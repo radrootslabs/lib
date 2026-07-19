@@ -197,3 +197,15 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace permissive unmarked reply authoring with strict marked direct and nested NIP-10 Reply types, signature-gated tolerant inbound projection with supplemental citations and advisory diagnostics, typed publication, and a registry-version-5 admission-only event contract."
+
+[[changes]]
+id = "canonical-nip10-relay-hints"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_conformance_vector",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace generic URL normalization for NIP-10 relay hints with one portable canonical profile, reject noncanonical hints during strict authoring, and preserve rejected inbound hints verbatim in ordered diagnostics."

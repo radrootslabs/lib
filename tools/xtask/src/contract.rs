@@ -171,7 +171,7 @@ const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsParsedNip52CalendarEventRsvp",
     "RadrootsAdmittedCalendarEventRsvp",
 ];
-const REQUIRED_POST_PUBLIC_TYPES: [&str; 33] = [
+const REQUIRED_POST_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsBlossomApprovedBlobUrl",
     "RadrootsBlossomByteVerifiedDescriptor",
     "RadrootsNip01EventWireParts",
@@ -186,6 +186,7 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 33] = [
     "RadrootsAuthoredPhotoUpdate",
     "RadrootsAuthoredAsk",
     "RadrootsNip10ReplyError",
+    "RadrootsNip10RelayHint",
     "RadrootsNip10ReplyReference",
     "RadrootsAuthoredNip10Reply",
     "RadrootsPostDiagnostic",
@@ -573,6 +574,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         rust_types: &[
             "radroots_event::reply::RadrootsAuthoredNip10Reply",
             "radroots_event::reply::RadrootsNip10ReplyError",
+            "radroots_event::reply::RadrootsNip10RelayHint",
             "radroots_event::reply::RadrootsNip10ReplyReference",
         ],
         case_kinds: &[
@@ -589,6 +591,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         signing: "none",
         rust_modules: &["crates/event_codec/src/reply/inbound.rs"],
         rust_types: &[
+            "radroots_event::reply::RadrootsNip10RelayHint",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -688,7 +691,7 @@ const POST_OPERATION_ID_PREFIXES: [&str; 5] = [
     "social.reply.",
     "social.post.",
 ];
-const POST_VECTOR_EXPECTATIONS: [(&str, &str); 54] = [
+const POST_VECTOR_EXPECTATIONS: [(&str, &str); 64] = [
     (
         "authored_update_wire",
         "social.update.build_authored_draft.valid",
@@ -719,11 +722,43 @@ const POST_VECTOR_EXPECTATIONS: [(&str, &str); 54] = [
         "social.reply.build_authored_draft.valid",
     ),
     (
+        "authored_nip10_canonical_ipv6_relay",
+        "social.reply.build_authored_draft.valid",
+    ),
+    (
         "authored_nip10_ambiguous_parent",
         "social.reply.build_authored_draft.invalid",
     ),
     (
         "authored_nip10_invalid_event_id",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_percent_host",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_bad_percent_host",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_ipv4_overflow",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_ipvfuture",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_empty_port",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_zero_port",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_port_overflow",
         "social.reply.build_authored_draft.invalid",
     ),
     (
@@ -768,6 +803,14 @@ const POST_VECTOR_EXPECTATIONS: [(&str, &str); 54] = [
     ),
     (
         "project_signed_nip10_invalid_relay",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_canonical_relay_authorities",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_malformed_relay_authorities",
         "social.reply.project_verified_event.valid",
     ),
     (
@@ -1672,6 +1715,7 @@ const REPLY_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/reply.rs",
         required_fragments: &[
+            "pub struct RadrootsNip10RelayHint",
             "pub struct RadrootsNip10ReplyReference",
             "pub struct RadrootsAuthoredNip10Reply",
         ],

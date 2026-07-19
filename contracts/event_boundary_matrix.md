@@ -123,6 +123,16 @@ rather than promoted to a validity gate. Positional replies remain thread
 enrichment, and a Reply carrying Ask or media metadata cannot be promoted as a
 root card.
 
+Authored and projected NIP-10 relay hints share one portable canonical profile:
+exact lowercase `ws://` or `wss://`, visible ASCII, canonical lowercase DNS or
+four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, optional canonical port
+`1..65535`, and RFC 3986 path-abempty/query syntax with uppercase `%HH`
+escapes. The profile rejects userinfo, fragments, backslashes, IDNA and
+percent-encoded hosts, legacy IPv4, and normalization-dependent spellings.
+Malformed inbound hints stay verbatim in ordered raw-tag diagnostics. Relay
+syntax validation is independent from the Reply boundary's 4,096-byte
+tag-element budget.
+
 Reply admission proves the Reply envelope's id, signature, and bounded NIP-10
 structure. It does not prove that a referenced event exists, has kind `1`, has
 a valid signature, was authored by the declared referenced author, or is

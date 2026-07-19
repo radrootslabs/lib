@@ -30,13 +30,22 @@ image-typed byte-verified Blossom descriptor. That descriptor state is not an
 upload receipt; BUD-02 completion remains a runtime prerequisite before
 signing.
 
-The Reply module exposes opaque, bounded `RadrootsNip10ReplyReference` and
-`RadrootsAuthoredNip10Reply` types for strict direct and nested kind-1
-authoring. References carry a validated event id, referenced author, and
-optional relay hint; construction emits either one marked root or distinct
-marked root and parent references. These values prove syntax and authored
-shape, not target existence, target kind, signature, author, or relay
-availability.
+The Reply module exposes opaque `RadrootsNip10RelayHint`,
+`RadrootsNip10ReplyReference`, and `RadrootsAuthoredNip10Reply` types for strict
+direct and nested kind-1 authoring. The relay hint is a byte-stable subset of
+WebSocket URLs: exact lowercase `ws://` or `wss://`, visible ASCII, canonical
+lowercase DNS or four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6,
+canonical optional port `1..65535`, and RFC 3986 path-abempty/query syntax
+with uppercase `%HH` escapes. It rejects IDNA and percent-encoded hosts,
+legacy IPv4, userinfo, fragments, controls, backslashes, and
+normalization-dependent spellings.
+
+References carry a validated event id, referenced author, and optional
+canonical relay hint; construction emits either one marked root or distinct
+marked root and parent references. Relay-hint syntax is not a wire-size claim:
+Reply construction separately enforces the 4,096-byte tag-element ceiling.
+These values prove syntax and authored shape, not target existence, target
+kind, signature, author, or relay availability.
 
 Kind `30402` has a raw, allocation-free marker partition before profile-specific
 tag-shape validation. Presence of `radroots:price_unit` or `radroots:quantity` selects

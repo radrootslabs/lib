@@ -53,6 +53,11 @@ publish policy both pass for the same source revision.
   deprecated positional threading, preserves valid supplemental references as
   citations, and retains malformed advisory metadata as ordered diagnostics
   while keeping every admitted Reply out of root-card classification.
+- Authored and projected NIP-10 relay hints now use one portable, canonical
+  visible-ASCII WebSocket URL profile instead of generic URL normalization.
+  Strict authoring rejects noncanonical hints; tolerant verified projection
+  preserves rejected hints verbatim in ordered raw-tag diagnostics. Relay
+  syntax remains separate from Reply wire-size budgets.
 - Typed root posts now enter signing and client publication through an opaque
   builder with no raw tag/content mutation. Generic builder direct signing and
   client publication reject kind `0` plus every kind `1` before signer access;

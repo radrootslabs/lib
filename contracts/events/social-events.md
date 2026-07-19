@@ -168,9 +168,24 @@ consulted.
 `RadrootsAuthoredNip10Reply` is an opaque, bounded authoring state. Direct
 Replies contain one root reference; nested Replies contain one root and one
 distinct parent reference. Each reference carries a validated 64-character
-lowercase event id, a referenced-author pubkey, and an optional `ws` or `wss`
-relay hint. Content is non-whitespace and shares the root-post content,
-tag-element, total-tag-byte, and compact signed-wire budgets.
+lowercase event id, a referenced-author pubkey, and an optional
+`RadrootsNip10RelayHint`. The relay hint profile accepts only byte-stable ASCII
+WebSocket URLs: an exact lowercase `ws://` or `wss://` scheme; a canonical
+lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6 authority;
+an optional canonical decimal port from `1` through `65535`; and an RFC 3986
+ASCII path-abempty and optional query whose percent escapes use uppercase
+`%HH`. DNS labels are 1 through 63 bytes, hosts are at most 253 bytes, and
+punycode (`xn--`) labels plus final all-decimal or `0x`-hex labels are rejected.
+The profile also rejects IDNA or percent-encoded hosts, legacy IPv4 forms,
+userinfo, fragments, controls, spaces, backslashes, and any
+normalization-dependent spelling.
+
+Relay syntax and Reply wire budgets are separate. The relay-hint type can hold
+a canonical URL whose path is longer than one tag element, while authored
+construction and verified inbound projection independently enforce the
+4,096-byte tag-element ceiling and return `reply_tag_element_too_large`.
+Content is non-whitespace and shares the root-post content, total-tag-byte, and
+compact signed-wire budgets.
 
 Strict authoring is deterministic. A direct Reply emits
 `["e",<root-id>,<relay-or-empty>,"root"]` followed by the root author's
@@ -195,8 +210,10 @@ participant propagation, relay hints, and referenced-author hints advisory,
 blank content or absent `p` tags do not erase an otherwise unambiguous inbound
 Reply. Malformed optional relay, author-hint, citation, and participant metadata is
 retained in the verified envelope and exposed as ordered typed diagnostics;
-valid values are projected best-effort. This tolerant read-side behavior never
-weakens strict authored output.
+valid relay hints are projected through the same `RadrootsNip10RelayHint`
+profile used for authoring, and rejected hints remain verbatim in the ordered
+diagnostic's raw tag. This tolerant read-side behavior never weakens strict
+authored output.
 
 The registry's Reply `e` and `p` tag contracts describe normalized qualifying
 semantic references. They do not claim that every malformed optional raw tag

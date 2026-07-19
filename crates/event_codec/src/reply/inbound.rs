@@ -5,12 +5,13 @@ use core::fmt;
 use std::collections::BTreeSet;
 
 use radroots_event::{
-    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey, RadrootsRelayUrl},
+    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey},
     kinds::KIND_POST,
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
+    reply::RadrootsNip10RelayHint,
 };
 
 use crate::verification::RadrootsSignatureVerifiedEvent;
@@ -145,7 +146,7 @@ pub struct RadrootsInboundNip10EventReference {
     tag_index: usize,
     raw_tag: Vec<String>,
     event_id: RadrootsEventId,
-    relay: Option<RadrootsRelayUrl>,
+    relay: Option<RadrootsNip10RelayHint>,
     author_hint: Option<RadrootsPublicKey>,
 }
 
@@ -162,7 +163,7 @@ impl RadrootsInboundNip10EventReference {
         &self.event_id
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsRelayUrl> {
+    pub const fn relay(&self) -> Option<&RadrootsNip10RelayHint> {
         self.relay.as_ref()
     }
 
@@ -176,7 +177,7 @@ pub struct RadrootsInboundNip10Participant {
     tag_index: usize,
     raw_tag: Vec<String>,
     pubkey: RadrootsPublicKey,
-    relay: Option<RadrootsRelayUrl>,
+    relay: Option<RadrootsNip10RelayHint>,
 }
 
 impl RadrootsInboundNip10Participant {
@@ -192,7 +193,7 @@ impl RadrootsInboundNip10Participant {
         &self.pubkey
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsRelayUrl> {
+    pub const fn relay(&self) -> Option<&RadrootsNip10RelayHint> {
         self.relay.as_ref()
     }
 }
@@ -734,10 +735,12 @@ fn project_participants(
     participants
 }
 
-fn parse_relay_hint(value: Option<&str>) -> Result<Option<RadrootsRelayUrl>, RadrootsIdParseError> {
+fn parse_relay_hint(
+    value: Option<&str>,
+) -> Result<Option<RadrootsNip10RelayHint>, RadrootsIdParseError> {
     match value {
         None | Some("") => Ok(None),
-        Some(value) => RadrootsRelayUrl::parse(value).map(Some),
+        Some(value) => RadrootsNip10RelayHint::parse(value).map(Some),
     }
 }
 
@@ -928,6 +931,99 @@ mod tests {
             };
             assert_eq!(diagnostic.raw_tag().expect("source tag"), tags[tag_index]);
         }
+    }
+
+    #[test]
+    fn inbound_projection_uses_the_canonical_relay_hint_profile() {
+        let root_id = "a".repeat(64);
+        let root_author = "b".repeat(64);
+        for relay in [
+            "wss://%65xample.com",
+            "wss://127.1",
+            "wss://relay.example:01",
+            "wss://[2001:0db8::1]",
+            "wss://relay.example/%2f",
+        ] {
+            let root_tag = vec![
+                "e".to_string(),
+                root_id.clone(),
+                relay.to_string(),
+                "root".to_string(),
+            ];
+            let tags = vec![root_tag.clone(), vec!["p".to_string(), root_author.clone()]];
+            let projection = project_nip10_reply_parts(KIND_POST, &tags, "Reply", 10)
+                .unwrap_or_else(|error| panic!("{relay} must remain advisory: {error}"));
+
+            assert!(projection.root().relay().is_none(), "{relay}");
+            assert_eq!(projection.root().raw_tag(), root_tag);
+            assert_eq!(
+                projection
+                    .diagnostics()
+                    .iter()
+                    .map(RadrootsNip10ReplyDiagnostic::code)
+                    .collect::<Vec<_>>(),
+                vec!["reply_reference_relay_ignored"],
+                "{relay}"
+            );
+            assert_eq!(
+                projection.diagnostics()[0].raw_tag(),
+                Some(root_tag.as_slice()),
+                "{relay}"
+            );
+        }
+
+        let tags = vec![
+            vec![
+                "e".to_string(),
+                root_id,
+                "wss://[2001:db8::1]:65535/nostr?region=ca-bc".to_string(),
+                "root".to_string(),
+            ],
+            vec![
+                "p".to_string(),
+                root_author,
+                "ws://127.0.0.1:21003".to_string(),
+            ],
+        ];
+        let projection = project_nip10_reply_parts(KIND_POST, &tags, "Reply", 10)
+            .expect("canonical reference and participant relays");
+        assert_eq!(
+            projection.root().relay().expect("root relay").as_str(),
+            "wss://[2001:db8::1]:65535/nostr?region=ca-bc"
+        );
+        assert_eq!(
+            projection.participants()[0]
+                .relay()
+                .expect("participant relay")
+                .as_str(),
+            "ws://127.0.0.1:21003"
+        );
+        assert!(projection.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn inbound_relay_syntax_and_tag_element_budgets_remain_separate() {
+        let prefix = "wss://relay.example/";
+        let relay = format!(
+            "{prefix}{}",
+            "a".repeat(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1 - prefix.len())
+        );
+        assert_eq!(relay.len(), RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1);
+        RadrootsNip10RelayHint::parse(&relay).expect("relay syntax has no Reply wire budget");
+
+        let tags = vec![
+            vec!["e".to_string(), "a".repeat(64), relay, "root".to_string()],
+            vec!["p".to_string(), "b".repeat(64)],
+        ];
+        assert!(matches!(
+            project_nip10_reply_parts(KIND_POST, &tags, "Reply", 10),
+            Err(RadrootsNip10ReplyProjectionError::TagElementTooLarge {
+                max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
+                actual,
+                tag_index: 0,
+                element_index: 2,
+            }) if actual == RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1
+        ));
     }
 
     #[test]

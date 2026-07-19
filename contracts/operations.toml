@@ -105,6 +105,7 @@ public = [
   "RadrootsAuthoredPhotoUpdate",
   "RadrootsAuthoredAsk",
   "RadrootsNip10ReplyError",
+  "RadrootsNip10RelayHint",
   "RadrootsNip10ReplyReference",
   "RadrootsAuthoredNip10Reply",
   "RadrootsPostDiagnostic",
@@ -858,6 +859,7 @@ rust_modules = [
 rust_types = [
   "radroots_event::reply::RadrootsAuthoredNip10Reply",
   "radroots_event::reply::RadrootsNip10ReplyError",
+  "radroots_event::reply::RadrootsNip10RelayHint",
   "radroots_event::reply::RadrootsNip10ReplyReference",
 ]
 
@@ -882,6 +884,7 @@ transport = "none"
 [operations.social_reply_project_verified_event.implementation]
 rust_modules = ["crates/event_codec/src/reply/inbound.rs"]
 rust_types = [
+  "radroots_event::reply::RadrootsNip10RelayHint",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",

@@ -219,6 +219,131 @@
       }
     },
     {
+      "id": "authored_nip10_canonical_ipv6_relay",
+      "kind": "social.reply.build_authored_draft.valid",
+      "input": {
+        "content": "Canonical relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://[2001:db8::1]:8443/nostr?region=ca-bc&next=%2Ffeed"
+        }
+      },
+      "expected": {
+        "kind": 1,
+        "content": "Canonical relay",
+        "tags": [
+          ["e", "1111111111111111111111111111111111111111111111111111111111111111", "wss://[2001:db8::1]:8443/nostr?region=ca-bc&next=%2Ffeed", "root"],
+          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+        ]
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_percent_host",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://%"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_bad_percent_host",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://%zz"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_ipv4_overflow",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://256.1.1.1"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_ipvfuture",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://[v1.foo]"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_empty_port",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://relay.example:"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_zero_port",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://relay.example:0"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
+      "id": "authored_nip10_invalid_relay_port_overflow",
+      "kind": "social.reply.build_authored_draft.invalid",
+      "input": {
+        "content": "Invalid relay",
+        "root": {
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "author": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relay": "wss://relay.example:65536"
+        }
+      },
+      "expected": {
+        "error": "reply_relay_invalid"
+      }
+    },
+    {
       "id": "project_signed_nip10_marked_direct",
       "kind": "social.reply.project_verified_event.valid",
       "input": {
@@ -640,6 +765,139 @@
             "code": "reply_reference_relay_ignored",
             "tag_index": 0,
             "raw_tag": ["e", "1111111111111111111111111111111111111111111111111111111111111111", "https://relay.example", "root"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "project_signed_nip10_canonical_relay_authorities",
+      "kind": "social.reply.project_verified_event.valid",
+      "input": {
+        "event_json": "{\"id\":\"a9f7683ed2eaf63e64af15dddf726ea32ec86e6079cd1038edf379c2de96a199\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781000020,\"kind\":1,\"tags\":[[\"e\",\"3333333333333333333333333333333333333333333333333333333333333333\",\"wss://relay.example/nostr/v1?region=ca-bc&next=%2Ffeed\",\"\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"],[\"e\",\"2222222222222222222222222222222222222222222222222222222222222222\",\"ws://127.0.0.1:21003\",\"reply\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"],[\"e\",\"1111111111111111111111111111111111111111111111111111111111111111\",\"wss://[2001:db8::1]:8443/nostr\",\"root\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],[\"p\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"ws://localhost:21003\"],[\"p\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"wss://participant.relay.example?region=ca-bc\"],[\"p\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"]],\"content\":\"Canonical relay authorities\",\"sig\":\"4b1691d3d3abcb62a70041da50a0c9790871454a2fb234bac6061a97b4407f91299e905210792c1005883a800d31a7580a218172b4c8ac2834e2c6bcf5b0d925\"}"
+      },
+      "expected": {
+        "style": "marked",
+        "contract_id": "radroots.social.reply.v1",
+        "direct": false,
+        "root": {
+          "tag_index": 2,
+          "raw_tag": ["e", "1111111111111111111111111111111111111111111111111111111111111111", "wss://[2001:db8::1]:8443/nostr", "root", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "relay": "wss://[2001:db8::1]:8443/nostr",
+          "author_hint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "parent": {
+          "tag_index": 1,
+          "raw_tag": ["e", "2222222222222222222222222222222222222222222222222222222222222222", "ws://127.0.0.1:21003", "reply", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+          "event_id": "2222222222222222222222222222222222222222222222222222222222222222",
+          "relay": "ws://127.0.0.1:21003",
+          "author_hint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "citations": [
+          {
+            "tag_index": 0,
+            "raw_tag": ["e", "3333333333333333333333333333333333333333333333333333333333333333", "wss://relay.example/nostr/v1?region=ca-bc&next=%2Ffeed", "", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+            "event_id": "3333333333333333333333333333333333333333333333333333333333333333",
+            "relay": "wss://relay.example/nostr/v1?region=ca-bc&next=%2Ffeed",
+            "author_hint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "participants": [
+          {
+            "tag_index": 3,
+            "raw_tag": ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "ws://localhost:21003"],
+            "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "relay": "ws://localhost:21003"
+          },
+          {
+            "tag_index": 4,
+            "raw_tag": ["p", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://participant.relay.example?region=ca-bc"],
+            "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "relay": "wss://participant.relay.example?region=ca-bc"
+          },
+          {
+            "tag_index": 5,
+            "raw_tag": ["p", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+            "pubkey": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "relay": null
+          }
+        ],
+        "diagnostics": []
+      }
+    },
+    {
+      "id": "project_signed_nip10_malformed_relay_authorities",
+      "kind": "social.reply.project_verified_event.valid",
+      "input": {
+        "event_json": "{\"id\":\"715bf99c903fcc3ff2f78411de07df916ab6b4476142c4f6974cf5eeddcabfd5\",\"pubkey\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"created_at\":1781000021,\"kind\":1,\"tags\":[[\"e\",\"3333333333333333333333333333333333333333333333333333333333333333\",\"wss://%\",\"\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"],[\"e\",\"1111111111111111111111111111111111111111111111111111111111111111\",\"wss://%zz\",\"root\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],[\"e\",\"2222222222222222222222222222222222222222222222222222222222222222\",\"wss://256.1.1.1\",\"reply\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"],[\"p\",\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"wss://[v1.foo]\"],[\"p\",\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"],[\"p\",\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"]],\"content\":\"Malformed relay authorities\",\"sig\":\"37644f8a4b353d758aa1ce78f78fd17c702c4fd862b0408c3c61000ef9533150dc4888ef78b1023f6ee26b0abe786e31e9cc442f62c12260af04750b58f3f20e\"}"
+      },
+      "expected": {
+        "style": "marked",
+        "contract_id": "radroots.social.reply.v1",
+        "direct": false,
+        "root": {
+          "tag_index": 1,
+          "raw_tag": ["e", "1111111111111111111111111111111111111111111111111111111111111111", "wss://%zz", "root", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+          "event_id": "1111111111111111111111111111111111111111111111111111111111111111",
+          "relay": null,
+          "author_hint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "parent": {
+          "tag_index": 2,
+          "raw_tag": ["e", "2222222222222222222222222222222222222222222222222222222222222222", "wss://256.1.1.1", "reply", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+          "event_id": "2222222222222222222222222222222222222222222222222222222222222222",
+          "relay": null,
+          "author_hint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "citations": [
+          {
+            "tag_index": 0,
+            "raw_tag": ["e", "3333333333333333333333333333333333333333333333333333333333333333", "wss://%", "", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+            "event_id": "3333333333333333333333333333333333333333333333333333333333333333",
+            "relay": null,
+            "author_hint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "participants": [
+          {
+            "tag_index": 3,
+            "raw_tag": ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://[v1.foo]"],
+            "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "relay": null
+          },
+          {
+            "tag_index": 4,
+            "raw_tag": ["p", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"],
+            "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "relay": null
+          },
+          {
+            "tag_index": 5,
+            "raw_tag": ["p", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+            "pubkey": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "relay": null
+          }
+        ],
+        "diagnostics": [
+          {
+            "code": "reply_reference_relay_ignored",
+            "tag_index": 0,
+            "raw_tag": ["e", "3333333333333333333333333333333333333333333333333333333333333333", "wss://%", "", "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"]
+          },
+          {
+            "code": "reply_reference_relay_ignored",
+            "tag_index": 1,
+            "raw_tag": ["e", "1111111111111111111111111111111111111111111111111111111111111111", "wss://%zz", "root", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+          },
+          {
+            "code": "reply_reference_relay_ignored",
+            "tag_index": 2,
+            "raw_tag": ["e", "2222222222222222222222222222222222222222222222222222222222222222", "wss://256.1.1.1", "reply", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+          },
+          {
+            "code": "reply_author_relay_ignored",
+            "tag_index": 3,
+            "raw_tag": ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://[v1.foo]"]
           }
         ]
       }

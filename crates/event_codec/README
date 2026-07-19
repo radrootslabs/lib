@@ -49,6 +49,17 @@ malformed advisory relay, author, participant, and citation metadata through
 ordered diagnostics. Root and parent ambiguity or malformed hard anchors
 remain projection failures.
 
+Authored and inbound relay metadata uses the shared
+`RadrootsNip10RelayHint` profile: exact lowercase `ws://` or `wss://`, visible
+ASCII, canonical lowercase DNS or four-octet IPv4 or bracketed pure-hex RFC
+5952 IPv6, canonical optional port `1..65535`, and RFC 3986
+path-abempty/query syntax with uppercase `%HH` escapes. IDNA or
+percent-encoded hosts, legacy IPv4, userinfo, fragments, controls,
+backslashes, and normalization-dependent forms are rejected. Inbound
+projection ignores an invalid advisory hint while preserving its exact raw tag
+in ordered diagnostics. Relay syntax remains independent from the 4,096-byte
+Reply tag-element budget.
+
 The FoodAvailability codec owns four boundaries for the focused
 `radroots.food.availability.v1` kind-`30402` profile. Strict details plus
 `created_at` produce bounded unsigned wire parts whose tag order is exactly

@@ -35,6 +35,15 @@ thread content and can never enter root-card admission. Reply admission proves
 the Reply event's NIP-01 id and signature; it does not prove that a referenced
 target exists, is kind `1`, or was authored by the declared referenced author.
 
+Reply authoring and verified projection share the portable
+`RadrootsNip10RelayHint` profile rather than the generic relay URL type. It
+accepts only exact lowercase `ws://` or `wss://` visible-ASCII URLs with a
+canonical lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6
+authority, an optional canonical port `1..65535`, and RFC 3986
+path-abempty/query syntax using uppercase `%HH` escapes. Rejected inbound hints
+remain verbatim in ordered raw-tag diagnostics. The hint profile does not own
+the Reply boundary's separate 4,096-byte tag-element budget.
+
 The former free-form text-note post builder is removed. Generic protocol
 builders reject kind-0 Profile events and every kind-1 event at both direct
 signing and client-publication boundaries. Typed media builders can sign or

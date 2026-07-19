@@ -43,7 +43,7 @@ const PACKAGED_VECTORS: &str = include_str!("fixtures/post_verified_profiles.v1.
 const WORKSPACE_VECTOR_PATH: &str =
     "../../contracts/conformance/vectors/post/verified_profiles.v1.json";
 const WORKSPACE_CONTRACT_MARKER_PATH: &str = "../../contracts/manifest.toml";
-const EXPECTED_VECTOR_CASES: [(&str, &str); 54] = [
+const EXPECTED_VECTOR_CASES: [(&str, &str); 64] = [
     (
         "admit_signed_duplicate_normalized_ask_marker",
         "social.post.verify_and_admit_event.invalid",
@@ -102,8 +102,40 @@ const EXPECTED_VECTOR_CASES: [(&str, &str); 54] = [
         "social.reply.build_authored_draft.invalid",
     ),
     (
+        "authored_nip10_canonical_ipv6_relay",
+        "social.reply.build_authored_draft.valid",
+    ),
+    (
         "authored_nip10_direct_wire",
         "social.reply.build_authored_draft.valid",
+    ),
+    (
+        "authored_nip10_invalid_relay_bad_percent_host",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_empty_port",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_ipv4_overflow",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_ipvfuture",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_percent_host",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_port_overflow",
+        "social.reply.build_authored_draft.invalid",
+    ),
+    (
+        "authored_nip10_invalid_relay_zero_port",
+        "social.reply.build_authored_draft.invalid",
     ),
     (
         "authored_nip10_invalid_event_id",
@@ -175,6 +207,14 @@ const EXPECTED_VECTOR_CASES: [(&str, &str); 54] = [
     ),
     (
         "project_signed_nip10_invalid_relay",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_canonical_relay_authorities",
+        "social.reply.project_verified_event.valid",
+    ),
+    (
+        "project_signed_nip10_malformed_relay_authorities",
         "social.reply.project_verified_event.valid",
     ),
     (
