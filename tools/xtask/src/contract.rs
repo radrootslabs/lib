@@ -23,6 +23,8 @@ const KNOWLEDGE_PUBLIC_SURFACE_RELATIVE: &str =
     "contracts/conformance/vectors/knowledge/public_surface.v1.json";
 const POST_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/post/verified_profiles.v1.json";
+const FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/food_availability/profile.v1.json";
 const RELEASES_ROOT_RELATIVE: &str = "contracts/releases";
 const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
 const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
@@ -30,7 +32,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 14] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 15] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -54,6 +56,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 14] = [
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
         "crates/event_codec/tests/fixtures/operational_listing_tags_full.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/food_availability/profile.v1.json",
+        "crates/event_codec/tests/fixtures/food_availability_profile.v1.json",
     ),
     (
         "contracts/conformance/vectors/operational_listing/build_draft.v1.json",
@@ -188,6 +194,39 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 22] = [
     "RadrootsThreadExcludedPostCandidate",
     "RadrootsPostAdmissionOutcome",
     "RadrootsPostAdmissionError",
+];
+const REQUIRED_FOOD_AVAILABILITY_PUBLIC_TYPES: [&str; 31] = [
+    "RadrootsBlossomByteVerifiedDescriptor",
+    "RadrootsNip01EventWireParts",
+    "RadrootsEventEnvelope",
+    "RadrootsSignatureVerifiedEvent",
+    "RadrootsClassifiedListingPartition",
+    "RadrootsAuthoredImage",
+    "RadrootsFoodAvailabilityError",
+    "RadrootsFoodContent",
+    "RadrootsFoodIdentifier",
+    "RadrootsFoodText",
+    "RadrootsFoodPublishedAt",
+    "RadrootsFoodCurrency",
+    "RadrootsFoodUnit",
+    "RadrootsFoodPrice",
+    "RadrootsFoodQuantity",
+    "RadrootsFoodAvailabilityStatus",
+    "RadrootsFoodImageDimensions",
+    "RadrootsFoodAvailabilityImage",
+    "RadrootsFoodAvailabilityDetailsParts",
+    "RadrootsFoodAvailabilityDetails",
+    "RadrootsFoodAvailabilityEncodeError",
+    "RadrootsFoodAvailabilityImageDiagnostic",
+    "RadrootsInboundFoodAvailabilityImage",
+    "RadrootsInboundFoodAvailabilityProjection",
+    "RadrootsFoodAvailabilityProjectionOutcome",
+    "RadrootsFoodAvailabilityProjectionError",
+    "RadrootsAdmittedFoodAvailabilityEvent",
+    "RadrootsExcludedClassifiedListingCandidate",
+    "RadrootsFoodAvailabilityAdmissionOutcome",
+    "RadrootsFoodAvailabilityAdmissionError",
+    "RadrootsFoodAvailabilityRevisionError",
 ];
 const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
@@ -676,6 +715,280 @@ const POST_VECTOR_EXPECTATIONS: [(&str, &str); 27] = [
         "social.post.verify_and_admit_event.invalid",
     ),
 ];
+const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpectation; 4] = [
+    FoodAvailabilityOperationExpectation {
+        key: "food_availability_build_authored_draft",
+        id: "food_availability.build_authored_draft",
+        inputs: &["RadrootsFoodAvailabilityDetails", "u64"],
+        outputs: &["RadrootsNip01EventWireParts"],
+        error_class: "encode_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event/src/food_availability.rs",
+            "crates/event_codec/src/food_availability/authored.rs",
+        ],
+        rust_types: &[
+            "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+            "radroots_event::food_availability::RadrootsFoodAvailabilityDetails",
+            "radroots_event::food_availability::RadrootsFoodAvailabilityDetailsParts",
+            "radroots_event::food_availability::RadrootsFoodAvailabilityError",
+            "radroots_event::food_availability::RadrootsFoodAvailabilityImage",
+            "radroots_event::media::RadrootsAuthoredImage",
+            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError",
+        ],
+        case_kinds: &[
+            "food_availability.build_authored_draft.valid",
+            "food_availability.build_authored_draft.invalid",
+        ],
+    },
+    FoodAvailabilityOperationExpectation {
+        key: "food_availability_project_verified_event",
+        id: "food_availability.project_verified_event",
+        inputs: &["RadrootsSignatureVerifiedEvent"],
+        outputs: &["RadrootsFoodAvailabilityProjectionOutcome"],
+        error_class: "parse_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event/src/classified_listing.rs",
+            "crates/event/src/food_availability.rs",
+            "crates/event_codec/src/food_availability/inbound.rs",
+        ],
+        rust_types: &[
+            "radroots_event::classified_listing::RadrootsClassifiedListingPartition",
+            "radroots_event::food_availability::RadrootsFoodAvailabilityError",
+            "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic",
+            "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
+            "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionOutcome",
+            "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityImage",
+            "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityProjection",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "food_availability.project_verified_event.valid",
+            "food_availability.project_verified_event.invalid",
+        ],
+    },
+    FoodAvailabilityOperationExpectation {
+        key: "food_availability_verify_and_admit_event",
+        id: "food_availability.verify_and_admit_event",
+        inputs: &["RadrootsEventEnvelope"],
+        outputs: &["RadrootsFoodAvailabilityAdmissionOutcome"],
+        error_class: "admission_error",
+        signing: "nip01",
+        rust_modules: &[
+            "crates/event_codec/src/food_availability/admission.rs",
+            "crates/event_codec/src/food_availability/inbound.rs",
+            "crates/event_codec/src/verification.rs",
+        ],
+        rust_types: &[
+            "radroots_event::RadrootsEventEnvelope",
+            "radroots_event_codec::food_availability::admission::RadrootsAdmittedFoodAvailabilityEvent",
+            "radroots_event_codec::food_availability::admission::RadrootsExcludedClassifiedListingCandidate",
+            "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionError",
+            "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionOutcome",
+            "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityProjection",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "food_availability.verify_and_admit_event.valid",
+            "food_availability.verify_and_admit_event.invalid",
+        ],
+    },
+    FoodAvailabilityOperationExpectation {
+        key: "food_availability_validate_revision",
+        id: "food_availability.validate_revision",
+        inputs: &["RadrootsSignatureVerifiedEvent"],
+        outputs: &["Unit"],
+        error_class: "validation_error",
+        signing: "none",
+        rust_modules: &[
+            "crates/event_codec/src/food_availability/inbound.rs",
+            "crates/event_codec/src/food_availability/revision.rs",
+        ],
+        rust_types: &[
+            "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
+            "radroots_event_codec::food_availability::revision::RadrootsFoodAvailabilityRevisionError",
+            "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+        ],
+        case_kinds: &[
+            "food_availability.validate_revision.valid",
+            "food_availability.validate_revision.invalid",
+        ],
+    },
+];
+const FOOD_AVAILABILITY_CASE_KINDS: [&str; 8] = [
+    "food_availability.build_authored_draft.valid",
+    "food_availability.build_authored_draft.invalid",
+    "food_availability.project_verified_event.valid",
+    "food_availability.project_verified_event.invalid",
+    "food_availability.verify_and_admit_event.valid",
+    "food_availability.verify_and_admit_event.invalid",
+    "food_availability.validate_revision.valid",
+    "food_availability.validate_revision.invalid",
+];
+const FOOD_AVAILABILITY_VECTOR_EXPECTATIONS: [(&str, &str); 40] = [
+    (
+        "food_authored_unit_g_001",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_kg_002",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_lb_003",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_oz_004",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_each_005",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_dozen_006",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_bunch_007",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_punnet_008",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_bag_009",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_unit_basket_010",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_wire_budget_ascii_max_011",
+        "food_availability.build_authored_draft.valid",
+    ),
+    (
+        "food_authored_wire_budget_escaped_overflow_012",
+        "food_availability.build_authored_draft.invalid",
+    ),
+    (
+        "food_authored_future_published_at_013",
+        "food_availability.build_authored_draft.invalid",
+    ),
+    (
+        "food_admission_normalizes_decimal_currency_014",
+        "food_availability.project_verified_event.valid",
+    ),
+    (
+        "food_admission_optional_standard_tags_015",
+        "food_availability.verify_and_admit_event.valid",
+    ),
+    (
+        "food_admission_excludes_operational_before_validation_016",
+        "food_availability.project_verified_event.valid",
+    ),
+    (
+        "food_admission_excludes_generic_nip99_017",
+        "food_availability.project_verified_event.valid",
+    ),
+    (
+        "food_admission_rejects_ambiguous_markers_018",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_wrong_kind_019",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_core_tag_shape_020",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_prohibited_delivery_021",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_price_frequency_022",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_requires_price_unit_023",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_bounds_raw_decimal_digits_024",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_malformed_price_unit_025",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_quantity_unit_mismatch_026",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_status_027",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_rejects_future_published_at_028",
+        "food_availability.project_verified_event.invalid",
+    ),
+    (
+        "food_admission_preserves_ordered_image_diagnostics_029",
+        "food_availability.project_verified_event.valid",
+    ),
+    (
+        "food_admission_bounds_image_projection_030",
+        "food_availability.project_verified_event.valid",
+    ),
+    (
+        "food_admission_rejects_invalid_signature_031",
+        "food_availability.verify_and_admit_event.invalid",
+    ),
+    (
+        "food_revision_accepts_later_created_at_032",
+        "food_availability.validate_revision.valid",
+    ),
+    (
+        "food_revision_rejects_invalid_previous_033",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_rejects_invalid_current_034",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_rejects_identifier_coordinate_change_035",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_rejects_author_coordinate_change_036",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_rejects_published_at_change_037",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_rejects_older_created_at_038",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_equal_time_a_current_039",
+        "food_availability.validate_revision.invalid",
+    ),
+    (
+        "food_revision_equal_time_b_current_040",
+        "food_availability.validate_revision.valid",
+    ),
+];
 const EVENT_BOUNDARY_MATRIX_RELATIVES: [&str; 2] = [
     "contracts/event_boundary_matrix.md",
     "docs/platform/canonical/open_source/radroots_v1_spec/02_public_contract_and_runtime/08_event_boundary_matrix.md",
@@ -865,6 +1178,19 @@ struct CalendarOperationExpectation {
 
 #[derive(Clone, Copy)]
 struct PostOperationExpectation {
+    key: &'static str,
+    id: &'static str,
+    inputs: &'static [&'static str],
+    outputs: &'static [&'static str],
+    error_class: &'static str,
+    signing: &'static str,
+    rust_modules: &'static [&'static str],
+    rust_types: &'static [&'static str],
+    case_kinds: &'static [&'static str],
+}
+
+#[derive(Clone, Copy)]
+struct FoodAvailabilityOperationExpectation {
     key: &'static str,
     id: &'static str,
     inputs: &'static [&'static str],
@@ -1572,6 +1898,42 @@ const OPERATIONAL_LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
+const FOOD_AVAILABILITY_WITNESSES: [EventBoundarySourceWitness; 6] = [
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/food_availability.rs",
+        required_fragments: &[
+            "pub const RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID: &str",
+            "pub struct RadrootsFoodAvailabilityDetails",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event/src/kinds.rs",
+        required_fragments: &["pub const KIND_CLASSIFIED_LISTING: u32 = 30402;"],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/food_availability/authored.rs",
+        required_fragments: &["pub fn authored_food_availability_to_wire_parts("],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/food_availability/inbound.rs",
+        required_fragments: &[
+            "pub struct RadrootsInboundFoodAvailabilityProjection",
+            "pub fn project_verified_food_availability_event(",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/food_availability/admission.rs",
+        required_fragments: &[
+            "pub struct RadrootsAdmittedFoodAvailabilityEvent",
+            "pub fn verify_and_admit_food_availability_event(",
+        ],
+    },
+    EventBoundarySourceWitness {
+        relative_path: "crates/event_codec/src/food_availability/revision.rs",
+        required_fragments: &["pub fn validate_food_availability_revision("],
+    },
+];
+
 const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/job_request.rs",
@@ -1740,7 +2102,7 @@ const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     },
 ];
 
-const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
+const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 42] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
@@ -2046,6 +2408,18 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 41] = [
             "events.resource_cap.get",
         ],
         witnesses: &RESOURCE_CAP_WITNESSES,
+    },
+    EventBoundaryExpectation {
+        domain: "food_availability",
+        kind: "30402",
+        radroots_type: "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent",
+        rpc_methods: &[
+            "food_availability.build_authored_draft",
+            "food_availability.project_verified_event",
+            "food_availability.verify_and_admit_event",
+            "food_availability.validate_revision",
+        ],
+        witnesses: &FOOD_AVAILABILITY_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "operational_listing",
@@ -4510,6 +4884,9 @@ fn validate_operations_contract(
         validate_calendar_operation_authority(operations_manifest, &shared_types)?;
         validate_post_operation_authority(operations_manifest, workspace_root)?;
     }
+    if domains.contains("food_availability") {
+        validate_food_availability_operation_authority(operations_manifest, workspace_root)?;
+    }
 
     Ok(())
 }
@@ -4754,6 +5131,240 @@ fn validate_post_operation_sequence(
     {
         return Err(format!(
             "post operation {operation_key} {field} drift: expected {:?}, got {:?}",
+            expected, actual
+        ));
+    }
+    Ok(())
+}
+
+fn validate_food_availability_operation_authority(
+    manifest: &OperationsContractManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let vector = validate_conformance_vector_file(
+        &workspace_root.join(FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE),
+        &manifest.contract.version,
+    )?;
+    validate_food_availability_operation_inventory(manifest, &vector)
+}
+
+fn validate_food_availability_operation_inventory(
+    manifest: &OperationsContractManifest,
+    vector: &ConformanceVectorFile,
+) -> Result<(), String> {
+    let shared_types = collect_non_empty_set(
+        &manifest.shared_types.public,
+        "food availability operation shared_types.public",
+    )?;
+    for required in REQUIRED_FOOD_AVAILABILITY_PUBLIC_TYPES {
+        if !shared_types.contains(required) {
+            return Err(format!(
+                "food availability operation authority requires shared public type {required}"
+            ));
+        }
+    }
+
+    let expected_keys = FOOD_AVAILABILITY_OPERATION_EXPECTATIONS
+        .iter()
+        .map(|expectation| expectation.key.to_string())
+        .collect::<BTreeSet<_>>();
+    let actual_keys = manifest
+        .operations
+        .iter()
+        .filter(|(key, operation)| {
+            operation.domain == "food_availability"
+                || operation.conformance.vector == FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE
+                || key.starts_with("food_availability_")
+                || operation.id.starts_with("food_availability.")
+        })
+        .map(|(key, _)| key.clone())
+        .collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        let missing = expected_keys
+            .difference(&actual_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let unexpected = actual_keys
+            .difference(&expected_keys)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "food availability operation authority drift: missing {}; unexpected {}",
+            join_set(&missing),
+            join_set(&unexpected)
+        ));
+    }
+
+    let mut owners = BTreeMap::new();
+    for expected in FOOD_AVAILABILITY_OPERATION_EXPECTATIONS {
+        let operation = manifest
+            .operations
+            .get(expected.key)
+            .ok_or_else(|| format!("food availability operation {} is required", expected.key))?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "domain",
+            &operation.domain,
+            "food_availability",
+        )?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "id",
+            &operation.id,
+            expected.id,
+        )?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "stability",
+            &operation.stability,
+            "beta",
+        )?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "error_class",
+            &operation.error_class,
+            expected.error_class,
+        )?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "signing",
+            &operation.signing,
+            expected.signing,
+        )?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "transport",
+            &operation.transport,
+            "none",
+        )?;
+        if !operation.deterministic {
+            return Err(format!(
+                "food availability operation {} deterministic drift: expected true, got false",
+                expected.key
+            ));
+        }
+        validate_food_availability_operation_sequence(
+            expected.key,
+            "inputs",
+            &operation.inputs,
+            expected.inputs,
+        )?;
+        validate_food_availability_operation_sequence(
+            expected.key,
+            "outputs",
+            &operation.outputs,
+            expected.outputs,
+        )?;
+        validate_food_availability_operation_sequence(
+            expected.key,
+            "implementation.rust_modules",
+            &operation.implementation.rust_modules,
+            expected.rust_modules,
+        )?;
+        validate_food_availability_operation_sequence(
+            expected.key,
+            "implementation.rust_types",
+            &operation.implementation.rust_types,
+            expected.rust_types,
+        )?;
+        validate_food_availability_operation_scalar(
+            expected.key,
+            "conformance.vector",
+            &operation.conformance.vector,
+            FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE,
+        )?;
+        validate_operation_case_kinds(operation, vector)?;
+        if !operation
+            .conformance
+            .case_kinds
+            .iter()
+            .map(String::as_str)
+            .eq(expected.case_kinds.iter().copied())
+        {
+            return Err(format!(
+                "food availability operation {} conformance.case_kinds drift: expected {:?}, got {:?}",
+                expected.key, expected.case_kinds, operation.conformance.case_kinds
+            ));
+        }
+        for case_kind in &operation.conformance.case_kinds {
+            if let Some(previous) = owners.insert(case_kind.as_str(), expected.key) {
+                return Err(format!(
+                    "food availability conformance case kind {case_kind} is multiply claimed by {previous} and {}",
+                    expected.key
+                ));
+            }
+        }
+    }
+
+    let expected_case_kinds = FOOD_AVAILABILITY_CASE_KINDS
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let actual_case_kinds = owners.keys().copied().collect::<BTreeSet<_>>();
+    if actual_case_kinds != expected_case_kinds {
+        return Err(format!(
+            "food availability conformance case-kind authority drift: expected {:?}, got {:?}",
+            expected_case_kinds, actual_case_kinds
+        ));
+    }
+
+    let mut actual_inventory = BTreeMap::new();
+    for entry in &vector.vectors {
+        if actual_inventory
+            .insert(entry.id.as_str(), entry.kind.as_str())
+            .is_some()
+        {
+            return Err(format!(
+                "food availability conformance vector inventory has duplicate id {}",
+                entry.id
+            ));
+        }
+    }
+    for kind in actual_inventory.values() {
+        if !owners.contains_key(kind) {
+            return Err(format!(
+                "food availability conformance vector kind {kind} is not claimed by exactly one operation"
+            ));
+        }
+    }
+    let expected_inventory = FOOD_AVAILABILITY_VECTOR_EXPECTATIONS
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    if actual_inventory != expected_inventory {
+        return Err(format!(
+            "food availability conformance vector inventory drift: expected {:?}, got {:?}",
+            expected_inventory, actual_inventory
+        ));
+    }
+    Ok(())
+}
+
+fn validate_food_availability_operation_scalar(
+    operation_key: &str,
+    field: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<(), String> {
+    if actual != expected {
+        return Err(format!(
+            "food availability operation {operation_key} {field} drift: expected {expected}, got {actual}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_food_availability_operation_sequence(
+    operation_key: &str,
+    field: &str,
+    actual: &[String],
+    expected: &[&str],
+) -> Result<(), String> {
+    if !actual
+        .iter()
+        .map(String::as_str)
+        .eq(expected.iter().copied())
+    {
+        return Err(format!(
+            "food availability operation {operation_key} {field} drift: expected {:?}, got {:?}",
             expected, actual
         ));
     }
@@ -6098,6 +6709,19 @@ mod tests {
         (manifest, vector)
     }
 
+    fn current_food_availability_authority() -> (OperationsContractManifest, ConformanceVectorFile)
+    {
+        let root = workspace_root();
+        let manifest =
+            parse_toml::<OperationsContractManifest>(&root.join("contracts/operations.toml"))
+                .expect("current operations manifest");
+        let vector = parse_json::<ConformanceVectorFile>(
+            &root.join(FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE),
+        )
+        .expect("current FoodAvailability conformance vector");
+        (manifest, vector)
+    }
+
     fn current_knowledge_manifest_authority() -> (String, ConformanceVectorFile) {
         let root = workspace_root();
         let manifest = fs::read_to_string(root.join(KNOWLEDGE_MANIFEST_RELATIVE))
@@ -6998,6 +7622,81 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let error = validate_post_operation_inventory(&manifest, &vector)
             .expect_err("post vector ID-to-kind drift must fail");
         assert!(error.contains("post conformance vector inventory drift"));
+    }
+
+    #[test]
+    fn food_availability_operation_authority_rejects_contract_drift() {
+        let (manifest, vector) = current_food_availability_authority();
+        validate_food_availability_operation_inventory(&manifest, &vector)
+            .expect("current FoodAvailability operation authority");
+
+        let (mut manifest, vector) = current_food_availability_authority();
+        manifest
+            .operations
+            .remove("food_availability_build_authored_draft");
+        let error = validate_food_availability_operation_inventory(&manifest, &vector)
+            .expect_err("missing FoodAvailability operation must fail");
+        assert!(
+            error.contains("food availability operation authority drift"),
+            "{error}"
+        );
+
+        let (mut manifest, vector) = current_food_availability_authority();
+        manifest
+            .shared_types
+            .public
+            .retain(|value| value != "RadrootsFoodAvailabilityRevisionError");
+        let error = validate_food_availability_operation_inventory(&manifest, &vector)
+            .expect_err("missing FoodAvailability public type must fail");
+        assert!(
+            error.contains(
+                "food availability operation authority requires shared public type RadrootsFoodAvailabilityRevisionError"
+            ),
+            "{error}"
+        );
+
+        let (mut manifest, vector) = current_food_availability_authority();
+        manifest
+            .operations
+            .get_mut("food_availability_validate_revision")
+            .expect("revision operation")
+            .conformance
+            .case_kinds
+            .pop();
+        let error = validate_food_availability_operation_inventory(&manifest, &vector)
+            .expect_err("missing FoodAvailability case kind must fail");
+        assert!(error.contains("conformance.case_kinds drift"), "{error}");
+    }
+
+    #[test]
+    fn food_availability_operation_authority_rejects_vector_inventory_drift() {
+        let (manifest, mut vector) = current_food_availability_authority();
+        vector
+            .vectors
+            .iter_mut()
+            .find(|entry| entry.id == "food_admission_normalizes_decimal_currency_014")
+            .expect("normalization vector")
+            .id = "food_admission_normalizes_decimal_currency_replacement".to_string();
+        let error = validate_food_availability_operation_inventory(&manifest, &vector)
+            .expect_err("same-count FoodAvailability vector replacement must fail");
+        assert!(
+            error.contains("food availability conformance vector inventory drift"),
+            "{error}"
+        );
+
+        let (manifest, mut vector) = current_food_availability_authority();
+        vector.vectors.push(ConformanceVectorEntry {
+            id: "food_unclaimed_case".to_string(),
+            kind: "food_availability.unclaimed.valid".to_string(),
+            input: Value::Object(Default::default()),
+            expected: Value::Object(Default::default()),
+        });
+        let error = validate_food_availability_operation_inventory(&manifest, &vector)
+            .expect_err("unclaimed FoodAvailability vector kind must fail");
+        assert!(
+            error.contains("is not claimed by exactly one operation"),
+            "{error}"
+        );
     }
 
     #[test]

@@ -55,17 +55,20 @@ Image dimensions use two nonzero canonical `u32` decimal values in
 `WIDTHxHEIGHT` form. Details accept at most 64 images, require unique image URLs
 and Blossom digests, and accept only `RadrootsAuthoredImage` values that already
 prove local descriptor-to-byte agreement. Details retain nonzero `published_at`
-for later replacement checks and can validate that it is not later than a
-supplied `created_at`; this checkpoint does not compare revisions or prove
-timestamp stability across them.
+and can validate that it is not later than a supplied `created_at`.
 
-These checked details are domain input, not a signable authored draft or wire
-event. This checkpoint supplies no FoodAvailability tag codec, event-contract
-registry entry, relay admission, signing, publication, upload receipt, raster
-decoding, network retrieval, or availability proof. Successful BUD-02 upload
-and any required media decoding or retrievability checks remain separate
-runtime responsibilities before a later publication boundary may sign an
-event.
+These checked details are the exclusive typed input to the focused
+`radroots.food.availability.v1` authoring contract. The event-contract registry
+classifies that kind-`30402` profile as `TypedOnly` and `AdmissionOnly`, so a
+generic unsigned classified listing cannot claim the focused contract. The
+details themselves remain domain values rather than signed events;
+`radroots_event_codec` owns deterministic wire construction, verified inbound
+projection and admission, and strict revision comparison.
+
+An authored image proves local descriptor-to-byte agreement only. Successful
+BUD-02 upload completion and any required raster, retrieval, or availability
+checks remain runtime responsibilities before signing. Neither this domain
+module nor the registry signs, publishes, replicates, or retrieves an event.
 
 The calendar module keeps three different states explicit for NIP-52 kinds
 `31922`, `31923`, `31924`, and `31925`: the complete structural event envelope,

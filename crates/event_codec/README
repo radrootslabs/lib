@@ -41,6 +41,41 @@ remain ordered; malformed media becomes diagnostic Update unless a valid Ask
 marker takes precedence. Structural inbound URLs remain unverified and no
 network retrieval occurs.
 
+The FoodAvailability codec owns four boundaries for the focused
+`radroots.food.availability.v1` kind-`30402` profile. Strict details plus
+`created_at` produce bounded unsigned wire parts whose tag order is exactly
+`d`, `title`, `summary`, `published_at`, `location`, `price`,
+`radroots:price_unit`, optional `radroots:quantity`, `status`, and repeated
+`image`. Content and decoded tags remain bounded, and compact signed-event size
+is checked after exact JSON escaping. Authored images already prove local
+Blossom descriptor-to-byte agreement, but not upload completion or network
+availability.
+
+Verified inbound projection partitions raw tag names before validation.
+Focused-only candidates are projected, Operational Listing and marker-free
+generic NIP-99 candidates are explicit exclusions, and mixed-marker candidates
+fail as ambiguous. Focused core fields are required; decimal and currency
+spellings are normalized within their wire bounds; optional unowned NIP-99
+tags are ignored; and tags purporting to add commerce, fulfillment,
+provenance, or operational capabilities fail closed. Image observations remain
+ordered structural HTTP(S) data. At most 64 are retained, with stable ordered
+diagnostics for overflow, shape, URL, dimensions, duplicate URL, and duplicate
+Blossom digest. An image diagnostic does not invalidate an otherwise complete
+focused core and never upgrades observed media to an authored typestate.
+
+`verify_and_admit_food_availability_event` first verifies the NIP-01 id and
+Schnorr signature, then binds either the focused projection or an explicit
+non-focused exclusion to that verified envelope. Revision validation accepts
+two independently verified events, requires both to satisfy the exact authored
+wire profile, preserves kind, author, `d`, and `published_at`, and applies the
+NIP-01 newer-event rule: later `created_at`, then lower event id at equal time.
+Successful combined verification and admission uses the optional `nostr`
+feature; without it, signature verification returns the stable unavailable
+error rather than admitting an event. The packaged conformance runner enables
+`serde_json,nostr` for signed JSON event cases.
+These codecs do not sign, publish, replicate, upload, retrieve, or provide
+client behavior.
+
 The NIP-52 calendar codecs expose a deliberate three-stage boundary for kinds
 `31922`, `31923`, `31924`, and `31925`:
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "registry_version": 3,
+  "registry_version": 4,
   "radroots_event_version": "1.0.0-alpha.1",
   "radroots_event_codec_version": "1.0.0-alpha.1",
   "contract_count": 11,

@@ -48,7 +48,7 @@ publish policy both pass for the same source revision.
   access; externally supplied unsigned events, NIP-46 signing, and signed-event
   relay remain explicit low-level Nostr interoperability with no typed product
   authoring claim.
-- Frozen drafts now carry event-contract registry version `3`, revalidate all
+- Frozen drafts now carry event-contract registry version `4`, revalidate all
   persisted fields and the recomputed event id during deserialization and
   signing, and enforce explicit `GenericDraft`, `TypedOnly`, and `ReadOnly`
   authoring policies.
@@ -76,9 +76,17 @@ publish policy both pass for the same source revision.
   for bounded identifiers and text, canonical decimal price and quantity,
   uppercase currency, the closed ten-unit food vocabulary, active or sold
   status, timestamps, dimensions, and at most 64 unique byte-verified Blossom
-  images. These details are not yet a signable authored draft and add no codec,
-  admission, registry, replica, publication, upload, raster-decoding, or
-  network-availability claim.
+  images. Its typed codec emits exact kind-`30402` wire parts, while verified
+  tolerant admission normalizes compatible inbound values, preserves bounded
+  ordered image diagnostics, and excludes generic or operational listings.
+  Strict revision comparison revalidates both signed events against authored
+  wire semantics before enforcing a stable coordinate and `published_at` plus
+  NIP-01 replacement ordering. This adds no replica, signing, publication,
+  upload, raster-decoding, or network-availability claim.
+- Event-contract identification now selects Operational Listing only for its
+  raw marker partition. Focused FoodAvailability is admission-only, while
+  marker-free generic and mixed-marker NIP-99 events cannot be mislabeled as
+  operational contracts.
 - Verified Profile admission binds a signed exact kind-`0` envelope to the
   tolerant metadata projection, accepts standard tagless events, and exposes
   deterministic equal-time lowest-id replacement vectors.
@@ -134,8 +142,8 @@ publish policy both pass for the same source revision.
   compatibility version instead of package SemVer. Existing backups stamped by
   `0.1.0-alpha.2` remain restorable because this release does not change their
   stored schema.
-- Persisted frozen drafts with event-contract registry versions `1` or `2` are
-  rejected and must be reconstructed against registry version `3`; strict
+- Persisted frozen drafts with event-contract registry versions `1`, `2`, or
+  `3` are rejected and must be reconstructed against registry version `4`; strict
   Profile plus typed and read-only post contracts can no longer be
   reconstructed as generic drafts.
 - This breaking capsule revision must not be pinned or published through

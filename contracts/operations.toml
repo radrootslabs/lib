@@ -7,6 +7,7 @@ source = "rust"
 domains = [
   "blossom",
   "event",
+  "food_availability",
   "profile",
   "farm",
   "operational_listing",
@@ -55,8 +56,34 @@ public = [
   "RadrootsEventRef",
   "RadrootsEventPtr",
   "RadrootsClassifiedListingAddress",
+  "RadrootsClassifiedListingPartition",
   "RadrootsAuthoredImage",
   "RadrootsAuthoredImageError",
+  "RadrootsFoodAvailabilityError",
+  "RadrootsFoodContent",
+  "RadrootsFoodIdentifier",
+  "RadrootsFoodText",
+  "RadrootsFoodPublishedAt",
+  "RadrootsFoodCurrency",
+  "RadrootsFoodUnit",
+  "RadrootsFoodPrice",
+  "RadrootsFoodQuantity",
+  "RadrootsFoodAvailabilityStatus",
+  "RadrootsFoodImageDimensions",
+  "RadrootsFoodAvailabilityImage",
+  "RadrootsFoodAvailabilityDetailsParts",
+  "RadrootsFoodAvailabilityDetails",
+  "RadrootsFoodAvailabilityEncodeError",
+  "RadrootsFoodAvailabilityImageDiagnostic",
+  "RadrootsInboundFoodAvailabilityImage",
+  "RadrootsInboundFoodAvailabilityProjection",
+  "RadrootsFoodAvailabilityProjectionOutcome",
+  "RadrootsFoodAvailabilityProjectionError",
+  "RadrootsAdmittedFoodAvailabilityEvent",
+  "RadrootsExcludedClassifiedListingCandidate",
+  "RadrootsFoodAvailabilityAdmissionOutcome",
+  "RadrootsFoodAvailabilityAdmissionError",
+  "RadrootsFoodAvailabilityRevisionError",
   "RadrootsNip05Identifier",
   "RadrootsNip05IdentifierError",
   "RadrootsAuthoredProfile",
@@ -411,6 +438,138 @@ rust_types = [
 
 [operations.event_select_head.conformance]
 vector = "contracts/conformance/vectors/profile/verified_event.v1.json"
+
+[operations.food_availability_build_authored_draft]
+domain = "food_availability"
+id = "food_availability.build_authored_draft"
+stability = "beta"
+inputs = ["RadrootsFoodAvailabilityDetails", "u64"]
+outputs = ["RadrootsNip01EventWireParts"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.food_availability_build_authored_draft.implementation]
+rust_modules = [
+  "crates/event/src/food_availability.rs",
+  "crates/event_codec/src/food_availability/authored.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_event::food_availability::RadrootsFoodAvailabilityDetails",
+  "radroots_event::food_availability::RadrootsFoodAvailabilityDetailsParts",
+  "radroots_event::food_availability::RadrootsFoodAvailabilityError",
+  "radroots_event::food_availability::RadrootsFoodAvailabilityImage",
+  "radroots_event::media::RadrootsAuthoredImage",
+  "radroots_event::wire::RadrootsNip01EventWireParts",
+  "radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError",
+]
+
+[operations.food_availability_build_authored_draft.conformance]
+vector = "contracts/conformance/vectors/food_availability/profile.v1.json"
+case_kinds = [
+  "food_availability.build_authored_draft.valid",
+  "food_availability.build_authored_draft.invalid",
+]
+
+[operations.food_availability_project_verified_event]
+domain = "food_availability"
+id = "food_availability.project_verified_event"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["RadrootsFoodAvailabilityProjectionOutcome"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.food_availability_project_verified_event.implementation]
+rust_modules = [
+  "crates/event/src/classified_listing.rs",
+  "crates/event/src/food_availability.rs",
+  "crates/event_codec/src/food_availability/inbound.rs",
+]
+rust_types = [
+  "radroots_event::classified_listing::RadrootsClassifiedListingPartition",
+  "radroots_event::food_availability::RadrootsFoodAvailabilityError",
+  "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic",
+  "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
+  "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionOutcome",
+  "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityImage",
+  "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityProjection",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.food_availability_project_verified_event.conformance]
+vector = "contracts/conformance/vectors/food_availability/profile.v1.json"
+case_kinds = [
+  "food_availability.project_verified_event.valid",
+  "food_availability.project_verified_event.invalid",
+]
+
+[operations.food_availability_verify_and_admit_event]
+domain = "food_availability"
+id = "food_availability.verify_and_admit_event"
+stability = "beta"
+inputs = ["RadrootsEventEnvelope"]
+outputs = ["RadrootsFoodAvailabilityAdmissionOutcome"]
+error_class = "admission_error"
+deterministic = true
+signing = "nip01"
+transport = "none"
+
+[operations.food_availability_verify_and_admit_event.implementation]
+rust_modules = [
+  "crates/event_codec/src/food_availability/admission.rs",
+  "crates/event_codec/src/food_availability/inbound.rs",
+  "crates/event_codec/src/verification.rs",
+]
+rust_types = [
+  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event_codec::food_availability::admission::RadrootsAdmittedFoodAvailabilityEvent",
+  "radroots_event_codec::food_availability::admission::RadrootsExcludedClassifiedListingCandidate",
+  "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionError",
+  "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionOutcome",
+  "radroots_event_codec::food_availability::inbound::RadrootsInboundFoodAvailabilityProjection",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.food_availability_verify_and_admit_event.conformance]
+vector = "contracts/conformance/vectors/food_availability/profile.v1.json"
+case_kinds = [
+  "food_availability.verify_and_admit_event.valid",
+  "food_availability.verify_and_admit_event.invalid",
+]
+
+[operations.food_availability_validate_revision]
+domain = "food_availability"
+id = "food_availability.validate_revision"
+stability = "beta"
+inputs = ["RadrootsSignatureVerifiedEvent"]
+outputs = ["Unit"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.food_availability_validate_revision.implementation]
+rust_modules = [
+  "crates/event_codec/src/food_availability/inbound.rs",
+  "crates/event_codec/src/food_availability/revision.rs",
+]
+rust_types = [
+  "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
+  "radroots_event_codec::food_availability::revision::RadrootsFoodAvailabilityRevisionError",
+  "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
+]
+
+[operations.food_availability_validate_revision.conformance]
+vector = "contracts/conformance/vectors/food_availability/profile.v1.json"
+case_kinds = [
+  "food_availability.validate_revision.valid",
+  "food_availability.validate_revision.invalid",
+]
 
 [operations.profile_build_authored_draft]
 domain = "profile"

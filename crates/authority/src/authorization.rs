@@ -443,14 +443,14 @@ mod tests {
     }
 
     #[test]
-    fn stale_v1_and_v2_draft_validation_failures_do_not_invoke_custom_signer() {
+    fn stale_registry_draft_validation_failures_do_not_invoke_custom_signer() {
         let pubkey = hex_64('a');
         let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = CountingSigner::new(pubkey.as_str());
 
-        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 3);
-        for actual in [1, 2] {
+        assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 4);
+        for actual in [1, 2, 3] {
             let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
                 Err(RadrootsDraftError::ContractRegistryVersionMismatch {
                     expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
@@ -463,7 +463,7 @@ mod tests {
                 error,
                 RadrootsAuthorityError::DraftValidation(
                     RadrootsDraftError::ContractRegistryVersionMismatch {
-                        expected: 3,
+                        expected: 4,
                         actual,
                     }
                 )

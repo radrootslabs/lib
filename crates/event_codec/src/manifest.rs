@@ -74,6 +74,9 @@ pub struct RadrootsKnowledgeContractManifestEntry {
 pub enum RadrootsKnowledgeManifestDiscriminator {
     KindOnly,
     AdmissionOnly,
+    ClassifiedListingPartition {
+        value: String,
+    },
     DTagExact {
         value: String,
     },
@@ -219,6 +222,11 @@ fn discriminator_manifest(
         RadrootsEventDiscriminator::AdmissionOnly => {
             RadrootsKnowledgeManifestDiscriminator::AdmissionOnly
         }
+        RadrootsEventDiscriminator::ClassifiedListingPartition(value) => {
+            RadrootsKnowledgeManifestDiscriminator::ClassifiedListingPartition {
+                value: classified_listing_partition_label(*value).to_string(),
+            }
+        }
         RadrootsEventDiscriminator::DTagExact(value) => {
             RadrootsKnowledgeManifestDiscriminator::DTagExact {
                 value: (*value).to_string(),
@@ -256,6 +264,19 @@ fn discriminator_manifest(
                 parts: parts.iter().map(discriminator_manifest).collect(),
             }
         }
+    }
+}
+
+fn classified_listing_partition_label(
+    value: radroots_event::classified_listing::RadrootsClassifiedListingPartition,
+) -> &'static str {
+    use radroots_event::classified_listing::RadrootsClassifiedListingPartition;
+
+    match value {
+        RadrootsClassifiedListingPartition::FocusedFoodAvailability => "focused_food_availability",
+        RadrootsClassifiedListingPartition::OperationalListing => "operational_listing",
+        RadrootsClassifiedListingPartition::GenericNip99 => "generic_nip99",
+        RadrootsClassifiedListingPartition::Ambiguous => "ambiguous",
     }
 }
 
@@ -451,8 +472,11 @@ fn reducer_label(value: RadrootsReducer) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{reducer_label, standard_label};
-    use radroots_event::contract::{RadrootsNostrStandard, RadrootsReducer};
+    use super::{discriminator_manifest, reducer_label, standard_label};
+    use radroots_event::{
+        classified_listing::RadrootsClassifiedListingPartition,
+        contract::{RadrootsEventDiscriminator, RadrootsNostrStandard, RadrootsReducer},
+    };
 
     #[test]
     fn classified_listing_standard_label_is_nip99() {
@@ -469,5 +493,35 @@ mod tests {
             reducer_label(RadrootsReducer::OperationalListingInventoryAccounting),
             "operational_listing_inventory_accounting"
         );
+    }
+
+    #[test]
+    fn classified_listing_partition_discriminators_render_exactly() {
+        for (partition, expected) in [
+            (
+                RadrootsClassifiedListingPartition::FocusedFoodAvailability,
+                "focused_food_availability",
+            ),
+            (
+                RadrootsClassifiedListingPartition::OperationalListing,
+                "operational_listing",
+            ),
+            (
+                RadrootsClassifiedListingPartition::GenericNip99,
+                "generic_nip99",
+            ),
+            (RadrootsClassifiedListingPartition::Ambiguous, "ambiguous"),
+        ] {
+            let manifest = discriminator_manifest(
+                &RadrootsEventDiscriminator::ClassifiedListingPartition(partition),
+            );
+            assert_eq!(
+                serde_json::to_value(manifest).expect("serialized discriminator"),
+                serde_json::json!({
+                    "type": "classified_listing_partition",
+                    "value": expected,
+                })
+            );
+        }
     }
 }

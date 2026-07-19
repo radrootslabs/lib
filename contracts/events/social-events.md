@@ -30,8 +30,9 @@ authoring and admission profile are separate contract layers.
 The repository implements strict authored and verified-projected kind `1` post profiles, kind `1111`
 `RadrootsComment`, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
 records through `RadrootsOperationalListing`, the raw kind-`30402` profile partition and validated
-FoodAvailability domain primitives, articles, generic public file metadata, calendar date events,
-calendar time events, reposts, generic reposts, calendar collections, RSVP events, and reports.
+FoodAvailability authored, verified-admission, and revision contract, articles, generic public file
+metadata, calendar date events, calendar time events, reposts, generic reposts, calendar
+collections, RSVP events, and reports.
 
 The closeout contract requires:
 
@@ -73,9 +74,9 @@ The production-v1 public social substrate includes:
 - `RadrootsReport` for NIP-56 kind `1984`
 - operational-listing profile validation through `RadrootsOperationalListing` at NIP-99
   classified-listing kind `30402`
-- validated FoodAvailability details and a raw marker-name partition for focused, operational,
-  generic NIP-99, and ambiguous kind-`30402` inputs; the focused codec and admission boundary are
-  not part of this checkpoint
+- strict FoodAvailability details, deterministic unsigned authoring, verified tolerant projection,
+  NIP-01 admission, and strict revision validation for focused kind-`30402` inputs, with explicit
+  exclusion of Operational Listing and marker-free generic NIP-99 candidates
 - relay-list kind `10002` validation through `RadrootsList`
 
 ## Contract Decisions
@@ -144,11 +145,11 @@ contract. Strict Profile, Update, PhotoUpdate, and Ask contracts are
 `TypedOnly`; `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft
 contracts remain `GenericDraft`. `RadrootsEventDraft::new` therefore rejects
 the strict Profile contract and all four governed kind-1 post contracts with
-`contract_not_draft_authorable`. Serialized drafts record registry version `3`
+`contract_not_draft_authorable`. Serialized drafts record registry version `4`
 and are accepted only after deserialization revalidates the registry version,
 contract, kind, shape, policy, recomputed event id, and known fields. The
-frozen-draft signing boundary repeats that validation, so stale version-`1`
-and version-`2` drafts must be rebuilt. Typed root posts enter Nostr signing and client
+frozen-draft signing boundary repeats that validation, so stale version-`1`, version-`2`, and
+version-`3` drafts must be rebuilt. Typed root posts enter Nostr signing and client
 publication only through an opaque post builder that exposes timestamp
 selection and signing, but no raw tag/content mutation or public conversion to
 the upstream builder. The opaque generic builder rejects kind `0` and unmarked
@@ -224,12 +225,42 @@ completion, decoded raster dimensions, content safety, retrieval, reachability, 
 availability.
 
 The details model deliberately has no farm, bin, route, pickup, delivery, order, checkout, or other
-commerce-workflow field. It retains `published_at` as input for later replacement checks, but this
-checkpoint does not compare revisions or prove its stability. The model is not serializable and is
-not a signable authored draft; it emits no tags or wire event. This checkpoint adds no
-FoodAvailability codec, registry identity, verified inbound admission, revision validator, replica
-projection, signing, publication, or client behavior; those boundaries require separate executable
-contract work.
+commerce-workflow field. `authored_food_availability_to_wire_parts` accepts these details plus
+`created_at`, requires `published_at <= created_at`, and emits unsigned kind-`30402` wire parts. Its
+closed tag sequence is exactly `d`, `title`, `summary`, `published_at`, `location`, `price`,
+`radroots:price_unit`, optional `radroots:quantity`, `status`, then zero or more `image` tags. Price
+is exactly amount plus currency, quantity is exactly amount plus unit, and image is exactly URL plus
+dimensions. The decoded tag budgets and the 262144-byte compact signed-event budget are both
+enforced. The operation neither chooses `created_at` nor signs or transports the result.
+
+Inbound projection accepts only a `RadrootsSignatureVerifiedEvent`. Raw marker partitioning occurs
+before focused tag validation: Operational Listing and marker-free generic NIP-99 candidates are
+explicit exclusions, while mixed markers are an error. A focused candidate requires the complete
+core profile and rejects tags that purport to add buyer, checkout, delivery, exception, group,
+invite, order, payment, pickup, proof, provenance, receipt, route, `route_stop`, or task capability.
+Other optional NIP-99 tags remain outside the focused projection and are ignored. Accepted inbound
+decimal values are normalized without exceeding the 28-digit wire bound, and three-letter currency
+is normalized to uppercase.
+
+Inbound image observations are not authored media typestates. The projection retains at most the
+first 64 tags in wire order and records stable ordered diagnostics for count overflow, malformed
+shape, invalid HTTP(S) URL, missing or invalid dimensions, duplicate URL, and duplicate Blossom
+digest. Image diagnostics do not invalidate an otherwise complete focused core. They confer no
+Blossom approval, byte agreement, upload, decoding, retrieval, safety, or availability claim.
+
+`verify_and_admit_food_availability_event` performs NIP-01 id and Schnorr verification before that
+projection and returns either `RadrootsAdmittedFoodAvailabilityEvent` or an explicit verified
+non-focused exclusion. The admitted type binds the projection to the verified envelope and exposes
+the admission-only `radroots.food.availability.v1` registry contract. The contract is `TypedOnly`:
+strict authored details are its only product-authoring input, and unsigned kind or tag matching does
+not confer focused admission.
+
+Revision validation accepts two independently signature-verified events and re-applies the exact
+authored wire profile to each side; tolerant normalized or diagnostic-bearing projections cannot
+enter this comparison. Kind, author, `d`, and `published_at` must remain stable. The candidate must
+have a later `created_at`, or the lower event id when both timestamps are equal. Invalid previous
+and current inputs have side-specific errors. The profile contract does not implement signing,
+relay publication, replica selection, media upload, or client behavior.
 
 ### Calendar Trust Layers
 
@@ -367,8 +398,8 @@ or an availability guarantee.
 Product routing uses surface-specific kind classifiers rather than a broad public-social set. Home,
 Events, Market, Map, and Profile public-content candidates are explicit. A kind-`30402` value alone
 does not select FoodAvailability: raw marker partitioning first distinguishes focused,
-operational, generic NIP-99, and ambiguous candidates. Full FoodAvailability admission remains a
-later boundary. Report kind `1984` is a moderation/admin candidate, not
+operational, generic NIP-99, and ambiguous candidates, and only signature-verified focused admission
+returns the FoodAvailability contract. Report kind `1984` is a moderation/admin candidate, not
 normal feed content. Relay and HTTP auth kinds are transient and excluded from durable social and
 farm-ops candidate sets. Private farm operations candidates include the farm workspace manifest,
 farm CRDT change envelope, farm file metadata, and the supported NIP-29 group event subset.
@@ -399,9 +430,11 @@ this contract boundary.
 ## Conformance Boundary
 
 Every new social codec and every upgraded existing social codec must have deterministic valid and
-invalid conformance vectors before closeout. Upgraded vectors must include the strict comment,
-reaction, operational-listing, farm, list, and list-set behavior whose public contract changes during the
-refactor.
+invalid conformance vectors before closeout. The FoodAvailability profile vector assigns exact
+valid and invalid case kinds to strict authoring, verified projection, combined verification and
+admission, and revision validation. Other upgraded vectors must include the strict comment,
+reaction, operational-listing, farm, list, and list-set behavior whose public contract changes
+during the refactor.
 
 Social vectors are repo-owned and synthetic. They must not depend on application relay state, local
 databases, external services, root fixture catalogs, or ambient machine state.

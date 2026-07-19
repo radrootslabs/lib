@@ -31,7 +31,7 @@ an envelope whose id and signature it has independently verified and whose kind
 the corresponding parser accepted. Outbound authored models produce unsigned
 wire parts and require runtime signing and transport.
 
-## Classified and operational listing boundary rule
+## Classified-listing profile boundary rule
 
 Kind `30402` is the standard NIP-99 classified-listing kind and
 `RadrootsClassifiedListingAddress` is the exact coordinate authority for that
@@ -51,14 +51,36 @@ as `FocusedFoodAvailability`, `OperationalListing`, `GenericNip99`, and
 are case-sensitive. This central partition does not inspect kind, values, or
 arity and does not validate either profile.
 
-The current FoodAvailability boundary exposes strict domain and authored-media
-input primitives only. Its validated details contain no farm, bin, route,
-pickup, delivery, order, or checkout fields, but they are not yet a signable
-authored draft. No FoodAvailability codec, registry contract, inbound
-admission, operation, replica projection, publication path, or client behavior
-is established by this checkpoint. A validated image proves local Blossom
-descriptor-to-byte agreement only; it does not prove upload completion, raster
-decoding, reachability, or network availability.
+The focused `radroots.food.availability.v1` profile has four public operation
+boundaries. Strict authored details plus `created_at` produce deterministic
+unsigned kind-`30402` wire parts. Projection accepts only a
+`RadrootsSignatureVerifiedEvent`, returns focused data or an explicit
+Operational Listing or generic NIP-99 exclusion, rejects mixed markers as
+ambiguous, and applies focused validation only after partitioning. Combined
+admission performs NIP-01 id and signature verification before projection and
+keeps either result bound to its verified envelope.
+
+Strict authoring emits the exact ordered `d`, `title`, `summary`,
+`published_at`, `location`, `price`, `radroots:price_unit`, optional
+`radroots:quantity`, `status`, and repeated `image` tags. Inbound focused
+projection normalizes accepted decimal and currency spellings, ignores
+unowned optional NIP-99 tags, and preserves a bounded ordered image projection
+with stable diagnostics instead of treating malformed image metadata as a
+valid authored image. Focused capability tags for checkout, fulfillment,
+payments, provenance, and operational workflows are rejected; the profile
+does not gain those semantics by carrying an unknown tag.
+
+Revision validation re-applies strict authored wire semantics to both verified
+events. It requires stable kind, author, `d` coordinate, and `published_at`,
+then applies NIP-01 replacement order: later `created_at` wins, and the lower
+event id wins at equal time. Side-specific errors identify an invalid previous
+or current candidate before revision comparison.
+
+No operation in this boundary signs, publishes, retrieves, or replicates an
+event. A validated authored image proves local Blossom descriptor-to-byte
+agreement only; successful BUD-02 upload completion and any raster,
+retrievability, or availability checks remain runtime responsibilities before
+signing.
 
 ## Kind-1 post boundary rule
 
@@ -109,6 +131,7 @@ implementation.
 | document | 30361 | RadrootsDocument | events.document.publish, events.document.list, events.document.get | requires `d` and pubkey tags; optional address tag |
 | resource_area | 30370 | RadrootsResourceArea | events.resource_area.publish, events.resource_area.list, events.resource_area.get | addressable; GCS location and `g` tag required |
 | resource_cap | 30371 | RadrootsResourceHarvestCap | events.resource_cap.publish, events.resource_cap.list, events.resource_cap.get | addressable; required address, pubkey, key, start, and end tags |
+| food_availability | 30402 | RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent | food_availability.build_authored_draft, food_availability.project_verified_event, food_availability.verify_and_admit_event, food_availability.validate_revision | focused `radroots.food.availability.v1` profile; strict deterministic authoring, verified projection/admission, explicit non-focused exclusion, and stable-coordinate revision validation; no signing, transport, replica, client behavior, or publication operation |
 | operational_listing | 30402 | RadrootsOperationalListing | events.operational_listing.publish, events.operational_listing.list, events.operational_listing.get | NIP-99 classified-listing kind with the richer Radroots operational profile; canonical Markdown content and tags; farm author required |
 | dvm_request | 5000-5999 | RadrootsJobRequest | events.dvm_request.publish, events.dvm_request.list, events.dvm_request.get | generic DVM request surface |
 | dvm_result | 6000-6999 | RadrootsJobResult | events.dvm_result.publish, events.dvm_result.list, events.dvm_result.get | generic DVM result surface |

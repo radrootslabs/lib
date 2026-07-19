@@ -1942,7 +1942,10 @@ mod tests {
     }
 
     fn operational_listing_tags(d_tag: &str) -> Vec<Vec<String>> {
-        vec![vec!["d".to_owned(), d_tag.to_owned()]]
+        vec![
+            vec!["d".to_owned(), d_tag.to_owned()],
+            vec!["radroots:primary_bin".to_owned(), "bin-1".to_owned()],
+        ]
     }
 
     fn head_coordinate_for_event(event: &RadrootsSignedEvent) -> RadrootsEventHeadCoordinate {
@@ -2752,7 +2755,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn malformed_addressable_heads_are_not_projected() {
+    async fn marker_free_classified_listings_are_unsupported() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(KIND_CLASSIFIED_LISTING, 16, Vec::new(), "{}");
 
@@ -2768,11 +2771,11 @@ mod tests {
 
         assert_eq!(
             receipt.contract_status,
-            RadrootsEventContractStatus::Supported
+            RadrootsEventContractStatus::UnsupportedShape(KIND_CLASSIFIED_LISTING)
         );
         assert_eq!(
             receipt.head_decision,
-            RadrootsEventHeadStoreDecision::Malformed
+            RadrootsEventHeadStoreDecision::Unsupported
         );
         assert!(!receipt.projection_eligible);
         assert!(!stored.projection_eligible);

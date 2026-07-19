@@ -407,24 +407,29 @@ mod tests {
     }
 
     #[test]
-    fn stale_v1_and_v2_draft_validation_errors_preserve_typed_sources() {
+    fn stale_registry_draft_validation_errors_preserve_typed_sources() {
         let cases = [
             (
                 1,
-                "draft validation failed: event contract registry version mismatch: expected 3, got 1",
-                "event contract registry version mismatch: expected 3, got 1",
+                "draft validation failed: event contract registry version mismatch: expected 4, got 1",
+                "event contract registry version mismatch: expected 4, got 1",
             ),
             (
                 2,
-                "draft validation failed: event contract registry version mismatch: expected 3, got 2",
-                "event contract registry version mismatch: expected 3, got 2",
+                "draft validation failed: event contract registry version mismatch: expected 4, got 2",
+                "event contract registry version mismatch: expected 4, got 2",
+            ),
+            (
+                3,
+                "draft validation failed: event contract registry version mismatch: expected 4, got 3",
+                "event contract registry version mismatch: expected 4, got 3",
             ),
         ];
 
         for (actual, expected_authority, expected_source) in cases {
             let authority_error = RadrootsAuthorityError::DraftValidation(
                 radroots_event::draft::RadrootsDraftError::ContractRegistryVersionMismatch {
-                    expected: 3,
+                    expected: 4,
                     actual,
                 },
             );

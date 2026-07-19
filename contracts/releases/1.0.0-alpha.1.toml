@@ -155,3 +155,16 @@ semver_impacts = [
   "add_enum_variant",
 ]
 summary = "Add raw kind-30402 profile partitioning and validated FoodAvailability domain and media-input primitives without claiming a codec, authored draft, admission, signing, or publication boundary."
+
+[[changes]]
+id = "food-availability-codec-contract"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Add typed FoodAvailability encoding, signature-gated tolerant admission, strict signed-revision comparison, and partition-aware kind-30402 contract identification while advancing the event registry to version 4."

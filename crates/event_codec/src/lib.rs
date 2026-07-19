@@ -34,6 +34,7 @@ pub mod farm_file;
 pub mod farm_workspace;
 pub mod file_metadata;
 pub mod follow;
+pub mod food_availability;
 pub mod geochat;
 pub mod gift_wrap;
 pub mod group;

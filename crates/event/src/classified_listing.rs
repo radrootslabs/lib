@@ -1,3 +1,8 @@
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+#[cfg(feature = "std")]
+use std::{string::String, vec::Vec};
+
 use crate::{RadrootsEventTag, RadrootsEventTags};
 
 pub const TAG_RADROOTS_PRICE_UNIT: &str = "radroots:price_unit";
@@ -33,11 +38,26 @@ pub fn classify_classified_listing_tags(
 pub fn classify_classified_listing_tag_slice(
     tags: &[RadrootsEventTag],
 ) -> RadrootsClassifiedListingPartition {
+    classify_classified_listing_tag_names(
+        tags.iter()
+            .map(|tag| tag.as_slice().first().map(String::as_str)),
+    )
+}
+
+pub(crate) fn classify_classified_listing_raw_tags(
+    tags: &[Vec<String>],
+) -> RadrootsClassifiedListingPartition {
+    classify_classified_listing_tag_names(tags.iter().map(|tag| tag.first().map(String::as_str)))
+}
+
+fn classify_classified_listing_tag_names<'a>(
+    names: impl IntoIterator<Item = Option<&'a str>>,
+) -> RadrootsClassifiedListingPartition {
     let mut has_focused_marker = false;
     let mut has_operational_marker = false;
 
-    for tag in tags {
-        let Some(name) = tag.as_slice().first().map(|value| value.as_str()) else {
+    for name in names {
+        let Some(name) = name else {
             continue;
         };
 

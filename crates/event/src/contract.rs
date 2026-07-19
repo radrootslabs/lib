@@ -10,6 +10,10 @@ use crate::{
         RadrootsCalendarUri, RadrootsIanaTimeZoneId, canonical_calendar_geohash_is_valid,
         canonical_calendar_tag_text_is_valid, covered_utc_days,
     },
+    classified_listing::{
+        RadrootsClassifiedListingPartition, TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY,
+        classify_classified_listing_raw_tags,
+    },
     ids::{
         RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
         relay_url_is_valid,
@@ -18,7 +22,7 @@ use crate::{
 };
 use radroots_blossom::RadrootsBlossomBlobUrl;
 
-pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 3;
+pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsEventClass {
@@ -202,6 +206,8 @@ pub enum RadrootsEventDiscriminator {
     KindOnly,
     /// Exact profile selection is owned by a verified admission algorithm.
     AdmissionOnly,
+    /// Exact NIP-99 profile selection uses the central raw marker partition.
+    ClassifiedListingPartition(RadrootsClassifiedListingPartition),
     DTagExact(&'static str),
     DTagPrefix(&'static str),
     DTagSuffix(&'static str),
@@ -731,6 +737,62 @@ const TAG_IMAGE: RadrootsTagContract = tag(
     RadrootsTagValueType::Url,
     false,
 );
+const TAG_FOOD_TITLE: RadrootsTagContract = tag(
+    "title",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Title,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_FOOD_SUMMARY: RadrootsTagContract = tag(
+    "summary",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Summary,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_FOOD_PUBLISHED_AT: RadrootsTagContract = tag(
+    "published_at",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::PublishedAt,
+    RadrootsTagValueType::UnixTimestamp,
+    false,
+);
+const TAG_FOOD_LOCATION: RadrootsTagContract = tag(
+    "location",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Location,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_FOOD_PRICE: RadrootsTagContract = tag(
+    "price",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Price,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_FOOD_PRICE_UNIT: RadrootsTagContract = tag(
+    TAG_RADROOTS_PRICE_UNIT,
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Price,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_FOOD_QUANTITY: RadrootsTagContract = tag(
+    TAG_RADROOTS_QUANTITY,
+    RadrootsTagCardinality::OptionalOne,
+    RadrootsTagSemantic::Price,
+    RadrootsTagValueType::Text,
+    false,
+);
+const TAG_FOOD_STATUS: RadrootsTagContract = tag(
+    "status",
+    RadrootsTagCardinality::RequiredOne,
+    RadrootsTagSemantic::Status,
+    RadrootsTagValueType::Text,
+    false,
+);
 const TAG_OPERATIONAL_LISTING_FARM: RadrootsTagContract = tag(
     "a",
     RadrootsTagCardinality::RequiredOne,
@@ -1033,6 +1095,18 @@ const CALENDAR_RSVP_TAGS: &[RadrootsTagContract] = &[
     TAG_CALENDAR_RSVP_AUTHOR,
 ];
 const FARM_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_IMAGE];
+const FOOD_AVAILABILITY_TAGS: &[RadrootsTagContract] = &[
+    TAG_D,
+    TAG_FOOD_TITLE,
+    TAG_FOOD_SUMMARY,
+    TAG_FOOD_PUBLISHED_AT,
+    TAG_FOOD_LOCATION,
+    TAG_FOOD_PRICE,
+    TAG_FOOD_PRICE_UNIT,
+    TAG_FOOD_QUANTITY,
+    TAG_FOOD_STATUS,
+    TAG_IMAGE,
+];
 const OPERATIONAL_LISTING_TAGS: &[RadrootsTagContract] = &[
     TAG_D,
     TAG_P_REQUIRED,
@@ -1114,6 +1188,7 @@ const OPERATIONAL_LISTING_REDUCERS: &[RadrootsReducer] = &[
     RadrootsReducer::MarketProjection,
     RadrootsReducer::OperationalListingInventoryAccounting,
 ];
+const FOOD_AVAILABILITY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::MarketProjection];
 const TRADE_MUTATION_REDUCERS: &[RadrootsReducer] = &[
     RadrootsReducer::TradeProjection,
     RadrootsReducer::OperationalListingInventoryAccounting,
@@ -1880,7 +1955,10 @@ static ALL_KIND_CONTRACTS: &[RadrootsKindContract] = &[
         "Classified Listing",
         RadrootsEventClass::Addressable,
         RadrootsNostrStandard::Nip99,
-        ["radroots.operational_listing.published.v1"]
+        [
+            "radroots.operational_listing.published.v1",
+            "radroots.food.availability.v1"
+        ]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_SOURCE,
@@ -3091,9 +3169,25 @@ static ALL_EVENT_CONTRACTS: &[RadrootsEventContract] = &[
         RadrootsEventPrivacy::Public,
         RadrootsActorRole::Seller,
         RadrootsContentSchema::Markdown,
-        RadrootsEventDiscriminator::KindOnly,
+        RadrootsEventDiscriminator::ClassifiedListingPartition(
+            RadrootsClassifiedListingPartition::OperationalListing,
+        ),
         OPERATIONAL_LISTING_TAGS,
         OPERATIONAL_LISTING_REDUCERS
+    ),
+    event_contract_with_authoring_policy!(
+        "radroots.food.availability.v1",
+        KIND_CLASSIFIED_LISTING,
+        "Food Availability",
+        "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection",
+        RadrootsEventClass::Addressable,
+        RadrootsEventPrivacy::Public,
+        RadrootsActorRole::Seller,
+        RadrootsContentSchema::Markdown,
+        RadrootsEventAuthoringPolicy::TypedOnly,
+        RadrootsEventDiscriminator::AdmissionOnly,
+        FOOD_AVAILABILITY_TAGS,
+        FOOD_AVAILABILITY_REDUCERS
     ),
     experimental_event_contract!(
         "radroots.knowledge.source.v1",
@@ -3564,12 +3658,30 @@ pub fn validate_event_contract_parts(
             contract_id: contract.id,
         });
     }
+    validate_classified_listing_partition_parts(tags, contract)?;
     validate_content_shape_parts(content, contract)?;
     validate_contract_tags_parts(tags, contract)?;
     validate_discriminator_parts(content, contract)?;
     validate_custom_calendar_contract_parts(tags, contract)?;
     validate_custom_knowledge_contract_parts(content, contract)?;
     Ok(())
+}
+
+fn validate_classified_listing_partition_parts(
+    tags: &[Vec<String>],
+    contract: &RadrootsEventContract,
+) -> Result<(), RadrootsContractValidationError> {
+    let RadrootsEventDiscriminator::ClassifiedListingPartition(expected) = contract.discriminator
+    else {
+        return Ok(());
+    };
+    if classify_classified_listing_raw_tags(tags) == expected {
+        Ok(())
+    } else {
+        Err(RadrootsContractValidationError::ContractMatch {
+            error: RadrootsContractMatchError::UnsupportedShape(contract.kind),
+        })
+    }
 }
 
 fn identify_from_contracts<'a, I>(
@@ -3617,7 +3729,7 @@ fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
         Some(RadrootsContractFamily::Knowledge)
     } else if id.starts_with("radroots.list.") || id.starts_with("radroots.list_set.") {
         Some(RadrootsContractFamily::List)
-    } else if id.starts_with("radroots.operational_listing.") {
+    } else if id.starts_with("radroots.operational_listing.") || id.starts_with("radroots.food.") {
         Some(RadrootsContractFamily::Market)
     } else if id.starts_with("radroots.message.") {
         Some(RadrootsContractFamily::Message)
@@ -4526,6 +4638,9 @@ fn discriminator_matches(
     match discriminator {
         RadrootsEventDiscriminator::KindOnly => true,
         RadrootsEventDiscriminator::AdmissionOnly => false,
+        RadrootsEventDiscriminator::ClassifiedListingPartition(expected) => {
+            classify_classified_listing_raw_tags(tags) == *expected
+        }
         RadrootsEventDiscriminator::DTagExact(expected) => tag_value(tags, "d") == Some(*expected),
         RadrootsEventDiscriminator::DTagPrefix(prefix) => tag_value(tags, "d")
             .map(|value| value.starts_with(prefix))
@@ -5100,7 +5215,7 @@ mod tests {
     }
 
     #[test]
-    fn classified_listing_kind_and_operational_profile_are_distinct() {
+    fn classified_listing_kind_profiles_are_partitioned_and_explicit() {
         let kind = kind_contract(KIND_CLASSIFIED_LISTING).expect("classified listing kind");
         assert_eq!(kind.canonical_constant, "KIND_CLASSIFIED_LISTING");
         assert_eq!(kind.name, "Classified Listing");
@@ -5108,15 +5223,66 @@ mod tests {
         assert_eq!(kind.standard, RadrootsNostrStandard::Nip99);
         assert_eq!(
             kind.accepted_event_contracts,
-            &["radroots.operational_listing.published.v1"]
+            &[
+                "radroots.operational_listing.published.v1",
+                "radroots.food.availability.v1",
+            ]
         );
 
-        let profile = event_contract("radroots.operational_listing.published.v1")
+        let operational = event_contract("radroots.operational_listing.published.v1")
             .expect("operational listing profile");
-        assert_eq!(profile.name, "Operational Listing");
-        assert_eq!(profile.payload_type, "RadrootsOperationalListing");
-        assert_eq!(profile.content_schema, RadrootsContentSchema::Markdown);
-        assert_eq!(profile.discriminator, RadrootsEventDiscriminator::KindOnly);
+        assert_eq!(operational.name, "Operational Listing");
+        assert_eq!(operational.payload_type, "RadrootsOperationalListing");
+        assert_eq!(operational.content_schema, RadrootsContentSchema::Markdown);
+        assert_eq!(
+            operational.discriminator,
+            RadrootsEventDiscriminator::ClassifiedListingPartition(
+                RadrootsClassifiedListingPartition::OperationalListing,
+            )
+        );
+
+        let food = event_contract("radroots.food.availability.v1")
+            .expect("focused food availability profile");
+        assert_eq!(food.name, "Food Availability");
+        assert_eq!(
+            food.payload_type,
+            "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection"
+        );
+        assert_eq!(food.class, RadrootsEventClass::Addressable);
+        assert_eq!(food.privacy, RadrootsEventPrivacy::Public);
+        assert_eq!(food.author_role, RadrootsActorRole::Seller);
+        assert_eq!(food.content_schema, RadrootsContentSchema::Markdown);
+        assert_eq!(
+            food.authoring_policy,
+            RadrootsEventAuthoringPolicy::TypedOnly
+        );
+        assert_eq!(
+            food.discriminator,
+            RadrootsEventDiscriminator::AdmissionOnly
+        );
+        assert_eq!(food.reducers, &[RadrootsReducer::MarketProjection]);
+        assert_eq!(
+            event_contract_family(food),
+            Some(RadrootsContractFamily::Market)
+        );
+        assert_eq!(
+            food.tags
+                .iter()
+                .map(|tag| (tag.name, tag.cardinality))
+                .collect::<Vec<_>>(),
+            vec![
+                ("d", RadrootsTagCardinality::RequiredOne),
+                ("title", RadrootsTagCardinality::RequiredOne),
+                ("summary", RadrootsTagCardinality::RequiredOne),
+                ("published_at", RadrootsTagCardinality::RequiredOne),
+                ("location", RadrootsTagCardinality::RequiredOne),
+                ("price", RadrootsTagCardinality::RequiredOne),
+                ("radroots:price_unit", RadrootsTagCardinality::RequiredOne),
+                ("radroots:quantity", RadrootsTagCardinality::OptionalOne),
+                ("status", RadrootsTagCardinality::RequiredOne),
+                ("image", RadrootsTagCardinality::OptionalMany),
+            ]
+        );
         assert!(event_contract("radroots.listing.published.v1").is_none());
 
         let seller = "a".repeat(64);
@@ -5139,6 +5305,76 @@ mod tests {
                 "radroots.operational_listing.published.v1",
             ),
             Ok(())
+        );
+        assert_eq!(
+            identify_event_contract(KIND_CLASSIFIED_LISTING, &tags, "# Carrots")
+                .expect("operational discriminator")
+                .id,
+            operational.id
+        );
+
+        let malformed_operational = vec![owned_tag(&["radroots:bin"])];
+        assert_eq!(
+            identify_event_contract(KIND_CLASSIFIED_LISTING, &malformed_operational, "Carrots",)
+                .expect("raw operational marker partitions before shape validation")
+                .id,
+            operational.id
+        );
+        assert_eq!(
+            validate_event_contract_parts(
+                KIND_CLASSIFIED_LISTING,
+                &malformed_operational,
+                "Carrots",
+                operational.id,
+            ),
+            Err(RadrootsContractValidationError::MissingTag {
+                contract_id: "radroots.operational_listing.published.v1",
+                name: "d",
+            })
+        );
+
+        let focused = vec![owned_tag(&["radroots:price_unit", "lb"])];
+        assert_eq!(
+            identify_event_contract(KIND_CLASSIFIED_LISTING, &focused, "Carrots"),
+            Err(RadrootsContractMatchError::UnsupportedShape(
+                KIND_CLASSIFIED_LISTING
+            ))
+        );
+        assert_eq!(
+            validate_event_contract_parts(KIND_CLASSIFIED_LISTING, &focused, "Carrots", food.id,),
+            Err(RadrootsContractValidationError::AdmissionRequired {
+                contract_id: "radroots.food.availability.v1",
+            })
+        );
+        assert_eq!(
+            validate_event_contract_parts(
+                KIND_CLASSIFIED_LISTING,
+                &focused,
+                "Carrots",
+                operational.id,
+            ),
+            Err(RadrootsContractValidationError::ContractMatch {
+                error: RadrootsContractMatchError::UnsupportedShape(KIND_CLASSIFIED_LISTING),
+            })
+        );
+
+        let generic = vec![owned_tag(&["d", "carrots"])];
+        assert_eq!(
+            identify_event_contract(KIND_CLASSIFIED_LISTING, &generic, "Carrots"),
+            Err(RadrootsContractMatchError::UnsupportedShape(
+                KIND_CLASSIFIED_LISTING
+            ))
+        );
+
+        let ambiguous = vec![
+            owned_tag(&["radroots:price_unit"]),
+            owned_tag(&["radroots:primary_bin"]),
+        ];
+        assert_eq!(
+            identify_event_contract(KIND_CLASSIFIED_LISTING, &ambiguous, "Carrots"),
+            Err(RadrootsContractMatchError::UnsupportedShape(
+                KIND_CLASSIFIED_LISTING
+            ))
         );
     }
 
@@ -5230,6 +5466,10 @@ mod tests {
             ),
             (
                 "radroots.operational_listing.test.v1",
+                Some(RadrootsContractFamily::Market),
+            ),
+            (
+                "radroots.food.test.v1",
                 Some(RadrootsContractFamily::Market),
             ),
             (

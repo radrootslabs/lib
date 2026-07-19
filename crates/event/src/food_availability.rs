@@ -4,7 +4,9 @@ use alloc::{string::String, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::{fmt, str::FromStr};
+use radroots_blossom::{RadrootsBlossomHashPath, RadrootsBlossomSha256};
 use unicode_general_category::{GeneralCategory, get_general_category};
+use url_nostd::{Host, Url};
 
 use crate::media::RadrootsAuthoredImage;
 
@@ -13,6 +15,7 @@ pub const RADROOTS_FOOD_IDENTIFIER_MAX_BYTES: usize = 512;
 pub const RADROOTS_FOOD_TEXT_MAX_BYTES: usize = 4 * 1024;
 pub const RADROOTS_FOOD_DECIMAL_MAX_DIGITS: usize = 28;
 pub const RADROOTS_FOOD_IMAGE_MAX_COUNT: usize = 64;
+pub const RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID: &str = "radroots.food.availability.v1";
 
 /// Errors raised while constructing strict FoodAvailability details.
 #[non_exhaustive]
@@ -748,6 +751,109 @@ fn validate_images(
     Ok(())
 }
 
+/// Returns whether an inbound FoodAvailability image is a structural HTTP(S) URL.
+///
+/// This is deliberately broader than strict authored Blossom policy. Success
+/// makes no byte-verification, upload, reachability, or media-safety claim.
+pub fn food_media_http_url_is_valid(value: &str) -> bool {
+    if !value.contains("://")
+        || value.chars().any(|character| {
+            character.is_whitespace()
+                || matches!(
+                    get_general_category(character),
+                    GeneralCategory::Control | GeneralCategory::Format
+                )
+        })
+    {
+        return false;
+    }
+
+    let Ok(url) = Url::parse(value) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return false;
+    }
+
+    let Some((raw_host, raw_path)) = raw_food_media_host_and_path(value) else {
+        return false;
+    };
+    if raw_path.is_empty() || !raw_path.starts_with('/') {
+        return false;
+    }
+
+    match url.host() {
+        Some(Host::Domain(_)) => raw_food_dns_host_is_valid(raw_host),
+        Some(Host::Ipv4(_)) => raw_host.is_ascii() && !raw_host.is_empty(),
+        Some(Host::Ipv6(_)) => raw_host.is_ascii() && !raw_host.is_empty(),
+        None => false,
+    }
+}
+
+/// Extracts a structural Blossom hash from an otherwise valid inbound URL.
+///
+/// A `None` result does not invalidate a standard inbound NIP-58 image URL; it
+/// only means duplicate-digest diagnostics cannot be derived from its path.
+pub fn food_media_blossom_digest(value: &str) -> Option<RadrootsBlossomSha256> {
+    if !food_media_http_url_is_valid(value) {
+        return None;
+    }
+    let url = Url::parse(value).ok()?;
+    RadrootsBlossomHashPath::parse(url.path())
+        .ok()
+        .map(|path| path.hash())
+}
+
+fn raw_food_media_host_and_path(value: &str) -> Option<(&str, &str)> {
+    let (_, remainder) = value.split_once("://")?;
+    let authority_end = remainder.find(['/', '?', '#']).unwrap_or(remainder.len());
+    let authority = &remainder[..authority_end];
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+    let path_and_suffix = &remainder[authority_end..];
+    let path_end = path_and_suffix
+        .find(['?', '#'])
+        .unwrap_or(path_and_suffix.len());
+    let raw_path = &path_and_suffix[..path_end];
+
+    let raw_host = if let Some(bracketed) = authority.strip_prefix('[') {
+        let (host, suffix) = bracketed.split_once(']')?;
+        if !suffix.is_empty() && !suffix.starts_with(':') {
+            return None;
+        }
+        host
+    } else if let Some((host, _port)) = authority.rsplit_once(':') {
+        if host.contains(':') {
+            return None;
+        }
+        host
+    } else {
+        authority
+    };
+
+    Some((raw_host, raw_path))
+}
+
+fn raw_food_dns_host_is_valid(host: &str) -> bool {
+    !host.is_empty()
+        && host.is_ascii()
+        && host.len() <= 253
+        && host.split('.').all(|label| {
+            let bytes = label.as_bytes();
+            !bytes.is_empty()
+                && bytes.len() <= 63
+                && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+                && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+                && bytes
+                    .iter()
+                    .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
+        })
+}
+
 fn validate_canonical_decimal(value: &str) -> bool {
     let mut digits = 0usize;
     let mut seen_dot = false;
@@ -911,6 +1017,38 @@ mod tests {
         );
         assert!(RadrootsFoodContent::new(" harvest\nnotes ").is_ok());
         assert!(RadrootsFoodContent::new("carrots\u{1c}").is_ok());
+    }
+
+    #[test]
+    fn inbound_food_media_urls_are_structural_without_claiming_blossom() {
+        let hash = RadrootsBlossomSha256::digest(b"carrots").to_string();
+        for valid in [
+            format!("https://media.example/{hash}.webp"),
+            format!("http://media.example:0/{hash}?download=1"),
+            "https://media.example/not-a-blossom-path.jpg".to_string(),
+            format!("https://[::1]/{hash}"),
+        ] {
+            assert!(food_media_http_url_is_valid(&valid), "{valid}");
+        }
+        for invalid in [
+            format!("ftp://media.example/{hash}"),
+            format!("https://user@media.example/{hash}"),
+            "https://media.example".to_string(),
+            format!("https://média.example/{hash}"),
+            format!("https://media.example/\u{200b}{hash}"),
+        ] {
+            assert!(!food_media_http_url_is_valid(&invalid), "{invalid}");
+        }
+
+        let blossom = format!("https://media.example/{hash}.webp?download=1");
+        assert_eq!(
+            food_media_blossom_digest(&blossom),
+            Some(RadrootsBlossomSha256::from_hex(&hash).unwrap())
+        );
+        assert_eq!(
+            food_media_blossom_digest("https://media.example/not-a-hash.jpg"),
+            None
+        );
     }
 
     #[test]
