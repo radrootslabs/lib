@@ -59,6 +59,19 @@ validates the declared backing mode, rejects multi-connection in-memory pools,
 and configures every file-pool connection with foreign-key enforcement and the
 required busy timeout before migrations or writes.
 
+## Status inspection
+
+`inspect_event_store_status` reads status and validates stored classification
+invariants from an existing `SqlitePool` without configuring the pool or
+running migrations. `RadrootsEventStore::status_summary` delegates to this
+same authority. This permits offline tools to inspect an already initialized
+store without duplicating schema-sensitive SQL or turning a read operation into
+a schema mutation.
+
+Pre-admission legacy rows remain included in `total_events` but excluded from
+`valid_stream_events`. New-format rows with inconsistent verification,
+admission, event-class, eligibility, or contract identity fail closed.
+
 ## Projection cursors
 
 `projection_cursor` requires the caller's expected projection version.

@@ -9,6 +9,8 @@ helpers for the `radroots` core libraries.
    money, quantity, currency, and unit values;
  * listing publish helpers for canonical address normalization, author checks,
    and event-shaping workflows;
+ * one typed Operational Listing semantic reducer shared by unsigned model
+   validation and the signature-verified Nostr event boundary;
  * order and public-trade helpers for shared request validation and projection;
  * optional `serde` and `serde_json` support for shared model serialization;
  * portable shared-model support for both `std` and `no_std` builds.

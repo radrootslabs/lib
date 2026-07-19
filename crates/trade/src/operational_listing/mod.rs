@@ -24,6 +24,10 @@ pub use self::mutation::{
     RadrootsOperationalListingLifecycleState, RadrootsOperationalListingMutation,
     RadrootsOperationalListingMutationError,
 };
+pub use self::validation::{
+    RadrootsOperationalListingTradeProjection, validate_operational_listing_event,
+    validate_operational_listing_model,
+};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsClassifiedListingAddressParts {
     pub address: RadrootsClassifiedListingAddress,

@@ -21,7 +21,9 @@ publish policy both pass for the same source revision.
   projection/head reads; projection cursors require an expected version and a
   monotonic prior-sequence compare-and-swap. Verified ephemeral events receive
   an explicit not-persisted outcome and allocate no raw sequence, tags,
-  observations, or heads.
+  observations, or heads. Read-only consumers can inspect the same fail-closed
+  status summary from an initialized pool without duplicating schema-sensitive
+  SQL or running migrations.
 - Nostr fetch-ingest receipts now distinguish admitted, unsupported, invalid,
   malformed, inserted, duplicate, and ephemeral not-persisted events, carry
   stable admission codes when classification occurs, and name valid-stream
@@ -53,11 +55,11 @@ publish policy both pass for the same source revision.
 - Operational listing authoring now emits canonical Markdown content from the
   tag-authoritative model. Tolerant inbound JSON inspection remains a decode
   compatibility boundary only and is not an authoring format.
-- Operational listing trade validation now requires a
-  `RadrootsSignatureVerifiedEvent` and rejects every non-operational
-  kind-`30402` marker partition before decoding. Event-store projection
-  reconstructs and verifies that typestate instead of trusting a plain stored
-  envelope.
+- Operational listing trade validation exposes one shared unsigned-model
+  semantic reducer and a signature-verified event boundary that delegates to
+  it after kind, marker-partition, and decoding checks. Event-store projection
+  reconstructs and verifies the event typestate instead of trusting a plain
+  stored envelope.
 - Generic NIP-01 identifier and signature verification is now independent of
   knowledge decoding, and every dynamic Nostr kind conversion rejects values
   above `65535` instead of truncating them. Canonical-length author keys that

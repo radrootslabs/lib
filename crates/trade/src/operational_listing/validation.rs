@@ -11,8 +11,8 @@ use radroots_core::{
 };
 use radroots_event::{
     classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
-    ids::RadrootsClassifiedListingAddress,
-    kinds::is_classified_listing_kind,
+    ids::{RadrootsClassifiedListingAddress, RadrootsPublicKey},
+    kinds::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind},
     location::{has_textual_locality, is_public_geohash5},
     operational_listing::{
         RadrootsOperationalListing, RadrootsOperationalListingAvailability,
@@ -75,13 +75,29 @@ pub fn validate_operational_listing_event(
 
     let listing = operational_listing_from_nostr_event(event)
         .map_err(|error| OperationalListingValidationError::ParseError { error })?;
+    validate_operational_listing_model(listing, event.author())
+}
+
+/// Validates the trade semantics of an unsigned Operational Listing model.
+///
+/// The seller is typed independently from the model because it is the
+/// authority against which the listing's farm identity is checked. This
+/// function does not perform event-kind, profile, decoding, or signature
+/// checks; callers handling Nostr events must use
+/// [`validate_operational_listing_event`] instead.
+pub fn validate_operational_listing_model(
+    listing: RadrootsOperationalListing,
+    seller_pubkey: &RadrootsPublicKey,
+) -> Result<RadrootsOperationalListingTradeProjection, OperationalListingValidationError> {
     let listing_id = listing.d_tag.trim().to_string();
 
-    let seller_pubkey = event.author_str().to_string();
-    if listing.farm.pubkey != seller_pubkey {
+    if listing.farm.pubkey != seller_pubkey.as_str() {
         return Err(OperationalListingValidationError::InvalidSeller);
     }
-    let listing_addr_raw = format!("{}:{}:{}", event.kind_u32(), seller_pubkey, listing_id);
+    let listing_addr_raw = format!(
+        "{KIND_CLASSIFIED_LISTING}:{}:{listing_id}",
+        seller_pubkey.as_str()
+    );
     let listing_addr = RadrootsClassifiedListingAddress::parse(&listing_addr_raw)
         .expect("validated listing identity must form a listing address");
 
@@ -175,7 +191,7 @@ pub fn validate_operational_listing_event(
     Ok(RadrootsOperationalListingTradeProjection {
         listing_id,
         listing_addr,
-        seller_pubkey,
+        seller_pubkey: seller_pubkey.as_str().to_string(),
         title,
         description,
         product_type,
@@ -206,7 +222,10 @@ fn validate_listing_location_geohash(
 
 #[cfg(test)]
 mod tests {
-    use super::{OperationalListingValidationError, validate_operational_listing_event};
+    use super::{
+        OperationalListingValidationError, validate_operational_listing_event,
+        validate_operational_listing_model,
+    };
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
@@ -215,7 +234,7 @@ mod tests {
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         farm::RadrootsFarmRef,
-        ids::{RadrootsDTag, RadrootsInventoryBinId},
+        ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsPublicKey},
         kinds::KIND_CLASSIFIED_LISTING,
         operational_listing::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
@@ -239,6 +258,14 @@ mod tests {
 
     fn bin_id(raw: &str) -> RadrootsInventoryBinId {
         RadrootsInventoryBinId::parse(raw).expect("bin id")
+    }
+
+    fn seller_pubkey() -> RadrootsPublicKey {
+        RadrootsPublicKey::parse(SELLER).expect("seller pubkey")
+    }
+
+    fn other_seller_pubkey() -> RadrootsPublicKey {
+        RadrootsPublicKey::parse(OTHER_SELLER).expect("other seller pubkey")
     }
 
     fn base_listing() -> RadrootsOperationalListing {
@@ -447,6 +474,80 @@ mod tests {
         let listing = base_listing();
         let event = base_event(&listing);
         assert!(validate_operational_listing_event(&event).is_ok());
+    }
+
+    #[test]
+    #[cfg(feature = "serde_json")]
+    fn model_and_verified_event_validation_return_the_same_projection() {
+        let listing = base_listing();
+        let event_projection =
+            validate_operational_listing_event(&base_event(&listing)).expect("event projection");
+        let model_projection = validate_operational_listing_model(listing, &seller_pubkey())
+            .expect("model projection");
+
+        assert_eq!(
+            serde_json::to_value(model_projection).expect("model projection JSON"),
+            serde_json::to_value(event_projection).expect("event projection JSON")
+        );
+    }
+
+    #[test]
+    fn model_and_verified_event_validation_return_the_same_semantic_errors() {
+        let mut listing = base_listing();
+        listing.inventory_available = None;
+        let event_error = validate_operational_listing_event(&base_event(&listing))
+            .expect_err("event inventory error");
+        let model_error = validate_operational_listing_model(listing, &seller_pubkey())
+            .expect_err("model inventory error");
+        assert_eq!(model_error, event_error);
+
+        let listing = base_listing();
+        let event = event_with_parts(
+            OTHER_SELLER,
+            KIND_CLASSIFIED_LISTING,
+            base_event(&listing).event().tags_as_vec(),
+            String::new(),
+        );
+        let event_error =
+            validate_operational_listing_event(&event).expect_err("event seller error");
+        let model_error = validate_operational_listing_model(listing, &other_seller_pubkey())
+            .expect_err("model seller error");
+        assert_eq!(model_error, event_error);
+    }
+
+    #[test]
+    fn model_validation_reports_errors_before_event_encoding() {
+        let mut listing = base_listing();
+        listing.bins.clear();
+        assert_eq!(
+            validate_operational_listing_model(listing, &seller_pubkey())
+                .expect_err("missing bins"),
+            OperationalListingValidationError::MissingBins
+        );
+
+        let mut listing = base_listing();
+        listing.primary_bin_id = bin_id("missing");
+        assert_eq!(
+            validate_operational_listing_model(listing, &seller_pubkey())
+                .expect_err("missing primary bin"),
+            OperationalListingValidationError::MissingPrimaryBin
+        );
+
+        let mut listing = base_listing();
+        listing.location.as_mut().expect("location").geohash = " ".into();
+        assert_eq!(
+            validate_operational_listing_model(listing, &seller_pubkey())
+                .expect_err("missing geohash"),
+            OperationalListingValidationError::MissingLocationGeohash
+        );
+
+        let mut listing = base_listing();
+        listing.location.as_mut().expect("location").geohash = "9q8yyz".into();
+        assert_eq!(
+            validate_operational_listing_model(listing, &seller_pubkey())
+                .expect_err("invalid geohash"),
+            OperationalListingValidationError::InvalidLocationGeohash
+        );
     }
 
     #[test]

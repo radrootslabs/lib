@@ -106,35 +106,7 @@ impl RadrootsEventStore {
     pub async fn status_summary(
         &self,
     ) -> Result<RadrootsEventStoreStatusSummary, RadrootsEventStoreError> {
-        let mut tx = self.pool.begin().await?;
-        let inconsistent_event_id: Option<String> = sqlx::query_scalar(
-            "SELECT event_id FROM event_envelopes WHERE contract_status NOT IN ('supported', 'unsupported_kind', 'unsupported_shape', 'ambiguous_shape') AND (verification_status != 'verified' OR contract_status NOT IN ('admitted', 'unsupported', 'invalid') OR kind < 0 OR kind > 65535 OR kind BETWEEN 20000 AND 29999 OR event_class IS NULL OR event_class != CASE WHEN kind = 0 OR kind = 3 OR kind BETWEEN 10000 AND 19999 THEN 'replaceable' WHEN kind BETWEEN 30000 AND 39999 THEN 'addressable' ELSE 'regular' END OR projection_eligible NOT IN (0, 1) OR projection_eligible != CASE WHEN contract_status = 'admitted' THEN 1 ELSE 0 END OR (contract_status = 'admitted') != (contract_id IS NOT NULL)) LIMIT 1",
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        if let Some(event_id) = inconsistent_event_id {
-            return Err(
-                RadrootsEventStoreError::StoredRawEventClassificationInconsistent { event_id },
-            );
-        }
-        let row = sqlx::query(
-            "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN verification_status = 'verified' AND contract_status = 'admitted' AND contract_id IS NOT NULL AND projection_eligible = 1 AND kind BETWEEN 0 AND 65535 AND NOT (kind BETWEEN 20000 AND 29999) AND event_class = CASE WHEN kind = 0 OR kind = 3 OR kind BETWEEN 10000 AND 19999 THEN 'replaceable' WHEN kind BETWEEN 30000 AND 39999 THEN 'addressable' ELSE 'regular' END THEN 1 ELSE 0 END), 0) AS valid_stream_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM event_envelopes",
-        )
-        .fetch_one(&mut *tx)
-        .await?;
-        let transport_observations: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM event_transport_observation")
-                .fetch_one(&mut *tx)
-                .await?;
-        let summary = RadrootsEventStoreStatusSummary {
-            total_events: row.try_get("total_events")?,
-            valid_stream_events: row.try_get("valid_stream_events")?,
-            transport_observations,
-            last_event_seq: row.try_get("last_event_seq")?,
-            last_event_updated_at_ms: row.try_get("last_event_updated_at_ms")?,
-        };
-        tx.commit().await?;
-        Ok(summary)
+        inspect_event_store_status(&self.pool).await
     }
 
     pub async fn ingest_event(
@@ -642,6 +614,43 @@ impl RadrootsEventStore {
         .await?;
         row.map(trade_projection_checkpoint_from_row).transpose()
     }
+}
+
+/// Inspects an existing event-store pool without configuring or migrating it.
+///
+/// The inspection uses one read transaction and applies the same fail-closed
+/// classification checks as [`RadrootsEventStore::status_summary`]. Callers
+/// must supply a pool whose event-store schema has already been initialized.
+pub async fn inspect_event_store_status(
+    pool: &SqlitePool,
+) -> Result<RadrootsEventStoreStatusSummary, RadrootsEventStoreError> {
+    let mut tx = pool.begin().await?;
+    let inconsistent_event_id: Option<String> = sqlx::query_scalar(
+        "SELECT event_id FROM event_envelopes WHERE contract_status NOT IN ('supported', 'unsupported_kind', 'unsupported_shape', 'ambiguous_shape') AND (verification_status != 'verified' OR contract_status NOT IN ('admitted', 'unsupported', 'invalid') OR kind < 0 OR kind > 65535 OR kind BETWEEN 20000 AND 29999 OR event_class IS NULL OR event_class != CASE WHEN kind = 0 OR kind = 3 OR kind BETWEEN 10000 AND 19999 THEN 'replaceable' WHEN kind BETWEEN 30000 AND 39999 THEN 'addressable' ELSE 'regular' END OR projection_eligible NOT IN (0, 1) OR projection_eligible != CASE WHEN contract_status = 'admitted' THEN 1 ELSE 0 END OR (contract_status = 'admitted') != (contract_id IS NOT NULL)) LIMIT 1",
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(event_id) = inconsistent_event_id {
+        return Err(RadrootsEventStoreError::StoredRawEventClassificationInconsistent { event_id });
+    }
+    let row = sqlx::query(
+        "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN verification_status = 'verified' AND contract_status = 'admitted' AND contract_id IS NOT NULL AND projection_eligible = 1 AND kind BETWEEN 0 AND 65535 AND NOT (kind BETWEEN 20000 AND 29999) AND event_class = CASE WHEN kind = 0 OR kind = 3 OR kind BETWEEN 10000 AND 19999 THEN 'replaceable' WHEN kind BETWEEN 30000 AND 39999 THEN 'addressable' ELSE 'regular' END THEN 1 ELSE 0 END), 0) AS valid_stream_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM event_envelopes",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    let transport_observations: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM event_transport_observation")
+            .fetch_one(&mut *tx)
+            .await?;
+    let summary = RadrootsEventStoreStatusSummary {
+        total_events: row.try_get("total_events")?,
+        valid_stream_events: row.try_get("valid_stream_events")?,
+        transport_observations,
+        last_event_seq: row.try_get("last_event_seq")?,
+        last_event_updated_at_ms: row.try_get("last_event_updated_at_ms")?,
+    };
+    tx.commit().await?;
+    Ok(summary)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2565,10 +2574,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pool_status_inspection_does_not_initialize_an_unmigrated_pool() {
+        let options = SqliteConnectOptions::from_str("sqlite::memory:").expect("options");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .expect("pool");
+
+        assert!(matches!(
+            inspect_event_store_status(&pool).await,
+            Err(RadrootsEventStoreError::Sqlx(_))
+        ));
+        let event_table_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'event_envelopes'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("schema inspection");
+        assert_eq!(event_table_count, 0);
+    }
+
+    #[tokio::test]
     async fn status_summary_counts_events_projections_and_transport_observations() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
 
         let empty = store.status_summary().await.expect("empty status");
+        assert_eq!(
+            inspect_event_store_status(store.pool())
+                .await
+                .expect("empty pool status"),
+            empty
+        );
         assert_eq!(empty.total_events, 0);
         assert_eq!(empty.valid_stream_events, 0);
         assert_eq!(empty.transport_observations, 0);
@@ -2598,6 +2635,14 @@ mod tests {
             .expect("observation ingest");
 
         let status = store.status_summary().await.expect("status");
+        sqlx::query("PRAGMA query_only = ON")
+            .execute(store.pool())
+            .await
+            .expect("read-only connection");
+        let inspected = inspect_event_store_status(store.pool())
+            .await
+            .expect("read-only pool status");
+        assert_eq!(inspected, status);
         assert_eq!(status.total_events, 1);
         assert_eq!(status.valid_stream_events, 1);
         assert_eq!(status.transport_observations, 1);
@@ -2629,6 +2674,10 @@ mod tests {
         ));
         assert!(matches!(
             store.status_summary().await,
+            Err(RadrootsEventStoreError::StoredRawEventClassificationInconsistent { .. })
+        ));
+        assert!(matches!(
+            inspect_event_store_status(store.pool()).await,
             Err(RadrootsEventStoreError::StoredRawEventClassificationInconsistent { .. })
         ));
 
@@ -2975,6 +3024,10 @@ mod tests {
             Err(RadrootsEventStoreError::StoredRawEventRequiresReconciliation { .. })
         ));
         let status = store.status_summary().await.expect("legacy status");
+        let inspected = inspect_event_store_status(store.pool())
+            .await
+            .expect("legacy pool status");
+        assert_eq!(inspected, status);
         assert_eq!(status.total_events, 1);
         assert_eq!(status.valid_stream_events, 0);
     }

@@ -308,3 +308,9 @@ id = "outbox-ephemeral-event-policy"
 classification = "breaking"
 semver_impacts = ["add_enum_variant", "change_exported_algorithm_behavior"]
 summary = "Reject every NIP-16 ephemeral event from all generic durable-outbox entry points, keep transient events inside their owning live transport exchanges, and validate and configure every externally supplied SQLite pool connection before migration or writes."
+
+[[changes]]
+id = "shared-read-only-owner-boundaries"
+classification = "feature"
+semver_impacts = ["add_exported_function"]
+summary = "Expose one Operational Listing model-semantic validator shared by unsigned authoring tools and verified event validation, plus one non-migrating event-store status inspector shared by runtime and offline consumers."
