@@ -59,7 +59,7 @@ impl Geocoder {
             SELECT
               g.id,
               g.name,
-              g.admin1_id,
+              CAST(g.admin1_id AS TEXT) AS admin1_id,
               g.admin1_name,
               g.country_id,
               g.country_name,
@@ -72,7 +72,8 @@ impl Geocoder {
               AND c.longitude BETWEEN ? - ? AND ? + ?
             ORDER BY
               ((? - c.latitude) * (? - c.latitude))
-              + ((? - c.longitude) * (? - c.longitude) * ?) ASC
+              + ((? - c.longitude) * (? - c.longitude) * ?) ASC,
+              g.id ASC
             LIMIT ?
             "#,
             )
@@ -103,7 +104,7 @@ impl Geocoder {
             SELECT
               id,
               name,
-              admin1_id,
+              CAST(admin1_id AS TEXT) AS admin1_id,
               admin1_name,
               country_id,
               country_name,
@@ -194,28 +195,41 @@ impl Geocoder {
             let query = sqlx::query(
                 r#"
             SELECT
-              id,
-              name,
-              admin1_id,
-              admin1_name,
-              country_id,
-              country_name,
-              latitude,
-              longitude
-            FROM geonames
-            WHERE lower(name) = ?
+              g.id,
+              g.name,
+              CAST(g.admin1_id AS TEXT) AS admin1_id,
+              g.admin1_name,
+              g.country_id,
+              g.country_name,
+              g.latitude,
+              g.longitude
+            FROM geonames AS g
+            WHERE lower(g.name) = ?
               AND (
                 ? IS NULL
-                OR lower(country_id) = ?
-                OR lower(country_name) = ?
+                OR lower(g.country_id) = ?
+                OR lower(g.country_name) = ?
               )
             ORDER BY
-              lower(name) ASC,
-              lower(country_id) ASC,
-              lower(coalesce(country_name, '')) ASC,
-              lower(coalesce(admin1_name, '')) ASC,
-              coalesce(admin1_id, -1) ASC,
-              id ASC
+              lower(g.name) ASC,
+              lower(g.country_id) ASC,
+              lower(coalesce(g.country_name, '')) ASC,
+              lower(coalesce(g.admin1_name, '')) ASC,
+              CASE
+                WHEN g.admin1_id IS NULL THEN 0
+                WHEN typeof(g.admin1_id) IN ('integer', 'real') THEN 1
+                WHEN typeof(g.admin1_id) = 'text' THEN 2
+                ELSE 3
+              END ASC,
+              CASE
+                WHEN typeof(g.admin1_id) IN ('integer', 'real') THEN g.admin1_id
+                ELSE NULL
+              END ASC,
+              CASE
+                WHEN typeof(g.admin1_id) = 'text' THEN CAST(g.admin1_id AS TEXT)
+                ELSE NULL
+              END COLLATE BINARY ASC,
+              g.id ASC
             "#,
             )
             .bind(locality)
@@ -241,7 +255,7 @@ impl Geocoder {
             SELECT
               id,
               name,
-              admin1_id,
+              CAST(admin1_id AS TEXT) AS admin1_id,
               admin1_name,
               country_id,
               country_name,
@@ -909,7 +923,7 @@ mod tests {
             map_reverse_row_error(
                 "'bad'",
                 "'name'",
-                "1",
+                "'1'",
                 "'admin'",
                 "'US'",
                 "'United States'",
@@ -919,48 +933,48 @@ mod tests {
             map_reverse_row_error(
                 "1",
                 "'name'",
+                "x'00'",
+                "'admin'",
+                "'US'",
+                "'United States'",
+                "1.0",
+                "2.0",
+            ),
+            map_reverse_row_error(
+                "1",
+                "'name'",
+                "'1'",
+                "1",
+                "'US'",
+                "'United States'",
+                "1.0",
+                "2.0",
+            ),
+            map_reverse_row_error(
+                "1",
+                "'name'",
+                "'1'",
+                "'admin'",
+                "1",
+                "'United States'",
+                "1.0",
+                "2.0",
+            ),
+            map_reverse_row_error("1", "'name'", "'1'", "'admin'", "'US'", "1", "1.0", "2.0"),
+            map_reverse_row_error(
+                "1",
+                "'name'",
+                "'1'",
+                "'admin'",
+                "'US'",
+                "'United States'",
                 "'bad'",
-                "'admin'",
-                "'US'",
-                "'United States'",
-                "1.0",
                 "2.0",
             ),
             map_reverse_row_error(
                 "1",
                 "'name'",
-                "1",
-                "1",
-                "'US'",
-                "'United States'",
-                "1.0",
-                "2.0",
-            ),
-            map_reverse_row_error(
-                "1",
-                "'name'",
-                "1",
-                "'admin'",
-                "1",
-                "'United States'",
-                "1.0",
-                "2.0",
-            ),
-            map_reverse_row_error("1", "'name'", "1", "'admin'", "'US'", "1", "1.0", "2.0"),
-            map_reverse_row_error(
-                "1",
-                "'name'",
-                "1",
-                "'admin'",
-                "'US'",
-                "'United States'",
-                "'bad'",
-                "2.0",
-            ),
-            map_reverse_row_error(
-                "1",
-                "'name'",
-                "1",
+                "'1'",
                 "'admin'",
                 "'US'",
                 "'United States'",

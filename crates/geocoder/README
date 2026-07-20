@@ -11,6 +11,8 @@ queries for the `radroots` core libraries.
    options;
  * country lookup, country listing, and country center helpers backed by the
    same dataset;
+ * opaque administrative subdivision identifiers normalized to text across
+   SQLite integer and text storage classes;
  * a `std`-based implementation over bundled GeoNames-style SQLite data.
 
 ## Copyright

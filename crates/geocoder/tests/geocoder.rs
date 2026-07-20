@@ -46,7 +46,7 @@ fn reverse_returns_nearest_match_by_default() {
     assert_eq!(results[0].id, 1);
     assert_eq!(results[0].name, "San Francisco");
     assert_eq!(results[0].country_id, "US");
-    assert_eq!(results[0].admin1_id, Some(6));
+    assert_eq!(results[0].admin1_id.as_deref(), Some("6"));
     assert_eq!(results[0].admin1_name.as_deref(), Some("California"));
 }
 
@@ -145,6 +145,60 @@ fn locality_resolves_structured_query_freeform_query_id_and_ambiguity() {
         .locality(&GeocoderLocalityQuery::structured("Missing Market").with_country("CA"))
         .expect("no-match lookup");
     assert!(matches!(no_match, GeocoderLocalityLookup::NoMatch));
+}
+
+#[test]
+fn locality_normalizes_and_orders_mixed_administrative_identifiers() {
+    let geocoder = open_mixed_admin1_geocoder();
+
+    let lookup = geocoder
+        .locality(&GeocoderLocalityQuery::structured("Mixed Locality").with_country("ZZ"))
+        .expect("mixed-type locality lookup");
+    let GeocoderLocalityLookup::Ambiguous { candidates } = lookup else {
+        panic!("expected ambiguous mixed-type locality lookup");
+    };
+
+    assert_eq!(
+        candidates
+            .iter()
+            .map(|candidate| candidate.id)
+            .collect::<Vec<_>>(),
+        vec![9004, 9002, 9003, 9001]
+    );
+    assert_eq!(
+        candidates
+            .iter()
+            .map(|candidate| candidate.admin1_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![None, Some("2"), Some("10"), Some("HCW")]
+    );
+}
+
+#[test]
+fn reverse_normalizes_mixed_administrative_identifiers_with_stable_ties() {
+    let geocoder = open_mixed_admin1_geocoder();
+
+    let results = geocoder
+        .reverse(
+            GeocoderPoint { lat: 1.0, lng: 2.0 },
+            Some(GeocoderReverseOptions {
+                limit: 4,
+                degree_offset: 0.1,
+            }),
+        )
+        .expect("mixed-type reverse lookup");
+
+    assert_eq!(
+        results.iter().map(|result| result.id).collect::<Vec<_>>(),
+        vec![9001, 9002, 9003, 9004]
+    );
+    assert_eq!(
+        results
+            .iter()
+            .map(|result| result.admin1_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![Some("HCW"), Some("2"), Some("10"), None]
+    );
 }
 
 #[test]
@@ -493,6 +547,11 @@ fn open_forward_fixture_geocoder() -> Geocoder {
     Geocoder::open_path(&path).expect("open geocoder")
 }
 
+fn open_mixed_admin1_geocoder() -> Geocoder {
+    let path = build_mixed_admin1_database();
+    Geocoder::open_path(&path).expect("open mixed administrative identifier geocoder")
+}
+
 fn open_empty_geocoder() -> Geocoder {
     let temp = NamedTempFile::new().expect("temp db");
     let path = temp.into_temp_path();
@@ -531,6 +590,13 @@ fn build_forward_fixture_database() -> tempfile::TempPath {
     let temp = NamedTempFile::new().expect("temp db");
     let path = temp.into_temp_path();
     seed_forward_fixture_database(path.to_str().expect("utf-8 temp path"));
+    path
+}
+
+fn build_mixed_admin1_database() -> tempfile::TempPath {
+    let temp = NamedTempFile::new().expect("temp db");
+    let path = temp.into_temp_path();
+    seed_mixed_admin1_database(path.to_str().expect("utf-8 temp path"));
     path
 }
 
@@ -598,6 +664,43 @@ fn seed_forward_fixture_database(path: &str) {
     insert_feature(&mut conn, 3006, "Alias Market", "US", 6, 38.5, -121.5);
     insert_feature(&mut conn, 3007, "No Country Place", "ZZ", 99, 10.0, 11.0);
     insert_feature(&mut conn, 3008, "No Alias Place", "ZZ", 100, 10.5, 11.5);
+}
+
+fn seed_mixed_admin1_database(path: &str) {
+    let mut conn = open_test_path_connection(path);
+    execute_batch(
+        &mut conn,
+        r#"
+        CREATE TABLE geonames(
+          id INTEGER,
+          name TEXT,
+          admin1_id,
+          admin1_name TEXT,
+          country_id TEXT,
+          country_name TEXT,
+          latitude REAL,
+          longitude REAL
+        );
+        CREATE TABLE coordinates(
+          feature_id INTEGER,
+          latitude REAL,
+          longitude REAL
+        );
+        INSERT INTO geonames
+          (id, name, admin1_id, admin1_name, country_id, country_name, latitude, longitude)
+        VALUES
+          (9004, 'Mixed Locality', NULL, 'Fixture Region', 'ZZ', 'Fixtureland', 1.0, 2.0),
+          (9003, 'Mixed Locality', 10, 'Fixture Region', 'ZZ', 'Fixtureland', 1.0, 2.0),
+          (9002, 'Mixed Locality', 2, 'Fixture Region', 'ZZ', 'Fixtureland', 1.0, 2.0),
+          (9001, 'Mixed Locality', 'HCW', 'Fixture Region', 'ZZ', 'Fixtureland', 1.0, 2.0);
+        INSERT INTO coordinates (feature_id, latitude, longitude)
+        VALUES
+          (9004, 1.0, 2.0),
+          (9003, 1.0, 2.0),
+          (9002, 1.0, 2.0),
+          (9001, 1.0, 2.0);
+        "#,
+    );
 }
 
 fn seed_reverse_country_row_error_database(path: &str) {

@@ -25,7 +25,8 @@ impl Default for GeocoderReverseOptions {
 pub struct GeocoderReverseResult {
     pub id: i64,
     pub name: String,
-    pub admin1_id: Option<i64>,
+    /// Opaque administrative subdivision identifier normalized to text.
+    pub admin1_id: Option<String>,
     pub admin1_name: Option<String>,
     pub country_id: String,
     pub country_name: Option<String>,
@@ -45,7 +46,8 @@ pub struct GeocoderCountryListResult {
 pub struct GeocoderLocalityCandidate {
     pub id: i64,
     pub name: String,
-    pub admin1_id: Option<i64>,
+    /// Opaque administrative subdivision identifier normalized to text.
+    pub admin1_id: Option<String>,
     pub admin1_name: Option<String>,
     pub country_id: String,
     pub country_name: Option<String>,

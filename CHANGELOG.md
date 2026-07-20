@@ -9,6 +9,10 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- Geocoder locality and reverse results now expose administrative subdivision
+  identifiers as opaque strings. SQLite integer and text values normalize to
+  the same lossless public representation, and mixed-storage candidate order
+  remains deterministic.
 - Trusted event-contract admission now has one signature-verified entry point.
   Profile, root Post, Reply, Comment, DeletionRequest, and FoodAvailability
   retain typed admitted values; other registered events require full contract

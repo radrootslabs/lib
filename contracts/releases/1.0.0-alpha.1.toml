@@ -320,3 +320,12 @@ id = "operational-listing-authoring-validation"
 classification = "breaking"
 semver_impacts = ["add_enum_variant", "change_exported_algorithm_behavior"]
 summary = "Require every canonical Operational Listing edit to pass the shared model-semantic validator, reject duplicate IDs and invalid quantity or price semantics across every bin, and return the typed validation cause before draft construction, signing, or durable workflow mutation."
+
+[[changes]]
+id = "textual-geonames-administrative-identifiers"
+classification = "breaking"
+semver_impacts = [
+  "change_exported_field_type",
+  "change_exported_algorithm_behavior",
+]
+summary = "Represent GeoNames administrative subdivision identifiers as opaque strings, normalize SQLite integer and text values at query boundaries, and make locality and reverse tie ordering deterministic."
