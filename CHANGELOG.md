@@ -9,6 +9,13 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+- Event-store schema initialization now uses a transactional, checksummed
+  migration authority with exact legacy-baseline adoption, shared-database
+  catalog scoping, tamper-evident fail-closed managed history, exact catalog
+  deltas, SQLite and FTS5 integrity validation, a no-write current-schema fast
+  path, and read-only schema status inspection. Rollback is a terminal,
+  pool-closing maintenance operation with a public version floor. Raw migration
+  SQL and unrestricted destructive rollback are no longer public APIs.
 - Geocoder locality and reverse results now expose administrative subdivision
   identifiers as opaque strings. SQLite integer and text values normalize to
   the same lossless public representation, and mixed-storage candidate order

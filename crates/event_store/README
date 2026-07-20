@@ -52,12 +52,42 @@ rewrite raw envelopes through the event-store API.
 
 The current event-store API is append-only, but the byte-pinned `0001` schema
 and the exposed SQLx pool do not prevent direct SQL mutation. Database-enforced
-raw-event immutability belongs to the later additive migration.
+raw-event immutability belongs to a later additive migration.
 
 `open_pool` inspects the opened main database rather than trusting URL text,
 validates the declared backing mode, rejects multi-connection in-memory pools,
 and configures every file-pool connection with foreign-key enforcement and the
 required busy timeout before migrations or writes.
+
+## Schema authority
+
+Every constructor converges the database through a versioned migration
+authority. The frozen `0001_event_store` SQL is pinned by byte length and
+SHA-256 in the embedded registry. Fresh databases install it transactionally;
+an existing database is adopted only when its exact 46-object SQLite catalog
+matches the frozen baseline fingerprint. Partial schemas, altered tables,
+attached indexes or triggers, counterfeit ledgers, history gaps, checksum
+drift, and schemas newer than this crate fail closed.
+
+Checksummed, tamper-evident managed history lives in the strict, without-rowid
+`radroots_event_store_schema_migrations` ledger and fails closed on drift.
+Current-schema opens return after read-only inspection. Mutating migration work
+rechecks under `BEGIN IMMEDIATE`, validates exact catalog deltas, SQLite and
+FTS5 integrity, and event-store-owned foreign keys before commit, and never
+changes `PRAGMA user_version`. Each migration declares its owned objects and
+tables. Objects introduced after the frozen baseline must use the reserved
+`radroots_event_store_` namespace, which lets older readers detect newer
+schema remnants after ledger loss while unrelated shared-database tables
+remain outside this crate's ownership.
+
+`inspect_event_store_schema_status` classifies a pool as `Uninitialized`,
+`UnledgeredBaseline`, or `Managed` without configuring or migrating it.
+`schema_status` exposes the same read-only inspection on an opened store.
+`rollback_to_schema_version_and_close` validates every descending step under
+`BEGIN EXCLUSIVE`, cannot cross the public version floor, consumes the store,
+and closes its shared pool on every outcome. Independent SQLite pools for the
+same file must be quiesced before this offline maintenance operation.
+Destructive removal is intentionally unavailable in the public API.
 
 ## Status inspection
 

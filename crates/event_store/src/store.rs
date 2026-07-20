@@ -1,5 +1,4 @@
 use crate::RadrootsEventStoreError;
-use crate::migrations::{EVENT_STORE_MIGRATION_DOWN, EVENT_STORE_MIGRATION_UP};
 use crate::model::{
     RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
     RadrootsEventPersistence, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
@@ -11,6 +10,12 @@ use crate::model::{
     RadrootsStoredVisibleEventHead, RadrootsTradeProjectionCheckpoint,
     RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
     tag_semantic_name, tag_value_type_name,
+};
+#[cfg(test)]
+use crate::schema::destroy_event_store_schema_for_test;
+use crate::schema::{
+    RadrootsEventStoreSchemaStatus, inspect_event_store_schema_status, migrate_event_store_schema,
+    rollback_event_store_schema_offline,
 };
 use radroots_event::contract::{RadrootsContractMatchError, RadrootsEventContract};
 use radroots_event::event_head::{
@@ -57,7 +62,7 @@ impl RadrootsEventStore {
             .connect_with(options)
             .await?;
         configure_pool(&pool, false).await?;
-        apply_up(&pool).await?;
+        migrate_event_store_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -70,7 +75,7 @@ impl RadrootsEventStore {
             .connect_with(options)
             .await?;
         configure_pool(&pool, true).await?;
-        apply_up(&pool).await?;
+        migrate_event_store_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -79,7 +84,7 @@ impl RadrootsEventStore {
         file_backed: bool,
     ) -> Result<Self, RadrootsEventStoreError> {
         configure_pool(&pool, file_backed).await?;
-        apply_up(&pool).await?;
+        migrate_event_store_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -87,8 +92,32 @@ impl RadrootsEventStore {
         &self.pool
     }
 
-    pub async fn migrate_down(&self) -> Result<(), RadrootsEventStoreError> {
-        apply_down(&self.pool).await
+    pub async fn schema_status(
+        &self,
+    ) -> Result<RadrootsEventStoreSchemaStatus, RadrootsEventStoreError> {
+        inspect_event_store_schema_status(&self.pool).await
+    }
+
+    pub async fn migrate_to_current_schema(&self) -> Result<(), RadrootsEventStoreError> {
+        migrate_event_store_schema(&self.pool).await
+    }
+
+    /// Terminates every clone of this store after an exclusive rollback attempt.
+    ///
+    /// Independent SQLite pools for the same file must be quiesced by the
+    /// caller before invoking this maintenance operation.
+    pub async fn rollback_to_schema_version_and_close(
+        self,
+        target: u32,
+    ) -> Result<(), RadrootsEventStoreError> {
+        let result = rollback_event_store_schema_offline(&self.pool, target).await;
+        self.pool.close().await;
+        result
+    }
+
+    #[cfg(test)]
+    async fn destroy_schema_for_test(&self) -> Result<(), RadrootsEventStoreError> {
+        destroy_event_store_schema_for_test(&self.pool).await
     }
 
     pub async fn pragma_foreign_keys(&self) -> Result<i64, RadrootsEventStoreError> {
@@ -779,22 +808,6 @@ async fn configure_pool(
                 .await?;
         }
     }
-    Ok(())
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn apply_up(pool: &SqlitePool) -> Result<(), RadrootsEventStoreError> {
-    sqlx::raw_sql(EVENT_STORE_MIGRATION_UP)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn apply_down(pool: &SqlitePool) -> Result<(), RadrootsEventStoreError> {
-    sqlx::raw_sql(EVENT_STORE_MIGRATION_DOWN)
-        .execute(pool)
-        .await?;
     Ok(())
 }
 
@@ -2819,15 +2832,45 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_can_run_down() {
+    async fn managed_schema_can_be_destroyed_and_recreated_for_tests() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        store.migrate_down().await.expect("down");
+        assert_eq!(
+            store.schema_status().await.expect("managed status"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 1 }
+        );
 
-        let missing = sqlx::query("SELECT COUNT(*) FROM event_envelopes")
-            .fetch_one(store.pool())
+        store.destroy_schema_for_test().await.expect("destroy");
+        assert_eq!(
+            inspect_event_store_schema_status(store.pool())
+                .await
+                .expect("uninitialized status"),
+            RadrootsEventStoreSchemaStatus::Uninitialized
+        );
+        store
+            .migrate_to_current_schema()
             .await
-            .expect_err("table should be removed");
-        assert!(missing.to_string().contains("event_envelopes"));
+            .expect("recreate schema");
+        assert_eq!(
+            store.schema_status().await.expect("recreated status"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 1 }
+        );
+    }
+
+    #[tokio::test]
+    async fn rollback_is_terminal_for_every_clone_of_the_store_pool() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let clone = store.clone();
+
+        store
+            .rollback_to_schema_version_and_close(1)
+            .await
+            .expect("terminal rollback");
+
+        assert!(clone.pool().is_closed());
+        assert!(matches!(
+            clone.schema_status().await,
+            Err(RadrootsEventStoreError::Sqlx(sqlx::Error::PoolClosed))
+        ));
     }
 
     #[tokio::test]

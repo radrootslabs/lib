@@ -38,6 +38,96 @@ pub enum RadrootsEventStoreError {
         "event-store pool backing mismatch: file_backed={file_backed}, configured filename `{filename}`"
     )]
     SqlitePoolBackingMismatch { file_backed: bool, filename: String },
+    #[error("event-store migration registry defect: {reason}")]
+    MigrationRegistryDefect { reason: String },
+    #[error(
+        "embedded event-store migration {version} {direction} length mismatch: expected {expected}, found {actual}"
+    )]
+    EmbeddedMigrationLengthMismatch {
+        version: u32,
+        direction: &'static str,
+        expected: usize,
+        actual: usize,
+    },
+    #[error(
+        "embedded event-store migration {version} {direction} checksum mismatch: expected {expected}, found {actual}"
+    )]
+    EmbeddedMigrationChecksumMismatch {
+        version: u32,
+        direction: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+    #[error("event-store migration {version} {direction} catalog delta mismatch: {reason}")]
+    MigrationCatalogDeltaMismatch {
+        version: u32,
+        direction: &'static str,
+        reason: String,
+    },
+    #[error("unmanaged event-store schema has fingerprint {actual_schema_sha256}")]
+    UnmanagedSchema { actual_schema_sha256: String },
+    #[error("event-store migration ledger catalog is invalid: {reason}")]
+    MigrationLedgerDrift { reason: String },
+    #[error("event-store migration history gap: expected version {expected}, found {actual:?}")]
+    MigrationHistoryGap { expected: u32, actual: Option<u32> },
+    #[error("event-store migration history references unknown version {version}")]
+    UnknownMigration { version: u32 },
+    #[error("event-store schema version {database} is newer than supported version {current}")]
+    SchemaTooNew { current: u32, database: i64 },
+    #[error("event-store migration {version} name drift: expected `{expected}`, found `{actual}`")]
+    MigrationHistoryNameDrift {
+        version: u32,
+        expected: &'static str,
+        actual: String,
+    },
+    #[error(
+        "event-store migration {version} {field} checksum drift: expected {expected}, found {actual}"
+    )]
+    MigrationHistoryChecksumDrift {
+        version: u32,
+        field: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+    #[error(
+        "event-store schema fingerprint mismatch at version {version}: expected {expected}, found {actual}"
+    )]
+    SchemaFingerprintMismatch {
+        version: u32,
+        expected: &'static str,
+        actual: String,
+    },
+    #[error("event-store rollback target {target} is below the supported version floor {floor}")]
+    RollbackBelowVersionFloor { floor: u32, target: u32 },
+    #[error("event-store rollback target {target} is ahead of managed version {current}")]
+    RollbackAhead { current: u32, target: u32 },
+    #[error("event-store rollback requires a managed schema")]
+    RollbackUnmanaged,
+    #[error(
+        "event-store schema operation failed: {primary}; transaction rollback also failed: {rollback}"
+    )]
+    MigrationTransactionRollbackFailed {
+        #[source]
+        primary: Box<RadrootsEventStoreError>,
+        rollback: sqlx::Error,
+    },
+    #[error("SQLite integrity check failed: {detail}")]
+    IntegrityCheckFailed { detail: String },
+    #[error("event-store FTS5 integrity check failed for `{table}`: {source}")]
+    Fts5IntegrityCheckFailed {
+        table: &'static str,
+        #[source]
+        source: sqlx::Error,
+    },
+    #[error(
+        "event-store foreign-key violation in `{table}` row {rowid:?}, parent `{parent}`, constraint {foreign_key_index}"
+    )]
+    ForeignKeyViolation {
+        table: String,
+        rowid: Option<i64>,
+        parent: String,
+        foreign_key_index: i64,
+    },
     #[error("invalid stored enum value `{value}` for {field}")]
     InvalidStoredEnum { field: &'static str, value: String },
     #[error("invalid stored boolean value `{value}` for {field}; expected 0 or 1")]

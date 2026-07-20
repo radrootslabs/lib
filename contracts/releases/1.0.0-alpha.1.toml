@@ -329,3 +329,18 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Represent GeoNames administrative subdivision identifiers as opaque strings, normalize SQLite integer and text values at query boundaries, and make locality and reverse tie ordering deterministic."
+
+[[changes]]
+id = "event-store-versioned-migration-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_exported_field",
+  "add_enum_variant",
+  "remove_exported_function",
+  "remove_exported_constant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace raw event-store migration SQL and unrestricted destructive rollback with a transactional, checksummed schema authority, exact legacy adoption, descriptor-owned catalog validation and deltas, tamper-evident fail-closed history, a no-write current-schema fast path, SQLite and FTS5 integrity checks, read-only schema inspection, and terminal pool-closing rollback with a governed version floor."
