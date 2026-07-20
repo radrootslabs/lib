@@ -600,6 +600,69 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
             "transport target set source must retain duplicate rejection witness `{required}`"
         );
     }
+    let target_struct = source_between(
+        transport_source.as_str(),
+        "pub struct RadrootsTransportTarget {",
+        "impl RadrootsTransportTarget {",
+    );
+    for forbidden in [
+        "pub kind:",
+        "pub uri:",
+        "pub scope:",
+        "pub label:",
+        "pub fingerprint:",
+    ] {
+        assert!(
+            !target_struct.contains(forbidden),
+            "transport target identity field must remain sealed: `{forbidden}`"
+        );
+    }
+    for required in [
+        "impl<'de> serde::Deserialize<'de> for RadrootsTransportTarget",
+        "impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetSet",
+    ] {
+        assert!(
+            transport_source.contains(required),
+            "transport target source must retain checked deserialization witness `{required}`"
+        );
+    }
+
+    let reticulum_source = read_source(crates_root.join("transport/src/reticulum.rs").as_path());
+    let destination_struct = source_between(
+        reticulum_source.as_str(),
+        "pub struct ReticulumDestinationV1 {",
+        "impl ReticulumDestinationV1 {",
+    );
+    for forbidden in ["pub uri:", "pub routing:", "pub label:", "pub fingerprint:"] {
+        assert!(
+            !destination_struct.contains(forbidden),
+            "Reticulum destination identity field must remain sealed: `{forbidden}`"
+        );
+    }
+    assert!(
+        reticulum_source.contains("impl<'de> serde::Deserialize<'de> for ReticulumDestinationV1"),
+        "Reticulum destination source must retain checked deserialization"
+    );
+
+    let relay_source = read_source(crates_root.join("transport_nostr/src/relay.rs").as_path());
+    for required in [
+        "RadrootsTransportTarget::nostr_relay(original)",
+        "RadrootsRelayTransportError::DuplicateRelayUrl",
+    ] {
+        assert!(
+            relay_source.contains(required),
+            "Nostr relay target source must retain canonical identity witness `{required}`"
+        );
+    }
+    for forbidden in [
+        "impl<'de> Deserialize<'de> for RadrootsRelayUrl",
+        "impl<'de> Deserialize<'de> for RadrootsRelayTargetSet",
+    ] {
+        assert!(
+            !relay_source.contains(forbidden),
+            "policy-free Nostr relay identity must not regain deserialization: `{forbidden}`"
+        );
+    }
 
     let protocol_source = read_source(
         crates_root
@@ -664,7 +727,7 @@ fn required_target_semantics_stay_fingerprint_exact() {
     for required in [
         "RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } =>",
         "let mut satisfied_required_targets = BTreeSet::new();",
-        "targets.contains(&target.fingerprint)",
+        "targets.contains(target.fingerprint())",
         "counts_as_satisfied(*class)",
         "targets\n                .iter()\n                .all(|target| satisfied_required_targets.contains(target))",
     ] {

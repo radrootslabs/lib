@@ -42,6 +42,10 @@ use crate::{
     },
 };
 
+#[doc(hidden)]
+pub mod registry_v7;
+pub use registry_v7::{RadrootsRegistryV7AdmissionDecision, admit_verified_event_registry_v7};
+
 /// A verified event admitted through its exact typed profile or full registry shape.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq)]

@@ -12,11 +12,11 @@ use crate::ids::{
     RadrootsEventId, RadrootsPublicKey, RadrootsRelayUrl,
 };
 use crate::media::RadrootsAuthoredImage;
-use crate::wire::{
+use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_MAX_BYTES,
 };
-use radroots_blossom::RadrootsBlossomBlobUrl;
+use radroots_blossom::url::RadrootsBlossomBlobUrl;
 use url_nostd::Url;
 
 pub const RADROOTS_CALENDAR_SECONDS_PER_DAY: u64 = 86_400;

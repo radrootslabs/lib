@@ -31,8 +31,9 @@ pub use outcome::{RadrootsRelayOutcome, RadrootsRelayOutcomeKind};
 #[cfg(feature = "client")]
 pub use publish::RadrootsNostrClientPublishAdapter;
 pub use publish::{
-    RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishReceipt, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
-    publish_signed_event, verified_signed_event_payload,
+    RADROOTS_RELAY_PUBLISH_IDEMPOTENCY_KEY_MAX_BYTES, RadrootsMockRelayPublishAdapter,
+    RadrootsNostrTransport, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
+    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, publish_signed_event,
+    verified_signed_event_payload,
 };
 pub use relay::{RadrootsRelayTargetSet, RadrootsRelayUrl, RadrootsRelayUrlPolicy};

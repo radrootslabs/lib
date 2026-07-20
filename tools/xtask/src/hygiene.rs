@@ -410,7 +410,7 @@ fn contains_retired_listing_module_reference(line: &str) -> bool {
 
 fn is_retired_listing_negative_guard(rel: &str, line: &str) -> bool {
     (rel == "crates/event/src/dto.rs" && line.contains("\"RadrootsListingCancel\""))
-        || (rel == "crates/event/src/contract.rs"
+        || (rel == "crates/event/src/contract/registry_v7/tests.rs"
             && line.contains("event_contract(\"radroots.listing.published.v1\").is_none()"))
 }
 
@@ -756,6 +756,11 @@ mod tests {
             &clean_root,
             "crates/event/src/operational_listing.rs",
             "pub struct RadrootsOperationalListing;\n",
+        );
+        write_file(
+            &clean_root,
+            "crates/event/src/contract/registry_v7/tests.rs",
+            "assert!(event_contract(\"radroots.listing.published.v1\").is_none());\n",
         );
         validate_forbidden_identifiers(&clean_root).expect("new listing taxonomy is accepted");
         let _ = fs::remove_dir_all(clean_root);

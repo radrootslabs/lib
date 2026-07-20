@@ -137,10 +137,12 @@ ed25519-dalek = { version = "2.1.1", default-features = false }
 futures = { version = "0.3" }
 futures-executor = { version = "0.3" }
 flate2 = { version = "1" }
+fs2 = { version = "0.4" }
 getrandom = { version = "0.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4" }
 jiff-tzdb = { version = "=0.1.8", default-features = false }
+jsonschema = { version = "0.48.1", default-features = false }
 js-sys = { version = "0.3" }
 mediatype = { version = "0.21", default-features = false }
 keyring = { version = "3.6.3", default-features = false, features = [
@@ -154,6 +156,9 @@ nostr-relay-pool = { version = "0.44.0" }
 nostr-sdk = { version = "0.44.1" }
 num_cpus = { version = "1.17.0" }
 poly1305 = { version = "0.8", default-features = false }
+prettyplease = { version = "0.2.37" }
+proc-macro2 = { version = "1" }
+quote = { version = "1" }
 secrecy = { version = "0.10.3" }
 salsa20 = { version = "0.10.2", default-features = false }
 semver = { version = "1" }
@@ -173,6 +178,7 @@ sntrup761 = { version = "0.4.0", default-features = false, features = [
   "kgen",
 ] }
 subtle = { version = "2.6", default-features = false }
+syn = { version = "2", features = ["full", "parsing", "visit", "visit-mut"] }
 sqlx = { version = "0.9.0", default-features = false }
 sp1-build = { version = "6.2.3" }
 sp1-sdk = { version = "6.2.3", default-features = false }

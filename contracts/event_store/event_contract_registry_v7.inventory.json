@@ -1,0 +1,5956 @@
+{
+  "schema_version": 1,
+  "event_contract_registry_version": 7,
+  "kind_contracts": [
+    {
+      "ordinal": 0,
+      "kind": 0,
+      "canonical_constant": "KIND_PROFILE",
+      "name": "Profile Metadata",
+      "class": "replaceable",
+      "standard": "nip01",
+      "accepted_event_contracts": [
+        "radroots.profile.metadata.v1"
+      ]
+    },
+    {
+      "ordinal": 1,
+      "kind": 1,
+      "canonical_constant": "KIND_POST",
+      "name": "Short Text Note",
+      "class": "regular",
+      "standard": "nip01",
+      "accepted_event_contracts": [
+        "radroots.social.post.v1",
+        "radroots.social.update.v1",
+        "radroots.social.photo_update.v1",
+        "radroots.social.ask.v1",
+        "radroots.social.reply.v1"
+      ]
+    },
+    {
+      "ordinal": 2,
+      "kind": 3,
+      "canonical_constant": "KIND_FOLLOW",
+      "name": "Contact List",
+      "class": "replaceable",
+      "standard": "nip01",
+      "accepted_event_contracts": [
+        "radroots.social.follow_list.v1"
+      ]
+    },
+    {
+      "ordinal": 3,
+      "kind": 5,
+      "canonical_constant": "KIND_DELETION_REQUEST",
+      "name": "Deletion Request",
+      "class": "regular",
+      "standard": "nip09",
+      "accepted_event_contracts": [
+        "radroots.social.deletion_request.v1"
+      ]
+    },
+    {
+      "ordinal": 4,
+      "kind": 6,
+      "canonical_constant": "KIND_REPOST",
+      "name": "Repost",
+      "class": "regular",
+      "standard": "nip18",
+      "accepted_event_contracts": [
+        "radroots.social.repost.v1"
+      ]
+    },
+    {
+      "ordinal": 5,
+      "kind": 7,
+      "canonical_constant": "KIND_REACTION",
+      "name": "Reaction",
+      "class": "regular",
+      "standard": "nip25",
+      "accepted_event_contracts": [
+        "radroots.social.reaction.v1"
+      ]
+    },
+    {
+      "ordinal": 6,
+      "kind": 13,
+      "canonical_constant": "KIND_SEAL",
+      "name": "Seal",
+      "class": "regular",
+      "standard": "nip17",
+      "accepted_event_contracts": [
+        "radroots.message.seal.v1"
+      ]
+    },
+    {
+      "ordinal": 7,
+      "kind": 14,
+      "canonical_constant": "KIND_MESSAGE",
+      "name": "Direct Message",
+      "class": "regular",
+      "standard": "nip17",
+      "accepted_event_contracts": [
+        "radroots.message.private.v1"
+      ]
+    },
+    {
+      "ordinal": 8,
+      "kind": 15,
+      "canonical_constant": "KIND_MESSAGE_FILE",
+      "name": "Direct Message File",
+      "class": "regular",
+      "standard": "nip17",
+      "accepted_event_contracts": [
+        "radroots.message.file.v1"
+      ]
+    },
+    {
+      "ordinal": 9,
+      "kind": 16,
+      "canonical_constant": "KIND_GENERIC_REPOST",
+      "name": "Generic Repost",
+      "class": "regular",
+      "standard": "nip18",
+      "accepted_event_contracts": [
+        "radroots.social.generic_repost.v1"
+      ]
+    },
+    {
+      "ordinal": 10,
+      "kind": 78,
+      "canonical_constant": "KIND_FARM_CRDT_CHANGE",
+      "name": "Farm CRDT Change",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.crdt_change.v1"
+      ]
+    },
+    {
+      "ordinal": 11,
+      "kind": 1059,
+      "canonical_constant": "KIND_GIFT_WRAP",
+      "name": "Gift Wrap",
+      "class": "regular",
+      "standard": "nip17",
+      "accepted_event_contracts": [
+        "radroots.message.gift_wrap.v1"
+      ]
+    },
+    {
+      "ordinal": 12,
+      "kind": 1063,
+      "canonical_constant": "KIND_FILE_METADATA",
+      "name": "File Metadata",
+      "class": "regular",
+      "standard": "nip94",
+      "accepted_event_contracts": [
+        "radroots.file.metadata.v1"
+      ]
+    },
+    {
+      "ordinal": 13,
+      "kind": 1111,
+      "canonical_constant": "KIND_COMMENT",
+      "name": "Comment",
+      "class": "regular",
+      "standard": "nip22",
+      "accepted_event_contracts": [
+        "radroots.social.comment.v1"
+      ]
+    },
+    {
+      "ordinal": 14,
+      "kind": 1984,
+      "canonical_constant": "KIND_REPORT",
+      "name": "Report",
+      "class": "regular",
+      "standard": "nip56",
+      "accepted_event_contracts": [
+        "radroots.social.report.v1"
+      ]
+    },
+    {
+      "ordinal": 15,
+      "kind": 9000,
+      "canonical_constant": "KIND_GROUP_PUT_USER",
+      "name": "Group Put User",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.put_user.v1"
+      ]
+    },
+    {
+      "ordinal": 16,
+      "kind": 9001,
+      "canonical_constant": "KIND_GROUP_REMOVE_USER",
+      "name": "Group Remove User",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.remove_user.v1"
+      ]
+    },
+    {
+      "ordinal": 17,
+      "kind": 9002,
+      "canonical_constant": "KIND_GROUP_EDIT_METADATA",
+      "name": "Group Edit Metadata",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.edit_metadata.v1"
+      ]
+    },
+    {
+      "ordinal": 18,
+      "kind": 9005,
+      "canonical_constant": "KIND_GROUP_DELETE_EVENT",
+      "name": "Group Delete Event",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.delete_event.v1"
+      ]
+    },
+    {
+      "ordinal": 19,
+      "kind": 9007,
+      "canonical_constant": "KIND_GROUP_CREATE_GROUP",
+      "name": "Group Create Group",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.create_group.v1"
+      ]
+    },
+    {
+      "ordinal": 20,
+      "kind": 9008,
+      "canonical_constant": "KIND_GROUP_DELETE_GROUP",
+      "name": "Group Delete Group",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.delete_group.v1"
+      ]
+    },
+    {
+      "ordinal": 21,
+      "kind": 9009,
+      "canonical_constant": "KIND_GROUP_CREATE_INVITE",
+      "name": "Group Create Invite",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.create_invite.v1"
+      ]
+    },
+    {
+      "ordinal": 22,
+      "kind": 9021,
+      "canonical_constant": "KIND_GROUP_JOIN_REQUEST",
+      "name": "Group Join Request",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.join_request.v1"
+      ]
+    },
+    {
+      "ordinal": 23,
+      "kind": 9022,
+      "canonical_constant": "KIND_GROUP_LEAVE_REQUEST",
+      "name": "Group Leave Request",
+      "class": "regular",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.leave_request.v1"
+      ]
+    },
+    {
+      "ordinal": 24,
+      "kind": 20000,
+      "canonical_constant": "KIND_GEOCHAT",
+      "name": "Geochat",
+      "class": "ephemeral",
+      "standard": "nip28",
+      "accepted_event_contracts": [
+        "radroots.social.geochat.v1"
+      ]
+    },
+    {
+      "ordinal": 25,
+      "kind": 22242,
+      "canonical_constant": "KIND_RELAY_AUTH",
+      "name": "Relay Auth",
+      "class": "ephemeral",
+      "standard": "nip42",
+      "accepted_event_contracts": [
+        "radroots.relay.auth.v1"
+      ]
+    },
+    {
+      "ordinal": 26,
+      "kind": 27235,
+      "canonical_constant": "KIND_HTTP_AUTH",
+      "name": "HTTP Auth",
+      "class": "ephemeral",
+      "standard": "nip98",
+      "accepted_event_contracts": [
+        "radroots.http.auth.v1"
+      ]
+    },
+    {
+      "ordinal": 27,
+      "kind": 10000,
+      "canonical_constant": "KIND_LIST_MUTE",
+      "name": "Mute List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.mute.v1"
+      ]
+    },
+    {
+      "ordinal": 28,
+      "kind": 10001,
+      "canonical_constant": "KIND_LIST_PINNED_NOTES",
+      "name": "Pinned Notes List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.pinned_notes.v1"
+      ]
+    },
+    {
+      "ordinal": 29,
+      "kind": 10002,
+      "canonical_constant": "KIND_LIST_READ_WRITE_RELAYS",
+      "name": "Read Write Relays List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.read_write_relays.v1"
+      ]
+    },
+    {
+      "ordinal": 30,
+      "kind": 10003,
+      "canonical_constant": "KIND_LIST_BOOKMARKS",
+      "name": "Bookmarks List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.bookmarks.v1"
+      ]
+    },
+    {
+      "ordinal": 31,
+      "kind": 10004,
+      "canonical_constant": "KIND_LIST_COMMUNITIES",
+      "name": "Communities List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.communities.v1"
+      ]
+    },
+    {
+      "ordinal": 32,
+      "kind": 10005,
+      "canonical_constant": "KIND_LIST_PUBLIC_CHATS",
+      "name": "Public Chats List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.public_chats.v1"
+      ]
+    },
+    {
+      "ordinal": 33,
+      "kind": 10006,
+      "canonical_constant": "KIND_LIST_BLOCKED_RELAYS",
+      "name": "Blocked Relays List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.blocked_relays.v1"
+      ]
+    },
+    {
+      "ordinal": 34,
+      "kind": 10007,
+      "canonical_constant": "KIND_LIST_SEARCH_RELAYS",
+      "name": "Search Relays List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.search_relays.v1"
+      ]
+    },
+    {
+      "ordinal": 35,
+      "kind": 10009,
+      "canonical_constant": "KIND_LIST_SIMPLE_GROUPS",
+      "name": "Simple Groups List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.simple_groups.v1"
+      ]
+    },
+    {
+      "ordinal": 36,
+      "kind": 10012,
+      "canonical_constant": "KIND_LIST_RELAY_FEEDS",
+      "name": "Relay Feeds List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.relay_feeds.v1"
+      ]
+    },
+    {
+      "ordinal": 37,
+      "kind": 10015,
+      "canonical_constant": "KIND_LIST_INTERESTS",
+      "name": "Interests List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.interests.v1"
+      ]
+    },
+    {
+      "ordinal": 38,
+      "kind": 10020,
+      "canonical_constant": "KIND_LIST_MEDIA_FOLLOWS",
+      "name": "Media Follows List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.media_follows.v1"
+      ]
+    },
+    {
+      "ordinal": 39,
+      "kind": 10030,
+      "canonical_constant": "KIND_LIST_EMOJIS",
+      "name": "Emojis List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.emojis.v1"
+      ]
+    },
+    {
+      "ordinal": 40,
+      "kind": 10050,
+      "canonical_constant": "KIND_LIST_DM_RELAYS",
+      "name": "DM Relays List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.dm_relays.v1"
+      ]
+    },
+    {
+      "ordinal": 41,
+      "kind": 10101,
+      "canonical_constant": "KIND_LIST_GOOD_WIKI_AUTHORS",
+      "name": "Good Wiki Authors List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.good_wiki_authors.v1"
+      ]
+    },
+    {
+      "ordinal": 42,
+      "kind": 10102,
+      "canonical_constant": "KIND_LIST_GOOD_WIKI_RELAYS",
+      "name": "Good Wiki Relays List",
+      "class": "replaceable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list.good_wiki_relays.v1"
+      ]
+    },
+    {
+      "ordinal": 43,
+      "kind": 30000,
+      "canonical_constant": "KIND_LIST_SET_FOLLOW",
+      "name": "Follow Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.follow.v1"
+      ]
+    },
+    {
+      "ordinal": 44,
+      "kind": 30001,
+      "canonical_constant": "KIND_LIST_SET_GENERIC",
+      "name": "Generic List Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.farm.members.v1",
+        "radroots.list_set.farm.members.owners.v1",
+        "radroots.list_set.farm.members.workers.v1",
+        "radroots.list_set.farm.plots.v1",
+        "radroots.list_set.farm.listings.v1",
+        "radroots.list_set.member_of.farms.v1"
+      ]
+    },
+    {
+      "ordinal": 45,
+      "kind": 30002,
+      "canonical_constant": "KIND_LIST_SET_RELAY",
+      "name": "Relay Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.relay.v1"
+      ]
+    },
+    {
+      "ordinal": 46,
+      "kind": 30003,
+      "canonical_constant": "KIND_LIST_SET_BOOKMARK",
+      "name": "Bookmark Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.bookmark.v1"
+      ]
+    },
+    {
+      "ordinal": 47,
+      "kind": 30004,
+      "canonical_constant": "KIND_LIST_SET_CURATION",
+      "name": "Curation Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.curation.v1"
+      ]
+    },
+    {
+      "ordinal": 48,
+      "kind": 30005,
+      "canonical_constant": "KIND_LIST_SET_VIDEO",
+      "name": "Video Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.video.v1"
+      ]
+    },
+    {
+      "ordinal": 49,
+      "kind": 30006,
+      "canonical_constant": "KIND_LIST_SET_PICTURE",
+      "name": "Picture Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.picture.v1"
+      ]
+    },
+    {
+      "ordinal": 50,
+      "kind": 30007,
+      "canonical_constant": "KIND_LIST_SET_KIND_MUTE",
+      "name": "Kind Mute Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.kind_mute.v1"
+      ]
+    },
+    {
+      "ordinal": 51,
+      "kind": 30015,
+      "canonical_constant": "KIND_LIST_SET_INTEREST",
+      "name": "Interest Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.interest.v1"
+      ]
+    },
+    {
+      "ordinal": 52,
+      "kind": 30030,
+      "canonical_constant": "KIND_LIST_SET_EMOJI",
+      "name": "Emoji Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.emoji.v1"
+      ]
+    },
+    {
+      "ordinal": 53,
+      "kind": 30063,
+      "canonical_constant": "KIND_LIST_SET_RELEASE_ARTIFACT",
+      "name": "Release Artifact Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.release_artifact.v1"
+      ]
+    },
+    {
+      "ordinal": 54,
+      "kind": 30267,
+      "canonical_constant": "KIND_LIST_SET_APP_CURATION",
+      "name": "App Curation Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.app_curation.v1"
+      ]
+    },
+    {
+      "ordinal": 55,
+      "kind": 30023,
+      "canonical_constant": "KIND_ARTICLE",
+      "name": "Long Form Article",
+      "class": "addressable",
+      "standard": "nip23",
+      "accepted_event_contracts": [
+        "radroots.social.article.v1"
+      ]
+    },
+    {
+      "ordinal": 56,
+      "kind": 818,
+      "canonical_constant": "KIND_WIKI_MERGE_REQUEST",
+      "name": "Wiki Merge Request",
+      "class": "regular",
+      "standard": "nip54",
+      "accepted_event_contracts": [
+        "radroots.wiki.merge_request.v1"
+      ]
+    },
+    {
+      "ordinal": 57,
+      "kind": 30818,
+      "canonical_constant": "KIND_WIKI_ARTICLE",
+      "name": "Wiki Article",
+      "class": "addressable",
+      "standard": "nip54",
+      "accepted_event_contracts": [
+        "radroots.wiki.article.v1"
+      ]
+    },
+    {
+      "ordinal": 58,
+      "kind": 30819,
+      "canonical_constant": "KIND_WIKI_REDIRECT",
+      "name": "Wiki Redirect",
+      "class": "addressable",
+      "standard": "nip54",
+      "accepted_event_contracts": [
+        "radroots.wiki.redirect.v1"
+      ]
+    },
+    {
+      "ordinal": 59,
+      "kind": 31922,
+      "canonical_constant": "KIND_CALENDAR_DATE_EVENT",
+      "name": "Calendar Date Event",
+      "class": "addressable",
+      "standard": "nip52",
+      "accepted_event_contracts": [
+        "radroots.calendar.date_event.v1"
+      ]
+    },
+    {
+      "ordinal": 60,
+      "kind": 31923,
+      "canonical_constant": "KIND_CALENDAR_TIME_EVENT",
+      "name": "Calendar Time Event",
+      "class": "addressable",
+      "standard": "nip52",
+      "accepted_event_contracts": [
+        "radroots.calendar.time_event.v1"
+      ]
+    },
+    {
+      "ordinal": 61,
+      "kind": 31924,
+      "canonical_constant": "KIND_CALENDAR",
+      "name": "Calendar Collection",
+      "class": "addressable",
+      "standard": "nip52",
+      "accepted_event_contracts": [
+        "radroots.calendar.collection.v1"
+      ]
+    },
+    {
+      "ordinal": 62,
+      "kind": 31925,
+      "canonical_constant": "KIND_CALENDAR_EVENT_RSVP",
+      "name": "Calendar RSVP",
+      "class": "addressable",
+      "standard": "nip52",
+      "accepted_event_contracts": [
+        "radroots.calendar.rsvp.v1"
+      ]
+    },
+    {
+      "ordinal": 63,
+      "kind": 39089,
+      "canonical_constant": "KIND_LIST_SET_STARTER_PACK",
+      "name": "Starter Pack Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.starter_pack.v1"
+      ]
+    },
+    {
+      "ordinal": 64,
+      "kind": 39092,
+      "canonical_constant": "KIND_LIST_SET_MEDIA_STARTER_PACK",
+      "name": "Media Starter Pack Set",
+      "class": "addressable",
+      "standard": "nip51",
+      "accepted_event_contracts": [
+        "radroots.list_set.media_starter_pack.v1"
+      ]
+    },
+    {
+      "ordinal": 65,
+      "kind": 30340,
+      "canonical_constant": "KIND_FARM",
+      "name": "Farm",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.profile.v1"
+      ]
+    },
+    {
+      "ordinal": 66,
+      "kind": 30350,
+      "canonical_constant": "KIND_PLOT",
+      "name": "Plot",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.plot.v1"
+      ]
+    },
+    {
+      "ordinal": 67,
+      "kind": 30360,
+      "canonical_constant": "KIND_COOP",
+      "name": "Coop",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.coop.v1"
+      ]
+    },
+    {
+      "ordinal": 68,
+      "kind": 30361,
+      "canonical_constant": "KIND_DOCUMENT",
+      "name": "Document",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.document.v1"
+      ]
+    },
+    {
+      "ordinal": 69,
+      "kind": 30370,
+      "canonical_constant": "KIND_RESOURCE_AREA",
+      "name": "Resource Area",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.resource_area.v1"
+      ]
+    },
+    {
+      "ordinal": 70,
+      "kind": 30371,
+      "canonical_constant": "KIND_RESOURCE_HARVEST_CAP",
+      "name": "Resource Harvest Capacity",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.farm.resource_harvest_cap.v1"
+      ]
+    },
+    {
+      "ordinal": 71,
+      "kind": 30380,
+      "canonical_constant": "KIND_ACCOUNT_CLAIM",
+      "name": "Account Claim",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.account.claim.v1"
+      ]
+    },
+    {
+      "ordinal": 72,
+      "kind": 30078,
+      "canonical_constant": "KIND_FARM_WORKSPACE_MANIFEST",
+      "name": "Farm Workspace Manifest",
+      "class": "addressable",
+      "standard": "nip78",
+      "accepted_event_contracts": [
+        "radroots.farm.workspace_manifest.v1"
+      ]
+    },
+    {
+      "ordinal": 73,
+      "kind": 30402,
+      "canonical_constant": "KIND_CLASSIFIED_LISTING",
+      "name": "Classified Listing",
+      "class": "addressable",
+      "standard": "nip99",
+      "accepted_event_contracts": [
+        "radroots.operational_listing.published.v1",
+        "radroots.food.availability.v1"
+      ]
+    },
+    {
+      "ordinal": 74,
+      "kind": 30450,
+      "canonical_constant": "KIND_KNOWLEDGE_SOURCE",
+      "name": "Knowledge Source",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.source.v1"
+      ]
+    },
+    {
+      "ordinal": 75,
+      "kind": 30451,
+      "canonical_constant": "KIND_EVIDENCE_BOUNTY",
+      "name": "Evidence Bounty",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.evidence_bounty.v1"
+      ]
+    },
+    {
+      "ordinal": 76,
+      "kind": 3460,
+      "canonical_constant": "KIND_KNOWLEDGE_CLAIM",
+      "name": "Knowledge Claim",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.claim.v1"
+      ]
+    },
+    {
+      "ordinal": 77,
+      "kind": 3461,
+      "canonical_constant": "KIND_KNOWLEDGE_RELATION",
+      "name": "Knowledge Relation",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.relation.v1"
+      ]
+    },
+    {
+      "ordinal": 78,
+      "kind": 3462,
+      "canonical_constant": "KIND_KNOWLEDGE_REVIEW",
+      "name": "Knowledge Review",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.review.v1"
+      ]
+    },
+    {
+      "ordinal": 79,
+      "kind": 3463,
+      "canonical_constant": "KIND_KNOWLEDGE_FIELD_REPORT",
+      "name": "Knowledge Field Report",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.field_report.v1"
+      ]
+    },
+    {
+      "ordinal": 80,
+      "kind": 3464,
+      "canonical_constant": "KIND_KNOWLEDGE_CHANGE_PROPOSAL",
+      "name": "Knowledge Change Proposal",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.change_proposal.v1"
+      ]
+    },
+    {
+      "ordinal": 81,
+      "kind": 3465,
+      "canonical_constant": "KIND_CONTRIBUTION_ATTESTATION",
+      "name": "Contribution Attestation",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.knowledge.contribution_attestation.v1"
+      ]
+    },
+    {
+      "ordinal": 82,
+      "kind": 31990,
+      "canonical_constant": "KIND_APPLICATION_HANDLER",
+      "name": "Application Handler",
+      "class": "addressable",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.application.handler.v1"
+      ]
+    },
+    {
+      "ordinal": 83,
+      "kind": 39000,
+      "canonical_constant": "KIND_GROUP_METADATA",
+      "name": "Group Metadata",
+      "class": "addressable",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.metadata.v1"
+      ]
+    },
+    {
+      "ordinal": 84,
+      "kind": 39001,
+      "canonical_constant": "KIND_GROUP_ADMINS",
+      "name": "Group Admins",
+      "class": "addressable",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.admins.v1"
+      ]
+    },
+    {
+      "ordinal": 85,
+      "kind": 39002,
+      "canonical_constant": "KIND_GROUP_MEMBERS",
+      "name": "Group Members",
+      "class": "addressable",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.members.v1"
+      ]
+    },
+    {
+      "ordinal": 86,
+      "kind": 39003,
+      "canonical_constant": "KIND_GROUP_ROLES",
+      "name": "Group Roles",
+      "class": "addressable",
+      "standard": "nip29",
+      "accepted_event_contracts": [
+        "radroots.group.roles.v1"
+      ]
+    },
+    {
+      "ordinal": 87,
+      "kind": 3470,
+      "canonical_constant": "KIND_TRADE_PROPOSAL",
+      "name": "Trade Proposal",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.trade.proposal.v1"
+      ]
+    },
+    {
+      "ordinal": 88,
+      "kind": 3471,
+      "canonical_constant": "KIND_TRADE_DECISION",
+      "name": "Trade Decision",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.trade.decision.v1"
+      ]
+    },
+    {
+      "ordinal": 89,
+      "kind": 3472,
+      "canonical_constant": "KIND_TRADE_REVISION_PROPOSAL",
+      "name": "Trade Revision Proposal",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.trade.revision_proposal.v1"
+      ]
+    },
+    {
+      "ordinal": 90,
+      "kind": 3473,
+      "canonical_constant": "KIND_TRADE_REVISION_DECISION",
+      "name": "Trade Revision Decision",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.trade.revision_decision.v1"
+      ]
+    },
+    {
+      "ordinal": 91,
+      "kind": 3474,
+      "canonical_constant": "KIND_TRADE_CANCELLATION",
+      "name": "Trade Cancellation",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.trade.cancellation.v1"
+      ]
+    },
+    {
+      "ordinal": 92,
+      "kind": 3440,
+      "canonical_constant": "KIND_TRADE_VALIDATION_RECEIPT",
+      "name": "Trade Validation Receipt",
+      "class": "regular",
+      "standard": "radroots",
+      "accepted_event_contracts": [
+        "radroots.trade.validation_receipt.v1"
+      ]
+    }
+  ],
+  "event_contracts": [
+    {
+      "ordinal": 0,
+      "contract_id": "radroots.profile.metadata.v1",
+      "kind": 0,
+      "name": "Profile Metadata",
+      "payload_type": "RadrootsAuthoredProfile / RadrootsInboundProfileMetadata",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "profile_projection"
+      ]
+    },
+    {
+      "ordinal": 1,
+      "contract_id": "radroots.social.post.v1",
+      "kind": 1,
+      "name": "Short Text Note",
+      "payload_type": "RadrootsPost",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "read_only",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 2,
+      "contract_id": "radroots.social.update.v1",
+      "kind": 1,
+      "name": "Root Text Update",
+      "payload_type": "RadrootsAuthoredUpdate / RadrootsInboundPostProjection",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 3,
+      "contract_id": "radroots.social.photo_update.v1",
+      "kind": 1,
+      "name": "NIP-92 Photo Update",
+      "payload_type": "RadrootsAuthoredPhotoUpdate / RadrootsInboundPostProjection",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [
+        {
+          "name": "imeta",
+          "cardinality": "required_many",
+          "semantic": "image",
+          "value_type": "text",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 4,
+      "contract_id": "radroots.social.ask.v1",
+      "kind": 1,
+      "name": "Root Ask",
+      "payload_type": "RadrootsAuthoredAsk / RadrootsInboundPostProjection",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [
+        {
+          "name": "t",
+          "cardinality": "required_one",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "imeta",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "text",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 5,
+      "contract_id": "radroots.social.reply.v1",
+      "kind": 1,
+      "name": "NIP-10 Reply",
+      "payload_type": "RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "required_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "participant",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 6,
+      "contract_id": "radroots.social.follow_list.v1",
+      "kind": 3,
+      "name": "Contact List",
+      "payload_type": "RadrootsFollowList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "profile_projection"
+      ]
+    },
+    {
+      "ordinal": 7,
+      "contract_id": "radroots.social.deletion_request.v1",
+      "kind": 5,
+      "name": "Deletion Request",
+      "payload_type": "RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "nip01_coordinate",
+          "value_type": "nip01_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "k",
+          "cardinality": "optional_many",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 8,
+      "contract_id": "radroots.social.repost.v1",
+      "kind": 6,
+      "name": "Repost",
+      "payload_type": "RadrootsRepost",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "k",
+          "cardinality": "optional_one",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 9,
+      "contract_id": "radroots.social.reaction.v1",
+      "kind": 7,
+      "name": "Reaction",
+      "payload_type": "RadrootsReaction",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "k",
+          "cardinality": "optional_one",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 10,
+      "contract_id": "radroots.message.seal.v1",
+      "kind": 13,
+      "name": "Seal",
+      "payload_type": "RadrootsSeal",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "encrypted",
+      "author_role": "any",
+      "content_schema": "encrypted",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 11,
+      "contract_id": "radroots.message.private.v1",
+      "kind": 14,
+      "name": "Direct Message",
+      "payload_type": "RadrootsMessage",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "encrypted",
+      "author_role": "any",
+      "content_schema": "encrypted",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 12,
+      "contract_id": "radroots.message.file.v1",
+      "kind": 15,
+      "name": "Direct Message File",
+      "payload_type": "RadrootsMessageFile",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "encrypted",
+      "author_role": "any",
+      "content_schema": "encrypted",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 13,
+      "contract_id": "radroots.social.generic_repost.v1",
+      "kind": 16,
+      "name": "Generic Repost",
+      "payload_type": "RadrootsGenericRepost",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "k",
+          "cardinality": "optional_one",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 14,
+      "contract_id": "radroots.farm.crdt_change.v1",
+      "kind": 78,
+      "name": "Farm CRDT Change",
+      "payload_type": "RadrootsFarmCrdtChange",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "encrypted",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 15,
+      "contract_id": "radroots.message.gift_wrap.v1",
+      "kind": 1059,
+      "name": "Gift Wrap",
+      "payload_type": "RadrootsGiftWrap",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "encrypted",
+      "author_role": "any",
+      "content_schema": "encrypted",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 16,
+      "contract_id": "radroots.file.metadata.v1",
+      "kind": 1063,
+      "name": "File Metadata",
+      "payload_type": "RadrootsFileMetadata",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "url",
+          "cardinality": "optional_one",
+          "semantic": "url",
+          "value_type": "url",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 17,
+      "contract_id": "radroots.social.comment.v1",
+      "kind": 1111,
+      "name": "Comment",
+      "payload_type": "RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [
+        {
+          "name": "E",
+          "cardinality": "optional_one",
+          "semantic": "root_event",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "A",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "K",
+          "cardinality": "required_one",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        },
+        {
+          "name": "P",
+          "cardinality": "required_one",
+          "semantic": "participant",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "required_one",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "k",
+          "cardinality": "required_one",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_many",
+          "semantic": "participant",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 18,
+      "contract_id": "radroots.social.report.v1",
+      "kind": 1984,
+      "name": "Report",
+      "payload_type": "RadrootsReport",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "k",
+          "cardinality": "optional_one",
+          "semantic": "kind",
+          "value_type": "kind",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 19,
+      "contract_id": "radroots.group.put_user.v1",
+      "kind": 9000,
+      "name": "Group Put User",
+      "payload_type": "RadrootsGroupPutUser",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 20,
+      "contract_id": "radroots.group.remove_user.v1",
+      "kind": 9001,
+      "name": "Group Remove User",
+      "payload_type": "RadrootsGroupRemoveUser",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 21,
+      "contract_id": "radroots.group.edit_metadata.v1",
+      "kind": 9002,
+      "name": "Group Edit Metadata",
+      "payload_type": "RadrootsGroupEditMetadata",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 22,
+      "contract_id": "radroots.group.delete_event.v1",
+      "kind": 9005,
+      "name": "Group Delete Event",
+      "payload_type": "RadrootsGroupDeleteEvent",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 23,
+      "contract_id": "radroots.group.create_group.v1",
+      "kind": 9007,
+      "name": "Group Create Group",
+      "payload_type": "RadrootsGroupCreateGroup",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 24,
+      "contract_id": "radroots.group.delete_group.v1",
+      "kind": 9008,
+      "name": "Group Delete Group",
+      "payload_type": "RadrootsGroupDeleteGroup",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 25,
+      "contract_id": "radroots.group.create_invite.v1",
+      "kind": 9009,
+      "name": "Group Create Invite",
+      "payload_type": "RadrootsGroupCreateInvite",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 26,
+      "contract_id": "radroots.group.join_request.v1",
+      "kind": 9021,
+      "name": "Group Join Request",
+      "payload_type": "RadrootsGroupJoinRequest",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "member",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 27,
+      "contract_id": "radroots.group.leave_request.v1",
+      "kind": 9022,
+      "name": "Group Leave Request",
+      "payload_type": "RadrootsGroupLeaveRequest",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "member",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "h",
+          "cardinality": "required_one",
+          "semantic": "group_id",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 28,
+      "contract_id": "radroots.social.geochat.v1",
+      "kind": 20000,
+      "name": "Geochat",
+      "payload_type": "RadrootsGeochat",
+      "class": "ephemeral",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 29,
+      "contract_id": "radroots.relay.auth.v1",
+      "kind": 22242,
+      "name": "Relay Auth",
+      "payload_type": "RadrootsRelayAuth",
+      "class": "ephemeral",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "relay",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [],
+      "reducers": [
+        "nostr_relay_policy_projection"
+      ]
+    },
+    {
+      "ordinal": 30,
+      "contract_id": "radroots.http.auth.v1",
+      "kind": 27235,
+      "name": "HTTP Auth",
+      "payload_type": "RadrootsHttpAuth",
+      "class": "ephemeral",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "application",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [],
+      "reducers": [
+        "nostr_relay_policy_projection"
+      ]
+    },
+    {
+      "ordinal": 31,
+      "contract_id": "radroots.list.mute.v1",
+      "kind": 10000,
+      "name": "Mute List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 32,
+      "contract_id": "radroots.list.pinned_notes.v1",
+      "kind": 10001,
+      "name": "Pinned Notes List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 33,
+      "contract_id": "radroots.list.read_write_relays.v1",
+      "kind": 10002,
+      "name": "Read Write Relays List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 34,
+      "contract_id": "radroots.list.bookmarks.v1",
+      "kind": 10003,
+      "name": "Bookmarks List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 35,
+      "contract_id": "radroots.list.communities.v1",
+      "kind": 10004,
+      "name": "Communities List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 36,
+      "contract_id": "radroots.list.public_chats.v1",
+      "kind": 10005,
+      "name": "Public Chats List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 37,
+      "contract_id": "radroots.list.blocked_relays.v1",
+      "kind": 10006,
+      "name": "Blocked Relays List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 38,
+      "contract_id": "radroots.list.search_relays.v1",
+      "kind": 10007,
+      "name": "Search Relays List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 39,
+      "contract_id": "radroots.list.simple_groups.v1",
+      "kind": 10009,
+      "name": "Simple Groups List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 40,
+      "contract_id": "radroots.list.relay_feeds.v1",
+      "kind": 10012,
+      "name": "Relay Feeds List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 41,
+      "contract_id": "radroots.list.interests.v1",
+      "kind": 10015,
+      "name": "Interests List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 42,
+      "contract_id": "radroots.list.media_follows.v1",
+      "kind": 10020,
+      "name": "Media Follows List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 43,
+      "contract_id": "radroots.list.emojis.v1",
+      "kind": 10030,
+      "name": "Emojis List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 44,
+      "contract_id": "radroots.list.dm_relays.v1",
+      "kind": 10050,
+      "name": "DM Relays List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 45,
+      "contract_id": "radroots.list.good_wiki_authors.v1",
+      "kind": 10101,
+      "name": "Good Wiki Authors List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 46,
+      "contract_id": "radroots.list.good_wiki_relays.v1",
+      "kind": 10102,
+      "name": "Good Wiki Relays List",
+      "payload_type": "RadrootsList",
+      "class": "replaceable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "relay",
+          "cardinality": "optional_many",
+          "semantic": "relay",
+          "value_type": "relay_url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 47,
+      "contract_id": "radroots.list_set.follow.v1",
+      "kind": 30000,
+      "name": "Follow Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 48,
+      "contract_id": "radroots.list_set.farm.members.v1",
+      "kind": 30001,
+      "name": "Farm Members List Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "composite",
+        "parts": [
+          {
+            "type": "d_tag_prefix",
+            "prefix": "farm:"
+          },
+          {
+            "type": "d_tag_suffix",
+            "suffix": ":members"
+          }
+        ]
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 49,
+      "contract_id": "radroots.list_set.farm.members.owners.v1",
+      "kind": 30001,
+      "name": "Farm Owners List Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "composite",
+        "parts": [
+          {
+            "type": "d_tag_prefix",
+            "prefix": "farm:"
+          },
+          {
+            "type": "d_tag_suffix",
+            "suffix": ":members.owners"
+          }
+        ]
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 50,
+      "contract_id": "radroots.list_set.farm.members.workers.v1",
+      "kind": 30001,
+      "name": "Farm Workers List Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "composite",
+        "parts": [
+          {
+            "type": "d_tag_prefix",
+            "prefix": "farm:"
+          },
+          {
+            "type": "d_tag_suffix",
+            "suffix": ":members.workers"
+          }
+        ]
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 51,
+      "contract_id": "radroots.list_set.farm.plots.v1",
+      "kind": 30001,
+      "name": "Farm Plots List Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "composite",
+        "parts": [
+          {
+            "type": "d_tag_prefix",
+            "prefix": "farm:"
+          },
+          {
+            "type": "d_tag_suffix",
+            "suffix": ":plots"
+          }
+        ]
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 52,
+      "contract_id": "radroots.list_set.farm.listings.v1",
+      "kind": 30001,
+      "name": "Farm Listings List Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "composite",
+        "parts": [
+          {
+            "type": "d_tag_prefix",
+            "prefix": "farm:"
+          },
+          {
+            "type": "d_tag_suffix",
+            "suffix": ":listings"
+          }
+        ]
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 53,
+      "contract_id": "radroots.list_set.member_of.farms.v1",
+      "kind": 30001,
+      "name": "Member Of Farms List Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "member",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "d_tag_exact",
+        "value": "member_of.farms"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 54,
+      "contract_id": "radroots.list_set.relay.v1",
+      "kind": 30002,
+      "name": "Relay Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "nostr_relay_policy_projection"
+      ]
+    },
+    {
+      "ordinal": 55,
+      "contract_id": "radroots.list_set.bookmark.v1",
+      "kind": 30003,
+      "name": "Bookmark Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 56,
+      "contract_id": "radroots.list_set.curation.v1",
+      "kind": 30004,
+      "name": "Curation Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 57,
+      "contract_id": "radroots.list_set.video.v1",
+      "kind": 30005,
+      "name": "Video Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 58,
+      "contract_id": "radroots.list_set.picture.v1",
+      "kind": 30006,
+      "name": "Picture Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 59,
+      "contract_id": "radroots.list_set.kind_mute.v1",
+      "kind": 30007,
+      "name": "Kind Mute Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 60,
+      "contract_id": "radroots.list_set.interest.v1",
+      "kind": 30015,
+      "name": "Interest Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 61,
+      "contract_id": "radroots.list_set.emoji.v1",
+      "kind": 30030,
+      "name": "Emoji Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 62,
+      "contract_id": "radroots.list_set.release_artifact.v1",
+      "kind": 30063,
+      "name": "Release Artifact Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 63,
+      "contract_id": "radroots.list_set.app_curation.v1",
+      "kind": 30267,
+      "name": "App Curation Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 64,
+      "contract_id": "radroots.social.article.v1",
+      "kind": 30023,
+      "name": "Long Form Article",
+      "payload_type": "RadrootsArticle",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "markdown",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "summary",
+          "cardinality": "optional_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "published_at",
+          "cardinality": "optional_one",
+          "semantic": "published_at",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 65,
+      "contract_id": "radroots.wiki.merge_request.v1",
+      "kind": 818,
+      "name": "Wiki Merge Request",
+      "payload_type": "RadrootsWikiMergeRequest",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "a",
+          "cardinality": "required_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "required_one",
+          "semantic": "source",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_one",
+          "semantic": "previous_event",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 66,
+      "contract_id": "radroots.wiki.article.v1",
+      "kind": 30818,
+      "name": "Wiki Article",
+      "payload_type": "RadrootsWikiArticle",
+      "class": "addressable",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "djot",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "summary",
+          "cardinality": "optional_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "published_at",
+          "cardinality": "optional_one",
+          "semantic": "published_at",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 67,
+      "contract_id": "radroots.wiki.redirect.v1",
+      "kind": 30819,
+      "name": "Wiki Redirect",
+      "payload_type": "RadrootsWikiRedirect",
+      "class": "addressable",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "empty",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "required_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 68,
+      "contract_id": "radroots.calendar.date_event.v1",
+      "kind": 31922,
+      "name": "Calendar Date Event",
+      "payload_type": "RadrootsAdmittedCalendarDateEvent",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "required_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "name",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "start",
+          "cardinality": "required_one",
+          "semantic": "calendar_start",
+          "value_type": "calendar_date",
+          "relay_indexed": false
+        },
+        {
+          "name": "end",
+          "cardinality": "optional_one",
+          "semantic": "calendar_end",
+          "value_type": "calendar_date",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "g",
+          "cardinality": "optional_one",
+          "semantic": "geohash",
+          "value_type": "geohash",
+          "relay_indexed": true
+        },
+        {
+          "name": "summary",
+          "cardinality": "optional_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_one",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "participant",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "r",
+          "cardinality": "optional_many",
+          "semantic": "reference",
+          "value_type": "uri",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "calendar_inclusion_request",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "calendar_projection"
+      ]
+    },
+    {
+      "ordinal": 69,
+      "contract_id": "radroots.calendar.time_event.v1",
+      "kind": 31923,
+      "name": "Calendar Time Event",
+      "payload_type": "RadrootsAdmittedCalendarTimeEvent",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "required_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "name",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "start",
+          "cardinality": "required_one",
+          "semantic": "calendar_start",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "end",
+          "cardinality": "optional_one",
+          "semantic": "calendar_end",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "D",
+          "cardinality": "required_many",
+          "semantic": "utc_day_coverage",
+          "value_type": "utc_day_index",
+          "relay_indexed": true
+        },
+        {
+          "name": "start_tzid",
+          "cardinality": "optional_one",
+          "semantic": "time_zone",
+          "value_type": "iana_time_zone_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "end_tzid",
+          "cardinality": "optional_one",
+          "semantic": "time_zone",
+          "value_type": "iana_time_zone_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "g",
+          "cardinality": "optional_one",
+          "semantic": "geohash",
+          "value_type": "geohash",
+          "relay_indexed": true
+        },
+        {
+          "name": "summary",
+          "cardinality": "optional_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_one",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "participant",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "r",
+          "cardinality": "optional_many",
+          "semantic": "reference",
+          "value_type": "uri",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "calendar_inclusion_request",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "calendar_projection"
+      ]
+    },
+    {
+      "ordinal": 70,
+      "contract_id": "radroots.calendar.collection.v1",
+      "kind": 31924,
+      "name": "Calendar Collection",
+      "payload_type": "RadrootsAdmittedCalendar",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "calendar_uid",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "required_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "description",
+          "cardinality": "optional_one",
+          "semantic": "list_description",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_one",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_many",
+          "semantic": "calendar_event_reference",
+          "value_type": "calendar_event_coordinate",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "calendar_projection"
+      ]
+    },
+    {
+      "ordinal": 71,
+      "contract_id": "radroots.calendar.rsvp.v1",
+      "kind": 31925,
+      "name": "Calendar RSVP",
+      "payload_type": "RadrootsAdmittedCalendarEventRsvp",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "plain_text",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "calendar_uid",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "required_one",
+          "semantic": "calendar_event_reference",
+          "value_type": "calendar_event_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_one",
+          "semantic": "calendar_event_revision",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "status",
+          "cardinality": "required_one",
+          "semantic": "status",
+          "value_type": "calendar_rsvp_status",
+          "relay_indexed": false
+        },
+        {
+          "name": "fb",
+          "cardinality": "optional_one",
+          "semantic": "free_busy",
+          "value_type": "calendar_free_busy",
+          "relay_indexed": false
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_one",
+          "semantic": "calendar_event_author",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "calendar_projection"
+      ]
+    },
+    {
+      "ordinal": 72,
+      "contract_id": "radroots.list_set.starter_pack.v1",
+      "kind": 39089,
+      "name": "Starter Pack Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 73,
+      "contract_id": "radroots.list_set.media_starter_pack.v1",
+      "kind": 39092,
+      "name": "Media Starter Pack Set",
+      "payload_type": "RadrootsListSet",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 74,
+      "contract_id": "radroots.farm.profile.v1",
+      "kind": 30340,
+      "name": "Farm",
+      "payload_type": "RadrootsFarm",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 75,
+      "contract_id": "radroots.farm.plot.v1",
+      "kind": 30350,
+      "name": "Plot",
+      "payload_type": "RadrootsPlot",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 76,
+      "contract_id": "radroots.farm.coop.v1",
+      "kind": 30360,
+      "name": "Coop",
+      "payload_type": "RadrootsCoop",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 77,
+      "contract_id": "radroots.farm.document.v1",
+      "kind": 30361,
+      "name": "Document",
+      "payload_type": "RadrootsDocument",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 78,
+      "contract_id": "radroots.farm.resource_area.v1",
+      "kind": 30370,
+      "name": "Resource Area",
+      "payload_type": "RadrootsResourceArea",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 79,
+      "contract_id": "radroots.farm.resource_harvest_cap.v1",
+      "kind": 30371,
+      "name": "Resource Harvest Capacity",
+      "payload_type": "RadrootsResourceHarvestCap",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "optional_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 80,
+      "contract_id": "radroots.account.claim.v1",
+      "kind": 30380,
+      "name": "Account Claim",
+      "payload_type": "RadrootsAccountClaim",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "profile_projection"
+      ]
+    },
+    {
+      "ordinal": 81,
+      "contract_id": "radroots.farm.workspace_manifest.v1",
+      "kind": 30078,
+      "name": "Farm Workspace Manifest",
+      "payload_type": "RadrootsFarmWorkspaceManifest",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "encrypted",
+      "author_role": "farmer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "farm_ops_projection"
+      ]
+    },
+    {
+      "ordinal": 82,
+      "contract_id": "radroots.operational_listing.published.v1",
+      "kind": 30402,
+      "name": "Operational Listing",
+      "payload_type": "RadrootsOperationalListing",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "seller",
+      "content_schema": "markdown",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "classified_listing_partition",
+        "value": "operational_listing"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "required_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "key",
+          "cardinality": "required_one",
+          "semantic": "category",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "title",
+          "cardinality": "required_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "category",
+          "cardinality": "required_one",
+          "semantic": "category",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "summary",
+          "cardinality": "optional_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "published_at",
+          "cardinality": "optional_one",
+          "semantic": "published_at",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "process",
+          "cardinality": "optional_one",
+          "semantic": "category",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "lot",
+          "cardinality": "optional_one",
+          "semantic": "reference",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "profile",
+          "cardinality": "optional_one",
+          "semantic": "category",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "year",
+          "cardinality": "optional_one",
+          "semantic": "category",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "optional_many",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "price",
+          "cardinality": "optional_many",
+          "semantic": "price",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "status",
+          "cardinality": "optional_one",
+          "semantic": "status",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        },
+        {
+          "name": "g",
+          "cardinality": "optional_one",
+          "semantic": "geohash",
+          "value_type": "geohash",
+          "relay_indexed": true
+        },
+        {
+          "name": "radroots:primary_bin",
+          "cardinality": "required_one",
+          "semantic": "operational_listing_snapshot",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:bin",
+          "cardinality": "required_many",
+          "semantic": "operational_listing_snapshot",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:price",
+          "cardinality": "required_many",
+          "semantic": "price",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:discount",
+          "cardinality": "optional_many",
+          "semantic": "price",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:resource_area",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:plot",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": false
+        },
+        {
+          "name": "inventory",
+          "cardinality": "optional_one",
+          "semantic": "operational_listing_snapshot",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:availability_start",
+          "cardinality": "optional_one",
+          "semantic": "status",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "expires_at",
+          "cardinality": "optional_one",
+          "semantic": "status",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "delivery",
+          "cardinality": "optional_one",
+          "semantic": "reference",
+          "value_type": "text",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "operational_listing_projection",
+        "market_projection",
+        "operational_listing_inventory_accounting"
+      ]
+    },
+    {
+      "ordinal": 83,
+      "contract_id": "radroots.food.availability.v1",
+      "kind": 30402,
+      "name": "Food Availability",
+      "payload_type": "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "seller",
+      "content_schema": "markdown",
+      "authoring_policy": "typed_only",
+      "discriminator": {
+        "type": "admission_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "title",
+          "cardinality": "required_one",
+          "semantic": "title",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "summary",
+          "cardinality": "required_one",
+          "semantic": "summary",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "published_at",
+          "cardinality": "required_one",
+          "semantic": "published_at",
+          "value_type": "unix_timestamp",
+          "relay_indexed": false
+        },
+        {
+          "name": "location",
+          "cardinality": "required_one",
+          "semantic": "location",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "price",
+          "cardinality": "required_one",
+          "semantic": "price",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:price_unit",
+          "cardinality": "required_one",
+          "semantic": "price",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "radroots:quantity",
+          "cardinality": "optional_one",
+          "semantic": "price",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "status",
+          "cardinality": "required_one",
+          "semantic": "status",
+          "value_type": "text",
+          "relay_indexed": false
+        },
+        {
+          "name": "image",
+          "cardinality": "optional_many",
+          "semantic": "image",
+          "value_type": "url",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "market_projection"
+      ]
+    },
+    {
+      "ordinal": 84,
+      "contract_id": "radroots.knowledge.source.v1",
+      "kind": 30450,
+      "name": "Knowledge Source",
+      "payload_type": "RadrootsKnowledgeSource",
+      "class": "addressable",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.source.v1"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 85,
+      "contract_id": "radroots.knowledge.evidence_bounty.v1",
+      "kind": 30451,
+      "name": "Evidence Bounty",
+      "payload_type": "RadrootsEvidenceBounty",
+      "class": "addressable",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.evidence_bounty.v1"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 86,
+      "contract_id": "radroots.knowledge.claim.v1",
+      "kind": 3460,
+      "name": "Knowledge Claim",
+      "payload_type": "RadrootsKnowledgeClaim",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.claim.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "citation",
+          "cardinality": "optional_many",
+          "semantic": "citation",
+          "value_type": "sha256",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 87,
+      "contract_id": "radroots.knowledge.relation.v1",
+      "kind": 3461,
+      "name": "Knowledge Relation",
+      "payload_type": "RadrootsKnowledgeRelation",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.relation.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "source",
+          "cardinality": "optional_many",
+          "semantic": "source",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 88,
+      "contract_id": "radroots.knowledge.review.v1",
+      "kind": 3462,
+      "name": "Knowledge Review",
+      "payload_type": "RadrootsKnowledgeReview",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.review.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "review_target",
+          "cardinality": "required_one",
+          "semantic": "review_target",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 89,
+      "contract_id": "radroots.knowledge.field_report.v1",
+      "kind": 3463,
+      "name": "Knowledge Field Report",
+      "payload_type": "RadrootsKnowledgeFieldReport",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.field_report.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "t",
+          "cardinality": "optional_many",
+          "semantic": "topic",
+          "value_type": "text",
+          "relay_indexed": true
+        },
+        {
+          "name": "g",
+          "cardinality": "optional_one",
+          "semantic": "geohash",
+          "value_type": "geohash",
+          "relay_indexed": true
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 90,
+      "contract_id": "radroots.knowledge.change_proposal.v1",
+      "kind": 3464,
+      "name": "Knowledge Change Proposal",
+      "payload_type": "RadrootsKnowledgeChangeProposal",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.change_proposal.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 91,
+      "contract_id": "radroots.knowledge.contribution_attestation.v1",
+      "kind": 3465,
+      "name": "Contribution Attestation",
+      "payload_type": "RadrootsContributionAttestation",
+      "class": "regular",
+      "stability": "experimental",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "tag_equals",
+        "name": "contract",
+        "value": "radroots.knowledge.contribution_attestation.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "evidence",
+          "cardinality": "optional_many",
+          "semantic": "evidence",
+          "value_type": "event_pointer",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "knowledge_projection"
+      ]
+    },
+    {
+      "ordinal": 92,
+      "contract_id": "radroots.application.handler.v1",
+      "kind": 31990,
+      "name": "Application Handler",
+      "payload_type": "RadrootsApplicationHandler",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "application",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "social_projection"
+      ]
+    },
+    {
+      "ordinal": 93,
+      "contract_id": "radroots.group.metadata.v1",
+      "kind": 39000,
+      "name": "Group Metadata",
+      "payload_type": "RadrootsGroupMetadata",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 94,
+      "contract_id": "radroots.group.admins.v1",
+      "kind": 39001,
+      "name": "Group Admins",
+      "payload_type": "RadrootsGroupAdmins",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 95,
+      "contract_id": "radroots.group.members.v1",
+      "kind": 39002,
+      "name": "Group Members",
+      "payload_type": "RadrootsGroupMembers",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 96,
+      "contract_id": "radroots.group.roles.v1",
+      "kind": 39003,
+      "name": "Group Roles",
+      "payload_type": "RadrootsGroupRoles",
+      "class": "addressable",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "moderator",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "optional_many",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "group_projection"
+      ]
+    },
+    {
+      "ordinal": 97,
+      "contract_id": "radroots.trade.proposal.v1",
+      "kind": 3470,
+      "name": "Trade Proposal",
+      "payload_type": "RadrootsTradeMutationEnvelopeV1",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "buyer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "content_json_field_equals",
+        "field": "contract_id",
+        "value": "radroots.trade.proposal.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "trade_projection",
+        "operational_listing_inventory_accounting"
+      ]
+    },
+    {
+      "ordinal": 98,
+      "contract_id": "radroots.trade.decision.v1",
+      "kind": 3471,
+      "name": "Trade Decision",
+      "payload_type": "RadrootsTradeMutationEnvelopeV1",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "seller",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "content_json_field_equals",
+        "field": "contract_id",
+        "value": "radroots.trade.decision.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "trade_projection",
+        "operational_listing_inventory_accounting"
+      ]
+    },
+    {
+      "ordinal": 99,
+      "contract_id": "radroots.trade.revision_proposal.v1",
+      "kind": 3472,
+      "name": "Trade Revision Proposal",
+      "payload_type": "RadrootsTradeMutationEnvelopeV1",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "content_json_field_equals",
+        "field": "contract_id",
+        "value": "radroots.trade.revision_proposal.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "trade_projection",
+        "operational_listing_inventory_accounting"
+      ]
+    },
+    {
+      "ordinal": 100,
+      "contract_id": "radroots.trade.revision_decision.v1",
+      "kind": 3473,
+      "name": "Trade Revision Decision",
+      "payload_type": "RadrootsTradeMutationEnvelopeV1",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "any",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "content_json_field_equals",
+        "field": "contract_id",
+        "value": "radroots.trade.revision_decision.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "trade_projection",
+        "operational_listing_inventory_accounting"
+      ]
+    },
+    {
+      "ordinal": 101,
+      "contract_id": "radroots.trade.cancellation.v1",
+      "kind": 3474,
+      "name": "Trade Cancellation",
+      "payload_type": "RadrootsTradeMutationEnvelopeV1",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "buyer",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "content_json_field_equals",
+        "field": "contract_id",
+        "value": "radroots.trade.cancellation.v1"
+      },
+      "tags": [
+        {
+          "name": "contract",
+          "cardinality": "required_one",
+          "semantic": "contract",
+          "value_type": "contract_id",
+          "relay_indexed": false
+        },
+        {
+          "name": "d",
+          "cardinality": "required_one",
+          "semantic": "identifier",
+          "value_type": "d_tag",
+          "relay_indexed": true
+        },
+        {
+          "name": "p",
+          "cardinality": "required_one",
+          "semantic": "counterparty",
+          "value_type": "public_key",
+          "relay_indexed": true
+        },
+        {
+          "name": "e",
+          "cardinality": "optional_many",
+          "semantic": "event_pointer",
+          "value_type": "event_id",
+          "relay_indexed": true
+        }
+      ],
+      "reducers": [
+        "trade_projection",
+        "operational_listing_inventory_accounting"
+      ]
+    },
+    {
+      "ordinal": 102,
+      "contract_id": "radroots.trade.validation_receipt.v1",
+      "kind": 3440,
+      "name": "Trade Validation Receipt",
+      "payload_type": "RadrootsTradeValidationReceipt",
+      "class": "regular",
+      "stability": "stable",
+      "privacy": "public",
+      "author_role": "service",
+      "content_schema": "json_object",
+      "authoring_policy": "generic_draft",
+      "discriminator": {
+        "type": "kind_only"
+      },
+      "tags": [
+        {
+          "name": "e",
+          "cardinality": "required_one",
+          "semantic": "root_event",
+          "value_type": "event_id",
+          "relay_indexed": true
+        },
+        {
+          "name": "a",
+          "cardinality": "optional_one",
+          "semantic": "addressable_coordinate",
+          "value_type": "addressable_coordinate",
+          "relay_indexed": true
+        },
+        {
+          "name": "output",
+          "cardinality": "required_one",
+          "semantic": "service_output",
+          "value_type": "text",
+          "relay_indexed": false
+        }
+      ],
+      "reducers": [
+        "trade_validation"
+      ]
+    }
+  ]
+}

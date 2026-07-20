@@ -9,7 +9,7 @@ use std::{string::String, vec::Vec};
 use crate::ids::{
     RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
 };
-use crate::wire::{
+use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,
 };

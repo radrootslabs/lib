@@ -4,6 +4,38 @@ use radroots_event::wire::RadrootsEventWireError;
 use radroots_event_codec::verification::RadrootsNip01VerificationError;
 use radroots_transport::RadrootsTransportError;
 
+/// Resource dimension that bounded NIP-09 reconciliation exceeded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RadrootsEventStoreReconciliationResource {
+    /// Number of retained raw-source event rows.
+    RawEvents,
+    /// Number of retained raw-source tag rows.
+    RawTags,
+    /// Total UTF-8 bytes across retained text fields in raw-source event rows.
+    RawEventBytes,
+    /// Total UTF-8 bytes across retained text fields in raw-source tag rows.
+    RawTagBytes,
+}
+
+impl RadrootsEventStoreReconciliationResource {
+    /// Stable diagnostic label used by the typed capacity error.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RawEvents => "raw event count",
+            Self::RawTags => "raw tag count",
+            Self::RawEventBytes => "total retained raw-source event row text bytes",
+            Self::RawTagBytes => "total retained raw-source tag row text bytes",
+        }
+    }
+}
+
+impl core::fmt::Display for RadrootsEventStoreReconciliationResource {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RadrootsEventStoreError {
     #[error("sqlx error: {0}")]
@@ -38,6 +70,16 @@ pub enum RadrootsEventStoreError {
         "event-store pool backing mismatch: file_backed={file_backed}, configured filename `{filename}`"
     )]
     SqlitePoolBackingMismatch { file_backed: bool, filename: String },
+    #[error("event-store SQLite connection has no main database")]
+    SqliteMainDatabaseUnavailable,
+    #[error(
+        "temporary schema object `{name}` ({object_type}, table `{table_name}`) collides with event-store authority"
+    )]
+    TemporarySchemaCollision {
+        object_type: String,
+        name: String,
+        table_name: String,
+    },
     #[error("event-store migration registry defect: {reason}")]
     MigrationRegistryDefect { reason: String },
     #[error(
@@ -111,6 +153,49 @@ pub enum RadrootsEventStoreError {
         primary: Box<RadrootsEventStoreError>,
         rollback: sqlx::Error,
     },
+    #[error(
+        "event-store ingest failed: {primary}; ingest transaction rollback also failed: {rollback}"
+    )]
+    IngestTransactionRollbackFailed {
+        #[source]
+        primary: Box<RadrootsEventStoreError>,
+        rollback: sqlx::Error,
+    },
+    #[error("event-store source generation entropy is unavailable")]
+    SourceGenerationEntropyUnavailable,
+    #[error(
+        "event-store NIP-09 reconciliation {resource} capacity exceeded: observed {actual}, limit {limit}"
+    )]
+    /// Refuses a one-time local-store migration before unbounded retention or
+    /// partial writes; callers can recover by pruning or rebuilding the cache.
+    ReconciliationCapacityExceeded {
+        resource: RadrootsEventStoreReconciliationResource,
+        actual: u64,
+        limit: u64,
+    },
+    #[error("event-store migration hook `{hook_id}` state is invalid: {reason}")]
+    MigrationHookStateDrift {
+        hook_id: &'static str,
+        reason: String,
+    },
+    #[error(
+        "event-store raw event `{event_id}` does not match its signed raw JSON field `{field}`"
+    )]
+    RawEventReconciliationMismatch {
+        event_id: String,
+        field: &'static str,
+    },
+    #[error(
+        "event-store raw authority drift: expected events={expected_count}, tags={expected_tag_count}, high-water={expected_high_water}; found events={actual_count}, tags={actual_tag_count}, high-water={actual_high_water}"
+    )]
+    RawEventSourceDrift {
+        expected_count: i64,
+        expected_tag_count: i64,
+        expected_high_water: i64,
+        actual_count: i64,
+        actual_tag_count: i64,
+        actual_high_water: i64,
+    },
     #[error("SQLite integrity check failed: {detail}")]
     IntegrityCheckFailed { detail: String },
     #[error("event-store FTS5 integrity check failed for `{table}`: {source}")]
@@ -155,6 +240,12 @@ pub enum RadrootsEventStoreError {
         expected: u32,
         actual: u32,
     },
+    #[error("projection `{projection_id}` has no source generation and must be rebuilt")]
+    ProjectionCursorRebuildRequired { projection_id: String },
+    #[error(
+        "projection `{projection_id}` source generation does not match the active event-store generation"
+    )]
+    ProjectionSourceGenerationMismatch { projection_id: String },
     #[error(
         "projection `{projection_id}` cursor compare-and-swap conflict: expected prior sequence {expected:?}, stored {actual:?}"
     )]
@@ -170,6 +261,32 @@ pub enum RadrootsEventStoreError {
         projection_id: String,
         current: i64,
         proposed: i64,
+    },
+    #[error(
+        "projection `{projection_id}` cursor sequence {proposed} is ahead of the active raw source high-water {high_water}"
+    )]
+    ProjectionCursorAheadOfSource {
+        projection_id: String,
+        proposed: i64,
+        high_water: i64,
+    },
+    #[error(
+        "projection `{projection_id}` version {projection_version} is already current for the active source generation"
+    )]
+    ProjectionRebuildNotRequired {
+        projection_id: String,
+        projection_version: u32,
+    },
+    #[error("projection `{projection_id}` rebuild ticket no longer matches stored state")]
+    ProjectionRebuildTicketConflict { projection_id: String },
+    #[error("projection id cannot be empty")]
+    InvalidProjectionId,
+    #[error("projection `{projection_id}` version is invalid: {value}")]
+    InvalidProjectionVersion { projection_id: String, value: i64 },
+    #[error("projection `{projection_id}` source revision is invalid: {value:?}")]
+    InvalidProjectionSourceRevision {
+        projection_id: String,
+        value: Option<i64>,
     },
     #[error("projection `{projection_id}` cursor sequence cannot be negative: {value}")]
     InvalidProjectionCursor { projection_id: String, value: i64 },
@@ -190,6 +307,27 @@ pub enum RadrootsEventStoreError {
         first_observed_at_ms: i64,
         last_observed_at_ms: i64,
         observation_count: i64,
+    },
+    #[error("transport observation timestamp cannot be negative: {value}")]
+    InvalidTransportObservationTimestamp { value: i64 },
+    #[error("event ingest timestamp cannot be negative: {value}")]
+    InvalidEventIngestTimestamp { value: i64 },
+    #[error(
+        "transport observation caller-redacted message is invalid: {reason}; bytes={actual_bytes}, max={max_bytes}"
+    )]
+    InvalidTransportObservationMessage {
+        reason: &'static str,
+        actual_bytes: usize,
+        max_bytes: usize,
+    },
+    #[error(
+        "stored transport observation caller-redacted message for event `{event_id}` is invalid: {reason}; bytes={actual_bytes}, max={max_bytes}"
+    )]
+    InvalidStoredTransportObservationMessage {
+        event_id: String,
+        reason: &'static str,
+        actual_bytes: usize,
+        max_bytes: usize,
     },
     #[error("integer value `{value}` is outside {field} range")]
     IntegerRange { field: &'static str, value: i64 },

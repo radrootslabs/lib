@@ -130,6 +130,13 @@ impl RadrootsRelayOutcome {
         }
     }
 
+    pub fn unknown(message: impl Into<String>) -> Self {
+        Self {
+            kind: RadrootsRelayOutcomeKind::Unknown,
+            message: Some(message.into()),
+        }
+    }
+
     pub fn timeout(message: impl Into<String>) -> Self {
         Self {
             kind: RadrootsRelayOutcomeKind::Timeout,

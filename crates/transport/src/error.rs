@@ -17,6 +17,18 @@ pub enum RadrootsTransportError {
     InvalidSatisfactionPolicy,
     EmptyRequiredTargetSet,
     DuplicateRequiredTargetFingerprint,
+    RequiredTargetNotRequested,
+    EmptyDeliveryRequestId,
+    InvalidDeliveryRequestId,
+    InvalidDeliveryTimestamp,
+    UnexpectedDeliveryTargetReceipt,
+    DuplicateDeliveryTargetReceipt,
+    MissingDeliveryTargetReceipt,
+    DeliveryTargetReceiptStatusMismatch,
+    DeliveryTargetReceiptAttemptMismatch,
+    TransportOutcomeStatusMismatch,
+    DeliveryReceiptRequestIdMismatch,
+    DeliveryReceiptTargetSetMismatch,
     EmptyPayloadId,
     InvalidPayloadId,
     EmptyPayloadLabel,
@@ -52,6 +64,40 @@ impl fmt::Display for RadrootsTransportError {
             Self::EmptyRequiredTargetSet => f.write_str("transport required target set is empty"),
             Self::DuplicateRequiredTargetFingerprint => {
                 f.write_str("transport required target set contains duplicate fingerprints")
+            }
+            Self::RequiredTargetNotRequested => {
+                f.write_str("transport required target was not requested")
+            }
+            Self::EmptyDeliveryRequestId => f.write_str("transport delivery request id is empty"),
+            Self::InvalidDeliveryRequestId => {
+                f.write_str("transport delivery request id is invalid")
+            }
+            Self::InvalidDeliveryTimestamp => {
+                f.write_str("transport delivery timestamp is invalid")
+            }
+            Self::UnexpectedDeliveryTargetReceipt => {
+                f.write_str("transport delivery receipt contains an unexpected target")
+            }
+            Self::DuplicateDeliveryTargetReceipt => {
+                f.write_str("transport delivery receipt contains a duplicate target")
+            }
+            Self::MissingDeliveryTargetReceipt => {
+                f.write_str("transport delivery receipt is missing a requested target")
+            }
+            Self::DeliveryTargetReceiptStatusMismatch => {
+                f.write_str("transport delivery target receipt status does not match its outcome")
+            }
+            Self::DeliveryTargetReceiptAttemptMismatch => {
+                f.write_str("transport delivery target receipt attempt evidence is incoherent")
+            }
+            Self::TransportOutcomeStatusMismatch => {
+                f.write_str("transport outcome status does not match its outcome kind")
+            }
+            Self::DeliveryReceiptRequestIdMismatch => {
+                f.write_str("transport delivery receipt request id does not match its request")
+            }
+            Self::DeliveryReceiptTargetSetMismatch => {
+                f.write_str("transport delivery receipt target set does not match its request")
             }
             Self::EmptyPayloadId => f.write_str("transport payload id is empty"),
             Self::InvalidPayloadId => f.write_str("transport payload id is invalid"),

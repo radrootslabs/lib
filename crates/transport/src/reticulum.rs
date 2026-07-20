@@ -75,6 +75,7 @@ pub enum ReticulumPrivacySemanticsV1 {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReticulumRoutingMetadataV1 {
     pub scope: RadrootsTransportMeshScopeId,
@@ -92,13 +93,13 @@ impl ReticulumRoutingMetadataV1 {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReticulumDestinationV1 {
-    pub uri: RadrootsTransportTargetUri,
-    pub routing: ReticulumRoutingMetadataV1,
-    pub label: Option<RadrootsTransportTargetLabel>,
-    pub fingerprint: RadrootsTransportTargetFingerprint,
+    uri: RadrootsTransportTargetUri,
+    routing: ReticulumRoutingMetadataV1,
+    label: Option<RadrootsTransportTargetLabel>,
+    fingerprint: RadrootsTransportTargetFingerprint,
 }
 
 impl ReticulumDestinationV1 {
@@ -122,36 +123,34 @@ impl ReticulumDestinationV1 {
             label.clone(),
         )?;
         Ok(Self {
-            uri: target.uri,
+            uri: target.uri().clone(),
             routing: ReticulumRoutingMetadataV1 {
-                scope: target.scope.expect("Reticulum destination scope"),
+                scope: target
+                    .scope()
+                    .cloned()
+                    .expect("Reticulum destination scope"),
                 gateway: ReticulumGatewaySemanticsV1::NoGatewayForwarding,
                 privacy: ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly,
             },
-            label,
-            fingerprint: target.fingerprint,
+            label: target.label().cloned(),
+            fingerprint: target.fingerprint().clone(),
         })
     }
 
     pub fn from_target(target: &RadrootsTransportTarget) -> Result<Self, RadrootsTransportError> {
-        if target.kind != RadrootsTransportKind::Reticulum
-            || target.uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
+        if target.kind() != &RadrootsTransportKind::Reticulum
+            || target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
         {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
-        let Some(scope) = target.scope.clone() else {
+        let Some(scope) = target.scope().cloned() else {
             return Err(RadrootsTransportError::EmptyTargetScope);
         };
-        Ok(Self {
-            uri: target.uri.clone(),
-            routing: ReticulumRoutingMetadataV1 {
-                scope,
-                gateway: ReticulumGatewaySemanticsV1::NoGatewayForwarding,
-                privacy: ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly,
-            },
-            label: target.label.clone(),
-            fingerprint: target.fingerprint.clone(),
-        })
+        let destination = Self::new(target.uri().as_str(), scope, target.label().cloned())?;
+        if destination.fingerprint != *target.fingerprint() {
+            return Err(RadrootsTransportError::InvalidTargetFingerprint);
+        }
+        Ok(destination)
     }
 
     pub fn transport_target(&self) -> Result<RadrootsTransportTarget, RadrootsTransportError> {
@@ -160,6 +159,57 @@ impl ReticulumDestinationV1 {
             Some(self.routing.scope.clone()),
             self.label.clone(),
         )
+    }
+
+    pub fn uri(&self) -> &RadrootsTransportTargetUri {
+        &self.uri
+    }
+
+    pub fn routing(&self) -> &ReticulumRoutingMetadataV1 {
+        &self.routing
+    }
+
+    pub fn label(&self) -> Option<&RadrootsTransportTargetLabel> {
+        self.label.as_ref()
+    }
+
+    pub fn fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+        &self.fingerprint
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReticulumDestinationV1Wire {
+    uri: RadrootsTransportTargetUri,
+    routing: ReticulumRoutingMetadataV1,
+    label: Option<RadrootsTransportTargetLabel>,
+    fingerprint: RadrootsTransportTargetFingerprint,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ReticulumDestinationV1 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = ReticulumDestinationV1Wire::deserialize(deserializer)?;
+        let destination = Self::new(
+            wire.uri.as_str(),
+            wire.routing.scope.clone(),
+            wire.label.clone(),
+        )
+        .map_err(serde::de::Error::custom)?;
+        if destination.routing != wire.routing
+            || destination.label != wire.label
+            || destination.fingerprint != wire.fingerprint
+        {
+            return Err(serde::de::Error::custom(
+                "Reticulum destination identity does not match its canonical fields",
+            ));
+        }
+        Ok(destination)
     }
 }
 

@@ -95,6 +95,13 @@ reach signing. It represents only a kind-`5` protocol request: it does not
 retrieve a target, prove same-author authority, compute an address cutoff,
 suppress content, mutate a store, or make a deletion request itself deletable.
 
+The immutable registry-v7 inventory and addressable-feed-v1 head functions are
+historical protocol inputs to event-store reconciliation v1. The explicit
+`event_contract_registry_v7`, `validate_event_contract_registry_v7`,
+`event_head_candidate_for_nip01_event_v1`, and `select_event_head_v1`
+entrypoints must retain their v7/v1 behavior when a later current registry or
+head algorithm is introduced.
+
 Kind `30402` has a raw, allocation-free marker partition before profile-specific
 tag-shape validation. Presence of `radroots:price_unit` or `radroots:quantity` selects
 the focused FoodAvailability marker family; presence of

@@ -1,16 +1,18 @@
 #![forbid(unsafe_code)]
 
-use crate::{RadrootsRelayOutcome, RadrootsRelayTransportError};
+use crate::error::ensure_nonnegative_timestamp;
+use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransportError};
 use core::time::Duration;
-use futures::future::BoxFuture;
+use futures::{StreamExt, future::BoxFuture};
 use nostr::{JsonUtil, filter::MatchEventOptions};
 use radroots_event_store::{
     RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventPersistence,
     RadrootsEventStore, RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter};
-use radroots_transport::RadrootsTransportKind;
+use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
 const DEFAULT_RELAY_FETCH_TIMEOUT_MS: u64 = 10_000;
@@ -56,7 +58,7 @@ pub struct RadrootsRelayFetchRequest {
     observed_at_ms: i64,
     max_events: usize,
     max_raw_events: usize,
-    relay_urls: Vec<String>,
+    relay_targets: RadrootsRelayTargetSet,
     filters: RadrootsRelayFetchFilters,
     timeout_ms: u64,
 }
@@ -65,6 +67,7 @@ impl RadrootsRelayFetchRequest {
     pub fn fetch<I>(
         observed_at_ms: i64,
         max_events: usize,
+        relay_targets: RadrootsRelayTargetSet,
         filters: I,
     ) -> Result<Self, RadrootsRelayTransportError>
     where
@@ -74,6 +77,7 @@ impl RadrootsRelayFetchRequest {
             RadrootsRelayFetchMode::Fetch,
             observed_at_ms,
             max_events,
+            relay_targets,
             filters,
         )
     }
@@ -81,6 +85,7 @@ impl RadrootsRelayFetchRequest {
     pub fn subscription<I>(
         observed_at_ms: i64,
         max_events: usize,
+        relay_targets: RadrootsRelayTargetSet,
         filters: I,
     ) -> Result<Self, RadrootsRelayTransportError>
     where
@@ -90,6 +95,7 @@ impl RadrootsRelayFetchRequest {
             RadrootsRelayFetchMode::Subscription,
             observed_at_ms,
             max_events,
+            relay_targets,
             filters,
         )
     }
@@ -98,30 +104,23 @@ impl RadrootsRelayFetchRequest {
         mode: RadrootsRelayFetchMode,
         observed_at_ms: i64,
         max_events: usize,
+        relay_targets: RadrootsRelayTargetSet,
         filters: I,
     ) -> Result<Self, RadrootsRelayTransportError>
     where
         I: IntoIterator<Item = RadrootsNostrFilter>,
     {
+        ensure_nonnegative_timestamp("observed_at_ms", observed_at_ms)?;
         ensure_positive_limit("max_events", max_events)?;
         Ok(Self {
             mode,
             observed_at_ms,
             max_events,
             max_raw_events: default_raw_event_scan_limit(max_events),
-            relay_urls: Vec::new(),
+            relay_targets,
             filters: RadrootsRelayFetchFilters::new(filters)?,
             timeout_ms: DEFAULT_RELAY_FETCH_TIMEOUT_MS,
         })
-    }
-
-    pub fn with_relay_urls<I, S>(mut self, relay_urls: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.relay_urls = relay_urls.into_iter().map(Into::into).collect();
-        self
     }
 
     pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Result<Self, RadrootsRelayTransportError> {
@@ -155,8 +154,8 @@ impl RadrootsRelayFetchRequest {
         self.max_raw_events
     }
 
-    pub fn relay_urls(&self) -> &[String] {
-        &self.relay_urls
+    pub fn relay_targets(&self) -> &RadrootsRelayTargetSet {
+        &self.relay_targets
     }
 
     pub fn filters(&self) -> &[RadrootsNostrFilter] {
@@ -196,27 +195,17 @@ fn ensure_positive_timeout(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsRelayFetchItem {
-    Event {
-        relay_url: String,
-        raw_json: String,
-        observed_at_ms: i64,
-    },
-    Eose {
-        relay_url: String,
-    },
-    Closed {
-        relay_url: String,
-        message: String,
-    },
-    Notice {
-        relay_url: String,
-        message: String,
-    },
+    Event { relay_url: String, raw_json: String },
+    Eose { relay_url: String },
+    Truncated { relay_url: String, message: String },
+    Closed { relay_url: String, message: String },
+    Notice { relay_url: String, message: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsRelayFetchOutcomeKind {
     Eose,
+    Truncated,
     Closed,
     Notice,
 }
@@ -268,10 +257,13 @@ pub struct RadrootsRelayFetchedEventsReceipt {
     pub failed_relays: Vec<RadrootsRelayFetchFailure>,
     pub events: Vec<RadrootsRelayFetchedEvent>,
     pub event_receipts: Vec<RadrootsRelayFetchEventReceipt>,
+    pub duplicate_count: usize,
+    pub invalid_count: usize,
     pub malformed_count: usize,
     pub out_of_filter_count: usize,
     pub skipped_over_limit_count: usize,
     pub eose_count: usize,
+    pub truncated_count: usize,
     pub closed_count: usize,
     pub notice_count: usize,
     pub relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
@@ -288,6 +280,7 @@ pub struct RadrootsRelayFetchReceipt {
     pub unsupported_count: usize,
     pub invalid_count: usize,
     pub eose_count: usize,
+    pub truncated_count: usize,
     pub closed_count: usize,
     pub notice_count: usize,
     pub events: Vec<RadrootsRelayFetchEventReceipt>,
@@ -308,15 +301,21 @@ pub async fn fetch_relay_events<A>(
 where
     A: RadrootsRelayFetchAdapter,
 {
-    let target_relays = request.relay_urls.clone();
+    let target_relays = request.relay_targets.relay_strings();
+    let observed_at_ms = request.observed_at_ms;
     let max_events = request.max_events;
     let max_raw_events = request.max_raw_events;
     let filters = request.filters.as_slice().to_vec();
     let items = adapter.fetch(request).await?;
-    Ok(
-        process_relay_fetch_items(target_relays, filters, max_events, max_raw_events, items)
-            .into_fetched_events_receipt(),
-    )
+    Ok(process_relay_fetch_items(
+        target_relays,
+        filters,
+        observed_at_ms,
+        max_events,
+        max_raw_events,
+        items,
+    )?
+    .into_fetched_events_receipt())
 }
 
 #[cfg(feature = "runtime-tokio")]
@@ -344,13 +343,20 @@ where
     A: RadrootsRelayFetchAdapter,
 {
     let mode = request.mode;
-    let target_relays = request.relay_urls.clone();
+    let target_relays = request.relay_targets.relay_strings();
+    let observed_at_ms = request.observed_at_ms;
     let max_events = request.max_events;
     let max_raw_events = request.max_raw_events;
     let filters = request.filters.as_slice().to_vec();
     let items = adapter.fetch(request).await?;
-    let processed =
-        process_relay_fetch_items(target_relays, filters, max_events, max_raw_events, items);
+    let processed = process_relay_fetch_items(
+        target_relays,
+        filters,
+        observed_at_ms,
+        max_events,
+        max_raw_events,
+        items,
+    )?;
     let mut receipt = RadrootsRelayFetchReceipt::from_processed_counts(&processed);
     for item in processed.items {
         match item {
@@ -358,6 +364,12 @@ where
                 receipt.events.push(event_receipt);
             }
             RadrootsRelayProcessedFetchItem::Accepted(RadrootsRelayFetchedEvent {
+                relay_url,
+                event: raw_event,
+                raw_json,
+                observed_at_ms,
+            })
+            | RadrootsRelayProcessedFetchItem::Duplicate(RadrootsRelayFetchedEvent {
                 relay_url,
                 event: raw_event,
                 raw_json,
@@ -448,6 +460,7 @@ where
 #[derive(Clone, Debug)]
 enum RadrootsRelayProcessedFetchItem {
     Accepted(RadrootsRelayFetchedEvent),
+    Duplicate(RadrootsRelayFetchedEvent),
     Receipt(RadrootsRelayFetchEventReceipt),
 }
 
@@ -455,10 +468,13 @@ enum RadrootsRelayProcessedFetchItem {
 struct RadrootsRelayProcessedFetch {
     target_relays: Vec<String>,
     items: Vec<RadrootsRelayProcessedFetchItem>,
+    duplicate_count: usize,
+    invalid_count: usize,
     malformed_count: usize,
     out_of_filter_count: usize,
     skipped_over_limit_count: usize,
     eose_count: usize,
+    truncated_count: usize,
     closed_count: usize,
     notice_count: usize,
     relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
@@ -473,6 +489,9 @@ impl RadrootsRelayProcessedFetch {
                 RadrootsRelayProcessedFetchItem::Accepted(event) => {
                     event_receipts.push(accepted_fetch_event_receipt(&event));
                     events.push(event);
+                }
+                RadrootsRelayProcessedFetchItem::Duplicate(event) => {
+                    event_receipts.push(duplicate_fetch_event_receipt(&event));
                 }
                 RadrootsRelayProcessedFetchItem::Receipt(receipt) => event_receipts.push(receipt),
             }
@@ -498,10 +517,13 @@ impl RadrootsRelayProcessedFetch {
             failed_relays,
             events,
             event_receipts,
+            duplicate_count: self.duplicate_count,
+            invalid_count: self.invalid_count,
             malformed_count: self.malformed_count,
             out_of_filter_count: self.out_of_filter_count,
             skipped_over_limit_count: self.skipped_over_limit_count,
             eose_count: self.eose_count,
+            truncated_count: self.truncated_count,
             closed_count: self.closed_count,
             notice_count: self.notice_count,
             relay_outcomes: self.relay_outcomes,
@@ -519,8 +541,9 @@ impl RadrootsRelayFetchReceipt {
             out_of_filter_count: processed.out_of_filter_count,
             skipped_over_limit_count: processed.skipped_over_limit_count,
             unsupported_count: 0,
-            invalid_count: 0,
+            invalid_count: processed.invalid_count,
             eose_count: processed.eose_count,
+            truncated_count: processed.truncated_count,
             closed_count: processed.closed_count,
             notice_count: processed.notice_count,
             events: Vec::new(),
@@ -532,30 +555,65 @@ impl RadrootsRelayFetchReceipt {
 fn process_relay_fetch_items(
     target_relays: Vec<String>,
     filters: Vec<RadrootsNostrFilter>,
+    observed_at_ms: i64,
     max_events: usize,
     max_raw_events: usize,
     items: Vec<RadrootsRelayFetchItem>,
-) -> RadrootsRelayProcessedFetch {
+) -> Result<RadrootsRelayProcessedFetch, RadrootsRelayTransportError> {
+    if target_relays.is_empty() {
+        return Err(RadrootsRelayTransportError::EmptyTargetSet);
+    }
     let mut processed = RadrootsRelayProcessedFetch {
         target_relays,
         items: Vec::new(),
+        duplicate_count: 0,
+        invalid_count: 0,
         malformed_count: 0,
         out_of_filter_count: 0,
         skipped_over_limit_count: 0,
         eose_count: 0,
+        truncated_count: 0,
         closed_count: 0,
         notice_count: 0,
         relay_outcomes: Vec::new(),
     };
     let mut scanned_raw_events = 0usize;
     let mut accepted_events = 0usize;
+    let mut seen_event_ids = BTreeSet::new();
+    let mut terminal_outcomes = BTreeMap::new();
     for item in items {
+        let item_relay_url = match &item {
+            RadrootsRelayFetchItem::Event { relay_url, .. }
+            | RadrootsRelayFetchItem::Eose { relay_url }
+            | RadrootsRelayFetchItem::Truncated { relay_url, .. }
+            | RadrootsRelayFetchItem::Closed { relay_url, .. }
+            | RadrootsRelayFetchItem::Notice { relay_url, .. } => relay_url,
+        };
+        let relay_url = canonical_requested_fetch_relay(
+            processed.target_relays.as_slice(),
+            item_relay_url.as_str(),
+        )?;
+        if let Some(next) = fetch_terminal_outcome_label(&item) {
+            if let Some(first) = terminal_outcomes.get(relay_url.as_str()).copied() {
+                if first == next {
+                    return Err(
+                        RadrootsRelayTransportError::DuplicateFetchTerminalRelayUrl {
+                            url: relay_url,
+                        },
+                    );
+                }
+                return Err(
+                    RadrootsRelayTransportError::ConflictingFetchTerminalRelayUrl {
+                        url: relay_url,
+                        first,
+                        next,
+                    },
+                );
+            }
+            terminal_outcomes.insert(relay_url.clone(), next);
+        }
         match item {
-            RadrootsRelayFetchItem::Event {
-                relay_url,
-                raw_json,
-                observed_at_ms,
-            } => {
+            RadrootsRelayFetchItem::Event { raw_json, .. } => {
                 if scanned_raw_events >= max_raw_events {
                     processed.skipped_over_limit_count += 1;
                     continue;
@@ -586,6 +644,32 @@ fn process_relay_fetch_items(
                         ));
                     continue;
                 };
+                if let Err(error) =
+                    RadrootsEventIngest::from_raw_json(raw_json.clone(), observed_at_ms)
+                {
+                    processed.invalid_count += 1;
+                    processed
+                        .items
+                        .push(RadrootsRelayProcessedFetchItem::Receipt(
+                            RadrootsRelayFetchEventReceipt {
+                                relay_url,
+                                event_id: Some(raw_event.id.to_hex()),
+                                inserted: false,
+                                duplicate: false,
+                                not_persisted: false,
+                                unsupported: false,
+                                invalid: true,
+                                malformed: false,
+                                out_of_filter: false,
+                                skipped_over_limit: false,
+                                valid_stream_eligible: false,
+                                admission_status: None,
+                                admission_code: None,
+                                message: Some(error.to_string()),
+                            },
+                        ));
+                    continue;
+                }
                 if !relay_fetch_event_matches_filters(&filters, &raw_event) {
                     processed.out_of_filter_count += 1;
                     processed
@@ -606,6 +690,21 @@ fn process_relay_fetch_items(
                                 admission_status: None,
                                 admission_code: None,
                                 message: Some("event did not match relay fetch filters".to_owned()),
+                            },
+                        ));
+                    continue;
+                }
+                let event_id = raw_event.id.to_hex();
+                if !seen_event_ids.insert(event_id) {
+                    processed.duplicate_count += 1;
+                    processed
+                        .items
+                        .push(RadrootsRelayProcessedFetchItem::Duplicate(
+                            RadrootsRelayFetchedEvent {
+                                relay_url,
+                                event: raw_event,
+                                raw_json,
+                                observed_at_ms,
                             },
                         ));
                     continue;
@@ -648,7 +747,7 @@ fn process_relay_fetch_items(
                         },
                     ));
             }
-            RadrootsRelayFetchItem::Eose { relay_url } => {
+            RadrootsRelayFetchItem::Eose { .. } => {
                 processed.eose_count += 1;
                 processed
                     .relay_outcomes
@@ -659,7 +758,18 @@ fn process_relay_fetch_items(
                         message: None,
                     });
             }
-            RadrootsRelayFetchItem::Closed { relay_url, message } => {
+            RadrootsRelayFetchItem::Truncated { message, .. } => {
+                processed.truncated_count += 1;
+                processed
+                    .relay_outcomes
+                    .push(RadrootsRelayFetchRelayOutcome {
+                        relay_url,
+                        kind: RadrootsRelayFetchOutcomeKind::Truncated,
+                        relay_outcome: None,
+                        message: Some(message),
+                    });
+            }
+            RadrootsRelayFetchItem::Closed { message, .. } => {
                 processed.closed_count += 1;
                 processed
                     .relay_outcomes
@@ -670,7 +780,7 @@ fn process_relay_fetch_items(
                         message: Some(message),
                     });
             }
-            RadrootsRelayFetchItem::Notice { relay_url, message } => {
+            RadrootsRelayFetchItem::Notice { message, .. } => {
                 processed.notice_count += 1;
                 processed
                     .relay_outcomes
@@ -683,7 +793,35 @@ fn process_relay_fetch_items(
             }
         }
     }
-    processed
+    Ok(processed)
+}
+
+fn fetch_terminal_outcome_label(item: &RadrootsRelayFetchItem) -> Option<&'static str> {
+    match item {
+        RadrootsRelayFetchItem::Eose { .. } => Some("eose"),
+        RadrootsRelayFetchItem::Truncated { .. } => Some("truncated"),
+        RadrootsRelayFetchItem::Closed { .. } => Some("closed"),
+        RadrootsRelayFetchItem::Event { .. } | RadrootsRelayFetchItem::Notice { .. } => None,
+    }
+}
+
+fn canonical_requested_fetch_relay(
+    target_relays: &[String],
+    relay_url: &str,
+) -> Result<String, RadrootsRelayTransportError> {
+    let target = RadrootsTransportTarget::nostr_relay(relay_url).map_err(|error| {
+        RadrootsRelayTransportError::InvalidFetchItemRelayUrl {
+            url: relay_url.to_owned(),
+            reason: error.to_string(),
+        }
+    })?;
+    let canonical = target.uri().as_str();
+    if !target_relays.iter().any(|requested| requested == canonical) {
+        return Err(RadrootsRelayTransportError::UnexpectedFetchItemRelayUrl {
+            url: canonical.to_owned(),
+        });
+    }
+    Ok(canonical.to_owned())
 }
 
 fn accepted_fetch_event_receipt(
@@ -704,6 +842,27 @@ fn accepted_fetch_event_receipt(
         admission_status: None,
         admission_code: None,
         message: Some("event accepted by relay fetch filters".to_owned()),
+    }
+}
+
+fn duplicate_fetch_event_receipt(
+    event: &RadrootsRelayFetchedEvent,
+) -> RadrootsRelayFetchEventReceipt {
+    RadrootsRelayFetchEventReceipt {
+        relay_url: event.relay_url.clone(),
+        event_id: Some(event.event.id.to_hex()),
+        inserted: false,
+        duplicate: true,
+        not_persisted: false,
+        unsupported: false,
+        invalid: false,
+        malformed: false,
+        out_of_filter: false,
+        skipped_over_limit: false,
+        valid_stream_eligible: false,
+        admission_status: None,
+        admission_code: None,
+        message: Some("event ID was already observed in this relay fetch".to_owned()),
     }
 }
 
@@ -735,17 +894,26 @@ impl RadrootsRelayFetchAdapter for RadrootsNostrClientFetchAdapter {
 async fn fetch_from_nostr_relays(
     request: RadrootsRelayFetchRequest,
 ) -> Result<Vec<RadrootsRelayFetchItem>, RadrootsRelayTransportError> {
-    if request.relay_urls.is_empty() {
-        return Err(RadrootsRelayTransportError::EmptyTargetSet);
-    }
     if request.filters.as_slice().is_empty() {
         return Err(RadrootsRelayTransportError::EmptyFetchFilters);
     }
     let timeout = Duration::from_millis(request.timeout_ms);
     let filters = request.filters.as_slice().to_vec();
-    let observed_at_ms = request.observed_at_ms;
+    let mut remaining_raw_events = request.max_raw_events;
     let mut items = Vec::new();
-    for relay_url in request.relay_urls {
+    let relay_urls = request.relay_targets.relay_strings();
+    for (relay_index, relay_url) in relay_urls.iter().cloned().enumerate() {
+        if remaining_raw_events == 0 {
+            items.extend(relay_urls[relay_index..].iter().cloned().map(|relay_url| {
+                RadrootsRelayFetchItem::Truncated {
+                    relay_url,
+                    message:
+                        "relay was not queried because the global raw event scan limit was reached"
+                            .to_owned(),
+                }
+            }));
+            break;
+        }
         let client = RadrootsNostrClient::new_signerless();
         if let Err(error) = client.add_read_relay(relay_url.as_str()).await {
             items.push(RadrootsRelayFetchItem::Closed {
@@ -763,15 +931,37 @@ async fn fetch_from_nostr_relays(
             continue;
         }
         let mut closed = false;
+        let mut truncated = false;
         for filter in filters.iter().cloned() {
-            match client.fetch_events(filter, timeout).await {
-                Ok(events) => {
-                    for event in events {
+            if remaining_raw_events == 0 {
+                truncated = true;
+                break;
+            }
+            let filter_limit = filter
+                .limit
+                .unwrap_or(remaining_raw_events)
+                .min(remaining_raw_events);
+            match client
+                .stream_events(filter.limit(filter_limit), timeout)
+                .await
+            {
+                Ok(mut events) => {
+                    loop {
+                        if remaining_raw_events == 0 {
+                            truncated = true;
+                            break;
+                        }
+                        let Some(event) = events.next().await else {
+                            break;
+                        };
                         items.push(RadrootsRelayFetchItem::Event {
                             relay_url: relay_url.clone(),
                             raw_json: event.as_json(),
-                            observed_at_ms,
                         });
+                        remaining_raw_events -= 1;
+                    }
+                    if truncated {
+                        break;
                     }
                 }
                 Err(error) => {
@@ -784,11 +974,23 @@ async fn fetch_from_nostr_relays(
                 }
             }
         }
-        if !closed {
-            items.push(RadrootsRelayFetchItem::Eose { relay_url });
+        if truncated {
+            items.push(RadrootsRelayFetchItem::Truncated {
+                relay_url,
+                message: "raw event scan limit reached before relay EOSE".to_owned(),
+            });
+        } else if !closed {
+            items.push(unproven_relay_stream_completion(relay_url));
         }
     }
     Ok(items)
+}
+
+fn unproven_relay_stream_completion(relay_url: String) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::Closed {
+        relay_url,
+        message: "relay stream ended before EOSE could be observed".to_owned(),
+    }
 }
 
 fn summarize_nostr_output_failures<K, E>(failed: &std::collections::HashMap<K, E>) -> String
@@ -837,7 +1039,8 @@ fn fetch_item_lock_error<T>(_error: PoisonError<T>) -> RadrootsRelayTransportErr
 #[cfg(test)]
 mod tests {
     use super::{
-        RadrootsNostrEvent, relay_fetch_event_matches_filters, summarize_nostr_output_failures,
+        RadrootsNostrEvent, RadrootsRelayFetchItem, relay_fetch_event_matches_filters,
+        summarize_nostr_output_failures, unproven_relay_stream_completion,
     };
     use nostr::JsonUtil;
     use radroots_nostr::prelude::{
@@ -883,5 +1086,16 @@ mod tests {
         assert!(summary.contains("wss://relay.example.com: timeout"));
         assert!(summary.contains("wss://relay-2.example.com: denied"));
         assert!(summary.contains("; "));
+    }
+
+    #[test]
+    fn unproven_sdk_stream_completion_never_claims_eose() {
+        assert_eq!(
+            unproven_relay_stream_completion("wss://relay.example".to_owned()),
+            RadrootsRelayFetchItem::Closed {
+                relay_url: "wss://relay.example".to_owned(),
+                message: "relay stream ended before EOSE could be observed".to_owned(),
+            }
+        );
     }
 }

@@ -75,9 +75,6 @@ pub enum TransportPublishProtocolError {
     EmptyTargetSet,
     InvalidQuorum,
     EmptyRequiredTargetSet,
-    InvalidRequiredTargetFingerprint {
-        index: usize,
-    },
     DuplicateRequiredTargetFingerprint {
         index: usize,
     },
@@ -176,9 +173,6 @@ impl fmt::Display for TransportPublishProtocolError {
             Self::InvalidQuorum => f.write_str("delivery quorum must be greater than zero"),
             Self::EmptyRequiredTargetSet => {
                 f.write_str("delivery required target set must not be empty")
-            }
-            Self::InvalidRequiredTargetFingerprint { index } => {
-                write!(f, "delivery required target {index} fingerprint is invalid")
             }
             Self::DuplicateRequiredTargetFingerprint { index } => {
                 write!(
@@ -330,6 +324,7 @@ impl TransportPublishTarget {
             self.target_label.as_deref(),
             index,
         )?;
+        self.canonical_target(index)?;
         Ok(())
     }
 
@@ -337,6 +332,13 @@ impl TransportPublishTarget {
         &self,
         index: usize,
     ) -> Result<RadrootsTransportTargetFingerprint, TransportPublishProtocolError> {
+        Ok(self.canonical_target(index)?.fingerprint().clone())
+    }
+
+    fn canonical_target(
+        &self,
+        index: usize,
+    ) -> Result<RadrootsTransportTarget, TransportPublishProtocolError> {
         let transport_kind = RadrootsTransportKind::parse_canonical(self.transport_kind.as_str())
             .map_err(|error| transport_kind_error(error, index))?;
         let scope = self
@@ -354,7 +356,10 @@ impl TransportPublishTarget {
         let target =
             transport_target_from_parts(transport_kind, self.endpoint_uri.as_str(), scope, label)
                 .map_err(|error| target_fingerprint_error(error, index))?;
-        Ok(target.fingerprint)
+        if target.uri().as_str() != self.endpoint_uri {
+            return Err(TransportPublishProtocolError::InvalidEndpointUri { index });
+        }
+        Ok(target)
     }
 
     fn identity_eq(
@@ -490,9 +495,18 @@ impl TransportPublishTargetPolicy {
             }
             Self::Nostr { relay_urls, .. } => {
                 validate_target_limit(relay_urls.len(), max_targets)?;
+                let mut fingerprints = BTreeSet::new();
                 for (index, endpoint_uri) in relay_urls.iter().enumerate() {
                     if endpoint_uri.trim().is_empty() {
                         return Err(TransportPublishProtocolError::EmptyEndpointUri { index });
+                    }
+                    let target = RadrootsTransportTarget::nostr_relay(endpoint_uri)
+                        .map_err(|error| target_fingerprint_error(error, index))?;
+                    if target.uri().as_str() != endpoint_uri {
+                        return Err(TransportPublishProtocolError::InvalidEndpointUri { index });
+                    }
+                    if !fingerprints.insert(target.fingerprint().clone()) {
+                        return Err(TransportPublishProtocolError::DuplicateTarget { index });
                     }
                 }
             }
@@ -588,9 +602,6 @@ fn validate_required_target_fingerprints(
     }
     let mut seen = BTreeSet::new();
     for (index, target) in targets.iter().enumerate() {
-        if RadrootsTransportTargetFingerprint::parse(target.as_str()).is_err() {
-            return Err(TransportPublishProtocolError::InvalidRequiredTargetFingerprint { index });
-        }
         if !seen.insert(target.as_str()) {
             return Err(
                 TransportPublishProtocolError::DuplicateRequiredTargetFingerprint { index },
@@ -1161,6 +1172,7 @@ fn validate_target_outcome(
     if target.outcome_kind.is_deferred_until_implemented() {
         return Err(TransportPublishProtocolError::InvalidTargetOutcomeKind { index });
     }
+    target_outcome_fingerprint(target, index)?;
     Ok(())
 }
 
@@ -1182,10 +1194,13 @@ fn target_outcome_fingerprint(
         .map(RadrootsTransportTargetLabel::parse)
         .transpose()
         .map_err(|error| target_metadata_error(error, index))?;
-    let target =
+    let canonical_target =
         transport_target_from_parts(transport_kind, target.endpoint_uri.as_str(), scope, label)
             .map_err(|error| target_fingerprint_error(error, index))?;
-    Ok(target.fingerprint)
+    if canonical_target.uri().as_str() != target.endpoint_uri {
+        return Err(TransportPublishProtocolError::InvalidEndpointUri { index });
+    }
+    Ok(canonical_target.fingerprint().clone())
 }
 
 fn transport_target_from_parts(
@@ -1603,6 +1618,15 @@ mod tests {
             invalid_endpoint.validate(1),
             Err(TransportPublishProtocolError::InvalidEndpointUri { index: 0 })
         );
+        let mut noncanonical_endpoint = request.clone();
+        noncanonical_endpoint.target_policy =
+            TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
+                "WSS://RELAY.EXAMPLE.COM/",
+            )]);
+        assert_eq!(
+            noncanonical_endpoint.validate(1),
+            Err(TransportPublishProtocolError::InvalidEndpointUri { index: 0 })
+        );
 
         let mut invalid_reticulum_endpoint = request.clone();
         invalid_reticulum_endpoint.target_policy =
@@ -1674,7 +1698,7 @@ mod tests {
         let mut duplicate_targets = request.clone();
         duplicate_targets.target_policy = TransportPublishTargetPolicy::explicit_targets(vec![
             TransportPublishTarget::nostr("wss://relay.example.com/a"),
-            TransportPublishTarget::nostr("WSS://RELAY.EXAMPLE.COM/a"),
+            TransportPublishTarget::nostr("wss://relay.example.com/a"),
         ]);
         assert_eq!(
             duplicate_targets.validate(2),
@@ -1686,7 +1710,7 @@ mod tests {
             TransportPublishTarget::nostr("wss://relay.example.com/a")
                 .with_scope("farm.local")
                 .with_label("Farm relay"),
-            TransportPublishTarget::nostr("WSS://RELAY.EXAMPLE.COM/a")
+            TransportPublishTarget::nostr("wss://relay.example.com/a")
                 .with_scope("farm.remote")
                 .with_label("Farm relay"),
         ]);
@@ -1700,7 +1724,7 @@ mod tests {
                 TransportPublishTarget::nostr("wss://relay.example.com/a")
                     .with_scope("farm.local")
                     .with_label("Primary"),
-                TransportPublishTarget::nostr("WSS://RELAY.EXAMPLE.COM/a")
+                TransportPublishTarget::nostr("wss://relay.example.com/a")
                     .with_scope("farm.local")
                     .with_label("Secondary"),
             ]);
@@ -1725,6 +1749,28 @@ mod tests {
         assert_eq!(
             invalid_label.validate(1),
             Err(TransportPublishProtocolError::InvalidTargetLabel { index: 0 })
+        );
+
+        let mut noncanonical_nostr_policy = request.clone();
+        noncanonical_nostr_policy.target_policy = TransportPublishTargetPolicy::nostr(
+            NostrPublishTargetSourcePolicy::ExplicitOnly,
+            vec!["WSS://RELAY.EXAMPLE.COM/".to_owned()],
+        );
+        assert_eq!(
+            noncanonical_nostr_policy.validate(1),
+            Err(TransportPublishProtocolError::InvalidEndpointUri { index: 0 })
+        );
+        let mut duplicate_nostr_policy = request.clone();
+        duplicate_nostr_policy.target_policy = TransportPublishTargetPolicy::nostr(
+            NostrPublishTargetSourcePolicy::ExplicitOnly,
+            vec![
+                "wss://relay.example.com".to_owned(),
+                "wss://relay.example.com".to_owned(),
+            ],
+        );
+        assert_eq!(
+            duplicate_nostr_policy.validate(2),
+            Err(TransportPublishProtocolError::DuplicateTarget { index: 1 })
         );
 
         let mut empty_key = request.clone();
@@ -1896,7 +1942,7 @@ mod tests {
         .validate()
         .expect("explicit target outcomes match regardless of order");
 
-        job_from_targets(
+        let noncanonical_outcome = job_from_targets(
             TransportPublishJobStatus::DeliverySatisfied,
             TransportPublishTargetPolicy::explicit_targets(vec![TransportPublishTarget::nostr(
                 "wss://relay-a.example.com",
@@ -1905,9 +1951,11 @@ mod tests {
                 "wss://relay-a.example.com/",
                 TransportPublishOutcomeKind::Accepted,
             )],
-        )
-        .validate()
-        .expect("explicit target outcome matches canonical-equivalent endpoint");
+        );
+        assert_eq!(
+            noncanonical_outcome.validate(),
+            Err(TransportPublishProtocolError::InvalidEndpointUri { index: 0 })
+        );
 
         let mismatched_endpoint = job_from_targets(
             TransportPublishJobStatus::DeliverySatisfied,
@@ -2238,10 +2286,6 @@ mod tests {
             (
                 TransportPublishProtocolError::EmptyRequiredTargetSet,
                 "delivery required target set must not be empty",
-            ),
-            (
-                TransportPublishProtocolError::InvalidRequiredTargetFingerprint { index: 1 },
-                "delivery required target 1 fingerprint is invalid",
             ),
             (
                 TransportPublishProtocolError::DuplicateRequiredTargetFingerprint { index: 2 },
@@ -2626,12 +2670,7 @@ mod tests {
             assert_eq!(target_metadata_error(error, 5), expected);
         }
 
-        let invalid_fingerprint: RadrootsTransportTargetFingerprint =
-            serde_json::from_str("\"invalid\"").expect("unchecked serde newtype fixture");
-        assert_eq!(
-            TransportPublishDeliveryPolicy::required_targets(vec![invalid_fingerprint]),
-            Err(TransportPublishProtocolError::InvalidRequiredTargetFingerprint { index: 0 })
-        );
+        assert!(serde_json::from_str::<RadrootsTransportTargetFingerprint>("\"invalid\"").is_err());
 
         assert!(
             transport_target_from_parts(RadrootsTransportKind::Local, "local:publish", None, None,)

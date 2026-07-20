@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
-use alloc::{string::String, vec::Vec};
+use alloc::string::String;
 #[cfg(feature = "std")]
-use std::{string::String, vec::Vec};
+use std::string::String;
 
 use crate::{RadrootsEventTag, RadrootsEventTags};
 
@@ -42,12 +42,6 @@ pub fn classify_classified_listing_tag_slice(
         tags.iter()
             .map(|tag| tag.as_slice().first().map(String::as_str)),
     )
-}
-
-pub(crate) fn classify_classified_listing_raw_tags(
-    tags: &[Vec<String>],
-) -> RadrootsClassifiedListingPartition {
-    classify_classified_listing_marker_names(tags.iter().map(|tag| tag.first().map(String::as_str)))
 }
 
 /// Partitions borrowed raw tag names without allocating or validating tag arity.

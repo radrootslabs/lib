@@ -254,7 +254,7 @@ fn validate_source_witnesses(workspace_root: &Path) -> Result<(), String> {
             ][..],
         ),
         (
-            "crates/event_codec/src/verification.rs",
+            "crates/event_codec/src/verification/v1.rs",
             &[
                 "pub struct RadrootsSignatureVerifiedEvent",
                 "pub struct RadrootsContractValidatedEvent",

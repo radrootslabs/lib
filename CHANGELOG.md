@@ -16,6 +16,53 @@ publish policy both pass for the same source revision.
   path, and read-only schema status inspection. Rollback is a terminal,
   pool-closing maintenance operation with a public version floor. Raw migration
   SQL and unrestricted destructive rollback are no longer public APIs.
+- Event-store schema version `2` now installs a byte-pinned NIP-09
+  reconciliation hook over immutable NIP-01, addressable-feed-v1, and
+  registry-v7 semantics. The hook re-verifies durable raw authority and
+  persists generation-partitioned event coordinates, deletion requests,
+  normalized targets, canonical addressable state, and append-only
+  transitions without rewriting or deleting raw events. Projection cursors
+  now bind to the active source generation; version or generation changes use
+  a typed, revision-bound rebuild ticket that rejects stale, replayed, raced,
+  and ABA-replaced resets. Initial reconciliation and repeated rebuilds use a
+  marker-first transaction whose deferred commit barrier rejects partial
+  authority; every successful rebuild appends a fresh generation while
+  preserving immutable generation and transition history. Critical owned,
+  borrowed-savepoint, and extension wrapper bodies now bind production AST
+  identity, as do the isolated reconciliation-core and raw-head storage
+  modules. Post-core orchestration receives a private transaction capability
+  instead of SQLx authority; its fixed literal-SQL methods confine
+  trade/observation writes to declared operation/table pairs. A lightweight
+  source/transition/schema seal runs after that capability is dropped and
+  rejects protocol-authority drift without introducing per-ingest full-table
+  scans. Schema, pool, status, and ingest boundaries bind governed access to
+  SQLite `main`, reject ASCII-case-insensitive temporary-schema collisions,
+  preserve unrelated shared-schema foreign-key evidence, and retain both the
+  primary ingest and rollback errors when rollback also fails.
+- Transport targets and Reticulum destinations now keep identity-bearing
+  fields private, expose read-only accessors, and revalidate canonical URI,
+  scope, label, routing, and fingerprint invariants during deserialization.
+  Nostr relay targets now use strict ASCII host, port, path, default-port, and
+  IPv6 canonicalization shared with the relay adapter. Policy-free relay URL
+  and target-set serialization has been removed; duplicate target sets fail,
+  and fetch requests require a typed nonempty target set. Adapter fetch items
+  are canonicalized and must belong to that request before any store mutation,
+  while the request timestamp is the sole observation-time authority. Public
+  relay policy is explicitly for trusted configured `wss` hostnames and
+  rejects local, special-use, single-label, and forbidden literal
+  destinations; localhost policy accepts exact loopback hosts only. The
+  default SDK connector does not make attacker-controlled DNS names an SSRF
+  boundary. Event-store diagnostic messages must be caller-redacted,
+  canonical, control-free, nonempty, and no larger than 4 KiB; automatic relay
+  publish observations no longer persist remote outcome text. Observation v1
+  remains endpoint-level and intentionally does not represent scoped
+  Reticulum or local-target identity; scoped evidence stays in transport
+  delivery receipts. This
+  intentionally changes fingerprints and public APIs for spellings and
+  configurations previously accepted. Because this is an unreleased alpha
+  contract, databases and serialized configuration containing those legacy
+  identities are not migrated: development instances must be reset and
+  canonically reseeded rather than silently reinterpreted.
 - Geocoder locality and reverse results now expose administrative subdivision
   identifiers as opaque strings. SQLite integer and text values normalize to
   the same lossless public representation, and mixed-storage candidate order
@@ -216,6 +263,20 @@ publish policy both pass for the same source revision.
   direct-event and inclusive address-cutoff rules, keeps kind `5` immune,
   ignores advisory kinds, returns canonical evidence independent of input
   order, and never mutates raw events or storage.
+- The NIP-09 reconciliation-v1 manifest and executable event-store result
+  vector pin migration `0002`, registry-v7 inventory, semantic vector inputs,
+  and the frozen verification, admission, head-selection, and suppression
+  source graph.
+- Event-store NIP-09 migration now bounds every retained raw-source text field
+  and row count through matching preflight, in-lock, and paged-loader checks.
+  Capacity failure is typed and atomic, and exact-target indices avoid cloning
+  request payloads or scanning unrelated requests per candidate head. Rebuild
+  tickets can commit at their captured raw high-water while later events remain
+  available for ordinary catch-up. Schema opens validate every applied hook,
+  and composed callers can reserve the SQLite writer with
+  `begin_write_transaction` before reading and ingesting in one transaction.
+  Borrowed-transaction ingests use nested savepoints so a failed call cannot
+  leave partial event-store writes available for the caller to commit.
 
 ### Removed
 

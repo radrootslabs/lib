@@ -4,31 +4,38 @@
 #[cfg(feature = "sqlite")]
 mod error;
 #[cfg(feature = "sqlite")]
+mod generated;
+#[cfg(feature = "sqlite")]
 mod migrations;
 #[cfg(feature = "sqlite")]
 mod model;
+#[cfg(feature = "sqlite")]
+mod nip09;
 #[cfg(feature = "sqlite")]
 mod schema;
 #[cfg(feature = "sqlite")]
 mod store;
 
 #[cfg(feature = "sqlite")]
-pub use error::RadrootsEventStoreError;
+pub use error::{RadrootsEventStoreError, RadrootsEventStoreReconciliationResource};
 #[cfg(feature = "sqlite")]
 pub use migrations::{
     RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT, RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
 };
 #[cfg(feature = "sqlite")]
 pub use model::{
-    RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
-    RadrootsEventPersistence, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
-    RadrootsProjectionCursor, RadrootsRawHeadDecision, RadrootsStoredEventTag,
-    RadrootsStoredRawEvent, RadrootsStoredRawEventHead, RadrootsStoredSellerReservation,
+    RADROOTS_TRANSPORT_OBSERVATION_MESSAGE_MAX_BYTES, RadrootsEventAdmissionStatus,
+    RadrootsEventIngest, RadrootsEventIngestReceipt, RadrootsEventPersistence,
+    RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
+    RadrootsProjectionCursor, RadrootsProjectionRebuildPrior, RadrootsProjectionRebuildTicket,
+    RadrootsRawHeadDecision, RadrootsStoredEventTag, RadrootsStoredRawEvent,
+    RadrootsStoredRawEventHead, RadrootsStoredSellerReservation,
     RadrootsStoredSellerReservationLine, RadrootsStoredTradeMissingParent,
     RadrootsStoredTradeMutation, RadrootsStoredTradeMutationParent,
     RadrootsStoredTradeTransportEnvelope, RadrootsStoredValidEvent, RadrootsStoredVisibleEvent,
     RadrootsStoredVisibleEventHead, RadrootsTradeProjectionCheckpoint,
-    RadrootsTransportObservation, RadrootsTransportObservationType, StoredEventClass,
+    RadrootsTransportObservation, RadrootsTransportObservationMessage,
+    RadrootsTransportObservationType, StoredEventClass,
 };
 #[cfg(feature = "sqlite")]
 pub use schema::{RadrootsEventStoreSchemaStatus, inspect_event_store_schema_status};

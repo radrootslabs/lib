@@ -346,6 +346,20 @@ semver_impacts = [
 summary = "Replace raw event-store migration SQL and unrestricted destructive rollback with a transactional, checksummed schema authority, exact legacy adoption, descriptor-owned catalog validation and deltas, tamper-evident fail-closed history, a no-write current-schema fast path, SQLite and FTS5 integrity checks, read-only schema inspection, and terminal pool-closing rollback with a governed version floor."
 
 [[changes]]
+id = "event-store-nip09-reconciliation-contract"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_conformance_vector",
+  "remove_exported_field",
+  "change_exported_constant_value",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Advance the event store to schema version 2 with byte-pinned registry-v7 NIP-09 reconciliation, generation-partitioned facts and addressable state transitions, generation-bound projection cursors and rebuild tickets, immutable raw authority, and an executable reconciliation result vector."
+
+[[changes]]
 id = "geonames-asset-download-boundary"
 classification = "breaking"
 semver_impacts = [
@@ -356,3 +370,20 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace dependency-specific GeoNames download errors and whole-body default installation with stable typed failure phases, cancellable DNS and bounded deadlines, and incrementally verified atomic streaming installation."
+
+[[changes]]
+id = "canonical-transport-target-identity"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "remove_exported_field",
+  "remove_exported_function",
+  "remove_exported_trait_impl",
+  "change_exported_field_type",
+  "change_exported_function_signature",
+  "change_exported_algorithm_behavior",
+]
+summary = "Seal and revalidate transport identity, remove policy-free relay deserialization, require typed nonempty fetch targets, reject forged adapter provenance, bind fetch observations to request time, bound caller-redacted diagnostics, constrain relay policies to trusted public configuration or exact loopback hosts, and require canonical reset and reseeding of unreleased-alpha state."

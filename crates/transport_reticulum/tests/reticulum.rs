@@ -40,6 +40,7 @@ fn delivery_request(targets: Vec<RadrootsTransportTarget>) -> RadrootsTransportD
         RadrootsTransportTargetSet::new(targets).expect("target set"),
         RadrootsTransportSatisfactionPolicy::any_accepted(),
     )
+    .expect("delivery request")
 }
 
 fn reticulum_payload() -> RadrootsTransportPayload {
@@ -81,19 +82,19 @@ fn default_profile_is_configured_deferred_until_implemented_and_rejecting() {
         Some(RADROOTS_RETICULUM_ENDPOINT_URI)
     );
     assert_eq!(
-        profile.destination().uri.as_str(),
+        profile.destination().uri().as_str(),
         RADROOTS_RETICULUM_ENDPOINT_URI
     );
     assert_eq!(
-        profile.destination().routing.scope.as_str(),
+        profile.destination().routing().scope.as_str(),
         RADROOTS_RETICULUM_SCOPE_ID
     );
     assert_eq!(
-        status.destination.routing.gateway,
+        status.destination.routing().gateway,
         ReticulumGatewaySemanticsV1::NoGatewayForwarding
     );
     assert_eq!(
-        status.destination.routing.privacy,
+        status.destination.routing().privacy,
         ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
     );
     assert!(status.capability_report.delivery_required);
@@ -104,8 +105,8 @@ fn default_profile_is_configured_deferred_until_implemented_and_rejecting() {
     assert!(!status.capability_report.can_forward_gateway);
     assert!(!status.capability_report.can_observe_receipts);
     assert_eq!(
-        status.capability_report.destination.fingerprint,
-        status.destination.fingerprint
+        status.capability_report.destination.fingerprint(),
+        status.destination.fingerprint()
     );
     assert_eq!(
         status.capability_report.payload_policy.fragment_policy.mode,
@@ -276,7 +277,7 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
         profile
             .capability_report()
             .destination
-            .routing
+            .routing()
             .scope
             .as_str(),
         RADROOTS_RETICULUM_SCOPE_ID
@@ -289,17 +290,16 @@ fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
     let request = delivery_request(vec![scoped_reticulum_target("farm-north.mesh_1")]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
-    assert_eq!(receipt.target_receipts.len(), 1);
+    assert_eq!(receipt.target_receipts().len(), 1);
     assert_eq!(
-        receipt.target_receipts[0]
+        receipt.target_receipts()[0]
             .target
-            .scope
-            .as_ref()
+            .scope()
             .map(|scope| scope.as_str()),
         Some("farm-north.mesh_1")
     );
     assert_eq!(
-        receipt.target_receipts[0].status,
+        receipt.target_receipts()[0].status,
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
@@ -317,15 +317,14 @@ fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
         )]))
         .expect("deferred delivery receipt");
     assert_eq!(
-        deferred.target_receipts[0]
+        deferred.target_receipts()[0]
             .target
-            .scope
-            .as_ref()
+            .scope()
             .map(|scope| scope.as_str()),
         Some("farm-south.mesh_2")
     );
     assert_eq!(
-        deferred.target_receipts[0].status,
+        deferred.target_receipts()[0].status,
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
@@ -366,11 +365,12 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
             reticulum_payload(),
             target_set.clone(),
             RadrootsTransportSatisfactionPolicy::any_accepted(),
-        ),
+        )
+        .expect("delivery request"),
     ))
     .expect("delivery receipt");
     assert_eq!(
-        delivery.target_receipts[0].status,
+        delivery.target_receipts()[0].status,
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 
@@ -392,13 +392,16 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
     let request = delivery_request(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
-    assert_eq!(receipt.target_receipts.len(), 1);
+    assert_eq!(receipt.target_receipts().len(), 1);
     assert_eq!(
         receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
         0
     );
-    for target_receipt in receipt.target_receipts {
-        assert_eq!(target_receipt.target.kind, RadrootsTransportKind::Reticulum);
+    for target_receipt in receipt.target_receipts() {
+        assert_eq!(
+            target_receipt.target.kind(),
+            &RadrootsTransportKind::Reticulum
+        );
         assert_eq!(
             target_receipt.status,
             RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
@@ -442,17 +445,17 @@ fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
     let request = delivery_request(vec![reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI)]);
     let receipt = transport.deliver(request).expect("delivery receipt");
 
-    assert_eq!(receipt.target_receipts.len(), 1);
+    assert_eq!(receipt.target_receipts().len(), 1);
     assert_eq!(
         receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
         0
     );
     assert_eq!(
-        receipt.target_receipts[0].status,
+        receipt.target_receipts()[0].status,
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
-        receipt.target_receipts[0].outcome.code.as_deref(),
+        receipt.target_receipts()[0].outcome.code.as_deref(),
         Some("deferred_until_implemented")
     );
     assert!(
@@ -476,15 +479,12 @@ fn non_reticulum_targets_are_rejected_without_nostr_routing() {
 }
 
 #[test]
-fn malformed_reticulum_target_without_typed_scope_is_rejected() {
-    let transport = RadrootsReticulumTransport::default();
-    let mut target = reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI);
-    target.scope = None;
-    let err = transport
-        .deliver(delivery_request(vec![target]))
-        .expect_err("missing typed scope");
-
-    assert_eq!(err, RadrootsReticulumError::InvalidEndpoint);
+fn reticulum_target_constructor_always_supplies_typed_scope() {
+    let target = reticulum_target(RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(
+        target.scope().map(|scope| scope.as_str()),
+        Some(RADROOTS_RETICULUM_SCOPE_ID)
+    );
 }
 
 #[test]
@@ -573,7 +573,7 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
         )]))
         .expect("delivery receipt");
     assert_eq!(
-        receipt.target_receipts[0].status,
+        receipt.target_receipts()[0].status,
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     let fetch = transport
@@ -594,6 +594,7 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
 }
 
 #[test]
+#[cfg(feature = "serde")]
 fn public_models_round_trip_through_serde() {
     let profile = RadrootsReticulumProfile::default()
         .with_behavior(RadrootsReticulumBehavior::DeferDeliveryPlans);

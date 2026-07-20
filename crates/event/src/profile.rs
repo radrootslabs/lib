@@ -11,7 +11,7 @@ pub const RADROOTS_PROFILE_TYPE_TAG_COOP: &str = "radroots:type:coop";
 pub const RADROOTS_PROFILE_TYPE_TAG_ANY: &str = "radroots:type:any";
 pub const RADROOTS_PROFILE_TYPE_TAG_RADROOTSD: &str = "radroots:type:radrootsd";
 pub const RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES: usize =
-    crate::wire::DEFAULT_CONTENT_MAX_BYTES;
+    crate::wire::v1::DEFAULT_CONTENT_MAX_BYTES;
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]

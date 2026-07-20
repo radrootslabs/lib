@@ -32,14 +32,74 @@ pub enum RadrootsRelayTransportError {
         reason: String,
     },
 
+    #[error("Relay URL `{url}` did not resolve to any addresses")]
+    RelayUrlResolvedNoAddresses { url: String },
+
     #[error("Relay target set must not be empty")]
     EmptyTargetSet,
+
+    #[error("Relay target set contains duplicate URL `{url}`")]
+    DuplicateRelayUrl { url: String },
+
+    #[error("Relay fetch item contains invalid relay URL `{url}`: {reason}")]
+    InvalidFetchItemRelayUrl { url: String, reason: String },
+
+    #[error("Relay fetch item came from unrequested relay URL `{url}`")]
+    UnexpectedFetchItemRelayUrl { url: String },
+
+    #[error("Relay fetch adapter returned duplicate terminal outcome for relay URL `{url}`")]
+    DuplicateFetchTerminalRelayUrl { url: String },
+
+    #[error(
+        "Relay fetch adapter returned conflicting terminal outcomes for relay URL `{url}`: first={first}, next={next}"
+    )]
+    ConflictingFetchTerminalRelayUrl {
+        url: String,
+        first: &'static str,
+        next: &'static str,
+    },
+
+    #[error("Relay publish receipt contains invalid relay URL `{url}`: {reason}")]
+    InvalidPublishReceiptRelayUrl { url: String, reason: String },
+
+    #[error("Relay publish receipt came from unrequested relay URL `{url}`")]
+    UnexpectedPublishReceiptRelayUrl { url: String },
+
+    #[error("Relay publish adapter returned duplicate receipts for relay URL `{url}`")]
+    DuplicatePublishReceiptRelayUrl { url: String },
+
+    #[error("Relay publish adapter returned incoherent attempt state for relay URL `{url}`")]
+    InvalidPublishReceiptAttemptState { url: String },
+
+    #[error("Transport returned conflicting publish receipts for relay URL `{url}`")]
+    ConflictingTransportReceiptRelayUrl { url: String },
+
+    #[error("Expected transport kind `{expected}`, received `{actual}`")]
+    UnexpectedTransportKind {
+        expected: &'static str,
+        actual: String,
+    },
 
     #[error("Relay fetch filters must not be empty")]
     EmptyFetchFilters,
 
     #[error("Relay fetch {field} must be greater than zero")]
     InvalidFetchLimit { field: &'static str },
+
+    #[error("Relay transport {field} cannot be negative: {value}")]
+    InvalidTimestamp { field: &'static str, value: i64 },
+
+    #[error(
+        "Relay publish idempotency key is invalid: {reason}; bytes={actual_bytes}, max={max_bytes}"
+    )]
+    InvalidIdempotencyKey {
+        reason: &'static str,
+        actual_bytes: usize,
+        max_bytes: usize,
+    },
+
+    #[error("Relay publish required target `{fingerprint}` is not in the requested relay set")]
+    RequiredTargetNotRequested { fingerprint: String },
 
     #[error("Transport contract error: {0}")]
     TransportContract(String),
@@ -64,6 +124,16 @@ pub enum RadrootsRelayTransportError {
 
     #[error("Relay transport error: {0}")]
     Transport(String),
+}
+
+pub(crate) fn ensure_nonnegative_timestamp(
+    field: &'static str,
+    value: i64,
+) -> Result<(), RadrootsRelayTransportError> {
+    if value < 0 {
+        return Err(RadrootsRelayTransportError::InvalidTimestamp { field, value });
+    }
+    Ok(())
 }
 
 impl From<radroots_transport::RadrootsTransportError> for RadrootsRelayTransportError {

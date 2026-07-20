@@ -1,14 +1,20 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsRelayTransportError;
-use serde::{Deserialize, Serialize};
+use radroots_transport::RadrootsTransportTarget;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsRelayUrlPolicy {
+    /// Allows `wss` endpoints from trusted configuration.
+    ///
+    /// This performs canonical syntax, literal-address, and local-hostname
+    /// checks. It is not an SSRF boundary for attacker-controlled hostnames
+    /// because the default SDK connector does not pin DNS resolution.
     Public,
+    /// Allows `ws` or `wss` only for exact loopback hosts.
     Localhost,
 }
 
@@ -19,7 +25,7 @@ impl RadrootsRelayUrlPolicy {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsRelayUrl(String);
 
 impl RadrootsRelayUrl {
@@ -27,7 +33,7 @@ impl RadrootsRelayUrl {
         value: impl AsRef<str>,
         policy: RadrootsRelayUrlPolicy,
     ) -> Result<Self, RadrootsRelayTransportError> {
-        let original = value.as_ref().trim();
+        let original = value.as_ref();
         let parsed =
             Url::parse(original).map_err(|error| RadrootsRelayTransportError::RelayUrlParse {
                 url: original.to_owned(),
@@ -65,11 +71,13 @@ impl RadrootsRelayUrl {
                 });
             }
         }
-        let mut normalized = parsed.to_string();
-        if parsed.path() == "/" {
-            normalized.pop();
-        }
-        Ok(Self(normalized))
+        let target = RadrootsTransportTarget::nostr_relay(original).map_err(|error| {
+            RadrootsRelayTransportError::RelayUrlParse {
+                url: original.to_owned(),
+                reason: error.to_string(),
+            }
+        })?;
+        Ok(Self(target.uri().as_str().to_owned()))
     }
 
     pub fn validate_public_resolved_ip_addrs<I>(
@@ -79,7 +87,9 @@ impl RadrootsRelayUrl {
     where
         I: IntoIterator<Item = IpAddr>,
     {
+        let mut resolved_any = false;
         for address in addrs {
+            resolved_any = true;
             if let Some(reason) = forbidden_public_ip_reason(address) {
                 return Err(
                     RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination {
@@ -89,6 +99,11 @@ impl RadrootsRelayUrl {
                     },
                 );
             }
+        }
+        if !resolved_any {
+            return Err(RadrootsRelayTransportError::RelayUrlResolvedNoAddresses {
+                url: self.0.clone(),
+            });
         }
         Ok(())
     }
@@ -111,16 +126,44 @@ fn validate_host_destination(
         .strip_prefix('[')
         .and_then(|value| value.strip_suffix(']'))
         .unwrap_or(host);
-    if matches!(policy, RadrootsRelayUrlPolicy::Public)
-        && let Ok(address) = host.parse::<IpAddr>()
-        && let Some(reason) = forbidden_public_ip_reason(address)
-    {
+    if matches!(policy, RadrootsRelayUrlPolicy::Localhost) {
+        if !policy.accepts_ws_host(host) {
+            return Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+                url: original.to_owned(),
+                reason: "localhost policy permits only exact loopback hosts".to_owned(),
+            });
+        }
+        return Ok(());
+    }
+    if let Ok(address) = host.parse::<IpAddr>() {
+        if let Some(reason) = forbidden_public_ip_reason(address) {
+            return Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination {
+                url: original.to_owned(),
+                reason: reason.to_owned(),
+            });
+        }
+    } else if let Some(reason) = forbidden_public_hostname_reason(host) {
         return Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination {
             url: original.to_owned(),
             reason: reason.to_owned(),
         });
     }
     Ok(())
+}
+
+fn forbidden_public_hostname_reason(host: &str) -> Option<&'static str> {
+    let host = host.to_ascii_lowercase();
+    if host == "localhost" || host.ends_with(".localhost") {
+        Some("localhost DNS name")
+    } else if host.ends_with(".local") {
+        Some("link-local multicast DNS name")
+    } else if host.ends_with(".home.arpa") {
+        Some("special-use home network DNS name")
+    } else if !host.contains('.') {
+        Some("single-label DNS name")
+    } else {
+        None
+    }
 }
 
 fn forbidden_public_ip_reason(address: IpAddr) -> Option<&'static str> {
@@ -150,6 +193,8 @@ fn forbidden_public_ipv4_reason(address: Ipv4Addr) -> Option<&'static str> {
         Some("shared IPv4 address space")
     } else if octets[0] == 192 && octets[1] == 0 && octets[2] == 0 {
         Some("IETF protocol-assignment IPv4 address")
+    } else if octets[0] == 192 && octets[1] == 88 && octets[2] == 99 {
+        Some("deprecated or local-use relay-anycast IPv4 address")
     } else if octets[0] == 198 && matches!(octets[1], 18 | 19) {
         Some("benchmark IPv4 address")
     } else if octets[0] >= 240 {
@@ -174,13 +219,28 @@ fn forbidden_public_ipv6_reason(address: Ipv6Addr) -> Option<&'static str> {
         Some("unique-local IPv6 address")
     } else if (segments[0] & 0xffc0) == 0xfe80 {
         Some("link-local IPv6 address")
+    } else if segments[0] == 0x0064
+        && segments[1] == 0xff9b
+        && segments[2..6].iter().all(|segment| *segment == 0)
+    {
+        Some("IPv4/IPv6 translation address")
+    } else if !is_supported_global_ipv6_unicast(segments) {
+        Some("non-global or reserved IPv6 unicast address")
     } else if segments[0] == 0x2001 && segments[1] == 0x0db8 {
         Some("documentation IPv6 address")
     } else if segments[0] == 0x2001 && segments[1] < 0x0200 {
         Some("IETF protocol-assignment IPv6 address")
+    } else if segments[0] == 0x2002 {
+        Some("6to4 IPv6 address")
+    } else if segments[0] == 0x3fff && (segments[1] & 0xf000) == 0 {
+        Some("documentation IPv6 address")
     } else {
         None
     }
+}
+
+fn is_supported_global_ipv6_unicast(segments: [u16; 8]) -> bool {
+    (segments[0] & 0xe000) == 0x2000
 }
 
 impl fmt::Display for RadrootsRelayUrl {
@@ -189,7 +249,7 @@ impl fmt::Display for RadrootsRelayUrl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayTargetSet {
     relays: Vec<RadrootsRelayUrl>,
 }
@@ -206,9 +266,12 @@ impl RadrootsRelayTargetSet {
         let mut ordered_relays = Vec::new();
         for relay in relays {
             let relay = RadrootsRelayUrl::parse(relay, policy)?;
-            if !ordered_relays.iter().any(|existing| existing == &relay) {
-                ordered_relays.push(relay);
+            if ordered_relays.iter().any(|existing| existing == &relay) {
+                return Err(RadrootsRelayTransportError::DuplicateRelayUrl {
+                    url: relay.into_string(),
+                });
             }
+            ordered_relays.push(relay);
         }
         let relays = ordered_relays;
         if relays.is_empty() {
@@ -220,9 +283,12 @@ impl RadrootsRelayTargetSet {
     pub fn from_urls(relays: Vec<RadrootsRelayUrl>) -> Result<Self, RadrootsRelayTransportError> {
         let mut ordered_relays = Vec::new();
         for relay in relays {
-            if !ordered_relays.iter().any(|existing| existing == &relay) {
-                ordered_relays.push(relay);
+            if ordered_relays.iter().any(|existing| existing == &relay) {
+                return Err(RadrootsRelayTransportError::DuplicateRelayUrl {
+                    url: relay.into_string(),
+                });
             }
+            ordered_relays.push(relay);
         }
         let relays = ordered_relays;
         if relays.is_empty() {
@@ -296,6 +362,7 @@ mod tests {
             Ipv4Addr::new(192, 0, 2, 1),
             Ipv4Addr::new(100, 64, 0, 1),
             Ipv4Addr::new(192, 0, 0, 8),
+            Ipv4Addr::new(192, 88, 99, 2),
             Ipv4Addr::new(198, 18, 0, 1),
             Ipv4Addr::new(240, 0, 0, 1),
         ];
@@ -337,8 +404,18 @@ mod tests {
             "ff02::1",
             "fd00::1",
             "fe80::1",
+            "64:ff9b::7f00:1",
+            "64:ff9b::a00:1",
+            "64:ff9b::5db8:d822",
+            "64:ff9b:1::1",
+            "100::1",
+            "100:0:0:1::1",
             "2001:db8::1",
             "2001:1::1",
+            "2002:db8::1",
+            "2002:1::1",
+            "3fff::1",
+            "5f00::1",
         ];
         for address in cases {
             assert!(
@@ -354,15 +431,7 @@ mod tests {
             None
         );
         assert_eq!(
-            forbidden_public_ipv6_reason("2002:db8::1".parse::<Ipv6Addr>().expect("ipv6")),
-            None
-        );
-        assert_eq!(
             forbidden_public_ipv6_reason("2001:db9::1".parse::<Ipv6Addr>().expect("ipv6")),
-            None
-        );
-        assert_eq!(
-            forbidden_public_ipv6_reason("2002:1::1".parse::<Ipv6Addr>().expect("ipv6")),
             None
         );
         assert_eq!(

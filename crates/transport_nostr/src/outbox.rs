@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::error::ensure_nonnegative_timestamp;
 use crate::{
     RadrootsRelayOutcome, RadrootsRelayPublishAdapter, RadrootsRelayPublishReceipt,
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
@@ -87,6 +88,8 @@ pub async fn publish_claimed_outbox_event<A>(
 where
     A: RadrootsRelayPublishAdapter,
 {
+    ensure_nonnegative_timestamp("now_ms", now_ms)?;
+    ensure_nonnegative_timestamp("next_attempt_after_ms", policy.next_attempt_after_ms)?;
     let signed_event = claimed.signed_event.clone().ok_or(
         RadrootsRelayTransportError::MissingSignedOutboxEvent(claimed.outbox_event_id),
     )?;
@@ -124,34 +127,25 @@ where
         });
     }
     let targets = RadrootsRelayTargetSet::new(
-        publishable
-            .relays
-            .iter()
-            .map(|target| target.relay_url.as_str()),
+        unique_publishable_relay_urls(&publishable),
         policy.relay_url_policy,
     )?;
     let target_strings = targets.relay_strings();
-    let satisfaction_policy = satisfaction_policy_for_remaining_count(
-        publishable.satisfaction_class,
-        publishable.remaining_satisfaction_count,
-        targets.len(),
-        publishable.remaining_required_targets.as_deref(),
-    );
     let active_delivery_plan_id = publishable.active_delivery_plan_id;
-    let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)
-        .with_satisfaction_policy(satisfaction_policy)
-        .with_idempotency_key(outbox_publish_idempotency_key(
+    let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)?
+        .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::NoWait)
+        .try_with_idempotency_key(outbox_publish_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
             signed_event.id_str(),
             active_delivery_plan_id,
-        ));
+        ))?;
     let publish = match publish_signed_event(adapter, request).await {
         Ok(receipt) => receipt,
         Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
             signed_event.id_str().to_owned(),
             target_strings,
-            publishable.remaining_satisfaction_count,
+            0,
             message,
         ),
         Err(error) => return Err(error),
@@ -177,7 +171,6 @@ where
                 event_store,
                 &signed_event,
                 relay.relay_url.as_str(),
-                relay.outcome.message.as_deref(),
                 now_ms,
             )
             .await?;
@@ -233,6 +226,15 @@ pub async fn publish_claimed_outbox_event_with_transport<T>(
 where
     T: RadrootsTransport + ?Sized,
 {
+    ensure_nonnegative_timestamp("now_ms", now_ms)?;
+    ensure_nonnegative_timestamp("next_attempt_after_ms", policy.next_attempt_after_ms)?;
+    let transport_kind = transport.transport_kind();
+    if transport_kind != RadrootsTransportKind::Nostr {
+        return Err(RadrootsRelayTransportError::UnexpectedTransportKind {
+            expected: "nostr",
+            actual: transport_kind.canonical_label(),
+        });
+    }
     let signed_event = claimed.signed_event.clone().ok_or(
         RadrootsRelayTransportError::MissingSignedOutboxEvent(claimed.outbox_event_id),
     )?;
@@ -270,10 +272,7 @@ where
         });
     }
     RadrootsRelayTargetSet::new(
-        publishable
-            .relays
-            .iter()
-            .map(|target| target.relay_url.as_str()),
+        unique_publishable_relay_urls(&publishable),
         policy.relay_url_policy,
     )?;
     let transport_targets = publishable_transport_targets(&publishable)?;
@@ -287,34 +286,39 @@ where
     );
     let payload =
         verified_signed_event_payload(&signed_event).map_err(transport_error_to_relay_error)?;
+    let delivery_request =
+        RadrootsTransportDeliveryRequest::new(request_id, payload, target_set, satisfaction_policy)
+            .and_then(|request| request.try_with_now_ms(now_ms))
+            .map_err(transport_error_to_relay_error)?;
     let delivery = transport
-        .deliver(
-            RadrootsTransportDeliveryRequest::new(
-                request_id,
-                payload,
-                target_set,
-                satisfaction_policy,
-            )
-            .with_now_ms(now_ms),
-        )
+        .deliver(delivery_request.clone())
         .await
         .map_err(transport_error_to_relay_error)?;
+    delivery
+        .validate_for_request(&delivery_request)
+        .map_err(transport_error_to_relay_error)?;
+    let relay_receipts = relay_receipts_from_transport_receipts(&delivery)?;
     let target_receipts = target_receipts_from_transport_receipts(&publishable, &delivery);
 
     for target_receipt in &target_receipts {
         complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
     }
 
-    for target_receipt in &target_receipts {
-        if target_receipt
-            .transport_status
+    for relay in &relay_receipts {
+        if relay
+            .outcome
+            .to_transport_outcome()
+            .status
             .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
+            && publishable
+                .targets_for_relay(relay.relay_url.as_str())
+                .next()
+                .is_some()
         {
             ingest_publish_observation(
                 event_store,
                 &signed_event,
-                target_receipt.endpoint_uri.as_str(),
-                target_receipt.outcome.message.as_deref(),
+                relay.relay_url.as_str(),
                 now_ms,
             )
             .await?;
@@ -331,8 +335,6 @@ where
             now_ms,
         )
         .await?;
-
-    let relay_receipts = relay_receipts_from_transport_receipts(&delivery);
 
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,
@@ -407,7 +409,7 @@ impl PublishableRelays {
     ) -> impl Iterator<Item = &'a PublishableRelay> + 'a {
         let canonical_relay_url = RadrootsTransportTarget::nostr_relay(relay_url)
             .ok()
-            .map(|target| target.uri.as_str().to_owned());
+            .map(|target| target.uri().as_str().to_owned());
         self.relays.iter().filter(move |target| {
             canonical_relay_url
                 .as_deref()
@@ -443,6 +445,17 @@ struct PublishableRelay {
     target_label: Option<String>,
 }
 
+fn unique_publishable_relay_urls(publishable: &PublishableRelays) -> Vec<&str> {
+    let mut relay_urls = Vec::new();
+    for target in &publishable.relays {
+        let relay_url = target.relay_url.as_str();
+        if !relay_urls.contains(&relay_url) {
+            relay_urls.push(relay_url);
+        }
+    }
+    relay_urls
+}
+
 fn target_receipts_from_relay_receipts(
     publishable: &PublishableRelays,
     relay_receipts: &[RadrootsRelayPublishRelayReceipt],
@@ -470,21 +483,20 @@ fn target_receipts_from_transport_receipts(
     delivery: &RadrootsTransportDeliveryReceipt,
 ) -> Vec<RadrootsOutboxPublishTargetReceipt> {
     delivery
-        .target_receipts
+        .target_receipts()
         .iter()
         .filter_map(|receipt| {
             publishable
                 .relays
                 .iter()
-                .find(|target| target.endpoint_fingerprint == receipt.target.fingerprint)
+                .find(|target| target.endpoint_fingerprint == *receipt.target.fingerprint())
                 .map(|target| RadrootsOutboxPublishTargetReceipt {
                     delivery_target_id: target.delivery_target_id,
                     endpoint_uri: target.relay_url.clone(),
                     endpoint_fingerprint: target.endpoint_fingerprint.clone(),
                     target_scope: target.target_scope.clone(),
                     target_label: target.target_label.clone(),
-                    attempted: receipt.status
-                        != RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
+                    attempted: receipt.attempted,
                     transport_status: receipt.status,
                     outcome: relay_outcome_from_transport_outcome(&receipt.outcome),
                 })
@@ -621,17 +633,31 @@ async fn complete_outbox_delivery_target(
 
 fn relay_receipts_from_transport_receipts(
     delivery: &RadrootsTransportDeliveryReceipt,
-) -> Vec<RadrootsRelayPublishRelayReceipt> {
-    delivery
-        .target_receipts
-        .iter()
-        .map(|receipt| {
-            RadrootsRelayPublishRelayReceipt::attempted(
-                receipt.target.uri.as_str(),
-                relay_outcome_from_transport_outcome(&receipt.outcome),
-            )
-        })
-        .collect()
+) -> Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError> {
+    let mut relay_receipts: Vec<RadrootsRelayPublishRelayReceipt> = Vec::new();
+    for receipt in delivery.target_receipts() {
+        let outcome = relay_outcome_from_transport_outcome(&receipt.outcome);
+        let relay_receipt = if receipt.attempted {
+            RadrootsRelayPublishRelayReceipt::attempted(receipt.target.uri().as_str(), outcome)
+        } else {
+            RadrootsRelayPublishRelayReceipt::skipped(receipt.target.uri().as_str(), outcome)
+        };
+        if let Some(existing) = relay_receipts
+            .iter()
+            .find(|existing| existing.relay_url == relay_receipt.relay_url)
+        {
+            if existing != &relay_receipt {
+                return Err(
+                    RadrootsRelayTransportError::ConflictingTransportReceiptRelayUrl {
+                        url: relay_receipt.relay_url,
+                    },
+                );
+            }
+            continue;
+        }
+        relay_receipts.push(relay_receipt);
+    }
+    Ok(relay_receipts)
 }
 
 fn relay_outcome_from_transport_outcome(
@@ -751,14 +777,26 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::InvalidTargetLabel
         | RadrootsTransportError::InvalidSatisfactionPolicy
         | RadrootsTransportError::EmptyRequiredTargetSet
-        | RadrootsTransportError::DuplicateRequiredTargetFingerprint => {
+        | RadrootsTransportError::DuplicateRequiredTargetFingerprint
+        | RadrootsTransportError::RequiredTargetNotRequested
+        | RadrootsTransportError::EmptyDeliveryRequestId
+        | RadrootsTransportError::InvalidDeliveryRequestId
+        | RadrootsTransportError::InvalidDeliveryTimestamp => {
             RadrootsRelayTransportError::Transport(error.to_string())
         }
         RadrootsTransportError::EmptyTargetUri
         | RadrootsTransportError::InvalidTargetUri
         | RadrootsTransportError::EmptyTargetSet
         | RadrootsTransportError::DuplicateTargetFingerprint
-        | RadrootsTransportError::InvalidTargetFingerprint => {
+        | RadrootsTransportError::InvalidTargetFingerprint
+        | RadrootsTransportError::UnexpectedDeliveryTargetReceipt
+        | RadrootsTransportError::DuplicateDeliveryTargetReceipt
+        | RadrootsTransportError::MissingDeliveryTargetReceipt
+        | RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
+        | RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
+        | RadrootsTransportError::TransportOutcomeStatusMismatch
+        | RadrootsTransportError::DeliveryReceiptRequestIdMismatch
+        | RadrootsTransportError::DeliveryReceiptTargetSetMismatch => {
             RadrootsRelayTransportError::TransportContract(error.to_string())
         }
         RadrootsTransportError::EmptyPayloadId
@@ -995,7 +1033,6 @@ async fn ingest_publish_observation(
     event_store: &RadrootsEventStore,
     signed_event: &RadrootsSignedEvent,
     relay_url: &str,
-    message: Option<&str>,
     observed_at_ms: i64,
 ) -> Result<(), RadrootsRelayTransportError> {
     let observation = RadrootsTransportObservation::new(
@@ -1003,11 +1040,7 @@ async fn ingest_publish_observation(
         relay_url,
         RadrootsTransportObservationType::PublishAck,
         observed_at_ms,
-    );
-    let mut observation = observation?;
-    if let Some(message) = message {
-        observation = observation.with_redacted_message(message);
-    }
+    )?;
     let ingest = RadrootsEventIngest::from_signed_event(signed_event.clone(), observed_at_ms)?
         .with_observation(observation);
     event_store.ingest_event(ingest).await?;
@@ -1032,9 +1065,10 @@ mod tests {
     };
     use radroots_transport::{
         RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
-        RadrootsTransportError, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-        RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+        RadrootsTransportError, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
+        RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+        RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+        RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
     };
 
     #[test]
@@ -1073,11 +1107,11 @@ mod tests {
                 RadrootsTransportSatisfactionClass::Delivered,
                 1,
                 3,
-                Some(core::slice::from_ref(&required_target.fingerprint))
+                Some(core::slice::from_ref(required_target.fingerprint()))
             ),
             RadrootsTransportSatisfactionPolicy::required_targets(
                 RadrootsTransportSatisfactionClass::Delivered,
-                vec![required_target.fingerprint]
+                vec![required_target.fingerprint().clone()]
             )
             .expect("required target policy")
         );
@@ -1152,8 +1186,8 @@ mod tests {
             active_delivery_plan_id: 7,
             relays: vec![PublishableRelay {
                 delivery_target_id: 11,
-                relay_url: target.uri.as_str().to_owned(),
-                endpoint_fingerprint: target.fingerprint.clone(),
+                relay_url: target.uri().as_str().to_owned(),
+                endpoint_fingerprint: target.fingerprint().clone(),
                 target_scope: None,
                 target_label: None,
             }],
@@ -1169,7 +1203,7 @@ mod tests {
         let accepted_relay_receipts = target_receipts_from_relay_receipts(
             &publishable,
             &[RadrootsRelayPublishRelayReceipt::attempted(
-                target.uri.as_str(),
+                target.uri().as_str(),
                 RadrootsRelayOutcome::accepted(),
             )],
         );
@@ -1182,16 +1216,17 @@ mod tests {
             0
         );
 
-        let delivered_transport_receipts = target_receipts_from_transport_receipts(
-            &publishable,
-            &RadrootsTransportDeliveryReceipt {
-                request_id: "request-1".to_owned(),
-                target_receipts: vec![RadrootsTransportTargetReceipt::new(
-                    target,
-                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
-                )],
-            },
-        );
+        let delivery = RadrootsTransportDeliveryReceipt::new(
+            "request-1",
+            RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
+            vec![RadrootsTransportTargetReceipt::new(
+                target,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
+            )],
+        )
+        .expect("delivery receipt");
+        let delivered_transport_receipts =
+            target_receipts_from_transport_receipts(&publishable, &delivery);
         assert_eq!(
             delivered_transport_receipts[0].transport_status,
             RadrootsTransportDeliveryTargetStatus::Delivered
@@ -1369,8 +1404,8 @@ mod tests {
             active_delivery_plan_id: 7,
             relays: vec![PublishableRelay {
                 delivery_target_id: 11,
-                relay_url: target.uri.as_str().to_owned(),
-                endpoint_fingerprint: target.fingerprint.clone(),
+                relay_url: target.uri().as_str().to_owned(),
+                endpoint_fingerprint: target.fingerprint().clone(),
                 target_scope: Some("foodshed.west".to_owned()),
                 target_label: Some("primary relay".to_owned()),
             }],
@@ -1384,14 +1419,8 @@ mod tests {
         };
         let targets = publishable_transport_targets(&publishable).expect("transport targets");
         assert_eq!(targets.len(), 1);
-        assert_eq!(
-            targets[0].scope.as_ref().expect("scope").as_str(),
-            "foodshed.west"
-        );
-        assert_eq!(
-            targets[0].label.as_ref().expect("label").as_str(),
-            "primary relay"
-        );
+        assert_eq!(targets[0].scope().expect("scope").as_str(), "foodshed.west");
+        assert_eq!(targets[0].label().expect("label").as_str(), "primary relay");
         assert_eq!(
             transport_satisfaction_policy_for_publishable(&publishable),
             RadrootsTransportSatisfactionPolicy::all_accepted()
@@ -1466,14 +1495,56 @@ mod tests {
 
         let unknown =
             RadrootsTransportTarget::nostr_relay("wss://unknown.example").expect("unknown target");
-        let delivery = RadrootsTransportDeliveryReceipt {
-            request_id: "unknown".to_owned(),
-            target_receipts: vec![RadrootsTransportTargetReceipt::new(
+        let delivery = RadrootsTransportDeliveryReceipt::new(
+            "unknown",
+            RadrootsTransportTargetSet::new(vec![unknown.clone()]).expect("target set"),
+            vec![RadrootsTransportTargetReceipt::new(
                 unknown,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
             )],
-        };
+        )
+        .expect("delivery receipt");
         assert!(target_receipts_from_transport_receipts(&invalid, &delivery).is_empty());
-        assert_eq!(relay_receipts_from_transport_receipts(&delivery).len(), 1);
+        assert_eq!(
+            relay_receipts_from_transport_receipts(&delivery)
+                .expect("relay receipts")
+                .len(),
+            1
+        );
+
+        let west = RadrootsTransportTarget::nostr_relay_with_metadata(
+            "wss://scoped.example",
+            Some(RadrootsTransportMeshScopeId::parse("foodshed.west").expect("west scope")),
+            None,
+        )
+        .expect("west target");
+        let east = RadrootsTransportTarget::nostr_relay_with_metadata(
+            "wss://scoped.example",
+            Some(RadrootsTransportMeshScopeId::parse("foodshed.east").expect("east scope")),
+            None,
+        )
+        .expect("east target");
+        let scoped_relay_uri = west.uri().as_str().to_owned();
+        let conflicting = RadrootsTransportDeliveryReceipt::new(
+            "conflicting",
+            RadrootsTransportTargetSet::new(vec![west.clone(), east.clone()])
+                .expect("scoped target set"),
+            vec![
+                RadrootsTransportTargetReceipt::new(
+                    west,
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+                ),
+                RadrootsTransportTargetReceipt::new(
+                    east,
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Timeout),
+                ),
+            ],
+        )
+        .expect("conflicting delivery receipt");
+        assert!(matches!(
+            relay_receipts_from_transport_receipts(&conflicting),
+            Err(RadrootsRelayTransportError::ConflictingTransportReceiptRelayUrl { url })
+                if url == scoped_relay_uri
+        ));
     }
 }

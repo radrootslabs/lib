@@ -2,7 +2,7 @@ use alloc::string::{String, ToString};
 use core::{fmt, str::FromStr};
 use sha2::{Digest, Sha256};
 
-use crate::RadrootsBlossomError;
+use crate::error::RadrootsBlossomError;
 
 const SHA256_BYTES: usize = 32;
 const SHA256_HEX_LENGTH: usize = SHA256_BYTES * 2;

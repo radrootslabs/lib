@@ -56,11 +56,15 @@ impl From<RadrootsTransportError> for RadrootsRuntimeTransportError {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsRuntimeTransportPayload {
-    SignedEvent(RadrootsSignedEvent),
+    SignedEvent(Box<RadrootsSignedEvent>),
     OpaqueBytes { label: String, bytes: Vec<u8> },
 }
 
 impl RadrootsRuntimeTransportPayload {
+    pub fn signed_event(event: RadrootsSignedEvent) -> Self {
+        Self::SignedEvent(Box::new(event))
+    }
+
     pub fn verified_signed_event_json(
         event: &RadrootsSignedEvent,
     ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
@@ -129,8 +133,8 @@ impl RadrootsRuntimeTransportDispatchRequest {
             self.payload.transport_payload()?,
             self.target_set.clone(),
             self.satisfaction_policy.clone(),
-        )
-        .with_now_ms(self.now_ms))
+        )?
+        .try_with_now_ms(self.now_ms)?)
     }
 }
 
@@ -385,7 +389,7 @@ fn satisfied_target_count_for_policy(
             .iter()
             .filter(|required| {
                 target_states.iter().any(|state| {
-                    state.target.fingerprint == **required
+                    state.target.fingerprint() == *required
                         && state.status.counts_as_satisfied(*class)
                 })
             })
@@ -410,6 +414,16 @@ fn target_states_satisfy_policy(
             policy.required_target_count(target_states.len())?;
             Ok(satisfied_target_count_for_policy(policy, target_states) == targets.len())
         }
+    }
+}
+
+#[cfg(feature = "transport-workers")]
+fn dispatch_satisfaction_policy(
+    policy: &RadrootsTransportSatisfactionPolicy,
+) -> RadrootsTransportSatisfactionPolicy {
+    match policy.target_satisfaction_class() {
+        Some(class) => RadrootsTransportSatisfactionPolicy::All { class },
+        None => RadrootsTransportSatisfactionPolicy::NoWait,
     }
 }
 
@@ -452,12 +466,13 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
         for plan in job.plans {
             let delivery_plan_id = plan.delivery_plan_id;
             let satisfaction_policy = plan.satisfaction_policy.clone();
+            let dispatch_satisfaction_policy = dispatch_satisfaction_policy(&satisfaction_policy);
             let mut target_states = plan
                 .targets
                 .iter()
                 .map(|target| {
                     (
-                        target.target.fingerprint.as_str().to_owned(),
+                        target.target.fingerprint().as_str().to_owned(),
                         RadrootsRuntimeDeliveryTargetState {
                             target: target.target.clone(),
                             status: target.status,
@@ -473,7 +488,7 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                 .filter(RadrootsRuntimeDeliveryTarget::is_ready_for_attempt)
             {
                 by_kind
-                    .entry(target.target.kind.clone())
+                    .entry(target.target.kind().clone())
                     .or_default()
                     .push(target);
             }
@@ -491,19 +506,27 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                     ),
                     job.payload.clone(),
                     transport_targets,
-                    satisfaction_policy.clone(),
+                    dispatch_satisfaction_policy.clone(),
                     job.now_ms,
                 )?;
-                let receipt = transport
-                    .deliver(request.transport_delivery_request()?)
-                    .await
+                let delivery_request = request.transport_delivery_request()?;
+                let receipt =
+                    transport
+                        .deliver(delivery_request.clone())
+                        .await
+                        .map_err(|error| RadrootsRuntimeTransportError::Transport {
+                            kind: kind.canonical_label(),
+                            message: error.to_string(),
+                        })?;
+                receipt
+                    .validate_for_request(&delivery_request)
                     .map_err(|error| RadrootsRuntimeTransportError::Transport {
                         kind: kind.canonical_label(),
                         message: error.to_string(),
                     })?;
-                for target_receipt in receipt.target_receipts {
+                for target_receipt in receipt.target_receipts().iter().cloned() {
                     target_states.insert(
-                        target_receipt.target.fingerprint.as_str().to_owned(),
+                        target_receipt.target.fingerprint().as_str().to_owned(),
                         RadrootsRuntimeDeliveryTargetState {
                             target: target_receipt.target.clone(),
                             status: target_receipt.status,
@@ -725,12 +748,12 @@ mod tests {
                     captured_now_ms
                         .lock()
                         .expect("now_ms capture")
-                        .push(request.now_ms);
+                        .push(request.now_ms());
                 }
-                Ok(RadrootsTransportDeliveryReceipt {
-                    request_id: request.request_id,
-                    target_receipts: request
-                        .target_set
+                RadrootsTransportDeliveryReceipt::for_request(
+                    &request,
+                    request
+                        .target_set()
                         .targets()
                         .iter()
                         .cloned()
@@ -741,7 +764,7 @@ mod tests {
                             )
                         })
                         .collect(),
-                })
+                )
             })
         }
 
@@ -767,6 +790,86 @@ mod tests {
                     0,
                 ))
             })
+        }
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[derive(Clone, Copy)]
+    enum ForgedDeliveryReceipt {
+        RequestId,
+        TargetSet,
+    }
+
+    #[cfg(feature = "transport-workers")]
+    struct ForgedReceiptTransport {
+        forged: ForgedDeliveryReceipt,
+    }
+
+    #[cfg(feature = "transport-workers")]
+    impl RadrootsTransport for ForgedReceiptTransport {
+        fn transport_kind(&self) -> RadrootsTransportKind {
+            RadrootsTransportKind::Nostr
+        }
+
+        fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+            Box::pin(async {
+                Ok(RadrootsTransportStatus::new(
+                    RadrootsTransportKind::Nostr,
+                    true,
+                    RadrootsTransportImplementationState::Real,
+                    true,
+                    "forged receipt fixture",
+                ))
+            })
+        }
+
+        fn deliver<'a>(
+            &'a self,
+            request: RadrootsTransportDeliveryRequest,
+        ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+            Box::pin(async move {
+                match self.forged {
+                    ForgedDeliveryReceipt::RequestId => RadrootsTransportDeliveryReceipt::new(
+                        "forged-request",
+                        request.target_set().clone(),
+                        request
+                            .target_set()
+                            .targets()
+                            .iter()
+                            .cloned()
+                            .map(|target| {
+                                RadrootsTransportTargetReceipt::new(
+                                    target,
+                                    RadrootsTransportOutcome::new(
+                                        RadrootsTransportOutcomeKind::Accepted,
+                                    ),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    ForgedDeliveryReceipt::TargetSet => {
+                        let target =
+                            RadrootsTransportTarget::nostr_relay("wss://forged-relay.example")?;
+                        RadrootsTransportDeliveryReceipt::new(
+                            request.request_id(),
+                            RadrootsTransportTargetSet::new(vec![target.clone()])?,
+                            vec![RadrootsTransportTargetReceipt::new(
+                                target,
+                                RadrootsTransportOutcome::new(
+                                    RadrootsTransportOutcomeKind::Accepted,
+                                ),
+                            )],
+                        )
+                    }
+                }
+            })
+        }
+
+        fn fetch<'a>(
+            &'a self,
+            _request: RadrootsTransportFetchRequest,
+        ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+            Box::pin(async { Err(RadrootsTransportError::UnsupportedOperation) })
         }
     }
 
@@ -812,7 +915,7 @@ mod tests {
         let event = signed_event();
         let payload = RadrootsRuntimeTransportPayload::verified_signed_event_json(&event)
             .expect("verified payload");
-        let via_variant = RadrootsRuntimeTransportPayload::SignedEvent(event.clone())
+        let via_variant = RadrootsRuntimeTransportPayload::signed_event(event.clone())
             .transport_payload()
             .expect("transport payload");
         let RadrootsTransportPayload::SignedEventJson {
@@ -912,7 +1015,7 @@ mod tests {
             1
         );
         assert_eq!(
-            receipt.target_receipts[0].status,
+            receipt.target_receipts()[0].status,
             RadrootsTransportDeliveryTargetStatus::Accepted
         );
     }
@@ -932,7 +1035,7 @@ mod tests {
             .transport_delivery_request()
             .expect("delivery request");
 
-        assert_eq!(delivery_request.now_ms, 123_456);
+        assert_eq!(delivery_request.now_ms(), 123_456);
     }
 
     #[cfg(feature = "transport-reticulum")]
@@ -994,7 +1097,7 @@ mod tests {
             0
         );
         assert_eq!(
-            receipt.target_receipts[0].status,
+            receipt.target_receipts()[0].status,
             RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
         );
     }
@@ -1113,6 +1216,47 @@ mod tests {
 
     #[cfg(feature = "transport-workers")]
     #[tokio::test]
+    async fn delivery_worker_rejects_receipts_forged_for_another_request() {
+        for forged in [
+            ForgedDeliveryReceipt::RequestId,
+            ForgedDeliveryReceipt::TargetSet,
+        ] {
+            let mut registry = RadrootsRuntimeTransportRegistry::new();
+            registry
+                .register(ForgedReceiptTransport { forged })
+                .expect("register");
+            let worker = RadrootsRuntimeDeliveryWorker::new(
+                &registry,
+                RadrootsRuntimeDeliveryWorkerConfig {
+                    bounded_queue_capacity: 8,
+                },
+            );
+
+            let error = worker
+                .execute_job(RadrootsRuntimeDeliveryJob {
+                    outbox_event_id: 42,
+                    payload: opaque_payload(),
+                    plans: vec![RadrootsRuntimeDeliveryPlan {
+                        delivery_plan_id: 7,
+                        satisfaction_policy: RadrootsTransportSatisfactionPolicy::any_accepted(),
+                        targets: vec![RadrootsRuntimeDeliveryTarget::ready(
+                            1,
+                            target(RadrootsTransportKind::Nostr, "wss://relay.example"),
+                        )],
+                    }],
+                    now_ms: 1_000,
+                })
+                .await
+                .expect_err("forged receipt rejected");
+            assert!(matches!(
+                error,
+                RadrootsRuntimeTransportError::Transport { .. }
+            ));
+        }
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
     async fn delivery_worker_reports_no_wait_satisfied_without_dispatch() {
         let registry = RadrootsRuntimeTransportRegistry::new();
         let worker = RadrootsRuntimeDeliveryWorker::new(
@@ -1164,7 +1308,7 @@ mod tests {
             },
         );
         let required_target = target(RadrootsTransportKind::Reticulum, "reticulum:local");
-        let required_fingerprint = required_target.fingerprint.clone();
+        let required_fingerprint = required_target.fingerprint().clone();
         let receipt = worker
             .execute_job(RadrootsRuntimeDeliveryJob {
                 outbox_event_id: 42,
@@ -1296,6 +1440,58 @@ mod tests {
             receipt.plan_receipts[0].satisfaction_state,
             RadrootsRuntimeDeliveryPlanSatisfactionState::Satisfied
         );
+    }
+
+    #[cfg(feature = "transport-workers")]
+    #[tokio::test]
+    async fn delivery_worker_evaluates_cross_transport_quorum_globally() {
+        let mut registry = RadrootsRuntimeTransportRegistry::new();
+        for kind in [
+            RadrootsTransportKind::Nostr,
+            RadrootsTransportKind::Reticulum,
+        ] {
+            registry
+                .register(StaticTransport::new(
+                    kind,
+                    RadrootsTransportOutcomeKind::Accepted,
+                ))
+                .expect("register");
+        }
+        let worker = RadrootsRuntimeDeliveryWorker::new(
+            &registry,
+            RadrootsRuntimeDeliveryWorkerConfig {
+                bounded_queue_capacity: 8,
+            },
+        );
+        let receipt = worker
+            .execute_job(RadrootsRuntimeDeliveryJob {
+                outbox_event_id: 42,
+                payload: opaque_payload(),
+                plans: vec![RadrootsRuntimeDeliveryPlan {
+                    delivery_plan_id: 7,
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+                    targets: vec![
+                        RadrootsRuntimeDeliveryTarget::ready(
+                            1,
+                            target(RadrootsTransportKind::Nostr, "wss://relay.example"),
+                        ),
+                        RadrootsRuntimeDeliveryTarget::ready(
+                            2,
+                            target(RadrootsTransportKind::Reticulum, "reticulum:local"),
+                        ),
+                    ],
+                }],
+                now_ms: 1_000,
+            })
+            .await
+            .expect("worker receipt");
+
+        assert_eq!(receipt.dispatch_count, 2);
+        assert!(receipt.all_plans_satisfied);
+        assert_eq!(receipt.plan_receipts[0].target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].attempted_target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].required_target_count, 2);
+        assert_eq!(receipt.plan_receipts[0].satisfied_target_count, 2);
     }
 
     #[cfg(feature = "transport-workers")]

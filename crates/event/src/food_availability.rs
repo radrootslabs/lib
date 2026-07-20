@@ -4,7 +4,7 @@ use alloc::{string::String, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::{fmt, str::FromStr};
-use radroots_blossom::{RadrootsBlossomHashPath, RadrootsBlossomSha256};
+use radroots_blossom::hash::{RadrootsBlossomHashPath, RadrootsBlossomSha256};
 use unicode_general_category::{GeneralCategory, get_general_category};
 use url_nostd::{Host, Url};
 

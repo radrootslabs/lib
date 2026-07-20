@@ -66,6 +66,15 @@ mod test_fixtures;
 pub mod relay_document;
 
 #[cfg(feature = "contract-manifest")]
+pub use manifest::registry_v7::{
+    RADROOTS_EVENT_CONTRACT_REGISTRY_V7_EVENT_COUNT,
+    RADROOTS_EVENT_CONTRACT_REGISTRY_V7_INVENTORY_SCHEMA_VERSION,
+    RADROOTS_EVENT_CONTRACT_REGISTRY_V7_KIND_COUNT, RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION,
+    RadrootsEventContractRegistryV7Inventory, event_contract_registry_v7_inventory,
+    event_contract_registry_v7_inventory_json, event_contract_registry_v7_inventory_sha256,
+    parse_event_contract_registry_v7_inventory_json,
+};
+#[cfg(feature = "contract-manifest")]
 pub use manifest::{
     RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION, contract_manifest_json,
     contract_manifest_sha256, knowledge_contract_manifest,
@@ -73,8 +82,9 @@ pub use manifest::{
 pub use tag_builders::RadrootsEventTagBuilder;
 pub use verification::{
     RadrootsContractValidatedEvent, RadrootsIdVerifiedEvent, RadrootsNip01VerificationError,
-    RadrootsSignatureVerifiedEvent, validate_event_contract, verify_event_id,
-    verify_event_signature, verify_nip01_event,
+    RadrootsSignatureVerifiedEvent, validate_event_contract, validate_event_contract_registry_v7,
+    verify_event_id, verify_event_id_v1, verify_event_signature, verify_event_signature_v1,
+    verify_nip01_event, verify_nip01_event_v1,
 };
 #[cfg(feature = "knowledge")]
 pub use verification::{

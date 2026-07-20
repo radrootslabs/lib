@@ -1,8 +1,18 @@
 #![forbid(unsafe_code)]
 
 mod admission_authority;
+mod artifact_bundle;
 mod comment_authority;
 mod deletion_authority;
+mod nip09_reconciliation;
+mod registry_v7;
+
+pub(crate) use nip09_reconciliation::{
+    validate_nip09_reconciliation_manifest, write_nip09_reconciliation_manifest,
+};
+pub(crate) use registry_v7::{
+    validate_event_contract_registry_v7_inventory, write_event_contract_registry_v7_inventory,
+};
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
 use admission_authority::validate_admission_operation_authority;
@@ -30,6 +40,10 @@ const ROOT_RELEASE_POLICY_RELATIVE: &str =
     "foundation/contracts/release_runtime/mounted_rust_crates/publish-policy.toml";
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
+const NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/event_store/nip09_reconciliation.v1.json";
+const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 1] =
+    [NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE];
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
 const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
@@ -49,7 +63,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 19] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 20] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -85,6 +99,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 19] = [
     (
         "contracts/conformance/vectors/event/verified_admission.v1.json",
         "crates/event_codec/tests/fixtures/verified_admission.v1.json",
+    ),
+    (
+        NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
+        "crates/event_store/tests/fixtures/nip09_reconciliation.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
@@ -1715,7 +1733,7 @@ const PROFILE_WITNESSES: [EventBoundarySourceWitness; 5] = [
         required_fragments: &["pub struct RadrootsAuthoredProfile"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/profile/inbound.rs",
+        relative_path: "crates/event_codec/src/profile/inbound/registry_v7.rs",
         required_fragments: &["pub struct RadrootsInboundProfileMetadata"],
     },
     EventBoundarySourceWitness {
@@ -1726,7 +1744,7 @@ const PROFILE_WITNESSES: [EventBoundarySourceWitness; 5] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/verification.rs",
+        relative_path: "crates/event_codec/src/verification/v1.rs",
         required_fragments: &[
             "pub struct RadrootsSignatureVerifiedEvent",
             "pub fn verify_nip01_event",
@@ -1768,7 +1786,7 @@ const POST_WITNESSES: [EventBoundarySourceWitness; 5] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/post/inbound.rs",
+        relative_path: "crates/event_codec/src/post/inbound/registry_v7.rs",
         required_fragments: &[
             "pub struct RadrootsInboundPostProjection",
             "pub fn project_verified_post_event",
@@ -1802,7 +1820,7 @@ const REPLY_WITNESSES: [EventBoundarySourceWitness; 5] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/reply/inbound.rs",
+        relative_path: "crates/event_codec/src/reply/inbound/registry_v7.rs",
         required_fragments: &[
             "pub struct RadrootsInboundNip10ReplyProjection",
             "pub fn project_verified_nip10_reply_event",
@@ -1842,7 +1860,7 @@ const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
         required_fragments: &["pub fn authored_nip22_comment_to_wire_parts"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/comment/inbound.rs",
+        relative_path: "crates/event_codec/src/comment/inbound/registry_v7.rs",
         required_fragments: &[
             "pub struct RadrootsInboundNip22CommentProjection",
             "pub fn project_verified_nip22_comment_event",
@@ -1882,21 +1900,21 @@ const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
         required_fragments: &["pub fn authored_nip09_deletion_request_to_wire_parts"],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/deletion/inbound.rs",
+        relative_path: "crates/event_codec/src/deletion/reconciliation_v1.rs",
         required_fragments: &[
             "pub struct RadrootsInboundNip09DeletionProjection",
             "pub fn project_verified_nip09_deletion_request_event",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/deletion/admission.rs",
+        relative_path: "crates/event_codec/src/deletion/reconciliation_v1.rs",
         required_fragments: &[
             "pub struct RadrootsAdmittedNip09DeletionRequestEvent",
             "pub fn verify_and_admit_nip09_deletion_request_event",
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/deletion/evaluator.rs",
+        relative_path: "crates/event_codec/src/deletion/reconciliation_v1.rs",
         required_fragments: &[
             "pub enum RadrootsNip09SuppressionOutcome",
             "pub enum RadrootsNip09SuppressionReason",
@@ -2122,7 +2140,7 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
         ],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event/src/contract.rs",
+        relative_path: "crates/event/src/contract/registry_v7.rs",
         required_fragments: &[
             "RadrootsReducer::KnowledgeProjection",
             "\"radroots.wiki.article.v1\"",
@@ -2352,7 +2370,7 @@ const FOOD_AVAILABILITY_WITNESSES: [EventBoundarySourceWitness; 6] = [
         required_fragments: &["pub fn authored_food_availability_to_wire_parts("],
     },
     EventBoundarySourceWitness {
-        relative_path: "crates/event_codec/src/food_availability/inbound.rs",
+        relative_path: "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
         required_fragments: &[
             "pub struct RadrootsInboundFoodAvailabilityProjection",
             "pub fn project_verified_food_availability_event(",
@@ -4143,6 +4161,12 @@ fn validate_all_conformance_vectors(
     let canonical_deletion_suppression_path =
         workspace_root.join(DELETION_SUPPRESSION_CONFORMANCE_VECTOR_RELATIVE);
     for path in paths {
+        if SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES
+            .iter()
+            .any(|relative| path == workspace_root.join(relative))
+        {
+            continue;
+        }
         let vector = validate_conformance_vector_file(&path, contract_version)?;
         validate_comment_vector_namespace(&path, &canonical_comment_path, &vector)?;
         validate_deletion_vector_namespace(

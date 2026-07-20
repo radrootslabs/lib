@@ -16,6 +16,7 @@ let
     root = root;
     fileset = lib.fileset.intersection (lib.fileset.fromSource repoSource) (
       lib.fileset.unions [
+        ../../.cargo
         ../../Cargo.toml
         ../../Cargo.lock
         ../../CHANGELOG.md
@@ -102,6 +103,7 @@ let
     "radroots_identity"
     "radroots_replica_schema"
     "radroots_event_codec"
+    "radroots_event_store"
     "radroots_nostr"
     "radroots_nostr_connect"
     "radroots_nostr_signer"

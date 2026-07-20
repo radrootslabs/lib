@@ -408,6 +408,88 @@ targets, kind-`5` immunity, unrelated authors, mixed qualifying requests, and
 input-order independence. The evaluator produces evidence only; neither
 fixture nor operation authorizes a store mutation.
 
+### NIP-09 Durable Reconciliation
+
+Event-store schema version `2` installs `0002_nip09` without changing the
+byte-pinned version-1 schema input. Its reconciliation-v1 hook re-verifies
+every durable raw envelope, rebuilds registry-v7 admission and
+addressable-feed-v1 raw heads, and persists normalized event-coordinate,
+deletion-request, event-target, and address-target facts under a fresh random
+32-byte source generation.
+
+The same generation partitions canonical addressable-head state and its
+append-only transition history. State records the raw head, admission result,
+visible or suppressed outcome, canonical NIP-09 evidence, and exact transition
+cause. Exact event targets are timestamp-independent; address targets retain
+the inclusive request-time cutoff; unauthorized requests remain evidence
+without suppressing another author's event; and kind-`5` requests remain
+immune. Raw envelopes and tags are never rewritten or removed to represent
+suppression.
+
+Initial reconciliation and repeated full rebuilds share one transactional
+marker-first protocol. The marker binds the exact prior generation, immutable
+raw counts and high-water sequence, and global transition floor. An impossible
+deferred foreign-key barrier makes every partial marker state uncommittable;
+the marker can close only after the rebuilt generation is internally complete.
+Successful rebuilds append a fresh generation and retain every historical
+generation, fact, state, and transition as immutable authority.
+
+Schema inspection, migration, rollback, and standalone status bind their
+catalog, ledger, history, and event-store reads explicitly to SQLite's `main`
+database. Before authority access or mutation, each relevant connection rejects
+temporary objects whose name or target table collides with declared
+event-store ownership, the migration ledger, or the reserved
+`radroots_event_store_` namespace using SQLite's ASCII-case-insensitive
+identifier semantics. Unrelated temporary and shared-schema state remains
+caller-owned. Full foreign-key reports may therefore retain unrelated
+shared-schema violations, while a violation whose child table is declared as
+event-store-owned or uses the reserved namespace fails with typed event-store
+integrity evidence.
+
+Projection cursors are bound to the active source generation. A projection
+version change, unbound legacy cursor, or source-generation change requires a
+typed rebuild ticket that captures the target generation and raw high-water
+sequence plus the exact prior cursor revision. Consuming that ticket after the
+rebuild commits the cursor at that captured high-water even if later raw events
+have arrived, then leaves those events for normal catch-up. It rejects
+concurrent cursor modification, replay, generation rotation, and same-value
+ABA replacement.
+
+The byte-pinned reconciliation manifest binds migration `0002`, registry-v7
+inventory, semantic input vectors, frozen v1/v7 source entrypoints, and the
+executable result vector at
+`contracts/conformance/vectors/event_store/nip09_reconciliation.v1.json`.
+It also binds the owned and borrowed transaction wrappers by production AST
+identity. The borrowed wrapper uses a nested savepoint, so a failed ingest
+cannot be ignored and then partially committed by its caller. Owned and
+borrowed ingest paths explicitly roll back a primary ingest failure and retain
+both failures if rollback also fails. The complete
+production AST identities of the versioned reconciliation core and shared
+raw-head storage modules are frozen independently of post-core product
+extensions. Post-core trade and transport-observation orchestration has no
+SQLx authority; it receives a private transaction capability whose fixed
+production methods may reach only literal SQL for the declared operation/table
+pairs, never protocol authority, cursors, migration history, attached
+databases, dynamic SQL, or schema mutation. The capability borrow ends before
+a final authenticated validator compares the core's source/generation
+authority, indexed raw and transition bounds, marker state, and main/temp
+schema versions and returns the receipt. Full cardinality and replay checks
+remain mandatory on explicit migration and rebuild integrity paths instead of
+running full scans for every ingest.
+The migration rejects unbounded local-cache reconciliation before any schema
+change and repeats the same capacity check under its serialized write
+transaction. Event and tag authority are then loaded in checked 512-row pages.
+Candidate heads consider only exact event- and address-target request indices;
+shared matches are merged once in canonical order without cloning request
+payloads.
+Schema inspection validates every applied hook in migration order rather than
+only the newest migration.
+This is local derived-state authority only. It does not assert relay deletion,
+network-wide disappearance, or authorization to mutate a remote store.
+The raw SQL pool is a fully trusted escape hatch rather than a security
+boundary; arbitrary DML or reproduction of the internal maintenance protocol
+is outside the supported mutation contract.
+
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.
 

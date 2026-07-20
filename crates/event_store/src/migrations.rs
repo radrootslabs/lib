@@ -1,4 +1,5 @@
 use crate::RadrootsEventStoreError;
+use crate::generated::nip09_reconciliation_manifest as nip09_manifest;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -6,9 +7,17 @@ pub(crate) const EVENT_STORE_LEDGER_NAME: &str = "radroots_event_store_schema_mi
 pub(crate) const EVENT_STORE_RESERVED_PREFIX: &str = "radroots_event_store_";
 
 pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN: u32 = 1;
-pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 1;
+pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 2;
 
 pub(crate) const EVENT_STORE_LEDGER_DDL: &str = "CREATE TABLE radroots_event_store_schema_migrations (
+  version INTEGER PRIMARY KEY NOT NULL CHECK (version > 0),
+  name TEXT NOT NULL UNIQUE CHECK (length(name) > 0),
+  up_sha256 TEXT NOT NULL CHECK (length(up_sha256) = 64 AND up_sha256 NOT GLOB '*[^0-9a-f]*'),
+  down_sha256 TEXT NOT NULL CHECK (length(down_sha256) = 64 AND down_sha256 NOT GLOB '*[^0-9a-f]*'),
+  schema_sha256 TEXT NOT NULL CHECK (length(schema_sha256) = 64 AND schema_sha256 NOT GLOB '*[^0-9a-f]*')
+) STRICT, WITHOUT ROWID";
+pub(crate) const EVENT_STORE_LEDGER_CREATE_DDL: &str =
+    "CREATE TABLE main.radroots_event_store_schema_migrations (
   version INTEGER PRIMARY KEY NOT NULL CHECK (version > 0),
   name TEXT NOT NULL UNIQUE CHECK (length(name) > 0),
   up_sha256 TEXT NOT NULL CHECK (length(up_sha256) = 64 AND up_sha256 NOT GLOB '*[^0-9a-f]*'),
@@ -90,6 +99,129 @@ pub(crate) const EVENT_STORE_BASELINE_TABLE_NAMES: &[&str] = &[
 
 pub(crate) const EVENT_STORE_BASELINE_FTS5_TABLE_NAMES: &[&str] = &["listing_search_fts"];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EventStoreMigrationHook {
+    None,
+    Nip09ReconciliationV1,
+}
+
+impl EventStoreMigrationHook {
+    pub(crate) const fn id(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Nip09ReconciliationV1 => nip09_manifest::NIP09_RECONCILIATION_HOOK_ID,
+        }
+    }
+
+    pub(crate) const fn manifest_sha256(self) -> Option<&'static str> {
+        match self {
+            Self::None => None,
+            Self::Nip09ReconciliationV1 => {
+                Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256)
+            }
+        }
+    }
+}
+
+pub(crate) const EVENT_STORE_NIP09_OBJECT_NAMES: &[&str] = &[
+    "radroots_event_store_addressable_head_state",
+    "radroots_event_store_addressable_head_transition",
+    "radroots_event_store_addressable_canonical_state",
+    "radroots_event_store_addressable_state_delete_guard",
+    "radroots_event_store_addressable_state_identity_update_guard",
+    "radroots_event_store_addressable_state_insert_guard",
+    "radroots_event_store_addressable_state_old_update_guard",
+    "radroots_event_store_addressable_transition_delete_guard",
+    "radroots_event_store_addressable_transition_floor_guard",
+    "radroots_event_store_addressable_transition_generation_idx",
+    "radroots_event_store_addressable_transition_insert_guard",
+    "radroots_event_store_addressable_transition_kind_idx",
+    "radroots_event_store_addressable_transition_sequence_guard",
+    "radroots_event_store_addressable_transition_update_guard",
+    "radroots_event_store_event_envelopes_append_guard",
+    "radroots_event_store_event_envelopes_delete_guard",
+    "radroots_event_store_event_envelopes_derived_update_guard",
+    "radroots_event_store_event_envelopes_insert_conflict_guard",
+    "radroots_event_store_event_envelopes_kind_pubkey_idx",
+    "radroots_event_store_event_envelopes_raw_update_guard",
+    "radroots_event_store_event_envelopes_seq_event_id_idx",
+    "radroots_event_store_event_head_delete_guard",
+    "radroots_event_store_event_head_insert_guard",
+    "radroots_event_store_event_head_update_guard",
+    "radroots_event_store_event_coordinate",
+    "radroots_event_store_event_coordinate_delete_guard",
+    "radroots_event_store_event_coordinate_insert_guard",
+    "radroots_event_store_event_coordinate_nip09_lookup_idx",
+    "radroots_event_store_event_coordinate_raw_lookup_idx",
+    "radroots_event_store_event_coordinate_update_guard",
+    "radroots_event_store_event_tags_append_guard",
+    "radroots_event_store_event_tags_delete_guard",
+    "radroots_event_store_event_tags_derived_update_guard",
+    "radroots_event_store_event_tags_insert_conflict_guard",
+    "radroots_event_store_event_tags_raw_update_guard",
+    "radroots_event_store_nip09_address_target",
+    "radroots_event_store_nip09_address_target_delete_guard",
+    "radroots_event_store_nip09_address_target_insert_guard",
+    "radroots_event_store_nip09_address_target_lookup_idx",
+    "radroots_event_store_nip09_address_target_update_guard",
+    "radroots_event_store_nip09_event_target",
+    "radroots_event_store_nip09_event_target_delete_guard",
+    "radroots_event_store_nip09_event_target_insert_guard",
+    "radroots_event_store_nip09_event_target_lookup_idx",
+    "radroots_event_store_nip09_event_target_update_guard",
+    "radroots_event_store_nip09_request",
+    "radroots_event_store_nip09_request_author_idx",
+    "radroots_event_store_nip09_request_delete_guard",
+    "radroots_event_store_nip09_request_insert_guard",
+    "radroots_event_store_nip09_request_update_guard",
+    "radroots_event_store_projection_cursor_identity_insert",
+    "radroots_event_store_projection_cursor_identity_update",
+    "radroots_event_store_projection_cursor_delete_guard",
+    "radroots_event_store_projection_cursor_insert_guard",
+    "radroots_event_store_projection_cursor_source",
+    "radroots_event_store_projection_cursor_source_delete_guard",
+    "radroots_event_store_projection_cursor_source_insert_guard",
+    "radroots_event_store_projection_cursor_source_update_guard",
+    "radroots_event_store_projection_cursor_update_guard",
+    "radroots_event_store_source_generation",
+    "radroots_event_store_source_generation_append_guard",
+    "radroots_event_store_source_generation_delete_guard",
+    "radroots_event_store_source_generation_insert_conflict_guard",
+    "radroots_event_store_source_generation_update_guard",
+    "radroots_event_store_source_rebuild_commit_barrier",
+    "radroots_event_store_source_rebuild_commit_barrier_delete_guard",
+    "radroots_event_store_source_rebuild_commit_barrier_insert_guard",
+    "radroots_event_store_source_rebuild_commit_barrier_update_guard",
+    "radroots_event_store_source_rebuild_marker",
+    "radroots_event_store_source_rebuild_marker_delete_guard",
+    "radroots_event_store_source_rebuild_marker_insert_guard",
+    "radroots_event_store_source_rebuild_marker_update_guard",
+    "radroots_event_store_source_state",
+    "radroots_event_store_source_state_active_generation_guard",
+    "radroots_event_store_source_state_authority_update_guard",
+    "radroots_event_store_source_state_delete_guard",
+    "radroots_event_store_source_state_insert_conflict_guard",
+    "radroots_event_store_write_lock",
+    "radroots_event_store_write_lock_delete_guard",
+    "radroots_event_store_write_lock_insert_guard",
+    "radroots_event_store_write_lock_update_guard",
+];
+
+pub(crate) const EVENT_STORE_NIP09_TABLE_NAMES: &[&str] = &[
+    "radroots_event_store_addressable_head_state",
+    "radroots_event_store_addressable_head_transition",
+    "radroots_event_store_event_coordinate",
+    "radroots_event_store_nip09_address_target",
+    "radroots_event_store_nip09_event_target",
+    "radroots_event_store_nip09_request",
+    "radroots_event_store_projection_cursor_source",
+    "radroots_event_store_source_generation",
+    "radroots_event_store_source_rebuild_commit_barrier",
+    "radroots_event_store_source_rebuild_marker",
+    "radroots_event_store_source_state",
+    "radroots_event_store_write_lock",
+];
+
 #[derive(Clone, Copy)]
 pub(crate) struct EventStoreMigration {
     pub(crate) version: u32,
@@ -104,22 +236,49 @@ pub(crate) struct EventStoreMigration {
     pub(crate) owned_object_names: &'static [&'static str],
     pub(crate) owned_table_names: &'static [&'static str],
     pub(crate) fts5_table_names: &'static [&'static str],
+    pub(crate) hook: EventStoreMigrationHook,
+    pub(crate) hook_manifest_sha256: Option<&'static str>,
+    pub(crate) event_contract_registry_version: Option<u32>,
 }
 
-pub(crate) const EVENT_STORE_MIGRATIONS: &[EventStoreMigration] = &[EventStoreMigration {
-    version: 1,
-    name: "event_store",
-    up_sql: include_str!("../migrations/0001_event_store.up.sql"),
-    down_sql: include_str!("../migrations/0001_event_store.down.sql"),
-    up_len: 10_712,
-    down_len: 522,
-    up_sha256: "4c03906a1cffd418a48d40907aa9a1ca51bb41766cff7250c4dfc7c2fd6eddde",
-    down_sha256: "fa84d587f657f601947eaeb9cd239c962a48f6fcdce723588476e8d22f3c1f53",
-    schema_sha256: "5b1f92779640f1a2dbd75e37a96996bda6c8be58883190f69eb3eced22a48f03",
-    owned_object_names: EVENT_STORE_BASELINE_OBJECT_NAMES,
-    owned_table_names: EVENT_STORE_BASELINE_TABLE_NAMES,
-    fts5_table_names: EVENT_STORE_BASELINE_FTS5_TABLE_NAMES,
-}];
+pub(crate) const EVENT_STORE_MIGRATIONS: &[EventStoreMigration] = &[
+    EventStoreMigration {
+        version: 1,
+        name: "event_store",
+        up_sql: include_str!("../migrations/0001_event_store.up.sql"),
+        down_sql: include_str!("../migrations/0001_event_store.down.sql"),
+        up_len: 10_712,
+        down_len: 522,
+        up_sha256: "4c03906a1cffd418a48d40907aa9a1ca51bb41766cff7250c4dfc7c2fd6eddde",
+        down_sha256: "fa84d587f657f601947eaeb9cd239c962a48f6fcdce723588476e8d22f3c1f53",
+        schema_sha256: "5b1f92779640f1a2dbd75e37a96996bda6c8be58883190f69eb3eced22a48f03",
+        owned_object_names: EVENT_STORE_BASELINE_OBJECT_NAMES,
+        owned_table_names: EVENT_STORE_BASELINE_TABLE_NAMES,
+        fts5_table_names: EVENT_STORE_BASELINE_FTS5_TABLE_NAMES,
+        hook: EventStoreMigrationHook::None,
+        hook_manifest_sha256: None,
+        event_contract_registry_version: None,
+    },
+    EventStoreMigration {
+        version: 2,
+        name: "nip09",
+        up_sql: include_str!("../migrations/0002_nip09.up.sql"),
+        down_sql: include_str!("../migrations/0002_nip09.down.sql"),
+        up_len: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH,
+        down_len: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_BYTE_LENGTH,
+        up_sha256: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_SHA256,
+        down_sha256: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_SHA256,
+        schema_sha256: nip09_manifest::NIP09_RECONCILIATION_SCHEMA_SHA256,
+        owned_object_names: EVENT_STORE_NIP09_OBJECT_NAMES,
+        owned_table_names: EVENT_STORE_NIP09_TABLE_NAMES,
+        fts5_table_names: &[],
+        hook: EventStoreMigrationHook::Nip09ReconciliationV1,
+        hook_manifest_sha256: Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256),
+        event_contract_registry_version: Some(
+            nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION,
+        ),
+    },
+];
 
 pub(crate) fn migration_for_version(
     registry: &[EventStoreMigration],
@@ -128,6 +287,34 @@ pub(crate) fn migration_for_version(
     registry
         .iter()
         .find(|migration| migration.version == version)
+}
+
+pub(crate) fn is_event_store_owned_table_name(
+    registry: &[EventStoreMigration],
+    name: &str,
+) -> bool {
+    sqlite_identifier_starts_with(name, EVENT_STORE_RESERVED_PREFIX)
+        || registry
+            .iter()
+            .flat_map(|migration| migration.owned_table_names)
+            .any(|owned| name.eq_ignore_ascii_case(owned))
+}
+
+pub(crate) fn is_event_store_governed_schema_name(
+    registry: &[EventStoreMigration],
+    name: &str,
+) -> bool {
+    name.eq_ignore_ascii_case(EVENT_STORE_LEDGER_NAME)
+        || is_event_store_owned_table_name(registry, name)
+        || registry
+            .iter()
+            .flat_map(|migration| migration.owned_object_names)
+            .any(|owned| name.eq_ignore_ascii_case(owned))
+}
+
+pub(crate) fn sqlite_identifier_starts_with(name: &str, prefix: &str) -> bool {
+    name.get(..prefix.len())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
 }
 
 pub(crate) fn validate_embedded_migration_registry() -> Result<(), RadrootsEventStoreError> {
@@ -143,6 +330,20 @@ pub(crate) fn validate_migration_registry(
     minimum: u32,
     current: u32,
 ) -> Result<(), RadrootsEventStoreError> {
+    if EVENT_STORE_LEDGER_CREATE_DDL.strip_prefix("CREATE TABLE main.")
+        != EVENT_STORE_LEDGER_DDL.strip_prefix("CREATE TABLE ")
+    {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "main-qualified ledger creation DDL does not match canonical catalog DDL"
+                .to_owned(),
+        });
+    }
+    if registry
+        .iter()
+        .any(|migration| migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1)
+    {
+        validate_generated_nip09_manifest_descriptor()?;
+    }
     if minimum == 0 || current < minimum || registry.is_empty() {
         return Err(RadrootsEventStoreError::MigrationRegistryDefect {
             reason: format!(
@@ -243,6 +444,41 @@ pub(crate) fn validate_migration_registry(
             migration.down_sha256,
         )?;
         validate_sha256_literal(migration.version, "schema", migration.schema_sha256)?;
+        if let Some(manifest_sha256) = migration.hook_manifest_sha256 {
+            validate_sha256_literal(migration.version, "hook manifest", manifest_sha256)?;
+        }
+        if migration.hook.id().is_empty()
+            || migration.hook.manifest_sha256() != migration.hook_manifest_sha256
+        {
+            return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                reason: format!(
+                    "migration version {} has invalid `{}` hook manifest identity",
+                    migration.version,
+                    migration.hook.id()
+                ),
+            });
+        }
+        match (
+            migration.hook,
+            migration.hook_manifest_sha256,
+            migration.event_contract_registry_version,
+        ) {
+            (EventStoreMigrationHook::None, None, None)
+            | (
+                EventStoreMigrationHook::Nip09ReconciliationV1,
+                Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256),
+                Some(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION),
+            ) => {}
+            (hook, manifest, registry_version) => {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration version {} hook `{}` declares unsupported manifest {manifest:?} or historical event contract registry version {registry_version:?}",
+                        migration.version,
+                        hook.id(),
+                    ),
+                });
+            }
+        }
         expected_version = expected_version.checked_add(1).ok_or_else(|| {
             RadrootsEventStoreError::MigrationRegistryDefect {
                 reason: "migration version overflow".to_owned(),
@@ -257,6 +493,147 @@ pub(crate) fn validate_migration_registry(
                 current
             ),
         });
+    }
+    Ok(())
+}
+
+fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventStoreError> {
+    let bytes = nip09_manifest::NIP09_RECONCILIATION_MANIFEST_JSON.as_bytes();
+    if bytes.len() != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_BYTE_LENGTH {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated NIP-09 manifest byte length is inconsistent".to_owned(),
+        });
+    }
+    validate_sha256_literal(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION,
+        "hook manifest",
+        nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256,
+    )?;
+    if sha256_hex(bytes) != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256 {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated NIP-09 manifest digest is inconsistent".to_owned(),
+        });
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+        RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: format!("generated NIP-09 manifest JSON is invalid: {error}"),
+        }
+    })?;
+    let up_byte_length = u64::try_from(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH,
+    )
+    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+        reason: "generated NIP-09 migration up byte length is out of range".to_owned(),
+    })?;
+    let down_byte_length = u64::try_from(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_BYTE_LENGTH,
+    )
+    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+        reason: "generated NIP-09 migration down byte length is out of range".to_owned(),
+    })?;
+    let reconciliation_version = u64::try_from(nip09_manifest::NIP09_RECONCILIATION_VERSION)
+        .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated NIP-09 reconciliation version is out of range".to_owned(),
+        })?;
+    let addressable_feed_version = u64::try_from(
+        nip09_manifest::NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
+    )
+    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+        reason: "generated NIP-09 addressable feed version is out of range".to_owned(),
+    })?;
+    let expected_numbers = [
+        (
+            "/schema_version",
+            u64::from(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SCHEMA_VERSION),
+        ),
+        (
+            "/migration/version",
+            u64::from(nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION),
+        ),
+        ("/migration/up_byte_length", up_byte_length),
+        ("/migration/down_byte_length", down_byte_length),
+        ("/profile/reconciliation_version", reconciliation_version),
+        (
+            "/profile/addressable_feed_version",
+            addressable_feed_version,
+        ),
+        (
+            "/profile/event_contract_registry_version",
+            u64::from(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION),
+        ),
+    ];
+    let expected_strings = [
+        ("/hook_id", nip09_manifest::NIP09_RECONCILIATION_HOOK_ID),
+        (
+            "/migration/name",
+            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_NAME,
+        ),
+        (
+            "/migration/up_sha256",
+            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_SHA256,
+        ),
+        (
+            "/migration/down_sha256",
+            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_SHA256,
+        ),
+        (
+            "/migration/schema_sha256",
+            nip09_manifest::NIP09_RECONCILIATION_SCHEMA_SHA256,
+        ),
+        (
+            "/result_vector/sha256",
+            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_SHA256,
+        ),
+        (
+            "/result_vector/executor_id",
+            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_ID,
+        ),
+        (
+            "/result_vector/executor_sha256",
+            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_SHA256,
+        ),
+    ];
+    let numbers_match = expected_numbers.iter().all(|(pointer, expected)| {
+        manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
+    });
+    let strings_match = expected_strings.iter().all(|(pointer, expected)| {
+        manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
+    });
+    if nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SCHEMA_VERSION != 1
+        || nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION != 2
+        || nip09_manifest::NIP09_RECONCILIATION_VERSION <= 0
+        || nip09_manifest::NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION <= 0
+        || !numbers_match
+        || !strings_match
+    {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated NIP-09 manifest metadata is inconsistent".to_owned(),
+        });
+    }
+    for (field, digest) in [
+        (
+            "migration up",
+            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_SHA256,
+        ),
+        (
+            "migration down",
+            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_SHA256,
+        ),
+        ("schema", nip09_manifest::NIP09_RECONCILIATION_SCHEMA_SHA256),
+        (
+            "result vector",
+            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_SHA256,
+        ),
+        (
+            "result-vector executor",
+            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_SHA256,
+        ),
+    ] {
+        validate_sha256_literal(
+            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION,
+            field,
+            digest,
+        )?;
     }
     Ok(())
 }
@@ -497,7 +874,7 @@ mod migration_framework {
     #[test]
     fn embedded_registry_is_contiguous_and_byte_pinned() {
         validate_embedded_migration_registry().expect("valid registry");
-        assert_eq!(EVENT_STORE_MIGRATIONS.len(), 1);
+        assert_eq!(EVENT_STORE_MIGRATIONS.len(), 2);
         assert_eq!(EVENT_STORE_MIGRATIONS[0].version, 1);
         assert_eq!(EVENT_STORE_MIGRATIONS[0].name, "event_store");
         assert_eq!(EVENT_STORE_MIGRATIONS[0].up_len, FROZEN_V1_UP_LEN);
@@ -512,6 +889,48 @@ mod migration_framework {
             EVENT_STORE_MIGRATIONS[0].owned_object_names.len(),
             FROZEN_V1_OBJECT_COUNT
         );
+        assert_eq!(EVENT_STORE_MIGRATIONS[1].version, 2);
+        assert_eq!(EVENT_STORE_MIGRATIONS[1].name, "nip09");
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[1].hook,
+            EventStoreMigrationHook::Nip09ReconciliationV1
+        );
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[1].event_contract_registry_version,
+            Some(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION)
+        );
+    }
+
+    #[test]
+    fn governed_name_matching_uses_sqlite_ascii_identifier_semantics() {
+        for name in [
+            "event_envelopes",
+            "EVENT_ENVELOPES",
+            "EvEnT_EnVeLoPeS",
+            "RADROOTS_EVENT_STORE_CALLER_PROBE",
+            "RaDrOoTs_EvEnT_StOrE_caller_probe",
+        ] {
+            assert!(is_event_store_owned_table_name(
+                EVENT_STORE_MIGRATIONS,
+                name
+            ));
+            assert!(is_event_store_governed_schema_name(
+                EVENT_STORE_MIGRATIONS,
+                name
+            ));
+        }
+        assert!(is_event_store_governed_schema_name(
+            EVENT_STORE_MIGRATIONS,
+            "RADROOTS_EVENT_STORE_SCHEMA_MIGRATIONS"
+        ));
+        assert!(!is_event_store_governed_schema_name(
+            EVENT_STORE_MIGRATIONS,
+            "event_envelopes_caller"
+        ));
+        assert!(!is_event_store_governed_schema_name(
+            EVENT_STORE_MIGRATIONS,
+            "évent_envelopes"
+        ));
     }
 
     #[test]

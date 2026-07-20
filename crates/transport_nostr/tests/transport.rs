@@ -122,7 +122,7 @@ impl RadrootsRelayPublishAdapter for UnknownRelayReceiptPublishAdapter {
     {
         Box::pin(async move {
             let relay = request
-                .targets
+                .targets()
                 .relays()
                 .first()
                 .expect("fixture target")
@@ -142,20 +142,122 @@ impl RadrootsRelayPublishAdapter for UnknownRelayReceiptPublishAdapter {
     }
 }
 
+struct DuplicateRelayReceiptPublishAdapter;
+
+impl RadrootsRelayPublishAdapter for DuplicateRelayReceiptPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async move {
+            let relay = request
+                .targets()
+                .relays()
+                .first()
+                .expect("fixture target")
+                .as_str()
+                .to_owned();
+            Ok(vec![
+                RadrootsRelayPublishRelayReceipt::attempted(
+                    relay.clone(),
+                    RadrootsRelayOutcome::accepted(),
+                ),
+                RadrootsRelayPublishRelayReceipt::attempted(
+                    format!("{relay}/"),
+                    RadrootsRelayOutcome::accepted(),
+                ),
+            ])
+        })
+    }
+}
+
+struct InvalidRelayReceiptPublishAdapter;
+
+impl RadrootsRelayPublishAdapter for InvalidRelayReceiptPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        _request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async {
+            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
+                "not a relay URL",
+                RadrootsRelayOutcome::accepted(),
+            )])
+        })
+    }
+}
+
+struct SkippedAcceptedRelayReceiptPublishAdapter;
+
+impl RadrootsRelayPublishAdapter for SkippedAcceptedRelayReceiptPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async move {
+            let relay = request
+                .targets()
+                .relays()
+                .first()
+                .expect("fixture target")
+                .as_str();
+            Ok(vec![RadrootsRelayPublishRelayReceipt::skipped(
+                relay,
+                RadrootsRelayOutcome::accepted(),
+            )])
+        })
+    }
+}
+
+struct AttemptedSkippedRelayReceiptPublishAdapter;
+
+impl RadrootsRelayPublishAdapter for AttemptedSkippedRelayReceiptPublishAdapter {
+    fn publish<'a>(
+        &'a self,
+        request: RadrootsRelayPublishRequest,
+    ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
+    {
+        Box::pin(async move {
+            let relay = request
+                .targets()
+                .relays()
+                .first()
+                .expect("fixture target")
+                .as_str();
+            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
+                relay,
+                RadrootsRelayOutcome::skipped_already_accepted("already accepted"),
+            )])
+        })
+    }
+}
+
 #[derive(Clone)]
 struct ScriptedTransport {
+    kind: RadrootsTransportKind,
     outcomes: Vec<RadrootsTransportOutcome>,
 }
 
 impl ScriptedTransport {
     fn new(outcomes: Vec<RadrootsTransportOutcome>) -> Self {
-        Self { outcomes }
+        Self {
+            kind: RadrootsTransportKind::Nostr,
+            outcomes,
+        }
+    }
+
+    fn with_kind(mut self, kind: RadrootsTransportKind) -> Self {
+        self.kind = kind;
+        self
     }
 }
 
 impl RadrootsTransport for ScriptedTransport {
     fn transport_kind(&self) -> RadrootsTransportKind {
-        RadrootsTransportKind::Nostr
+        self.kind.clone()
     }
 
     fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
@@ -176,17 +278,89 @@ impl RadrootsTransport for ScriptedTransport {
     ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
         Box::pin(async move {
             let target_receipts = request
-                .target_set
+                .target_set()
                 .targets()
                 .iter()
                 .cloned()
                 .zip(self.outcomes.iter().cloned())
                 .map(|(target, outcome)| RadrootsTransportTargetReceipt::new(target, outcome))
                 .collect();
-            Ok(RadrootsTransportDeliveryReceipt {
-                request_id: request.request_id,
-                target_receipts,
-            })
+            RadrootsTransportDeliveryReceipt::for_request(&request, target_receipts)
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        _request: RadrootsTransportFetchRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        Box::pin(async { Err(RadrootsTransportError::UnsupportedOperation) })
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ForgedDeliveryReceipt {
+    RequestId,
+    TargetSet,
+}
+
+struct ForgedReceiptTransport {
+    forged: ForgedDeliveryReceipt,
+}
+
+impl RadrootsTransport for ForgedReceiptTransport {
+    fn transport_kind(&self) -> RadrootsTransportKind {
+        RadrootsTransportKind::Nostr
+    }
+
+    fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        Box::pin(async {
+            Ok(RadrootsTransportStatus::new(
+                RadrootsTransportKind::Nostr,
+                true,
+                RadrootsTransportImplementationState::Real,
+                true,
+                "forged receipt fixture",
+            ))
+        })
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        request: RadrootsTransportDeliveryRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        Box::pin(async move {
+            match self.forged {
+                ForgedDeliveryReceipt::RequestId => RadrootsTransportDeliveryReceipt::new(
+                    "forged-request",
+                    request.target_set().clone(),
+                    request
+                        .target_set()
+                        .targets()
+                        .iter()
+                        .cloned()
+                        .map(|target| {
+                            RadrootsTransportTargetReceipt::new(
+                                target,
+                                RadrootsTransportOutcome::new(
+                                    RadrootsTransportOutcomeKind::Accepted,
+                                ),
+                            )
+                        })
+                        .collect(),
+                ),
+                ForgedDeliveryReceipt::TargetSet => {
+                    let target = nostr_target(RELAY_TERTIARY_WSS);
+                    RadrootsTransportDeliveryReceipt::new(
+                        request.request_id(),
+                        RadrootsTransportTargetSet::new(vec![target.clone()])
+                            .expect("forged target set"),
+                        vec![RadrootsTransportTargetReceipt::new(
+                            target,
+                            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+                        )],
+                    )
+                }
+            }
         })
     }
 
@@ -419,6 +593,19 @@ fn unsupported_relay_fetch_filter(limit: usize) -> RadrootsNostrFilter {
         .limit(limit)
 }
 
+fn fixture_relay_targets() -> RadrootsRelayTargetSet {
+    RadrootsRelayTargetSet::new(
+        [RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS],
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("fixture relay targets")
+}
+
+fn primary_relay_target() -> RadrootsRelayTargetSet {
+    RadrootsRelayTargetSet::new([RELAY_PRIMARY_WSS], RadrootsRelayUrlPolicy::Public)
+        .expect("primary relay target")
+}
+
 fn fixture_relay_fetch_request(
     observed_at_ms: i64,
     max_events: usize,
@@ -426,6 +613,7 @@ fn fixture_relay_fetch_request(
     RadrootsRelayFetchRequest::fetch(
         observed_at_ms,
         max_events,
+        fixture_relay_targets(),
         [
             post_relay_fetch_filter(max_events),
             unsupported_relay_fetch_filter(max_events),
@@ -438,6 +626,7 @@ fn post_relay_fetch_request(observed_at_ms: i64, max_events: usize) -> RadrootsR
     RadrootsRelayFetchRequest::fetch(
         observed_at_ms,
         max_events,
+        fixture_relay_targets(),
         [post_relay_fetch_filter(max_events)],
     )
     .expect("post relay fetch request")
@@ -483,6 +672,14 @@ fn relay_url_validation_and_target_normalization() {
         RadrootsRelayUrl::parse("ws://192.168.1.10:7777", RadrootsRelayUrlPolicy::Localhost)
             .is_err()
     );
+    assert!(
+        RadrootsRelayUrl::parse("wss://192.168.1.10", RadrootsRelayUrlPolicy::Localhost).is_err()
+    );
+    assert!(
+        RadrootsRelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Localhost)
+            .is_err()
+    );
+    assert!(RadrootsRelayUrl::parse("wss://localhost", RadrootsRelayUrlPolicy::Localhost).is_ok());
     assert!(matches!(
         RadrootsRelayUrl::parse("wss://127.0.0.1", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
@@ -506,14 +703,28 @@ fn relay_url_validation_and_target_normalization() {
         "wss://255.255.255.255",
         "wss://100.64.0.1",
         "wss://192.0.0.8",
+        "wss://192.88.99.2",
         "wss://198.18.0.1",
         "wss://240.0.0.1",
         "wss://[::]",
+        "wss://[64:ff9b::7f00:1]",
+        "wss://[64:ff9b::a00:1]",
+        "wss://[64:ff9b::5db8:d822]",
+        "wss://[64:ff9b:1::1]",
+        "wss://[100::1]",
+        "wss://[100:0:0:1::1]",
         "wss://[ff02::1]",
         "wss://[fe80::1]",
         "wss://[2001:db8::1]",
         "wss://[2001:1::1]",
+        "wss://[2002::1]",
+        "wss://[3fff::1]",
+        "wss://[5f00::1]",
         "wss://[::ffff:192.168.1.10]",
+        "wss://localhost",
+        "wss://relay.local",
+        "wss://relay.home.arpa",
+        "wss://relay",
     ] {
         assert!(matches!(
             RadrootsRelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::Public),
@@ -546,9 +757,18 @@ fn relay_url_validation_and_target_normalization() {
                 .expect("public ipv6"),
         )])
         .expect("public resolved ipv6");
-    public_relay
-        .validate_public_resolved_ip_addrs(Vec::<IpAddr>::new())
-        .expect("empty resolved set");
+    assert!(matches!(
+        public_relay.validate_public_resolved_ip_addrs([IpAddr::V6(
+            "64:ff9b::5db8:d822"
+                .parse::<Ipv6Addr>()
+                .expect("translation prefix"),
+        )]),
+        Err(RadrootsRelayTransportError::RelayUrlResolvedForbiddenDestination { .. })
+    ));
+    assert!(matches!(
+        public_relay.validate_public_resolved_ip_addrs(Vec::<IpAddr>::new()),
+        Err(RadrootsRelayTransportError::RelayUrlResolvedNoAddresses { .. })
+    ));
 
     assert!(
         RadrootsRelayUrl::parse("https://relay.example.com", RadrootsRelayUrlPolicy::Public)
@@ -607,12 +827,7 @@ fn relay_url_validation_and_target_normalization() {
     );
 
     let targets = RadrootsRelayTargetSet::new(
-        vec![
-            RELAY_TERTIARY_WSS,
-            RELAY_PRIMARY_WSS,
-            RELAY_PRIMARY_WSS,
-            RELAY_SECONDARY_WSS,
-        ],
+        vec![RELAY_TERTIARY_WSS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
         RadrootsRelayUrlPolicy::Public,
     )
     .expect("targets");
@@ -626,7 +841,6 @@ fn relay_url_validation_and_target_normalization() {
     );
 
     let from_urls = RadrootsRelayTargetSet::from_urls(vec![
-        relay_path.clone(),
         relay_path.clone(),
         RadrootsRelayUrl::parse(RELAY_SECONDARY_WSS, RadrootsRelayUrlPolicy::Public)
             .expect("secondary"),
@@ -647,6 +861,70 @@ fn relay_url_validation_and_target_normalization() {
         RadrootsRelayTargetSet::from_urls(Vec::new()),
         Err(RadrootsRelayTransportError::EmptyTargetSet)
     ));
+    assert!(matches!(
+        RadrootsRelayTargetSet::new(
+            [RELAY_PRIMARY_WSS, "WSS://Relay.Example.com/"],
+            RadrootsRelayUrlPolicy::Public,
+        ),
+        Err(RadrootsRelayTransportError::DuplicateRelayUrl { .. })
+    ));
+    assert!(matches!(
+        RadrootsRelayTargetSet::from_urls(vec![relay_path.clone(), relay_path]),
+        Err(RadrootsRelayTransportError::DuplicateRelayUrl { .. })
+    ));
+}
+
+#[test]
+fn transport_target_and_relay_adapter_share_canonical_url_identity() {
+    for (raw, policy) in [
+        (
+            "WSS://Relay.Example.com:443/",
+            RadrootsRelayUrlPolicy::Public,
+        ),
+        (
+            "wss://relay.example.com/nostr/%2Ffeed",
+            RadrootsRelayUrlPolicy::Public,
+        ),
+        (
+            "WSS://[2001:4860:4860:0:0:0:0:8888]:443/",
+            RadrootsRelayUrlPolicy::Public,
+        ),
+        ("ws://LOCALHOST:80/", RadrootsRelayUrlPolicy::Localhost),
+        (
+            "ws://[0:0:0:0:0:0:0:1]:7777/",
+            RadrootsRelayUrlPolicy::Localhost,
+        ),
+    ] {
+        let target = RadrootsTransportTarget::nostr_relay(raw).expect("transport target");
+        let relay = RadrootsRelayUrl::parse(raw, policy).expect("relay URL");
+        assert_eq!(target.uri().as_str(), relay.as_str(), "{raw}");
+    }
+
+    for raw in [
+        " wss://relay.example.com",
+        "wss://relay.example.com ",
+        "wss://relay.example.com/a/./b",
+        "wss://relay.example.com/a/../b",
+        "wss://relay.example.com/a/%2E/b",
+        "wss://relay.example.com\\path",
+        "wss://relay.example.com:0",
+        "wss://relay.example.com:01",
+        "wss://relay.example.com.",
+        "wss://xn--fa-hia.example.com",
+        "wss://faß.example.com",
+        "wss://%65xample.com",
+        "wss://relay.example.com/%2f",
+        "wss://relay.example.com?subscription=1",
+    ] {
+        assert!(
+            RadrootsTransportTarget::nostr_relay(raw).is_err(),
+            "transport target accepted {raw}"
+        );
+        assert!(
+            RadrootsRelayUrl::parse(raw, RadrootsRelayUrlPolicy::Public).is_err(),
+            "relay adapter accepted {raw}"
+        );
+    }
 }
 
 #[test]
@@ -782,6 +1060,12 @@ fn outcome_prefix_classification_covers_required_kinds() {
         "connection_failed"
     );
     assert_eq!(
+        RadrootsRelayOutcome::unknown("adapter omitted receipt")
+            .to_transport_outcome()
+            .kind,
+        radroots_transport::RadrootsTransportOutcomeKind::TransportUnavailable
+    );
+    assert_eq!(
         RadrootsRelayOutcome::relay_url_rejected("unsafe")
             .kind
             .as_str(),
@@ -822,6 +1106,7 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
     let receipt = publish_signed_event(
         &adapter,
         radroots_transport_nostr::RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_000)
+            .expect("publish request")
             .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::quorum_accepted(2)),
     )
     .await
@@ -859,7 +1144,8 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
             .expect("payload"),
         RadrootsTransportTargetSet::new(vec![target.clone()]).expect("targets"),
         RadrootsTransportSatisfactionPolicy::all_accepted(),
-    );
+    )
+    .expect("delivery request");
 
     let receipt = transport.deliver(request).await.expect("delivery");
     let status = transport.status().await.expect("status");
@@ -869,11 +1155,11 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
         vec![signed.raw_json().to_owned()]
     );
     assert_eq!(status, expected_status);
-    assert_eq!(receipt.request_id, "facade-request-1");
-    assert_eq!(receipt.target_receipts.len(), 1);
-    assert_eq!(receipt.target_receipts[0].target, target);
+    assert_eq!(receipt.request_id(), "facade-request-1");
+    assert_eq!(receipt.target_receipts().len(), 1);
+    assert_eq!(receipt.target_receipts()[0].target, target);
     assert_eq!(
-        receipt.target_receipts[0].outcome.kind,
+        receipt.target_receipts()[0].outcome.kind,
         radroots_transport::RadrootsTransportOutcomeKind::Accepted
     );
     assert!(
@@ -924,44 +1210,51 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
     let target_set =
         RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)]).expect("targets");
     let payload_error = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-payload",
-            RadrootsTransportPayload::opaque_bytes("not-signed-event", [1, 2, 3]).expect("payload"),
-            target_set,
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-payload",
+                RadrootsTransportPayload::opaque_bytes("not-signed-event", [1, 2, 3])
+                    .expect("payload"),
+                target_set,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect_err("payload rejected");
     assert_eq!(payload_error, RadrootsTransportError::InvalidPayloadBytes);
 
     let non_nostr_target = RadrootsTransportTarget::reticulum().expect("reticulum target");
     let target_error = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-target",
-            RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id_str(),
-                signed.raw_json(),
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-target",
+                RadrootsTransportPayload::unchecked_signed_event_json(
+                    signed.id_str(),
+                    signed.raw_json(),
+                )
+                .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![non_nostr_target]).expect("targets"),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
             )
-            .expect("payload"),
-            RadrootsTransportTargetSet::new(vec![non_nostr_target]).expect("targets"),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+            .expect("delivery request"),
+        )
         .await
         .expect_err("target rejected");
     assert_eq!(target_error, RadrootsTransportError::InvalidTargetUri);
 
     let invalid_json_error = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-invalid-json",
-            RadrootsTransportPayload::SignedEventJson {
-                event_id: signed.id_str().to_owned(),
-                raw_json: "{}".to_owned(),
-                digest: "00".repeat(32),
-            },
-            RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)])
-                .expect("targets"),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-invalid-json",
+                RadrootsTransportPayload::unchecked_signed_event_json(signed.id_str(), "{}")
+                    .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)])
+                    .expect("targets"),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect_err("invalid event json rejected");
     assert_eq!(
@@ -970,17 +1263,20 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
     );
 
     let mismatched_id_error = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-mismatched-id",
-            RadrootsTransportPayload::SignedEventJson {
-                event_id: "00".repeat(32),
-                raw_json: signed.raw_json().to_owned(),
-                digest: "00".repeat(32),
-            },
-            RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)])
-                .expect("targets"),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-mismatched-id",
+                RadrootsTransportPayload::unchecked_signed_event_json(
+                    "00".repeat(32),
+                    signed.raw_json(),
+                )
+                .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)])
+                    .expect("targets"),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect_err("mismatched event id rejected");
     assert_eq!(
@@ -993,33 +1289,39 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
     tampered["content"] = serde_json::Value::String("tampered".to_owned());
     let tampered_raw = serde_json::to_string(&tampered).expect("tampered event json");
     let tampered_error = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-tampered-event",
-            RadrootsTransportPayload::SignedEventJson {
-                event_id: signed.id_str().to_owned(),
-                raw_json: tampered_raw,
-                digest: "00".repeat(32),
-            },
-            RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)])
-                .expect("targets"),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-tampered-event",
+                RadrootsTransportPayload::unchecked_signed_event_json(
+                    signed.id_str(),
+                    tampered_raw,
+                )
+                .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)])
+                    .expect("targets"),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect_err("tampered event rejected");
     assert_eq!(tampered_error, RadrootsTransportError::InvalidPayloadBytes);
 
     let forbidden_target_error = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-forbidden-target",
-            RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id_str(),
-                signed.raw_json(),
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-forbidden-target",
+                RadrootsTransportPayload::unchecked_signed_event_json(
+                    signed.id_str(),
+                    signed.raw_json(),
+                )
+                .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![nostr_target("wss://127.0.0.1")])
+                    .expect("targets"),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
             )
-            .expect("payload"),
-            RadrootsTransportTargetSet::new(vec![nostr_target("wss://127.0.0.1")])
-                .expect("targets"),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+            .expect("delivery request"),
+        )
         .await
         .expect_err("forbidden relay rejected");
     assert_eq!(
@@ -1028,20 +1330,23 @@ async fn nostr_transport_facade_rejects_unsupported_payloads_and_targets() {
     );
 
     let local_receipt = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-request-local-relay",
-            RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id_str(),
-                signed.raw_json(),
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-request-local-relay",
+                RadrootsTransportPayload::unchecked_signed_event_json(
+                    signed.id_str(),
+                    signed.raw_json(),
+                )
+                .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![nostr_target("ws://127.0.0.1:21002")])
+                    .expect("targets"),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
             )
-            .expect("payload"),
-            RadrootsTransportTargetSet::new(vec![nostr_target("ws://127.0.0.1:21002")])
-                .expect("targets"),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+            .expect("delivery request"),
+        )
         .await
         .expect("localhost relay accepted");
-    assert_eq!(local_receipt.target_receipts.len(), 1);
+    assert_eq!(local_receipt.target_receipts().len(), 1);
 }
 
 #[tokio::test]
@@ -1058,42 +1363,51 @@ async fn nostr_transport_facade_preserves_adapter_failure_and_omission_evidence(
 
     let transport = RadrootsNostrTransport::new(TransportFailurePublishAdapter);
     let failed = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-transport-failure",
-            payload.clone(),
-            targets.clone(),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-transport-failure",
+                payload.clone(),
+                targets.clone(),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect("failure receipts");
-    assert_eq!(failed.target_receipts.len(), 2);
-    assert!(failed.target_receipts.iter().all(|receipt| {
+    assert_eq!(failed.target_receipts().len(), 2);
+    assert!(failed.target_receipts().iter().all(|receipt| {
         receipt.outcome.kind == RadrootsTransportOutcomeKind::ConnectionFailed
             && receipt.status == RadrootsTransportDeliveryTargetStatus::FailedRetryable
     }));
 
     let partial = RadrootsNostrTransport::new(PartialPublishAdapter)
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-partial",
-            payload.clone(),
-            targets.clone(),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-partial",
+                payload.clone(),
+                targets.clone(),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect("partial receipts");
-    assert_eq!(partial.target_receipts.len(), 2);
+    assert_eq!(partial.target_receipts().len(), 2);
     assert_eq!(
-        partial.target_receipts[1].outcome.kind,
-        RadrootsTransportOutcomeKind::RouteUnavailable
+        partial.target_receipts()[1].outcome.kind,
+        RadrootsTransportOutcomeKind::TransportUnavailable
     );
 
     let error = RadrootsNostrTransport::new(NostrJsonFailurePublishAdapter)
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-json-failure",
-            payload,
-            targets,
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        ))
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-json-failure",
+                payload,
+                targets,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect("delivery request"),
+        )
         .await
         .expect_err("adapter JSON error");
     assert_eq!(error, RadrootsTransportError::InvalidPayloadBytes);
@@ -1105,28 +1419,31 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
     let target = nostr_target(RELAY_PRIMARY_WSS);
     let policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
-        vec![target.fingerprint.clone()],
+        vec![target.fingerprint().clone()],
     )
     .expect("required target policy");
     let transport = RadrootsNostrTransport::new(SlashSpelledRelayReceiptPublishAdapter);
     let receipt = transport
-        .deliver(RadrootsTransportDeliveryRequest::new(
-            "facade-canonical-receipt",
-            RadrootsTransportPayload::unchecked_signed_event_json(
-                signed.id_str(),
-                signed.raw_json(),
+        .deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "facade-canonical-receipt",
+                RadrootsTransportPayload::unchecked_signed_event_json(
+                    signed.id_str(),
+                    signed.raw_json(),
+                )
+                .expect("payload"),
+                RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
+                policy.clone(),
             )
-            .expect("payload"),
-            RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
-            policy.clone(),
-        ))
+            .expect("delivery request"),
+        )
         .await
         .expect("delivery");
 
-    assert_eq!(receipt.target_receipts.len(), 1);
-    assert_eq!(receipt.target_receipts[0].target, target);
+    assert_eq!(receipt.target_receipts().len(), 1);
+    assert_eq!(receipt.target_receipts()[0].target, target);
     assert_eq!(
-        receipt.target_receipts[0].status,
+        receipt.target_receipts()[0].status,
         radroots_transport::RadrootsTransportDeliveryTargetStatus::Accepted
     );
     assert!(receipt.is_satisfied_by(&policy).expect("satisfaction"));
@@ -1139,6 +1456,7 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
                 .expect("targets"),
             1_070,
         )
+        .expect("publish request")
         .with_satisfaction_policy(policy),
     )
     .await
@@ -1155,7 +1473,7 @@ async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
     let second = scoped_nostr_target(RELAY_PRIMARY_WSS, "local_food_farmers", "farmers");
     let policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
-        vec![first.fingerprint.clone(), second.fingerprint.clone()],
+        vec![first.fingerprint().clone(), second.fingerprint().clone()],
     )
     .expect("required targets");
     let request = RadrootsTransportDeliveryRequest::new(
@@ -1164,13 +1482,14 @@ async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
             .expect("payload"),
         RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("targets"),
         policy.clone(),
-    );
+    )
+    .expect("delivery request");
 
     let receipt = transport.deliver(request).await.expect("delivery");
 
-    assert_eq!(receipt.target_receipts.len(), 2);
-    assert_eq!(receipt.target_receipts[0].target, first);
-    assert_eq!(receipt.target_receipts[1].target, second);
+    assert_eq!(receipt.target_receipts().len(), 2);
+    assert_eq!(receipt.target_receipts()[0].target, first);
+    assert_eq!(receipt.target_receipts()[1].target, second);
     assert!(receipt.is_satisfied_by(&policy).expect("satisfaction"));
     assert_eq!(adapter.captured_raw_events().len(), 1);
 }
@@ -1191,6 +1510,7 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     let receipt = publish_signed_event(
         &adapter,
         RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_050)
+            .expect("publish request")
             .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
     )
     .await
@@ -1219,7 +1539,8 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
             RadrootsRelayTargetSet::new(vec![RELAY_PRIMARY_WSS], RadrootsRelayUrlPolicy::Public)
                 .expect("targets"),
             1_060,
-        ),
+        )
+        .expect("publish request"),
     )
     .await
     .expect_err("transport failure");
@@ -1245,13 +1566,15 @@ async fn publish_required_target_policy_uses_relay_fingerprints() {
 
     let receipt = publish_signed_event(
         &adapter,
-        RadrootsRelayPublishRequest::new(signed, targets, 1_070).with_satisfaction_policy(
-            RadrootsTransportSatisfactionPolicy::required_targets(
-                RadrootsTransportSatisfactionClass::Accepted,
-                vec![required_target.fingerprint],
-            )
-            .expect("required relay policy"),
-        ),
+        RadrootsRelayPublishRequest::new(signed, targets, 1_070)
+            .expect("publish request")
+            .with_satisfaction_policy(
+                RadrootsTransportSatisfactionPolicy::required_targets(
+                    RadrootsTransportSatisfactionClass::Accepted,
+                    vec![required_target.fingerprint().clone()],
+                )
+                .expect("required relay policy"),
+            ),
     )
     .await
     .expect("publish");
@@ -1273,6 +1596,7 @@ async fn publish_all_policy_uses_requested_target_count() {
     let receipt = publish_signed_event(
         &PartialPublishAdapter,
         RadrootsRelayPublishRequest::new(signed.clone(), targets.clone(), 1_080)
+            .expect("publish request")
             .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
     )
     .await
@@ -1280,12 +1604,20 @@ async fn publish_all_policy_uses_requested_target_count() {
 
     assert_eq!(receipt.attempted_count, 1);
     assert_eq!(receipt.accepted_count, 1);
+    assert_eq!(receipt.retryable_count, 1);
     assert_eq!(receipt.quorum, 2);
     assert!(!receipt.quorum_met);
+    assert_eq!(receipt.relays.len(), 2);
+    assert!(!receipt.relays[1].attempted);
+    assert_eq!(
+        receipt.relays[1].outcome.kind,
+        RadrootsRelayOutcomeKind::Unknown
+    );
 
     let no_wait = publish_signed_event(
         &PartialPublishAdapter,
         RadrootsRelayPublishRequest::new(signed, targets, 1_081)
+            .expect("publish request")
             .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::NoWait),
     )
     .await
@@ -1294,14 +1626,130 @@ async fn publish_all_policy_uses_requested_target_count() {
     assert!(no_wait.quorum_met);
 }
 
+#[tokio::test]
+async fn publish_rejects_untrusted_adapter_receipt_provenance() {
+    let signed = signed_post("adapter provenance");
+    let request = || {
+        RadrootsRelayPublishRequest::new(signed.clone(), primary_relay_target(), 1_090)
+            .expect("publish request")
+    };
+
+    assert!(matches!(
+        publish_signed_event(&UnknownRelayReceiptPublishAdapter, request()).await,
+        Err(RadrootsRelayTransportError::UnexpectedPublishReceiptRelayUrl { url })
+            if url == RELAY_TERTIARY_WSS
+    ));
+    assert!(matches!(
+        publish_signed_event(&DuplicateRelayReceiptPublishAdapter, request()).await,
+        Err(RadrootsRelayTransportError::DuplicatePublishReceiptRelayUrl { url })
+            if url == RELAY_PRIMARY_WSS
+    ));
+    assert!(matches!(
+        publish_signed_event(&InvalidRelayReceiptPublishAdapter, request()).await,
+        Err(RadrootsRelayTransportError::InvalidPublishReceiptRelayUrl { url, .. })
+            if url == "not a relay URL"
+    ));
+    assert!(matches!(
+        publish_signed_event(&SkippedAcceptedRelayReceiptPublishAdapter, request()).await,
+        Err(RadrootsRelayTransportError::InvalidPublishReceiptAttemptState { url })
+            if url == RELAY_PRIMARY_WSS
+    ));
+    assert!(matches!(
+        publish_signed_event(&AttemptedSkippedRelayReceiptPublishAdapter, request()).await,
+        Err(RadrootsRelayTransportError::InvalidPublishReceiptAttemptState { url })
+            if url == RELAY_PRIMARY_WSS
+    ));
+}
+
+#[test]
+fn relay_publish_request_rejects_negative_time() {
+    let signed = signed_post("negative publish time");
+
+    assert!(matches!(
+        RadrootsRelayPublishRequest::new(signed, primary_relay_target(), -1),
+        Err(RadrootsRelayTransportError::InvalidTimestamp {
+            field: "now_ms",
+            value: -1,
+        })
+    ));
+}
+
+#[test]
+fn relay_publish_request_seals_fields_and_validates_idempotency_keys() {
+    let signed = signed_post("sealed publish request");
+    let request = RadrootsRelayPublishRequest::new(signed.clone(), primary_relay_target(), 7)
+        .expect("publish request");
+    assert_eq!(request.signed_event(), &signed);
+    assert_eq!(request.targets().len(), 1);
+    assert_eq!(
+        request.satisfaction_policy(),
+        &RadrootsTransportSatisfactionPolicy::all_accepted()
+    );
+    assert_eq!(request.idempotency_key(), None);
+    assert_eq!(request.now_ms(), 7);
+
+    for invalid in ["", " ", " leading", "trailing ", "line\nbreak"] {
+        assert!(matches!(
+            request.clone().try_with_idempotency_key(invalid),
+            Err(RadrootsRelayTransportError::InvalidIdempotencyKey { .. })
+        ));
+    }
+    assert!(matches!(
+        request.clone().try_with_idempotency_key("x".repeat(
+            radroots_transport_nostr::RADROOTS_RELAY_PUBLISH_IDEMPOTENCY_KEY_MAX_BYTES + 1,
+        ),),
+        Err(RadrootsRelayTransportError::InvalidIdempotencyKey { .. })
+    ));
+    let request = request
+        .try_with_idempotency_key("publish-7")
+        .expect("idempotency key");
+    assert_eq!(request.idempotency_key(), Some("publish-7"));
+}
+
+#[tokio::test]
+async fn relay_publish_request_rejects_unrequested_required_target_before_adapter() {
+    let signed = signed_post("missing required target");
+    let required = RadrootsTransportTarget::nostr_relay(RELAY_SECONDARY_WSS)
+        .expect("required target")
+        .fingerprint()
+        .clone();
+    let request = RadrootsRelayPublishRequest::new(signed, primary_relay_target(), 8)
+        .expect("publish request")
+        .with_satisfaction_policy(
+            RadrootsTransportSatisfactionPolicy::required_targets(
+                RadrootsTransportSatisfactionClass::Accepted,
+                vec![required.clone()],
+            )
+            .expect("required policy"),
+        );
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+
+    assert!(matches!(
+        publish_signed_event(&adapter, request).await,
+        Err(RadrootsRelayTransportError::RequiredTargetNotRequested { fingerprint })
+            if fingerprint == required.as_str()
+    ));
+    assert!(adapter.captured_raw_events().is_empty());
+}
+
 #[test]
 fn fetch_requests_reject_empty_filter_sets() {
     assert!(matches!(
-        RadrootsRelayFetchRequest::fetch(1_000, 10, Vec::<RadrootsNostrFilter>::new()),
+        RadrootsRelayFetchRequest::fetch(
+            1_000,
+            10,
+            primary_relay_target(),
+            Vec::<RadrootsNostrFilter>::new(),
+        ),
         Err(RadrootsRelayTransportError::EmptyFetchFilters)
     ));
     assert!(matches!(
-        RadrootsRelayFetchRequest::subscription(1_000, 10, Vec::<RadrootsNostrFilter>::new()),
+        RadrootsRelayFetchRequest::subscription(
+            1_000,
+            10,
+            primary_relay_target(),
+            Vec::<RadrootsNostrFilter>::new(),
+        ),
         Err(RadrootsRelayTransportError::EmptyFetchFilters)
     ));
 }
@@ -1314,16 +1762,28 @@ fn fetch_requests_reject_zero_limits_and_timeouts() {
     assert_eq!(as_ref_filters.len(), 1);
 
     assert!(matches!(
-        RadrootsRelayFetchRequest::fetch(1_000, 0, [filter.clone()]),
+        RadrootsRelayFetchRequest::fetch(-1, 1, primary_relay_target(), [filter.clone()]),
+        Err(RadrootsRelayTransportError::InvalidTimestamp {
+            field: "observed_at_ms",
+            value: -1,
+        })
+    ));
+    assert!(matches!(
+        RadrootsRelayFetchRequest::fetch(1_000, 0, primary_relay_target(), [filter.clone()]),
         Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "max_events"
     ));
     assert!(matches!(
-        RadrootsRelayFetchRequest::subscription(1_000, 0, [filter.clone()]),
+        RadrootsRelayFetchRequest::subscription(
+            1_000,
+            0,
+            primary_relay_target(),
+            [filter.clone()],
+        ),
         Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "max_events"
     ));
 
-    let request =
-        RadrootsRelayFetchRequest::fetch(1_000, 1, [filter]).expect("valid fetch request");
+    let request = RadrootsRelayFetchRequest::fetch(1_000, 1, primary_relay_target(), [filter])
+        .expect("valid fetch request");
     assert!(matches!(
         request.clone().with_timeout_ms(0),
         Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "timeout_ms"
@@ -1341,20 +1801,28 @@ fn fetch_requests_reject_zero_limits_and_timeouts() {
     assert_eq!(request.timeout_ms(), 1);
     assert_eq!(request.max_raw_events(), 1);
 
-    let request = RadrootsRelayFetchRequest::subscription(1_005, 2, [post_relay_fetch_filter(2)])
-        .expect("subscription request")
-        .with_relay_urls([RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS])
-        .with_timeout_ms(25)
-        .expect("timeout")
-        .with_raw_event_scan_limit(3)
-        .expect("raw limit");
+    let request = RadrootsRelayFetchRequest::subscription(
+        1_005,
+        2,
+        RadrootsRelayTargetSet::new(
+            [RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
+            RadrootsRelayUrlPolicy::Public,
+        )
+        .expect("relay targets"),
+        [post_relay_fetch_filter(2)],
+    )
+    .expect("subscription request")
+    .with_timeout_ms(25)
+    .expect("timeout")
+    .with_raw_event_scan_limit(3)
+    .expect("raw limit");
     assert_eq!(request.mode(), RadrootsRelayFetchMode::Subscription);
     assert_eq!(request.observed_at_ms(), 1_005);
     assert_eq!(request.max_events(), 2);
     assert_eq!(request.max_raw_events(), 3);
     assert_eq!(
-        request.relay_urls(),
-        &[RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()]
+        request.relay_targets().relay_strings(),
+        vec![RELAY_PRIMARY_WSS.to_owned(), RELAY_SECONDARY_WSS.to_owned()]
     );
     assert_eq!(request.filters().len(), 1);
     assert_eq!(request.timeout_ms(), 25);
@@ -1368,7 +1836,6 @@ fn fetch_blocking_facade_runs_mock_adapter() {
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: signed.raw_json().to_owned(),
-            observed_at_ms: 1_090,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1380,7 +1847,213 @@ fn fetch_blocking_facade_runs_mock_adapter() {
 
     assert_eq!(receipt.events.len(), 1);
     assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
+    assert_eq!(receipt.events[0].observed_at_ms, 1_090);
     assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
+}
+
+#[tokio::test]
+async fn fetch_canonicalizes_adapter_relay_spelling_and_uses_request_observation_time() {
+    let signed = signed_post("canonical fetch relay");
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: "wss://RELAY.EXAMPLE.COM/".to_owned(),
+            raw_json: signed.raw_json().to_owned(),
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: "wss://RELAY.EXAMPLE.COM/".to_owned(),
+        },
+    ]);
+
+    let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 10))
+        .await
+        .expect("canonical fetch");
+
+    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.events[0].relay_url, RELAY_PRIMARY_WSS);
+    assert_eq!(receipt.events[0].observed_at_ms, 1_091);
+    assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
+}
+
+#[tokio::test]
+async fn fetch_verifies_events_before_acceptance_budgeting() {
+    let accepted = signed_post("verified after tampered");
+    let accepted_id = accepted.id_str().to_owned();
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: tampered_raw_event(),
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: accepted.raw_json().to_owned(),
+        },
+    ]);
+
+    let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 1))
+        .await
+        .expect("verified fetch");
+
+    assert_eq!(receipt.events.len(), 1);
+    assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
+    assert_eq!(receipt.invalid_count, 1);
+    assert_eq!(receipt.skipped_over_limit_count, 0);
+    assert!(receipt.event_receipts[0].invalid);
+    assert!(!receipt.event_receipts[1].invalid);
+}
+
+#[tokio::test]
+async fn fetch_deduplicates_event_ids_without_starving_unique_events() {
+    let first = signed_post("first unique");
+    let second = signed_post("second unique");
+    let first_id = first.id_str().to_owned();
+    let second_id = second.id_str().to_owned();
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            raw_json: first.raw_json().to_owned(),
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            raw_json: first.raw_json().to_owned(),
+        },
+        RadrootsRelayFetchItem::Event {
+            relay_url: RELAY_SECONDARY_WSS.to_owned(),
+            raw_json: second.raw_json().to_owned(),
+        },
+    ]);
+
+    let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 2))
+        .await
+        .expect("deduplicated fetch");
+
+    assert_eq!(
+        receipt
+            .events
+            .iter()
+            .map(|event| event.event.id.to_hex())
+            .collect::<Vec<_>>(),
+        vec![first_id.clone(), second_id]
+    );
+    assert_eq!(receipt.duplicate_count, 1);
+    assert_eq!(receipt.skipped_over_limit_count, 0);
+    assert_eq!(receipt.event_receipts.len(), 3);
+    assert_eq!(
+        receipt.event_receipts[1].event_id.as_deref(),
+        Some(first_id.as_str())
+    );
+    assert!(receipt.event_receipts[1].duplicate);
+}
+
+#[tokio::test]
+async fn fetch_reports_local_truncation_without_claiming_eose() {
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Truncated {
+        relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        message: "local budget reached".to_owned(),
+    }]);
+
+    let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 1))
+        .await
+        .expect("truncated fetch");
+
+    assert!(receipt.events.is_empty());
+    assert!(receipt.connected_relays.is_empty());
+    assert_eq!(receipt.eose_count, 0);
+    assert_eq!(receipt.truncated_count, 1);
+    assert_eq!(receipt.relay_outcomes.len(), 1);
+    assert_eq!(
+        receipt.relay_outcomes[0].kind,
+        RadrootsRelayFetchOutcomeKind::Truncated
+    );
+}
+
+#[tokio::test]
+async fn fetch_rejects_duplicate_and_conflicting_terminal_outcomes() {
+    let duplicate = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+    ]);
+    assert!(matches!(
+        fetch_relay_events(&duplicate, post_relay_fetch_request(1_091, 1)).await,
+        Err(RadrootsRelayTransportError::DuplicateFetchTerminalRelayUrl { url })
+            if url == RELAY_PRIMARY_WSS
+    ));
+
+    let conflicting = RadrootsMockRelayFetchAdapter::new(vec![
+        RadrootsRelayFetchItem::Eose {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+        },
+        RadrootsRelayFetchItem::Closed {
+            relay_url: RELAY_PRIMARY_WSS.to_owned(),
+            message: "closed after EOSE".to_owned(),
+        },
+    ]);
+    assert!(matches!(
+        fetch_relay_events(&conflicting, post_relay_fetch_request(1_091, 1)).await,
+        Err(RadrootsRelayTransportError::ConflictingFetchTerminalRelayUrl {
+            url,
+            first: "eose",
+            next: "closed",
+        }) if url == RELAY_PRIMARY_WSS
+    ));
+}
+
+#[tokio::test]
+async fn fetch_rejects_unrequested_adapter_relay_for_every_item_before_store_mutation() {
+    let signed = signed_post("forged fetch relay");
+    let unexpected_relay = "wss://unexpected.example.com";
+    let forged_items = [
+        RadrootsRelayFetchItem::Event {
+            relay_url: unexpected_relay.to_owned(),
+            raw_json: signed.raw_json().to_owned(),
+        },
+        RadrootsRelayFetchItem::Eose {
+            relay_url: unexpected_relay.to_owned(),
+        },
+        RadrootsRelayFetchItem::Truncated {
+            relay_url: unexpected_relay.to_owned(),
+            message: "truncated".to_owned(),
+        },
+        RadrootsRelayFetchItem::Closed {
+            relay_url: unexpected_relay.to_owned(),
+            message: "closed".to_owned(),
+        },
+        RadrootsRelayFetchItem::Notice {
+            relay_url: unexpected_relay.to_owned(),
+            message: "notice".to_owned(),
+        },
+    ];
+
+    for forged_item in forged_items {
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let adapter = RadrootsMockRelayFetchAdapter::new(vec![
+            RadrootsRelayFetchItem::Event {
+                relay_url: RELAY_PRIMARY_WSS.to_owned(),
+                raw_json: signed.raw_json().to_owned(),
+            },
+            forged_item,
+        ]);
+        let error =
+            fetch_and_ingest_relay_events(&adapter, &store, post_relay_fetch_request(1_092, 10))
+                .await
+                .expect_err("unrequested relay must fail the whole fetch");
+
+        assert!(matches!(
+            error,
+            RadrootsRelayTransportError::UnexpectedFetchItemRelayUrl { ref url }
+                if url == unexpected_relay
+        ));
+        assert!(
+            store
+                .raw_event(signed.id_str())
+                .await
+                .expect("raw event")
+                .is_none()
+        );
+    }
 }
 
 #[tokio::test]
@@ -1391,32 +2064,26 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: signed.raw_json().to_owned(),
-            observed_at_ms: 1_000,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: signed.raw_json().to_owned(),
-            observed_at_ms: 1_001,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_SECONDARY_WSS.to_owned(),
             raw_json: unsupported_raw_event(),
-            observed_at_ms: 1_002,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_SECONDARY_WSS.to_owned(),
             raw_json: invalid_contract_shape_raw_event(),
-            observed_at_ms: 1_003,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_TERTIARY_WSS.to_owned(),
             raw_json: tampered_raw_event(),
-            observed_at_ms: 1_004,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_TERTIARY_WSS.to_owned(),
             raw_json: "{not json".to_owned(),
-            observed_at_ms: 1_005,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1444,8 +2111,8 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     assert_eq!(receipt.duplicate_count, 1);
     assert_eq!(receipt.not_persisted_count, 0);
     assert_eq!(receipt.unsupported_count, 1);
-    assert_eq!(receipt.invalid_count, 1);
-    assert_eq!(receipt.malformed_count, 2);
+    assert_eq!(receipt.invalid_count, 2);
+    assert_eq!(receipt.malformed_count, 1);
     assert_eq!(receipt.eose_count, 1);
     assert_eq!(receipt.closed_count, 2);
     assert_eq!(receipt.notice_count, 1);
@@ -1569,6 +2236,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     let serialized = serde_json::to_value(&receipt).expect("serialized fetch receipt");
     assert!(serialized.get("invalid_count").is_some());
     assert!(serialized.get("not_persisted_count").is_some());
+    assert!(serialized.get("truncated_count").is_some());
     let serialized_event = serialized["events"][0]
         .as_object()
         .expect("serialized event receipt");
@@ -1620,12 +2288,10 @@ async fn fetch_reports_ephemeral_events_as_not_persisted_without_duplicate_or_st
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: signed.raw_json().to_owned(),
-            observed_at_ms: 1_010,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: signed.raw_json().to_owned(),
-            observed_at_ms: 1_011,
         },
     ]);
     let filter = RadrootsNostrFilter::new()
@@ -1633,9 +2299,8 @@ async fn fetch_reports_ephemeral_events_as_not_persisted_without_duplicate_or_st
             u16::try_from(KIND_GEOCHAT).expect("ephemeral kind"),
         ))
         .limit(10);
-    let request = RadrootsRelayFetchRequest::fetch(1_010, 10, [filter])
-        .expect("ephemeral fetch request")
-        .with_relay_urls([RELAY_PRIMARY_WSS]);
+    let request = RadrootsRelayFetchRequest::fetch(1_010, 10, primary_relay_target(), [filter])
+        .expect("ephemeral fetch request");
 
     let receipt = fetch_and_ingest_relay_events(&adapter, &store, request)
         .await
@@ -1688,17 +2353,14 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: wrong_tag.raw_json().to_owned(),
-            observed_at_ms: 1_005,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: accepted.raw_json().to_owned(),
-            observed_at_ms: 1_006,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_SECONDARY_WSS.to_owned(),
             raw_json: wrong_kind.as_json(),
-            observed_at_ms: 1_007,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1718,7 +2380,8 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     let receipt = fetch_and_ingest_relay_events(
         &adapter,
         &store,
-        RadrootsRelayFetchRequest::fetch(1_005, 10, [filter]).expect("fetch request"),
+        RadrootsRelayFetchRequest::fetch(1_005, 10, fixture_relay_targets(), [filter])
+            .expect("fetch request"),
     )
     .await
     .expect("fetch ingest");
@@ -1767,22 +2430,18 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: "{not json".to_owned(),
-            observed_at_ms: 1_099,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: wrong_tag.raw_json().to_owned(),
-            observed_at_ms: 1_100,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: accepted.raw_json().to_owned(),
-            observed_at_ms: 1_101,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: skipped.raw_json().to_owned(),
-            observed_at_ms: 1_102,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1877,22 +2536,18 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: "{not json".to_owned(),
-            observed_at_ms: 2_100,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: wrong_tag.raw_json().to_owned(),
-            observed_at_ms: 2_101,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: accepted.raw_json().to_owned(),
-            observed_at_ms: 2_102,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: skipped.raw_json().to_owned(),
-            observed_at_ms: 2_103,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1909,16 +2564,15 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
 
     let receipt = fetch_relay_events(
         &adapter,
-        RadrootsRelayFetchRequest::fetch(2_100, 1, [filter])
-            .expect("fetch request")
-            .with_relay_urls([RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS]),
+        RadrootsRelayFetchRequest::fetch(2_100, 1, fixture_relay_targets(), [filter])
+            .expect("fetch request"),
     )
     .await
     .expect("fetch events");
 
     assert_eq!(
         receipt.target_relays,
-        vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS]
+        vec![RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS]
     );
     assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
     assert_eq!(receipt.failed_relays.len(), 1);
@@ -1948,17 +2602,14 @@ async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: "{not json".to_owned(),
-            observed_at_ms: 1_130,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: wrong_tag.raw_json().to_owned(),
-            observed_at_ms: 1_131,
         },
         RadrootsRelayFetchItem::Event {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
             raw_json: accepted.raw_json().to_owned(),
-            observed_at_ms: 1_132,
         },
         RadrootsRelayFetchItem::Eose {
             relay_url: RELAY_PRIMARY_WSS.to_owned(),
@@ -1997,14 +2648,18 @@ async fn fetch_subscription_mode_and_store_errors_are_propagated() {
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
         relay_url: RELAY_PRIMARY_WSS.to_owned(),
         raw_json: signed.raw_json().to_owned(),
-        observed_at_ms: 1_200,
     }]);
 
     let receipt = fetch_and_ingest_relay_events(
         &adapter,
         &store,
-        RadrootsRelayFetchRequest::subscription(1_200, 10, [post_relay_fetch_filter(10)])
-            .expect("subscription request"),
+        RadrootsRelayFetchRequest::subscription(
+            1_200,
+            10,
+            primary_relay_target(),
+            [post_relay_fetch_filter(10)],
+        )
+        .expect("subscription request"),
     )
     .await
     .expect("fetch ingest");
@@ -2025,7 +2680,6 @@ async fn fetch_subscription_mode_and_store_errors_are_propagated() {
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
         relay_url: RELAY_PRIMARY_WSS.to_owned(),
         raw_json: signed.raw_json().to_owned(),
-        observed_at_ms: 1_210,
     }]);
     let error =
         fetch_and_ingest_relay_events(&adapter, &closed_store, post_relay_fetch_request(1_210, 10))
@@ -2042,7 +2696,6 @@ async fn fetch_ingest_rejects_invalid_observation_endpoint() {
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
         relay_url: " ".to_owned(),
         raw_json: signed.raw_json().to_owned(),
-        observed_at_ms: 1_300,
     }]);
 
     let error =
@@ -2052,11 +2705,7 @@ async fn fetch_ingest_rejects_invalid_observation_endpoint() {
 
     assert!(matches!(
         error,
-        RadrootsRelayTransportError::EventStore(
-            radroots_event_store::RadrootsEventStoreError::Transport(
-                radroots_transport::RadrootsTransportError::EmptyTargetUri
-            )
-        )
+        RadrootsRelayTransportError::InvalidFetchItemRelayUrl { .. }
     ));
 }
 
@@ -2271,6 +2920,16 @@ async fn outbox_transport_facade_persists_partial_success_and_retryable_failures
         .await
         .expect("observations");
     assert_outbox_publish_observations(&observations, 1);
+    assert_eq!(
+        observations
+            .iter()
+            .find(|observation| {
+                observation.observation_type == RadrootsTransportObservationType::PublishAck
+            })
+            .expect("publish acknowledgement")
+            .observation_count,
+        1
+    );
 }
 
 #[tokio::test]
@@ -2329,7 +2988,7 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
     .expect("transport publish");
 
     assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 13);
+    assert_eq!(published.attempted_count, 14);
     assert_eq!(published.accepted_count, 6);
     assert_eq!(published.retryable_count, 3);
     assert_eq!(published.terminal_count, 5);
@@ -2396,10 +3055,9 @@ async fn outbox_transport_facade_rejects_pending_receipts() {
         .await
         .expect("publish claim")
         .expect("publish claim");
-    let transport = ScriptedTransport::new(vec![
-        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
-            .with_target_status(RadrootsTransportDeliveryTargetStatus::Pending),
-    ]);
+    let mut forged_outcome = RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted);
+    forged_outcome.status = RadrootsTransportDeliveryTargetStatus::Pending;
+    let transport = ScriptedTransport::new(vec![forged_outcome]);
 
     let error = publish_claimed_outbox_event_with_transport(
         &outbox,
@@ -2415,6 +3073,61 @@ async fn outbox_transport_facade_rejects_pending_receipts() {
         error,
         RadrootsRelayTransportError::TransportContract(_)
     ));
+}
+
+#[tokio::test]
+async fn outbox_transport_facade_rejects_receipts_forged_for_another_request() {
+    for forged in [
+        ForgedDeliveryReceipt::RequestId,
+        ForgedDeliveryReceipt::TargetSet,
+    ] {
+        let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let receipt = outbox
+            .enqueue_operation(all_accepted_outbox_operation_input(
+                generic_draft("forged transport receipt"),
+                [RELAY_PRIMARY_WSS],
+            ))
+            .await
+            .expect("enqueue");
+        let claimed = outbox
+            .claim_next_ready_event("signer", "forged-sign", 2_000, 1_000)
+            .await
+            .expect("sign claim")
+            .expect("sign claim");
+        let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
+        let publish_claim = outbox
+            .claim_next_ready_event("publisher", "forged-publish", 3_000, 1_100)
+            .await
+            .expect("publish claim")
+            .expect("publish claim");
+
+        let error = publish_claimed_outbox_event_with_transport(
+            &outbox,
+            &store,
+            &ForgedReceiptTransport { forged },
+            &publish_claim,
+            RadrootsOutboxPublishPolicy::new(2_500),
+            2_200,
+        )
+        .await
+        .expect_err("forged receipt rejected");
+        assert!(matches!(
+            error,
+            RadrootsRelayTransportError::TransportContract(_)
+        ));
+        let event = outbox
+            .get_event(receipt.outbox_event_id)
+            .await
+            .expect("event")
+            .expect("event");
+        assert_eq!(event.state, RadrootsOutboxEventState::Publishing);
+        let observations = store
+            .observations_for_event(signed.id_str())
+            .await
+            .expect("observations");
+        assert_outbox_publish_observations(&observations, 0);
+    }
 }
 
 #[tokio::test]
@@ -2556,6 +3269,74 @@ async fn outbox_transport_facade_requires_signed_claims() {
 }
 
 #[tokio::test]
+async fn outbox_transport_facade_rejects_non_nostr_transport_before_mutation() {
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let receipt = outbox
+        .enqueue_operation(all_accepted_outbox_operation_input(
+            generic_draft("misrouted transport"),
+            [RELAY_PRIMARY_WSS],
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "misrouted-sign", 2_000, 1_000)
+        .await
+        .expect("sign claim")
+        .expect("sign claim");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "misrouted-publish", 3_000, 1_100)
+        .await
+        .expect("publish claim")
+        .expect("publish claim");
+    let transport = ScriptedTransport::new(Vec::new()).with_kind(RadrootsTransportKind::Reticulum);
+
+    let error = publish_claimed_outbox_event_with_transport(
+        &outbox,
+        &store,
+        &transport,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect_err("non-Nostr transport rejected");
+    assert!(matches!(
+        error,
+        RadrootsRelayTransportError::UnexpectedTransportKind {
+            expected: "nostr",
+            actual,
+        } if actual == "reticulum"
+    ));
+    assert!(
+        store
+            .raw_event(signed.id_str())
+            .await
+            .expect("raw event")
+            .is_none()
+    );
+    assert!(
+        store
+            .observations_for_event(signed.id_str())
+            .await
+            .expect("observations")
+            .is_empty()
+    );
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Publishing);
+    let targets = outbox
+        .delivery_targets(receipt.outbox_event_id)
+        .await
+        .expect("targets");
+    assert!(targets.iter().all(|target| target.attempt_count == 0));
+}
+
+#[tokio::test]
 async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
@@ -2661,6 +3442,111 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
 }
 
 #[tokio::test]
+async fn outbox_transport_facade_fans_out_endpoint_receipts_to_scoped_logical_targets() {
+    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
+    let store = RadrootsEventStore::open_memory().await.expect("store");
+    let receipt = outbox
+        .enqueue_operation(RadrootsOutboxOperationInput::new(
+            "publish_post",
+            generic_draft("transport scoped duplicate relay"),
+            RadrootsOutboxDeliveryPlanInput::new(
+                "transport.nostr.local",
+                2,
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+                vec![
+                    scoped_nostr_target(RELAY_PRIMARY_WSS, "foodshed.west", "West foodshed"),
+                    scoped_nostr_target(RELAY_PRIMARY_WSS, "foodshed.east", "East foodshed"),
+                ],
+            ),
+            1_000,
+        ))
+        .await
+        .expect("enqueue");
+    let claimed = outbox
+        .claim_next_ready_event("signer", "sign-a", 2_000, 1_000)
+        .await
+        .expect("claim")
+        .expect("claim");
+    let signed = complete_claimed_signing(&outbox, &claimed, 1_100).await;
+    let publish_claim = outbox
+        .claim_next_ready_event("publisher", "publish-a", 3_000, 1_100)
+        .await
+        .expect("claim")
+        .expect("publish claim");
+    let adapter = RadrootsMockRelayPublishAdapter::new()
+        .with_outcome(RELAY_PRIMARY_WSS, RadrootsRelayOutcome::accepted());
+    let transport = RadrootsNostrTransport::new(adapter.clone());
+
+    let published = publish_claimed_outbox_event_with_transport(
+        &outbox,
+        &store,
+        &transport,
+        &publish_claim,
+        RadrootsOutboxPublishPolicy::new(2_500),
+        2_200,
+    )
+    .await
+    .expect("transport publish");
+
+    assert_eq!(published.local_ingest.event_id, signed.id_str());
+    assert_eq!(published.event_id, signed.id_str());
+    assert_eq!(published.attempted_count, 2);
+    assert_eq!(published.accepted_count, 2);
+    assert_eq!(published.retryable_count, 0);
+    assert_eq!(published.terminal_count, 0);
+    assert_eq!(published.quorum, 2);
+    assert!(published.quorum_met);
+    assert_eq!(published.relay_receipts.len(), 1);
+    assert_eq!(published.target_receipts.len(), 2);
+    assert!(published.target_receipts.iter().all(|target| {
+        target.endpoint_uri == RELAY_PRIMARY_WSS
+            && target.attempted
+            && target.transport_status == RadrootsTransportDeliveryTargetStatus::Accepted
+    }));
+    assert!(published.target_receipts.iter().any(|target| {
+        target.target_scope.as_deref() == Some("foodshed.west")
+            && target.target_label.as_deref() == Some("West foodshed")
+    }));
+    assert!(published.target_receipts.iter().any(|target| {
+        target.target_scope.as_deref() == Some("foodshed.east")
+            && target.target_label.as_deref() == Some("East foodshed")
+    }));
+    assert_eq!(adapter.captured_raw_events().len(), 1);
+
+    let event = outbox
+        .get_event(receipt.outbox_event_id)
+        .await
+        .expect("event")
+        .expect("event");
+    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    let targets = outbox
+        .delivery_targets(receipt.outbox_event_id)
+        .await
+        .expect("targets");
+    assert_eq!(targets.len(), 2);
+    assert!(targets.iter().all(|target| {
+        target.endpoint_uri.as_str() == RELAY_PRIMARY_WSS
+            && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
+            && target.attempt_count == 1
+    }));
+    let observations = store
+        .observations_for_event(signed.id_str())
+        .await
+        .expect("observations");
+    assert_outbox_publish_observations(&observations, 1);
+    assert_eq!(
+        observations
+            .iter()
+            .find(|observation| {
+                observation.observation_type == RadrootsTransportObservationType::PublishAck
+            })
+            .expect("scoped publish acknowledgement")
+            .observation_count,
+        1
+    );
+}
+
+#[tokio::test]
 async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_success() {
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
@@ -2676,7 +3562,7 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
                 1,
                 RadrootsTransportSatisfactionPolicy::required_targets(
                     RadrootsTransportSatisfactionClass::Accepted,
-                    vec![required.fingerprint.clone()],
+                    vec![required.fingerprint().clone()],
                 )
                 .expect("required target policy"),
                 vec![optional.clone(), required.clone()],
@@ -2699,7 +3585,7 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
     let optional_target_id = publish_claim
         .delivery_targets
         .iter()
-        .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+        .find(|target| &target.endpoint_fingerprint == optional.fingerprint())
         .expect("optional target")
         .delivery_target_id;
     outbox
@@ -2745,11 +3631,11 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
         .await
         .expect("targets");
     assert!(targets.iter().any(|target| {
-        target.endpoint_fingerprint == optional.fingerprint
+        &target.endpoint_fingerprint == optional.fingerprint()
             && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
     }));
     assert!(targets.iter().any(|target| {
-        target.endpoint_fingerprint == required.fingerprint
+        &target.endpoint_fingerprint == required.fingerprint()
             && target.status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
     }));
 }
@@ -2770,7 +3656,7 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
                 1,
                 RadrootsTransportSatisfactionPolicy::required_targets(
                     RadrootsTransportSatisfactionClass::Accepted,
-                    vec![required.fingerprint.clone()],
+                    vec![required.fingerprint().clone()],
                 )
                 .expect("required target policy"),
                 vec![optional.clone(), required.clone()],
@@ -2793,7 +3679,7 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
     let optional_target_id = publish_claim
         .delivery_targets
         .iter()
-        .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+        .find(|target| &target.endpoint_fingerprint == optional.fingerprint())
         .expect("optional target")
         .delivery_target_id;
     outbox
@@ -2837,11 +3723,11 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
         .await
         .expect("targets");
     assert!(targets.iter().any(|target| {
-        target.endpoint_fingerprint == optional.fingerprint
+        &target.endpoint_fingerprint == optional.fingerprint()
             && target.status == RadrootsOutboxDeliveryTargetStatus::FailedRetryable
     }));
     assert!(targets.iter().any(|target| {
-        target.endpoint_fingerprint == required.fingerprint
+        &target.endpoint_fingerprint == required.fingerprint()
             && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
     }));
     let observations = store
@@ -2868,7 +3754,7 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
                 1,
                 RadrootsTransportSatisfactionPolicy::required_targets(
                     RadrootsTransportSatisfactionClass::Accepted,
-                    vec![required.fingerprint.clone()],
+                    vec![required.fingerprint().clone()],
                 )
                 .expect("required target policy"),
                 vec![
@@ -2896,7 +3782,7 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
     let optional_record = publish_claim
         .delivery_targets
         .iter()
-        .find(|target| target.endpoint_fingerprint == optional.fingerprint)
+        .find(|target| &target.endpoint_fingerprint == optional.fingerprint())
         .expect("optional target");
     outbox
         .mark_delivery_target_accepted(
@@ -2910,7 +3796,7 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
     let terminal_record = publish_claim
         .delivery_targets
         .iter()
-        .find(|target| target.endpoint_fingerprint == terminal.fingerprint)
+        .find(|target| &target.endpoint_fingerprint == terminal.fingerprint())
         .expect("terminal target");
     outbox
         .mark_delivery_target_failed_terminal(
@@ -2943,11 +3829,11 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
     assert_eq!(published.relay_receipts.len(), 1);
     assert_eq!(published.target_receipts.len(), 2);
     assert!(published.target_receipts.iter().any(|target| {
-        target.endpoint_fingerprint == required.fingerprint
+        &target.endpoint_fingerprint == required.fingerprint()
             && target.target_scope.as_deref() == Some("foodshed.west")
     }));
     assert!(published.target_receipts.iter().any(|target| {
-        target.endpoint_fingerprint == optional.fingerprint
+        &target.endpoint_fingerprint == optional.fingerprint()
             && target.target_scope.as_deref() == Some("foodshed.east")
     }));
     let event = outbox
@@ -2965,14 +3851,14 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
         targets
             .iter()
             .filter(|target| { target.transport_kind == RadrootsTransportKind::Nostr })
-            .filter(|target| target.endpoint_fingerprint != terminal.fingerprint)
+            .filter(|target| &target.endpoint_fingerprint != terminal.fingerprint())
             .all(|target| {
                 target.endpoint_uri.as_str() == RELAY_PRIMARY_WSS
                     && target.status == RadrootsOutboxDeliveryTargetStatus::Accepted
             })
     );
     assert!(targets.iter().any(|target| {
-        target.endpoint_fingerprint == terminal.fingerprint
+        &target.endpoint_fingerprint == terminal.fingerprint()
             && target.status == RadrootsOutboxDeliveryTargetStatus::FailedTerminal
     }));
     assert!(targets.iter().any(|target| {
@@ -3144,7 +4030,7 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
 }
 
 #[tokio::test]
-async fn outbox_publish_ignores_unknown_adapter_receipts() {
+async fn outbox_publish_rejects_unknown_adapter_receipts() {
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let draft = generic_draft("unknown receipt");
@@ -3167,7 +4053,7 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
         .expect("claim")
         .expect("publish claim");
 
-    let published = publish_claimed_outbox_event(
+    let error = publish_claimed_outbox_event(
         &outbox,
         &store,
         &UnknownRelayReceiptPublishAdapter,
@@ -3176,28 +4062,24 @@ async fn outbox_publish_ignores_unknown_adapter_receipts() {
         2_200,
     )
     .await
-    .expect("publish");
+    .expect_err("unknown adapter receipt");
 
-    assert_eq!(published.attempted_count, 1);
-    assert_eq!(published.accepted_count, 1);
-    assert_eq!(published.target_receipts.len(), 1);
-    assert_eq!(published.relay_receipts.len(), 2);
-    assert!(published.quorum_met);
+    assert!(matches!(
+        error,
+        RadrootsRelayTransportError::UnexpectedPublishReceiptRelayUrl { url }
+            if url == RELAY_TERTIARY_WSS
+    ));
     let event = outbox
         .get_event(receipt.outbox_event_id)
         .await
         .expect("event")
         .expect("event");
-    assert_eq!(event.state, RadrootsOutboxEventState::Published);
+    assert_eq!(event.state, RadrootsOutboxEventState::Publishing);
     let observations = store
         .observations_for_event(signed.id_str())
         .await
         .expect("observations");
-    assert_outbox_publish_observations(&observations, 1);
-    assert!(observations.iter().any(|observation| {
-        observation.observation_type == RadrootsTransportObservationType::PublishAck
-            && observation.endpoint_uri.as_str() == RELAY_PRIMARY_WSS
-    }));
+    assert_outbox_publish_observations(&observations, 0);
 }
 
 #[tokio::test]
@@ -3670,7 +4552,6 @@ async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
         items.push(RadrootsRelayFetchItem::Event {
             relay_url: relay_url.to_owned(),
             raw_json: signed.raw_json().to_owned(),
-            observed_at_ms: 10_000 + index,
         });
     }
     let adapter = RadrootsMockRelayFetchAdapter::new(items);

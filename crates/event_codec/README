@@ -30,17 +30,25 @@ is independent of the optional `knowledge` decoder. The `nostr` feature exposes
 `RadrootsSignatureVerifiedEvent` and rejects event kinds above `u16::MAX`
 instead of truncating them.
 
-With `serde_json`, `admission::admit_verified_event` is the central contract
-boundary over an already verified event. It preserves typed admitted Profile,
-root Post, Reply, Comment, DeletionRequest, and FoodAvailability values, while
-other registered events must pass complete registry shape validation and
-return `ContractValidated`. Kind `1` is tested as a root Post before the exact
-thread-excluded candidate may be promoted to Reply. Kind `30402` is partitioned
-as focused Food, Operational Listing, generic NIP-99, or ambiguous before any
-profile validation; a valid excluded Operational Listing falls back to the
-registry, while generic and mixed-marker candidates remain distinct failures.
-The operation never accepts an unverified envelope and does not sign, publish,
-select event heads, evaluate deletion effects, or mutate storage.
+With `serde_json`, `admission::admit_verified_event` is the current central
+contract boundary over an already verified event. It preserves typed admitted
+Profile, root Post, Reply, Comment, DeletionRequest, and FoodAvailability
+values, while other registered events must pass complete registry shape
+validation and return `ContractValidated`. Kind `1` is tested as a root Post
+before the exact thread-excluded candidate may be promoted to Reply. Kind
+`30402` is partitioned as focused Food, Operational Listing, generic NIP-99,
+or ambiguous before any profile validation; a valid excluded Operational
+Listing falls back to the registry, while generic and mixed-marker candidates
+remain distinct failures.
+
+`admission::admit_verified_event_registry_v7` is the immutable historical
+admission graph used by event-store reconciliation v1. It returns the closed
+registry-v7 admitted, unsupported, invalid, or internal-defect decision needed
+for persisted facts without depending on richer current admission enums.
+Later registry revisions must add a new versioned entrypoint rather than
+changing this behavior. Neither admission operation accepts an unverified
+envelope, signs or publishes events, selects event heads, evaluates deletion
+effects, or mutates storage.
 
 The post codec exposes deterministic authored wire builders and a separate
 verified-event projection. Update emits no profile tags, PhotoUpdate emits
@@ -149,6 +157,14 @@ event-id target applies independently of timestamps; a canonical address
 target applies through the inclusive maximum qualifying request timestamp, so
 a later replacement is not suppressed. Advisory `k` values do not affect the
 result, and request order cannot affect the decision.
+
+The reconciliation-v1 entrypoints
+`project_verified_nip09_deletion_request_event_v1`,
+`admit_verified_nip09_deletion_request_event_v1`, and
+`evaluate_nip09_suppression_v1` freeze the exact request and suppression
+behavior consumed by event-store schema version 2. Current compatibility
+entrypoints delegate to these functions; a future algorithm revision must add
+new versioned functions.
 
 The exact operation namespace is
 `social.deletion_request.build_authored_draft`,

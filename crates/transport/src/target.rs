@@ -6,9 +6,10 @@ use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::net::Ipv6Addr;
 use sha2::{Digest, Sha256};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsTransportTargetUri(String);
 
@@ -34,7 +35,24 @@ impl core::fmt::Display for RadrootsTransportTargetUri {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetUri {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let parsed = Self::parse(raw.as_str()).map_err(serde::de::Error::custom)?;
+        if parsed.as_str() != raw {
+            return Err(serde::de::Error::custom(
+                "transport target URI is not canonical",
+            ));
+        }
+        Ok(parsed)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsTransportMeshScopeId(String);
 
@@ -69,7 +87,18 @@ impl core::fmt::Display for RadrootsTransportMeshScopeId {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportMeshScopeId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::parse(raw).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsTransportTargetLabel(String);
 
@@ -96,7 +125,24 @@ impl core::fmt::Display for RadrootsTransportTargetLabel {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetLabel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let parsed = Self::parse(raw.as_str()).map_err(serde::de::Error::custom)?;
+        if parsed.as_str() != raw {
+            return Err(serde::de::Error::custom(
+                "transport target label is not canonical",
+            ));
+        }
+        Ok(parsed)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsTransportTargetFingerprint(String);
 
@@ -147,14 +193,31 @@ impl core::fmt::Display for RadrootsTransportTargetFingerprint {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetFingerprint {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let parsed = Self::parse(raw.as_str()).map_err(serde::de::Error::custom)?;
+        if parsed.as_str() != raw {
+            return Err(serde::de::Error::custom(
+                "transport target fingerprint is not canonical",
+            ));
+        }
+        Ok(parsed)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportTarget {
-    pub kind: RadrootsTransportKind,
-    pub uri: RadrootsTransportTargetUri,
-    pub scope: Option<RadrootsTransportMeshScopeId>,
-    pub label: Option<RadrootsTransportTargetLabel>,
-    pub fingerprint: RadrootsTransportTargetFingerprint,
+    kind: RadrootsTransportKind,
+    uri: RadrootsTransportTargetUri,
+    scope: Option<RadrootsTransportMeshScopeId>,
+    label: Option<RadrootsTransportTargetLabel>,
+    fingerprint: RadrootsTransportTargetFingerprint,
 }
 
 impl RadrootsTransportTarget {
@@ -226,13 +289,90 @@ impl RadrootsTransportTarget {
             fingerprint,
         })
     }
+
+    pub fn kind(&self) -> &RadrootsTransportKind {
+        &self.kind
+    }
+
+    pub fn uri(&self) -> &RadrootsTransportTargetUri {
+        &self.uri
+    }
+
+    pub fn scope(&self) -> Option<&RadrootsTransportMeshScopeId> {
+        self.scope.as_ref()
+    }
+
+    pub fn label(&self) -> Option<&RadrootsTransportTargetLabel> {
+        self.label.as_ref()
+    }
+
+    pub fn fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+        &self.fingerprint
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsTransportTargetWire {
+    kind: RadrootsTransportKind,
+    uri: String,
+    scope: Option<String>,
+    label: Option<String>,
+    fingerprint: String,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportTarget {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsTransportTargetWire::deserialize(deserializer)?;
+        let scope = wire
+            .scope
+            .map(RadrootsTransportMeshScopeId::parse)
+            .transpose()
+            .map_err(serde::de::Error::custom)?;
+        let label = wire
+            .label
+            .map(|label| {
+                let parsed = RadrootsTransportTargetLabel::parse(label.as_str())?;
+                if parsed.as_str() != label {
+                    return Err(RadrootsTransportError::InvalidTargetLabel);
+                }
+                Ok(parsed)
+            })
+            .transpose()
+            .map_err(serde::de::Error::custom)?;
+        let fingerprint = RadrootsTransportTargetFingerprint::parse(wire.fingerprint.as_str())
+            .map_err(serde::de::Error::custom)?;
+        if fingerprint.as_str() != wire.fingerprint {
+            return Err(serde::de::Error::custom(
+                "transport target fingerprint is not canonical",
+            ));
+        }
+        let target =
+            Self::new_with_metadata(wire.kind, wire.uri.as_str(), scope.clone(), label.clone())
+                .map_err(serde::de::Error::custom)?;
+        if target.uri.as_str() != wire.uri
+            || target.scope != scope
+            || target.label != label
+            || target.fingerprint != fingerprint
+        {
+            return Err(serde::de::Error::custom(
+                "transport target identity does not match its canonical fields",
+            ));
+        }
+        Ok(target)
+    }
 }
 
 fn default_scope_for_kind(kind: &RadrootsTransportKind) -> Option<RadrootsTransportMeshScopeId> {
     (*kind == RadrootsTransportKind::Reticulum).then(RadrootsTransportMeshScopeId::local_reticulum)
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportTargetSet {
     targets: Vec<RadrootsTransportTarget>,
@@ -262,6 +402,24 @@ impl RadrootsTransportTargetSet {
 
     pub fn is_empty(&self) -> bool {
         self.targets.is_empty()
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsTransportTargetSetWire {
+    targets: Vec<RadrootsTransportTarget>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsTransportTargetSetWire::deserialize(deserializer)?;
+        Self::new(wire.targets).map_err(serde::de::Error::custom)
     }
 }
 
@@ -323,7 +481,7 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportEr
     {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
-    if trimmed.contains('?') || trimmed.contains('#') {
+    if trimmed.contains('?') || trimmed.contains('#') || trimmed.contains('\\') {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
     let Some(scheme_end) = trimmed.find("://") else {
@@ -338,6 +496,7 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportEr
     let authority = &endpoint[..authority_end];
     let path = &endpoint[authority_end..];
     let authority = canonicalize_nostr_relay_authority(authority, scheme.as_str())?;
+    validate_nostr_relay_path(path)?;
     if path == "/" {
         return Ok(format!("{scheme}://{authority}"));
     }
@@ -360,16 +519,17 @@ fn canonicalize_nostr_relay_authority(
         if host.is_empty()
             || host
                 .chars()
-                .any(|ch| matches!(ch, '[' | ']' | '/' | '?' | '#' | '@'))
+                .any(|ch| matches!(ch, '[' | ']' | '/' | '?' | '#' | '@' | '\\'))
         {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
+        let canonical_host = canonicalize_nostr_relay_ipv6(host)?;
         (
-            format!("[{}]", host.to_ascii_lowercase()),
+            format!("[{canonical_host}]"),
             parse_nostr_relay_port(suffix)?,
         )
     } else {
-        if authority.contains(['[', ']']) {
+        if authority.contains(['[', ']', '\\']) {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
         let mut parts = authority.splitn(2, ':');
@@ -378,14 +538,13 @@ fn canonicalize_nostr_relay_authority(
             .next()
             .map(parse_nostr_relay_port_with_prefix)
             .transpose()?;
-        if !is_valid_nostr_relay_host(host) {
-            return Err(RadrootsTransportError::InvalidTargetUri);
-        }
-        (host.to_ascii_lowercase(), port)
+        (canonicalize_nostr_relay_host(host)?, port)
     };
     if scheme == "ws" && !is_local_ws_relay_host(host.as_str()) {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
+    let port =
+        port.filter(|port| !matches!((scheme, port.as_str()), ("wss", "443") | ("ws", "80")));
     Ok(match port {
         Some(port) => format!("{host}:{port}"),
         None => host,
@@ -403,24 +562,175 @@ fn parse_nostr_relay_port(suffix: &str) -> Result<Option<String>, RadrootsTransp
 }
 
 fn parse_nostr_relay_port_with_prefix(port: &str) -> Result<String, RadrootsTransportError> {
-    if port.is_empty() || !port.bytes().all(|byte| byte.is_ascii_digit()) {
+    if port.is_empty()
+        || !port.bytes().all(|byte| byte.is_ascii_digit())
+        || port.len() > 1 && port.starts_with('0')
+    {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
     let value = port
         .parse::<u32>()
         .map_err(|_| RadrootsTransportError::InvalidTargetUri)?;
-    if value > u16::MAX as u32 {
+    if !(1..=u16::MAX as u32).contains(&value) {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
     Ok(port.to_string())
 }
 
-fn is_valid_nostr_relay_host(host: &str) -> bool {
-    if host.contains("..") || host.starts_with('.') || host.ends_with('.') {
+fn canonicalize_nostr_relay_host(host: &str) -> Result<String, RadrootsTransportError> {
+    let canonical = host.to_ascii_lowercase();
+    if canonical_ipv4(canonical.as_str()) || canonical_dns_host(canonical.as_str()) {
+        return Ok(canonical);
+    }
+    Err(RadrootsTransportError::InvalidTargetUri)
+}
+
+fn canonicalize_nostr_relay_ipv6(host: &str) -> Result<String, RadrootsTransportError> {
+    if host.is_empty()
+        || !host
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f' | b'A'..=b'F' | b':'))
+    {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    host.parse::<Ipv6Addr>()
+        .map(|address| address.to_string())
+        .map_err(|_| RadrootsTransportError::InvalidTargetUri)
+}
+
+fn canonical_ipv4(value: &str) -> bool {
+    let mut count = 0usize;
+    for part in value.split('.') {
+        if part.is_empty()
+            || !part.bytes().all(|byte| byte.is_ascii_digit())
+            || part.len() > 1 && part.starts_with('0')
+            || part.parse::<u8>().is_err()
+        {
+            return false;
+        }
+        count += 1;
+    }
+    count == 4
+}
+
+fn canonical_dns_host(value: &str) -> bool {
+    if value.is_empty() || value.len() > 253 {
         return false;
     }
-    host.bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.'))
+    let mut final_label = "";
+    for label in value.split('.') {
+        if label.is_empty()
+            || label.len() > 63
+            || label.starts_with("xn--")
+            || !label
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+            || !label
+                .as_bytes()
+                .first()
+                .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+            || !label
+                .as_bytes()
+                .last()
+                .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        {
+            return false;
+        }
+        final_label = label;
+    }
+    !dns_label_is_whatwg_number(final_label)
+}
+
+fn dns_label_is_whatwg_number(value: &str) -> bool {
+    value.bytes().all(|byte| byte.is_ascii_digit())
+        || value
+            .strip_prefix("0x")
+            .is_some_and(|digits| digits.bytes().all(|byte| byte.is_ascii_hexdigit()))
+}
+
+fn validate_nostr_relay_path(path: &str) -> Result<(), RadrootsTransportError> {
+    if path.is_empty() || path == "/" {
+        return Ok(());
+    }
+    let Some(component) = path.strip_prefix('/') else {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    };
+    if relay_path_component_is_valid(component) {
+        Ok(())
+    } else {
+        Err(RadrootsTransportError::InvalidTargetUri)
+    }
+}
+
+fn relay_path_component_is_valid(value: &str) -> bool {
+    if value.split('/').any(relay_path_segment_is_dot) {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len()
+                || !upper_hex_digit(bytes[index + 1])
+                || !upper_hex_digit(bytes[index + 2])
+            {
+                return false;
+            }
+            index += 3;
+            continue;
+        }
+        if !relay_path_character(bytes[index]) {
+            return false;
+        }
+        index += 1;
+    }
+    true
+}
+
+fn relay_path_segment_is_dot(segment: &str) -> bool {
+    let bytes = segment.as_bytes();
+    let mut index = 0usize;
+    let mut dots = 0usize;
+    while index < bytes.len() {
+        if bytes[index] == b'.' {
+            dots += 1;
+            index += 1;
+        } else if bytes[index..].starts_with(b"%2E") {
+            dots += 1;
+            index += 3;
+        } else {
+            return false;
+        }
+    }
+    matches!(dots, 1 | 2)
+}
+
+fn relay_path_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'-' | b'.'
+                | b'_'
+                | b'~'
+                | b'!'
+                | b'$'
+                | b'&'
+                | b'\''
+                | b'('
+                | b')'
+                | b'*'
+                | b'+'
+                | b','
+                | b';'
+                | b'='
+                | b':'
+                | b'@'
+                | b'/'
+        )
+}
+
+fn upper_hex_digit(byte: u8) -> bool {
+    byte.is_ascii_digit() || matches!(byte, b'A'..=b'F')
 }
 
 fn is_local_ws_relay_host(host: &str) -> bool {

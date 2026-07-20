@@ -5,19 +5,19 @@ SQLx-backed canonical event-envelope storage for Radroots protocol events.
 ## Ingest boundary
 
 `RadrootsEventIngest::from_signed_event` and `from_raw_json` verify the NIP-01
-identifier and signature before constructing an ingest value. The store applies
-`radroots_event_codec::admission::admit_verified_event` only to that verified
-typestate. A failed signature never enters trusted contract validation or the
-durable raw-event sequence.
+identifier and signature with the reconciliation-v1 boundary before
+constructing an ingest value. The store applies the immutable registry-v7
+admission graph only to that verified typestate. A failed signature never
+enters trusted contract validation or the durable raw-event sequence.
 
 The ingest receipt reports admission status and its stable failure code
 separately from `valid_stream_eligible` and the raw-head decision. Admission may
 be `Admitted`, `Unsupported`, or `Invalid`; unsupported registry matching is
 not interchangeable with a registered contract or typed profile that failed
-validation. The failure code is present when that ingest performed the durable
-classification. A duplicate returns the immutable stored status and eligibility
-without pretending that the baseline schema persisted the original diagnostic
-code.
+validation. The failure code is a deterministic result of the verified envelope
+and the frozen registry profile, so it is returned for both first insertion and
+duplicate ingest. A duplicate returns the immutable stored status, contract, and
+eligibility while recomputing no durable classification.
 
 ## Read surfaces
 
@@ -46,39 +46,123 @@ tags, observations, or heads. Their ingest receipt carries
 `RadrootsEventPersistence::NotPersisted`; repeated delivery remains live-only
 and is never reported as a durable duplicate.
 
-Deletion suppression is not stored by this baseline schema. A later additive
-migration extends the same visibility boundary; deletion evaluation does not
-rewrite raw envelopes through the event-store API.
+Schema version 2 persists NIP-09 reconciliation as derived authority without
+rewriting or deleting raw envelopes. It stores generation-partitioned event
+coordinate facts, admitted deletion-request facts, normalized event and
+address targets, canonical addressable-head state, and an ordered transition
+history. Kind-`5` requests remain durable protocol events and are immune from
+suppression. These derived facts do not claim that a relay removed an event.
+The existing `event_visibility`, `visible_event`, and `visible_event_head`
+queries remain NIP-01 admission/head views in this schema checkpoint; callers
+must not treat them as NIP-09-aware until the generation-bound visibility and
+transition read contract is published.
 
-The current event-store API is append-only, but the byte-pinned `0001` schema
-and the exposed SQLx pool do not prevent direct SQL mutation. Database-enforced
-raw-event immutability belongs to a later additive migration.
+The `0002_nip09` migration also installs guards that reject accidental
+out-of-sequence SQL mutation of raw envelopes, tags, heads, reconciliation
+facts, source authority, and transition history. The exposed SQLx pool is a
+fully trusted database-authority escape hatch, not a security or capability
+boundary. A caller that executes arbitrary DML, reproduces an internal
+maintenance protocol, disables connection invariants, or changes the schema
+can subvert derived authority and is outside the supported mutation model.
+Typed event-store methods are the supported integrity-enforced write surface.
 
 `open_pool` inspects the opened main database rather than trusting URL text,
 validates the declared backing mode, rejects multi-connection in-memory pools,
 and configures every file-pool connection with foreign-key enforcement and the
-required busy timeout before migrations or writes.
+required busy timeout before migrations or writes. Backing inspection uses
+SQLite's non-shadowable `PRAGMA database_list`. Every supplied connection is
+also checked for temporary schema objects whose name or target table collides
+with the migration ledger, an event-store-owned object, or the reserved
+`radroots_event_store_` namespace. Collision matching follows SQLite's
+ASCII-case-insensitive identifier semantics. Unrelated caller-owned temporary
+tables remain allowed and are not removed. Temporary views and triggers are
+rejected because they can redirect name resolution or inject undeclared writes
+into otherwise governed migration and maintenance statements.
+
+Call `begin_write_transaction` before any reads that precede
+`ingest_event_in_transaction`. It obtains the SQLite writer reservation up
+front; a deferred transaction whose snapshot was invalidated by another writer
+fails closed instead of partially ingesting an event. The borrowed-transaction
+ingest API wraps each call in a nested savepoint. A failed call rolls back its
+own protocol and extension writes while leaving successful work already present
+in the caller's transaction available for the caller to commit or roll back.
+Owned and borrowed ingests validate the active connection against governed
+temporary-schema collisions before protocol mutation. If rollback itself
+fails, the typed error preserves both the primary ingest failure and the
+rollback failure.
+
+The reconciliation core and its shared raw-head storage are isolated in
+versioned modules whose complete production AST identities are bound by the
+manifest. The authenticated ingest wrapper then creates a private post-core
+storage capability whose only production methods write the declared trade and
+transport-observation operation/table pairs. Extension orchestration receives
+that capability rather than a SQL transaction and has no SQLx authority. The
+capability policy rejects transaction escape, dynamic or compound SQL, schema
+changes, attached databases, and event-store protocol authority.
+
+The capability borrow ends before an identity-bound validator compares the
+exact source generation/profile authority, maintained raw counters and indexed
+high-water, indexed transition bounds, rebuild-marker absence, and main/temp
+schema versions captured by the protocol core. Full table cardinality and
+replay validation remain explicit migration and rebuild integrity checks rather
+than quadratic per-ingest scans.
 
 ## Schema authority
 
 Every constructor converges the database through a versioned migration
-authority. The frozen `0001_event_store` SQL is pinned by byte length and
-SHA-256 in the embedded registry. Fresh databases install it transactionally;
-an existing database is adopted only when its exact 46-object SQLite catalog
-matches the frozen baseline fingerprint. Partial schemas, altered tables,
-attached indexes or triggers, counterfeit ledgers, history gaps, checksum
-drift, and schemas newer than this crate fail closed.
+authority whose current version is `2`. The frozen `0001_event_store` and
+`0002_nip09` SQL inputs are pinned by byte length and SHA-256 in the embedded
+registry. Fresh databases install them transactionally; an existing
+unledgered database is adopted only when its exact 46-object SQLite catalog
+matches the frozen version-1 baseline fingerprint. Partial schemas, altered
+tables, attached indexes or triggers, counterfeit ledgers, history gaps,
+checksum drift, and schemas newer than this crate fail closed.
 
 Checksummed, tamper-evident managed history lives in the strict, without-rowid
 `radroots_event_store_schema_migrations` ledger and fails closed on drift.
-Current-schema opens return after read-only inspection. Mutating migration work
-rechecks under `BEGIN IMMEDIATE`, validates exact catalog deltas, SQLite and
-FTS5 integrity, and event-store-owned foreign keys before commit, and never
-changes `PRAGMA user_version`. Each migration declares its owned objects and
-tables. Objects introduced after the frozen baseline must use the reserved
+Current-schema opens return after read-only inspection and validate the active
+reconciliation source authority. Every open validates all hooks in applied
+migration order, so a later hookless migration cannot mask an earlier hook.
+Mutating migration work rechecks under `BEGIN IMMEDIATE`, validates exact
+catalog deltas, SQLite and FTS5 integrity, event-store-owned foreign keys, and
+all applied migration-hook results before commit, and never changes
+`PRAGMA user_version`. Each migration declares its owned objects and tables.
+Objects introduced after the frozen baseline must use the reserved
 `radroots_event_store_` namespace, which lets older readers detect newer
 schema remnants after ledger loss while unrelated shared-database tables
 remain outside this crate's ownership.
+
+Schema inspection, migration, and rollback bind their catalog, ledger, and
+history access explicitly to SQLite's `main` database and reject governed
+temporary-schema collisions on the connection before authority reads or
+mutation. Reconciliation and migration integrity checks fail on foreign-key
+violations whose child table is declared as event-store-owned or uses the
+reserved namespace. Violations in unrelated shared-schema child tables remain
+caller-owned and visible through SQLite's full `foreign_key_check`; they do not
+block event-store migration or source rebuild.
+
+Migration `0002_nip09` re-verifies the frozen raw JSON and immutable columns,
+rebuilds derived registry-v7 admission and raw-head facts, then creates one
+random 32-byte source generation. Initial reconciliation and every later full
+rebuild use the same marker-first state machine: the marker binds the exact
+prior and raw authority, an impossible deferred foreign-key barrier prevents a
+partial rebuild from committing, and guarded closure requires the rebuilt
+authority before commit. Each successful rebuild appends a fresh random
+generation and preserves prior generations, facts, states, and transition
+history as immutable records. All NIP-09 facts, canonical addressable state,
+and transitions are partitioned by generation. The reconciliation version,
+addressable-feed version, registry version, hook-manifest digest, raw counts,
+raw high-water sequence, and transition floor are stored with each generation
+and validated on open.
+
+The one-time reconciliation preflights and then rechecks under the writer lock
+at most 25,000 raw events, 250,000 raw tags, 64 MiB of retained event-row text,
+and 32 MiB of retained tag-row text. It loads both authorities in checked
+512-row pages. Candidate heads evaluate only the exact event- and
+address-target request indices, merging shared matches once in canonical
+request order without cloning request payloads. Exceeding a dimension returns
+`ReconciliationCapacityExceeded` before schema changes; local cache owners can
+reduce or rebuild the cache and retry.
 
 `inspect_event_store_schema_status` classifies a pool as `Uninitialized`,
 `UnledgeredBaseline`, or `Managed` without configuring or migrating it.
@@ -96,7 +180,8 @@ invariants from an existing `SqlitePool` without configuring the pool or
 running migrations. `RadrootsEventStore::status_summary` delegates to this
 same authority. This permits offline tools to inspect an already initialized
 store without duplicating schema-sensitive SQL or turning a read operation into
-a schema mutation.
+a schema mutation. Status reads are explicitly bound to `main`, so an attached
+database cannot stand in for a missing main event-store schema.
 
 Pre-admission legacy rows remain included in `total_events` but excluded from
 `valid_stream_events`. New-format rows with inconsistent verification,
@@ -104,13 +189,22 @@ admission, event-class, eligibility, or contract identity fail closed.
 
 ## Projection cursors
 
-`projection_cursor` requires the caller's expected projection version.
-`compare_and_swap_projection_cursor` requires an expected prior sequence for an
-existing cursor, rejects version mismatch and sequence regression, and reports
-conflicting writers. Callers must reset or rebuild derived state after a
-version mismatch. Persisted source-generation identity belongs to the later
-additive migration; the byte-pinned `0001_event_store` migration is not
-rewritten and no generation is fabricated here.
+`projection_cursor` requires the caller's expected projection version and
+returns a cursor bound to the active source generation.
+`compare_and_swap_projection_cursor` rejects a stale generation, version
+mismatch, sequence regression, a sequence beyond the raw high-water mark, and
+conflicting writers.
+
+A consumer that needs a different projection version or encounters an
+unbound legacy cursor must call `prepare_projection_cursor_rebuild`, rebuild
+derived state through the ticket's target raw high-water sequence, and pass
+the consumed ticket to `reset_projection_cursor_after_rebuild`. The ticket
+binds the projection id, target version, active source generation, raw
+high-water sequence, and exact prior cursor identity including its monotonic
+source revision. New raw events may arrive while the consumer rebuilds; reset
+commits at the ticket's captured high-water sequence and the consumer catches
+up normally afterward. Reset fails closed on generation rotation, cursor-row
+races, replay, and same-value ABA replacement.
 
 The historical SQLite column name `projection_eligible` remains an internal
 `0001` compatibility detail. Public APIs and models use

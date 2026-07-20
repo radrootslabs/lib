@@ -1,5 +1,6 @@
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransport,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
+    RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RadrootsTransport,
     RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
     RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
@@ -34,16 +35,16 @@ fn target_fingerprints_are_stable_and_transport_scoped() {
         RadrootsTransportTarget::nostr_relay("wss://relay.example/Events").expect("nostr target");
     let reticulum = RadrootsTransportTarget::reticulum().expect("reticulum target");
 
-    assert_eq!(nostr_upper.uri.as_str(), "wss://relay.example/Events");
-    assert_eq!(nostr_upper.scope, None);
+    assert_eq!(nostr_upper.uri().as_str(), "wss://relay.example/Events");
+    assert_eq!(nostr_upper.scope(), None);
     assert_eq!(
-        reticulum.scope.as_ref().map(|scope| scope.as_str()),
+        reticulum.scope().map(|scope| scope.as_str()),
         Some(RADROOTS_RETICULUM_SCOPE_ID)
     );
-    assert_eq!(nostr_upper.fingerprint, nostr_lower.fingerprint);
-    assert_ne!(nostr_upper.fingerprint, reticulum.fingerprint);
+    assert_eq!(nostr_upper.fingerprint(), nostr_lower.fingerprint());
+    assert_ne!(nostr_upper.fingerprint(), reticulum.fingerprint());
     assert_eq!(
-        nostr_upper.fingerprint.as_str(),
+        nostr_upper.fingerprint().as_str(),
         "d0903c3067150d7b4f7efd92a9be002b97d74e83f8bb6827327fa7ecd869332b"
     );
 }
@@ -56,29 +57,29 @@ fn reticulum_destination_v1_is_canonical_and_stable() {
     let local = radroots_transport::ReticulumDestinationV1::local();
 
     assert_eq!(destination, local);
-    assert_eq!(destination.uri.as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(destination.uri().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(
-        destination.routing.scope.as_str(),
+        destination.routing().scope.as_str(),
         RADROOTS_RETICULUM_SCOPE_ID
     );
     assert_eq!(
-        destination.routing.gateway,
+        destination.routing().gateway,
         ReticulumGatewaySemanticsV1::NoGatewayForwarding
     );
     assert_eq!(
-        destination.routing.privacy,
+        destination.routing().privacy,
         ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
     );
-    assert_eq!(destination.fingerprint, target.fingerprint);
+    assert_eq!(destination.fingerprint(), target.fingerprint());
     assert_eq!(
         destination
             .transport_target()
             .expect("transport target")
-            .fingerprint,
-        target.fingerprint
+            .fingerprint(),
+        target.fingerprint()
     );
     assert_eq!(
-        destination.fingerprint.as_str(),
+        destination.fingerprint().as_str(),
         "39142c9a79d6912655e0ad00fb5dbfbe9d2d91b4999e5d68d04a81d89a77f831"
     );
     assert!(
@@ -89,6 +90,48 @@ fn reticulum_destination_v1_is_canonical_and_stable() {
         )
         .is_err()
     );
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn reticulum_destination_deserialization_revalidates_canonical_identity() {
+    let destination = ReticulumDestinationV1::local();
+    let canonical = serde_json::to_value(&destination).expect("serialize destination");
+    assert_eq!(
+        serde_json::from_value::<ReticulumDestinationV1>(canonical.clone())
+            .expect("deserialize canonical destination"),
+        destination
+    );
+
+    let mut forged_fingerprint = canonical.clone();
+    forged_fingerprint
+        .as_object_mut()
+        .expect("destination object")
+        .insert("fingerprint".to_owned(), Value::String("0".repeat(64)));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_fingerprint).is_err());
+
+    let mut forged_scope = canonical.clone();
+    forged_scope
+        .get_mut("routing")
+        .and_then(Value::as_object_mut)
+        .expect("routing object")
+        .insert("scope".to_owned(), Value::String("remote".to_owned()));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(forged_scope).is_err());
+
+    let mut nested_unknown = canonical.clone();
+    nested_unknown
+        .get_mut("routing")
+        .and_then(Value::as_object_mut)
+        .expect("routing object")
+        .insert("unexpected".to_owned(), Value::Bool(true));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(nested_unknown).is_err());
+
+    let mut top_level_unknown = canonical;
+    top_level_unknown
+        .as_object_mut()
+        .expect("destination object")
+        .insert("unexpected".to_owned(), Value::Bool(true));
+    assert!(serde_json::from_value::<ReticulumDestinationV1>(top_level_unknown).is_err());
 }
 
 #[test]
@@ -206,18 +249,22 @@ fn nostr_relay_targets_use_canonical_endpoint_identity() {
     let root = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("root target");
     let root_slash =
         RadrootsTransportTarget::nostr_relay("WSS://RELAY.EXAMPLE/").expect("root slash target");
+    let root_default_port = RadrootsTransportTarget::nostr_relay("wss://relay.example:443")
+        .expect("default-port root target");
     let path =
         RadrootsTransportTarget::nostr_relay("wss://relay.example/path").expect("path target");
     let generic =
         RadrootsTransportTarget::new(RadrootsTransportKind::Nostr, "wss://relay.example/")
             .expect("generic nostr target");
 
-    assert_eq!(root.uri.as_str(), "wss://relay.example");
-    assert_eq!(root_slash.uri.as_str(), "wss://relay.example");
-    assert_eq!(root.fingerprint, root_slash.fingerprint);
-    assert_eq!(root.fingerprint, generic.fingerprint);
-    assert_ne!(root.fingerprint, path.fingerprint);
-    assert_eq!(path.uri.as_str(), "wss://relay.example/path");
+    assert_eq!(root.uri().as_str(), "wss://relay.example");
+    assert_eq!(root_slash.uri().as_str(), "wss://relay.example");
+    assert_eq!(root_default_port.uri().as_str(), "wss://relay.example");
+    assert_eq!(root.fingerprint(), root_slash.fingerprint());
+    assert_eq!(root.fingerprint(), root_default_port.fingerprint());
+    assert_eq!(root.fingerprint(), generic.fingerprint());
+    assert_ne!(root.fingerprint(), path.fingerprint());
+    assert_eq!(path.uri().as_str(), "wss://relay.example/path");
     assert_eq!(
         RadrootsTransportTargetSet::new(vec![root, root_slash])
             .expect_err("canonical-equivalent roots collide"),
@@ -235,7 +282,13 @@ fn nostr_relay_targets_reject_noncanonical_or_unsupported_endpoint_forms() {
         "wss://relay.example#fragment",
         "wss://",
         "wss://relay.example:bad",
+        "wss://relay.example:0",
+        "wss://relay.example:01",
         "wss://relay.example:65536",
+        "wss://:443",
+        "wss://[not-ipv6]",
+        "wss://relay.example\\path",
+        "wss://relay.example/%2f",
         "ws://relay.example",
     ] {
         assert_eq!(
@@ -246,10 +299,10 @@ fn nostr_relay_targets_reject_noncanonical_or_unsupported_endpoint_forms() {
 
     let local_ws =
         RadrootsTransportTarget::nostr_relay("ws://LOCALHOST:7777/").expect("local ws relay");
-    assert_eq!(local_ws.uri.as_str(), "ws://localhost:7777");
+    assert_eq!(local_ws.uri().as_str(), "ws://localhost:7777");
     let local_ipv6 =
         RadrootsTransportTarget::nostr_relay("ws://[::1]:7777").expect("local ipv6 relay");
-    assert_eq!(local_ipv6.uri.as_str(), "ws://[::1]:7777");
+    assert_eq!(local_ipv6.uri().as_str(), "ws://[::1]:7777");
 }
 
 #[test]
@@ -405,13 +458,15 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
 #[test]
 fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
     let target = RadrootsTransportTarget::reticulum().expect("target");
-    let receipt = RadrootsTransportDeliveryReceipt {
-        request_id: "reticulum".to_owned(),
-        target_receipts: vec![RadrootsTransportTargetReceipt::new(
+    let receipt = RadrootsTransportDeliveryReceipt::new(
+        "reticulum",
+        RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
+        vec![RadrootsTransportTargetReceipt::new(
             target,
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented),
         )],
-    };
+    )
+    .expect("receipt");
 
     assert!(
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
@@ -441,7 +496,8 @@ fn request_models_round_trip_with_serde() {
         opaque_payload(),
         target_set,
         RadrootsTransportSatisfactionPolicy::any_accepted(),
-    );
+    )
+    .expect("request");
 
     let json = serde_json::to_string(&request).expect("serialize request");
     let decoded: RadrootsTransportDeliveryRequest =
@@ -694,7 +750,7 @@ fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
             "transport.nostr_relay_target.valid" => {
                 let target = RadrootsTransportTarget::nostr_relay(raw_uri).expect("relay target");
                 assert_eq!(
-                    target.uri.as_str(),
+                    target.uri().as_str(),
                     expected
                         .get("canonical_uri")
                         .and_then(Value::as_str)
@@ -712,9 +768,9 @@ fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
 #[test]
 fn reticulum_transport_targets_use_default_destination_and_scope() {
     let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    assert_eq!(target.uri.as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(target.uri().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(
-        target.scope.as_ref().map(|scope| scope.as_str()),
+        target.scope().map(|scope| scope.as_str()),
         Some(RADROOTS_RETICULUM_SCOPE_ID)
     );
 
@@ -736,11 +792,12 @@ fn reticulum_transport_targets_use_default_destination_and_scope() {
 #[test]
 fn target_fingerprints_and_sets_cover_accessors_and_validation() {
     let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    let parsed =
-        RadrootsTransportTargetFingerprint::parse(target.fingerprint.as_str().to_ascii_uppercase())
-            .expect("uppercase fingerprint parses");
-    assert_eq!(parsed.as_str(), target.fingerprint.as_str());
-    assert_eq!(parsed.to_string(), target.fingerprint.as_str());
+    let parsed = RadrootsTransportTargetFingerprint::parse(
+        target.fingerprint().as_str().to_ascii_uppercase(),
+    )
+    .expect("uppercase fingerprint parses");
+    assert_eq!(parsed.as_str(), target.fingerprint().as_str());
+    assert_eq!(parsed.to_string(), target.fingerprint().as_str());
     assert_eq!(
         RadrootsTransportTargetFingerprint::parse("g".repeat(64)).expect_err("non-hex fingerprint"),
         RadrootsTransportError::InvalidTargetFingerprint
@@ -782,14 +839,11 @@ fn target_scope_participates_in_identity_and_label_does_not() {
     )
     .expect("remote Reticulum target");
 
-    assert_eq!(local.fingerprint, relabeled.fingerprint);
-    assert_ne!(local.fingerprint, remote.fingerprint);
+    assert_eq!(local.fingerprint(), relabeled.fingerprint());
+    assert_ne!(local.fingerprint(), remote.fingerprint());
+    assert_eq!(local.scope().map(|scope| scope.as_str()), Some("local"));
     assert_eq!(
-        local.scope.as_ref().map(|scope| scope.as_str()),
-        Some("local")
-    );
-    assert_eq!(
-        local.label.as_ref().map(|label| label.as_str()),
+        local.label().map(|label| label.as_str()),
         Some("Local Reticulum node")
     );
     assert_eq!(
@@ -1051,12 +1105,14 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
     }
 
     let deferred_until_implemented =
-        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::TransportUnavailable)
-            .with_target_status(RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented);
+        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented);
     assert_eq!(
         deferred_until_implemented.status,
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
+    deferred_until_implemented
+        .validate()
+        .expect("canonical outcome");
 }
 
 #[test]
@@ -1067,7 +1123,7 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
         RadrootsTransportTarget::nostr_relay("wss://two.example").expect("optional target");
     let policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
-        vec![required.fingerprint.clone()],
+        vec![required.fingerprint().clone()],
     )
     .expect("required target policy");
     assert_eq!(policy.required_target_count(2).expect("required count"), 1);
@@ -1091,15 +1147,20 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
         policy
             .required_target_fingerprints()
             .expect("required targets"),
-        std::slice::from_ref(&required.fingerprint)
+        std::slice::from_ref(required.fingerprint())
     );
     let unordered_policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
-        vec![optional.fingerprint.clone(), required.fingerprint.clone()],
+        vec![
+            optional.fingerprint().clone(),
+            required.fingerprint().clone(),
+        ],
     )
     .expect("unordered required targets");
-    let mut expected_required_targets =
-        vec![required.fingerprint.clone(), optional.fingerprint.clone()];
+    let mut expected_required_targets = vec![
+        required.fingerprint().clone(),
+        optional.fingerprint().clone(),
+    ];
     expected_required_targets.sort();
     assert_eq!(
         unordered_policy
@@ -1108,22 +1169,27 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
         expected_required_targets.as_slice()
     );
 
-    let optional_only = RadrootsTransportDeliveryReceipt {
-        request_id: "required-target".to_owned(),
-        target_receipts: vec![RadrootsTransportTargetReceipt::new(
+    let optional_only = RadrootsTransportDeliveryReceipt::new(
+        "required-target",
+        RadrootsTransportTargetSet::new(vec![optional.clone()]).expect("optional target set"),
+        vec![RadrootsTransportTargetReceipt::new(
             optional.clone(),
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
         )],
-    };
-    assert!(
-        !optional_only
+    )
+    .expect("optional receipt");
+    assert_eq!(
+        optional_only
             .is_satisfied_by(&policy)
-            .expect("missing required target")
+            .expect_err("unrequested required target"),
+        RadrootsTransportError::RequiredTargetNotRequested
     );
 
-    let required_delivered = RadrootsTransportDeliveryReceipt {
-        request_id: "required-target".to_owned(),
-        target_receipts: vec![
+    let required_delivered = RadrootsTransportDeliveryReceipt::new(
+        "required-target",
+        RadrootsTransportTargetSet::new(vec![optional.clone(), required.clone()])
+            .expect("required target set"),
+        vec![
             RadrootsTransportTargetReceipt::new(
                 optional,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Rejected),
@@ -1133,7 +1199,8 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
             ),
         ],
-    };
+    )
+    .expect("required receipt");
     assert!(
         required_delivered
             .is_satisfied_by(&policy)
@@ -1150,7 +1217,10 @@ fn required_target_satisfaction_uses_fingerprints_not_target_counts() {
     assert_eq!(
         RadrootsTransportSatisfactionPolicy::required_targets(
             RadrootsTransportSatisfactionClass::Accepted,
-            vec![required.fingerprint.clone(), required.fingerprint],
+            vec![
+                required.fingerprint().clone(),
+                required.fingerprint().clone(),
+            ],
         )
         .expect_err("duplicate required target"),
         RadrootsTransportError::DuplicateRequiredTargetFingerprint
@@ -1186,13 +1256,14 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
             request: RadrootsTransportDeliveryRequest,
         ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
             Box::pin(async move {
-                Ok(RadrootsTransportDeliveryReceipt {
-                    request_id: request.request_id,
-                    target_receipts: vec![RadrootsTransportTargetReceipt::new(
+                RadrootsTransportDeliveryReceipt::new(
+                    request.request_id(),
+                    request.target_set().clone(),
+                    vec![RadrootsTransportTargetReceipt::new(
                         self.target.clone(),
                         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Delivered),
                     )],
-                })
+                )
             })
         }
 
@@ -1223,16 +1294,20 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
         status.capabilities,
         RadrootsTransportCapabilities::deliver_and_fetch()
     );
-    let delivery =
-        futures::executor::block_on(transport.deliver(RadrootsTransportDeliveryRequest::new(
-            "deliver-1",
-            opaque_payload(),
-            target_set.clone(),
-            RadrootsTransportSatisfactionPolicy::all_delivered(),
-        )))
-        .expect("deliver");
+    let delivery = futures::executor::block_on(
+        transport.deliver(
+            RadrootsTransportDeliveryRequest::new(
+                "deliver-1",
+                opaque_payload(),
+                target_set.clone(),
+                RadrootsTransportSatisfactionPolicy::all_delivered(),
+            )
+            .expect("delivery request"),
+        ),
+    )
+    .expect("deliver");
     assert_eq!(
-        delivery.target_receipts[0].outcome.kind,
+        delivery.target_receipts()[0].outcome.kind,
         RadrootsTransportOutcomeKind::Delivered
     );
     let fetch = futures::executor::block_on(
@@ -1256,8 +1331,10 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
         RadrootsTransportTargetSet::new(vec![one.clone(), two.clone()]).expect("target set"),
         RadrootsTransportSatisfactionPolicy::all_accepted(),
     )
-    .with_now_ms(42);
-    assert_eq!(request.now_ms, 42);
+    .expect("delivery request")
+    .try_with_now_ms(42)
+    .expect("delivery timestamp");
+    assert_eq!(request.now_ms(), 42);
 
     for (policy, class) in [
         (
@@ -1282,7 +1359,7 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
 
     let required = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
-        vec![one.fingerprint.clone(), two.fingerprint.clone()],
+        vec![one.fingerprint().clone(), two.fingerprint().clone()],
     )
     .expect("required policy");
     assert_eq!(
@@ -1300,10 +1377,12 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
         two.clone(),
         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Rejected),
     );
-    let receipt = RadrootsTransportDeliveryReceipt {
-        request_id: "delivery".to_owned(),
-        target_receipts: vec![accepted, rejected],
-    };
+    let receipt = RadrootsTransportDeliveryReceipt::new(
+        "delivery",
+        RadrootsTransportTargetSet::new(vec![one.clone(), two]).expect("receipt target set"),
+        vec![accepted, rejected],
+    )
+    .expect("delivery receipt");
     assert!(
         receipt
             .is_satisfied_by(&RadrootsTransportSatisfactionPolicy::no_wait())
@@ -1345,13 +1424,308 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
 
     let duplicate = RadrootsTransportSatisfactionPolicy::RequiredTargets {
         class: RadrootsTransportSatisfactionClass::Accepted,
-        targets: vec![one.fingerprint.clone(), one.fingerprint],
+        targets: vec![one.fingerprint().clone(), one.fingerprint().clone()],
     };
     assert_eq!(
         duplicate
             .required_target_count(2)
             .expect_err("duplicate required set"),
         RadrootsTransportError::DuplicateRequiredTargetFingerprint
+    );
+}
+
+#[test]
+fn delivery_requests_and_receipts_reject_forged_identity_and_cardinality() {
+    let first = RadrootsTransportTarget::nostr_relay("wss://one.example").expect("first");
+    let second = RadrootsTransportTarget::nostr_relay("wss://two.example").expect("second");
+    let unexpected =
+        RadrootsTransportTarget::nostr_relay("wss://unexpected.example").expect("unexpected");
+    let targets =
+        RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("target set");
+    let payload = opaque_payload();
+
+    assert_eq!(
+        RadrootsTransportDeliveryRequest::new(
+            "",
+            payload.clone(),
+            targets.clone(),
+            RadrootsTransportSatisfactionPolicy::all_accepted(),
+        )
+        .expect_err("empty request id"),
+        RadrootsTransportError::EmptyDeliveryRequestId
+    );
+    for request_id in [
+        " request".to_owned(),
+        "request\n".to_owned(),
+        "x".repeat(RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES + 1),
+    ] {
+        assert_eq!(
+            RadrootsTransportDeliveryRequest::new(
+                request_id,
+                payload.clone(),
+                targets.clone(),
+                RadrootsTransportSatisfactionPolicy::all_accepted(),
+            )
+            .expect_err("invalid request id"),
+            RadrootsTransportError::InvalidDeliveryRequestId
+        );
+    }
+
+    let unrequested_policy = RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        vec![unexpected.fingerprint().clone()],
+    )
+    .expect("required policy");
+    assert_eq!(
+        RadrootsTransportDeliveryRequest::new(
+            "request",
+            payload.clone(),
+            targets.clone(),
+            unrequested_policy,
+        )
+        .expect_err("unrequested required target"),
+        RadrootsTransportError::RequiredTargetNotRequested
+    );
+
+    let forged_payload = RadrootsTransportPayload::OpaqueBytes {
+        label: "opaque".to_owned(),
+        bytes: vec![1],
+        digest: "0".repeat(64),
+    };
+    assert_eq!(
+        RadrootsTransportDeliveryRequest::new(
+            "request",
+            forged_payload,
+            targets.clone(),
+            RadrootsTransportSatisfactionPolicy::all_accepted(),
+        )
+        .expect_err("forged payload"),
+        RadrootsTransportError::PayloadDigestMismatch
+    );
+
+    let request = RadrootsTransportDeliveryRequest::new(
+        "request",
+        payload,
+        targets.clone(),
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
+    )
+    .expect("request");
+    assert_eq!(
+        request
+            .clone()
+            .try_with_now_ms(-1)
+            .expect_err("negative timestamp"),
+        RadrootsTransportError::InvalidDeliveryTimestamp
+    );
+
+    let accepted_first = RadrootsTransportTargetReceipt::new(
+        first.clone(),
+        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+    );
+    let accepted_second = RadrootsTransportTargetReceipt::new(
+        second.clone(),
+        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+    );
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new(
+            "request",
+            targets.clone(),
+            vec![accepted_first.clone()],
+        )
+        .expect_err("missing receipt"),
+        RadrootsTransportError::MissingDeliveryTargetReceipt
+    );
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new(
+            "request",
+            targets.clone(),
+            vec![accepted_first.clone(), accepted_first.clone()],
+        )
+        .expect_err("duplicate receipt"),
+        RadrootsTransportError::DuplicateDeliveryTargetReceipt
+    );
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new(
+            "request",
+            targets.clone(),
+            vec![
+                accepted_first.clone(),
+                RadrootsTransportTargetReceipt::new(
+                    unexpected.clone(),
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+                ),
+            ],
+        )
+        .expect_err("unexpected receipt"),
+        RadrootsTransportError::UnexpectedDeliveryTargetReceipt
+    );
+    let mut mismatched_status = accepted_second.clone();
+    mismatched_status.status = RadrootsTransportDeliveryTargetStatus::Pending;
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new(
+            "request",
+            targets.clone(),
+            vec![accepted_first.clone(), mismatched_status],
+        )
+        .expect_err("status mismatch"),
+        RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
+    );
+    let mut forged_outcome = RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted);
+    forged_outcome.status = RadrootsTransportDeliveryTargetStatus::Pending;
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new(
+            "request",
+            targets.clone(),
+            vec![
+                accepted_first.clone(),
+                RadrootsTransportTargetReceipt {
+                    target: second.clone(),
+                    attempted: true,
+                    status: RadrootsTransportDeliveryTargetStatus::Pending,
+                    outcome: forged_outcome,
+                },
+            ],
+        )
+        .expect_err("outcome status mismatch"),
+        RadrootsTransportError::TransportOutcomeStatusMismatch
+    );
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new(
+            "request",
+            targets.clone(),
+            vec![
+                accepted_first.clone(),
+                RadrootsTransportTargetReceipt::skipped(
+                    second.clone(),
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+                ),
+            ],
+        )
+        .expect_err("skipped accepted outcome"),
+        RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
+    );
+
+    let receipt = RadrootsTransportDeliveryReceipt::new(
+        "request",
+        targets.clone(),
+        vec![accepted_second, accepted_first],
+    )
+    .expect("canonical receipt");
+    assert_eq!(receipt.target_receipts()[0].target, first);
+    assert_eq!(receipt.target_receipts()[1].target, second);
+    receipt
+        .validate_for_request(&request)
+        .expect("matching request");
+
+    let wrong_id = RadrootsTransportDeliveryReceipt::new(
+        "other-request",
+        targets,
+        receipt.target_receipts().to_vec(),
+    )
+    .expect("wrong id receipt");
+    assert_eq!(
+        wrong_id
+            .validate_for_request(&request)
+            .expect_err("request id mismatch"),
+        RadrootsTransportError::DeliveryReceiptRequestIdMismatch
+    );
+    let wrong_targets = RadrootsTransportDeliveryReceipt::new(
+        "request",
+        RadrootsTransportTargetSet::new(vec![unexpected.clone()]).expect("unexpected target set"),
+        vec![RadrootsTransportTargetReceipt::new(
+            unexpected,
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+        )],
+    )
+    .expect("wrong target receipt");
+    assert_eq!(
+        wrong_targets
+            .validate_for_request(&request)
+            .expect_err("target set mismatch"),
+        RadrootsTransportError::DeliveryReceiptTargetSetMismatch
+    );
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn delivery_request_and_receipt_deserialization_revalidates_invariants() {
+    let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
+    let request = RadrootsTransportDeliveryRequest::new(
+        "request",
+        opaque_payload(),
+        RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set"),
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
+    )
+    .expect("request");
+    let mut request_wire = serde_json::to_value(&request).expect("request wire");
+    request_wire["now_ms"] = Value::from(-1);
+    assert!(serde_json::from_value::<RadrootsTransportDeliveryRequest>(request_wire).is_err());
+
+    let receipt = RadrootsTransportDeliveryReceipt::for_request(
+        &request,
+        vec![RadrootsTransportTargetReceipt::new(
+            target,
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+        )],
+    )
+    .expect("receipt");
+    let mut receipt_wire = serde_json::to_value(&receipt).expect("receipt wire");
+    receipt_wire["target_receipts"][0]["status"] = Value::String("Pending".to_owned());
+    assert!(serde_json::from_value::<RadrootsTransportDeliveryReceipt>(receipt_wire).is_err());
+    let mut attempt_wire = serde_json::to_value(&receipt).expect("receipt wire");
+    attempt_wire["target_receipts"][0]["attempted"] = Value::Bool(false);
+    assert!(serde_json::from_value::<RadrootsTransportDeliveryReceipt>(attempt_wire).is_err());
+    let mut direct_target_receipt_wire =
+        serde_json::to_value(&receipt.target_receipts()[0]).expect("target receipt wire");
+    direct_target_receipt_wire["status"] = Value::String("Pending".to_owned());
+    assert!(
+        serde_json::from_value::<RadrootsTransportTargetReceipt>(direct_target_receipt_wire)
+            .is_err()
+    );
+    let mut direct_attempt_wire =
+        serde_json::to_value(&receipt.target_receipts()[0]).expect("target receipt wire");
+    direct_attempt_wire["attempted"] = Value::Bool(false);
+    assert!(serde_json::from_value::<RadrootsTransportTargetReceipt>(direct_attempt_wire).is_err());
+
+    let mut payload_wire = serde_json::to_value(opaque_payload()).expect("payload wire");
+    payload_wire["OpaqueBytes"]["digest"] = Value::String("0".repeat(64));
+    assert!(serde_json::from_value::<RadrootsTransportPayload>(payload_wire).is_err());
+
+    let first = RadrootsTransportTarget::nostr_relay("wss://one.example").expect("first target");
+    let second = RadrootsTransportTarget::nostr_relay("wss://two.example").expect("second target");
+    let mut reversed = vec![first.fingerprint().clone(), second.fingerprint().clone()];
+    reversed.sort();
+    reversed.reverse();
+    let required_wire = serde_json::json!({
+        "RequiredTargets": {
+            "class": "Accepted",
+            "targets": reversed,
+        }
+    });
+    let decoded_required =
+        serde_json::from_value::<RadrootsTransportSatisfactionPolicy>(required_wire)
+            .expect("decode required policy");
+    let required_targets = decoded_required
+        .required_target_fingerprints()
+        .expect("required fingerprints");
+    assert!(required_targets.windows(2).all(|pair| pair[0] < pair[1]));
+    assert!(
+        serde_json::from_value::<RadrootsTransportSatisfactionPolicy>(serde_json::json!({
+            "RequiredTargets": {
+                "class": "Accepted",
+                "targets": [],
+            }
+        }))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<RadrootsTransportSatisfactionPolicy>(serde_json::json!({
+            "Quorum": {
+                "class": "Accepted",
+                "threshold": 0,
+            }
+        }))
+        .is_err()
     );
 }
 
@@ -1511,25 +1885,85 @@ fn transport_kind_deserializer_rejects_non_string_values() {
 }
 
 #[test]
-fn reticulum_destination_rejects_wrong_kind_uri_and_missing_scope() {
+fn reticulum_destination_rejects_wrong_kind() {
     let local = RadrootsTransportTarget::local("local:memory").expect("local target");
     assert_eq!(
         ReticulumDestinationV1::from_target(&local).expect_err("wrong kind"),
         RadrootsTransportError::InvalidTargetUri
     );
+}
 
-    let mut wrong_uri = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    wrong_uri.uri = RadrootsTransportTargetUri::parse("reticulum:other").expect("generic URI");
+#[test]
+#[cfg(feature = "serde")]
+fn transport_target_deserialization_rejects_forged_and_noncanonical_identity() {
+    let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
+    let canonical = serde_json::to_value(&target).expect("serialize target");
     assert_eq!(
-        ReticulumDestinationV1::from_target(&wrong_uri).expect_err("wrong URI"),
-        RadrootsTransportError::InvalidTargetUri
+        serde_json::from_value::<RadrootsTransportTarget>(canonical.clone())
+            .expect("deserialize canonical target"),
+        target
     );
 
-    let mut missing_scope = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    missing_scope.scope = None;
+    for (field, forged) in [
+        ("uri", Value::String("reticulum:other".to_owned())),
+        ("scope", Value::Null),
+        ("fingerprint", Value::String("0".repeat(64))),
+        (
+            "fingerprint",
+            Value::String(target.fingerprint().as_str().to_ascii_uppercase()),
+        ),
+    ] {
+        let mut wire = canonical.clone();
+        wire.as_object_mut()
+            .expect("target object")
+            .insert(field.to_owned(), forged);
+        assert!(
+            serde_json::from_value::<RadrootsTransportTarget>(wire).is_err(),
+            "forged {field} must fail"
+        );
+    }
+
+    let labeled = RadrootsTransportTarget::nostr_relay_with_metadata(
+        "wss://relay.example",
+        None,
+        Some(RadrootsTransportTargetLabel::parse("Relay").expect("label")),
+    )
+    .expect("labeled target");
+    let mut noncanonical_label = serde_json::to_value(&labeled).expect("serialize labeled target");
+    noncanonical_label
+        .as_object_mut()
+        .expect("target object")
+        .insert("label".to_owned(), Value::String(" Relay ".to_owned()));
+    assert!(serde_json::from_value::<RadrootsTransportTarget>(noncanonical_label).is_err());
+
+    let mut unknown_field = canonical;
+    unknown_field
+        .as_object_mut()
+        .expect("target object")
+        .insert("unexpected".to_owned(), Value::Bool(true));
+    assert!(serde_json::from_value::<RadrootsTransportTarget>(unknown_field).is_err());
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_target_set_deserialization_revalidates_nonempty_unique_targets() {
+    let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
+    let set = RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set");
+    let canonical = serde_json::to_value(&set).expect("serialize target set");
     assert_eq!(
-        ReticulumDestinationV1::from_target(&missing_scope).expect_err("missing scope"),
-        RadrootsTransportError::EmptyTargetScope
+        serde_json::from_value::<RadrootsTransportTargetSet>(canonical)
+            .expect("deserialize canonical target set"),
+        set
+    );
+    assert!(
+        serde_json::from_value::<RadrootsTransportTargetSet>(serde_json::json!({ "targets": [] }))
+            .is_err()
+    );
+    assert!(
+        serde_json::from_value::<RadrootsTransportTargetSet>(
+            serde_json::json!({ "targets": [target, target] })
+        )
+        .is_err()
     );
 }
 
@@ -1569,10 +2003,35 @@ fn target_contract_covers_parser_and_authority_boundaries() {
         "wss://relay..example",
         "wss://relay.example.",
         "wss://relay_example",
+        "wss://-relay.example",
+        "wss://relay-.example",
+        "wss://xn--fa-hia.example",
+        "wss://example.999",
+        "wss://example.0x1",
+        "wss://%65xample.com",
+        "wss://127.1",
+        "wss://2130706433",
+        "wss://0x7f.1",
+        "wss://01.2.3.4",
+        "wss://256.1.1.1",
+        "wss://:443",
         "wss://relay.example:",
+        "wss://relay.example:0",
+        "wss://relay.example:01",
         "wss://[::1]:",
         "wss://[::1]:bad",
         "wss://[::1]:42949672960",
+        "wss://[not-ipv6]",
+        "wss://relay.example\\path",
+        "wss://relay.example/[raw]",
+        "wss://relay.example/%",
+        "wss://relay.example/%2",
+        "wss://relay.example/%2f",
+        "wss://relay.example/%GG",
+        "wss://relay.example/a/./b",
+        "wss://relay.example/a/../b",
+        "wss://relay.example/a/%2E/b",
+        "wss://relay.example/a/.%2E/b",
         "ws://[2001:db8::1]",
     ] {
         assert_eq!(
@@ -1587,14 +2046,18 @@ fn target_contract_covers_parser_and_authority_boundaries() {
     }
 
     for (raw, canonical) in [
-        ("WSS://[2001:DB8::1]", "wss://[2001:db8::1]"),
-        ("wss://relay.example:443/", "wss://relay.example:443"),
+        ("WSS://[2001:0DB8:0:0:0:0:0:1]", "wss://[2001:db8::1]"),
+        ("wss://relay.example:443/", "wss://relay.example"),
+        (
+            "wss://relay.example/nostr/%2Ffeed",
+            "wss://relay.example/nostr/%2Ffeed",
+        ),
         ("ws://127.0.0.1", "ws://127.0.0.1"),
     ] {
         assert_eq!(
             RadrootsTransportTarget::nostr_relay(raw)
                 .expect("relay URI")
-                .uri
+                .uri()
                 .as_str(),
             canonical
         );
@@ -1604,6 +2067,18 @@ fn target_contract_covers_parser_and_authority_boundaries() {
 #[test]
 fn every_transport_error_has_a_stable_display_message() {
     let remaining = [
+        RadrootsTransportError::RequiredTargetNotRequested,
+        RadrootsTransportError::EmptyDeliveryRequestId,
+        RadrootsTransportError::InvalidDeliveryRequestId,
+        RadrootsTransportError::InvalidDeliveryTimestamp,
+        RadrootsTransportError::UnexpectedDeliveryTargetReceipt,
+        RadrootsTransportError::DuplicateDeliveryTargetReceipt,
+        RadrootsTransportError::MissingDeliveryTargetReceipt,
+        RadrootsTransportError::DeliveryTargetReceiptStatusMismatch,
+        RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch,
+        RadrootsTransportError::TransportOutcomeStatusMismatch,
+        RadrootsTransportError::DeliveryReceiptRequestIdMismatch,
+        RadrootsTransportError::DeliveryReceiptTargetSetMismatch,
         RadrootsTransportError::EmptyPayloadId,
         RadrootsTransportError::InvalidPayloadId,
         RadrootsTransportError::EmptyPayloadLabel,

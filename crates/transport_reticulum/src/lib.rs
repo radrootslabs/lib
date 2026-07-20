@@ -13,12 +13,12 @@ use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport,
     RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
     RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
-    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumPayloadPolicyV1,
+    RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
+    RadrootsTransportOutcomeKind, RadrootsTransportStatus, RadrootsTransportTarget,
+    RadrootsTransportTargetReceipt, ReticulumCapabilityReportV1, ReticulumDestinationV1,
+    ReticulumPayloadPolicyV1,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.default";
@@ -267,19 +267,17 @@ impl RadrootsReticulumTransport {
         &self,
         request: RadrootsTransportDeliveryRequest,
     ) -> Result<RadrootsTransportDeliveryReceipt, RadrootsReticulumError> {
-        ensure_reticulum_targets(request.target_set.targets())?;
+        ensure_reticulum_targets(request.target_set().targets())?;
         let outcome = reticulum_outcome(self.profile.behavior);
         let target_receipts = request
-            .target_set
+            .target_set()
             .targets()
             .iter()
             .cloned()
-            .map(|target| RadrootsTransportTargetReceipt::new(target, outcome.clone()))
+            .map(|target| RadrootsTransportTargetReceipt::skipped(target, outcome.clone()))
             .collect::<Vec<_>>();
-        Ok(RadrootsTransportDeliveryReceipt {
-            request_id: request.request_id,
-            target_receipts,
-        })
+        RadrootsTransportDeliveryReceipt::for_request(&request, target_receipts)
+            .map_err(|_| RadrootsReticulumError::InvalidDeliveryReceipt)
     }
 
     pub fn fetch(
@@ -339,7 +337,7 @@ impl RadrootsTransport for RadrootsReticulumTransport {
                 .targets()
                 .iter()
                 .cloned()
-                .map(|target| RadrootsTransportTargetReceipt::new(target, outcome.clone()))
+                .map(|target| RadrootsTransportTargetReceipt::skipped(target, outcome.clone()))
                 .collect::<Vec<_>>();
             Ok(RadrootsTransportFetchReceipt::new(
                 request.request_id,
@@ -391,6 +389,7 @@ pub enum RadrootsReticulumError {
     InvalidProfileId,
     InvalidFetchLimit,
     NonReticulumTarget,
+    InvalidDeliveryReceipt,
 }
 
 impl fmt::Display for RadrootsReticulumError {
@@ -401,6 +400,7 @@ impl fmt::Display for RadrootsReticulumError {
             Self::InvalidProfileId => "invalid Reticulum profile id",
             Self::InvalidFetchLimit => "Reticulum fetch limit must be greater than zero",
             Self::NonReticulumTarget => "Reticulum transport received a non-Reticulum target",
+            Self::InvalidDeliveryReceipt => "Reticulum transport produced an invalid receipt",
         })
     }
 }
@@ -412,7 +412,10 @@ fn reticulum_error_to_transport_error(error: RadrootsReticulumError) -> Radroots
         }
         RadrootsReticulumError::InvalidAgentEndpoint
         | RadrootsReticulumError::InvalidProfileId
-        | RadrootsReticulumError::InvalidFetchLimit => RadrootsTransportError::InvalidTransportKind,
+        | RadrootsReticulumError::InvalidFetchLimit
+        | RadrootsReticulumError::InvalidDeliveryReceipt => {
+            RadrootsTransportError::InvalidTransportKind
+        }
     }
 }
 
@@ -420,13 +423,13 @@ fn ensure_reticulum_targets(
     targets: &[RadrootsTransportTarget],
 ) -> Result<(), RadrootsReticulumError> {
     for target in targets {
-        if target.kind != RadrootsTransportKind::Reticulum {
+        if target.kind() != &RadrootsTransportKind::Reticulum {
             return Err(RadrootsReticulumError::NonReticulumTarget);
         }
-        if target.uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI {
+        if target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI {
             return Err(RadrootsReticulumError::InvalidEndpoint);
         }
-        if target.scope.is_none() {
+        if target.scope().is_none() {
             return Err(RadrootsReticulumError::InvalidEndpoint);
         }
     }
@@ -436,8 +439,7 @@ fn ensure_reticulum_targets(
 fn reticulum_outcome(behavior: RadrootsReticulumBehavior) -> RadrootsTransportOutcome {
     let mut outcome = match behavior {
         RadrootsReticulumBehavior::RejectDeliveryAttempts => {
-            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::TransportUnavailable)
-                .with_target_status(RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented)
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
         }
         RadrootsReticulumBehavior::DeferDeliveryPlans => {
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
@@ -486,6 +488,7 @@ mod tests {
             RadrootsTransportTargetSet::new(targets).expect("target set"),
             RadrootsTransportSatisfactionPolicy::any_accepted(),
         )
+        .expect("delivery request")
     }
 
     #[test]
@@ -586,7 +589,7 @@ mod tests {
         let receipt = rejecting
             .deliver(delivery_request(vec![reticulum_target()]))
             .expect("direct delivery");
-        assert_eq!(receipt.target_receipts.len(), 1);
+        assert_eq!(receipt.target_receipts().len(), 1);
         assert_eq!(
             rejecting
                 .fetch(RadrootsReticulumFetchRequest::new("direct-fetch", 1).expect("fetch"))
@@ -629,7 +632,7 @@ mod tests {
             deferring
                 .deliver(delivery_request(vec![reticulum_target()]))
                 .expect("deferred delivery")
-                .target_receipts[0]
+                .target_receipts()[0]
                 .outcome
                 .kind,
             RadrootsTransportOutcomeKind::DeferredUntilImplemented
@@ -655,25 +658,18 @@ mod tests {
         }
 
         assert!(ensure_reticulum_targets(&[]).is_ok());
-        let mut wrong_kind = reticulum_target();
-        wrong_kind.kind = RadrootsTransportKind::Local;
+        let wrong_kind =
+            RadrootsTransportTarget::local("local:memory").expect("non-Reticulum target");
         assert_eq!(
             ensure_reticulum_targets(&[wrong_kind]),
             Err(RadrootsReticulumError::NonReticulumTarget)
         );
-        let mut wrong_uri = reticulum_target();
-        wrong_uri.uri = radroots_transport::RadrootsTransportTargetUri::parse("reticulum:other")
-            .expect("syntactically valid wrong URI");
         assert_eq!(
-            ensure_reticulum_targets(&[wrong_uri]),
-            Err(RadrootsReticulumError::InvalidEndpoint)
+            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, "reticulum:other")
+                .expect_err("wrong Reticulum URI"),
+            RadrootsTransportError::InvalidTargetUri
         );
-        let mut missing_scope = reticulum_target();
-        missing_scope.scope = None;
-        assert_eq!(
-            ensure_reticulum_targets(&[missing_scope]),
-            Err(RadrootsReticulumError::InvalidEndpoint)
-        );
+        assert!(reticulum_target().scope().is_some());
 
         for behavior in [
             RadrootsReticulumBehavior::RejectDeliveryAttempts,

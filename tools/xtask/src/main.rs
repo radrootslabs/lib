@@ -1,5 +1,6 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
+#![recursion_limit = "256"]
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod contract;
@@ -16,6 +17,8 @@ use std::process::ExitCode;
 fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask contract validate");
+    eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
+    eprintln!("  cargo xtask contract nip09-reconciliation-manifest [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
@@ -60,6 +63,8 @@ fn validate_contract() -> Result<(), String> {
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
+        .and_then(|_| contract::validate_event_contract_registry_v7_inventory(&root))
+        .and_then(|_| contract::validate_nip09_reconciliation_manifest(&root))
         .and_then(|_| contract::validate_knowledge_contract_manifest(&root))
 }
 
@@ -85,6 +90,24 @@ fn run_release(args: &[String]) -> Result<(), String> {
 fn run_contract(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("validate") => validate_contract(),
+        Some("event-contract-registry-v7") => match &args[1..] {
+            [] => contract::validate_event_contract_registry_v7_inventory(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_event_contract_registry_v7_inventory(&workspace_root())
+            }
+            _ => Err(
+                "event-contract-registry-v7 accepts no arguments or exactly --write".to_string(),
+            ),
+        },
+        Some("nip09-reconciliation-manifest") => match &args[1..] {
+            [] => contract::validate_nip09_reconciliation_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_nip09_reconciliation_manifest(&workspace_root())
+            }
+            _ => Err(
+                "nip09-reconciliation-manifest accepts no arguments or exactly --write".to_string(),
+            ),
+        },
         Some("knowledge-manifest") => {
             if args.get(1).map(String::as_str) == Some("--write") {
                 contract::write_knowledge_contract_manifest(&workspace_root())
@@ -181,6 +204,18 @@ mod tests {
         let unknown_contract =
             run_contract(&["unknown".to_string()]).expect_err("unknown contract subcommand");
         assert!(unknown_contract.contains("unknown contract subcommand"));
+        let invalid_registry = run_contract(&[
+            "event-contract-registry-v7".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid registry-v7 mode");
+        assert!(invalid_registry.contains("exactly --write"));
+        let invalid_nip09 = run_contract(&[
+            "nip09-reconciliation-manifest".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid NIP-09 manifest mode");
+        assert!(invalid_nip09.contains("exactly --write"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
@@ -272,6 +307,10 @@ mod tests {
     fn run_contract_dispatches_validate_command() {
         let _guard = lock_workspace();
         run_contract(&["validate".to_string()]).expect("contract validate");
+        run_contract(&["event-contract-registry-v7".to_string()])
+            .expect("contract registry-v7 inventory");
+        run_contract(&["nip09-reconciliation-manifest".to_string()])
+            .expect("contract NIP-09 reconciliation manifest");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }

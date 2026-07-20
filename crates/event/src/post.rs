@@ -2,7 +2,7 @@
 use alloc::{format, string::String, vec::Vec};
 use core::fmt;
 
-use radroots_blossom::RadrootsBlossomApprovedBlobUrl;
+use radroots_blossom::url::RadrootsBlossomApprovedBlobUrl;
 use url_nostd::Url;
 
 use crate::media::RadrootsAuthoredImage;
@@ -12,11 +12,12 @@ use crate::social::{
 };
 use crate::tags::TAG_IMETA;
 
-pub const RADROOTS_POST_CONTENT_MAX_BYTES: usize = crate::wire::DEFAULT_CONTENT_MAX_BYTES;
+pub const RADROOTS_POST_CONTENT_MAX_BYTES: usize = crate::wire::v1::DEFAULT_CONTENT_MAX_BYTES;
 pub const RADROOTS_POST_IMETA_MAX_COUNT: usize = 64;
-pub const RADROOTS_POST_EVENT_WIRE_MAX_BYTES: usize = crate::wire::DEFAULT_RAW_JSON_MAX_BYTES;
-pub const RADROOTS_POST_TAG_ELEMENT_MAX_BYTES: usize = crate::wire::DEFAULT_TAG_ELEMENT_MAX_BYTES;
-pub const RADROOTS_POST_TAG_TOTAL_MAX_BYTES: usize = crate::wire::DEFAULT_TAG_TOTAL_MAX_BYTES;
+pub const RADROOTS_POST_EVENT_WIRE_MAX_BYTES: usize = crate::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES;
+pub const RADROOTS_POST_TAG_ELEMENT_MAX_BYTES: usize =
+    crate::wire::v1::DEFAULT_TAG_ELEMENT_MAX_BYTES;
+pub const RADROOTS_POST_TAG_TOTAL_MAX_BYTES: usize = crate::wire::v1::DEFAULT_TAG_TOTAL_MAX_BYTES;
 pub const RADROOTS_POST_ALT_MAX_BYTES: usize = RADROOTS_POST_TAG_ELEMENT_MAX_BYTES - "alt ".len();
 pub const RADROOTS_ASK_MARKER_TAG_KEY: &str = "t";
 pub const RADROOTS_ASK_MARKER_TAG_VALUE: &str = "radroots-ask";

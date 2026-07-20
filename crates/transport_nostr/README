@@ -3,13 +3,26 @@
 Deterministic Nostr relay transport substrate for exact signed-event publish,
 fetch ingest, and outbox delivery target coordination.
 
-Fetch ingest verifies each accepted relay event before storage. Per-event
-receipts distinguish unsupported contracts, invalid registered shapes, malformed
-NIP-01 input, ephemeral events that were not persisted, and immutable
-valid-stream eligibility. `admission_code` carries the stable classifier
-diagnostic when the store performed classification; it is absent for duplicates
-because the baseline schema does not persist that code. Inserted, duplicate, and
-not-persisted outcomes have separate flags and aggregate counts.
+Every fetch path verifies the NIP-01 id and signature before filter matching,
+unique-event budgeting, or returning an event. Repeated event ids preserve
+per-relay observation evidence without consuming the unique-event limit. The
+SDK adapter streams into the configured raw-event bound; `Truncated` is distinct
+from relay `EOSE`, including for later target relays that were not queried after
+the global bound was reached.
+
+Fetch-ingest receipts distinguish unsupported contracts, invalid registered
+shapes, malformed NIP-01 input, ephemeral events that were not persisted, and
+immutable valid-stream eligibility. `admission_code` carries the stable
+classifier diagnostic when the store performed classification; it is absent for
+duplicates because the baseline schema does not persist that code. Inserted,
+duplicate, and not-persisted outcomes have separate flags and aggregate counts.
 Local event-store failures abort the operation and remain typed transport
 errors, so callers can retry without confusing storage failure with bad relay
 input.
+
+`RadrootsRelayUrlPolicy::Public` is for trusted relay configuration. It rejects
+non-canonical and known non-global literal destinations, but hostname checks do
+not pin DNS resolution in the SDK connector and are not an SSRF boundary for
+attacker-controlled relay hostnames. Validate resolved addresses at the network
+boundary or use a connector that pins approved resolutions before accepting
+untrusted relay configuration.

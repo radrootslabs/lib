@@ -208,7 +208,8 @@ validated_string_id!(RadrootsRelayUrl, validate_relay_url);
 /// Radroots tag-element policy for a NIP-01 coordinate.
 ///
 /// NIP-01 does not define this resource limit.
-pub const RADROOTS_NIP01_COORDINATE_MAX_BYTES: usize = crate::wire::DEFAULT_TAG_ELEMENT_MAX_BYTES;
+pub const RADROOTS_NIP01_COORDINATE_MAX_BYTES: usize =
+    crate::wire::v1::DEFAULT_TAG_ELEMENT_MAX_BYTES;
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -942,7 +943,7 @@ mod tests {
     fn nip01_coordinate_errors_and_policy_limit_are_explicit() {
         assert_eq!(
             RADROOTS_NIP01_COORDINATE_MAX_BYTES,
-            crate::wire::DEFAULT_TAG_ELEMENT_MAX_BYTES
+            crate::wire::v1::DEFAULT_TAG_ELEMENT_MAX_BYTES
         );
         let errors = [
             RadrootsNip01CoordinateParseError::Empty,

@@ -16,6 +16,8 @@ use radroots_event::contract::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub mod registry_v7;
+
 pub const RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
 const HISTORICAL_KNOWLEDGE_CONTRACT_INTRODUCTIONS: [(&str, &str); 11] = [

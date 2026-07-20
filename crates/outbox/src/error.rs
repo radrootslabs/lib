@@ -60,6 +60,14 @@ pub enum RadrootsOutboxError {
     #[error("stored event-store ingest state is inconsistent for outbox event {outbox_event_id}")]
     StoredEventStoreIngestStateInconsistent { outbox_event_id: i64 },
 
+    #[error(
+        "stored delivery target {delivery_target_id} has inconsistent canonical identity in {field}"
+    )]
+    InvalidStoredDeliveryTargetIdentity {
+        delivery_target_id: i64,
+        field: &'static str,
+    },
+
     #[error("Invalid stored identifier for {field}: {value}")]
     InvalidStoredIdentifier { field: &'static str, value: String },
 

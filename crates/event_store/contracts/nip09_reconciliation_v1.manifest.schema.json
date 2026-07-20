@@ -1,0 +1,1106 @@
+{
+  "$id": "https://radroots.org/core/event-store/nip09-reconciliation-manifest-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "cargo_feature_profile": {
+      "additionalProperties": false,
+      "properties": {
+        "event_store_dependencies": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "default_features": {
+                "type": "boolean"
+              },
+              "features": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "optional": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "default_features",
+              "optional",
+              "features"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "packages": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "default_features_enabled": {
+                "type": "boolean"
+              },
+              "feature_definitions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "enables": {
+                      "items": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "type": "array",
+                      "uniqueItems": true
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "enables"
+                  ],
+                  "type": "object"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "manifest_path": {
+                "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+                "type": "string"
+              },
+              "package": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "selected_features": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "package",
+              "manifest_path",
+              "default_features_enabled",
+              "selected_features",
+              "feature_definitions"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "packages",
+        "event_store_dependencies"
+      ],
+      "type": "object"
+    },
+    "entry_points": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rust_path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "rust_path"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "frozen_sources": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_byte_length": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "hash_algorithm": {
+            "const": "rust_production_ast_sha256_v1"
+          },
+          "path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "hash_algorithm",
+          "canonical_byte_length",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "hook_id": {
+      "const": "nip09_reconciliation_v1"
+    },
+    "impl_resolution_witness": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "protected_v1_resolution_relevant_impl_ast_sha256_v2"
+        },
+        "impls": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "ast_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "impl_header_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "member": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "path": {
+                "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+                "type": "string"
+              },
+              "self_type": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "trait_path": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "self_type",
+              "trait_path",
+              "member",
+              "impl_header_sha256",
+              "ast_sha256"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "protected_self_types": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "roots": {
+          "const": [
+            "crates/core/src",
+            "crates/event/src",
+            "crates/event_codec/src",
+            "crates/blossom/src",
+            "crates/event_store/src"
+          ]
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "roots",
+        "protected_self_types",
+        "impls",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "local_runtime_sources": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_route": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "feature_definitions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "enables": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "enables"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "files": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "byte_length": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "path": {
+                  "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "byte_length",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "maxItems": 15,
+            "minItems": 15,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "package": {
+            "const": "libsqlite3-sys"
+          },
+          "patch_dependency": {
+            "const": "libsqlite3-sys"
+          },
+          "patch_registry": {
+            "const": "crates-io"
+          },
+          "path": {
+            "const": "crates/libsqlite3_sys_3_53_3"
+          },
+          "tree_algorithm": {
+            "const": "canonical_json_file_inventory_sha256_v1"
+          },
+          "tree_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "version": {
+            "const": "0.37.0"
+          }
+        },
+        "required": [
+          "package",
+          "version",
+          "path",
+          "patch_registry",
+          "patch_dependency",
+          "activation_route",
+          "feature_definitions",
+          "tree_algorithm",
+          "files",
+          "tree_sha256"
+        ],
+        "type": "object"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "manifest_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "const": "crates/event_store/contracts/nip09_reconciliation_v1.manifest.schema.json"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "migration": {
+      "additionalProperties": false,
+      "properties": {
+        "down_byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "down_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "name": {
+          "const": "nip09"
+        },
+        "schema_sha256": {
+          "const": "1fee6b2bb8cdc4602d9c89fecd97c3f51312b9a4339dbf5049b04c692ba50b12"
+        },
+        "up_byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "up_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "version": {
+          "const": 2
+        }
+      },
+      "required": [
+        "version",
+        "name",
+        "up_byte_length",
+        "up_sha256",
+        "down_byte_length",
+        "down_sha256",
+        "schema_sha256"
+      ],
+      "type": "object"
+    },
+    "post_core_sql_capability": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "post_core_storage_sql_bind_capability_v3"
+        },
+        "allowed_capabilities": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "operation": {
+                "enum": [
+                  "delete",
+                  "insert",
+                  "select",
+                  "upsert"
+                ]
+              },
+              "table": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation",
+              "table"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "capabilities_path": {
+          "const": "crates/event_store/src/store/post_core_extension_capabilities.rs"
+        },
+        "capability_constructor_ast_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "capability_struct_ast_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "capability_type": {
+          "const": "PostCoreExtensionCapabilities"
+        },
+        "capability_v1_method_ast_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "dispatcher_path": {
+          "const": "crates/event_store/src/store/post_core_extension_dispatcher.rs"
+        },
+        "dispatcher_root": {
+          "const": "dispatch_post_core_extensions"
+        },
+        "dispatcher_signature_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "dispatcher_v1_prefix_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "extension_ast_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "extension_path": {
+          "const": "crates/event_store/src/store/post_core_extensions_v1.rs"
+        },
+        "forbidden_classes": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "root": {
+          "const": "apply_post_core_extensions_v1"
+        },
+        "statements": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bind_expressions": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "function": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "operation": {
+                "enum": [
+                  "delete",
+                  "insert",
+                  "select",
+                  "upsert"
+                ]
+              },
+              "placeholder_count": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sql_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "tables": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "terminal": {
+                "enum": [
+                  "execute",
+                  "fetch",
+                  "fetch_all",
+                  "fetch_many",
+                  "fetch_one",
+                  "fetch_optional"
+                ]
+              }
+            },
+            "required": [
+              "function",
+              "operation",
+              "tables",
+              "terminal",
+              "sql_sha256",
+              "placeholder_count",
+              "bind_expressions"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "storage_ast_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "storage_methods": {
+          "const": [
+            "new",
+            "quarantine_trade",
+            "persist_trade_projection",
+            "upsert_transport_observation"
+          ]
+        },
+        "storage_path": {
+          "const": "crates/event_store/src/store/post_core_storage_v1.rs"
+        }
+      },
+      "required": [
+        "algorithm",
+        "capabilities_path",
+        "capability_type",
+        "capability_struct_ast_sha256",
+        "capability_constructor_ast_sha256",
+        "capability_v1_method_ast_sha256",
+        "dispatcher_path",
+        "dispatcher_root",
+        "dispatcher_signature_sha256",
+        "dispatcher_v1_prefix_sha256",
+        "extension_path",
+        "extension_ast_sha256",
+        "storage_path",
+        "storage_ast_sha256",
+        "root",
+        "storage_methods",
+        "statements",
+        "allowed_capabilities",
+        "forbidden_classes"
+      ],
+      "type": "object"
+    },
+    "profile": {
+      "additionalProperties": false,
+      "properties": {
+        "addressable_feed_version": {
+          "const": 1
+        },
+        "event_contract_registry_version": {
+          "const": 7
+        },
+        "reconciliation_version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "reconciliation_version",
+        "addressable_feed_version",
+        "event_contract_registry_version"
+      ],
+      "type": "object"
+    },
+    "registry_inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "canonical_path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "executor_canonical_byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "executor_hash_algorithm": {
+          "const": "rust_full_ast_sha256_v1"
+        },
+        "executor_id": {
+          "const": "radroots_event_store.nip09_reconciliation_v1.result_vector_executor.v1"
+        },
+        "executor_path": {
+          "const": "crates/event_store/src/nip09/reconciliation_v1/result_vector_executor.rs"
+        },
+        "executor_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "executor_test": {
+          "const": "nip09_reconciliation_v1_result_vector"
+        },
+        "mirror_path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canonical_path",
+        "mirror_path",
+        "byte_length",
+        "sha256",
+        "executor_id",
+        "executor_path",
+        "executor_test",
+        "executor_hash_algorithm",
+        "executor_canonical_byte_length",
+        "executor_sha256"
+      ],
+      "type": "object"
+    },
+    "runtime_dependencies": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "checksum": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dependencies": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "version",
+                "source"
+              ],
+              "type": "object"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "source",
+          "checksum",
+          "dependencies"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "runtime_dependency_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "cargo_lock_resolved_semantic_subgraph_v1"
+        },
+        "exclusions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "bound_by": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "owner": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "name",
+              "reason",
+              "bound_by"
+            ],
+            "type": "object"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "roots": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "owner": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "source": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "name",
+              "version",
+              "source"
+            ],
+            "type": "object"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "algorithm",
+        "roots",
+        "exclusions"
+      ],
+      "type": "object"
+    },
+    "rust_fragment_witnesses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "ast_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "selector": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "selector",
+          "ast_sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "rust_item_witnesses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "ast_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "binding": {
+            "enum": [
+              "self_ast",
+              "ast_closure"
+            ]
+          },
+          "item": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "local_call_sequence": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "required_call_sequence": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "root": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "item",
+          "root",
+          "binding",
+          "local_call_sequence",
+          "required_call_sequence",
+          "ast_sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "semantic_dependencies": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_length": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "canonical_path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "executors": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "mirror_path": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "canonical_path",
+          "mirror_path",
+          "byte_length",
+          "sha256",
+          "executors"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "source_route_witnesses": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "routes": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "routes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "hook_id",
+    "manifest_schema",
+    "migration",
+    "profile",
+    "cargo_feature_profile",
+    "entry_points",
+    "registry_inventory",
+    "semantic_dependencies",
+    "runtime_dependency_policy",
+    "runtime_dependencies",
+    "local_runtime_sources",
+    "frozen_sources",
+    "source_route_witnesses",
+    "rust_item_witnesses",
+    "rust_fragment_witnesses",
+    "impl_resolution_witness",
+    "post_core_sql_capability",
+    "result_vector"
+  ],
+  "title": "Radroots event-store NIP-09 reconciliation manifest v1",
+  "type": "object"
+}

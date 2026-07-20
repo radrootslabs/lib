@@ -140,7 +140,7 @@ impl RadrootsTransportOutcomeKind {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportOutcome {
     pub kind: RadrootsTransportOutcomeKind,
@@ -169,9 +169,39 @@ impl RadrootsTransportOutcome {
         self
     }
 
-    pub fn with_target_status(mut self, status: RadrootsTransportDeliveryTargetStatus) -> Self {
-        self.status = status;
-        self
+    pub fn validate(&self) -> Result<(), crate::RadrootsTransportError> {
+        if self.status != self.kind.target_status() {
+            return Err(crate::RadrootsTransportError::TransportOutcomeStatusMismatch);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsTransportOutcomeWire {
+    kind: RadrootsTransportOutcomeKind,
+    status: RadrootsTransportDeliveryTargetStatus,
+    code: Option<String>,
+    message: Option<String>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportOutcome {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsTransportOutcomeWire::deserialize(deserializer)?;
+        let outcome = Self {
+            kind: wire.kind,
+            status: wire.status,
+            code: wire.code,
+            message: wire.message,
+        };
+        outcome.validate().map_err(serde::de::Error::custom)?;
+        Ok(outcome)
     }
 }
 

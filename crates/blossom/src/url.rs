@@ -5,7 +5,7 @@ use core::{fmt, str::FromStr};
 use unicode_general_category::{GeneralCategory, get_general_category};
 use url_nostd::{Host, Url};
 
-use crate::{RadrootsBlossomError, RadrootsBlossomHashPath};
+use crate::{error::RadrootsBlossomError, hash::RadrootsBlossomHashPath};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RadrootsBlossomBlobUrl {

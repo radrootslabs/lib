@@ -1,87 +1,89 @@
+mod ingest_reconciliation_v1;
+pub(crate) mod reconciliation_v1;
+
 use crate::RadrootsEventStoreError;
-use radroots_event::contract::{RadrootsTagSemantic, RadrootsTagValueType};
-use radroots_event::draft::RadrootsSignedEvent;
-use radroots_event::event_head::RadrootsEventHeadDecision;
+use radroots_event::RadrootsEventKind;
 use radroots_event::ids::{
     RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsPublicKey,
     RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
 };
 use radroots_event::trade::RadrootsTradeMutationKindV1;
-use radroots_event::wire::RadrootsNip01EventWire;
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventKind, RadrootsEventKindClass};
-use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_transport::{
-    RadrootsTransportKind, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+    RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetUri,
+};
+pub use reconciliation_v1::{
+    RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
+    RadrootsEventPersistence, RadrootsEventStoreSourceGeneration, RadrootsRawHeadDecision,
+    RadrootsStoredRawEvent, RadrootsStoredRawEventHead, StoredEventClass,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventAdmissionStatus {
-    Admitted,
-    Unsupported,
-    Invalid,
+pub const RADROOTS_TRANSPORT_OBSERVATION_MESSAGE_MAX_BYTES: usize = 4_096;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTransportObservationMessage(String);
+
+impl RadrootsTransportObservationMessage {
+    pub fn parse(value: impl Into<String>) -> Result<Self, RadrootsEventStoreError> {
+        let value = value.into();
+        validate_transport_observation_message(value.as_str()).map_err(|reason| {
+            RadrootsEventStoreError::InvalidTransportObservationMessage {
+                reason,
+                actual_bytes: value.len(),
+                max_bytes: RADROOTS_TRANSPORT_OBSERVATION_MESSAGE_MAX_BYTES,
+            }
+        })?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub(crate) fn parse_stored(
+        event_id: &str,
+        value: String,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        validate_transport_observation_message(value.as_str()).map_err(|reason| {
+            RadrootsEventStoreError::InvalidStoredTransportObservationMessage {
+                event_id: event_id.to_owned(),
+                reason,
+                actual_bytes: value.len(),
+                max_bytes: RADROOTS_TRANSPORT_OBSERVATION_MESSAGE_MAX_BYTES,
+            }
+        })?;
+        Ok(Self(value))
+    }
 }
 
-impl RadrootsEventAdmissionStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Admitted => "admitted",
-            Self::Unsupported => "unsupported",
-            Self::Invalid => "invalid",
-        }
-    }
-
-    pub fn parse(value: &str) -> Result<Self, RadrootsEventStoreError> {
-        match value {
-            "admitted" => Ok(Self::Admitted),
-            "unsupported" => Ok(Self::Unsupported),
-            "invalid" => Ok(Self::Invalid),
-            _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
-                field: "contract_status",
-                value: value.to_owned(),
-            }),
-        }
+impl AsRef<str> for RadrootsTransportObservationMessage {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StoredEventClass {
-    Regular,
-    Replaceable,
-    Addressable,
-    Ephemeral,
+impl core::ops::Deref for RadrootsTransportObservationMessage {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
 }
 
-impl StoredEventClass {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Regular => "regular",
-            Self::Replaceable => "replaceable",
-            Self::Addressable => "addressable",
-            Self::Ephemeral => "ephemeral",
-        }
+fn validate_transport_observation_message(value: &str) -> Result<(), &'static str> {
+    if value.is_empty() {
+        return Err("message must not be empty");
     }
-
-    pub fn from_event_kind_class(value: RadrootsEventKindClass) -> Self {
-        match value {
-            RadrootsEventKindClass::Regular => Self::Regular,
-            RadrootsEventKindClass::Replaceable => Self::Replaceable,
-            RadrootsEventKindClass::Ephemeral => Self::Ephemeral,
-            RadrootsEventKindClass::Addressable => Self::Addressable,
-        }
+    if value != value.trim() {
+        return Err("message must not have surrounding whitespace");
     }
-
-    pub fn parse(value: &str) -> Result<Self, RadrootsEventStoreError> {
-        match value {
-            "regular" => Ok(Self::Regular),
-            "replaceable" => Ok(Self::Replaceable),
-            "addressable" => Ok(Self::Addressable),
-            "ephemeral" => Ok(Self::Ephemeral),
-            _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
-                field: "event_class",
-                value: value.to_owned(),
-            }),
-        }
+    if value.chars().any(char::is_control) {
+        return Err("message must not contain control characters");
     }
+    if value.len() > RADROOTS_TRANSPORT_OBSERVATION_MESSAGE_MAX_BYTES {
+        return Err("message exceeds the UTF-8 byte limit");
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -136,162 +138,113 @@ impl RadrootsTransportObservationType {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportObservation {
-    pub transport_kind: RadrootsTransportKind,
-    pub endpoint_uri: RadrootsTransportTargetUri,
-    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
-    pub observation_type: RadrootsTransportObservationType,
-    pub observed_at_ms: i64,
-    pub redacted_message: Option<String>,
+    transport_kind: RadrootsTransportKind,
+    endpoint_uri: RadrootsTransportTargetUri,
+    endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    observation_type: RadrootsTransportObservationType,
+    observed_at_ms: i64,
+    caller_redacted_message: Option<RadrootsTransportObservationMessage>,
 }
 
 impl RadrootsTransportObservation {
+    /// Creates endpoint-level transport evidence.
+    ///
+    /// Logical target scope and label are intentionally not part of this v1
+    /// observation identity. Use transport delivery receipts when scoped
+    /// Reticulum or local-target evidence must be preserved.
     pub fn new(
         transport_kind: RadrootsTransportKind,
         endpoint_uri: impl AsRef<str>,
         observation_type: RadrootsTransportObservationType,
         observed_at_ms: i64,
     ) -> Result<Self, RadrootsEventStoreError> {
-        let endpoint_uri = RadrootsTransportTargetUri::parse(endpoint_uri)?;
-        let endpoint_fingerprint =
-            RadrootsTransportTargetFingerprint::from_target(&transport_kind, &endpoint_uri, None);
+        if observed_at_ms < 0 {
+            return Err(
+                RadrootsEventStoreError::InvalidTransportObservationTimestamp {
+                    value: observed_at_ms,
+                },
+            );
+        }
+        let target = RadrootsTransportTarget::new(transport_kind, endpoint_uri)?;
         Ok(Self {
-            transport_kind,
-            endpoint_uri,
-            endpoint_fingerprint,
+            transport_kind: target.kind().clone(),
+            endpoint_uri: target.uri().clone(),
+            endpoint_fingerprint: target.fingerprint().clone(),
             observation_type,
             observed_at_ms,
-            redacted_message: None,
+            caller_redacted_message: None,
         })
     }
 
-    pub fn with_redacted_message(mut self, message: impl Into<String>) -> Self {
-        self.redacted_message = Some(message.into());
-        self
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventIngest {
-    verified_event: RadrootsSignatureVerifiedEvent,
-    raw_json: String,
-    observed_at_ms: i64,
-    transport_observation: Option<RadrootsTransportObservation>,
-}
-
-impl RadrootsEventIngest {
-    #[cfg(test)]
-    pub(crate) fn new(signed_event: RadrootsSignedEvent, observed_at_ms: i64) -> Self {
-        Self::from_signed_event(signed_event, observed_at_ms)
-            .expect("test event must have a valid NIP-01 signature")
+    pub fn transport_kind(&self) -> &RadrootsTransportKind {
+        &self.transport_kind
     }
 
-    pub fn from_signed_event(
-        signed_event: RadrootsSignedEvent,
-        observed_at_ms: i64,
-    ) -> Result<Self, RadrootsEventStoreError> {
-        let verified_event = verify_nip01_event(signed_event.envelope().clone())?;
-        Ok(Self {
-            verified_event,
-            raw_json: signed_event.raw_json().to_owned(),
-            observed_at_ms,
-            transport_observation: None,
-        })
+    pub fn endpoint_uri(&self) -> &RadrootsTransportTargetUri {
+        &self.endpoint_uri
     }
 
-    pub fn from_raw_json(
-        raw_json: impl Into<String>,
-        observed_at_ms: i64,
-    ) -> Result<Self, RadrootsEventStoreError> {
-        let raw_json = raw_json.into();
-        let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
-        let signed_event = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)?;
-        Self::from_signed_event(signed_event, observed_at_ms)
+    pub fn endpoint_fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+        &self.endpoint_fingerprint
     }
 
-    pub fn with_observation(mut self, observation: RadrootsTransportObservation) -> Self {
-        self.transport_observation = Some(observation);
-        self
-    }
-
-    pub fn event(&self) -> &RadrootsEventEnvelope {
-        self.verified_event.event()
-    }
-
-    pub fn verified_event(&self) -> &RadrootsSignatureVerifiedEvent {
-        &self.verified_event
-    }
-
-    pub fn raw_json(&self) -> &str {
-        self.raw_json.as_str()
+    pub fn observation_type(&self) -> RadrootsTransportObservationType {
+        self.observation_type
     }
 
     pub fn observed_at_ms(&self) -> i64 {
         self.observed_at_ms
     }
 
-    pub fn transport_observation(&self) -> Option<&RadrootsTransportObservation> {
-        self.transport_observation.as_ref()
+    pub fn caller_redacted_message(&self) -> Option<&str> {
+        self.caller_redacted_message.as_deref()
     }
-}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsRawHeadDecision {
-    Applied,
-    NotHeadSelected,
-    NotPersisted,
-    SkippedDuplicate,
-    SkippedOlder,
-    SkippedSameTimestampHigherEventId,
-    MalformedCoordinate,
-}
+    pub fn try_with_caller_redacted_message(
+        mut self,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        self.caller_redacted_message = Some(RadrootsTransportObservationMessage::parse(message)?);
+        Ok(self)
+    }
 
-impl RadrootsRawHeadDecision {
-    pub fn from_protocol(value: &RadrootsEventHeadDecision) -> Self {
-        match value {
-            RadrootsEventHeadDecision::Applied(_) => Self::Applied,
-            RadrootsEventHeadDecision::SkippedDuplicate => Self::SkippedDuplicate,
-            RadrootsEventHeadDecision::SkippedOlder => Self::SkippedOlder,
-            RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId => {
-                Self::SkippedSameTimestampHigherEventId
-            }
-            RadrootsEventHeadDecision::CoordinateMismatch => Self::MalformedCoordinate,
+    pub(crate) fn validate_endpoint_for_event(
+        &self,
+        event_id: &str,
+    ) -> Result<(), RadrootsEventStoreError> {
+        let target =
+            RadrootsTransportTarget::new(self.transport_kind.clone(), self.endpoint_uri.as_str())?;
+        if target.uri() != &self.endpoint_uri || target.fingerprint() != &self.endpoint_fingerprint
+        {
+            return Err(
+                RadrootsEventStoreError::InvalidStoredTransportEndpointFingerprint {
+                    event_id: event_id.to_owned(),
+                    transport_kind: self.transport_kind.canonical_label(),
+                    endpoint_uri: self.endpoint_uri.as_str().to_owned(),
+                    endpoint_fingerprint: self.endpoint_fingerprint.as_str().to_owned(),
+                },
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_unchecked_parts_for_test(
+        transport_kind: RadrootsTransportKind,
+        endpoint_uri: RadrootsTransportTargetUri,
+        endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+        observation_type: RadrootsTransportObservationType,
+        observed_at_ms: i64,
+    ) -> Self {
+        Self {
+            transport_kind,
+            endpoint_uri,
+            endpoint_fingerprint,
+            observation_type,
+            observed_at_ms,
+            caller_redacted_message: None,
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventPersistence {
-    Inserted { seq: i64 },
-    Duplicate { seq: i64 },
-    NotPersisted,
-}
-
-impl RadrootsEventPersistence {
-    pub const fn sequence(&self) -> Option<i64> {
-        match self {
-            Self::Inserted { seq } | Self::Duplicate { seq } => Some(*seq),
-            Self::NotPersisted => None,
-        }
-    }
-
-    pub const fn is_inserted(&self) -> bool {
-        matches!(self, Self::Inserted { .. })
-    }
-
-    pub const fn is_duplicate(&self) -> bool {
-        matches!(self, Self::Duplicate { .. })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventIngestReceipt {
-    pub persistence: RadrootsEventPersistence,
-    pub event_id: String,
-    pub admission_status: RadrootsEventAdmissionStatus,
-    pub admission_code: Option<String>,
-    pub contract_id: Option<String>,
-    pub valid_stream_eligible: bool,
-    pub raw_head_decision: RadrootsRawHeadDecision,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -301,25 +254,6 @@ pub struct RadrootsEventStoreStatusSummary {
     pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsStoredRawEvent {
-    pub seq: i64,
-    pub event_id: String,
-    pub pubkey: String,
-    pub created_at: u64,
-    pub kind: u32,
-    pub tags_json: String,
-    pub content: String,
-    pub sig: String,
-    pub raw_json: String,
-    pub admission_status: RadrootsEventAdmissionStatus,
-    pub contract_id: Option<String>,
-    pub event_class: StoredEventClass,
-    pub valid_stream_eligible: bool,
-    pub inserted_at_ms: i64,
-    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -388,17 +322,6 @@ pub struct RadrootsStoredEventTag {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsStoredRawEventHead {
-    pub coordinate_type: StoredEventClass,
-    pub kind: u32,
-    pub pubkey: String,
-    pub d_tag: Option<String>,
-    pub event_id: String,
-    pub created_at: u64,
-    pub updated_at_ms: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredVisibleEventHead {
     raw_head: RadrootsStoredRawEventHead,
     event: RadrootsStoredVisibleEvent,
@@ -431,10 +354,109 @@ pub enum RadrootsEventVisibility {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsProjectionCursor {
-    pub projection_id: String,
-    pub projection_version: u32,
-    pub last_event_seq: i64,
-    pub updated_at_ms: i64,
+    pub(crate) projection_id: String,
+    pub(crate) projection_version: u32,
+    pub(crate) source_generation: RadrootsEventStoreSourceGeneration,
+    pub(crate) last_event_seq: i64,
+    pub(crate) updated_at_ms: i64,
+}
+
+impl RadrootsProjectionCursor {
+    pub fn new(
+        projection_id: impl Into<String>,
+        projection_version: u32,
+        source_generation: RadrootsEventStoreSourceGeneration,
+        last_event_seq: i64,
+        updated_at_ms: i64,
+    ) -> Result<Self, crate::RadrootsEventStoreError> {
+        let projection_id = projection_id.into();
+        if projection_id.is_empty() {
+            return Err(crate::RadrootsEventStoreError::InvalidProjectionId);
+        }
+        if projection_version == 0 {
+            return Err(crate::RadrootsEventStoreError::InvalidProjectionVersion {
+                projection_id,
+                value: 0,
+            });
+        }
+        if last_event_seq < 0 {
+            return Err(crate::RadrootsEventStoreError::InvalidProjectionCursor {
+                projection_id,
+                value: last_event_seq,
+            });
+        }
+        Ok(Self {
+            projection_id,
+            projection_version,
+            source_generation,
+            last_event_seq,
+            updated_at_ms,
+        })
+    }
+
+    pub fn projection_id(&self) -> &str {
+        self.projection_id.as_str()
+    }
+
+    pub const fn projection_version(&self) -> u32 {
+        self.projection_version
+    }
+
+    pub const fn source_generation(&self) -> RadrootsEventStoreSourceGeneration {
+        self.source_generation
+    }
+
+    pub const fn last_event_seq(&self) -> i64 {
+        self.last_event_seq
+    }
+
+    pub const fn updated_at_ms(&self) -> i64 {
+        self.updated_at_ms
+    }
+}
+
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RadrootsProjectionRebuildPrior {
+    Missing,
+    Cursor {
+        source_generation: Option<RadrootsEventStoreSourceGeneration>,
+        source_revision: u64,
+        projection_version: u32,
+        last_event_seq: i64,
+        updated_at_ms: i64,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsProjectionRebuildTicket {
+    pub(crate) projection_id: String,
+    pub(crate) target_projection_version: u32,
+    pub(crate) target_source_generation: RadrootsEventStoreSourceGeneration,
+    pub(crate) target_raw_high_water_seq: i64,
+    pub(crate) prior: RadrootsProjectionRebuildPrior,
+}
+
+impl RadrootsProjectionRebuildTicket {
+    pub fn projection_id(&self) -> &str {
+        self.projection_id.as_str()
+    }
+
+    pub const fn target_projection_version(&self) -> u32 {
+        self.target_projection_version
+    }
+
+    pub const fn target_source_generation(&self) -> RadrootsEventStoreSourceGeneration {
+        self.target_source_generation
+    }
+
+    pub const fn target_raw_high_water_seq(&self) -> i64 {
+        self.target_raw_high_water_seq
+    }
+
+    pub const fn prior(&self) -> &RadrootsProjectionRebuildPrior {
+        &self.prior
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -536,84 +558,12 @@ pub struct RadrootsTradeProjectionCheckpoint {
     pub updated_at_ms: i64,
 }
 
-pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
-    match value {
-        RadrootsTagSemantic::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagSemantic::CalendarEventAuthor => "calendar_event_author",
-        RadrootsTagSemantic::CalendarEventReference => "calendar_event_reference",
-        RadrootsTagSemantic::CalendarEventRevision => "calendar_event_revision",
-        RadrootsTagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
-        RadrootsTagSemantic::CalendarEnd => "calendar_end",
-        RadrootsTagSemantic::CalendarStart => "calendar_start",
-        RadrootsTagSemantic::Category => "category",
-        RadrootsTagSemantic::Citation => "citation",
-        RadrootsTagSemantic::Contract => "contract",
-        RadrootsTagSemantic::Counterparty => "counterparty",
-        RadrootsTagSemantic::Evidence => "evidence",
-        RadrootsTagSemantic::EventPointer => "event_pointer",
-        RadrootsTagSemantic::FreeBusy => "free_busy",
-        RadrootsTagSemantic::Geohash => "geohash",
-        RadrootsTagSemantic::GroupId => "group_id",
-        RadrootsTagSemantic::Identifier => "identifier",
-        RadrootsTagSemantic::Image => "image",
-        RadrootsTagSemantic::Kind => "kind",
-        RadrootsTagSemantic::ClassifiedListingAddress => "listing_address",
-        RadrootsTagSemantic::OperationalListingSnapshot => "listing_snapshot",
-        RadrootsTagSemantic::ListDescription => "list_description",
-        RadrootsTagSemantic::Location => "location",
-        RadrootsTagSemantic::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagSemantic::Participant => "participant",
-        RadrootsTagSemantic::PreviousEvent => "previous_event",
-        RadrootsTagSemantic::Price => "price",
-        RadrootsTagSemantic::PublishedAt => "published_at",
-        RadrootsTagSemantic::Relay => "relay",
-        RadrootsTagSemantic::Reference => "reference",
-        RadrootsTagSemantic::ReviewTarget => "review_target",
-        RadrootsTagSemantic::RootEvent => "root_event",
-        RadrootsTagSemantic::ServiceInput => "service_input",
-        RadrootsTagSemantic::ServiceOutput => "service_output",
-        RadrootsTagSemantic::Source => "source",
-        RadrootsTagSemantic::Status => "status",
-        RadrootsTagSemantic::Summary => "summary",
-        RadrootsTagSemantic::Title => "title",
-        RadrootsTagSemantic::Topic => "topic",
-        RadrootsTagSemantic::TimeZone => "time_zone",
-        RadrootsTagSemantic::Url => "url",
-        RadrootsTagSemantic::UtcDayCoverage => "utc_day_coverage",
-    }
-}
-
-pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
-    match value {
-        RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagValueType::CalendarDate => "calendar_date",
-        RadrootsTagValueType::CalendarEventCoordinate => "calendar_event_coordinate",
-        RadrootsTagValueType::CalendarFreeBusy => "calendar_free_busy",
-        RadrootsTagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
-        RadrootsTagValueType::CalendarUid => "calendar_uid",
-        RadrootsTagValueType::ContractId => "contract_id",
-        RadrootsTagValueType::DTag => "d_tag",
-        RadrootsTagValueType::EventId => "event_id",
-        RadrootsTagValueType::EventPointer => "event_pointer",
-        RadrootsTagValueType::Geohash => "geohash",
-        RadrootsTagValueType::IanaTimeZoneId => "iana_time_zone_id",
-        RadrootsTagValueType::Kind => "kind",
-        RadrootsTagValueType::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagValueType::PublicKey => "public_key",
-        RadrootsTagValueType::RelayUrl => "relay_url",
-        RadrootsTagValueType::Sha256 => "sha256",
-        RadrootsTagValueType::Text => "text",
-        RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
-        RadrootsTagValueType::Uri => "uri",
-        RadrootsTagValueType::Url => "url",
-        RadrootsTagValueType::UtcDayIndex => "utc_day_index",
-        RadrootsTagValueType::Uuid => "uuid",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::reconciliation_v1::{tag_semantic_name, tag_value_type_name};
+    use radroots_event::RadrootsEventKindClass;
+    use radroots_event::contract::{RadrootsTagSemantic, RadrootsTagValueType};
     use radroots_event::event_head::{
         RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     };
@@ -711,11 +661,54 @@ mod tests {
             1,
         )
         .expect("observation")
-        .with_redacted_message("seen");
-        assert_eq!(observation.redacted_message.as_deref(), Some("seen"));
+        .try_with_caller_redacted_message("seen")
+        .expect("caller-redacted message");
+        assert_eq!(observation.caller_redacted_message(), Some("seen"));
         assert_eq!(
-            observation.endpoint_uri.as_str(),
+            observation.endpoint_uri().as_str(),
             "wss://relay.example.test"
+        );
+        let canonical_relay = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "WSS://RELAY.EXAMPLE.TEST/",
+            RadrootsTransportObservationType::Fetch,
+            1,
+        )
+        .expect("canonical relay observation");
+        assert_eq!(
+            canonical_relay.endpoint_uri().as_str(),
+            "wss://relay.example.test"
+        );
+        for invalid_relay in [
+            "https://relay.example.test",
+            "wss://relay.example.test?query=1",
+            "wss://:443",
+            "ws://relay.example.test",
+        ] {
+            assert!(
+                RadrootsTransportObservation::new(
+                    RadrootsTransportKind::Nostr,
+                    invalid_relay,
+                    RadrootsTransportObservationType::Fetch,
+                    1,
+                )
+                .is_err(),
+                "accepted invalid relay `{invalid_relay}`"
+            );
+        }
+        let reticulum = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Reticulum,
+            "reticulum:local",
+            RadrootsTransportObservationType::MeshHeard,
+            1,
+        )
+        .expect("Reticulum observation");
+        let expected_reticulum =
+            RadrootsTransportTarget::reticulum().expect("canonical Reticulum target");
+        assert_eq!(reticulum.endpoint_uri(), expected_reticulum.uri());
+        assert_eq!(
+            reticulum.endpoint_fingerprint(),
+            expected_reticulum.fingerprint()
         );
         assert!(
             RadrootsTransportObservation::new(
@@ -725,6 +718,39 @@ mod tests {
                 1,
             )
             .is_err()
+        );
+        assert!(matches!(
+            RadrootsTransportObservation::new(
+                RadrootsTransportKind::Nostr,
+                "wss://relay.example.test",
+                RadrootsTransportObservationType::Fetch,
+                -1,
+            ),
+            Err(RadrootsEventStoreError::InvalidTransportObservationTimestamp { value: -1 })
+        ));
+        for invalid_message in [
+            "",
+            " ",
+            " leading",
+            "trailing ",
+            "line\nbreak",
+            "tab\tseparated",
+        ] {
+            assert!(
+                observation
+                    .clone()
+                    .try_with_caller_redacted_message(invalid_message)
+                    .is_err(),
+                "accepted invalid caller-redacted message {invalid_message:?}"
+            );
+        }
+        assert!(
+            observation
+                .clone()
+                .try_with_caller_redacted_message(
+                    "x".repeat(RADROOTS_TRANSPORT_OBSERVATION_MESSAGE_MAX_BYTES + 1),
+                )
+                .is_err()
         );
     }
 

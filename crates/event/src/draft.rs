@@ -6,7 +6,7 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 #[cfg(any(feature = "std", test))]
 use std::{borrow::ToOwned, string::String, vec::Vec};
 
-use crate::contract::{
+use crate::contract::registry_v7::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError,
     RadrootsEventAuthoringPolicy, RadrootsEventContract, event_contract,
     validate_event_contract_parts,
@@ -14,7 +14,7 @@ use crate::contract::{
 use crate::ids::{
     RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
 };
-use crate::wire::{
+use crate::wire::v1::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsNip01EventWire,
     canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
 };
