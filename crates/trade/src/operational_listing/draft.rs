@@ -19,7 +19,10 @@ use radroots_event::{
     },
     kinds::KIND_CLASSIFIED_LISTING,
     operational_listing::RadrootsOperationalListing,
+    trade_validation::RadrootsOperationalListingValidationError,
 };
+
+use super::validation::validate_operational_listing_model;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
@@ -56,6 +59,9 @@ impl RadrootsOperationalListingCanonicalEdit {
         }
         listing.farm.pubkey = farm_pubkey.as_str().to_string();
         validate_listing_bins(&listing)?;
+        let listing = validate_operational_listing_model(listing, &seller_pubkey)
+            .map_err(RadrootsOperationalListingEditError::InvalidModel)?
+            .listing;
 
         let public_listing_addr = listing_addr(
             KIND_CLASSIFIED_LISTING,
@@ -87,6 +93,7 @@ impl RadrootsOperationalListingCanonicalEdit {
 pub enum RadrootsOperationalListingEditError {
     InvalidFarmPubkey(RadrootsIdParseError),
     InvalidClassifiedListingAddress(RadrootsIdParseError),
+    InvalidModel(RadrootsOperationalListingValidationError),
     ActorRoleUnsatisfied {
         required_role: RadrootsActorRole,
     },
@@ -110,6 +117,9 @@ impl fmt::Display for RadrootsOperationalListingEditError {
             }
             Self::InvalidClassifiedListingAddress(error) => {
                 write!(f, "invalid listing edit address: {error}")
+            }
+            Self::InvalidModel(error) => {
+                write!(f, "invalid listing edit model: {error}")
             }
             Self::ActorRoleUnsatisfied { required_role } => write!(
                 f,
@@ -197,9 +207,12 @@ mod tests {
         },
         kinds::KIND_CLASSIFIED_LISTING,
         operational_listing::{
-            RadrootsOperationalListing, RadrootsOperationalListingBin,
-            RadrootsOperationalListingProduct,
+            RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+            RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
+            RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
+            RadrootsOperationalListingStatus,
         },
+        trade_validation::RadrootsOperationalListingValidationError,
     };
 
     use super::{
@@ -263,10 +276,18 @@ mod tests {
             resource_area: None,
             plot: None,
             discounts: None,
-            inventory_available: None,
-            availability: None,
-            delivery_method: None,
-            location: None,
+            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            availability: Some(RadrootsOperationalListingAvailability::Status {
+                status: RadrootsOperationalListingStatus::Active,
+            }),
+            delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
+            location: Some(RadrootsOperationalListingPublicLocation {
+                primary: "Victoria".to_string(),
+                city: Some("Victoria".to_string()),
+                region: Some("British Columbia".to_string()),
+                country: Some("CA".to_string()),
+                geohash: "c287g".to_string(),
+            }),
             images: None,
         }
     }
@@ -493,6 +514,66 @@ mod tests {
             RadrootsOperationalListingEditError::DuplicateBinId {
                 bin_id: bin_id("bin-1")
             }
+        );
+    }
+
+    #[test]
+    fn canonical_draft_new_rejects_invalid_model() {
+        let mut listing = listing();
+        listing.inventory_available = None;
+
+        let error = RadrootsOperationalListingCanonicalEdit::new(
+            listing,
+            RadrootsPublicKey::parse(SELLER).expect("seller"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsOperationalListingEditError::InvalidModel(
+                RadrootsOperationalListingValidationError::MissingInventory
+            )
+        );
+    }
+
+    #[test]
+    fn canonical_draft_new_rejects_invalid_secondary_bin() {
+        let mut invalid_quantity_listing = listing();
+        let mut secondary_bin = invalid_quantity_listing.bins[0].clone();
+        secondary_bin.bin_id = bin_id("bin-2");
+        secondary_bin.quantity.amount = "-1".parse().expect("negative decimal");
+        invalid_quantity_listing.bins.push(secondary_bin);
+
+        let error = RadrootsOperationalListingCanonicalEdit::new(
+            invalid_quantity_listing,
+            RadrootsPublicKey::parse(SELLER).expect("seller"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsOperationalListingEditError::InvalidModel(
+                RadrootsOperationalListingValidationError::InvalidBin
+            )
+        );
+
+        let mut mismatched_unit_listing = listing();
+        let mut secondary_bin = mismatched_unit_listing.bins[0].clone();
+        secondary_bin.bin_id = bin_id("bin-2");
+        secondary_bin.price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
+        mismatched_unit_listing.bins.push(secondary_bin);
+
+        let error = RadrootsOperationalListingCanonicalEdit::new(
+            mismatched_unit_listing,
+            RadrootsPublicKey::parse(SELLER).expect("seller"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            RadrootsOperationalListingEditError::InvalidModel(
+                RadrootsOperationalListingValidationError::InvalidPrice
+            )
         );
     }
 

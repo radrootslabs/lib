@@ -314,3 +314,9 @@ id = "shared-read-only-owner-boundaries"
 classification = "feature"
 semver_impacts = ["add_exported_function"]
 summary = "Expose one Operational Listing model-semantic validator shared by unsigned authoring tools and verified event validation, plus one non-migrating event-store status inspector shared by runtime and offline consumers."
+
+[[changes]]
+id = "operational-listing-authoring-validation"
+classification = "breaking"
+semver_impacts = ["add_enum_variant", "change_exported_algorithm_behavior"]
+summary = "Require every canonical Operational Listing edit to pass the shared model-semantic validator, reject duplicate IDs and invalid quantity or price semantics across every bin, and return the typed validation cause before draft construction, signing, or durable workflow mutation."

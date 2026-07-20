@@ -16,7 +16,8 @@ use radroots_event::{
     location::{has_textual_locality, is_public_geohash5},
     operational_listing::{
         RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-        RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingPublicLocation,
+        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
+        RadrootsOperationalListingPublicLocation,
     },
     trade_validation::RadrootsOperationalListingValidationError as OperationalListingValidationError,
 };
@@ -129,34 +130,26 @@ pub fn validate_operational_listing_model(
         return Err(OperationalListingValidationError::MissingBins);
     }
     let primary_bin_id = listing.primary_bin_id.trim().to_string();
-    let primary_bin = listing
+    let primary_bin_index = listing
         .bins
         .iter()
-        .find(|bin| bin.bin_id == primary_bin_id)
+        .position(|bin| bin.bin_id == primary_bin_id)
         .ok_or(OperationalListingValidationError::MissingPrimaryBin)?;
+    for (index, bin) in listing.bins.iter().enumerate() {
+        if listing.bins[..index]
+            .iter()
+            .any(|seen| seen.bin_id == bin.bin_id)
+        {
+            return Err(OperationalListingValidationError::InvalidBin);
+        }
+    }
+    let primary_bin = &listing.bins[primary_bin_index];
 
-    if primary_bin.quantity.amount.is_sign_negative() {
-        return Err(OperationalListingValidationError::InvalidBin);
-    }
-    if !primary_bin.quantity.is_canonical() {
-        return Err(OperationalListingValidationError::InvalidBin);
-    }
-    if !primary_bin
-        .price_per_canonical_unit
-        .is_price_per_canonical_unit()
-    {
-        return Err(OperationalListingValidationError::InvalidPrice);
-    }
-    if primary_bin
-        .price_per_canonical_unit
-        .amount
-        .amount
-        .is_sign_negative()
-    {
-        return Err(OperationalListingValidationError::InvalidPrice);
-    }
-    if primary_bin.price_per_canonical_unit.quantity.unit != primary_bin.quantity.unit {
-        return Err(OperationalListingValidationError::InvalidPrice);
+    validate_listing_bin(primary_bin)?;
+    for (index, bin) in listing.bins.iter().enumerate() {
+        if index != primary_bin_index {
+            validate_listing_bin(bin)?;
+        }
     }
 
     let inventory_available = listing
@@ -205,6 +198,25 @@ pub fn validate_operational_listing_model(
         delivery_method,
         listing,
     })
+}
+
+fn validate_listing_bin(
+    bin: &RadrootsOperationalListingBin,
+) -> Result<(), OperationalListingValidationError> {
+    if bin.quantity.amount.is_sign_negative() || !bin.quantity.is_canonical() {
+        return Err(OperationalListingValidationError::InvalidBin);
+    }
+    if !bin.price_per_canonical_unit.is_price_per_canonical_unit()
+        || bin
+            .price_per_canonical_unit
+            .amount
+            .amount
+            .is_sign_negative()
+        || bin.price_per_canonical_unit.quantity.unit != bin.quantity.unit
+    {
+        return Err(OperationalListingValidationError::InvalidPrice);
+    }
+    Ok(())
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -469,6 +481,41 @@ mod tests {
         assert_eq!(format!("{err}"), format!("{expected}"));
     }
 
+    fn assert_secondary_bin_model_error(
+        update: impl FnOnce(&mut RadrootsOperationalListingBin),
+        expected: OperationalListingValidationError,
+    ) {
+        let mut listing = listing_with_secondary_bin();
+        update(&mut listing.bins[1]);
+
+        assert_eq!(
+            validate_operational_listing_model(listing, &seller_pubkey())
+                .expect_err("invalid secondary bin"),
+            expected
+        );
+    }
+
+    fn listing_with_secondary_bin() -> RadrootsOperationalListing {
+        let mut listing = base_listing();
+        let mut secondary_bin = listing.bins[0].clone();
+        secondary_bin.bin_id = bin_id("bin-2");
+        listing.bins.push(secondary_bin);
+        listing
+    }
+
+    fn assert_model_and_signed_event_error(
+        listing: RadrootsOperationalListing,
+        expected: OperationalListingValidationError,
+    ) {
+        let event_error = validate_operational_listing_event(&base_event(&listing))
+            .expect_err("signed event semantic error");
+        let model_error = validate_operational_listing_model(listing, &seller_pubkey())
+            .expect_err("model semantic error");
+
+        assert_eq!(event_error, expected);
+        assert_eq!(model_error, event_error);
+    }
+
     #[test]
     fn validate_listing_ok() {
         let listing = base_listing();
@@ -479,7 +526,7 @@ mod tests {
     #[test]
     #[cfg(feature = "serde_json")]
     fn model_and_verified_event_validation_return_the_same_projection() {
-        let listing = base_listing();
+        let listing = listing_with_secondary_bin();
         let event_projection =
             validate_operational_listing_event(&base_event(&listing)).expect("event projection");
         let model_projection = validate_operational_listing_model(listing, &seller_pubkey())
@@ -513,6 +560,18 @@ mod tests {
         let model_error = validate_operational_listing_model(listing, &other_seller_pubkey())
             .expect_err("model seller error");
         assert_eq!(model_error, event_error);
+
+        let mut listing = listing_with_secondary_bin();
+        listing.bins[1].quantity.amount = "-1".parse().expect("negative decimal");
+        assert_model_and_signed_event_error(listing, OperationalListingValidationError::InvalidBin);
+
+        let mut listing = listing_with_secondary_bin();
+        listing.bins[1].price_per_canonical_unit.amount.amount =
+            "-1".parse().expect("negative decimal");
+        assert_model_and_signed_event_error(
+            listing,
+            OperationalListingValidationError::InvalidPrice,
+        );
     }
 
     #[test]
@@ -534,6 +593,14 @@ mod tests {
         );
 
         let mut listing = base_listing();
+        listing.bins.push(listing.bins[0].clone());
+        assert_eq!(
+            validate_operational_listing_model(listing, &seller_pubkey())
+                .expect_err("duplicate bin ID"),
+            OperationalListingValidationError::InvalidBin
+        );
+
+        let mut listing = base_listing();
         listing.location.as_mut().expect("location").geohash = " ".into();
         assert_eq!(
             validate_operational_listing_model(listing, &seller_pubkey())
@@ -547,6 +614,47 @@ mod tests {
             validate_operational_listing_model(listing, &seller_pubkey())
                 .expect_err("invalid geohash"),
             OperationalListingValidationError::InvalidLocationGeohash
+        );
+    }
+
+    #[test]
+    fn model_validation_rejects_invalid_secondary_bin_quantities() {
+        assert_secondary_bin_model_error(
+            |bin| bin.quantity.amount = "-1".parse().expect("negative decimal"),
+            OperationalListingValidationError::InvalidBin,
+        );
+        assert_secondary_bin_model_error(
+            |bin| bin.quantity.unit = RadrootsCoreUnit::MassKg,
+            OperationalListingValidationError::InvalidBin,
+        );
+    }
+
+    #[test]
+    fn model_validation_rejects_invalid_secondary_bin_prices() {
+        assert_secondary_bin_model_error(
+            |bin| {
+                bin.price_per_canonical_unit.quantity.amount = RadrootsCoreDecimal::from(2u32);
+            },
+            OperationalListingValidationError::InvalidPrice,
+        );
+        assert_secondary_bin_model_error(
+            |bin| {
+                bin.price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::MassKg;
+            },
+            OperationalListingValidationError::InvalidPrice,
+        );
+        assert_secondary_bin_model_error(
+            |bin| {
+                bin.price_per_canonical_unit.amount.amount =
+                    "-1".parse().expect("negative decimal");
+            },
+            OperationalListingValidationError::InvalidPrice,
+        );
+        assert_secondary_bin_model_error(
+            |bin| {
+                bin.price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
+            },
+            OperationalListingValidationError::InvalidPrice,
         );
     }
 

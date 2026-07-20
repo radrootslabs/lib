@@ -59,7 +59,9 @@ publish policy both pass for the same source revision.
   semantic reducer and a signature-verified event boundary that delegates to
   it after kind, marker-partition, and decoding checks. Event-store projection
   reconstructs and verifies the event typestate instead of trusting a plain
-  stored envelope.
+  stored envelope. Canonical authoring now invokes that reducer before draft
+  construction and preserves its typed failure cause; the reducer rejects
+  duplicate bin IDs and invalid quantity or price semantics in every bin.
 - Generic NIP-01 identifier and signature verification is now independent of
   knowledge decoding, and every dynamic Nostr kind conversion rejects values
   above `65535` instead of truncating them. Canonical-length author keys that
