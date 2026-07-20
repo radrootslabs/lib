@@ -35,6 +35,8 @@ use radroots_transport::{
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult};
+#[cfg(test)]
+use sqlx::{Connection, SqliteConnection};
 use sqlx::{Row, SqlitePool};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -97,7 +99,7 @@ impl RadrootsOutbox {
     }
 
     pub async fn pragma_journal_mode(&self) -> Result<String, RadrootsOutboxError> {
-        query_string(&self.pool, "PRAGMA journal_mode").await
+        query_string(&self.pool, "PRAGMA main.journal_mode").await
     }
 
     pub async fn status_summary(
@@ -1843,12 +1845,38 @@ async fn configure_pool(pool: &SqlitePool, file_backed: bool) -> Result<(), Radr
             .execute(&mut **connection)
             .await?;
         if file_backed {
-            sqlx::query("PRAGMA journal_mode = WAL")
-                .execute(&mut **connection)
+            let actual = sqlx::query_scalar::<_, String>("PRAGMA main.journal_mode = WAL")
+                .fetch_one(&mut **connection)
                 .await?;
+            if actual != "wal" {
+                return Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual });
+            }
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+async fn file_pool_with_immutable_delete_journal(path: &Path) -> SqlitePool {
+    let mut writer = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true),
+    )
+    .await
+    .expect("writer connection");
+    let mode: String = sqlx::query_scalar("PRAGMA main.journal_mode = DELETE")
+        .fetch_one(&mut writer)
+        .await
+        .expect("delete journal mode");
+    assert_eq!(mode, "delete");
+    writer.close().await.expect("close writer");
+
+    SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(SqliteConnectOptions::new().filename(path).immutable(true))
+        .await
+        .expect("immutable pool")
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -4216,6 +4244,19 @@ mod tests {
         .await
         .expect("table query");
         assert!(row.is_none());
+    }
+
+    #[tokio::test]
+    async fn file_pool_rejects_successful_non_wal_journal_result() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("immutable-delete.sqlite");
+        let pool = file_pool_with_immutable_delete_journal(&path).await;
+
+        assert!(matches!(
+            RadrootsOutbox::open_pool(pool, true).await,
+            Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual })
+                if actual == "delete"
+        ));
     }
 
     #[tokio::test]

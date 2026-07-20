@@ -43,6 +43,9 @@ pub enum RadrootsOutboxError {
     )]
     SqlitePoolBackingMismatch { file_backed: bool, filename: String },
 
+    #[error("SQLite outbox file connection did not enter WAL journal mode; reported `{actual}`")]
+    SqliteFileJournalModeNotWal { actual: String },
+
     #[error(
         "trade mutation outbox metadata does not match the canonical mutation content: {field}"
     )]

@@ -45,6 +45,17 @@ pub enum RadrootsNostrSignerError {
 
     #[error("publish workflow not found: {0}")]
     PublishWorkflowNotFound(String),
+
+    #[error("SQLite signer journal-mode query returned {actual_rows} rows; expected exactly one")]
+    SqliteJournalModeResultCardinality { actual_rows: usize },
+
+    #[error(
+        "SQLite signer connection did not enter `{expected}` journal mode; reported `{actual}`"
+    )]
+    SqliteJournalModeMismatch {
+        expected: &'static str,
+        actual: String,
+    },
 }
 
 impl From<radroots_runtime::RuntimeJsonError> for RadrootsNostrSignerError {

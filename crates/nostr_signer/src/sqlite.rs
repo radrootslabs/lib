@@ -1,7 +1,13 @@
 use crate::error::RadrootsNostrSignerError;
 use crate::migrations;
 use radroots_sql_core::{SqlExecutor, SqlxSqliteExecutor};
+use serde::Deserialize;
 use std::path::Path;
+
+#[derive(Deserialize)]
+struct SqliteJournalModeRow {
+    journal_mode: String,
+}
 
 pub struct RadrootsNostrSignerSqliteDb {
     executor: SqlxSqliteExecutor,
@@ -66,20 +72,41 @@ impl RadrootsNostrSignerSqliteDb {
              PRAGMA temp_store = MEMORY;"
         };
         let _ = self.executor.exec(pragma_batch, "[]")?;
-        if self.file_backed {
-            let _ = self.executor.query_raw("PRAGMA journal_mode = WAL", "[]")?;
+        let (journal_mode_sql, expected_journal_mode) = if self.file_backed {
+            ("PRAGMA main.journal_mode = WAL", "wal")
         } else {
-            let _ = self
-                .executor
-                .query_raw("PRAGMA journal_mode = MEMORY", "[]")?;
-        }
-        Ok(())
+            ("PRAGMA main.journal_mode = MEMORY", "memory")
+        };
+        let result = self.executor.query_raw(journal_mode_sql, "[]")?;
+        validate_journal_mode_result(&result, expected_journal_mode)
     }
+}
+
+fn validate_journal_mode_result(
+    result: &str,
+    expected: &'static str,
+) -> Result<(), RadrootsNostrSignerError> {
+    let rows: Vec<SqliteJournalModeRow> = serde_json::from_str(result)?;
+    let [row] = rows.as_slice() else {
+        return Err(
+            RadrootsNostrSignerError::SqliteJournalModeResultCardinality {
+                actual_rows: rows.len(),
+            },
+        );
+    };
+    if row.journal_mode != expected {
+        return Err(RadrootsNostrSignerError::SqliteJournalModeMismatch {
+            expected,
+            actual: row.journal_mode.clone(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::RadrootsNostrSignerSqliteDb;
+    use super::{RadrootsNostrSignerSqliteDb, validate_journal_mode_result};
+    use crate::error::RadrootsNostrSignerError;
     use radroots_sql_core::SqlExecutor;
     use serde_json::Value;
 
@@ -113,6 +140,10 @@ mod tests {
     fn open_memory_bootstraps_schema_and_migrations_idempotently() {
         let db = RadrootsNostrSignerSqliteDb::open_memory().expect("open memory db");
         db.migrate_up().expect("rerun migrations");
+        assert_eq!(
+            query_single_text(&db, "PRAGMA main.journal_mode", "journal_mode"),
+            "memory"
+        );
 
         let tables = query_values(
             &db,
@@ -187,17 +218,47 @@ mod tests {
     #[test]
     fn file_database_uses_wal_and_foreign_keys() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let db = RadrootsNostrSignerSqliteDb::open(temp.path().join("signer.sqlite"))
-            .expect("open sqlite file db");
+        let path = temp.path().join("signer.sqlite");
+        {
+            let db = RadrootsNostrSignerSqliteDb::open(&path).expect("open sqlite file db");
 
+            assert_eq!(
+                query_single_text(&db, "PRAGMA main.journal_mode", "journal_mode"),
+                "wal"
+            );
+            assert_eq!(
+                query_single_i64(&db, "PRAGMA foreign_keys", "foreign_keys"),
+                1
+            );
+        }
+
+        let reopened = RadrootsNostrSignerSqliteDb::open(&path).expect("reopen sqlite file db");
         assert_eq!(
-            query_single_text(&db, "PRAGMA journal_mode", "journal_mode"),
+            query_single_text(&reopened, "PRAGMA main.journal_mode", "journal_mode"),
             "wal"
         );
-        assert_eq!(
-            query_single_i64(&db, "PRAGMA foreign_keys", "foreign_keys"),
-            1
-        );
+    }
+
+    #[test]
+    fn journal_mode_result_validation_fails_closed() {
+        assert!(matches!(
+            validate_journal_mode_result(r#"[{"journal_mode":"delete"}]"#, "wal"),
+            Err(RadrootsNostrSignerError::SqliteJournalModeMismatch {
+                expected: "wal",
+                actual,
+            }) if actual == "delete"
+        ));
+        assert!(matches!(
+            validate_journal_mode_result("[]", "wal"),
+            Err(RadrootsNostrSignerError::SqliteJournalModeResultCardinality { actual_rows: 0 })
+        ));
+        assert!(matches!(
+            validate_journal_mode_result(
+                r#"[{"journal_mode":"wal"},{"journal_mode":"delete"}]"#,
+                "wal"
+            ),
+            Err(RadrootsNostrSignerError::SqliteJournalModeResultCardinality { actual_rows: 2 })
+        ));
     }
 
     #[test]
