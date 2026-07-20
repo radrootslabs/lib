@@ -309,7 +309,8 @@ pub struct SdkSqliteWalCheckpointReceipt {
 pub struct SdkEventStoreStorageStatus {
     pub store: SdkSqliteStoreStatus,
     pub total_events: i64,
-    pub projection_eligible_events: i64,
+    #[serde(alias = "projection_eligible_events")]
+    pub valid_stream_events: i64,
     pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
@@ -785,7 +786,7 @@ impl RadrootsClient {
             event_store: SdkEventStoreStorageStatus {
                 store: event_store_status,
                 total_events: event_summary.total_events,
-                projection_eligible_events: event_summary.projection_eligible_events,
+                valid_stream_events: event_summary.valid_stream_events,
                 transport_observations: event_summary.transport_observations,
                 last_event_seq: event_summary.last_event_seq,
                 last_event_updated_at_ms: event_summary.last_event_updated_at_ms,
@@ -1110,7 +1111,7 @@ async fn directory_storage_status_read_only(
         event_store: SdkEventStoreStorageStatus {
             store: event_store_status,
             total_events: event_summary.total_events,
-            projection_eligible_events: event_summary.projection_eligible_events,
+            valid_stream_events: event_summary.valid_stream_events,
             transport_observations: event_summary.transport_observations,
             last_event_seq: event_summary.last_event_seq,
             last_event_updated_at_ms: event_summary.last_event_updated_at_ms,
@@ -1180,33 +1181,9 @@ async fn sqlite_store_status_from_pool(
 async fn event_store_status_summary_from_pool(
     pool: &SqlitePool,
 ) -> Result<radroots_event_store::RadrootsEventStoreStatusSummary, RadrootsSdkError> {
-    let row = sqlx::query(
-        "SELECT COUNT(*) AS total_events, COALESCE(SUM(CASE WHEN projection_eligible = 1 THEN 1 ELSE 0 END), 0) AS projection_eligible_events, MAX(seq) AS last_event_seq, MAX(updated_at_ms) AS last_event_updated_at_ms FROM event_envelopes",
-    )
-    .fetch_one(pool)
-    .await
-    .map_err(|error| SqliteStoreRole::EventStore.error(error.to_string()))?;
-    let transport_observations = sqlite_query_i64(
-        pool,
-        "SELECT COUNT(*) FROM event_transport_observation",
-        SqliteStoreRole::EventStore,
-    )
-    .await?;
-    Ok(radroots_event_store::RadrootsEventStoreStatusSummary {
-        total_events: row
-            .try_get("total_events")
-            .map_err(|error| SqliteStoreRole::EventStore.error(error.to_string()))?,
-        projection_eligible_events: row
-            .try_get("projection_eligible_events")
-            .map_err(|error| SqliteStoreRole::EventStore.error(error.to_string()))?,
-        transport_observations,
-        last_event_seq: row
-            .try_get("last_event_seq")
-            .map_err(|error| SqliteStoreRole::EventStore.error(error.to_string()))?,
-        last_event_updated_at_ms: row
-            .try_get("last_event_updated_at_ms")
-            .map_err(|error| SqliteStoreRole::EventStore.error(error.to_string()))?,
-    })
+    radroots_event_store::inspect_event_store_status(pool)
+        .await
+        .map_err(|error| SqliteStoreRole::EventStore.error(error.to_string()))
 }
 
 #[cfg(feature = "runtime")]
@@ -2350,13 +2327,17 @@ async fn recover_sdk_runtime_state(pool: &SqlitePool, now_ms: i64) -> Result<(),
     if operation_recovery.rows_affected() > 0 {
         record_runtime_recovery_receipt(
             pool,
-            "signer_timeout",
-            None,
-            None,
-            None,
-            "retry_operation_with_same_idempotency_key",
-            serde_json::json!({ "recovered_operations": operation_recovery.rows_affected() }),
-            now_ms,
+            RuntimeRecoveryReceiptWrite {
+                recovery_code: "signer_timeout",
+                operation_kind: None,
+                actor_pubkey: None,
+                idempotency_key: None,
+                recovery_action: "retry_operation_with_same_idempotency_key",
+                detail_json: serde_json::json!({
+                    "recovered_operations": operation_recovery.rows_affected()
+                }),
+                created_at_ms: now_ms,
+            },
         )
         .await?;
     }
@@ -2371,13 +2352,17 @@ async fn recover_sdk_runtime_state(pool: &SqlitePool, now_ms: i64) -> Result<(),
     if reservation_expiry.rows_affected() > 0 {
         record_runtime_recovery_receipt(
             pool,
-            "reservation_expiry",
-            None,
-            None,
-            None,
-            "retry_operation_with_same_idempotency_key",
-            serde_json::json!({ "expired_reservations": reservation_expiry.rows_affected() }),
-            now_ms,
+            RuntimeRecoveryReceiptWrite {
+                recovery_code: "reservation_expiry",
+                operation_kind: None,
+                actor_pubkey: None,
+                idempotency_key: None,
+                recovery_action: "retry_operation_with_same_idempotency_key",
+                detail_json: serde_json::json!({
+                    "expired_reservations": reservation_expiry.rows_affected()
+                }),
+                created_at_ms: now_ms,
+            },
         )
         .await?;
     }
@@ -2391,13 +2376,17 @@ async fn recover_sdk_runtime_state(pool: &SqlitePool, now_ms: i64) -> Result<(),
     if projection_stale.rows_affected() > 0 {
         record_runtime_recovery_receipt(
             pool,
-            "projection_stale",
-            None,
-            None,
-            None,
-            "inspect_local_stores",
-            serde_json::json!({ "stale_projection_checkpoints": projection_stale.rows_affected() }),
-            now_ms,
+            RuntimeRecoveryReceiptWrite {
+                recovery_code: "projection_stale",
+                operation_kind: None,
+                actor_pubkey: None,
+                idempotency_key: None,
+                recovery_action: "inspect_local_stores",
+                detail_json: serde_json::json!({
+                    "stale_projection_checkpoints": projection_stale.rows_affected()
+                }),
+                created_at_ms: now_ms,
+            },
         )
         .await?;
     }
@@ -2412,13 +2401,17 @@ async fn recover_sdk_runtime_state(pool: &SqlitePool, now_ms: i64) -> Result<(),
     if outbox_claim_recovery.rows_affected() > 0 {
         record_runtime_recovery_receipt(
             pool,
-            "relay_failure",
-            None,
-            None,
-            None,
-            "retry_after_transport_failure",
-            serde_json::json!({ "recovered_outbox_claims": outbox_claim_recovery.rows_affected() }),
-            now_ms,
+            RuntimeRecoveryReceiptWrite {
+                recovery_code: "relay_failure",
+                operation_kind: None,
+                actor_pubkey: None,
+                idempotency_key: None,
+                recovery_action: "retry_after_transport_failure",
+                detail_json: serde_json::json!({
+                    "recovered_outbox_claims": outbox_claim_recovery.rows_affected()
+                }),
+                created_at_ms: now_ms,
+            },
         )
         .await?;
     }
@@ -2426,26 +2419,31 @@ async fn recover_sdk_runtime_state(pool: &SqlitePool, now_ms: i64) -> Result<(),
 }
 
 #[cfg(feature = "runtime")]
+pub(crate) struct RuntimeRecoveryReceiptWrite<'a> {
+    pub(crate) recovery_code: &'a str,
+    pub(crate) operation_kind: Option<&'a str>,
+    pub(crate) actor_pubkey: Option<&'a str>,
+    pub(crate) idempotency_key: Option<&'a str>,
+    pub(crate) recovery_action: &'a str,
+    pub(crate) detail_json: serde_json::Value,
+    pub(crate) created_at_ms: i64,
+}
+
+#[cfg(feature = "runtime")]
 pub(crate) async fn record_runtime_recovery_receipt(
     pool: &SqlitePool,
-    recovery_code: &'static str,
-    operation_kind: Option<&str>,
-    actor_pubkey: Option<&str>,
-    idempotency_key: Option<&str>,
-    recovery_action: &'static str,
-    detail_json: serde_json::Value,
-    created_at_ms: i64,
+    receipt: RuntimeRecoveryReceiptWrite<'_>,
 ) -> Result<(), RadrootsSdkError> {
     sqlx::query(
         "INSERT INTO sdk_runtime_recovery_receipt(recovery_code, operation_kind, actor_pubkey, idempotency_key, recovery_action, detail_json, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(recovery_code)
-    .bind(operation_kind)
-    .bind(actor_pubkey)
-    .bind(idempotency_key)
-    .bind(recovery_action)
-    .bind(detail_json.to_string())
-    .bind(created_at_ms)
+    .bind(receipt.recovery_code)
+    .bind(receipt.operation_kind)
+    .bind(receipt.actor_pubkey)
+    .bind(receipt.idempotency_key)
+    .bind(receipt.recovery_action)
+    .bind(receipt.detail_json.to_string())
+    .bind(receipt.created_at_ms)
     .execute(pool)
     .await
     .map(|_| ())

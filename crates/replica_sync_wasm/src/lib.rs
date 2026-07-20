@@ -5,11 +5,12 @@ use base64::Engine;
 #[cfg(target_arch = "wasm32")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+#[cfg(any(target_arch = "wasm32", test))]
+use radroots_replica_sync::RadrootsReplicaIngestOutcome;
 use radroots_replica_sync::RadrootsReplicaSyncRequest;
 #[cfg(target_arch = "wasm32")]
 use radroots_replica_sync::{
-    RadrootsReplicaIdFactory, RadrootsReplicaIngestOutcome,
-    radroots_replica_ingest_event_with_factory, radroots_replica_sync_all,
+    RadrootsReplicaIdFactory, radroots_replica_ingest_event_with_factory, radroots_replica_sync_all,
 };
 #[cfg(target_arch = "wasm32")]
 use radroots_sdk_sql_wasm_runtime::WasmSqlExecutor;
@@ -66,6 +67,16 @@ pub fn parse_event_model(event_json: &str) -> Result<RadrootsEventEnvelope, Stri
     .map_err(|error| error.to_string())
 }
 
+#[cfg(any(target_arch = "wasm32", test))]
+fn ingest_outcome_label(outcome: RadrootsReplicaIngestOutcome) -> &'static str {
+    match outcome {
+        RadrootsReplicaIngestOutcome::Applied => "applied",
+        RadrootsReplicaIngestOutcome::Excluded => "excluded",
+        RadrootsReplicaIngestOutcome::Rejected => "rejected",
+        RadrootsReplicaIngestOutcome::Skipped => "skipped",
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(js_name = replica_sync_sync_all)]
 pub fn replica_sync_sync_all(request_json: &str) -> Result<JsValue, JsValue> {
@@ -83,16 +94,13 @@ pub fn replica_sync_ingest_event(event_json: &str) -> Result<JsValue, JsValue> {
     let factory = WasmIdFactory;
     let outcome =
         radroots_replica_ingest_event_with_factory(&exec, &event, &factory).map_err(err_js)?;
-    let value = match outcome {
-        RadrootsReplicaIngestOutcome::Applied => "applied",
-        RadrootsReplicaIngestOutcome::Skipped => "skipped",
-    };
-    Ok(JsValue::from_str(value))
+    Ok(JsValue::from_str(ingest_outcome_label(outcome)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_event_model, parse_request_model};
+    use super::{ingest_outcome_label, parse_event_model, parse_request_model};
+    use radroots_replica_sync::RadrootsReplicaIngestOutcome;
 
     fn event_json(author: Option<&str>, pubkey: Option<&str>) -> String {
         let mut fields = vec![
@@ -147,5 +155,25 @@ mod tests {
     fn parse_request_rejects_malformed_json() {
         let error = parse_request_model("{").expect_err("error");
         assert!(error.contains("EOF"));
+    }
+
+    #[test]
+    fn ingest_outcome_labels_cover_the_replica_contract() {
+        assert_eq!(
+            ingest_outcome_label(RadrootsReplicaIngestOutcome::Applied),
+            "applied"
+        );
+        assert_eq!(
+            ingest_outcome_label(RadrootsReplicaIngestOutcome::Excluded),
+            "excluded"
+        );
+        assert_eq!(
+            ingest_outcome_label(RadrootsReplicaIngestOutcome::Rejected),
+            "rejected"
+        );
+        assert_eq!(
+            ingest_outcome_label(RadrootsReplicaIngestOutcome::Skipped),
+            "skipped"
+        );
     }
 }

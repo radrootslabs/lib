@@ -1,15 +1,48 @@
 use radroots_authority::{RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity};
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use std::sync::LazyLock;
+
+struct FixtureKeyMaterial {
+    keys: RadrootsNostrKeys,
+    pubkey: String,
+}
+
+impl FixtureKeyMaterial {
+    fn generate() -> Self {
+        let keys = RadrootsNostrKeys::generate();
+        let pubkey = keys.public_key().to_hex();
+        Self { keys, pubkey }
+    }
+}
+
+static FIXTURE_ALICE: LazyLock<FixtureKeyMaterial> = LazyLock::new(FixtureKeyMaterial::generate);
+static FIXTURE_BOB: LazyLock<FixtureKeyMaterial> = LazyLock::new(FixtureKeyMaterial::generate);
+
+pub(crate) fn fixture_alice_pubkey() -> &'static str {
+    FIXTURE_ALICE.pubkey.as_str()
+}
+
+pub(crate) fn fixture_bob_pubkey() -> &'static str {
+    FIXTURE_BOB.pubkey.as_str()
+}
 
 #[derive(Clone)]
 pub struct FixtureSigner {
     identity: RadrootsSignerIdentity,
+    keys: RadrootsNostrKeys,
 }
 
 impl FixtureSigner {
     pub fn new(pubkey: &str) -> Self {
+        let material = match pubkey {
+            pubkey if pubkey == fixture_alice_pubkey() => &*FIXTURE_ALICE,
+            pubkey if pubkey == fixture_bob_pubkey() => &*FIXTURE_BOB,
+            _ => panic!("unsupported fixture signer public key"),
+        };
         Self {
             identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
+            keys: material.keys.clone(),
         }
     }
 }
@@ -28,29 +61,10 @@ impl RadrootsEventSigner for FixtureSigner {
                 message: "wrong fixture signer".to_owned(),
             });
         }
-        let sig = "f".repeat(128);
-        let raw_json = serde_json::json!({
-            "id": draft.expected_event_id_str(),
-            "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at_u64(),
-            "kind": draft.kind_u32(),
-            "tags": draft.tags_as_vec(),
-            "content": draft.content(),
-            "sig": sig,
-        })
-        .to_string();
-        RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id_str().to_owned(),
-            pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at_u64(),
-            kind: draft.kind_u32(),
-            tags: draft.tags_as_vec(),
-            content: draft.content().to_owned(),
-            sig,
-            raw_json,
-        })
-        .map_err(|error| RadrootsSignerError::SigningFailed {
-            message: error.to_string(),
+        radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
+            RadrootsSignerError::SigningFailed {
+                message: error.to_string(),
+            }
         })
     }
 }

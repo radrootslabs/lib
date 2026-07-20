@@ -121,7 +121,7 @@ pub enum SyncStatusSource {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SyncEventStoreStatus {
     pub total_events: i64,
-    pub projection_eligible_events: i64,
+    pub valid_stream_events: i64,
     pub transport_observations: i64,
     pub last_event_seq: Option<i64>,
     pub last_event_updated_at_ms: Option<i64>,
@@ -132,7 +132,7 @@ impl From<RadrootsEventStoreStatusSummary> for SyncEventStoreStatus {
     fn from(summary: RadrootsEventStoreStatusSummary) -> Self {
         Self {
             total_events: summary.total_events,
-            projection_eligible_events: summary.projection_eligible_events,
+            valid_stream_events: summary.valid_stream_events,
             transport_observations: summary.transport_observations,
             last_event_seq: summary.last_event_seq,
             last_event_updated_at_ms: summary.last_event_updated_at_ms,
@@ -1006,20 +1006,9 @@ fn reticulum_event_receipt(
 #[cfg(feature = "runtime")]
 fn reticulum_event_final_state(
     _event_state: RadrootsOutboxEventState,
-    targets: &[RadrootsOutboxDeliveryTargetRecord],
+    _targets: &[RadrootsOutboxDeliveryTargetRecord],
 ) -> PushOutboxEventState {
-    if targets.iter().any(|target| {
-        matches!(
-            target.status,
-            RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
-                | RadrootsOutboxDeliveryTargetStatus::Pending
-                | RadrootsOutboxDeliveryTargetStatus::FailedRetryable
-        )
-    }) {
-        PushOutboxEventState::DeferredUntilImplemented
-    } else {
-        PushOutboxEventState::DeferredUntilImplemented
-    }
+    PushOutboxEventState::DeferredUntilImplemented
 }
 
 #[cfg(feature = "runtime")]
@@ -1093,7 +1082,7 @@ pub(crate) async fn refresh_product_projections_for_sdk(
     }
     let refreshed_at_ms = sdk_now_ms(sdk)?;
     let summary = sdk._event_store.status_summary().await?;
-    let scanned_events = usize::try_from(summary.projection_eligible_events.max(0))
+    let scanned_events = usize::try_from(summary.valid_stream_events.max(0))
         .unwrap_or(usize::MAX)
         .min(request.limit as usize);
     let trade_upserts = trade_mutation_count(sdk).await?;
@@ -1149,7 +1138,7 @@ fn projection_source_digest(
     hasher.update(b"\0");
     hasher.update(summary.total_events.to_string().as_bytes());
     hasher.update(b"\0");
-    hasher.update(summary.projection_eligible_events.to_string().as_bytes());
+    hasher.update(summary.valid_stream_events.to_string().as_bytes());
     hasher.update(b"\0");
     hasher.update(
         summary
@@ -1648,18 +1637,11 @@ async fn complete_missing_radrootsd_delivery_target(
     publish: &TransportPublishJobView,
     now_ms: i64,
 ) -> Result<(), RadrootsSdkError> {
-    if publish.status == TransportPublishJobStatus::DeliveryDeferred {
-        sync.sdk
-            ._outbox
-            .mark_delivery_target_deferred_until_implemented(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                target.delivery_target_id,
-                "radrootsd publish deferred until implemented",
-                now_ms,
-            )
-            .await?;
-    } else if publish.status == TransportPublishJobStatus::DeliveryDeferredUntilImplemented {
+    if matches!(
+        publish.status,
+        TransportPublishJobStatus::DeliveryDeferred
+            | TransportPublishJobStatus::DeliveryDeferredUntilImplemented
+    ) {
         sync.sdk
             ._outbox
             .mark_delivery_target_deferred_until_implemented(
@@ -1754,9 +1736,11 @@ fn radrootsd_transport_error_receipt(
 fn radrootsd_push_event_final_state(publish: &TransportPublishJobView) -> PushOutboxEventState {
     if publish.delivery_satisfied {
         PushOutboxEventState::Published
-    } else if publish.status == TransportPublishJobStatus::DeliveryDeferred {
-        PushOutboxEventState::DeferredUntilImplemented
-    } else if publish.status == TransportPublishJobStatus::DeliveryDeferredUntilImplemented {
+    } else if matches!(
+        publish.status,
+        TransportPublishJobStatus::DeliveryDeferred
+            | TransportPublishJobStatus::DeliveryDeferredUntilImplemented
+    ) {
         PushOutboxEventState::DeferredUntilImplemented
     } else if publish.retryable_count > 0 || !publish.terminal {
         PushOutboxEventState::PublishRetryable

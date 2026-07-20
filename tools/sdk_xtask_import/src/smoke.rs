@@ -123,14 +123,14 @@ const CONSUMER_MAIN: &str = r#"use nostr::{EventBuilder, Keys, Kind, Tag, Timest
 use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_sdk::knowledge::prelude::*;
 
-const SECRET_KEY_HEX: &str = "0101010101010101010101010101010101010101010101010101010101010101";
 const CREATED_AT: u32 = 1_800_000_000;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let keys = Keys::generate();
     let claim = claim_builder().build()?;
     let parts = claim_builder().build_event()?;
-    let draft = claim_builder().build_draft(public_key_hex(), CREATED_AT)?;
-    let decoded = verify_and_decode_radroots_event(sign_parts(parts)?)?;
+    let draft = claim_builder().build_draft(keys.public_key().to_hex(), CREATED_AT)?;
+    let decoded = verify_and_decode_radroots_event(sign_parts(parts, &keys)?)?;
     let manifest = contract_manifest();
 
     assert_eq!(draft.contract_id, KNOWLEDGE_CLAIM_CONTRACT_ID);
@@ -142,17 +142,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn sign_parts(parts: RadrootsNip01EventWireParts) -> Result<RadrootsEventEnvelope, Box<dyn std::error::Error>> {
+fn sign_parts(
+    parts: RadrootsNip01EventWireParts,
+    keys: &Keys,
+) -> Result<RadrootsEventEnvelope, Box<dyn std::error::Error>> {
     let tags = parts
         .tags
         .into_iter()
         .map(Tag::parse)
         .collect::<Result<Vec<_>, _>>()?;
-    let keys = Keys::parse(SECRET_KEY_HEX)?;
     let event = EventBuilder::new(Kind::Custom(parts.kind as u16), parts.content)
         .tags(tags)
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
-        .sign_with_keys(&keys)?;
+        .sign_with_keys(keys)?;
     Ok(RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
@@ -167,13 +169,6 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> Result<RadrootsEventEnvelop
         content: event.content,
         sig: event.sig.to_string(),
     })?)
-}
-
-fn public_key_hex() -> String {
-    Keys::parse(SECRET_KEY_HEX)
-        .expect("keys")
-        .public_key()
-        .to_hex()
 }
 
 fn hex_64(character: char) -> String {

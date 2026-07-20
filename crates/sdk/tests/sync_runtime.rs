@@ -1,19 +1,21 @@
 #![cfg(feature = "runtime")]
 
 use futures::future::BoxFuture;
-use radroots_authority::{
-    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
-};
+use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_event::{
     contract::RadrootsActorRole,
-    draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts},
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId},
-    listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
+    operational_listing::{
+        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
+        RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
+        RadrootsOperationalListingStatus,
+    },
 };
 use radroots_event_store::{RadrootsEventStore, RadrootsTransportObservationType};
 use radroots_outbox::{
@@ -52,7 +54,11 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+#[path = "support/fixture_signer.rs"]
+mod fixture_signer;
+
+use fixture_signer::{FixtureSigner, fixture_alice_pubkey};
+
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const LISTING_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
 const LISTING_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
@@ -68,9 +74,8 @@ const PRIVATE_LAN_WS_RELAY: &str = "ws://192.168.1.10:8080";
 #[cfg(feature = "radrootsd-execution")]
 const RADROOTSD_EXECUTION_TEST_RELAY: &str = "wss://daemon-resolved.example.com";
 
-#[derive(Clone)]
-struct FixtureSigner {
-    identity: RadrootsSignerIdentity,
+fn seller_pubkey() -> &'static str {
+    fixture_alice_pubkey()
 }
 
 struct TransportFailurePublishAdapter;
@@ -382,68 +387,19 @@ impl RadrootsRelayPublishAdapter for RecordingPublishAdapter {
     }
 }
 
-impl FixtureSigner {
-    fn new(pubkey: &str) -> Self {
-        Self {
-            identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
-        }
-    }
-}
-
-impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
-        self.identity.pubkey()
-    }
-
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-        if self.pubkey().as_str() != draft.expected_pubkey_str() {
-            return Err(RadrootsSignerError::SigningFailed {
-                message: "wrong fixture signer".to_owned(),
-            });
-        }
-        let sig = "f".repeat(128);
-        let raw_json = serde_json::json!({
-            "id": draft.expected_event_id_str(),
-            "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at_u64(),
-            "kind": draft.kind_u32(),
-            "tags": draft.tags_as_vec(),
-            "content": draft.content(),
-            "sig": sig,
-        })
-        .to_string();
-        RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id_str().to_owned(),
-            pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at_u64(),
-            kind: draft.kind_u32(),
-            tags: draft.tags_as_vec(),
-            content: draft.content().to_owned(),
-            sig,
-            raw_json,
-        })
-        .map_err(|error| RadrootsSignerError::SigningFailed {
-            message: error.to_string(),
-        })
-    }
-}
-
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor")
 }
 
-fn listing(d_tag: &str, title: &str) -> RadrootsListing {
-    RadrootsListing {
+fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
+    RadrootsOperationalListing {
         d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
-            pubkey: SELLER.to_owned(),
+            pubkey: seller_pubkey().to_owned(),
             d_tag: FARM_D_TAG.to_owned(),
         },
-        product: RadrootsListingProduct {
+        product: RadrootsOperationalListingProduct {
             key: "coffee".to_owned(),
             title: title.to_owned(),
             category: "coffee".to_owned(),
@@ -455,7 +411,7 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
             year: None,
         },
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-        bins: vec![RadrootsListingBin {
+        bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1000u32),
@@ -480,10 +436,18 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
         resource_area: None,
         plot: None,
         discounts: None,
-        inventory_available: None,
-        availability: None,
-        delivery_method: None,
-        location: None,
+        inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+        availability: Some(RadrootsOperationalListingAvailability::Status {
+            status: RadrootsOperationalListingStatus::Active,
+        }),
+        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
+        location: Some(RadrootsOperationalListingPublicLocation {
+            primary: "Victoria".to_owned(),
+            city: Some("Victoria".to_owned()),
+            region: Some("British Columbia".to_owned()),
+            country: Some("CA".to_owned()),
+            geohash: "c287g".to_owned(),
+        }),
         images: None,
     }
 }
@@ -559,9 +523,9 @@ async fn enqueue_scoped_duplicate_listing(sdk: &RadrootsClient, d_tag: &str, tit
             listing(d_tag, title),
         ))
         .expect("prepared listing");
-    let signer = FixtureSigner::new(SELLER);
+    let signer = FixtureSigner::new(seller_pubkey());
     let signed_event = signer
-        .sign_frozen_draft(&plan.frozen_draft)
+        .sign_frozen_draft(plan.frozen_draft())
         .expect("signed listing");
     let outbox = RadrootsOutbox::open_file(&sdk.storage_paths().expect("paths").runtime_path)
         .await
@@ -569,7 +533,7 @@ async fn enqueue_scoped_duplicate_listing(sdk: &RadrootsClient, d_tag: &str, tit
     outbox
         .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
             LISTING_PUBLISH_OPERATION_KIND,
-            plan.frozen_draft,
+            plan.frozen_draft().clone(),
             signed_event,
             scoped_duplicate_relay_delivery_plan(RELAY_A),
             true,
@@ -706,7 +670,7 @@ async fn enqueue_listing_with_policy(
             .expect("relay targets")
             .try_with_idempotency_key(sync_fixture_idempotency_key(d_tag, title, relays))
             .expect("idempotency key"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue")
@@ -726,7 +690,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
     assert_eq!(receipt.source, SyncStatusSource::SdkCanonicalStores);
     assert_eq!(receipt.observed_at_ms, 1_700_000_000_000);
     assert_eq!(receipt.event_store.total_events, 0);
-    assert_eq!(receipt.event_store.projection_eligible_events, 0);
+    assert_eq!(receipt.event_store.valid_stream_events, 0);
     assert_eq!(receipt.event_store.transport_observations, 0);
     assert_eq!(receipt.event_store.last_event_seq, None);
     assert_eq!(receipt.outbox.total_events, 0);
@@ -765,7 +729,7 @@ async fn sync_status_empty_store_reports_canonical_sources_and_transport_targets
             "observed_at_ms": 1700000000000i64,
             "event_store": {
                 "total_events": 0,
-                "projection_eligible_events": 0,
+                "valid_stream_events": 0,
                 "transport_observations": 0,
                 "last_event_seq": null,
                 "last_event_updated_at_ms": null
@@ -1765,7 +1729,7 @@ async fn product_push_outbox_uses_radrootsd_execution_transport_with_daemon_reso
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000250")
             .expect("idempotency key"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue");
@@ -1873,7 +1837,7 @@ async fn product_push_outbox_radrootsd_execution_recovers_expired_publishing_cla
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000251")
             .expect("idempotency key"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue");
@@ -1978,7 +1942,7 @@ async fn product_push_outbox_radrootsd_execution_idempotency_is_attempt_scoped()
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000252")
             .expect("idempotency key"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue");
@@ -2087,7 +2051,7 @@ async fn product_push_outbox_radrootsd_execution_error_and_terminal_paths_update
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000253")
             .expect("idempotency key"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue retryable");
@@ -2152,7 +2116,7 @@ async fn product_push_outbox_radrootsd_execution_error_and_terminal_paths_update
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000254")
             .expect("idempotency key"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue terminal");
@@ -2335,7 +2299,7 @@ async fn sync_runtime_product_push_outbox_reticulum_reports_zero_attempts_with_r
                 )
                 .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000255")
                 .expect("idempotency key"),
-                &FixtureSigner::new(SELLER),
+                &FixtureSigner::new(seller_pubkey()),
             )
             .await
             .expect("enqueue");
@@ -2769,7 +2733,7 @@ async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
             .expect("first targets")
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022e")
             .expect("first idempotency"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("first enqueue");
@@ -3309,7 +3273,7 @@ async fn push_outbox_does_not_claim_unsigned_outbox_work() {
     let unsigned = outbox
         .enqueue_operation(RadrootsOutboxOperationInput::new(
             LISTING_PUBLISH_OPERATION_KIND,
-            prepared.frozen_draft,
+            prepared.frozen_draft().clone(),
             delivery_plan_for_relays([RELAY_A], NostrRelayUrlPolicy::Public),
             1_700_000_000_000,
         ))

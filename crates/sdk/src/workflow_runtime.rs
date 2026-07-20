@@ -3,15 +3,17 @@ use crate::RadrootsSdkSignRequest;
 use crate::{
     RadrootsClient, RadrootsSdkError, ReticulumBehavior, SatisfactionPolicy, SdkIdempotencyKey,
     TargetPolicy, TargetSet, TransportProfile,
-    runtime::{record_runtime_recovery_receipt, sdk_now_ms},
+    runtime::{RuntimeRecoveryReceiptWrite, record_runtime_recovery_receipt, sdk_now_ms},
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event::{
+    RadrootsEventKind, RadrootsEventKindClass,
     draft::{RadrootsEventDraft, RadrootsSignedEvent},
     ids::RadrootsEventId,
 };
 use radroots_event_store::{
-    RadrootsEventIngest, RadrootsTransportObservation, RadrootsTransportObservationType,
+    RadrootsEventIngest, RadrootsEventPersistence, RadrootsEventStoreError,
+    RadrootsTransportObservation, RadrootsTransportObservationType,
 };
 use radroots_outbox::{
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxEnqueueStatus, RadrootsOutboxReticulumBehavior,
@@ -50,6 +52,7 @@ pub(crate) async fn enqueue_signed_workflow(
     request: SdkWorkflowEnqueueRequest<'_>,
     signer: &dyn RadrootsEventSigner,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
+    ensure_durable_workflow_kind(&request)?;
     let delivery_plan =
         resolved_delivery_plan(sdk, &request.target_policy, &request.satisfaction_policy)?;
     let prepared = prepare_runtime_operation_journal(sdk, &request, &delivery_plan).await?;
@@ -88,6 +91,7 @@ pub(crate) async fn enqueue_configured_signed_workflow(
     sdk: &RadrootsClient,
     request: SdkWorkflowEnqueueRequest<'_>,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
+    ensure_durable_workflow_kind(&request)?;
     let delivery_plan =
         resolved_delivery_plan(sdk, &request.target_policy, &request.satisfaction_policy)?;
     let prepared = prepare_runtime_operation_journal(sdk, &request, &delivery_plan).await?;
@@ -167,19 +171,24 @@ async fn enqueue_signed_workflow_event(
         RadrootsTransportObservationType::LocalImport,
         observed_at_ms,
     )?;
-    let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
-        .with_observation(local_import_observation);
+    let ingest =
+        workflow_event_ingest(request.operation_kind, signed_event.clone(), observed_at_ms)?
+            .with_observation(local_import_observation);
     let ingest_receipt = sdk
         ._event_store
         .ingest_event_in_transaction(&mut tx, ingest)
         .await?;
+    let (event_store_inserted, local_event_seq) = durable_event_persistence(
+        ingest_receipt.event_id.as_str(),
+        &ingest_receipt.persistence,
+    )?;
     let outbox_input = signed_outbox_input(
         request.operation_kind,
         request.frozen_draft,
         signed_event,
         delivery_plan_value,
         idempotency_key.clone(),
-        ingest_receipt.inserted,
+        event_store_inserted,
         observed_at_ms,
     );
     let outbox_receipt = sdk
@@ -190,7 +199,7 @@ async fn enqueue_signed_workflow_event(
         digest_prefix(outbox_receipt.operation_idempotency_digest.as_str());
     let receipt = SdkWorkflowEnqueueReceipt {
         signed_event_id,
-        local_event_seq: ingest_receipt.seq,
+        local_event_seq,
         outbox_operation_id: outbox_receipt.operation_id,
         outbox_event_id: outbox_receipt.outbox_event_id,
         state: outbox_receipt.status,
@@ -241,12 +250,17 @@ async fn enqueue_signed_trade_workflow_event(
         RadrootsTransportObservationType::LocalImport,
         observed_at_ms,
     )?;
-    let ingest = RadrootsEventIngest::new(signed_event.clone(), observed_at_ms)
-        .with_observation(local_import_observation);
+    let ingest =
+        workflow_event_ingest(request.operation_kind, signed_event.clone(), observed_at_ms)?
+            .with_observation(local_import_observation);
     let ingest_receipt = sdk
         ._event_store
         .ingest_event_in_transaction(&mut tx, ingest)
         .await?;
+    let (event_store_inserted, local_event_seq) = durable_event_persistence(
+        ingest_receipt.event_id.as_str(),
+        &ingest_receipt.persistence,
+    )?;
     tx.commit()
         .await
         .map_err(|error| RadrootsSdkError::EventStore {
@@ -258,7 +272,7 @@ async fn enqueue_signed_trade_workflow_event(
         signed_event,
         delivery_plan_value,
         idempotency_key.clone(),
-        ingest_receipt.inserted,
+        event_store_inserted,
         observed_at_ms,
     )?;
     let outbox_receipt = sdk
@@ -269,7 +283,7 @@ async fn enqueue_signed_trade_workflow_event(
         digest_prefix(outbox_receipt.operation_idempotency_digest.as_str());
     let receipt = SdkWorkflowEnqueueReceipt {
         signed_event_id,
-        local_event_seq: ingest_receipt.seq,
+        local_event_seq,
         outbox_operation_id: outbox_receipt.operation_id,
         outbox_event_id: outbox_receipt.outbox_event_id,
         state: outbox_receipt.status,
@@ -416,6 +430,58 @@ fn reticulum_behavior(behavior: ReticulumBehavior) -> RadrootsOutboxReticulumBeh
 
 fn digest_prefix(digest: &str) -> String {
     digest.chars().take(12).collect()
+}
+
+fn ensure_durable_workflow_kind(
+    request: &SdkWorkflowEnqueueRequest<'_>,
+) -> Result<(), RadrootsSdkError> {
+    if RadrootsEventKind::new(request.frozen_draft.kind_u32()).class()
+        == RadrootsEventKindClass::Ephemeral
+    {
+        return Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "{} cannot enqueue ephemeral event kind {} into a durable workflow",
+                request.operation_kind,
+                request.frozen_draft.kind_u32()
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn workflow_event_ingest(
+    operation_kind: &str,
+    signed_event: RadrootsSignedEvent,
+    observed_at_ms: i64,
+) -> Result<RadrootsEventIngest, RadrootsSdkError> {
+    RadrootsEventIngest::from_signed_event(signed_event, observed_at_ms).map_err(
+        |error| match error {
+            RadrootsEventStoreError::Nip01Verification(error) => {
+                RadrootsSdkError::SignerReturnedEventDrift {
+                    operation: operation_kind.to_owned(),
+                    reason: format!(
+                        "signer returned an event that failed NIP-01 verification: {error}"
+                    ),
+                }
+            }
+            error => error.into(),
+        },
+    )
+}
+
+fn durable_event_persistence(
+    event_id: &str,
+    persistence: &RadrootsEventPersistence,
+) -> Result<(bool, i64), RadrootsSdkError> {
+    match persistence {
+        RadrootsEventPersistence::Inserted { seq } => Ok((true, *seq)),
+        RadrootsEventPersistence::Duplicate { seq } => Ok((false, *seq)),
+        RadrootsEventPersistence::NotPersisted => Err(RadrootsSdkError::InvalidRequest {
+            message: format!(
+                "workflow event `{event_id}` requires durable local event-store persistence"
+            ),
+        }),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -727,13 +793,15 @@ async fn record_runtime_operation_failure(
     if let Some((recovery_code, recovery_action)) = recovery {
         record_runtime_recovery_receipt(
             sdk._event_store.pool(),
-            recovery_code,
-            Some(request.operation_kind),
-            Some(request.actor.pubkey().as_str()),
-            Some(idempotency_key.as_str()),
-            recovery_action,
-            error.detail_json(),
-            sdk_now_ms(sdk)?,
+            RuntimeRecoveryReceiptWrite {
+                recovery_code,
+                operation_kind: Some(request.operation_kind),
+                actor_pubkey: Some(request.actor.pubkey().as_str()),
+                idempotency_key: Some(idempotency_key.as_str()),
+                recovery_action,
+                detail_json: error.detail_json(),
+                created_at_ms: sdk_now_ms(sdk)?,
+            },
         )
         .await?;
     }

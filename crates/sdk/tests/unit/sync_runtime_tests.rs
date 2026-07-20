@@ -30,9 +30,7 @@ use radroots_event::ids::RadrootsEventId;
 use radroots_event::kinds::KIND_FARM;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_nostr::prelude::{
-    RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
-};
+use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 #[cfg(feature = "radrootsd-execution")]
 use radroots_outbox::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanStatus,
@@ -65,14 +63,21 @@ use std::io::ErrorKind;
 #[cfg(feature = "radrootsd-execution")]
 use std::net::TcpListener;
 #[cfg(feature = "radrootsd-execution")]
+use std::sync::LazyLock;
+#[cfg(feature = "radrootsd-execution")]
 use std::time::Duration;
 
 #[cfg(feature = "radrootsd-execution")]
-const RADROOTSD_FIXTURE_SIGNER_SECRET_KEY_HEX: &str =
-    "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
+static RADROOTSD_FIXTURE_SIGNER_KEYS: LazyLock<RadrootsNostrKeys> =
+    LazyLock::new(RadrootsNostrKeys::generate);
 #[cfg(feature = "radrootsd-execution")]
-const RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX: &str =
-    "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+static RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY: LazyLock<String> =
+    LazyLock::new(|| RADROOTSD_FIXTURE_SIGNER_KEYS.public_key().to_hex());
+
+#[cfg(feature = "radrootsd-execution")]
+fn radrootsd_fixture_signer_pubkey() -> &'static str {
+    RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY.as_str()
+}
 
 struct UnusedPublishAdapter;
 
@@ -85,13 +90,10 @@ struct RadrootsdFixtureSigner {
 #[cfg(feature = "radrootsd-execution")]
 impl RadrootsdFixtureSigner {
     fn new() -> Self {
-        let secret_key = RadrootsNostrSecretKey::from_hex(RADROOTSD_FIXTURE_SIGNER_SECRET_KEY_HEX)
-            .expect("secret key");
-        let keys = RadrootsNostrKeys::new(secret_key);
         Self {
-            identity: RadrootsSignerIdentity::new(RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX)
+            identity: RadrootsSignerIdentity::new(radrootsd_fixture_signer_pubkey())
                 .expect("identity"),
-            keys,
+            keys: RADROOTSD_FIXTURE_SIGNER_KEYS.clone(),
         }
     }
 }
@@ -127,7 +129,7 @@ impl RadrootsRelayPublishAdapter for UnusedPublishAdapter {
 #[cfg(feature = "radrootsd-execution")]
 fn radrootsd_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(
-        RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX,
+        radrootsd_fixture_signer_pubkey(),
         [RadrootsActorRole::Farmer],
     )
     .expect("actor")
@@ -141,7 +143,7 @@ fn radrootsd_frozen_draft(d_tag: &str) -> RadrootsEventDraft {
         1_700_000_000,
         vec![vec!["d".to_owned(), d_tag.to_owned()]],
         "{}",
-        RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX,
+        radrootsd_fixture_signer_pubkey(),
     )
     .expect("frozen draft")
 }
@@ -344,7 +346,7 @@ fn radrootsd_job(
         terminal: !retryable,
         delivery_satisfied,
         event_id: event_id.to_owned(),
-        pubkey: RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX.to_owned(),
+        pubkey: radrootsd_fixture_signer_pubkey().to_owned(),
         event_kind: KIND_FARM,
         target_policy: TransportPublishTargetPolicy::nostr(
             NostrPublishTargetSourcePolicy::RequestThenAuthorWriteThenDaemonDefault,
@@ -531,14 +533,14 @@ fn auth_policy_defaults_and_outbox_state_mappings_cover_all_public_states() {
 fn sync_status_summary_conversions_preserve_all_fields() {
     let event_summary = RadrootsEventStoreStatusSummary {
         total_events: 11,
-        projection_eligible_events: 7,
+        valid_stream_events: 7,
         transport_observations: 3,
         last_event_seq: Some(9),
         last_event_updated_at_ms: Some(1_700_000_000_000),
     };
     let event_status = SyncEventStoreStatus::from(event_summary);
     assert_eq!(event_status.total_events, 11);
-    assert_eq!(event_status.projection_eligible_events, 7);
+    assert_eq!(event_status.valid_stream_events, 7);
     assert_eq!(event_status.transport_observations, 3);
     assert_eq!(event_status.last_event_seq, Some(9));
     assert_eq!(
@@ -1104,7 +1106,7 @@ async fn radrootsd_push_reports_missing_signed_claim_before_daemon_publish() {
             1_700_000_000,
             vec![vec!["d".to_owned(), "missing-signed-event".to_owned()]],
             "{}",
-            RADROOTSD_FIXTURE_SIGNER_PUBLIC_KEY_HEX,
+            radrootsd_fixture_signer_pubkey(),
         )
         .expect("draft"),
         signed_event: None,

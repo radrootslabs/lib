@@ -134,14 +134,14 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
     core_override("RadrootsCoreQuantityPrice"),
     core_override("RadrootsCoreUnit"),
     event_override("RadrootsFarmRef"),
-    event_override("RadrootsListing"),
-    event_override("RadrootsListingAvailability"),
-    event_override("RadrootsListingBin"),
-    event_override("RadrootsListingDeliveryMethod"),
-    event_override("RadrootsListingImage"),
-    event_override("RadrootsListingProduct"),
-    event_override("RadrootsListingPublicLocation"),
-    event_override("RadrootsListingStatus"),
+    event_override("RadrootsOperationalListing"),
+    event_override("RadrootsOperationalListingAvailability"),
+    event_override("RadrootsOperationalListingBin"),
+    event_override("RadrootsOperationalListingDeliveryMethod"),
+    event_override("RadrootsOperationalListingImage"),
+    event_override("RadrootsOperationalListingProduct"),
+    event_override("RadrootsOperationalListingPublicLocation"),
+    event_override("RadrootsOperationalListingStatus"),
     event_override("RadrootsEventPtr"),
     event_override("RadrootsPlotRef"),
     event_override("RadrootsResourceAreaRef"),
@@ -451,7 +451,7 @@ fn with_event_sdk_wrappers(module: DtoTypesModule) -> DtoTypesModule {
         .map(str::to_owned)
         .collect::<Vec<_>>();
     declarations.push(type_alias(
-        "RadrootsListingProductTagKeys",
+        "RadrootsOperationalListingProductTagKeys",
         TypeScriptType::readonly_tuple(
             [
                 "key", "title", "category", "summary", "process", "lot", "location", "profile",
@@ -583,7 +583,6 @@ mod tests {
         "RadrootsAccountClaim",
         "RadrootsAddressableRef",
         "RadrootsAppData",
-        "RadrootsComment",
         "RadrootsCommercialDomain",
         "RadrootsContributionAttestation",
         "RadrootsCoop",
@@ -630,22 +629,23 @@ mod tests {
         "RadrootsList",
         "RadrootsListEntry",
         "RadrootsListSet",
-        "RadrootsListing",
-        "RadrootsListingAvailability",
-        "RadrootsListingBin",
-        "RadrootsListingDeliveryMethod",
-        "RadrootsListingImage",
-        "RadrootsListingImageSize",
-        "RadrootsListingParseError",
-        "RadrootsListingProduct",
-        "RadrootsListingProductTagKeys",
-        "RadrootsListingPublicLocation",
-        "RadrootsListingStatus",
         "RadrootsMessage",
         "RadrootsMessageFile",
         "RadrootsMessageFileDimensions",
         "RadrootsMessageRecipient",
         "RadrootsNip01EventWireDto",
+        "RadrootsOperationalListing",
+        "RadrootsOperationalListingAvailability",
+        "RadrootsOperationalListingBin",
+        "RadrootsOperationalListingDeliveryMethod",
+        "RadrootsOperationalListingImage",
+        "RadrootsOperationalListingImageSize",
+        "RadrootsOperationalListingParseError",
+        "RadrootsOperationalListingProduct",
+        "RadrootsOperationalListingProductTagKeys",
+        "RadrootsOperationalListingPublicLocation",
+        "RadrootsOperationalListingStatus",
+        "RadrootsOperationalListingValidationError",
         "RadrootsPlot",
         "RadrootsPlotLocation",
         "RadrootsPlotRef",
@@ -668,7 +668,6 @@ mod tests {
         "RadrootsSocialMediaMetadata",
         "RadrootsSocialMediaThumbnail",
         "RadrootsSocialTarget",
-        "RadrootsTradeValidationListingError",
         "RadrootsVerifiedSignedEventDto",
         "RadrootsVerifiedSignedEventVerificationStateDto",
         "RadrootsWikiArticle",
@@ -685,6 +684,9 @@ mod tests {
         "RadrootsEventIndexCheckpoint",
     ];
     const TRADE_TYPE_INVENTORY: &[&str] = &[
+        "RadrootsOperationalListingSubtotal",
+        "RadrootsOperationalListingTotal",
+        "RadrootsOperationalListingTradeProjection",
         "RadrootsTradeAgreementClaimV1",
         "RadrootsTradeAgreementStateV1",
         "RadrootsTradeAttestationRecordV1",
@@ -694,7 +696,6 @@ mod tests {
         "RadrootsTradeEvidenceStateV1",
         "RadrootsTradeFacetCount",
         "RadrootsTradeFulfillmentStateV1",
-        "RadrootsTradeListing",
         "RadrootsTradeListingBackofficeOverlay",
         "RadrootsTradeListingBackofficeQuery",
         "RadrootsTradeListingBackofficeView",
@@ -705,8 +706,6 @@ mod tests {
         "RadrootsTradeListingQuery",
         "RadrootsTradeListingSort",
         "RadrootsTradeListingSortField",
-        "RadrootsTradeListingSubtotal",
-        "RadrootsTradeListingTotal",
         "RadrootsTradeMarketplaceListingSummary",
         "RadrootsTradeModerationFlag",
         "RadrootsTradeModerationSeverity",
@@ -1004,16 +1003,16 @@ mod tests {
         assert!(
             imports
                 .get("@radroots/event-bindings")
-                .is_some_and(|names| names.contains("RadrootsListing"))
+                .is_some_and(|names| names.contains("RadrootsOperationalListing"))
         );
         assert!(
             imports
                 .get("@radroots/event-bindings")
-                .is_some_and(|names| names.contains("RadrootsListingBin"))
+                .is_some_and(|names| names.contains("RadrootsOperationalListingBin"))
         );
 
         for duplicate in [
-            "export type RadrootsListing = ",
+            "export type RadrootsOperationalListing = ",
             "export type RadrootsFarmRef = ",
             "export type RadrootsOrderEconomics = ",
             "export type RadrootsOrderInventoryCommitment = ",

@@ -3,8 +3,9 @@
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
 use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_sdk::knowledge::prelude::*;
+use std::sync::LazyLock;
 
-const SECRET_KEY_HEX: &str = "0101010101010101010101010101010101010101010101010101010101010101";
+static KNOWLEDGE_KEYS: LazyLock<Keys> = LazyLock::new(Keys::generate);
 const CREATED_AT: u32 = 1_800_000_000;
 const RELAY: &str = "wss://relay.radroots.example";
 
@@ -410,6 +411,35 @@ fn knowledge_errors_expose_stable_codes() {
     .into();
     assert_eq!(draft_error.code(), "knowledge_draft");
     assert_eq!(draft_error.inner_code(), "missing_tag");
+
+    let draft_errors = [
+        (
+            RadrootsDraftError::ContractNotDraftAuthorable {
+                contract_id: KNOWLEDGE_CLAIM_CONTRACT_ID.to_owned(),
+            },
+            "contract_not_draft_authorable",
+        ),
+        (
+            RadrootsDraftError::ContractRegistryVersionMismatch {
+                expected: 2,
+                actual: 1,
+            },
+            "contract_registry_version_mismatch",
+        ),
+        (
+            RadrootsDraftError::DraftExpectedEventIdMismatch {
+                expected_event_id: hex_64('a'),
+                actual_event_id: hex_64('b'),
+            },
+            "draft_expected_event_id_mismatch",
+        ),
+    ];
+
+    for (draft_error, expected_inner_code) in draft_errors {
+        let error = RadrootsSdkKnowledgeError::from(draft_error);
+        assert_eq!(error.code(), "knowledge_draft");
+        assert_eq!(error.inner_code(), expected_inner_code);
+    }
 }
 
 fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
@@ -419,11 +449,10 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
         .map(Tag::parse)
         .collect::<Result<Vec<_>, _>>()
         .expect("tags");
-    let keys = Keys::parse(SECRET_KEY_HEX).expect("keys");
     let event = EventBuilder::new(Kind::Custom(parts.kind as u16), parts.content)
         .tags(tags)
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
-        .sign_with_keys(&keys)
+        .sign_with_keys(&KNOWLEDGE_KEYS)
         .expect("signed event");
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: event.id.to_hex(),
@@ -443,10 +472,7 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
 }
 
 fn public_key_hex() -> String {
-    Keys::parse(SECRET_KEY_HEX)
-        .expect("keys")
-        .public_key()
-        .to_hex()
+    KNOWLEDGE_KEYS.public_key().to_hex()
 }
 
 fn hex_64(character: char) -> String {

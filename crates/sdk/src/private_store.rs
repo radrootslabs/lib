@@ -579,12 +579,10 @@ impl SdkPrivateStore {
                 if record.deleted_at_ms.is_some()
                     || record.trade_id != trade_id
                     || record.artifact_kind != SdkPrivateTradeArtifactKind::BindingTerms
-                {
-                    RadrootsTradePrivateTermsStateV1::Missing
-                } else if record
-                    .candidate_id
-                    .as_deref()
-                    .is_some_and(|stored_candidate_id| stored_candidate_id != candidate_id)
+                    || record
+                        .candidate_id
+                        .as_deref()
+                        .is_some_and(|stored_candidate_id| stored_candidate_id != candidate_id)
                 {
                     RadrootsTradePrivateTermsStateV1::Missing
                 } else if record.schema_id != schema_id

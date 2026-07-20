@@ -20,7 +20,7 @@ use radroots_event::{
     farm::{RadrootsFarm, RadrootsFarmPublicLocation},
     ids::{RadrootsAddressableCoordinate, RadrootsEventId},
     kinds::KIND_FARM,
-    listing::RadrootsListingPublicLocation,
+    operational_listing::RadrootsOperationalListingPublicLocation,
 };
 #[cfg(feature = "runtime")]
 #[cfg(feature = "runtime")]
@@ -124,10 +124,29 @@ impl FarmEnqueuePublishRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct FarmPublishPlan {
-    pub farm_addr: RadrootsAddressableCoordinate,
-    pub expected_event_id: RadrootsEventId,
-    pub frozen_draft: RadrootsEventDraft,
-    pub created_at: RadrootsSdkTimestamp,
+    farm_addr: RadrootsAddressableCoordinate,
+    expected_event_id: RadrootsEventId,
+    frozen_draft: RadrootsEventDraft,
+    created_at: RadrootsSdkTimestamp,
+}
+
+#[cfg(feature = "runtime")]
+impl FarmPublishPlan {
+    pub fn farm_addr(&self) -> &RadrootsAddressableCoordinate {
+        &self.farm_addr
+    }
+
+    pub fn expected_event_id(&self) -> &RadrootsEventId {
+        &self.expected_event_id
+    }
+
+    pub fn frozen_draft(&self) -> &RadrootsEventDraft {
+        &self.frozen_draft
+    }
+
+    pub fn created_at(&self) -> RadrootsSdkTimestamp {
+        self.created_at
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -182,8 +201,8 @@ impl SdkPublicLocality {
         }
     }
 
-    pub fn to_listing_public_location(&self) -> RadrootsListingPublicLocation {
-        RadrootsListingPublicLocation {
+    pub fn to_listing_public_location(&self) -> RadrootsOperationalListingPublicLocation {
+        RadrootsOperationalListingPublicLocation {
             primary: self.primary.clone(),
             city: self.city.clone(),
             region: self.region.clone(),
@@ -473,6 +492,7 @@ impl<'sdk> FarmsClient<'sdk> {
         target_policy: TargetPolicy,
         idempotency_key: Option<SdkIdempotencyKey>,
     ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
+        let metadata = validate_farm_publish_plan(&plan)?;
         let enqueue = enqueue_configured_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
@@ -485,7 +505,7 @@ impl<'sdk> FarmsClient<'sdk> {
             },
         )
         .await?;
-        Ok(farm_enqueue_receipt(plan, enqueue))
+        Ok(farm_enqueue_receipt(metadata, enqueue))
     }
 
     pub async fn enqueue_prepared_publish_with_explicit_signer(
@@ -496,6 +516,7 @@ impl<'sdk> FarmsClient<'sdk> {
         idempotency_key: Option<SdkIdempotencyKey>,
         signer: &dyn RadrootsEventSigner,
     ) -> Result<FarmEnqueueReceipt, RadrootsSdkError> {
+        let metadata = validate_farm_publish_plan(&plan)?;
         let enqueue = enqueue_signed_workflow(
             self.sdk,
             SdkWorkflowEnqueueRequest {
@@ -509,7 +530,7 @@ impl<'sdk> FarmsClient<'sdk> {
             signer,
         )
         .await?;
-        Ok(farm_enqueue_receipt(plan, enqueue))
+        Ok(farm_enqueue_receipt(metadata, enqueue))
     }
 
     pub async fn upsert_private_location(
@@ -710,12 +731,12 @@ impl<'sdk> FarmsClient<'sdk> {
 
 #[cfg(feature = "runtime")]
 fn farm_enqueue_receipt(
-    plan: FarmPublishPlan,
+    metadata: ValidatedFarmPublishPlanMetadata,
     enqueue: crate::workflow_runtime::SdkWorkflowEnqueueReceipt,
 ) -> FarmEnqueueReceipt {
     FarmEnqueueReceipt {
-        farm_addr: plan.farm_addr,
-        expected_event_id: plan.expected_event_id,
+        farm_addr: metadata.farm_addr,
+        expected_event_id: metadata.expected_event_id,
         signed_event_id: enqueue.signed_event_id,
         local_event_seq: enqueue.local_event_seq,
         outbox_operation_id: enqueue.outbox_operation_id,
@@ -723,6 +744,62 @@ fn farm_enqueue_receipt(
         state: enqueue.state.into(),
         idempotency_digest_prefix: Some(enqueue.idempotency_digest_prefix),
     }
+}
+
+#[cfg(feature = "runtime")]
+struct ValidatedFarmPublishPlanMetadata {
+    farm_addr: RadrootsAddressableCoordinate,
+    expected_event_id: RadrootsEventId,
+}
+
+#[cfg(feature = "runtime")]
+fn validate_farm_publish_plan(
+    plan: &FarmPublishPlan,
+) -> Result<ValidatedFarmPublishPlanMetadata, RadrootsSdkError> {
+    let invalid = |reason: &str| RadrootsSdkError::InvalidRequest {
+        message: format!("invalid prepared farm publish plan: {reason}"),
+    };
+    plan.frozen_draft
+        .validate_for_signing()
+        .map_err(|_| invalid("frozen draft is invalid"))?;
+    if plan.frozen_draft.contract_id() != FARM_PROFILE_CONTRACT_ID
+        || plan.frozen_draft.kind_u32() != KIND_FARM
+    {
+        return Err(invalid("contract or kind does not match Farm publish"));
+    }
+
+    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_str())
+        .expect("validated frozen draft has a typed event ID");
+    if plan.expected_event_id != expected_event_id {
+        return Err(invalid("expected event ID does not match frozen draft"));
+    }
+    if plan.created_at.unix_seconds() != plan.frozen_draft.created_at_u64() {
+        return Err(invalid("created-at timestamp does not match frozen draft"));
+    }
+
+    let tags = plan.frozen_draft.tags_as_vec();
+    let mut d_tags = tags
+        .iter()
+        .filter(|tag| tag.first().is_some_and(|value| value == "d"));
+    let d_tag = d_tags
+        .next()
+        .and_then(|tag| tag.get(1))
+        .ok_or_else(|| invalid("frozen draft is missing its farm identifier"))?;
+    if d_tags.next().is_some() {
+        return Err(invalid("frozen draft contains duplicate farm identifiers"));
+    }
+    let farm_addr = RadrootsAddressableCoordinate::parse(format!(
+        "{KIND_FARM}:{}:{d_tag}",
+        plan.frozen_draft.expected_pubkey_str()
+    ))
+    .map_err(|_| invalid("frozen draft farm address is invalid"))?;
+    if plan.farm_addr != farm_addr {
+        return Err(invalid("farm address does not match frozen draft"));
+    }
+    Ok(ValidatedFarmPublishPlanMetadata {
+        farm_addr,
+        expected_event_id,
+    })
 }
 
 #[cfg(feature = "runtime")]

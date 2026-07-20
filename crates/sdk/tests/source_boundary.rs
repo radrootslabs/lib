@@ -12,12 +12,24 @@ fn read_source(path: &Path) -> String {
 }
 
 fn active_source_files() -> Vec<PathBuf> {
-    let src = manifest_dir().join("src");
-    fs::read_dir(src)
-        .expect("src entries")
-        .map(|entry| entry.expect("src entry").path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
-        .collect()
+    fn collect_rust_sources(directory: &Path, files: &mut Vec<PathBuf>) {
+        let mut entries = fs::read_dir(directory)
+            .unwrap_or_else(|error| panic!("read {}: {error}", directory.display()))
+            .map(|entry| entry.expect("source entry").path())
+            .collect::<Vec<_>>();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                collect_rust_sources(&path, files);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                files.push(path);
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    collect_rust_sources(&manifest_dir().join("src"), &mut files);
+    files
 }
 
 #[test]
@@ -65,6 +77,25 @@ fn active_sources_do_not_import_retired_trade_modules() {
             assert!(
                 !source.contains(forbidden),
                 "{} must not import retired trade module `{forbidden}`",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn active_sources_do_not_import_retired_listing_contracts() {
+    for path in active_source_files() {
+        let source = read_source(&path);
+        for forbidden in [
+            "radroots_event::listing",
+            "radroots_trade::listing",
+            "RadrootsListingAddress",
+            "KIND_LISTING",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{} must not import retired listing contract `{forbidden}`",
                 path.display()
             );
         }

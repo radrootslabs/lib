@@ -1,19 +1,21 @@
 #![cfg(feature = "runtime")]
 
-use radroots_authority::{
-    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
-};
+use radroots_authority::RadrootsActorContext;
 use radroots_core::{
     RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
     RadrootsCoreQuantityPrice, RadrootsCoreUnit,
 };
 use radroots_event::{
     contract::RadrootsActorRole,
-    draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts},
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
-    kinds::KIND_LISTING,
-    listing::{RadrootsListing, RadrootsListingBin, RadrootsListingProduct},
+    kinds::KIND_CLASSIFIED_LISTING,
+    operational_listing::{
+        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
+        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
+        RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
+        RadrootsOperationalListingStatus,
+    },
 };
 use radroots_event_store::RadrootsEventStore;
 use radroots_outbox::{
@@ -27,17 +29,18 @@ use radroots_sdk::{
     RadrootsSdkTimestamp, ReticulumProfile, SdkIdempotencyKey, SdkMutationState, TargetPolicy,
     TargetSet, TransportProfile,
 };
-use radroots_trade::listing::RadrootsListingEditDocumentV1;
+use radroots_trade::operational_listing::RadrootsOperationalListingEditDocumentV1;
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 use sqlx::Row;
 
+#[path = "support/fixture_signer.rs"]
+mod fixture_signer;
 #[path = "support/serializer_failure.rs"]
 mod serializer_failure;
 
+use fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
 use serializer_failure::assert_struct_serialize_error_paths;
 
-const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const LISTING_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
 const LISTING_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
@@ -53,77 +56,31 @@ const LISTING_K_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAACw";
 const RELAY: &str = "wss://relay.example.com";
 const RELAY_B: &str = "wss://relay-b.example.com";
 
-#[derive(Clone)]
-struct FixtureSigner {
-    identity: RadrootsSignerIdentity,
+fn seller_pubkey() -> &'static str {
+    fixture_alice_pubkey()
 }
 
-impl FixtureSigner {
-    fn new(pubkey: &str) -> Self {
-        Self {
-            identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
-        }
-    }
-}
-
-impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
-        self.identity.pubkey()
-    }
-
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-        if self.pubkey().as_str() != draft.expected_pubkey_str() {
-            return Err(RadrootsSignerError::SigningFailed {
-                message: "wrong fixture signer".to_owned(),
-            });
-        }
-        let sig = "f".repeat(128);
-        let raw_json = serde_json::json!({
-            "id": draft.expected_event_id_str(),
-            "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at_u64(),
-            "kind": draft.kind_u32(),
-            "tags": draft.tags_as_vec(),
-            "content": draft.content(),
-            "sig": sig,
-        })
-        .to_string();
-        RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id_str().to_owned(),
-            pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at_u64(),
-            kind: draft.kind_u32(),
-            tags: draft.tags_as_vec(),
-            content: draft.content().to_owned(),
-            sig,
-            raw_json,
-        })
-        .map_err(|error| RadrootsSignerError::SigningFailed {
-            message: error.to_string(),
-        })
-    }
+fn other_pubkey() -> &'static str {
+    fixture_bob_pubkey()
 }
 
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor")
 }
 
 fn non_seller_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Buyer]).expect("actor")
 }
 
-fn listing(d_tag: &str, title: &str) -> RadrootsListing {
-    RadrootsListing {
+fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
+    RadrootsOperationalListing {
         d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
-            pubkey: SELLER.to_owned(),
+            pubkey: seller_pubkey().to_owned(),
             d_tag: FARM_D_TAG.to_owned(),
         },
-        product: RadrootsListingProduct {
+        product: RadrootsOperationalListingProduct {
             key: "coffee".to_owned(),
             title: title.to_owned(),
             category: "coffee".to_owned(),
@@ -135,7 +92,7 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
             year: None,
         },
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-        bins: vec![RadrootsListingBin {
+        bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(1000u32),
@@ -160,10 +117,18 @@ fn listing(d_tag: &str, title: &str) -> RadrootsListing {
         resource_area: None,
         plot: None,
         discounts: None,
-        inventory_available: None,
-        availability: None,
-        delivery_method: None,
-        location: None,
+        inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+        availability: Some(RadrootsOperationalListingAvailability::Status {
+            status: RadrootsOperationalListingStatus::Active,
+        }),
+        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
+        location: Some(RadrootsOperationalListingPublicLocation {
+            primary: "Victoria".to_owned(),
+            city: Some("Victoria".to_owned()),
+            region: Some("British Columbia".to_owned()),
+            country: Some("CA".to_owned()),
+            geohash: "c287g".to_owned(),
+        }),
         images: None,
     }
 }
@@ -208,15 +173,18 @@ async fn prepare_publish_is_side_effect_free() {
     let request = ListingPreparePublishRequest::new(actor(), listing(LISTING_A_D_TAG, "Coffee"));
     let prepared = sdk.listings().prepare_publish(request).expect("prepared");
 
-    assert_eq!(prepared.frozen_draft.kind_u32(), KIND_LISTING);
-    assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
+    assert_eq!(prepared.frozen_draft().kind_u32(), KIND_CLASSIFIED_LISTING);
+    assert_eq!(prepared.created_at().unix_seconds(), 1_700_000_000);
     assert_eq!(
-        prepared.expected_event_id,
-        prepared.frozen_draft.expected_event_id_str()
+        prepared.expected_event_id().as_str(),
+        prepared.frozen_draft().expected_event_id_str()
     );
     assert_eq!(
-        prepared.public_listing_addr.as_str(),
-        format!("{KIND_LISTING}:{SELLER}:{LISTING_A_D_TAG}")
+        prepared.public_listing_addr().as_str(),
+        format!(
+            "{KIND_CLASSIFIED_LISTING}:{}:{LISTING_A_D_TAG}",
+            seller_pubkey()
+        )
     );
 
     let paths = sdk.storage_paths().expect("paths");
@@ -225,7 +193,7 @@ async fn prepare_publish_is_side_effect_free() {
         .expect("event store");
     assert!(
         event_store
-            .get_event(prepared.expected_event_id.as_str())
+            .raw_event(prepared.expected_event_id().as_str())
             .await
             .expect("event lookup")
             .is_none()
@@ -275,13 +243,13 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("prepared");
     let receipt = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("enqueue");
 
-    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
+    assert_eq!(&receipt.expected_event_id, prepared.expected_event_id());
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
-    assert_eq!(receipt.public_listing_addr, prepared.public_listing_addr);
+    assert_eq!(&receipt.public_listing_addr, prepared.public_listing_addr());
     assert_eq!(receipt.local_event_seq, 1);
     assert_eq!(receipt.outbox_operation_id, 1);
     assert_eq!(receipt.outbox_event_id, 1);
@@ -294,7 +262,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("event store");
     assert!(
         event_store
-            .get_event(receipt.signed_event_id.as_str())
+            .valid_event(receipt.signed_event_id.as_str())
             .await
             .expect("event lookup")
             .is_some()
@@ -323,7 +291,7 @@ async fn enqueue_publish_default_profile_rejects_empty_transport_targets() {
 
     let error = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect_err("empty transport profile");
 
@@ -355,13 +323,13 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
                 SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000238")
                     .expect("idempotency"),
             ),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("prepared enqueue");
 
-    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
-    assert_eq!(receipt.signed_event_id, prepared.expected_event_id);
+    assert_eq!(&receipt.expected_event_id, prepared.expected_event_id());
+    assert_eq!(&receipt.signed_event_id, prepared.expected_event_id());
 
     let paths = sdk.storage_paths().expect("paths");
     let event_store = RadrootsEventStore::open_file(&paths.runtime_path)
@@ -369,7 +337,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .expect("event store");
     assert!(
         event_store
-            .get_event(prepared.expected_event_id.as_str())
+            .valid_event(prepared.expected_event_id().as_str())
             .await
             .expect("event lookup")
             .is_some()
@@ -383,7 +351,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .await
         .expect("outbox event")
         .expect("outbox event");
-    assert_eq!(outbox_event.event_id, prepared.expected_event_id.as_str());
+    assert_eq!(outbox_event.event_id, prepared.expected_event_id().as_str());
 }
 
 #[tokio::test]
@@ -398,7 +366,7 @@ async fn enqueue_receipt_debug_omits_signed_event_payload_material() {
     .expect("idempotency key");
     let receipt = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("enqueue");
     let debug = format!("{receipt:?}");
@@ -430,13 +398,16 @@ async fn listing_runtime_dtos_serialize_deterministically() {
     let created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_123);
     let prepare_request = ListingPreparePublishRequest::from_document(
         actor(),
-        RadrootsListingEditDocumentV1::new(listing(LISTING_A_D_TAG, "Serialized Coffee")),
+        RadrootsOperationalListingEditDocumentV1::new(listing(
+            LISTING_A_D_TAG,
+            "Serialized Coffee",
+        )),
     )
     .with_created_at(created_at);
     let prepare_json = serde_json::to_value(&prepare_request).expect("prepare request json");
     assert_struct_serialize_error_paths(&prepare_request, 3);
 
-    assert_eq!(prepare_json["actor"]["pubkey"], SELLER);
+    assert_eq!(prepare_json["actor"]["pubkey"], seller_pubkey());
     assert_eq!(
         prepare_json["actor"]["roles"],
         serde_json::json!(["seller"])
@@ -501,7 +472,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
 
     let try_key_request = ListingEnqueuePublishRequest::from_document(
         actor(),
-        RadrootsListingEditDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
+        RadrootsOperationalListingEditDocumentV1::new(listing(LISTING_C_D_TAG, "Queued Coffee")),
         TargetPolicy::default_profile(),
     )
     .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000227")
@@ -513,7 +484,7 @@ async fn listing_runtime_dtos_serialize_deterministically() {
 
     let receipt = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("enqueue");
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");
@@ -544,7 +515,7 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
                 SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000239")
                     .expect("idempotency"),
             ),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("prepared enqueue");
@@ -559,7 +530,10 @@ async fn enqueue_publish_convenience_matches_prepare_plus_enqueue_prepared() {
     .expect("idempotency");
     let convenience_receipt = convenience_sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(convenience_request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(
+            convenience_request,
+            &FixtureSigner::new(seller_pubkey()),
+        )
         .await
         .expect("convenience enqueue");
 
@@ -586,7 +560,7 @@ async fn enqueue_prepared_publish_returns_structured_actor_errors() {
                 SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000023e")
                     .expect("idempotency key"),
             ),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect_err("actor error");
@@ -615,7 +589,7 @@ async fn enqueue_prepared_publish_returns_sanitized_signer_errors() {
                 SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-00000000023f")
                     .expect("idempotency key"),
             ),
-            &FixtureSigner::new(OTHER),
+            &FixtureSigner::new(other_pubkey()),
         )
         .await
         .expect_err("signer error");
@@ -645,7 +619,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
 
     let receipt = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("enqueue");
 
@@ -654,10 +628,11 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
         .await
         .expect("event store");
     let stored_event = event_store
-        .get_event(receipt.signed_event_id.as_str())
+        .valid_event(receipt.signed_event_id.as_str())
         .await
         .expect("event lookup")
         .expect("stored event");
+    let stored_event = stored_event.raw_event();
     assert_eq!(stored_event.created_at, 1_600_000_000);
     assert_eq!(stored_event.inserted_at_ms, observed_at_ms);
     assert_eq!(stored_event.updated_at_ms, observed_at_ms);
@@ -691,7 +666,7 @@ async fn enqueue_publish_returns_sanitized_signer_errors() {
     .expect("idempotency key");
     let error = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(OTHER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(other_pubkey()))
         .await
         .expect_err("signer error");
     let message = error.to_string();
@@ -715,7 +690,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
     .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000228")
     .expect("idempotency key");
     sdk.listings()
-        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("first enqueue");
     let paths = sdk.storage_paths().expect("paths");
@@ -751,7 +726,7 @@ async fn enqueue_publish_reports_preflight_idempotency_conflict_without_mutation
     .expect("idempotency key");
     let error = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect_err("conflict");
 
@@ -799,7 +774,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, 'queued', ?, ?)",
     )
     .bind(LISTING_PUBLISH_OPERATION_KIND)
-    .bind(SELLER)
+    .bind(seller_pubkey())
     .bind(idempotency_key)
     .bind("conflicting-digest")
     .bind(1_700_000_000_000i64)
@@ -813,7 +788,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
     )
     .bind(conflicting_operation)
     .bind("0".repeat(64))
-    .bind(SELLER)
+    .bind(seller_pubkey())
     .bind(1_700_000_000_000i64)
     .bind(1_700_000_000_000i64)
     .bind(1_700_000_000_000i64)
@@ -837,7 +812,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         .expect("prepared");
     let error = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect_err("outbox conflict");
     assert!(matches!(
@@ -850,7 +825,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         .expect("event store");
     assert!(
         event_store
-            .get_event(prepared.expected_event_id.as_str())
+            .raw_event(prepared.expected_event_id().as_str())
             .await
             .expect("event lookup")
             .is_none()
@@ -859,7 +834,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         "SELECT state, last_error_code FROM sdk_runtime_operation_journal WHERE operation_kind = ? AND actor_pubkey = ? AND idempotency_key = ?",
     )
     .bind(LISTING_PUBLISH_OPERATION_KIND)
-    .bind(SELLER)
+    .bind(seller_pubkey())
     .bind(idempotency_key)
     .fetch_one(event_store.pool())
     .await
@@ -874,7 +849,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         "SELECT COUNT(*) FROM sdk_runtime_recovery_receipt WHERE recovery_code = 'idempotency_conflict' AND operation_kind = ? AND actor_pubkey = ? AND idempotency_key = ?",
     )
     .bind(LISTING_PUBLISH_OPERATION_KIND)
-    .bind(SELLER)
+    .bind(seller_pubkey())
     .bind(idempotency_key)
         .fetch_one(event_store.pool())
         .await
@@ -920,12 +895,12 @@ async fn enqueue_publish_uses_explicit_idempotency_key_across_equivalent_target_
 
     let first_receipt = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("first enqueue");
     let second_receipt = sdk
         .listings()
-        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(SELLER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(seller_pubkey()))
         .await
         .expect("second enqueue");
 
@@ -966,7 +941,7 @@ async fn listing_multi_target_profile_publishes_after_nostr_success_and_retains_
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000023c")
             .expect("idempotency"),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect("enqueue");

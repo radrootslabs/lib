@@ -4,34 +4,31 @@ use nostr::{EventBuilder, JsonUtil, Kind, Tag};
 use radroots_authority::RadrootsLocalEventSigner;
 use radroots_event::contract::RadrootsActorRole;
 use radroots_event::draft::RadrootsEventDraft;
-use radroots_event::kinds::{KIND_COOP, KIND_FARM, KIND_LISTING, TRADE_MUTATION_EVENT_KINDS};
-use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrSecretKey};
+use radroots_event::kinds::{
+    KIND_CLASSIFIED_LISTING, KIND_COOP, KIND_FARM, TRADE_MUTATION_EVENT_KINDS,
+};
+use radroots_nostr::prelude::RadrootsNostrEvent;
 use radroots_nostr_connect::prelude::{
     RADROOTS_NOSTR_CONNECT_RPC_KIND, RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,
     RadrootsNostrConnectRequest, RadrootsNostrConnectRequestMessage, RadrootsNostrConnectResponse,
 };
 use std::collections::VecDeque;
 use std::future;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
 
-const USER_SECRET_KEY_HEX: &str =
-    "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
-const USER_PUBLIC_KEY_HEX: &str =
-    "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
-const REMOTE_SECRET_KEY_HEX: &str =
-    "59392e9068f66431b12f70218fb61281cb6b433d7f27c55d61f1a63fe1a96ff8";
-const CLIENT_SECRET_KEY_HEX: &str =
-    "4d6c20fdd86857de77ff5cfa5c545751ba2efd126e0b6642dae9764d782d6509";
-
-fn keys(secret_key_hex: &str) -> RadrootsNostrKeys {
-    let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
-    RadrootsNostrKeys::new(secret_key)
-}
+static USER_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
+static USER_PUBLIC_KEY: LazyLock<String> = LazyLock::new(|| USER_KEYS.public_key().to_hex());
+static REMOTE_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
+static CLIENT_KEYS: LazyLock<RadrootsNostrKeys> = LazyLock::new(RadrootsNostrKeys::generate);
 
 fn user_keys() -> RadrootsNostrKeys {
-    keys(USER_SECRET_KEY_HEX)
+    USER_KEYS.clone()
+}
+
+fn user_pubkey() -> &'static str {
+    USER_PUBLIC_KEY.as_str()
 }
 
 fn local_sdk_signer(keys: RadrootsNostrKeys) -> RadrootsSdkLocalKeySigner {
@@ -42,21 +39,21 @@ fn local_sdk_signer(keys: RadrootsNostrKeys) -> RadrootsSdkLocalKeySigner {
 }
 
 fn remote_keys() -> RadrootsNostrKeys {
-    keys(REMOTE_SECRET_KEY_HEX)
+    REMOTE_KEYS.clone()
 }
 
 fn client_keys() -> RadrootsNostrKeys {
-    keys(CLIENT_SECRET_KEY_HEX)
+    CLIENT_KEYS.clone()
 }
 
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(USER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer]).expect("actor")
+    RadrootsActorContext::test(user_pubkey(), [RadrootsActorRole::Farmer]).expect("actor")
 }
 
 fn frozen_draft() -> RadrootsEventDraft {
     frozen_draft_with(
         "radroots.farm.profile.v1",
-        USER_PUBLIC_KEY_HEX,
+        user_pubkey(),
         KIND_FARM,
         1_700_000_000,
         vec![vec!["d".to_owned(), "sdk-signer".to_owned()]],
@@ -121,13 +118,9 @@ fn myc_signer_with_responses(
         remote_keys.public_key(),
         vec![nostr::RelayUrl::parse("wss://relay.example.com").expect("relay")],
     );
-    let signer = RadrootsSdkMycNip46Signer::new(
-        client_keys(),
-        target,
-        USER_PUBLIC_KEY_HEX,
-        transport.clone(),
-    )
-    .expect("signer");
+    let signer =
+        RadrootsSdkMycNip46Signer::new(client_keys(), target, user_pubkey(), transport.clone())
+            .expect("signer");
     (signer, transport)
 }
 
@@ -260,7 +253,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
     assert_eq!(provider.status(), signer.status());
     assert!(provider.capability().nip46_permissions.is_empty());
     assert_eq!(receipt.mode, RadrootsSdkSignerMode::LocalKey);
-    assert_eq!(receipt.signer_pubkey, USER_PUBLIC_KEY_HEX);
+    assert_eq!(receipt.signer_pubkey, user_pubkey());
     assert_eq!(receipt.signed_event_id, draft.expected_event_id_str());
     assert_eq!(
         progress,
@@ -370,13 +363,9 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
     ];
     let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), relays);
     let transport = Arc::new(MockNip46Transport::new(remote_keys.clone(), Vec::new()));
-    let signer = RadrootsSdkMycNip46Signer::new(
-        client_keys(),
-        target,
-        USER_PUBLIC_KEY_HEX,
-        transport.clone(),
-    )
-    .expect("signer");
+    let signer =
+        RadrootsSdkMycNip46Signer::new(client_keys(), target, user_pubkey(), transport.clone())
+            .expect("signer");
     let provider = RadrootsSdkSignerProvider::MycNip46(Box::new(signer));
 
     assert_eq!(provider.mode(), RadrootsSdkSignerMode::MycNip46);
@@ -385,7 +374,7 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
         RadrootsSdkSignerStatus {
             mode: RadrootsSdkSignerMode::MycNip46,
             state: RadrootsSdkSignerState::Ready,
-            signer_pubkey: USER_PUBLIC_KEY_HEX.to_owned(),
+            signer_pubkey: user_pubkey().to_owned(),
             remote_signer_pubkey: Some(remote_keys.public_key().to_hex()),
             relay_count: 2,
         }
@@ -394,7 +383,7 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
         provider.capability(),
         RadrootsSdkSignerCapability {
             mode: RadrootsSdkSignerMode::MycNip46,
-            signer_pubkey: USER_PUBLIC_KEY_HEX.to_owned(),
+            signer_pubkey: user_pubkey().to_owned(),
             remote_signer_pubkey: Some(remote_keys.public_key().to_hex()),
             relays: vec![
                 "wss://relay-a.example.com".to_owned(),
@@ -420,9 +409,9 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
 
 #[test]
 fn nip46_private_helpers_map_identity_adapter_and_response_edges() {
-    let pubkey = USER_PUBLIC_KEY_HEX.parse().expect("pubkey");
+    let pubkey = user_pubkey().parse().expect("pubkey");
     let identity = RadrootsSdkSignerIdentityOnly { pubkey };
-    assert_eq!(identity.pubkey().as_str(), USER_PUBLIC_KEY_HEX);
+    assert_eq!(identity.pubkey().as_str(), user_pubkey());
     assert!(matches!(
         identity.sign_frozen_draft(&frozen_draft()),
         Err(RadrootsSignerError::Unavailable)
@@ -516,7 +505,7 @@ async fn nip46_transport_adapter_delegates_publish_and_response_poll() {
 fn myc_nip46_product_permissions_cover_sdk_write_event_kinds() {
     let permissions = radroots_sdk_myc_nip46_product_permissions();
     let rendered = radroots_sdk_myc_nip46_product_permission_strings();
-    let mut expected_kinds = vec![KIND_FARM, KIND_LISTING];
+    let mut expected_kinds = vec![KIND_FARM, KIND_CLASSIFIED_LISTING];
     expected_kinds.extend_from_slice(&TRADE_MUTATION_EVENT_KINDS);
 
     assert_eq!(permissions.as_slice().len(), expected_kinds.len());
@@ -554,7 +543,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
         vec![nostr::RelayUrl::parse("wss://relay.example.com").expect("relay")],
     );
     let signer =
-        RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport.clone())
+        RadrootsSdkMycNip46Signer::new(client_keys, target, user_pubkey(), transport.clone())
             .expect("signer");
     let provider = RadrootsSdkSignerProvider::MycNip46(Box::new(signer));
     assert_eq!(
@@ -577,7 +566,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
         .expect("receipt");
 
     assert_eq!(receipt.mode, RadrootsSdkSignerMode::MycNip46);
-    assert_eq!(receipt.signer_pubkey, USER_PUBLIC_KEY_HEX);
+    assert_eq!(receipt.signer_pubkey, user_pubkey());
     assert_eq!(
         receipt.remote_signer_pubkey,
         Some(remote_keys.public_key().to_hex())
@@ -759,9 +748,8 @@ async fn myc_nip46_provider_reports_auth_challenge_progress_and_timeout() {
         )],
     ));
     let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
-    let signer =
-        RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport)
-            .expect("signer");
+    let signer = RadrootsSdkMycNip46Signer::new(client_keys, target, user_pubkey(), transport)
+        .expect("signer");
     let mut progress = Vec::new();
     let draft = frozen_draft();
     let actor = actor();
@@ -807,9 +795,8 @@ async fn myc_nip46_provider_returns_progress_sink_errors_from_auth_challenge() {
         )],
     ));
     let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
-    let signer =
-        RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport)
-            .expect("signer");
+    let signer = RadrootsSdkMycNip46Signer::new(client_keys, target, user_pubkey(), transport)
+        .expect("signer");
     let draft = frozen_draft();
     let actor = actor();
     let mut observed = Vec::new();
@@ -860,7 +847,7 @@ async fn myc_nip46_provider_rejects_zero_timeout_policy() {
     let constructor_error = match RadrootsSdkMycNip46Signer::new_with_request_policy(
         client_keys(),
         target,
-        USER_PUBLIC_KEY_HEX,
+        user_pubkey(),
         transport,
         RadrootsSdkMycNip46RequestPolicy {
             request_timeout: Duration::ZERO,
@@ -886,7 +873,7 @@ async fn myc_nip46_provider_times_out_hanging_transport() {
     let signer = RadrootsSdkMycNip46Signer::new_with_request_policy(
         client_keys,
         target,
-        USER_PUBLIC_KEY_HEX,
+        user_pubkey(),
         transport,
         policy,
     )
@@ -928,7 +915,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
             user_keys(),
             frozen_draft_with(
                 "radroots.farm.profile.v1",
-                USER_PUBLIC_KEY_HEX,
+                user_pubkey(),
                 KIND_FARM,
                 1_700_000_000,
                 vec![vec!["d".to_owned(), "sdk-signer-id-drift".to_owned()]],
@@ -940,7 +927,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
             user_keys(),
             frozen_draft_with(
                 "radroots.farm.profile.v1",
-                USER_PUBLIC_KEY_HEX,
+                user_pubkey(),
                 KIND_FARM,
                 1_700_000_001,
                 vec![vec!["d".to_owned(), "sdk-signer".to_owned()]],
@@ -952,7 +939,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
             user_keys(),
             frozen_draft_with(
                 "radroots.farm.coop.v1",
-                USER_PUBLIC_KEY_HEX,
+                user_pubkey(),
                 KIND_COOP,
                 1_700_000_000,
                 vec![vec!["d".to_owned(), "sdk-signer".to_owned()]],
@@ -964,7 +951,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
             user_keys(),
             frozen_draft_with(
                 "radroots.farm.profile.v1",
-                USER_PUBLIC_KEY_HEX,
+                user_pubkey(),
                 KIND_FARM,
                 1_700_000_000,
                 vec![vec!["d".to_owned(), "sdk-signer-tags-drift".to_owned()]],
@@ -976,7 +963,7 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
             user_keys(),
             frozen_draft_with(
                 "radroots.farm.profile.v1",
-                USER_PUBLIC_KEY_HEX,
+                user_pubkey(),
                 KIND_FARM,
                 1_700_000_000,
                 vec![vec!["d".to_owned(), "sdk-signer".to_owned()]],
@@ -996,9 +983,8 @@ async fn myc_nip46_provider_rejects_returned_event_drift() {
             )],
         ));
         let target = RadrootsNostrConnectClientTarget::new(remote_keys.public_key(), Vec::new());
-        let signer =
-            RadrootsSdkMycNip46Signer::new(client_keys, target, USER_PUBLIC_KEY_HEX, transport)
-                .expect("signer");
+        let signer = RadrootsSdkMycNip46Signer::new(client_keys, target, user_pubkey(), transport)
+            .expect("signer");
         let actor = actor();
 
         let error = signer

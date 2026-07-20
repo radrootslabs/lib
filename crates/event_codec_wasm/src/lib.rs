@@ -1,7 +1,14 @@
 #![forbid(unsafe_code)]
 
+use radroots_blossom::{
+    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomError,
+    RadrootsBlossomMediaType, RadrootsBlossomSha256,
+};
 use radroots_event::article::RadrootsArticle;
-use radroots_event::comment::RadrootsComment;
+use radroots_event::comment::{
+    RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
+    RadrootsNip22CommentParentReference, RadrootsNip22CommentRoot, RadrootsNip22EventRootReference,
+};
 use radroots_event::coop::RadrootsCoop;
 use radroots_event::document::RadrootsDocument;
 use radroots_event::farm::RadrootsFarm;
@@ -28,21 +35,26 @@ use radroots_event::knowledge::{
 };
 use radroots_event::list::RadrootsList;
 use radroots_event::list_set::RadrootsListSet;
-use radroots_event::listing::RadrootsListing;
+use radroots_event::media::{RadrootsAuthoredImage, RadrootsAuthoredImageError};
 use radroots_event::message::RadrootsMessage;
 use radroots_event::message_file::RadrootsMessageFile;
+use radroots_event::operational_listing::RadrootsOperationalListing;
 use radroots_event::plot::RadrootsPlot;
-use radroots_event::post::RadrootsPost;
+use radroots_event::post::{
+    RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError,
+    RadrootsAuthoredPostImage, RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
+};
 use radroots_event::reaction::RadrootsReaction;
 use radroots_event::relay_auth::RadrootsRelayAuth;
 use radroots_event::report::RadrootsReport;
 use radroots_event::repost::{RadrootsGenericRepost, RadrootsRepost};
 use radroots_event::seal::RadrootsSeal;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
 };
 use radroots_event_codec::article::encode::article_build_tags;
-use radroots_event_codec::comment::encode::comment_build_tags;
+use radroots_event_codec::comment::authored::authored_nip22_comment_to_wire_parts;
 use radroots_event_codec::coop::encode::coop_build_tags;
 use radroots_event_codec::document::encode::document_build_tags;
 use radroots_event_codec::farm::encode::farm_build_tags;
@@ -70,13 +82,16 @@ use radroots_event_codec::knowledge::{
 };
 use radroots_event_codec::list::encode::list_build_tags;
 use radroots_event_codec::list_set::encode::list_set_build_tags;
-use radroots_event_codec::listing::tags::{
-    listing_tags as listing_tags_impl, listing_tags_full as listing_tags_full_impl,
-};
 use radroots_event_codec::message::encode::message_build_tags;
 use radroots_event_codec::message_file::encode::message_file_build_tags;
+use radroots_event_codec::operational_listing::tags::{
+    operational_listing_tags as operational_listing_tags_impl,
+    operational_listing_tags_full as operational_listing_tags_full_impl,
+};
 use radroots_event_codec::plot::encode::plot_build_tags;
-use radroots_event_codec::post::encode::post_build_tags;
+use radroots_event_codec::post::authored::{
+    authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
+};
 use radroots_event_codec::reaction::encode::reaction_build_tags;
 use radroots_event_codec::relay_auth::encode::relay_auth_build_tags;
 use radroots_event_codec::report::encode::report_build_tags;
@@ -123,6 +138,35 @@ fn parse_json<T: DeserializeOwned>(input: &str) -> Result<T, RadrootsJsValue> {
     serde_json::from_str(normalized_payload(input)).map_err(err_js)
 }
 
+fn parse_authored_json<T: DeserializeOwned>(input: &str) -> Result<T, RadrootsJsValue> {
+    serde_json::from_str(input).map_err(|_| error_json("invalid_json", Some("authored_input")))
+}
+
+fn authored_error(code: &str) -> RadrootsJsValue {
+    error_json("encode_error", Some(code))
+}
+
+fn blossom_authored_error(error: RadrootsBlossomError) -> RadrootsJsValue {
+    authored_error(error.code())
+}
+
+fn post_authored_error(error: RadrootsAuthoredPostError) -> RadrootsJsValue {
+    authored_error(error.code())
+}
+
+fn image_authored_error(error: RadrootsAuthoredImageError) -> RadrootsJsValue {
+    authored_error(error.code())
+}
+
+fn comment_authored_error(error: RadrootsNip22CommentError) -> RadrootsJsValue {
+    authored_error(error.code())
+}
+
+fn wire_parts_to_json(parts: &RadrootsNip01EventWireParts) -> Result<String, RadrootsJsValue> {
+    serde_json::to_string(parts)
+        .map_err(|_| error_json("internal_error", Some("wire_parts_serialization")))
+}
+
 fn tags_to_json(tags: Vec<Vec<String>>) -> Result<String, RadrootsJsValue> {
     serde_json::to_string(&tags).map_err(err_js)
 }
@@ -152,6 +196,7 @@ fn envelope_error_code(error: &RadrootsEventEnvelopeError) -> &'static str {
         RadrootsEventEnvelopeError::ControlCharacterTagKey { .. } => "tag_key_control_character",
         RadrootsEventEnvelopeError::ContentTooLarge { .. } => "content_too_large",
         RadrootsEventEnvelopeError::TooManyTags { .. } => "too_many_tags",
+        RadrootsEventEnvelopeError::TooManyTagElements { .. } => "too_many_tag_elements",
         RadrootsEventEnvelopeError::TagElementTooLarge { .. } => "tag_element_too_large",
         RadrootsEventEnvelopeError::TagsTooLarge { .. } => "tags_too_large",
     }
@@ -287,24 +332,247 @@ struct FarmCrdtTagsInput {
     author_pubkey: String,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = listing_tags))]
-pub fn listing_tags(listing_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsListing, _, _>(listing_json, listing_tags_impl)
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoredUpdateInput {
+    content: String,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = listing_tags_full))]
-pub fn listing_tags_full(listing_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsListing, _, _>(listing_json, listing_tags_full_impl)
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoredMediaPostInput {
+    content: String,
+    #[serde(default)]
+    images: Vec<AuthoredImageInput>,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = post_tags))]
-pub fn post_tags(post_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsPost, _, _>(post_json, post_build_tags)
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoredImageInput {
+    bytes: Vec<u8>,
+    url: String,
+    media_type: String,
+    uploaded: u64,
+    width: u32,
+    height: u32,
+    alt: String,
+    #[serde(default)]
+    fallbacks: Vec<String>,
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = comment_tags))]
-pub fn comment_tags(comment_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsComment, _, _>(comment_json, comment_build_tags)
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoredCommentInput {
+    content: String,
+    root: AuthoredCommentRootInput,
+    position: AuthoredCommentPositionInput,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+enum AuthoredCommentRootInput {
+    Event {
+        event_id: String,
+        author: String,
+        kind: u32,
+        #[serde(default)]
+        relay: Option<String>,
+    },
+    Address {
+        coordinate: String,
+        author: String,
+        kind: u32,
+        #[serde(default)]
+        relay: Option<String>,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+enum AuthoredCommentPositionInput {
+    TopEvent,
+    TopAddress { current_revision: String },
+    Nested { parent: AuthoredCommentParentInput },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthoredCommentParentInput {
+    event_id: String,
+    author: String,
+    #[serde(default)]
+    relay: Option<String>,
+}
+
+fn authored_post_images(
+    inputs: Vec<AuthoredImageInput>,
+) -> Result<Vec<RadrootsAuthoredPostImage>, RadrootsJsValue> {
+    inputs.into_iter().map(authored_post_image).collect()
+}
+
+fn authored_post_image(
+    input: AuthoredImageInput,
+) -> Result<RadrootsAuthoredPostImage, RadrootsJsValue> {
+    let media_type =
+        RadrootsBlossomMediaType::parse(&input.media_type).map_err(blossom_authored_error)?;
+    let sha256 = RadrootsBlossomSha256::digest(&input.bytes);
+    let size = u64::try_from(input.bytes.len())
+        .map_err(|_| authored_error("blob_size_platform_overflow"))?;
+    let descriptor = RadrootsBlossomBlobDescriptor::new(
+        RadrootsBlossomBlobUrl::parse(&input.url).map_err(blossom_authored_error)?,
+        sha256,
+        size,
+        media_type.clone(),
+        input.uploaded,
+    )
+    .map_err(blossom_authored_error)?
+    .approve_reference()
+    .map_err(blossom_authored_error)?
+    .verify_bytes(&input.bytes, &media_type)
+    .map_err(blossom_authored_error)?;
+    let image = RadrootsAuthoredImage::try_from_verified_descriptor(descriptor)
+        .map_err(image_authored_error)?;
+    let dimensions =
+        RadrootsPostImageDimensions::new(input.width, input.height).map_err(post_authored_error)?;
+    let mut authored = RadrootsAuthoredPostImage::new(image, dimensions, input.alt)
+        .map_err(post_authored_error)?;
+    for fallback in input.fallbacks {
+        let fallback = RadrootsBlossomBlobUrl::parse(&fallback)
+            .map_err(blossom_authored_error)?
+            .approve()
+            .map_err(blossom_authored_error)?;
+        authored = authored
+            .try_with_fallback(fallback)
+            .map_err(post_authored_error)?;
+    }
+    Ok(authored)
+}
+
+fn authored_comment_from_input(
+    input: AuthoredCommentInput,
+) -> Result<RadrootsAuthoredNip22Comment, RadrootsJsValue> {
+    let root = match input.root {
+        AuthoredCommentRootInput::Event {
+            event_id,
+            author,
+            kind,
+            relay,
+        } => RadrootsNip22CommentRoot::Event(
+            RadrootsNip22EventRootReference::parse(event_id, author, kind, relay.as_deref())
+                .map_err(comment_authored_error)?,
+        ),
+        AuthoredCommentRootInput::Address {
+            coordinate,
+            author,
+            kind,
+            relay,
+        } => {
+            let root = RadrootsNip22AddressRootReference::parse(coordinate, relay.as_deref())
+                .map_err(comment_authored_error)?;
+            if root.author().as_str() != author {
+                return Err(authored_error("comment_root_author_mismatch"));
+            }
+            if root.kind().as_u32() != kind {
+                return Err(authored_error("comment_root_kind_mismatch"));
+            }
+            RadrootsNip22CommentRoot::Address(root)
+        }
+    };
+
+    match (root, input.position) {
+        (RadrootsNip22CommentRoot::Event(root), AuthoredCommentPositionInput::TopEvent) => {
+            RadrootsAuthoredNip22Comment::top_level_event(input.content, root)
+                .map_err(comment_authored_error)
+        }
+        (
+            RadrootsNip22CommentRoot::Address(root),
+            AuthoredCommentPositionInput::TopAddress { current_revision },
+        ) => RadrootsAuthoredNip22Comment::parse_top_level_address(
+            input.content,
+            root,
+            current_revision,
+        )
+        .map_err(comment_authored_error),
+        (root, AuthoredCommentPositionInput::Nested { parent }) => {
+            let parent = RadrootsNip22CommentParentReference::parse(
+                parent.event_id,
+                parent.author,
+                parent.relay.as_deref(),
+            )
+            .map_err(comment_authored_error)?;
+            RadrootsAuthoredNip22Comment::nested(input.content, root, parent)
+                .map_err(comment_authored_error)
+        }
+        _ => Err(authored_error("comment_root_position_incompatible")),
+    }
+}
+
+/// Builds deterministic unsigned kind-1 wire parts for a strict Update.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = social_update_build_authored_draft)
+)]
+pub fn social_update_build_authored_draft(input_json: &str) -> Result<String, RadrootsJsValue> {
+    let input = parse_authored_json::<AuthoredUpdateInput>(input_json)?;
+    let update = RadrootsAuthoredUpdate::new(input.content).map_err(post_authored_error)?;
+    wire_parts_to_json(&authored_update_to_wire_parts(&update))
+}
+
+/// Builds deterministic unsigned kind-1 wire parts for a strict PhotoUpdate.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = social_photo_update_build_authored_draft)
+)]
+pub fn social_photo_update_build_authored_draft(
+    input_json: &str,
+) -> Result<String, RadrootsJsValue> {
+    let input = parse_authored_json::<AuthoredMediaPostInput>(input_json)?;
+    let images = authored_post_images(input.images)?;
+    let photo =
+        RadrootsAuthoredPhotoUpdate::new(input.content, images).map_err(post_authored_error)?;
+    wire_parts_to_json(&authored_photo_update_to_wire_parts(&photo))
+}
+
+/// Builds deterministic unsigned kind-1 wire parts for a strict Ask.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = social_ask_build_authored_draft)
+)]
+pub fn social_ask_build_authored_draft(input_json: &str) -> Result<String, RadrootsJsValue> {
+    let input = parse_authored_json::<AuthoredMediaPostInput>(input_json)?;
+    let images = authored_post_images(input.images)?;
+    let ask = RadrootsAuthoredAsk::new(input.content, images).map_err(post_authored_error)?;
+    wire_parts_to_json(&authored_ask_to_wire_parts(&ask))
+}
+
+/// Builds deterministic unsigned kind-1111 wire parts for a strict NIP-22 Comment.
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = social_comment_build_authored_draft)
+)]
+pub fn social_comment_build_authored_draft(input_json: &str) -> Result<String, RadrootsJsValue> {
+    let input = parse_authored_json::<AuthoredCommentInput>(input_json)?;
+    let comment = authored_comment_from_input(input)?;
+    wire_parts_to_json(&authored_nip22_comment_to_wire_parts(&comment))
+}
+
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = operational_listing_tags)
+)]
+pub fn operational_listing_tags(listing_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsOperationalListing, _, _>(listing_json, operational_listing_tags_impl)
+}
+
+#[cfg_attr(
+    target_arch = "wasm32",
+    wasm_bindgen(js_name = operational_listing_tags_full)
+)]
+pub fn operational_listing_tags_full(listing_json: &str) -> Result<String, RadrootsJsValue> {
+    build_tags_json::<RadrootsOperationalListing, _, _>(
+        listing_json,
+        operational_listing_tags_full_impl,
+    )
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = article_tags))]
@@ -606,18 +874,19 @@ mod tests {
         RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
         RadrootsWikiArticleVersionRef,
     };
-    use radroots_event::listing::{RadrootsListingBin, RadrootsListingProduct};
+    use radroots_event::operational_listing::{
+        RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
+    };
     use radroots_event::relay_auth::RadrootsRelayAuth;
     use radroots_event::social::{
         RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialFarmAnchor,
-        RadrootsSocialLocation, RadrootsSocialMediaDimensions, RadrootsSocialMediaMetadata,
-        RadrootsSocialTarget,
+        RadrootsSocialLocation, RadrootsSocialMediaDimensions, RadrootsSocialTarget,
     };
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
     };
 
-    fn sample_listing() -> RadrootsListing {
+    fn sample_listing() -> RadrootsOperationalListing {
         let quantity =
             RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
         let price = RadrootsCoreQuantityPrice::new(
@@ -625,14 +894,14 @@ mod tests {
             quantity.clone(),
         );
 
-        RadrootsListing {
+        RadrootsOperationalListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
             published_at: None,
             farm: RadrootsFarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsListingProduct {
+            product: RadrootsOperationalListingProduct {
                 key: "sku".to_string(),
                 title: "widget".to_string(),
                 category: "tools".to_string(),
@@ -644,7 +913,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: "bin-1".parse().expect("primary bin id"),
-            bins: vec![RadrootsListingBin {
+            bins: vec![RadrootsOperationalListingBin {
                 bin_id: "bin-1".parse().expect("bin id"),
                 quantity,
                 price_per_canonical_unit: price,
@@ -888,9 +1157,7 @@ mod tests {
             .map(nostr::Tag::parse)
             .collect::<Result<Vec<_>, _>>()
             .expect("parsed tags");
-        let keys =
-            nostr::Keys::parse("0101010101010101010101010101010101010101010101010101010101010101")
-                .expect("keys");
+        let keys = nostr::Keys::generate();
         let event =
             nostr::EventBuilder::new(nostr::Kind::Custom(KIND_KNOWLEDGE_CLAIM as u16), claim_json)
                 .tags(tags)
@@ -919,40 +1186,6 @@ mod tests {
         RadrootsSocialLocation {
             name: Some("field edge".to_string()),
             geohash: Some("c23nb62w20st".to_string()),
-        }
-    }
-
-    fn sample_post() -> RadrootsPost {
-        RadrootsPost {
-            content: "field update".to_string(),
-            farm: Some(social_farm_anchor()),
-            address_refs: Some(vec![address_target(30023, "AAAAAAAAAAAAAAAAAAAAAQ")]),
-            location: Some(social_location()),
-            topics: Some(vec!["soil".to_string(), "market".to_string()]),
-            quote_refs: Some(vec![event_target(30023, 'd')]),
-            media: Some(vec![RadrootsSocialMediaMetadata {
-                url: Some("https://media.example.test/field.jpg".to_string()),
-                mime_type: Some("image/jpeg".to_string()),
-                sha256: Some(
-                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
-                ),
-                original_sha256: None,
-                size: Some(4096),
-                dimensions: Some(RadrootsSocialMediaDimensions {
-                    width: 1200,
-                    height: 800,
-                }),
-                blurhash: None,
-                thumbnails: None,
-                image: None,
-                summary: Some("field photo".to_string()),
-                alt: Some("rows after harvest".to_string()),
-                fallback: None,
-                magnet: Some("magnet:?xt=urn:btih:abc".to_string()),
-                content_hashes: Some(vec!["sha256:field".to_string()]),
-                services: Some(vec!["https://media.example.test".to_string()]),
-                imeta: None,
-            }]),
         }
     }
 
@@ -992,14 +1225,6 @@ mod tests {
             content_hashes: Some(vec!["sha256:field".to_string()]),
             services: Some(vec!["https://media.example.test".to_string()]),
             content: Some("caption".to_string()),
-        }
-    }
-
-    fn sample_comment() -> RadrootsComment {
-        RadrootsComment {
-            root: event_target(30023, 'a'),
-            parent: address_target(30023, "AAAAAAAAAAAAAAAAAAAAAg"),
-            content: "great notes".to_string(),
         }
     }
 
@@ -1196,13 +1421,136 @@ mod tests {
 
     type BindingEncoder = fn(&str) -> Result<String, RadrootsJsValue>;
 
+    const POST_AUTHORED_VECTORS: &str = include_str!(
+        "../../../../lib/contracts/conformance/vectors/post/verified_profiles.v1.json"
+    );
+    const COMMENT_AUTHORED_VECTORS: &str = include_str!(
+        "../../../../lib/contracts/conformance/vectors/comment/verified_profile.v1.json"
+    );
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct AuthoredVectorSuite {
+        suite: String,
+        contract_version: String,
+        vectors: Vec<AuthoredVector>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct AuthoredVector {
+        id: String,
+        kind: String,
+        input: serde_json::Value,
+        expected: serde_json::Value,
+    }
+
+    fn authored_binding(kind: &str) -> Option<BindingEncoder> {
+        if kind.starts_with("social.update.build_authored_draft.") {
+            Some(social_update_build_authored_draft)
+        } else if kind.starts_with("social.photo_update.build_authored_draft.") {
+            Some(social_photo_update_build_authored_draft)
+        } else if kind.starts_with("social.ask.build_authored_draft.") {
+            Some(social_ask_build_authored_draft)
+        } else if kind.starts_with("social.comment.build_authored_draft.") {
+            Some(social_comment_build_authored_draft)
+        } else {
+            None
+        }
+    }
+
+    fn authored_vector_request(vector: &AuthoredVector) -> String {
+        let mut input = vector.input.clone();
+        if let Some(images) = input
+            .get_mut("images")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for image in images {
+                let image = image
+                    .as_object_mut()
+                    .unwrap_or_else(|| panic!("{} image must be an object", vector.id));
+                let bytes_utf8 = image
+                    .remove("bytes_utf8")
+                    .unwrap_or_else(|| panic!("{} image must carry vector bytes", vector.id));
+                let bytes_utf8 = bytes_utf8
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{} vector bytes must be UTF-8 text", vector.id));
+                image.insert(
+                    "bytes".to_owned(),
+                    serde_json::Value::Array(
+                        bytes_utf8
+                            .as_bytes()
+                            .iter()
+                            .copied()
+                            .map(serde_json::Value::from)
+                            .collect(),
+                    ),
+                );
+            }
+        }
+        serde_json::to_string(&input)
+            .unwrap_or_else(|error| panic!("{} request JSON failed: {error}", vector.id))
+    }
+
+    fn authored_error_value(error: RadrootsJsValue) -> serde_json::Value {
+        serde_json::from_str(&error).expect("authored binding error must be coded JSON")
+    }
+
+    fn authored_error_inner(error: RadrootsJsValue) -> String {
+        let error = authored_error_value(error);
+        assert_eq!(error["code"], "encode_error");
+        error["inner_code"]
+            .as_str()
+            .expect("authored error inner_code")
+            .to_owned()
+    }
+
+    fn execute_authored_vectors(raw: &str, expected_suite: &str, expected_vector_count: usize) {
+        let suite: AuthoredVectorSuite =
+            serde_json::from_str(raw).expect("owner conformance vectors");
+        assert_eq!(suite.suite, expected_suite);
+        assert_eq!(suite.contract_version, "1.0.0");
+        let mut executed = 0usize;
+        for vector in suite.vectors {
+            let Some(binding) = authored_binding(&vector.kind) else {
+                continue;
+            };
+            executed += 1;
+            let request = authored_vector_request(&vector);
+            if vector.kind.ends_with(".valid") {
+                let first = binding(&request)
+                    .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
+                let second = binding(&request)
+                    .unwrap_or_else(|error| panic!("{} repeat failed: {error}", vector.id));
+                assert_eq!(first, second, "{} repeat encoding drifted", vector.id);
+                let actual: serde_json::Value = serde_json::from_str(&first)
+                    .unwrap_or_else(|error| panic!("{} output JSON failed: {error}", vector.id));
+                assert_eq!(actual, vector.expected, "{}", vector.id);
+            } else if vector.kind.ends_with(".invalid") {
+                let first = binding(&request).expect_err("invalid authored vector must fail");
+                let second =
+                    binding(&request).expect_err("repeated invalid authored vector must fail");
+                let expected = vector.expected["error"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{} expected error must be a string", vector.id));
+                assert_eq!(authored_error_inner(first), expected, "{}", vector.id);
+                assert_eq!(authored_error_inner(second), expected, "{}", vector.id);
+            } else {
+                panic!("{} has unsupported authored vector kind", vector.id);
+            }
+        }
+        assert_eq!(executed, expected_vector_count);
+    }
+
     #[test]
     fn bindings_reject_invalid_json() {
-        let bindings: [BindingEncoder; 42] = [
-            listing_tags,
-            listing_tags_full,
-            post_tags,
-            comment_tags,
+        let bindings: [BindingEncoder; 44] = [
+            social_update_build_authored_draft,
+            social_photo_update_build_authored_draft,
+            social_ask_build_authored_draft,
+            social_comment_build_authored_draft,
+            operational_listing_tags,
+            operational_listing_tags_full,
             article_tags,
             file_metadata_tags,
             repost_tags,
@@ -1246,13 +1594,107 @@ mod tests {
         for binding in bindings {
             assert!(binding("{").is_err());
         }
-        assert!(listing_tags("").is_err());
+        assert!(operational_listing_tags("").is_err());
+    }
+
+    #[test]
+    fn strict_authored_post_bindings_execute_owner_conformance_vectors() {
+        execute_authored_vectors(POST_AUTHORED_VECTORS, "post_profiles", 6);
+    }
+
+    #[test]
+    fn strict_authored_comment_binding_executes_owner_conformance_vectors() {
+        execute_authored_vectors(COMMENT_AUTHORED_VECTORS, "nip22_comment_profile", 31);
+    }
+
+    #[test]
+    fn authored_media_binding_verifies_exact_arbitrary_bytes() {
+        let bytes = vec![0, 159, 146, 150];
+        let hash = RadrootsBlossomSha256::digest(&bytes);
+        let url = format!("https://media.example/{hash}.webp");
+        let input = serde_json::json!({
+            "content": format!("Harvest {url}"),
+            "images": [{
+                "bytes": bytes,
+                "url": url,
+                "media_type": "image/webp",
+                "uploaded": 1_784_347_200_u64,
+                "width": 1200,
+                "height": 900,
+                "alt": "Harvest",
+                "fallbacks": [],
+            }],
+        });
+
+        let encoded = social_photo_update_build_authored_draft(
+            &serde_json::to_string(&input).expect("media request"),
+        )
+        .expect("byte-verified PhotoUpdate");
+        let encoded: RadrootsNip01EventWireParts =
+            serde_json::from_str(&encoded).expect("wire parts");
+        assert_eq!(encoded.tags.len(), 1);
+        assert!(encoded.tags[0].contains(&format!("x {hash}")));
+        assert!(encoded.tags[0].contains(&"size 4".to_owned()));
+
+        let mut wrong_bytes = input.clone();
+        wrong_bytes["images"][0]["bytes"] = serde_json::json!([1, 2, 3, 4]);
+        let error = social_photo_update_build_authored_draft(
+            &serde_json::to_string(&wrong_bytes).expect("wrong-byte request"),
+        )
+        .expect_err("URL digest must bind exact bytes");
+        assert_eq!(authored_error_inner(error), "descriptor_hash_mismatch");
+    }
+
+    #[test]
+    fn authored_media_binding_rejects_fabricated_descriptor_fields() {
+        let bytes = b"image".to_vec();
+        let hash = RadrootsBlossomSha256::digest(&bytes);
+        let url = format!("https://media.example/{hash}.webp");
+        let mut input = serde_json::json!({
+            "content": format!("Harvest {url}"),
+            "images": [{
+                "bytes": bytes,
+                "url": url,
+                "media_type": "image/webp",
+                "uploaded": 1_784_347_200_u64,
+                "width": 1200,
+                "height": 900,
+                "alt": "Harvest",
+            }],
+        });
+        input["images"][0]["sha256"] = serde_json::json!(hash.to_string());
+        input["images"][0]["size"] = serde_json::json!(5);
+
+        let error = social_photo_update_build_authored_draft(
+            &serde_json::to_string(&input).expect("fabricated descriptor request"),
+        )
+        .expect_err("caller-supplied descriptor commitments must be rejected");
+        let error = authored_error_value(error);
+        assert_eq!(error["code"], "invalid_json");
+        assert_eq!(error["inner_code"], "authored_input");
+    }
+
+    #[test]
+    fn ask_allows_zero_media_while_photo_update_requires_media() {
+        let ask = social_ask_build_authored_draft(r#"{"content":"When is harvest?","images":[]}"#)
+            .expect("Ask without media");
+        let ask: RadrootsNip01EventWireParts = serde_json::from_str(&ask).expect("Ask wire parts");
+        assert_eq!(
+            ask.tags,
+            vec![vec!["t".to_owned(), "radroots-ask".to_owned()]]
+        );
+
+        let error =
+            social_photo_update_build_authored_draft(r#"{"content":"Harvest","images":[]}"#)
+                .expect_err("PhotoUpdate without media");
+        assert_eq!(authored_error_inner(error), "photo_imeta_missing");
     }
 
     #[test]
     fn bindings_encode_to_json_when_input_is_valid() {
         let listing_json = serde_json::to_string(&sample_listing()).expect("listing json");
-        let listing_tags_json = listing_tags(&listing_json).expect("listing tags");
+        let listing_tags_json =
+            operational_listing_tags(&listing_json).expect("operational listing tags");
         let listing_tags: Vec<Vec<String>> =
             serde_json::from_str(&listing_tags_json).expect("listing tags json");
         assert!(!listing_tags.is_empty());
@@ -1266,12 +1708,6 @@ mod tests {
 
     #[test]
     fn social_bindings_encode_to_json_when_input_is_valid() {
-        assert_tags_json(post_tags(
-            &serde_json::to_string(&sample_post()).expect("post json"),
-        ));
-        assert_tags_json(comment_tags(
-            &serde_json::to_string(&sample_comment()).expect("comment json"),
-        ));
         assert_tags_json(article_tags(
             &serde_json::to_string(&sample_article()).expect("article json"),
         ));
@@ -1297,10 +1733,6 @@ mod tests {
         let mut article = sample_article();
         article.d_tag.clear();
         assert!(article_tags(&serde_json::to_string(&article).expect("article json")).is_err());
-
-        let mut comment = sample_comment();
-        comment.root = event_target(1, 'a');
-        assert!(comment_tags(&serde_json::to_string(&comment).expect("comment json")).is_err());
 
         let mut reaction = sample_reaction();
         reaction.target = RadrootsSocialTarget::External {
@@ -1687,7 +2119,7 @@ mod tests {
         listing_json["bins"] = serde_json::Value::Array(Vec::new());
         let listing_json = serde_json::to_string(&listing_json).expect("listing json");
 
-        assert!(listing_tags(&listing_json).is_err());
-        assert!(listing_tags_full(&listing_json).is_err());
+        assert!(operational_listing_tags(&listing_json).is_err());
+        assert!(operational_listing_tags_full(&listing_json).is_err());
     }
 }

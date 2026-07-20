@@ -355,7 +355,6 @@ fn promise_of(type_expr: TypeScriptType) -> TypeScriptType {
 
 const EVENT_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("article_tags", Some("article_json"), String, 2, 4),
-    public_function!("comment_tags", Some("comment_json"), String, 2, 4),
     public_function!("coop_tags", Some("coop_json"), String, 2, 4),
     public_function!("document_tags", Some("document_json"), String, 2, 4),
     public_function!("farm_crdt_change_tags", Some("input_json"), String, 2, 4),
@@ -408,17 +407,56 @@ const EVENT_CODEC_FUNCTIONS: &[WasmPublicFunction] = &[
     public_function!("knowledge_source_tags", Some("source_json"), String, 2, 4),
     public_function!("list_set_tags", Some("list_json"), String, 2, 4),
     public_function!("list_tags", Some("list_json"), String, 2, 4),
-    public_function!("listing_tags", Some("listing_json"), String, 2, 4),
-    public_function!("listing_tags_full", Some("listing_json"), String, 2, 4),
+    public_function!(
+        "operational_listing_tags",
+        Some("listing_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!(
+        "operational_listing_tags_full",
+        Some("listing_json"),
+        String,
+        2,
+        4
+    ),
     public_function!("message_file_tags", Some("message_json"), String, 2, 4),
     public_function!("message_tags", Some("message_json"), String, 2, 4),
     public_function!("plot_tags", Some("plot_json"), String, 2, 4),
-    public_function!("post_tags", Some("post_json"), String, 2, 4),
     public_function!("reaction_tags", Some("reaction_json"), String, 2, 4),
     public_function!("relay_auth_tags", Some("auth_json"), String, 2, 4),
     public_function!("report_tags", Some("report_json"), String, 2, 4),
     public_function!("repost_tags", Some("repost_json"), String, 2, 4),
     public_function!("seal_tags", Some("seal_json"), String, 2, 4),
+    public_function!(
+        "social_ask_build_authored_draft",
+        Some("input_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!(
+        "social_comment_build_authored_draft",
+        Some("input_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!(
+        "social_photo_update_build_authored_draft",
+        Some("input_json"),
+        String,
+        2,
+        4
+    ),
+    public_function!(
+        "social_update_build_authored_draft",
+        Some("input_json"),
+        String,
+        2,
+        4
+    ),
     public_function!("wiki_article_tags", Some("article_json"), String, 2, 4),
     public_function!(
         "wiki_merge_request_tags",
@@ -1013,12 +1051,33 @@ mod tests {
     fn generated_declarations_include_public_wasm_entrypoints() {
         let specs = wasm_package_specs();
         let events = declaration_files(specs[0]).expect("event declarations");
-        assert!(events[0].contents.contains("export function listing_tags"));
+        assert!(
+            events[0]
+                .contents
+                .contains("export function operational_listing_tags")
+        );
         assert!(
             events[1]
                 .contents
-                .contains("export declare const listing_tags")
+                .contains("export declare const operational_listing_tags")
         );
+        for authored in [
+            "social_ask_build_authored_draft",
+            "social_comment_build_authored_draft",
+            "social_photo_update_build_authored_draft",
+            "social_update_build_authored_draft",
+        ] {
+            assert!(
+                events[0]
+                    .contents
+                    .contains(&format!("export function {authored}"))
+            );
+            assert!(
+                events[1]
+                    .contents
+                    .contains(&format!("export declare const {authored}"))
+            );
+        }
         for retired in [
             "calendar_date_event_tags",
             "calendar_event_rsvp_tags",
@@ -1027,6 +1086,18 @@ mod tests {
         ] {
             assert!(!events[0].contents.contains(retired));
             assert!(!events[1].contents.contains(retired));
+        }
+        for retired in ["comment_tags", "post_tags"] {
+            assert!(
+                !events[0]
+                    .contents
+                    .contains(&format!("export function {retired}("))
+            );
+            assert!(
+                !events[1]
+                    .contents
+                    .contains(&format!("export declare const {retired}:"))
+            );
         }
 
         let replica_store = declaration_files(specs[1]).expect("replica store declarations");

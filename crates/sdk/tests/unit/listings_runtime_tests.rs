@@ -8,14 +8,17 @@ use radroots_event::{
     contract::RadrootsActorRole,
     farm::RadrootsFarmRef,
     ids::{RadrootsDTag, RadrootsInventoryBinId},
-    listing::{RadrootsListingBin, RadrootsListingProduct},
+    operational_listing::{
+        RadrootsOperationalListingAvailability, RadrootsOperationalListingBin,
+        RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingProduct,
+        RadrootsOperationalListingPublicLocation, RadrootsOperationalListingStatus,
+    },
     resource_area::RadrootsResourceAreaRef,
 };
 
-use crate::fixture_signer::FixtureSigner;
+use crate::fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
 use crate::serializer_failure::assert_struct_serialize_error_paths;
 
-const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FARM_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const LISTING_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
 const LISTING_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
@@ -23,23 +26,27 @@ const LISTING_C_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAw";
 const RELAY_A: &str = "wss://relay-a.radroots.test";
 const RELAY_B: &str = "wss://relay-b.radroots.test";
 
+fn seller_pubkey() -> &'static str {
+    fixture_alice_pubkey()
+}
+
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor")
 }
 
-fn listing(d_tag: &str, title: &str) -> RadrootsListing {
-    listing_for_seller(SELLER, d_tag, title)
+fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
+    listing_for_seller(seller_pubkey(), d_tag, title)
 }
 
-fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsListing {
-    RadrootsListing {
+fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsOperationalListing {
+    RadrootsOperationalListing {
         d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
         published_at: None,
         farm: RadrootsFarmRef {
             pubkey: seller.to_owned(),
             d_tag: FARM_D_TAG.to_owned(),
         },
-        product: RadrootsListingProduct {
+        product: RadrootsOperationalListingProduct {
             key: "lettuce".to_owned(),
             title: title.to_owned(),
             category: "greens".to_owned(),
@@ -51,7 +58,7 @@ fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsListing
             year: None,
         },
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-        bins: vec![RadrootsListingBin {
+        bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             quantity: RadrootsCoreQuantity::new(
                 RadrootsCoreDecimal::from(12u32),
@@ -76,10 +83,18 @@ fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsListing
         resource_area: None,
         plot: None,
         discounts: None,
-        inventory_available: None,
-        availability: None,
-        delivery_method: None,
-        location: None,
+        inventory_available: Some(RadrootsCoreDecimal::from(12u32)),
+        availability: Some(RadrootsOperationalListingAvailability::Status {
+            status: RadrootsOperationalListingStatus::Active,
+        }),
+        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
+        location: Some(RadrootsOperationalListingPublicLocation {
+            primary: "Victoria".to_owned(),
+            city: Some("Victoria".to_owned()),
+            region: Some("British Columbia".to_owned()),
+            country: Some("CA".to_owned()),
+            geohash: "c287g".to_owned(),
+        }),
         images: None,
     }
 }
@@ -92,12 +107,12 @@ fn listing_runtime_request_builders_and_serializers_cover_success_paths() {
             .with_created_at(created_at);
     assert_struct_serialize_error_paths(&prepare, 3);
     let prepare_json = serde_json::to_value(&prepare).expect("prepare json");
-    assert_eq!(prepare_json["actor"]["pubkey"], SELLER);
+    assert_eq!(prepare_json["actor"]["pubkey"], seller_pubkey());
     assert_eq!(prepare_json["created_at"], 1_700_000_321);
 
     let enqueue = ListingEnqueuePublishRequest::from_document(
         actor(),
-        RadrootsListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
+        RadrootsOperationalListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Queued Greens")),
         TargetPolicy::default_profile(),
     )
     .try_with_nostr_targets([RELAY_A, RELAY_B], NostrRelayUrlPolicy::Public)
@@ -141,7 +156,7 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
 
     let timestamp_error = listing_publish_plan(
         &actor(),
-        RadrootsListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Future Greens")),
+        RadrootsOperationalListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Future Greens")),
         RadrootsSdkTimestamp::from_unix_seconds(u64::MAX),
     )
     .expect_err("timestamp error");
@@ -153,12 +168,12 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
     let mut invalid_resource_area_listing =
         listing(LISTING_C_D_TAG, "Invalid Resource Area Greens");
     invalid_resource_area_listing.resource_area = Some(RadrootsResourceAreaRef {
-        pubkey: SELLER.to_owned(),
+        pubkey: seller_pubkey().to_owned(),
         d_tag: "bad d tag".to_owned(),
     });
     let mutation_error = listing_publish_plan(
         &actor(),
-        RadrootsListingEditDocumentV1::new(invalid_resource_area_listing),
+        RadrootsOperationalListingEditDocumentV1::new(invalid_resource_area_listing),
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_000),
     )
     .expect_err("mutation error");
@@ -183,7 +198,7 @@ async fn listing_client_prepare_resolves_default_and_explicit_created_at() {
         ))
         .expect("default plan");
     assert_eq!(
-        default_plan.created_at,
+        default_plan.created_at(),
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_400)
     );
 
@@ -198,9 +213,159 @@ async fn listing_client_prepare_resolves_default_and_explicit_created_at() {
         )
         .expect("explicit plan");
     assert_eq!(
-        explicit_plan.created_at,
+        explicit_plan.created_at(),
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_401)
     );
+}
+
+#[tokio::test]
+async fn listing_prepared_plan_rejects_forged_state_before_signing_or_mutation() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_450))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = actor();
+    let plan = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor.clone(),
+            listing(LISTING_A_D_TAG, "Sealed Plan Greens"),
+        ))
+        .expect("plan");
+    assert_eq!(
+        serde_json::to_value(&plan).expect("plan json"),
+        serde_json::json!({
+            "public_listing_addr": plan.public_listing_addr(),
+            "expected_event_id": plan.expected_event_id(),
+            "frozen_draft": plan.frozen_draft(),
+            "created_at": plan.created_at(),
+        })
+    );
+    // Frozen drafts enforce registry contract-kind consistency, so a valid foreign pair is the
+    // safe representable substitution for both identity fields.
+    let foreign_draft = RadrootsEventDraft::new(
+        "radroots.social.geochat.v1",
+        radroots_event::kinds::KIND_GEOCHAT,
+        plan.created_at().unix_seconds(),
+        Vec::new(),
+        "Foreign draft",
+        seller_pubkey(),
+    )
+    .expect("valid foreign draft");
+    let mut forged_contract_kind = plan.clone();
+    forged_contract_kind.frozen_draft = foreign_draft;
+    assert!(matches!(
+        validate_listing_publish_plan(&forged_contract_kind),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("contract or kind")
+    ));
+
+    let mut forged_event_id = plan.clone();
+    forged_event_id.expected_event_id =
+        RadrootsEventId::parse(fixture_bob_pubkey()).expect("alternate event ID");
+    assert!(matches!(
+        validate_listing_publish_plan(&forged_event_id),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("expected event ID")
+    ));
+
+    let mut forged_address = plan.clone();
+    forged_address.public_listing_addr = RadrootsClassifiedListingAddress::parse(format!(
+        "{KIND_CLASSIFIED_LISTING}:{}:{LISTING_B_D_TAG}",
+        seller_pubkey()
+    ))
+    .expect("alternate listing address");
+    assert!(matches!(
+        validate_listing_publish_plan(&forged_address),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("listing address")
+    ));
+
+    let mut forged_created_at = plan.clone();
+    forged_created_at.created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_451);
+    assert!(matches!(
+        validate_listing_publish_plan(&forged_created_at),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("created-at timestamp")
+    ));
+
+    let alternate_plan = sdk
+        .listings()
+        .prepare_publish(ListingPreparePublishRequest::new(
+            actor.clone(),
+            listing(LISTING_B_D_TAG, "Alternate Plan Greens"),
+        ))
+        .expect("alternate plan");
+    let mut forged_draft = plan;
+    forged_draft.frozen_draft = alternate_plan.frozen_draft;
+    assert!(matches!(
+        validate_listing_publish_plan(&forged_draft),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("expected event ID")
+    ));
+
+    let error = sdk
+        .listings()
+        .enqueue_prepared_publish_with_explicit_signer(
+            &actor,
+            forged_contract_kind,
+            TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
+                .expect("transport targets"),
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000245")
+                    .expect("idempotency"),
+            ),
+            &FixtureSigner::new(fixture_bob_pubkey()),
+        )
+        .await
+        .expect_err("forged plan");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("contract or kind")
+    ));
+    let error = sdk
+        .listings()
+        .enqueue_prepared_publish(
+            &actor,
+            forged_address,
+            TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
+                .expect("transport targets"),
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000246")
+                    .expect("idempotency"),
+            ),
+        )
+        .await
+        .expect_err("forged configured-signer plan");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("listing address")
+    ));
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        0
+    );
+    let journal_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sdk_runtime_operation_journal")
+            .fetch_one(sdk._event_store.pool())
+            .await
+            .expect("journal count");
+    assert_eq!(journal_count, 0);
 }
 
 #[tokio::test]
@@ -237,7 +402,7 @@ async fn listing_enqueue_publish_reports_prepare_errors_before_signing() {
                     .expect("transport targets"),
             )
             .with_created_at(RadrootsSdkTimestamp::from_unix_seconds(u64::MAX)),
-            &FixtureSigner::new(SELLER),
+            &FixtureSigner::new(seller_pubkey()),
         )
         .await
         .expect_err("prepare error");
@@ -245,6 +410,53 @@ async fn listing_enqueue_publish_reports_prepare_errors_before_signing() {
         error,
         RadrootsSdkError::TimestampOutOfRange { .. }
     ));
+
+    let mut invalid_listing = listing(LISTING_B_D_TAG, "Invalid Inventory Greens");
+    invalid_listing.inventory_available = None;
+    let error = sdk
+        .listings()
+        .enqueue_publish_with_explicit_signer(
+            ListingEnqueuePublishRequest::new(
+                actor(),
+                invalid_listing,
+                TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
+                    .expect("transport targets"),
+            )
+            .try_with_idempotency_key("01890f0e-6c00-7000-8000-000000000239")
+            .expect("idempotency"),
+            &FixtureSigner::new(fixture_bob_pubkey()),
+        )
+        .await
+        .expect_err("invalid listing model");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::ListingValidation {
+            kind: crate::RadrootsSdkListingValidationErrorKind::MissingInventory,
+            ref message,
+        } if message == "missing listing inventory"
+    ));
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        0
+    );
+    let journal_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sdk_runtime_operation_journal")
+            .fetch_one(sdk._event_store.pool())
+            .await
+            .expect("journal count");
+    assert_eq!(journal_count, 0);
 }
 
 #[tokio::test]
@@ -254,7 +466,7 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .build()
         .await
         .expect("sdk");
-    let signer = FixtureSigner::new(SELLER);
+    let signer = FixtureSigner::new(seller_pubkey());
     let actor = actor();
     let receipt = sdk
         .listings()
@@ -278,7 +490,10 @@ async fn listing_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .listings()
         .prepare_publish(ListingPreparePublishRequest::from_document(
             actor.clone(),
-            RadrootsListingEditDocumentV1::new(listing(LISTING_B_D_TAG, "Prepared Greens")),
+            RadrootsOperationalListingEditDocumentV1::new(listing(
+                LISTING_B_D_TAG,
+                "Prepared Greens",
+            )),
         ))
         .expect("prepared listing");
     let prepared = sdk
@@ -305,20 +520,21 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(SELLER))
+            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(seller_pubkey()))
                 .expect("signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(SELLER, [RadrootsActorRole::Seller]).expect("actor");
+    let actor =
+        RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor");
 
     let receipt = sdk
         .listings()
         .enqueue_publish(
             ListingEnqueuePublishRequest::new(
                 actor,
-                listing_for_seller(SELLER, LISTING_C_D_TAG, "Configured Greens"),
+                listing_for_seller(seller_pubkey(), LISTING_C_D_TAG, "Configured Greens"),
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             )

@@ -100,7 +100,7 @@ fn storage_status() -> StorageStatusReceipt {
         event_store: SdkEventStoreStorageStatus {
             store: sqlite_status(),
             total_events: 0,
-            projection_eligible_events: 0,
+            valid_stream_events: 0,
             transport_observations: 0,
             last_event_seq: None,
             last_event_updated_at_ms: None,
@@ -774,6 +774,82 @@ fn sqlite_wal_checkpoint_receipt_mapping_covers_edge_states() {
 }
 
 #[tokio::test]
+async fn read_only_event_store_status_enforces_valid_stream_invariants() {
+    let sdk = RadrootsClient::builder().build().await.expect("sdk");
+    let pool = sdk._event_store.pool();
+    let valid_event_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let unsupported_event_id = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    sqlx::query(
+        "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 1, 1, '[]', 'valid', ?, '{}', 'verified', 'admitted', 'radroots.social.post.v1', 'regular', 1, 1, 1)",
+    )
+    .bind(valid_event_id)
+    .bind("c".repeat(64))
+    .bind("d".repeat(128))
+    .execute(pool)
+    .await
+    .expect("valid event row");
+    sqlx::query(
+        "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 2, 65000, '[]', 'unsupported', ?, '{}', 'verified', 'unsupported', NULL, 'regular', 0, 2, 2)",
+    )
+    .bind(unsupported_event_id)
+    .bind("e".repeat(64))
+    .bind("f".repeat(128))
+    .execute(pool)
+    .await
+    .expect("unsupported event row");
+
+    let summary = event_store_status_summary_from_pool(pool)
+        .await
+        .expect("valid stream summary");
+    assert_eq!(summary.total_events, 2);
+    assert_eq!(summary.valid_stream_events, 1);
+
+    sqlx::query(
+        "UPDATE event_envelopes SET contract_status = 'supported', contract_id = 'radroots.legacy.supported.v0', projection_eligible = 1 WHERE event_id = ?",
+    )
+        .bind(unsupported_event_id)
+        .execute(pool)
+        .await
+        .expect("legacy status");
+    let legacy_summary = event_store_status_summary_from_pool(pool)
+        .await
+        .expect("legacy status summary");
+    assert_eq!(legacy_summary.total_events, 2);
+    assert_eq!(legacy_summary.valid_stream_events, 1);
+    sqlx::query(
+        "UPDATE event_envelopes SET contract_status = 'unsupported', contract_id = NULL, projection_eligible = 0 WHERE event_id = ?",
+    )
+        .bind(unsupported_event_id)
+        .execute(pool)
+        .await
+        .expect("restore admission status");
+
+    sqlx::query(
+        "UPDATE event_envelopes SET verification_status = 'signature_invalid' WHERE event_id = ?",
+    )
+    .bind(valid_event_id)
+    .execute(pool)
+    .await
+    .expect("invalid verification");
+    assert_event_store_error(event_store_status_summary_from_pool(pool).await);
+    sqlx::query("UPDATE event_envelopes SET verification_status = 'verified' WHERE event_id = ?")
+        .bind(valid_event_id)
+        .execute(pool)
+        .await
+        .expect("restore verification");
+
+    sqlx::query(
+        "UPDATE event_envelopes SET kind = 20000, event_class = 'ephemeral', projection_eligible = 0 WHERE event_id = ?",
+    )
+    .bind(valid_event_id)
+    .execute(pool)
+    .await
+    .expect("ephemeral stored row");
+    assert_event_store_error(event_store_status_summary_from_pool(pool).await);
+}
+
+#[tokio::test]
 async fn storage_status_inspection_is_read_only_and_never_creates_missing_profiles() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let missing = tempdir.path().join("missing-profile");
@@ -781,6 +857,28 @@ async fn storage_status_inspection_is_read_only_and_never_creates_missing_profil
         RadrootsClient::inspect_storage_status(&missing, StorageStatusRequest::new()).await,
     );
     assert!(!missing.exists());
+
+    let legacy_profile = tempdir.path().join("legacy-profile");
+    let legacy_sdk = RadrootsClient::builder()
+        .directory_storage(&legacy_profile)
+        .build()
+        .await
+        .expect("legacy sdk");
+    sqlx::query(
+        "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 1, 1, '[]', 'legacy', ?, '{}', 'verified', 'supported', 'radroots.social.post.v1', NULL, 1, 1, 1)",
+    )
+    .bind("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+    .bind("d".repeat(64))
+    .bind("e".repeat(128))
+    .execute(legacy_sdk._event_store.pool())
+    .await
+    .expect("legacy event row");
+    let legacy_status =
+        RadrootsClient::inspect_storage_status(&legacy_profile, StorageStatusRequest::new())
+            .await
+            .expect("legacy storage status");
+    assert_eq!(legacy_status.event_store.total_events, 1);
+    assert_eq!(legacy_status.event_store.valid_stream_events, 0);
 
     let pre_v1_profile = tempdir.path().join("pre-v1");
     fs::create_dir(&pre_v1_profile).expect("pre-v1 profile");
@@ -1876,40 +1974,29 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
         .build()
         .await
         .expect("populated sdk");
-    let populated_event_pubkey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    let populated_event_tags = Vec::<Vec<String>>::new();
-    let populated_event_content = "{}".to_owned();
-    let populated_event_id = radroots_event::wire::compute_canonical_nip01_event_id(
-        populated_event_pubkey,
+    let populated_event_keys = radroots_nostr::prelude::RadrootsNostrKeys::generate();
+    let populated_event_draft = radroots_event::draft::RadrootsEventDraft::new(
+        "radroots.farm.profile.v1",
+        radroots_event::kinds::KIND_FARM,
         1_700_000_002,
-        1,
-        &populated_event_tags,
-        &populated_event_content,
+        vec![vec!["d".to_owned(), "backup-fixture".to_owned()]],
+        "{}",
+        populated_event_keys.public_key().to_hex(),
     )
-    .expect("canonical event id");
-    let populated_event_wire = radroots_event::wire::RadrootsNip01EventWire {
-        id: populated_event_id.into_string(),
-        pubkey: populated_event_pubkey.to_owned(),
-        created_at: 1_700_000_002,
-        kind: 1,
-        tags: populated_event_tags,
-        content: populated_event_content,
-        sig: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_owned(),
-        extra: Default::default(),
-    };
-    let populated_event_raw_json =
-        serde_json::to_string(&populated_event_wire).expect("raw event json");
-    let populated_event = radroots_event::draft::RadrootsSignedEvent::from_wire_verified_id(
-        populated_event_wire,
-        populated_event_raw_json,
+    .expect("event draft");
+    let populated_event = radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(
+        &populated_event_keys,
+        &populated_event_draft,
     )
     .expect("signed event");
+    let populated_ingest = radroots_event_store::RadrootsEventIngest::from_signed_event(
+        populated_event,
+        1_700_000_002_000,
+    )
+    .expect("verified event ingest");
     populated_sdk
         ._event_store
-        .ingest_event(radroots_event_store::RadrootsEventIngest::new(
-            populated_event,
-            1_700_000_002_000,
-        ))
+        .ingest_event(populated_ingest)
         .await
         .expect("populated event");
     let populated_backup_destination = tempdir.path().join("populated-backup");

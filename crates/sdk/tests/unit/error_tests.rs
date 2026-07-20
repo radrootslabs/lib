@@ -1,6 +1,6 @@
 use super::{
-    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkTradeErrorKind,
-    radroots_sdk_error_catalog, redacted_relay_url,
+    RadrootsSdkError, RadrootsSdkGeoNamesErrorKind, RadrootsSdkListingValidationErrorKind,
+    RadrootsSdkTradeErrorKind, radroots_sdk_error_catalog, redacted_relay_url,
 };
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumBehavior;
@@ -33,7 +33,7 @@ fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
 #[test]
 fn listing_and_store_errors_convert_to_sdk_error_classes() {
     let draft = RadrootsSdkError::from(
-        radroots_trade::listing::RadrootsListingEditError::ActorRoleUnsatisfied {
+        radroots_trade::operational_listing::RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
             required_role: RadrootsActorRole::Seller,
         },
     );
@@ -44,7 +44,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
     ));
 
     let draft_fallback = RadrootsSdkError::from(
-        radroots_trade::listing::RadrootsListingEditError::InvalidFarmPubkey(
+        radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidFarmPubkey(
             radroots_event::ids::RadrootsIdParseError::InvalidCharacter,
         ),
     );
@@ -54,8 +54,28 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
             if message.contains("invalid listing edit farm pubkey")
     ));
 
+    let invalid_model = RadrootsSdkError::from(
+        radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidModel(
+            radroots_event::trade_validation::RadrootsOperationalListingValidationError::MissingInventory,
+        ),
+    );
+    assert!(matches!(
+        invalid_model,
+        RadrootsSdkError::ListingValidation {
+            kind: RadrootsSdkListingValidationErrorKind::MissingInventory,
+            ref message,
+        } if message == "missing listing inventory"
+    ));
+    let detail = invalid_model.detail_json();
+    assert_eq!(detail["code"], "listing_validation");
+    assert_eq!(
+        detail["detail"]["kind"],
+        serde_json::json!("missing_inventory")
+    );
+    assert_eq!(detail["detail"]["message"], "missing listing inventory");
+
     let mutation = RadrootsSdkError::from(
-        radroots_trade::listing::RadrootsListingMutationError::UnsupportedMutation,
+        radroots_trade::operational_listing::RadrootsOperationalListingMutationError::UnsupportedMutation,
     );
     assert!(matches!(
         mutation,
@@ -343,6 +363,10 @@ fn sdk_error_contract_methods_cover_representative_classes_and_details() {
         RadrootsSdkError::ListingEdit {
             message: "edit".to_owned(),
         },
+        RadrootsSdkError::ListingValidation {
+            kind: RadrootsSdkListingValidationErrorKind::MissingInventory,
+            message: "missing listing inventory".to_owned(),
+        },
         RadrootsSdkError::ListingMutation {
             message: "mutation".to_owned(),
         },
@@ -414,6 +438,7 @@ fn sdk_error_catalog_exposes_stable_codes_and_metadata() {
     assert!(codes.contains("product_sync_unsupported"));
     assert!(codes.contains("reticulum_transport_deferred"));
     assert!(codes.contains("unsupported_profile_schema"));
+    assert!(codes.contains("listing_validation"));
     assert!(codes.contains("geonames_lookup"));
 
     for trade_kind in [

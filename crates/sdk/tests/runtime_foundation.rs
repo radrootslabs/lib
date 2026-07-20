@@ -3,9 +3,9 @@
 use radroots_sdk::{
     BackupRequest, IntegrityRequest, LISTING_PUBLISH_OPERATION_KIND, NostrProfile,
     NostrRelayUrlPolicy, RadrootsClient, RadrootsSdkClock, RadrootsSdkError, RadrootsSdkErrorClass,
-    RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction, RadrootsSdkStorageConfig,
-    RadrootsSdkTimestamp, RadrootsSdkTradeErrorKind, RestoreRequest, ReticulumBehavior,
-    SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState,
+    RadrootsSdkGeoNamesErrorKind, RadrootsSdkListingValidationErrorKind, RadrootsSdkRecoveryAction,
+    RadrootsSdkStorageConfig, RadrootsSdkTimestamp, RadrootsSdkTradeErrorKind, RestoreRequest,
+    ReticulumBehavior, SDK_IDEMPOTENCY_KEY_MAX_LEN, SDK_TRANSPORT_TARGET_MAX_COUNT, SdkBackupState,
     SdkBackupVerification, SdkEventStoreStorageStatus, SdkIdempotencyKey, SdkOutboxStorageStatus,
     SdkPrivateStoreStorageStatus, SdkRestoreState, SdkSqliteStoreStatus,
     SdkSqliteWalCheckpointReceipt, SdkSqliteWalStatus, SdkStorageKind, SdkStudioStoreStorageStatus,
@@ -539,6 +539,16 @@ fn sdk_error_contract_methods_cover_all_variants() {
             vec![RadrootsSdkRecoveryAction::FixRequest],
         ),
         (
+            RadrootsSdkError::ListingValidation {
+                kind: RadrootsSdkListingValidationErrorKind::MissingInventory,
+                message: "missing listing inventory".to_owned(),
+            },
+            "listing_validation",
+            RadrootsSdkErrorClass::Request,
+            false,
+            vec![RadrootsSdkRecoveryAction::FixRequest],
+        ),
+        (
             RadrootsSdkError::ListingMutation {
                 message: "mutation".to_owned(),
             },
@@ -753,7 +763,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
             event_store: SdkEventStoreStorageStatus {
                 store: store.clone(),
                 total_events: 2,
-                projection_eligible_events: 1,
+                valid_stream_events: 1,
                 transport_observations: 1,
                 last_event_seq: Some(2),
                 last_event_updated_at_ms: Some(1_700_000_000_000),
@@ -797,7 +807,7 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                     "integrity_result": "ok"
                 },
                 "total_events": 2,
-                "projection_eligible_events": 1,
+                "valid_stream_events": 1,
                 "transport_observations": 1,
                 "last_event_seq": 2,
                 "last_event_updated_at_ms": 1700000000000i64
@@ -855,6 +865,33 @@ fn storage_backup_and_integrity_contract_dtos_serialize() {
                 "studio_state_records": 5
             }
         })
+    );
+    let mut legacy_event_store_json = serde_json::to_value(SdkEventStoreStorageStatus {
+        store: store.clone(),
+        total_events: 2,
+        valid_stream_events: 1,
+        transport_observations: 1,
+        last_event_seq: Some(2),
+        last_event_updated_at_ms: Some(1_700_000_000_000),
+    })
+    .expect("event store status");
+    let legacy_event_store_object = legacy_event_store_json
+        .as_object_mut()
+        .expect("event store status object");
+    let valid_stream_events = legacy_event_store_object
+        .remove("valid_stream_events")
+        .expect("valid stream events");
+    legacy_event_store_object.insert("projection_eligible_events".to_owned(), valid_stream_events);
+    let legacy_event_store: SdkEventStoreStorageStatus =
+        serde_json::from_value(legacy_event_store_json).expect("legacy event store status");
+    assert_eq!(legacy_event_store.valid_stream_events, 1);
+    let current_event_store_json =
+        serde_json::to_value(legacy_event_store).expect("current event store status");
+    assert_eq!(current_event_store_json["valid_stream_events"], 1);
+    assert!(
+        current_event_store_json
+            .get("projection_eligible_events")
+            .is_none()
     );
     assert_eq!(
         serde_json::to_value(StorageCheckpointRequest::new()).expect("checkpoint request"),

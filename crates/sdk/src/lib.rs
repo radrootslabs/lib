@@ -60,8 +60,8 @@ pub use radroots_runtime_contract_v1 as runtime_contract_v1;
 #[cfg(feature = "runtime")]
 pub use crate::error::{
     RADROOTS_SDK_ERROR_CATALOG, RadrootsSdkError, RadrootsSdkErrorCatalogEntry,
-    RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkRecoveryAction,
-    RadrootsSdkTradeErrorKind, radroots_sdk_error_catalog,
+    RadrootsSdkErrorClass, RadrootsSdkGeoNamesErrorKind, RadrootsSdkListingValidationErrorKind,
+    RadrootsSdkRecoveryAction, RadrootsSdkTradeErrorKind, radroots_sdk_error_catalog,
 };
 #[cfg(feature = "runtime")]
 pub use crate::farms_runtime::{

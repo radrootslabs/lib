@@ -7,8 +7,8 @@ use radroots_authority::{
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
 use radroots_event::ids::RadrootsPublicKey;
 use radroots_event::kinds::{
-    KIND_FARM, KIND_LISTING, KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION, KIND_TRADE_PROPOSAL,
-    KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
+    KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION,
+    KIND_TRADE_PROPOSAL, KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
 };
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys};
@@ -29,7 +29,7 @@ pub type RadrootsSdkLocalSignerCapability = dyn RadrootsEventSigner + Send + Syn
 
 pub const RADROOTS_SDK_MYC_NIP46_PRODUCT_SIGN_EVENT_KINDS: [u32; 7] = [
     KIND_FARM,
-    KIND_LISTING,
+    KIND_CLASSIFIED_LISTING,
     KIND_TRADE_PROPOSAL,
     KIND_TRADE_DECISION,
     KIND_TRADE_REVISION_PROPOSAL,

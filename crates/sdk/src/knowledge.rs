@@ -273,7 +273,7 @@ impl RadrootsWikiArticleBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_wiki_article_event(&self.build()?)?)
+        build_wiki_article_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -281,11 +281,7 @@ impl RadrootsWikiArticleBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_wiki_article_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_wiki_article_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -317,7 +313,7 @@ impl RadrootsWikiRedirectBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_wiki_redirect_event(&self.build()?)?)
+        build_wiki_redirect_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -325,11 +321,7 @@ impl RadrootsWikiRedirectBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_wiki_redirect_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_wiki_redirect_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -396,7 +388,7 @@ impl RadrootsWikiMergeRequestBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_wiki_merge_request_event(&self.build()?)?)
+        build_wiki_merge_request_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -404,11 +396,7 @@ impl RadrootsWikiMergeRequestBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_wiki_merge_request_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_wiki_merge_request_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -512,7 +500,7 @@ impl RadrootsKnowledgeSourceBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_knowledge_source_event(&self.build()?)?)
+        build_knowledge_source_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -520,11 +508,7 @@ impl RadrootsKnowledgeSourceBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_knowledge_source_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_knowledge_source_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -606,7 +590,7 @@ impl RadrootsKnowledgeClaimBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_knowledge_claim_event(&self.build()?)?)
+        build_knowledge_claim_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -614,11 +598,7 @@ impl RadrootsKnowledgeClaimBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_knowledge_claim_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_knowledge_claim_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -692,7 +672,7 @@ impl RadrootsKnowledgeRelationBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_knowledge_relation_event(&self.build()?)?)
+        build_knowledge_relation_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -700,11 +680,7 @@ impl RadrootsKnowledgeRelationBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_knowledge_relation_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_knowledge_relation_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -775,7 +751,7 @@ impl RadrootsKnowledgeReviewBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_knowledge_review_event(&self.build()?)?)
+        build_knowledge_review_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -783,11 +759,7 @@ impl RadrootsKnowledgeReviewBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_knowledge_review_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_knowledge_review_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -874,7 +846,7 @@ impl RadrootsKnowledgeFieldReportBuilder {
     }
 
     pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
-        Ok(build_knowledge_field_report_event(&self.build()?)?)
+        build_knowledge_field_report_event(&self.build()?)
     }
 
     pub fn build_draft(
@@ -882,11 +854,7 @@ impl RadrootsKnowledgeFieldReportBuilder {
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
     ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-        Ok(prepare_knowledge_field_report_draft(
-            &self.build()?,
-            expected_pubkey,
-            created_at,
-        )?)
+        prepare_knowledge_field_report_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
@@ -1251,6 +1219,13 @@ fn prepare_draft(
 fn draft_error_code(error: &RadrootsDraftError) -> &'static str {
     match error {
         RadrootsDraftError::UnknownContract(_) => "unknown_contract",
+        RadrootsDraftError::ContractNotDraftAuthorable { .. } => "contract_not_draft_authorable",
+        RadrootsDraftError::ContractRegistryVersionMismatch { .. } => {
+            "contract_registry_version_mismatch"
+        }
+        RadrootsDraftError::DraftExpectedEventIdMismatch { .. } => {
+            "draft_expected_event_id_mismatch"
+        }
         RadrootsDraftError::ContractKindMismatch { .. } => "contract_kind_mismatch",
         RadrootsDraftError::ContractShape { error, .. } => error.code(),
         RadrootsDraftError::SignedEventPubkeyMismatch { .. } => "signed_event_pubkey_mismatch",

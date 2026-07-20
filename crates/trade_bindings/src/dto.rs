@@ -3,7 +3,7 @@ use dto_bindgen_core::{
     RustTypeId, SourceSpan, TargetFieldNames, TargetOverride, TypeDef, TypeRef, VariantDef,
     VariantShape, WireFieldNames,
 };
-use radroots_trade::listing::model::RadrootsTradeListingTotal;
+use radroots_trade::operational_listing::model::RadrootsOperationalListingTotal;
 
 pub fn dto_roots() -> Vec<RootDescriptor> {
     let mut roots = radroots_trade::dto::dto_roots()
@@ -52,22 +52,30 @@ imported_ts_type!(RadrootsCoreQuantityImport, "RadrootsCoreQuantity");
 imported_ts_type!(RadrootsCoreQuantityPriceImport, "RadrootsCoreQuantityPrice");
 imported_ts_type!(RadrootsCoreUnitImport, "RadrootsCoreUnit");
 imported_ts_type!(RadrootsFarmRefImport, "RadrootsFarmRef");
-imported_ts_type!(RadrootsListingImport, "RadrootsListing");
 imported_ts_type!(
-    RadrootsListingAvailabilityImport,
-    "RadrootsListingAvailability"
+    RadrootsOperationalListingAvailabilityImport,
+    "RadrootsOperationalListingAvailability"
 );
-imported_ts_type!(RadrootsListingBinImport, "RadrootsListingBin");
 imported_ts_type!(
-    RadrootsListingDeliveryMethodImport,
-    "RadrootsListingDeliveryMethod"
+    RadrootsOperationalListingBinImport,
+    "RadrootsOperationalListingBin"
 );
-imported_ts_type!(RadrootsListingImageImport, "RadrootsListingImage");
 imported_ts_type!(
-    RadrootsListingPublicLocationImport,
-    "RadrootsListingPublicLocation"
+    RadrootsOperationalListingDeliveryMethodImport,
+    "RadrootsOperationalListingDeliveryMethod"
 );
-imported_ts_type!(RadrootsListingProductImport, "RadrootsListingProduct");
+imported_ts_type!(
+    RadrootsOperationalListingImageImport,
+    "RadrootsOperationalListingImage"
+);
+imported_ts_type!(
+    RadrootsOperationalListingPublicLocationImport,
+    "RadrootsOperationalListingPublicLocation"
+);
+imported_ts_type!(
+    RadrootsOperationalListingProductImport,
+    "RadrootsOperationalListingProduct"
+);
 imported_ts_type!(RadrootsPlotRefImport, "RadrootsPlotRef");
 imported_ts_type!(RadrootsResourceAreaRefImport, "RadrootsResourceAreaRef");
 
@@ -102,8 +110,8 @@ pub struct RadrootsTradeListingBackofficeView {
 
 #[derive(dto_bindgen::Dto)]
 pub struct RadrootsTradeListingBinProjection {
-    pub bin: RadrootsListingBinImport,
-    pub one_bin_total: RadrootsTradeListingTotal,
+    pub bin: RadrootsOperationalListingBinImport,
+    pub one_bin_total: RadrootsOperationalListingTotal,
 }
 
 #[derive(dto_bindgen::Dto)]
@@ -178,17 +186,17 @@ pub struct RadrootsTradeListingProjection {
     pub seller_pubkey: String,
     pub listing_id: String,
     pub farm: RadrootsFarmRefImport,
-    pub product: RadrootsListingProductImport,
+    pub product: RadrootsOperationalListingProductImport,
     pub primary_bin_id: String,
     pub bins: Vec<RadrootsTradeListingBinProjection>,
     pub resource_area: Option<RadrootsResourceAreaRefImport>,
     pub plot: Option<RadrootsPlotRefImport>,
     pub discounts: Option<Vec<RadrootsCoreDiscountImport>>,
     pub inventory_available: Option<RadrootsCoreDecimalImport>,
-    pub availability: Option<RadrootsListingAvailabilityImport>,
-    pub delivery_method: Option<RadrootsListingDeliveryMethodImport>,
-    pub location: Option<RadrootsListingPublicLocationImport>,
-    pub images: Option<Vec<RadrootsListingImageImport>>,
+    pub availability: Option<RadrootsOperationalListingAvailabilityImport>,
+    pub delivery_method: Option<RadrootsOperationalListingDeliveryMethodImport>,
+    pub location: Option<RadrootsOperationalListingPublicLocationImport>,
+    pub images: Option<Vec<RadrootsOperationalListingImageImport>>,
     pub trade_count: u32,
     pub open_trade_count: u32,
     pub terminal_trade_count: u32,
@@ -243,7 +251,7 @@ pub struct RadrootsTradeMarketplaceListingSummary {
     pub inventory_available: Option<RadrootsCoreDecimalImport>,
     pub primary_bin_id: String,
     pub primary_bin_label: Option<String>,
-    pub primary_bin_total: RadrootsTradeListingTotal,
+    pub primary_bin_total: RadrootsOperationalListingTotal,
     pub trade_count: u32,
     pub open_trade_count: u32,
     pub terminal_trade_count: u32,

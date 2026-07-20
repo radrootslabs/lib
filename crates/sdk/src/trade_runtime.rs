@@ -905,17 +905,11 @@ pub enum TradeListAnyOf {
 }
 
 #[cfg(feature = "runtime")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TradeListSort {
+    #[default]
     UpdatedDesc,
-}
-
-#[cfg(feature = "runtime")]
-impl Default for TradeListSort {
-    fn default() -> Self {
-        Self::UpdatedDesc
-    }
 }
 
 #[cfg(feature = "runtime")]

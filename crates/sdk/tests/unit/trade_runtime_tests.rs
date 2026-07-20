@@ -7,7 +7,7 @@ use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_event::{
     contract::RadrootsActorRole,
     ids::{
-        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
+        RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
         RadrootsPublicKey, RadrootsTradeId,
     },
     kinds::TRADE_MUTATION_EVENT_KINDS,
@@ -22,16 +22,11 @@ use radroots_event::{
         RadrootsTradeMutationEnvelopeV1, canonical_trade_mutation_content,
     },
 };
-use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
+use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_trade::workflow::{
     RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
     RadrootsTradePrivateTermsStateV1,
 };
-
-const BUYER_SECRET_KEY_HEX: &str =
-    "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
-const SELLER_SECRET_KEY_HEX: &str =
-    "59392e9068f66431b12f70218fb61281cb6b433d7f27c55d61f1a63fe1a96ff8";
 
 fn pubkey(value: &str) -> RadrootsPublicKey {
     RadrootsPublicKey::parse(value).expect("pubkey")
@@ -45,9 +40,8 @@ fn trade_id() -> RadrootsTradeId {
     RadrootsTradeId::parse("11111111111111111111111111111111").expect("trade id")
 }
 
-fn local_signer(secret_key_hex: &str) -> (String, RadrootsLocalEventSigner) {
-    let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");
-    let keys = RadrootsNostrKeys::new(secret_key);
+fn local_signer() -> (String, RadrootsLocalEventSigner) {
+    let keys = RadrootsNostrKeys::generate();
     let pubkey = keys.public_key().to_hex();
     (
         pubkey,
@@ -135,7 +129,7 @@ fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateT
         farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
         lines: vec![RadrootsTradeCandidateLineV1 {
             line_id: RadrootsDTag::parse("line-1").expect("line id"),
-            listing_addr: RadrootsAddressableCoordinate::parse(format!(
+            listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                 "30402:{seller_pubkey}:listing-1"
             ))
             .expect("listing address"),
@@ -268,8 +262,8 @@ fn accepted_decision(
 
 #[tokio::test]
 async fn trade_commands_query_and_private_terms_are_release_product_v1() {
-    let (buyer_pubkey, buyer_signer) = local_signer(BUYER_SECRET_KEY_HEX);
-    let (seller_pubkey, seller_signer) = local_signer(SELLER_SECRET_KEY_HEX);
+    let (buyer_pubkey, buyer_signer) = local_signer();
+    let (seller_pubkey, seller_signer) = local_signer();
     let sdk = RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_799_000_100))
         .build()

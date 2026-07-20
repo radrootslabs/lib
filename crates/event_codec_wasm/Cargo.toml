@@ -15,6 +15,9 @@ readme = "README"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+radroots_blossom = { workspace = true, default-features = false, features = [
+  "std",
+] }
 radroots_event = { workspace = true, default-features = false, features = [
   "std",
   "serde",

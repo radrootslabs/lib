@@ -4,15 +4,24 @@ use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_event::contract::RadrootsActorRole;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
-use radroots_event::kinds::KIND_FARM;
-use radroots_nostr::prelude::{
-    RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
-};
+use radroots_event::kinds::{KIND_FARM, KIND_GEOCHAT};
+use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use std::sync::LazyLock;
 
-const FARMER_SECRET_KEY_HEX: &str =
-    "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
-const FARMER_PUBLIC_KEY_HEX: &str =
-    "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+struct WorkflowKeyMaterial {
+    keys: RadrootsNostrKeys,
+    pubkey: String,
+}
+
+static WORKFLOW_KEY_MATERIAL: LazyLock<WorkflowKeyMaterial> = LazyLock::new(|| {
+    let keys = RadrootsNostrKeys::generate();
+    let pubkey = keys.public_key().to_hex();
+    WorkflowKeyMaterial { keys, pubkey }
+});
+
+fn farmer_pubkey() -> &'static str {
+    WORKFLOW_KEY_MATERIAL.pubkey.as_str()
+}
 
 fn workflow_idempotency_key(index: u16) -> SdkIdempotencyKey {
     SdkIdempotencyKey::new(format!("01890f0e-6c00-7000-8000-00000000{index:04x}"))
@@ -26,13 +35,65 @@ struct WorkflowSigner {
 
 impl WorkflowSigner {
     fn new() -> Self {
-        let secret_key =
-            RadrootsNostrSecretKey::from_hex(FARMER_SECRET_KEY_HEX).expect("secret key");
-        let keys = RadrootsNostrKeys::new(secret_key);
         Self {
-            identity: RadrootsSignerIdentity::new(FARMER_PUBLIC_KEY_HEX).expect("identity"),
-            keys,
+            identity: RadrootsSignerIdentity::new(farmer_pubkey()).expect("identity"),
+            keys: WORKFLOW_KEY_MATERIAL.keys.clone(),
         }
+    }
+}
+
+struct FailIfCalledSigner {
+    identity: RadrootsSignerIdentity,
+}
+
+impl FailIfCalledSigner {
+    fn new() -> Self {
+        Self {
+            identity: RadrootsSignerIdentity::new(farmer_pubkey()).expect("identity"),
+        }
+    }
+}
+
+impl RadrootsEventSigner for FailIfCalledSigner {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+        self.identity.pubkey()
+    }
+
+    fn sign_frozen_draft(
+        &self,
+        _draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+        panic!("ephemeral workflow preflight must not invoke the signer")
+    }
+}
+
+struct InvalidSignatureSigner(WorkflowSigner);
+
+impl InvalidSignatureSigner {
+    fn new() -> Self {
+        Self(WorkflowSigner::new())
+    }
+}
+
+impl RadrootsEventSigner for InvalidSignatureSigner {
+    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+        self.0.pubkey()
+    }
+
+    fn sign_frozen_draft(
+        &self,
+        draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+        let signed = self.0.sign_frozen_draft(draft)?;
+        let mut wire = signed.wire().clone();
+        wire.sig = "0".repeat(128);
+        let raw_json =
+            serde_json::to_string(&wire).expect("invalid-signature fixture must serialize");
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
+            RadrootsSignerError::SigningFailed {
+                message: error.to_string(),
+            }
+        })
     }
 }
 
@@ -71,6 +132,18 @@ fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsEventDraft {
 
 fn frozen_draft() -> RadrootsEventDraft {
     frozen_draft_for("a".repeat(64).as_str())
+}
+
+fn ephemeral_draft_for(pubkey: &str) -> RadrootsEventDraft {
+    RadrootsEventDraft::new(
+        "radroots.social.geochat.v1",
+        KIND_GEOCHAT,
+        1_700_000_000,
+        Vec::new(),
+        "Transient local message",
+        pubkey,
+    )
+    .expect("ephemeral draft")
 }
 
 fn signed_event() -> RadrootsSignedEvent {
@@ -157,6 +230,30 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
         "wss://relay.example.com"
     );
     assert!(input.event_store_inserted);
+    assert_eq!(
+        durable_event_persistence(
+            draft.expected_event_id_str(),
+            &RadrootsEventPersistence::Inserted { seq: 7 },
+        )
+        .expect("inserted persistence"),
+        (true, 7)
+    );
+    assert_eq!(
+        durable_event_persistence(
+            draft.expected_event_id_str(),
+            &RadrootsEventPersistence::Duplicate { seq: 7 },
+        )
+        .expect("duplicate persistence"),
+        (false, 7)
+    );
+    assert!(matches!(
+        durable_event_persistence(
+            draft.expected_event_id_str(),
+            &RadrootsEventPersistence::NotPersisted,
+        ),
+        Err(RadrootsSdkError::InvalidRequest { message })
+            if message.contains("requires durable local event-store persistence")
+    ));
     let frozen = frozen_draft_json(&draft).expect("frozen draft json");
     assert!(frozen.contains("\"expected_event_id\""));
     let receipt = SdkWorkflowEnqueueReceipt {
@@ -175,6 +272,133 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
 }
 
 #[tokio::test]
+async fn enqueue_signed_workflow_rejects_ephemeral_event_before_durable_commit() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_013,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = ephemeral_draft_for(farmer_pubkey());
+    let error = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind: "workflow.ephemeral.test.v1",
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: TargetPolicy::LocalOnly,
+            satisfaction_policy: SatisfactionPolicy::NoWait,
+            idempotency_key: Some(workflow_idempotency_key(0x247)),
+        },
+        &FailIfCalledSigner::new(),
+    )
+    .await
+    .expect_err("ephemeral workflow");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("cannot enqueue ephemeral event kind")
+    ));
+    assert!(!error.retryable());
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        0
+    );
+    let journal_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sdk_runtime_operation_journal WHERE operation_kind = ?",
+    )
+    .bind("workflow.ephemeral.test.v1")
+    .fetch_one(sdk._event_store.pool())
+    .await
+    .expect("journal count");
+    assert_eq!(journal_count, 0);
+}
+
+#[tokio::test]
+async fn enqueue_signed_workflow_rejects_invalid_signer_signature_without_storage_mutation() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
+            1_700_000_013,
+        ))
+        .build()
+        .await
+        .expect("sdk");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-invalid-signature");
+    let operation_kind = "workflow.invalid-signature.test.v1";
+
+    let error = enqueue_signed_workflow(
+        &sdk,
+        SdkWorkflowEnqueueRequest {
+            operation_kind,
+            actor: &actor,
+            frozen_draft: &draft,
+            target_policy: TargetPolicy::LocalOnly,
+            satisfaction_policy: SatisfactionPolicy::NoWait,
+            idempotency_key: Some(workflow_idempotency_key(0x248)),
+        },
+        &InvalidSignatureSigner::new(),
+    )
+    .await
+    .expect_err("invalid signer signature");
+
+    assert!(matches!(
+        error,
+        RadrootsSdkError::SignerReturnedEventDrift {
+            ref operation,
+            ref reason,
+        } if operation == operation_kind
+            && reason.contains("failed NIP-01 verification")
+    ));
+    assert!(!error.retryable());
+    assert_eq!(
+        error.recovery_actions(),
+        vec![crate::RadrootsSdkRecoveryAction::ConfigureSigner]
+    );
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        0
+    );
+    let journal_state: String = sqlx::query_scalar(
+        "SELECT state FROM sdk_runtime_operation_journal WHERE operation_kind = ?",
+    )
+    .bind(operation_kind)
+    .fetch_one(sdk._event_store.pool())
+    .await
+    .expect("journal state");
+    assert_eq!(journal_state, "rejected");
+}
+
+#[tokio::test]
 async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_command_hash() {
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(crate::RadrootsSdkTimestamp::from_unix_seconds(
@@ -183,10 +407,10 @@ async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_comm
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
     let signer = WorkflowSigner::new();
-    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-target-policy");
+    let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-target-policy");
     let first_target_policy = TargetPolicy::try_nostr_relays(
         ["wss://relay-a.example.com"],
         crate::NostrRelayUrlPolicy::Public,
@@ -298,10 +522,10 @@ async fn enqueue_signed_workflow_maps_no_wait_directly_and_allows_local_only_pro
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
     let signer = WorkflowSigner::new();
-    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-no-wait");
+    let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-no-wait");
 
     let receipt = enqueue_signed_workflow(
         &sdk,
@@ -372,9 +596,9 @@ async fn enqueue_signed_workflow_rejects_missing_explicit_idempotency_key_withou
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
-    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-missing-idempotency");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-missing-idempotency");
 
     let error = match enqueue_signed_workflow(
         &sdk,
@@ -423,10 +647,10 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
     let signer = WorkflowSigner::new();
-    let first_draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-success");
+    let first_draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-success");
     let idempotency_key =
         SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000237").expect("idempotency");
     let receipt = enqueue_signed_workflow(
@@ -469,7 +693,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         1
     );
 
-    let second_draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-conflict");
+    let second_draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-conflict");
     let error = match enqueue_signed_workflow(
         &sdk,
         SdkWorkflowEnqueueRequest {
@@ -528,9 +752,9 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
-    let draft = frozen_draft_for_d_tag(FARMER_PUBLIC_KEY_HEX, "workflow-configured");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-configured");
 
     let receipt = enqueue_configured_signed_workflow(
         &sdk,
@@ -569,9 +793,9 @@ async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() 
         0
     );
     sdk._outbox.pool().close().await;
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
-    let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
         operation_kind: "workflow.test.v1",
         actor: &actor,
@@ -591,9 +815,9 @@ async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() 
 
 #[tokio::test]
 async fn enqueue_signed_workflow_reports_store_failures() {
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
-    let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for(farmer_pubkey());
     let closed_store_sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
         .build()
@@ -627,9 +851,9 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
-    let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
         operation_kind: "workflow.test.v1",
         actor: &actor,
@@ -647,9 +871,9 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
 #[tokio::test]
 async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_radrootsd_execution() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER_PUBLIC_KEY_HEX, [RadrootsActorRole::Farmer])
-        .expect("actor");
-    let draft = frozen_draft_for(FARMER_PUBLIC_KEY_HEX);
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
         operation_kind: "workflow.test.v1",
         actor: &actor,

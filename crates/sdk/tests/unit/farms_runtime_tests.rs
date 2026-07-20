@@ -2,18 +2,21 @@ use super::*;
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-use crate::fixture_signer::FixtureSigner;
+use crate::fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
 use crate::serializer_failure::assert_struct_serialize_error_paths;
 
-const FARMER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const FARM_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const FARM_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
 const FARM_C_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
 const RELAY_A: &str = "wss://relay-a.radroots.test";
 const RELAY_B: &str = "wss://relay-b.radroots.test";
 
+fn farmer_pubkey() -> &'static str {
+    fixture_alice_pubkey()
+}
+
 fn farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(FARMER, [RadrootsActorRole::Farmer]).expect("actor")
+    RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor")
 }
 
 fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
@@ -154,7 +157,7 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
             .with_created_at(created_at);
     assert_struct_serialize_error_paths(&prepare, 3);
     let prepare_json = serde_json::to_value(&prepare).expect("prepare json");
-    assert_eq!(prepare_json["actor"]["pubkey"], FARMER);
+    assert_eq!(prepare_json["actor"]["pubkey"], farmer_pubkey());
     assert_eq!(prepare_json["created_at"], 1_700_000_321);
 
     let enqueue = FarmEnqueuePublishRequest::new(
@@ -275,7 +278,7 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
 
     let private_receipt = FarmPrivateLocationReceipt {
         farm_addr: farm_addr(&farmer_actor(), FARM_B_D_TAG).expect("farm addr"),
-        farm_pubkey: FARMER.to_owned(),
+        farm_pubkey: farmer_pubkey().to_owned(),
         farm_d_tag: FARM_B_D_TAG.to_owned(),
         label: Some("query gate".to_owned()),
         exact_location: SdkExactLocation::new(12.25, -34.5),
@@ -320,7 +323,7 @@ fn farm_runtime_request_builders_and_serializers_cover_success_paths() {
     assert_struct_serialize_error_paths(&candidate, 7);
     let lookup = FarmPrivateLocationLookupReceipt {
         farm_addr: farm_addr(&farmer_actor(), FARM_B_D_TAG).expect("farm addr"),
-        farm_pubkey: FARMER.to_owned(),
+        farm_pubkey: farmer_pubkey().to_owned(),
         farm_d_tag: FARM_B_D_TAG.to_owned(),
         input: FarmPrivateLocationInput::query("Fixture City, FX"),
         candidates: vec![candidate],
@@ -479,7 +482,7 @@ async fn farm_client_prepare_resolves_default_and_explicit_created_at() {
         ))
         .expect("default plan");
     assert_eq!(
-        default_plan.created_at,
+        default_plan.created_at(),
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_400)
     );
 
@@ -494,9 +497,159 @@ async fn farm_client_prepare_resolves_default_and_explicit_created_at() {
         )
         .expect("explicit plan");
     assert_eq!(
-        explicit_plan.created_at,
+        explicit_plan.created_at(),
         RadrootsSdkTimestamp::from_unix_seconds(1_700_000_401)
     );
+}
+
+#[tokio::test]
+async fn farm_prepared_plan_rejects_forged_state_before_signing_or_mutation() {
+    let sdk = crate::RadrootsClient::builder()
+        .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_450))
+        .build()
+        .await
+        .expect("sdk");
+    let actor = farmer_actor();
+    let plan = sdk
+        .farms()
+        .prepare_publish(FarmPreparePublishRequest::new(
+            actor.clone(),
+            farm(FARM_A_D_TAG, "Sealed Plan Farm"),
+        ))
+        .expect("plan");
+    assert_eq!(
+        serde_json::to_value(&plan).expect("plan json"),
+        serde_json::json!({
+            "farm_addr": plan.farm_addr(),
+            "expected_event_id": plan.expected_event_id(),
+            "frozen_draft": plan.frozen_draft(),
+            "created_at": plan.created_at(),
+        })
+    );
+    // Frozen drafts enforce registry contract-kind consistency, so a valid foreign pair is the
+    // safe representable substitution for both identity fields.
+    let foreign_draft = RadrootsEventDraft::new(
+        "radroots.social.geochat.v1",
+        radroots_event::kinds::KIND_GEOCHAT,
+        plan.created_at().unix_seconds(),
+        Vec::new(),
+        "Foreign draft",
+        farmer_pubkey(),
+    )
+    .expect("valid foreign draft");
+    let mut forged_contract_kind = plan.clone();
+    forged_contract_kind.frozen_draft = foreign_draft;
+    assert!(matches!(
+        validate_farm_publish_plan(&forged_contract_kind),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("contract or kind")
+    ));
+
+    let mut forged_event_id = plan.clone();
+    forged_event_id.expected_event_id =
+        RadrootsEventId::parse(fixture_bob_pubkey()).expect("alternate event ID");
+    assert!(matches!(
+        validate_farm_publish_plan(&forged_event_id),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("expected event ID")
+    ));
+
+    let mut forged_address = plan.clone();
+    forged_address.farm_addr = RadrootsAddressableCoordinate::parse(format!(
+        "{KIND_FARM}:{}:{FARM_B_D_TAG}",
+        farmer_pubkey()
+    ))
+    .expect("alternate farm address");
+    assert!(matches!(
+        validate_farm_publish_plan(&forged_address),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("farm address")
+    ));
+
+    let mut forged_created_at = plan.clone();
+    forged_created_at.created_at = RadrootsSdkTimestamp::from_unix_seconds(1_700_000_451);
+    assert!(matches!(
+        validate_farm_publish_plan(&forged_created_at),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("created-at timestamp")
+    ));
+
+    let alternate_plan = sdk
+        .farms()
+        .prepare_publish(FarmPreparePublishRequest::new(
+            actor.clone(),
+            farm(FARM_B_D_TAG, "Alternate Plan Farm"),
+        ))
+        .expect("alternate plan");
+    let mut forged_draft = plan;
+    forged_draft.frozen_draft = alternate_plan.frozen_draft;
+    assert!(matches!(
+        validate_farm_publish_plan(&forged_draft),
+        Err(RadrootsSdkError::InvalidRequest { ref message })
+            if message.contains("expected event ID")
+    ));
+
+    let error = sdk
+        .farms()
+        .enqueue_prepared_publish_with_explicit_signer(
+            &actor,
+            forged_contract_kind,
+            TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
+                .expect("transport targets"),
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000445")
+                    .expect("idempotency"),
+            ),
+            &FixtureSigner::new(fixture_bob_pubkey()),
+        )
+        .await
+        .expect_err("forged plan");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("contract or kind")
+    ));
+    let error = sdk
+        .farms()
+        .enqueue_prepared_publish(
+            &actor,
+            forged_address,
+            TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
+                .expect("transport targets"),
+            Some(
+                SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000446")
+                    .expect("idempotency"),
+            ),
+        )
+        .await
+        .expect_err("forged configured-signer plan");
+    assert!(matches!(
+        error,
+        RadrootsSdkError::InvalidRequest { ref message }
+            if message.contains("farm address")
+    ));
+    assert_eq!(
+        sdk._event_store
+            .status_summary()
+            .await
+            .expect("event store status")
+            .total_events,
+        0
+    );
+    assert_eq!(
+        sdk._outbox
+            .status_summary(0)
+            .await
+            .expect("outbox status")
+            .total_events,
+        0
+    );
+    let journal_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sdk_runtime_operation_journal")
+            .fetch_one(sdk._event_store.pool())
+            .await
+            .expect("journal count");
+    assert_eq!(journal_count, 0);
 }
 
 #[tokio::test]
@@ -532,7 +685,7 @@ async fn farm_enqueue_publish_reports_prepare_errors_before_signing() {
                 TargetPolicy::try_nostr_relays([RELAY_A], NostrRelayUrlPolicy::Public)
                     .expect("transport targets"),
             ),
-            &FixtureSigner::new(FARMER),
+            &FixtureSigner::new(farmer_pubkey()),
         )
         .await
         .expect_err("prepare error");
@@ -546,7 +699,7 @@ async fn farm_client_enqueue_methods_cover_source_attached_workflow_paths() {
         .build()
         .await
         .expect("sdk");
-    let signer = FixtureSigner::new(FARMER);
+    let signer = FixtureSigner::new(farmer_pubkey());
     let actor = farmer_actor();
     let receipt = sdk
         .farms()
@@ -597,13 +750,14 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
     let sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(FARMER))
+            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(farmer_pubkey()))
                 .expect("signer"),
         ))
         .build()
         .await
         .expect("sdk");
-    let actor = RadrootsActorContext::test(FARMER, [RadrootsActorRole::Farmer]).expect("actor");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
 
     let receipt = sdk
         .farms()
@@ -629,13 +783,14 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
     let configured_sdk = crate::RadrootsClient::builder()
         .fixed_clock(RadrootsSdkTimestamp::from_unix_seconds(1_700_000_500))
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(
-            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(FARMER))
+            RadrootsSdkLocalKeySigner::from_event_signer(FixtureSigner::new(farmer_pubkey()))
                 .expect("signer"),
         ))
         .build()
         .await
         .expect("configured sdk");
-    let actor = RadrootsActorContext::test(FARMER, [RadrootsActorRole::Farmer]).expect("actor");
+    let actor =
+        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
 
     assert!(matches!(
         configured_sdk
@@ -767,8 +922,8 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
         farm_addr(&actor, FARM_B_D_TAG).expect("farm b addr")
     );
 
-    let non_farmer_actor =
-        RadrootsActorContext::test(FARMER, [RadrootsActorRole::Buyer]).expect("buyer actor");
+    let non_farmer_actor = RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Buyer])
+        .expect("buyer actor");
     assert!(matches!(
         sdk.farms()
             .clear_private_location(FarmPrivateLocationClearRequest::new(

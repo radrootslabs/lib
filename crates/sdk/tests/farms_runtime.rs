@@ -1,11 +1,8 @@
 #![cfg(feature = "runtime")]
 
-use radroots_authority::{
-    RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
-};
+use radroots_authority::RadrootsActorContext;
 use radroots_event::{
     contract::RadrootsActorRole,
-    draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts},
     farm::RadrootsFarm,
     ids::RadrootsAddressableCoordinate,
     kinds::{KIND_FARM, KIND_PROFILE},
@@ -30,13 +27,14 @@ use radroots_sdk::{
 use radroots_transport_nostr::{RadrootsMockRelayPublishAdapter, RadrootsNostrTransport};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
+#[path = "support/fixture_signer.rs"]
+mod fixture_signer;
 #[path = "support/serializer_failure.rs"]
 mod serializer_failure;
 
+use fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
 use serializer_failure::assert_struct_serialize_error_paths;
 
-const FARMER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const FARM_A_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const FARM_B_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAQ";
 const FARM_C_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAg";
@@ -46,66 +44,20 @@ const FARM_F_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAABQ";
 const RELAY: &str = "wss://relay.example.com";
 const RELAY_B: &str = "wss://relay-b.example.com";
 
-#[derive(Clone)]
-struct FixtureSigner {
-    identity: RadrootsSignerIdentity,
+fn farmer_pubkey() -> &'static str {
+    fixture_alice_pubkey()
 }
 
-impl FixtureSigner {
-    fn new(pubkey: &str) -> Self {
-        Self {
-            identity: RadrootsSignerIdentity::new(pubkey).expect("identity"),
-        }
-    }
-}
-
-impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
-        self.identity.pubkey()
-    }
-
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-        if self.pubkey().as_str() != draft.expected_pubkey_str() {
-            return Err(RadrootsSignerError::SigningFailed {
-                message: "wrong fixture signer".to_owned(),
-            });
-        }
-        let sig = "f".repeat(128);
-        let raw_json = serde_json::json!({
-            "id": draft.expected_event_id_str(),
-            "pubkey": self.pubkey().as_str(),
-            "created_at": draft.created_at_u64(),
-            "kind": draft.kind_u32(),
-            "tags": draft.tags_as_vec(),
-            "content": draft.content(),
-            "sig": sig,
-        })
-        .to_string();
-        RadrootsSignedEvent::new(RadrootsSignedEventParts {
-            id: draft.expected_event_id_str().to_owned(),
-            pubkey: self.pubkey().as_str().to_owned(),
-            created_at: draft.created_at_u64(),
-            kind: draft.kind_u32(),
-            tags: draft.tags_as_vec(),
-            content: draft.content().to_owned(),
-            sig,
-            raw_json,
-        })
-        .map_err(|error| RadrootsSignerError::SigningFailed {
-            message: error.to_string(),
-        })
-    }
+fn other_pubkey() -> &'static str {
+    fixture_bob_pubkey()
 }
 
 fn farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(FARMER, [RadrootsActorRole::Farmer]).expect("actor")
+    RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor")
 }
 
 fn non_farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(FARMER, [RadrootsActorRole::Buyer]).expect("actor")
+    RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Buyer]).expect("actor")
 }
 
 fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
@@ -252,15 +204,15 @@ async fn farm_prepare_publish_is_side_effect_free() {
     let request = FarmPreparePublishRequest::new(farmer_actor(), farm(FARM_A_D_TAG, "North Farm"));
     let prepared = sdk.farms().prepare_publish(request).expect("prepared");
 
-    assert_eq!(prepared.frozen_draft.kind_u32(), KIND_FARM);
-    assert_eq!(prepared.created_at.unix_seconds(), 1_700_000_000);
+    assert_eq!(prepared.frozen_draft().kind_u32(), KIND_FARM);
+    assert_eq!(prepared.created_at().unix_seconds(), 1_700_000_000);
     assert_eq!(
-        prepared.expected_event_id,
-        prepared.frozen_draft.expected_event_id_str()
+        prepared.expected_event_id().as_str(),
+        prepared.frozen_draft().expected_event_id_str()
     );
     assert_eq!(
-        prepared.farm_addr.as_str(),
-        format!("{KIND_FARM}:{FARMER}:{FARM_A_D_TAG}")
+        prepared.farm_addr().as_str(),
+        format!("{KIND_FARM}:{}:{FARM_A_D_TAG}", farmer_pubkey())
     );
 
     let paths = sdk.storage_paths().expect("paths");
@@ -277,7 +229,7 @@ async fn farm_prepare_publish_is_side_effect_free() {
     );
     assert!(
         event_store
-            .get_event(prepared.expected_event_id.as_str())
+            .raw_event(prepared.expected_event_id().as_str())
             .await
             .expect("event lookup")
             .is_none()
@@ -327,9 +279,9 @@ async fn farm_private_location_upsert_stores_exact_location_and_public_locality_
 
     assert_eq!(
         receipt.farm_addr.as_str(),
-        format!("{KIND_FARM}:{FARMER}:{FARM_A_D_TAG}")
+        format!("{KIND_FARM}:{}:{FARM_A_D_TAG}", farmer_pubkey())
     );
-    assert_eq!(receipt.farm_pubkey, FARMER);
+    assert_eq!(receipt.farm_pubkey, farmer_pubkey());
     assert_eq!(receipt.farm_d_tag, FARM_A_D_TAG);
     assert_eq!(receipt.label, None);
     assert_eq!(receipt.exact_location, SdkExactLocation::new(12.26, -34.51));
@@ -641,13 +593,13 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         .expect("prepared");
     let receipt = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect("enqueue");
 
-    assert_eq!(receipt.expected_event_id, prepared.expected_event_id);
+    assert_eq!(&receipt.expected_event_id, prepared.expected_event_id());
     assert_eq!(receipt.signed_event_id, receipt.expected_event_id);
-    assert_eq!(receipt.farm_addr, prepared.farm_addr);
+    assert_eq!(&receipt.farm_addr, prepared.farm_addr());
     assert_eq!(receipt.local_event_seq, 1);
     assert_eq!(receipt.outbox_operation_id, 1);
     assert_eq!(receipt.outbox_event_id, 1);
@@ -664,10 +616,11 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         .expect("event store status");
     assert_eq!(status.total_events, 1);
     let stored_event = event_store
-        .get_event(receipt.signed_event_id.as_str())
+        .valid_event(receipt.signed_event_id.as_str())
         .await
         .expect("event lookup")
         .expect("stored event");
+    let stored_event = stored_event.raw_event();
     assert_eq!(stored_event.kind, KIND_FARM);
     assert_ne!(stored_event.kind, KIND_PROFILE);
     assert_eq!(
@@ -700,7 +653,7 @@ async fn farm_enqueue_publish_returns_sanitized_signer_errors_before_mutation() 
     .expect("idempotency key");
     let error = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(OTHER))
+        .enqueue_publish_with_explicit_signer(request, &FixtureSigner::new(other_pubkey()))
         .await
         .expect_err("signer error");
     let message = error.to_string();
@@ -761,12 +714,12 @@ async fn farm_enqueue_publish_uses_explicit_idempotency_key_across_equivalent_ta
 
     let first_receipt = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect("first enqueue");
     let second_receipt = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect("second enqueue");
 
@@ -808,7 +761,7 @@ async fn farm_enqueue_publish_pushes_queued_event_with_mock_relay_sync() {
     .expect("idempotency key");
     let enqueue_receipt = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect("enqueue");
     let adapter = RadrootsMockRelayPublishAdapter::new();
@@ -869,7 +822,7 @@ async fn farm_multi_target_profile_publishes_after_nostr_success_and_retains_ret
             )
             .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022f")
             .expect("idempotency key"),
-            &FixtureSigner::new(FARMER),
+            &FixtureSigner::new(farmer_pubkey()),
         )
         .await
         .expect("enqueue");
@@ -944,7 +897,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     .try_with_idempotency_key("01890f0e-6c00-7000-8000-00000000022a")
     .expect("idempotency key");
     sdk.farms()
-        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(first, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect("first enqueue");
     let paths = sdk.storage_paths().expect("paths");
@@ -980,7 +933,7 @@ async fn farm_enqueue_publish_reports_preflight_idempotency_conflict_without_mut
     .expect("idempotency key");
     let error = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(second, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect_err("conflict");
 
@@ -1030,7 +983,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         prepare_json,
         serde_json::json!({
             "actor": {
-                "pubkey": FARMER,
+                "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
                 "source": "test"
@@ -1067,7 +1020,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         enqueue_json,
         serde_json::json!({
             "actor": {
-                "pubkey": FARMER,
+                "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
                 "source": "test"
@@ -1138,7 +1091,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         serde_json::to_value(&private_upsert).expect("private upsert json"),
         serde_json::json!({
             "actor": {
-                "pubkey": FARMER,
+                "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
                 "source": "test"
@@ -1165,7 +1118,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         serde_json::to_value(&private_set).expect("private set json"),
         serde_json::json!({
             "actor": {
-                "pubkey": FARMER,
+                "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
                 "source": "test"
@@ -1224,7 +1177,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         serde_json::to_value(&private_clear).expect("private clear json"),
         serde_json::json!({
             "actor": {
-                "pubkey": FARMER,
+                "pubkey": farmer_pubkey(),
                 "roles": ["farmer"],
                 "account_id": null,
                 "source": "test"
@@ -1236,7 +1189,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
 
     let private_receipt = FarmPrivateLocationReceipt {
         farm_addr: farm_addr(&farmer_actor(), FARM_D_D_TAG),
-        farm_pubkey: FARMER.to_owned(),
+        farm_pubkey: farmer_pubkey().to_owned(),
         farm_d_tag: FARM_D_D_TAG.to_owned(),
         label: Some("identifier gate".to_owned()),
         exact_location: SdkExactLocation::new(48.9, -123.4),
@@ -1293,7 +1246,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
     assert_struct_serialize_error_paths(&candidate, 7);
     let lookup = FarmPrivateLocationLookupReceipt {
         farm_addr: farm_addr(&farmer_actor(), FARM_F_D_TAG),
-        farm_pubkey: FARMER.to_owned(),
+        farm_pubkey: farmer_pubkey().to_owned(),
         farm_d_tag: FARM_F_D_TAG.to_owned(),
         input: FarmPrivateLocationInput::query("Shared Market"),
         candidates: vec![candidate],
@@ -1322,7 +1275,7 @@ async fn farm_runtime_dtos_serialize_deterministically() {
 
     let receipt = sdk
         .farms()
-        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(FARMER))
+        .enqueue_publish_with_explicit_signer(enqueue_request, &FixtureSigner::new(farmer_pubkey()))
         .await
         .expect("enqueue");
     let receipt_json = serde_json::to_value(&receipt).expect("receipt json");

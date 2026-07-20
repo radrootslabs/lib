@@ -6,6 +6,8 @@ use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(feature = "runtime")]
 use crate::transport::ReticulumBehavior;
 #[cfg(feature = "runtime")]
+use radroots_event::trade_validation::RadrootsOperationalListingValidationError;
+#[cfg(feature = "runtime")]
 use serde_json::{Value, json};
 
 #[cfg(feature = "runtime")]
@@ -52,6 +54,91 @@ pub enum RadrootsSdkGeoNamesErrorKind {
     Integrity,
     Schema,
     Lookup,
+}
+
+#[cfg(feature = "runtime")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RadrootsSdkListingValidationErrorKind {
+    InvalidKind,
+    InvalidProfile,
+    MissingListingId,
+    ListingEventNotFound,
+    ListingEventFetchFailed,
+    ParseError,
+    InvalidSeller,
+    MissingFarmProfile,
+    MissingFarmRecord,
+    MissingTitle,
+    MissingDescription,
+    MissingProductType,
+    MissingBins,
+    MissingPrimaryBin,
+    InvalidBin,
+    MissingPrice,
+    InvalidPrice,
+    MissingInventory,
+    InvalidInventory,
+    MissingAvailability,
+    MissingLocation,
+    MissingLocationLocality,
+    MissingLocationGeohash,
+    InvalidLocationGeohash,
+    MissingDeliveryMethod,
+}
+
+#[cfg(feature = "runtime")]
+impl From<&RadrootsOperationalListingValidationError> for RadrootsSdkListingValidationErrorKind {
+    fn from(error: &RadrootsOperationalListingValidationError) -> Self {
+        match error {
+            RadrootsOperationalListingValidationError::InvalidKind { .. } => Self::InvalidKind,
+            RadrootsOperationalListingValidationError::InvalidProfile => Self::InvalidProfile,
+            RadrootsOperationalListingValidationError::MissingListingId => Self::MissingListingId,
+            RadrootsOperationalListingValidationError::ListingEventNotFound { .. } => {
+                Self::ListingEventNotFound
+            }
+            RadrootsOperationalListingValidationError::ListingEventFetchFailed { .. } => {
+                Self::ListingEventFetchFailed
+            }
+            RadrootsOperationalListingValidationError::ParseError { .. } => Self::ParseError,
+            RadrootsOperationalListingValidationError::InvalidSeller => Self::InvalidSeller,
+            RadrootsOperationalListingValidationError::MissingFarmProfile => {
+                Self::MissingFarmProfile
+            }
+            RadrootsOperationalListingValidationError::MissingFarmRecord => Self::MissingFarmRecord,
+            RadrootsOperationalListingValidationError::MissingTitle => Self::MissingTitle,
+            RadrootsOperationalListingValidationError::MissingDescription => {
+                Self::MissingDescription
+            }
+            RadrootsOperationalListingValidationError::MissingProductType => {
+                Self::MissingProductType
+            }
+            RadrootsOperationalListingValidationError::MissingBins => Self::MissingBins,
+            RadrootsOperationalListingValidationError::MissingPrimaryBin => Self::MissingPrimaryBin,
+            RadrootsOperationalListingValidationError::InvalidBin => Self::InvalidBin,
+            RadrootsOperationalListingValidationError::MissingPrice => Self::MissingPrice,
+            RadrootsOperationalListingValidationError::InvalidPrice => Self::InvalidPrice,
+            RadrootsOperationalListingValidationError::MissingInventory => Self::MissingInventory,
+            RadrootsOperationalListingValidationError::InvalidInventory => Self::InvalidInventory,
+            RadrootsOperationalListingValidationError::MissingAvailability => {
+                Self::MissingAvailability
+            }
+            RadrootsOperationalListingValidationError::MissingLocation => Self::MissingLocation,
+            RadrootsOperationalListingValidationError::MissingLocationLocality => {
+                Self::MissingLocationLocality
+            }
+            RadrootsOperationalListingValidationError::MissingLocationGeohash => {
+                Self::MissingLocationGeohash
+            }
+            RadrootsOperationalListingValidationError::InvalidLocationGeohash => {
+                Self::InvalidLocationGeohash
+            }
+            RadrootsOperationalListingValidationError::MissingDeliveryMethod => {
+                Self::MissingDeliveryMethod
+            }
+        }
+    }
 }
 
 #[cfg(feature = "runtime")]
@@ -221,7 +308,7 @@ pub const RADROOTS_SDK_ERROR_CATALOG: &[RadrootsSdkErrorCatalogEntry] = &[
         "signer_returned_event_drift",
         RadrootsSdkErrorClass::Authorization,
         false,
-        RECOVERY_SELECT_AUTHORIZED_ACTOR,
+        RECOVERY_CONFIGURE_SIGNER,
     ),
     RadrootsSdkErrorCatalogEntry::new(
         "empty_transport_targets",
@@ -351,6 +438,12 @@ pub const RADROOTS_SDK_ERROR_CATALOG: &[RadrootsSdkErrorCatalogEntry] = &[
     ),
     RadrootsSdkErrorCatalogEntry::new(
         "listing_edit",
+        RadrootsSdkErrorClass::Request,
+        false,
+        RECOVERY_FIX_REQUEST,
+    ),
+    RadrootsSdkErrorCatalogEntry::new(
+        "listing_validation",
         RadrootsSdkErrorClass::Request,
         false,
         RECOVERY_FIX_REQUEST,
@@ -537,6 +630,10 @@ pub enum RadrootsSdkError {
     ListingEdit {
         message: String,
     },
+    ListingValidation {
+        kind: RadrootsSdkListingValidationErrorKind,
+        message: String,
+    },
     ListingMutation {
         message: String,
     },
@@ -594,6 +691,7 @@ impl RadrootsSdkError {
             Self::InvalidRequest { .. } => "invalid_request",
             Self::UnsupportedProfileSchema { .. } => "unsupported_profile_schema",
             Self::ListingEdit { .. } => "listing_edit",
+            Self::ListingValidation { .. } => "listing_validation",
             Self::ListingMutation { .. } => "listing_mutation",
             Self::Outbox { .. } => "outbox",
             Self::PrivateStore { .. } => "private_store",
@@ -647,6 +745,7 @@ impl RadrootsSdkError {
             | Self::InvalidRequest { .. }
             | Self::UnsupportedProfileSchema { .. }
             | Self::ListingEdit { .. }
+            | Self::ListingValidation { .. }
             | Self::ListingMutation { .. } => RadrootsSdkErrorClass::Request,
             Self::ProductSyncUnsupported { .. } | Self::ReticulumTransportUnavailable { .. } => {
                 RadrootsSdkErrorClass::Unsupported
@@ -704,9 +803,10 @@ impl RadrootsSdkError {
             Self::UnauthorizedActor { .. }
             | Self::SignerPubkeyMismatch { .. }
             | Self::SignerRequestRejected { .. }
-            | Self::SignerReturnedEventDrift { .. }
             | Self::Authority { .. } => vec![RadrootsSdkRecoveryAction::SelectAuthorizedActor],
-            Self::SignerUnavailable { .. } => vec![RadrootsSdkRecoveryAction::ConfigureSigner],
+            Self::SignerUnavailable { .. } | Self::SignerReturnedEventDrift { .. } => {
+                vec![RadrootsSdkRecoveryAction::ConfigureSigner]
+            }
             Self::EmptyTransportTargets { .. }
             | Self::TransportTargetLimitExceeded { .. }
             | Self::InvalidRelayUrl { .. } => {
@@ -740,6 +840,7 @@ impl RadrootsSdkError {
             | Self::SignerProtocol { .. }
             | Self::InvalidRequest { .. }
             | Self::ListingEdit { .. }
+            | Self::ListingValidation { .. }
             | Self::ListingMutation { .. } => vec![RadrootsSdkRecoveryAction::FixRequest],
         }
     }
@@ -823,6 +924,9 @@ impl RadrootsSdkError {
                 "endpoint_uri": endpoint_uri,
                 "behavior": behavior.as_str()
             }),
+            Self::ListingValidation { kind, message } => {
+                json!({ "kind": kind, "message": message })
+            }
             Self::ProductSyncTransportSetupFailure { message }
             | Self::Authority { message }
             | Self::EventStore { message }
@@ -989,6 +1093,9 @@ impl fmt::Display for RadrootsSdkError {
                 path.display()
             ),
             Self::ListingEdit { message } => write!(f, "sdk listing edit error: {message}"),
+            Self::ListingValidation { kind, message } => {
+                write!(f, "sdk listing validation error ({kind:?}): {message}")
+            }
             Self::ListingMutation { message } => {
                 write!(f, "sdk listing mutation error: {message}")
             }
@@ -1093,14 +1200,20 @@ impl From<radroots_geocoder::GeocoderError> for RadrootsSdkError {
 }
 
 #[cfg(feature = "runtime")]
-impl From<radroots_trade::listing::RadrootsListingEditError> for RadrootsSdkError {
-    fn from(error: radroots_trade::listing::RadrootsListingEditError) -> Self {
+impl From<radroots_trade::operational_listing::RadrootsOperationalListingEditError>
+    for RadrootsSdkError
+{
+    fn from(
+        error: radroots_trade::operational_listing::RadrootsOperationalListingEditError,
+    ) -> Self {
         match error {
-            radroots_trade::listing::RadrootsListingEditError::ActorRoleUnsatisfied {
-                required_role,
-            } => Self::UnauthorizedActor {
+            radroots_trade::operational_listing::RadrootsOperationalListingEditError::ActorRoleUnsatisfied { required_role } => Self::UnauthorizedActor {
                 operation: "listing.prepare_publish".to_owned(),
                 reason: format!("missing role {required_role:?}"),
+            },
+            radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidModel(error) => Self::ListingValidation {
+                kind: RadrootsSdkListingValidationErrorKind::from(&error),
+                message: error.to_string(),
             },
             error => Self::ListingEdit {
                 message: error.to_string(),
@@ -1110,8 +1223,12 @@ impl From<radroots_trade::listing::RadrootsListingEditError> for RadrootsSdkErro
 }
 
 #[cfg(feature = "runtime")]
-impl From<radroots_trade::listing::RadrootsListingMutationError> for RadrootsSdkError {
-    fn from(error: radroots_trade::listing::RadrootsListingMutationError) -> Self {
+impl From<radroots_trade::operational_listing::RadrootsOperationalListingMutationError>
+    for RadrootsSdkError
+{
+    fn from(
+        error: radroots_trade::operational_listing::RadrootsOperationalListingMutationError,
+    ) -> Self {
         Self::ListingMutation {
             message: error.to_string(),
         }

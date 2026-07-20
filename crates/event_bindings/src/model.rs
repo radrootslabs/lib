@@ -1,19 +1,21 @@
 use dto_bindgen_backend_ts::{
     TypeScriptDeclaration, TypeScriptImport, TypeScriptModule, TypeScriptType, TypeScriptValue,
 };
-use radroots_event::{kinds, listing::RADROOTS_LISTING_PRODUCT_TAG_KEYS};
+use radroots_event::{kinds, operational_listing::RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS};
 
 pub fn constants_module() -> TypeScriptModule {
     TypeScriptModule::new("src/generated/constants.ts")
         .with_import(TypeScriptImport::type_only(
-            ["RadrootsListingProductTagKeys"],
+            ["RadrootsOperationalListingProductTagKeys"],
             "./types.js",
         ))
         .with_declaration(TypeScriptDeclaration::constant(
-            "RADROOTS_LISTING_PRODUCT_TAG_KEYS",
-            Some(TypeScriptType::named("RadrootsListingProductTagKeys")),
+            "RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS",
+            Some(TypeScriptType::named(
+                "RadrootsOperationalListingProductTagKeys",
+            )),
             TypeScriptValue::array(
-                RADROOTS_LISTING_PRODUCT_TAG_KEYS
+                RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS
                     .iter()
                     .map(|value| TypeScriptValue::string(*value))
                     .collect::<Vec<_>>(),
@@ -111,7 +113,7 @@ const EVENT_KIND_EXPORTS: &[(&str, u32)] = &[
     ),
     ("KIND_ACCOUNT_CLAIM", kinds::KIND_ACCOUNT_CLAIM),
     ("KIND_APP_DATA", kinds::KIND_APP_DATA),
-    ("KIND_LISTING", kinds::KIND_LISTING),
+    ("KIND_CLASSIFIED_LISTING", kinds::KIND_CLASSIFIED_LISTING),
     ("KIND_APPLICATION_HANDLER", kinds::KIND_APPLICATION_HANDLER),
     ("KIND_TRADE_PROPOSAL", kinds::KIND_TRADE_PROPOSAL),
     ("KIND_TRADE_DECISION", kinds::KIND_TRADE_DECISION),
