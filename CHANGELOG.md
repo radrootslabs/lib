@@ -20,6 +20,13 @@ publish policy both pass for the same source revision.
   identifiers as opaque strings. SQLite integer and text values normalize to
   the same lossless public representation, and mixed-storage candidate order
   remains deterministic.
+- Default GeoNames asset installation now uses cancellable asynchronous DNS,
+  explicit connect, response, read, and total deadlines, denied redirects, and
+  bounded runtime shutdown. HTTP bodies stream through incremental length and
+  SHA-256 verification into a same-directory tempfile that is synced, checked
+  for SQLite integrity and schema, and atomically persisted. Public download
+  errors expose stable typed phases and detail fields instead of
+  `reqwest::Error`; trusted injected fetchers retain a bounded byte adapter.
 - Trusted event-contract admission now has one signature-verified entry point.
   Profile, root Post, Reply, Comment, DeletionRequest, and FoodAvailability
   retain typed admitted values; other registered events require full contract

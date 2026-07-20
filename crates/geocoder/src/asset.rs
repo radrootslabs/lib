@@ -1,6 +1,8 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 use radroots_runtime_paths::default_shared_geonames_database_path_from_cache_root;
 use sha2::{Digest, Sha256};
@@ -8,7 +10,7 @@ use sqlx::Connection;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use url::Url;
 
-use crate::GeocoderError;
+use crate::{GeoNamesAssetDownloadError, GeoNamesAssetDownloadPhase, GeocoderError};
 
 pub const GEONAMES_ASSET_VERSION: &str = "1.0";
 pub const GEONAMES_ASSET_FILE_NAME: &str = "geonames-1.0.db";
@@ -33,6 +35,13 @@ pub const GEONAMES_1_0_ASSET: GeoNamesAssetSpec = GeoNamesAssetSpec {
     byte_size: GEONAMES_ASSET_BYTE_SIZE,
     sha256: GEONAMES_ASSET_SHA256,
 };
+
+const GEONAMES_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const GEONAMES_HTTP_RESPONSE_TIMEOUT: Duration = Duration::from_secs(15);
+const GEONAMES_HTTP_READ_TIMEOUT: Duration = Duration::from_secs(15);
+const GEONAMES_HTTP_TOTAL_TIMEOUT: Duration = Duration::from_secs(120);
+const GEONAMES_HTTP_RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(250);
+const GEONAMES_HTTP_INITIAL_CAPACITY_MAX: usize = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GeoNamesAssetSpec {
@@ -64,7 +73,44 @@ pub struct GeoNamesAssetStatus {
 }
 
 pub trait GeoNamesAssetFetcher {
+    /// Returns a complete asset from a trusted or injected source.
+    ///
+    /// The default writer adapter bounds this result before installation.
+    /// Network fetchers should override [`Self::fetch_to_writer`] to avoid
+    /// buffering the complete asset.
     fn fetch(&self, url: &str) -> Result<Vec<u8>, GeocoderError>;
+
+    /// Returns a complete asset after enforcing its maximum logical size.
+    fn fetch_with_max_bytes(
+        &self,
+        url: &str,
+        maximum_bytes: u64,
+    ) -> Result<Vec<u8>, GeocoderError> {
+        let bytes = self.fetch(url)?;
+        let actual = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        if actual > maximum_bytes {
+            return Err(asset_download_error(
+                url,
+                GeoNamesAssetDownloadError::ResponseTooLarge {
+                    maximum: maximum_bytes,
+                    observed_at_least: actual,
+                },
+            ));
+        }
+        Ok(bytes)
+    }
+
+    /// Writes a logically bounded asset to an installation destination.
+    fn fetch_to_writer(
+        &self,
+        url: &str,
+        maximum_bytes: u64,
+        destination: &mut (dyn Write + Send),
+    ) -> Result<(), GeocoderError> {
+        let bytes = self.fetch_with_max_bytes(url, maximum_bytes)?;
+        destination.write_all(&bytes)?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -73,25 +119,246 @@ pub struct GeoNamesBlockingHttpFetcher;
 impl GeoNamesAssetFetcher for GeoNamesBlockingHttpFetcher {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn fetch(&self, url: &str) -> Result<Vec<u8>, GeocoderError> {
-        let response =
-            reqwest::blocking::get(url).map_err(|source| GeocoderError::AssetDownload {
-                url: url.to_owned(),
-                source,
-            })?;
-        let response =
-            response
-                .error_for_status()
-                .map_err(|source| GeocoderError::AssetDownload {
-                    url: url.to_owned(),
-                    source,
-                })?;
-        response
-            .bytes()
-            .map(|bytes| bytes.to_vec())
-            .map_err(|source| GeocoderError::AssetDownload {
-                url: url.to_owned(),
-                source,
+        self.fetch_with_max_bytes(url, GEONAMES_ASSET_BYTE_SIZE)
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn fetch_with_max_bytes(
+        &self,
+        url: &str,
+        maximum_bytes: u64,
+    ) -> Result<Vec<u8>, GeocoderError> {
+        let initial_capacity = usize::try_from(maximum_bytes)
+            .unwrap_or(usize::MAX)
+            .min(GEONAMES_HTTP_INITIAL_CAPACITY_MAX);
+        let mut bytes = Vec::with_capacity(initial_capacity);
+        fetch_http_asset_to_writer_with_policy(
+            url,
+            maximum_bytes,
+            &mut bytes,
+            GeoNamesHttpFetchPolicy::production(),
+        )?;
+        Ok(bytes)
+    }
+
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn fetch_to_writer(
+        &self,
+        url: &str,
+        maximum_bytes: u64,
+        destination: &mut (dyn Write + Send),
+    ) -> Result<(), GeocoderError> {
+        fetch_http_asset_to_writer_with_policy(
+            url,
+            maximum_bytes,
+            destination,
+            GeoNamesHttpFetchPolicy::production(),
+        )
+    }
+}
+
+#[derive(Clone, Copy)]
+struct GeoNamesHttpFetchPolicy {
+    connect_timeout: Duration,
+    response_timeout: Duration,
+    read_timeout: Duration,
+    total_timeout: Duration,
+    runtime_shutdown_timeout: Duration,
+}
+
+impl GeoNamesHttpFetchPolicy {
+    const fn production() -> Self {
+        Self {
+            connect_timeout: GEONAMES_HTTP_CONNECT_TIMEOUT,
+            response_timeout: GEONAMES_HTTP_RESPONSE_TIMEOUT,
+            read_timeout: GEONAMES_HTTP_READ_TIMEOUT,
+            total_timeout: GEONAMES_HTTP_TOTAL_TIMEOUT,
+            runtime_shutdown_timeout: GEONAMES_HTTP_RUNTIME_SHUTDOWN_TIMEOUT,
+        }
+    }
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn fetch_http_asset_to_writer_with_policy(
+    url: &str,
+    maximum_bytes: u64,
+    destination: &mut (dyn Write + Send),
+    policy: GeoNamesHttpFetchPolicy,
+) -> Result<(), GeocoderError> {
+    thread::scope(|scope| {
+        let worker_url = url.to_owned();
+        let worker = thread::Builder::new()
+            .name("radroots-geonames-http".to_owned())
+            .spawn_scoped(scope, move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|source| {
+                        asset_download_error(
+                            &worker_url,
+                            GeoNamesAssetDownloadError::Runtime {
+                                detail: source.to_string(),
+                            },
+                        )
+                    })?;
+                let result = runtime.block_on(async {
+                    tokio::time::timeout(
+                        policy.total_timeout,
+                        fetch_http_asset_async(&worker_url, maximum_bytes, destination, policy),
+                    )
+                    .await
+                    .map_err(|_| {
+                        timeout_error(
+                            &worker_url,
+                            GeoNamesAssetDownloadPhase::Total,
+                            policy.total_timeout,
+                        )
+                    })?
+                });
+                runtime.shutdown_timeout(policy.runtime_shutdown_timeout);
+                result
             })
+            .map_err(|source| {
+                asset_download_error(
+                    url,
+                    GeoNamesAssetDownloadError::Runtime {
+                        detail: source.to_string(),
+                    },
+                )
+            })?;
+        worker
+            .join()
+            .map_err(|_| asset_download_error(url, GeoNamesAssetDownloadError::WorkerTerminated))?
+    })
+}
+
+async fn fetch_http_asset_async(
+    url: &str,
+    maximum_bytes: u64,
+    destination: &mut (dyn Write + Send),
+    policy: GeoNamesHttpFetchPolicy,
+) -> Result<(), GeocoderError> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(policy.connect_timeout)
+        .hickory_dns(true)
+        // Source validation grants authority to one exact host.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|source| request_error(url, GeoNamesAssetDownloadPhase::Setup, source))?;
+    let mut response = tokio::time::timeout(policy.response_timeout, client.get(url).send())
+        .await
+        .map_err(|_| {
+            timeout_error(
+                url,
+                GeoNamesAssetDownloadPhase::Response,
+                policy.response_timeout,
+            )
+        })?
+        .map_err(|source| {
+            if source.is_timeout() && source.is_connect() {
+                timeout_error(
+                    url,
+                    GeoNamesAssetDownloadPhase::Connect,
+                    policy.connect_timeout,
+                )
+            } else {
+                let phase = if source.is_connect() {
+                    GeoNamesAssetDownloadPhase::Connect
+                } else {
+                    GeoNamesAssetDownloadPhase::Response
+                };
+                request_error(url, phase, source)
+            }
+        })?;
+
+    if !response.status().is_success() {
+        return Err(asset_download_error(
+            url,
+            GeoNamesAssetDownloadError::HttpStatus {
+                status: response.status().as_u16(),
+            },
+        ));
+    }
+    if let Some(content_length) = response.content_length()
+        && content_length > maximum_bytes
+    {
+        return Err(asset_download_error(
+            url,
+            GeoNamesAssetDownloadError::ResponseTooLarge {
+                maximum: maximum_bytes,
+                observed_at_least: content_length,
+            },
+        ));
+    }
+
+    let mut downloaded = 0_u64;
+    loop {
+        let chunk = tokio::time::timeout(policy.read_timeout, response.chunk())
+            .await
+            .map_err(|_| timeout_error(url, GeoNamesAssetDownloadPhase::Read, policy.read_timeout))?
+            .map_err(|source| response_read_error(url, source))?;
+        let Some(chunk) = chunk else {
+            break;
+        };
+        let chunk_len = u64::try_from(chunk.len()).unwrap_or(u64::MAX);
+        let observed_at_least = downloaded.saturating_add(chunk_len);
+        if observed_at_least > maximum_bytes {
+            return Err(asset_download_error(
+                url,
+                GeoNamesAssetDownloadError::ResponseTooLarge {
+                    maximum: maximum_bytes,
+                    observed_at_least,
+                },
+            ));
+        }
+        destination.write_all(&chunk)?;
+        downloaded = observed_at_least;
+    }
+    destination.flush()?;
+    Ok(())
+}
+
+fn request_error(
+    url: &str,
+    phase: GeoNamesAssetDownloadPhase,
+    source: reqwest::Error,
+) -> GeocoderError {
+    asset_download_error(
+        url,
+        GeoNamesAssetDownloadError::Request {
+            phase,
+            detail: source.to_string(),
+        },
+    )
+}
+
+fn response_read_error(url: &str, source: reqwest::Error) -> GeocoderError {
+    asset_download_error(
+        url,
+        GeoNamesAssetDownloadError::Read {
+            detail: source.to_string(),
+        },
+    )
+}
+
+fn timeout_error(url: &str, phase: GeoNamesAssetDownloadPhase, timeout: Duration) -> GeocoderError {
+    asset_download_error(
+        url,
+        GeoNamesAssetDownloadError::Timeout {
+            phase,
+            timeout_ms: duration_millis(timeout),
+        },
+    )
+}
+
+fn duration_millis(duration: Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+}
+
+fn asset_download_error(url: &str, source: GeoNamesAssetDownloadError) -> GeocoderError {
+    GeocoderError::AssetDownload {
+        url: url.to_owned(),
+        source,
     }
 }
 
@@ -148,8 +415,7 @@ where
     if inspection.state == GeoNamesAssetState::Available {
         return Ok(inspection);
     }
-    let bytes = fetcher.fetch(spec.url)?;
-    install_geonames_asset_bytes(path, spec, &bytes)?;
+    install_geonames_asset_with_fetcher(path, spec, fetcher)?;
     let mut status = validate_geonames_asset_file(path, spec)?;
     status.state = GeoNamesAssetState::Refreshed;
     Ok(status)
@@ -245,31 +511,111 @@ pub fn validate_geonames_asset_spec_source(spec: &GeoNamesAssetSpec) -> Result<(
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn install_geonames_asset_bytes(
+fn install_geonames_asset_with_fetcher<F>(
     path: &Path,
     spec: &GeoNamesAssetSpec,
-    bytes: &[u8],
-) -> Result<(), GeocoderError> {
-    if bytes.len() as u64 != spec.byte_size {
-        return Err(GeocoderError::InvalidAssetLength {
-            path: path.to_path_buf(),
-            expected: spec.byte_size,
-            actual: bytes.len() as u64,
-        });
-    }
+    fetcher: &F,
+) -> Result<(), GeocoderError>
+where
+    F: GeoNamesAssetFetcher,
+{
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent)?;
     let mut tempfile = tempfile::Builder::new()
         .prefix(&format!(".{}.", spec.file_name))
         .suffix(".tmp")
         .tempfile_in(parent)?;
-    tempfile.as_file_mut().write_all(bytes)?;
+    let identity = {
+        let mut writer = GeoNamesAssetIdentityWriter::new(tempfile.as_file_mut(), spec.byte_size);
+        fetcher.fetch_to_writer(spec.url, spec.byte_size, &mut writer)?;
+        writer.flush()?;
+        writer.finish()
+    };
+    validate_downloaded_asset_identity(path, spec, &identity)?;
     tempfile.as_file_mut().sync_all()?;
-    validate_geonames_asset_file(tempfile.path(), spec)?;
+    validate_sqlite_integrity_and_schema(tempfile.path())?;
     tempfile
         .persist(path)
         .map(|_| ())
         .map_err(|error| GeocoderError::Io(error.error))
+}
+
+struct GeoNamesAssetIdentity {
+    byte_size: u64,
+    sha256: String,
+}
+
+struct GeoNamesAssetIdentityWriter<'a> {
+    destination: &'a mut File,
+    maximum_bytes: u64,
+    byte_size: u64,
+    hasher: Sha256,
+}
+
+impl<'a> GeoNamesAssetIdentityWriter<'a> {
+    fn new(destination: &'a mut File, maximum_bytes: u64) -> Self {
+        Self {
+            destination,
+            maximum_bytes,
+            byte_size: 0,
+            hasher: Sha256::new(),
+        }
+    }
+
+    fn finish(self) -> GeoNamesAssetIdentity {
+        GeoNamesAssetIdentity {
+            byte_size: self.byte_size,
+            sha256: hex::encode(self.hasher.finalize()),
+        }
+    }
+}
+
+impl Write for GeoNamesAssetIdentityWriter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        let requested = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        let observed_at_least = self.byte_size.saturating_add(requested);
+        if observed_at_least > self.maximum_bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::FileTooLarge,
+                format!(
+                    "GeoNames asset exceeds maximum {} bytes; observed at least {observed_at_least}",
+                    self.maximum_bytes
+                ),
+            ));
+        }
+        let written = self.destination.write(bytes)?;
+        self.byte_size = self
+            .byte_size
+            .saturating_add(u64::try_from(written).unwrap_or(u64::MAX));
+        self.hasher.update(&bytes[..written]);
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.destination.flush()
+    }
+}
+
+fn validate_downloaded_asset_identity(
+    path: &Path,
+    spec: &GeoNamesAssetSpec,
+    identity: &GeoNamesAssetIdentity,
+) -> Result<(), GeocoderError> {
+    if identity.byte_size != spec.byte_size {
+        return Err(GeocoderError::InvalidAssetLength {
+            path: path.to_path_buf(),
+            expected: spec.byte_size,
+            actual: identity.byte_size,
+        });
+    }
+    if identity.sha256 != spec.sha256 {
+        return Err(GeocoderError::InvalidAssetSha256 {
+            path: path.to_path_buf(),
+            expected: spec.sha256.to_owned(),
+            actual: identity.sha256.clone(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -379,7 +725,11 @@ impl Drop for GeoNamesAssetLock {
 mod tests {
     use std::cell::Cell;
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     use sha2::Digest;
     use sqlx::Connection;
@@ -387,11 +737,12 @@ mod tests {
 
     use super::{
         GEONAMES_ASSET_HOST, GeoNamesAssetFetcher, GeoNamesAssetSpec, GeoNamesAssetState,
-        ensure_geonames_asset_path_with_fetcher, inspect_geonames_asset_path,
+        GeoNamesHttpFetchPolicy, ensure_geonames_asset_path_with_fetcher,
+        fetch_http_asset_to_writer_with_policy, inspect_geonames_asset_path,
         is_invalid_asset_error, lock_path_for_asset, validate_geonames_asset_file,
         validate_geonames_asset_spec_source,
     };
-    use crate::GeocoderError;
+    use crate::{GeoNamesAssetDownloadError, GeoNamesAssetDownloadPhase, GeocoderError};
 
     const TEST_URL: &str = "https://assets.radroots.io/data/geonames/geonames-test.db";
 
@@ -405,6 +756,218 @@ mod tests {
             self.calls.set(self.calls.get() + 1);
             Ok(self.bytes.clone())
         }
+    }
+
+    struct WriterOnlyFetcher {
+        bytes: Vec<u8>,
+        calls: Cell<usize>,
+    }
+
+    impl GeoNamesAssetFetcher for WriterOnlyFetcher {
+        fn fetch(&self, _url: &str) -> Result<Vec<u8>, GeocoderError> {
+            panic!("writer-oriented install must not call the Vec adapter")
+        }
+
+        fn fetch_to_writer(
+            &self,
+            _url: &str,
+            maximum_bytes: u64,
+            destination: &mut (dyn Write + Send),
+        ) -> Result<(), GeocoderError> {
+            self.calls.set(self.calls.get() + 1);
+            assert!(self.bytes.len() as u64 <= maximum_bytes);
+            for chunk in self.bytes.chunks(257) {
+                destination.write_all(chunk)?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn blocking_http_fetch_streams_a_bounded_success_response() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello",
+                )
+                .expect("success response");
+        });
+
+        let bytes = fetch_http_bytes(&server.url, 5, test_http_policy()).expect("bounded download");
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn blocking_http_fetch_allows_progress_to_exceed_read_timeout_cumulatively() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\n")
+                .expect("response headers");
+            for byte in b"hello" {
+                stream.write_all(&[*byte]).expect("response byte");
+                stream.flush().expect("response flush");
+                thread::sleep(Duration::from_millis(75));
+            }
+        });
+        let policy = GeoNamesHttpFetchPolicy {
+            connect_timeout: Duration::from_millis(500),
+            response_timeout: Duration::from_secs(1),
+            read_timeout: Duration::from_millis(200),
+            total_timeout: Duration::from_secs(2),
+            runtime_shutdown_timeout: Duration::from_millis(100),
+        };
+
+        let bytes = fetch_http_bytes(&server.url, 5, policy).expect("progressing download");
+        assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn blocking_http_fetch_rejects_oversized_chunked_response_without_buffering_it() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nabcd\r\n4\r\nefgh\r\n0\r\n\r\n",
+                )
+                .expect("chunked response");
+        });
+
+        assert!(matches!(
+            fetch_http_bytes(&server.url, 5, test_http_policy()),
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::ResponseTooLarge {
+                    maximum: 5,
+                    observed_at_least,
+                },
+                ..
+            }) if observed_at_least >= 6
+        ));
+    }
+
+    #[test]
+    fn blocking_http_fetch_times_out_a_stalled_response_body() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\n")
+                .expect("response headers");
+            stream.flush().expect("response flush");
+            thread::sleep(Duration::from_millis(600));
+        });
+        let policy = GeoNamesHttpFetchPolicy {
+            connect_timeout: Duration::from_millis(500),
+            response_timeout: Duration::from_secs(1),
+            read_timeout: Duration::from_millis(200),
+            total_timeout: Duration::from_secs(2),
+            runtime_shutdown_timeout: Duration::from_millis(100),
+        };
+
+        let started_at = Instant::now();
+        let result = fetch_http_bytes(&server.url, 1, policy);
+        let elapsed = started_at.elapsed();
+        assert!(
+            matches!(
+                result,
+                Err(GeocoderError::AssetDownload {
+                    source: GeoNamesAssetDownloadError::Timeout {
+                        phase: GeoNamesAssetDownloadPhase::Read,
+                        timeout_ms: 200,
+                    },
+                    ..
+                })
+            ),
+            "{result:?}"
+        );
+        assert!(elapsed >= Duration::from_millis(100), "{elapsed:?}");
+        assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
+    }
+
+    #[test]
+    fn blocking_http_fetch_reports_response_timeout_without_elapsed_heuristics() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            thread::sleep(Duration::from_millis(600));
+        });
+        let policy = GeoNamesHttpFetchPolicy {
+            connect_timeout: Duration::from_millis(500),
+            response_timeout: Duration::from_millis(200),
+            read_timeout: Duration::from_secs(1),
+            total_timeout: Duration::from_secs(2),
+            runtime_shutdown_timeout: Duration::from_millis(100),
+        };
+
+        assert!(matches!(
+            fetch_http_bytes(&server.url, 1, policy),
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::Timeout {
+                    phase: GeoNamesAssetDownloadPhase::Response,
+                    timeout_ms: 200,
+                },
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn blocking_http_fetch_enforces_total_deadline_across_progressing_reads() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\n")
+                .expect("response headers");
+            for byte in b"slow" {
+                if stream.write_all(&[*byte]).is_err() {
+                    break;
+                }
+                let _ = stream.flush();
+                thread::sleep(Duration::from_millis(150));
+            }
+        });
+        let policy = GeoNamesHttpFetchPolicy {
+            connect_timeout: Duration::from_millis(500),
+            response_timeout: Duration::from_secs(1),
+            read_timeout: Duration::from_millis(500),
+            total_timeout: Duration::from_millis(250),
+            runtime_shutdown_timeout: Duration::from_millis(100),
+        };
+
+        let started_at = Instant::now();
+        let result = fetch_http_bytes(&server.url, 4, policy);
+        let elapsed = started_at.elapsed();
+        assert!(matches!(
+            result,
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::Timeout {
+                    phase: GeoNamesAssetDownloadPhase::Total,
+                    timeout_ms: 250,
+                },
+                ..
+            })
+        ));
+        assert!(elapsed >= Duration::from_millis(125), "{elapsed:?}");
+        assert!(elapsed < Duration::from_secs(3), "{elapsed:?}");
+    }
+
+    #[test]
+    fn blocking_http_fetch_does_not_follow_redirects_outside_the_validated_source() {
+        let server = LoopbackHttpServer::spawn(|mut stream| {
+            read_request(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 302 Found\r\nLocation: https://example.com/geonames.db\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("redirect response");
+        });
+
+        assert!(matches!(
+            fetch_http_bytes(&server.url, 5, test_http_policy()),
+            Err(GeocoderError::AssetDownload {
+                source: GeoNamesAssetDownloadError::HttpStatus { status: 302 },
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -442,6 +1005,49 @@ mod tests {
             ensure_geonames_asset_path_with_fetcher(&target, &spec, &fetcher).expect("available");
         assert_eq!(available.state, GeoNamesAssetState::Available);
         assert_eq!(fetcher.calls.get(), 1);
+    }
+
+    #[test]
+    fn geonames_asset_install_uses_streaming_writer_and_atomic_replacement() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let bytes = fixture_database_bytes();
+        let spec = fixture_spec(&bytes, TEST_URL);
+        let target = tempdir.path().join("geonames-test.db");
+        let fetcher = WriterOnlyFetcher {
+            bytes,
+            calls: Cell::new(0),
+        };
+
+        let status =
+            ensure_geonames_asset_path_with_fetcher(&target, &spec, &fetcher).expect("install");
+        assert_eq!(status.state, GeoNamesAssetState::Refreshed);
+        assert_eq!(fetcher.calls.get(), 1);
+        assert_no_install_tempfiles(tempdir.path());
+    }
+
+    #[test]
+    fn geonames_asset_failed_identity_validation_preserves_existing_target() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let bytes = fixture_database_bytes();
+        let spec = fixture_spec(&bytes, TEST_URL);
+        let target = tempdir.path().join("geonames-test.db");
+        let previous = b"previous asset";
+        fs::write(&target, previous).expect("previous target");
+        let mut wrong_bytes = bytes;
+        let last = wrong_bytes.last_mut().expect("nonempty fixture");
+        *last ^= 0x01;
+        let fetcher = WriterOnlyFetcher {
+            bytes: wrong_bytes,
+            calls: Cell::new(0),
+        };
+
+        assert!(matches!(
+            ensure_geonames_asset_path_with_fetcher(&target, &spec, &fetcher),
+            Err(GeocoderError::InvalidAssetSha256 { .. })
+        ));
+        assert_eq!(fs::read(&target).expect("preserved target"), previous);
+        assert_eq!(fetcher.calls.get(), 1);
+        assert_no_install_tempfiles(tempdir.path());
     }
 
     #[test]
@@ -629,6 +1235,83 @@ mod tests {
     fn execute_batch(conn: &mut SqliteConnection, sql: &str) {
         futures_executor::block_on(sqlx::raw_sql(sqlx::AssertSqlSafe(sql)).execute(conn))
             .expect("execute fixture sql batch");
+    }
+
+    fn fetch_http_bytes(
+        url: &str,
+        maximum_bytes: u64,
+        policy: GeoNamesHttpFetchPolicy,
+    ) -> Result<Vec<u8>, GeocoderError> {
+        let mut bytes = Vec::new();
+        fetch_http_asset_to_writer_with_policy(url, maximum_bytes, &mut bytes, policy)?;
+        Ok(bytes)
+    }
+
+    fn test_http_policy() -> GeoNamesHttpFetchPolicy {
+        GeoNamesHttpFetchPolicy {
+            connect_timeout: Duration::from_secs(1),
+            response_timeout: Duration::from_secs(1),
+            read_timeout: Duration::from_secs(1),
+            total_timeout: Duration::from_secs(2),
+            runtime_shutdown_timeout: Duration::from_millis(100),
+        }
+    }
+
+    struct LoopbackHttpServer {
+        url: String,
+        thread: Option<thread::JoinHandle<()>>,
+    }
+
+    impl LoopbackHttpServer {
+        fn spawn(handler: impl FnOnce(TcpStream) + Send + 'static) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+            let address = listener.local_addr().expect("loopback address");
+            let thread = thread::spawn(move || {
+                let (stream, _) = listener.accept().expect("loopback accept");
+                handler(stream);
+            });
+            Self {
+                url: format!("http://{address}/geonames.db"),
+                thread: Some(thread),
+            }
+        }
+    }
+
+    impl Drop for LoopbackHttpServer {
+        fn drop(&mut self) {
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+
+    fn read_request(stream: &mut TcpStream) {
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("request read timeout");
+        let mut request = Vec::with_capacity(2048);
+        let mut buffer = [0_u8; 256];
+        loop {
+            let read = stream.read(&mut buffer).expect("request");
+            assert_ne!(read, 0, "connection closed before complete request headers");
+            request.extend_from_slice(&buffer[..read]);
+            assert!(request.len() <= 32 * 1024, "request headers are bounded");
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                return;
+            }
+        }
+    }
+
+    fn assert_no_install_tempfiles(parent: &Path) {
+        let entries = fs::read_dir(parent).expect("asset parent");
+        for entry in entries {
+            let file_name = entry.expect("asset parent entry").file_name();
+            let file_name = file_name.to_string_lossy();
+            assert!(
+                !(file_name.starts_with(".geonames-test.db.") && file_name.ends_with(".tmp")),
+                "temporary install file leaked: {file_name}"
+            );
+        }
     }
 
     const FIXTURE_SCHEMA: &str = r#"

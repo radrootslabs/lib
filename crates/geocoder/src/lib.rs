@@ -15,7 +15,7 @@ pub use asset::{
     inspect_default_geonames_asset_in_cache_root, inspect_geonames_asset_path,
     validate_geonames_asset_file, validate_geonames_asset_spec_source,
 };
-pub use error::GeocoderError;
+pub use error::{GeoNamesAssetDownloadError, GeoNamesAssetDownloadPhase, GeocoderError};
 pub use geocoder::Geocoder;
 pub use model::{
     GeocoderCountryListResult, GeocoderLocalityCandidate, GeocoderLocalityInput,

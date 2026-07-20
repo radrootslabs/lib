@@ -344,3 +344,15 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace raw event-store migration SQL and unrestricted destructive rollback with a transactional, checksummed schema authority, exact legacy adoption, descriptor-owned catalog validation and deltas, tamper-evident fail-closed history, a no-write current-schema fast path, SQLite and FTS5 integrity checks, read-only schema inspection, and terminal pool-closing rollback with a governed version floor."
+
+[[changes]]
+id = "geonames-asset-download-boundary"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "change_exported_field_type",
+  "change_exported_enum_variant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace dependency-specific GeoNames download errors and whole-body default installation with stable typed failure phases, cancellable DNS and bounded deadlines, and incrementally verified atomic streaming installation."

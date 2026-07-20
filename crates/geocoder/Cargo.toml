@@ -19,12 +19,13 @@ test-fixture-geonames-asset = []
 hex = { workspace = true }
 futures-executor = { workspace = true }
 radroots_runtime_paths = { workspace = true }
-reqwest = { workspace = true, features = ["blocking", "rustls-tls"] }
+reqwest = { workspace = true, features = ["hickory-dns", "rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 sha2 = { workspace = true }
 sqlx = { workspace = true, features = ["derive", "sqlite-bundled"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "time"] }
 url = { workspace = true }
 
 [lints.rust]

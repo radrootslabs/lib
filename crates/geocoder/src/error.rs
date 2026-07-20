@@ -1,5 +1,55 @@
 use thiserror::Error;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GeoNamesAssetDownloadPhase {
+    Setup,
+    Connect,
+    Response,
+    Read,
+    Total,
+}
+
+impl std::fmt::Display for GeoNamesAssetDownloadPhase {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Setup => "setup",
+            Self::Connect => "connect",
+            Self::Response => "response",
+            Self::Read => "read",
+            Self::Total => "total",
+        })
+    }
+}
+
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum GeoNamesAssetDownloadError {
+    #[error("HTTP worker runtime failed: {detail}")]
+    Runtime { detail: String },
+    #[error("HTTP worker terminated unexpectedly")]
+    WorkerTerminated,
+    #[error("{phase} request failed: {detail}")]
+    Request {
+        phase: GeoNamesAssetDownloadPhase,
+        detail: String,
+    },
+    #[error("HTTP status {status}")]
+    HttpStatus { status: u16 },
+    #[error("{phase} timeout after {timeout_ms} ms")]
+    Timeout {
+        phase: GeoNamesAssetDownloadPhase,
+        timeout_ms: u64,
+    },
+    #[error("response read failed: {detail}")]
+    Read { detail: String },
+    #[error("response body exceeds maximum {maximum} bytes; observed at least {observed_at_least}")]
+    ResponseTooLarge {
+        maximum: u64,
+        observed_at_least: u64,
+    },
+}
+
 #[derive(Debug, Error)]
 pub enum GeocoderError {
     #[error("sqlite error: {0}")]
@@ -49,7 +99,7 @@ pub enum GeocoderError {
     AssetDownload {
         url: String,
         #[source]
-        source: reqwest::Error,
+        source: GeoNamesAssetDownloadError,
     },
     #[error("country center not found for {country_id}")]
     CountryCenterNotFound { country_id: String },
