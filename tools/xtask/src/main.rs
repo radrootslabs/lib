@@ -19,6 +19,7 @@ fn usage() {
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
     eprintln!("  cargo xtask contract nip09-reconciliation-manifest [--write]");
+    eprintln!("  cargo xtask contract food-availability-projection-manifest [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
@@ -65,6 +66,7 @@ fn validate_contract() -> Result<(), String> {
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
         .and_then(|_| contract::validate_event_contract_registry_v7_inventory(&root))
         .and_then(|_| contract::validate_nip09_reconciliation_manifest(&root))
+        .and_then(|_| contract::validate_food_availability_projection_manifest(&root))
         .and_then(|_| contract::validate_knowledge_contract_manifest(&root))
 }
 
@@ -106,6 +108,16 @@ fn run_contract(args: &[String]) -> Result<(), String> {
             }
             _ => Err(
                 "nip09-reconciliation-manifest accepts no arguments or exactly --write".to_string(),
+            ),
+        },
+        Some("food-availability-projection-manifest") => match &args[1..] {
+            [] => contract::validate_food_availability_projection_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_food_availability_projection_manifest(&workspace_root())
+            }
+            _ => Err(
+                "food-availability-projection-manifest accepts no arguments or exactly --write"
+                    .to_string(),
             ),
         },
         Some("knowledge-manifest") => {
@@ -216,6 +228,12 @@ mod tests {
         ])
         .expect_err("invalid NIP-09 manifest mode");
         assert!(invalid_nip09.contains("exactly --write"));
+        let invalid_food = run_contract(&[
+            "food-availability-projection-manifest".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid FoodAvailability projection manifest mode");
+        assert!(invalid_food.contains("exactly --write"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
@@ -311,6 +329,8 @@ mod tests {
             .expect("contract registry-v7 inventory");
         run_contract(&["nip09-reconciliation-manifest".to_string()])
             .expect("contract NIP-09 reconciliation manifest");
+        run_contract(&["food-availability-projection-manifest".to_string()])
+            .expect("contract FoodAvailability projection manifest");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }

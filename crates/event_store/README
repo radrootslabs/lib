@@ -36,26 +36,37 @@ The public read APIs name their authority explicitly:
   protocol identifier; a missing `d` tag or missing first value becomes the
   empty identifier. Product-contract admission may impose stricter `d` rules
   independently.
-- `event_visibility`, `visible_event`, and `visible_event_head` expose current
-  product visibility. A visible head is the exact raw head only when that event
-  is admitted; an unsupported or invalid winning raw head yields no older
-  fallback. Non-head durable revisions report `NotCurrent`.
+- `event_visibility`, `event_visibilities`, `visible_event`, and
+  `visible_event_head` expose current product visibility. The bounded batch API
+  evaluates distinct canonical event IDs once in a single read transaction and
+  preserves requested order and duplicate cardinality. A visible head is the
+  exact raw head only when that event is admitted; an unsupported or invalid
+  winning raw head yields no older fallback. Non-head durable revisions report
+  `NotCurrent`.
 
 Verified ephemeral events are classified but never written to the raw sequence,
 tags, observations, or heads. Their ingest receipt carries
 `RadrootsEventPersistence::NotPersisted`; repeated delivery remains live-only
 and is never reported as a durable duplicate.
 
-Schema version 2 persists NIP-09 reconciliation as derived authority without
-rewriting or deleting raw envelopes. It stores generation-partitioned event
-coordinate facts, admitted deletion-request facts, normalized event and
-address targets, canonical addressable-head state, and an ordered transition
-history. Kind-`5` requests remain durable protocol events and are immune from
-suppression. These derived facts do not claim that a relay removed an event.
-The existing `event_visibility`, `visible_event`, and `visible_event_head`
-queries remain NIP-01 admission/head views in this schema checkpoint; callers
-must not treat them as NIP-09-aware until the generation-bound visibility and
-transition read contract is published.
+Schema version 3 composes NIP-09 reconciliation with a generation-bound current
+visibility view, generic addressable transition feed, and focused kind-`30402`
+FoodAvailability projection. Version 2 stores generation-partitioned event
+coordinate facts, admitted deletion-request facts, normalized event and address
+targets, canonical addressable-head state, and ordered transition history.
+Version 3 applies the same admission, raw-head, and suppression predicate to
+regular, replaceable, addressable, feed, and focused projection reads. Kind-`5`
+requests remain durable protocol events and are immune from suppression. These
+derived facts do not claim that a relay removed an event.
+
+`current_event_visibility_v1` returns the complete generation-bound decision
+and NIP-09 evidence for a stored event. Food point, recent, and literal FTS5
+search APIs expose only the active, visible FoodAvailability heads and reverify
+each returned raw event and projection. Their persisted cursor seals generation,
+feed/projection versions, scope, manifest digest, high-water, and row count.
+`audit_food_availability_projection_v1` is the explicit exhaustive projection,
+image, source-transition, exact visible-head coordinate, FTS, and signed-event
+integrity check; ordinary reads use bounded seal validation.
 
 The `0002_nip09` migration also installs guards that reject accidental
 out-of-sequence SQL mutation of raw envelopes, tags, heads, reconciliation
@@ -93,12 +104,13 @@ rollback failure.
 
 The reconciliation core and its shared raw-head storage are isolated in
 versioned modules whose complete production AST identities are bound by the
-manifest. The authenticated ingest wrapper then creates a private post-core
-storage capability whose only production methods write the declared trade and
-transport-observation operation/table pairs. Extension orchestration receives
-that capability rather than a SQL transaction and has no SQLx authority. The
-capability policy rejects transaction escape, dynamic or compound SQL, schema
-changes, attached databases, and event-store protocol authority.
+manifest. The authenticated ingest wrapper then creates private post-core
+storage capabilities. Version 1 can write only its declared trade and
+transport-observation operation/table pairs; version 2 can apply only pending
+FoodAvailability transitions. Extension orchestration receives those bounded
+capabilities rather than a SQL transaction. The capability policy rejects
+transaction escape, dynamic or compound SQL, schema changes, attached
+databases, and ungoverned protocol authority.
 
 The capability borrow ends before an identity-bound validator compares the
 exact source generation/profile authority, maintained raw counters and indexed
@@ -110,9 +122,10 @@ than quadratic per-ingest scans.
 ## Schema authority
 
 Every constructor converges the database through a versioned migration
-authority whose current version is `2`. The frozen `0001_event_store` and
-`0002_nip09` SQL inputs are pinned by byte length and SHA-256 in the embedded
-registry. Fresh databases install them transactionally; an existing
+authority whose current version is `3`. The frozen `0001_event_store`,
+`0002_nip09`, and additive `0003_food_availability_projection` SQL inputs are
+pinned by byte length and SHA-256 in the embedded registry. Fresh databases
+install them transactionally; an existing
 unledgered database is adopted only when its exact 46-object SQLite catalog
 matches the frozen version-1 baseline fingerprint. Partial schemas, altered
 tables, attached indexes or triggers, counterfeit ledgers, history gaps,
@@ -121,8 +134,9 @@ checksum drift, and schemas newer than this crate fail closed.
 Checksummed, tamper-evident managed history lives in the strict, without-rowid
 `radroots_event_store_schema_migrations` ledger and fails closed on drift.
 Current-schema opens return after read-only inspection and validate the active
-reconciliation source authority. Every open validates all hooks in applied
-migration order, so a later hookless migration cannot mask an earlier hook.
+reconciliation source authority plus the bounded Food projection seal. Every
+open validates all hooks in applied migration order, so a later hook cannot
+mask an earlier hook.
 Mutating migration work rechecks under `BEGIN IMMEDIATE`, validates exact
 catalog deltas, SQLite and FTS5 integrity, event-store-owned foreign keys, and
 all applied migration-hook results before commit, and never changes
@@ -143,21 +157,23 @@ block event-store migration or source rebuild.
 
 Migration `0002_nip09` re-verifies the frozen raw JSON and immutable columns,
 rebuilds derived registry-v7 admission and raw-head facts, then creates one
-random 32-byte source generation. Initial reconciliation and every later full
-rebuild use the same marker-first state machine: the marker binds the exact
+random 32-byte source generation. Its marker-first state machine binds the exact
 prior and raw authority, an impossible deferred foreign-key barrier prevents a
 partial rebuild from committing, and guarded closure requires the rebuilt
-authority before commit. Each successful rebuild appends a fresh random
-generation and preserves prior generations, facts, states, and transition
-history as immutable records. All NIP-09 facts, canonical addressable state,
-and transitions are partitioned by generation. The reconciliation version,
-addressable-feed version, registry version, hook-manifest digest, raw counts,
-raw high-water sequence, and transition floor are stored with each generation
-and validated on open.
+authority before commit. Generations, NIP-09 facts, canonical addressable state,
+and transitions are immutable and generation-partitioned. The reconciliation
+version, addressable-feed version, registry version, hook-manifest digest, raw
+counts, raw high-water sequence, and transition floor are stored with each
+generation and validated on open. A supported current-schema full rebuild must
+also reset and replay the version-3 Food authority before that marker closes;
+this checkpoint does not yet expose such a maintenance operation.
 
-The one-time reconciliation preflights and then rechecks under the writer lock
-at most 25,000 raw events, 250,000 raw tags, 64 MiB of retained event-row text,
-and 32 MiB of retained tag-row text. It loads both authorities in checked
+Every pending rebuild-bound migration, including `0002_nip09` and
+`0003_food_availability_projection`, preflights and then rechecks under the
+writer lock at most 25,000 raw events, 250,000 raw tags, 64 MiB of retained
+event-row text, and 32 MiB of retained tag-row text. This same immutable-source
+bound caps the rows and payload from which the Food projection, image rows, and
+FTS authority are derived. Reconciliation loads both raw authorities in checked
 512-row pages. Candidate heads evaluate only the exact event- and
 address-target request indices, merging shared matches once in canonical
 request order without cloning request payloads. Exceeding a dimension returns

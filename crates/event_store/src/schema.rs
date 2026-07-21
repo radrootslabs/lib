@@ -15,6 +15,10 @@ use crate::nip09::reconciliation_v1::{
     OsSourceGenerationProvider, ReconciliationCapacityLimits, SourceGenerationProvider,
     apply_reconciliation_hook, validate_active_hook_state_fast, validate_reconciliation_capacity,
 };
+use crate::store::food_availability_projection_v1::{
+    apply_food_availability_projection_hook_v1,
+    validate_food_availability_projection_hook_state_fast_v1,
+};
 
 #[cfg(test)]
 const EMPTY_SCHEMA_SHA256: &str =
@@ -152,7 +156,7 @@ async fn migrate_event_store_schema_with_registry_and_generation_provider(
     {
         return Ok(());
     }
-    if has_pending_reconciliation_hook(&status, registry) {
+    if has_pending_source_capacity_hook(&status, registry) {
         let mut connection = pool.acquire().await?;
         validate_event_store_temp_schema_with_registry(&mut connection, registry).await?;
         validate_reconciliation_capacity(&mut connection, reconciliation_limits).await?;
@@ -170,7 +174,7 @@ async fn migrate_event_store_schema_with_registry_and_generation_provider(
     finish_schema_transaction(transaction, result).await
 }
 
-fn has_pending_reconciliation_hook(
+fn has_pending_source_capacity_hook(
     status: &RadrootsEventStoreSchemaStatus,
     registry: &[EventStoreMigration],
 ) -> bool {
@@ -181,7 +185,11 @@ fn has_pending_reconciliation_hook(
     };
     registry.iter().any(|migration| {
         migration.version > current_version
-            && migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1
+            && matches!(
+                migration.hook,
+                EventStoreMigrationHook::Nip09ReconciliationV1
+                    | EventStoreMigrationHook::FoodAvailabilityProjectionV1
+            )
     })
 }
 
@@ -290,7 +298,11 @@ async fn migrate_schema_on_connection(
         .iter()
         .filter(|migration| migration.version > current_version)
     {
-        if migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1 {
+        if matches!(
+            migration.hook,
+            EventStoreMigrationHook::Nip09ReconciliationV1
+                | EventStoreMigrationHook::FoodAvailabilityProjectionV1
+        ) {
             validate_reconciliation_capacity(connection, reconciliation_limits).await?;
         }
         apply_migration_up(connection, registry, migration).await?;
@@ -614,6 +626,9 @@ async fn apply_migration_hook(
         EventStoreMigrationHook::Nip09ReconciliationV1 => {
             apply_reconciliation_hook(connection, generation_provider, reconciliation_limits).await
         }
+        EventStoreMigrationHook::FoodAvailabilityProjectionV1 => {
+            apply_food_availability_projection_hook_v1(connection).await
+        }
     }
 }
 
@@ -625,6 +640,9 @@ async fn validate_migration_hook_state(
         EventStoreMigrationHook::None => Ok(()),
         EventStoreMigrationHook::Nip09ReconciliationV1 => {
             validate_active_hook_state_fast(connection).await
+        }
+        EventStoreMigrationHook::FoodAvailabilityProjectionV1 => {
+            validate_food_availability_projection_hook_state_fast_v1(connection).await
         }
     }
 }
@@ -1068,7 +1086,7 @@ DROP TABLE radroots_event_store_v2_parent;";
     }
 
     #[tokio::test]
-    async fn nip09_capacity_is_rechecked_inside_migration_transaction() {
+    async fn source_capacity_is_rechecked_for_every_rebuild_bound_migration() {
         let pool = memory_pool().await;
         install_unledgered_baseline(&pool).await;
         sqlx::query(
@@ -1097,14 +1115,20 @@ DROP TABLE radroots_event_store_v2_parent;";
             limits,
         )
         .await;
-        assert!(matches!(
-            finish_schema_transaction(transaction, result).await,
-            Err(RadrootsEventStoreError::ReconciliationCapacityExceeded {
-                resource: crate::RadrootsEventStoreReconciliationResource::RawEvents,
-                actual: 1,
-                limit: 0,
-            })
-        ));
+        let error = finish_schema_transaction(transaction, result)
+            .await
+            .expect_err("reconciliation capacity excess must fail");
+        assert!(
+            matches!(
+                error,
+                RadrootsEventStoreError::ReconciliationCapacityExceeded {
+                    resource: crate::RadrootsEventStoreReconciliationResource::RawEvents,
+                    actual: 1,
+                    limit: 0,
+                }
+            ),
+            "unexpected reconciliation capacity failure: {error:?}"
+        );
         assert_eq!(
             inspect_event_store_schema_status(&pool)
                 .await
@@ -1118,6 +1142,78 @@ DROP TABLE radroots_event_store_v2_parent;";
         .await
         .expect("v2 object count");
         assert_eq!(v2_object_count, 0);
+
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            &EVENT_STORE_MIGRATIONS[..2],
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            2,
+        )
+        .await
+        .expect("install v2 schema");
+        sqlx::query(
+            "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 1, 1, '[]', '', ?, '{}', 'verified', 'unsupported', NULL, 'regular', 0, 1, 1)",
+        )
+        .bind("d".repeat(64))
+        .bind("e".repeat(64))
+        .bind("f".repeat(128))
+        .execute(&pool)
+        .await
+        .expect("post-v2 raw event");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET raw_event_count = 1, raw_high_water_seq = (SELECT MAX(seq) FROM event_envelopes) WHERE singleton = 1",
+        )
+        .execute(&pool)
+        .await
+        .expect("advance post-v2 source authority");
+
+        let mut transaction = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("v3 migration transaction");
+        let result = migrate_schema_on_connection(
+            &mut transaction,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            &OsSourceGenerationProvider,
+            limits,
+        )
+        .await;
+        let error = finish_schema_transaction(transaction, result)
+            .await
+            .expect_err("v3 capacity excess must fail");
+        assert!(
+            matches!(
+                error,
+                RadrootsEventStoreError::ReconciliationCapacityExceeded {
+                    resource: crate::RadrootsEventStoreReconciliationResource::RawEvents,
+                    actual: 1,
+                    limit: 0,
+                }
+            ),
+            "unexpected v3 capacity failure: {error:?}"
+        );
+        assert_eq!(
+            inspect_event_store_schema_status(&pool)
+                .await
+                .expect("v2 status after rejected v3 migration"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 2 }
+        );
+        let v3_object_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'radroots_event_store_food_availability_projection'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v3 object count");
+        assert_eq!(v3_object_count, 0);
+        let v3_ledger_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM radroots_event_store_schema_migrations WHERE version = 3",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v3 ledger count");
+        assert_eq!(v3_ledger_count, 0);
     }
 
     #[tokio::test]
@@ -1472,15 +1568,43 @@ DROP TABLE event_envelopes;";
 
     #[tokio::test]
     async fn nip09_catalog_matches_the_declared_schema_fingerprint() {
+        let predecessor_registry = &EVENT_STORE_MIGRATIONS[..2];
         let pool = memory_pool().await;
-        sqlx::raw_sql(EVENT_STORE_MIGRATIONS[0].up_sql)
+        sqlx::raw_sql(predecessor_registry[0].up_sql)
             .execute(&pool)
             .await
             .expect("v1 schema");
-        sqlx::raw_sql(EVENT_STORE_MIGRATIONS[1].up_sql)
+        sqlx::raw_sql(predecessor_registry[1].up_sql)
             .execute(&pool)
             .await
             .expect("v2 schema");
+
+        let mut connection = pool.acquire().await.expect("connection");
+        let catalog = governed_catalog(
+            &read_catalog(&mut connection).await.expect("catalog"),
+            predecessor_registry,
+        );
+        let declared_object_count = predecessor_registry
+            .iter()
+            .map(|migration| migration.owned_object_names.len())
+            .sum::<usize>();
+
+        assert_eq!(catalog.len(), declared_object_count);
+        assert_eq!(
+            catalog_fingerprint(&catalog),
+            predecessor_registry[1].schema_sha256
+        );
+    }
+
+    #[tokio::test]
+    async fn current_catalog_matches_the_declared_schema_fingerprint() {
+        let pool = memory_pool().await;
+        for migration in EVENT_STORE_MIGRATIONS {
+            sqlx::raw_sql(migration.up_sql)
+                .execute(&pool)
+                .await
+                .expect("migration schema");
+        }
 
         let mut connection = pool.acquire().await.expect("connection");
         let catalog = governed_catalog(
@@ -1495,7 +1619,10 @@ DROP TABLE event_envelopes;";
         assert_eq!(catalog.len(), declared_object_count);
         assert_eq!(
             catalog_fingerprint(&catalog),
-            EVENT_STORE_MIGRATIONS[1].schema_sha256
+            EVENT_STORE_MIGRATIONS
+                .last()
+                .expect("current migration")
+                .schema_sha256
         );
     }
 
@@ -1927,7 +2054,7 @@ DROP TABLE event_envelopes;";
         ));
 
         let unknown = AppliedMigration {
-            version: 3,
+            version: 4,
             name: "future".to_owned(),
             up_sha256: "0".repeat(64),
             down_sha256: "1".repeat(64),
@@ -1938,12 +2065,13 @@ DROP TABLE event_envelopes;";
                 &[
                     row(&EVENT_STORE_MIGRATIONS[0]),
                     row(&EVENT_STORE_MIGRATIONS[1]),
+                    row(&EVENT_STORE_MIGRATIONS[2]),
                     unknown
                 ],
                 EVENT_STORE_MIGRATIONS,
-                3
+                4
             ),
-            Err(RadrootsEventStoreError::UnknownMigration { version: 3 })
+            Err(RadrootsEventStoreError::UnknownMigration { version: 4 })
         ));
     }
 
@@ -1988,12 +2116,13 @@ DROP TABLE event_envelopes;";
                 target: 0
             })
         ));
+        let ahead = RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT + 1;
         assert!(matches!(
-            rollback_event_store_schema_offline(&managed, 3).await,
+            rollback_event_store_schema_offline(&managed, ahead).await,
             Err(RadrootsEventStoreError::RollbackAhead {
                 current: RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
-                target: 3
-            })
+                target
+            }) if target == ahead
         ));
         rollback_event_store_schema_offline(&managed, 1)
             .await

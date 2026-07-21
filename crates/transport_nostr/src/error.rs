@@ -86,6 +86,13 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay fetch {field} must be greater than zero")]
     InvalidFetchLimit { field: &'static str },
 
+    #[error("Relay fetch {field} {actual} exceeds maximum {max}")]
+    FetchLimitTooLarge {
+        field: &'static str,
+        max: usize,
+        actual: usize,
+    },
+
     #[error("Relay transport {field} cannot be negative: {value}")]
     InvalidTimestamp { field: &'static str, value: i64 },
 
@@ -113,6 +120,18 @@ pub enum RadrootsRelayTransportError {
     #[cfg(feature = "storage")]
     #[error("Event store error: {0}")]
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
+
+    #[cfg(feature = "storage")]
+    #[error("Event store returned no current visibility for persisted event `{event_id}`")]
+    MissingStoredEventVisibility { event_id: String },
+
+    #[cfg(feature = "storage")]
+    #[error("Persisted relay fetch event receipt is missing its event id")]
+    MissingPersistedFetchReceiptEventId,
+
+    #[cfg(feature = "storage")]
+    #[error("Event store returned an unsupported current visibility for event `{event_id}`")]
+    UnsupportedStoredEventVisibility { event_id: String },
 
     #[cfg(feature = "storage")]
     #[error("Outbox error: {0}")]

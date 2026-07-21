@@ -1,0 +1,418 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_event_store.food_availability_projection_v1",
+  "hook_id": "food_availability_projection_v1",
+  "manifest_schema": {
+    "path": "crates/event_store/contracts/food_availability_projection_v1.manifest.schema.json",
+    "byte_length": 7964,
+    "sha256": "39171f6ef872a8d1483bc3d55049df5e0d110d9131c5adb4450b7c418f546910",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "predecessor": {
+    "hook_id": "nip09_reconciliation_v1",
+    "manifest": {
+      "path": "crates/event_store/contracts/nip09_reconciliation_v1.manifest.json",
+      "byte_length": 537538,
+      "sha256": "74af832420ffbaa9805e89df3c0b34f126a443e1598f757e3372f407f9003b77",
+      "hash_algorithm": "sha256_bytes_v1"
+    }
+  },
+  "migration": {
+    "version": 3,
+    "name": "food_availability_projection",
+    "up": {
+      "path": "crates/event_store/migrations/0003_food_availability_projection.up.sql",
+      "byte_length": 23683,
+      "sha256": "4e7edfb981b25f76055efc7802ec30b4034eeae9b9c0809ea4ea7c574678748a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "down": {
+      "path": "crates/event_store/migrations/0003_food_availability_projection.down.sql",
+      "byte_length": 1755,
+      "sha256": "29d663320109d9dd0df6a00b6a53d8d988438d01f7a66960a9d4ba3482ffffb8",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "schema_sha256": "dd12467e04addcbddb5ea0f386c12a8ac05ef5ebaaf949f24dd2c62745f5aaac",
+    "catalog": {
+      "objects": [
+        "radroots_event_store_addressable_feed_generation_insert",
+        "radroots_event_store_addressable_feed_integrity_v1",
+        "radroots_event_store_addressable_feed_transition_insert",
+        "radroots_event_store_addressable_transition_coordinate_idx",
+        "radroots_event_store_current_visibility_head_lookup_idx",
+        "radroots_event_store_current_visibility_v1",
+        "radroots_event_store_food_availability_author_idx",
+        "radroots_event_store_food_availability_cursor",
+        "radroots_event_store_food_availability_cursor_delete_guard",
+        "radroots_event_store_food_availability_cursor_insert_guard",
+        "radroots_event_store_food_availability_cursor_update_guard",
+        "radroots_event_store_food_availability_image",
+        "radroots_event_store_food_availability_image_delete_guard",
+        "radroots_event_store_food_availability_image_insert_guard",
+        "radroots_event_store_food_availability_image_update_guard",
+        "radroots_event_store_food_availability_projection",
+        "radroots_event_store_food_availability_projection_delete_guard",
+        "radroots_event_store_food_availability_projection_insert_guard",
+        "radroots_event_store_food_availability_projection_update_guard",
+        "radroots_event_store_food_availability_read_v1",
+        "radroots_event_store_food_availability_recent_idx",
+        "radroots_event_store_food_availability_search_delete",
+        "radroots_event_store_food_availability_search_fts",
+        "radroots_event_store_food_availability_search_fts_config",
+        "radroots_event_store_food_availability_search_fts_content",
+        "radroots_event_store_food_availability_search_fts_data",
+        "radroots_event_store_food_availability_search_fts_docsize",
+        "radroots_event_store_food_availability_search_fts_idx",
+        "radroots_event_store_food_availability_search_insert",
+        "radroots_event_store_food_availability_status_idx",
+        "radroots_event_store_nip09_address_target_visibility_lookup_idx"
+      ],
+      "tables": [
+        "radroots_event_store_addressable_feed_integrity_v1",
+        "radroots_event_store_food_availability_cursor",
+        "radroots_event_store_food_availability_image",
+        "radroots_event_store_food_availability_projection",
+        "radroots_event_store_food_availability_search_fts",
+        "radroots_event_store_food_availability_search_fts_config",
+        "radroots_event_store_food_availability_search_fts_content",
+        "radroots_event_store_food_availability_search_fts_data",
+        "radroots_event_store_food_availability_search_fts_docsize",
+        "radroots_event_store_food_availability_search_fts_idx"
+      ],
+      "fts5_tables": [
+        "radroots_event_store_food_availability_search_fts"
+      ]
+    }
+  },
+  "profile": {
+    "event_contract_registry_version": 7,
+    "addressable_feed_version": 1,
+    "projection_version": 1,
+    "scope_kinds": [
+      30402
+    ],
+    "scope_fingerprint_sha256": "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0",
+    "food_contract_id": "radroots.food.availability.v1",
+    "admission_authority": "event_contract_registry_v7",
+    "current_visibility_authority": "radroots_event_store_current_visibility_v1",
+    "post_core_capability": "apply_v2"
+  },
+  "registry_inventory": {
+    "path": "contracts/event_store/event_contract_registry_v7.inventory.json",
+    "byte_length": 158021,
+    "sha256": "91595544310f865bdef064ee760c227c870417a95b87b3e27278f8da74fdddea",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "food_profile_vector": {
+    "path": "contracts/conformance/vectors/food_availability/profile.v1.json",
+    "byte_length": 90099,
+    "sha256": "dede1eb1f682ecd548e8cd3ccb251d298762e504e2588a73528e5f7a5b9eff21",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "entry_points": [
+    {
+      "role": "registry_v7_admission",
+      "rust_path": "radroots_event_codec::admit_verified_event_registry_v7"
+    },
+    {
+      "role": "migration_registry",
+      "rust_path": "radroots_event_store::migrations::EVENT_STORE_MIGRATIONS[2]"
+    },
+    {
+      "role": "migration_apply_hook",
+      "rust_path": "radroots_event_store::schema::apply_migration_hook"
+    },
+    {
+      "role": "migration_validation_hook",
+      "rust_path": "radroots_event_store::schema::validate_migration_hook_state"
+    },
+    {
+      "role": "post_core_extension",
+      "rust_path": "radroots_event_store::store::PostCoreExtensionCapabilities::apply_v2"
+    },
+    {
+      "role": "addressable_transition_feed",
+      "rust_path": "radroots_event_store::RadrootsEventStore::addressable_transition_page_v1"
+    },
+    {
+      "role": "current_visibility",
+      "rust_path": "radroots_event_store::RadrootsEventStore::current_event_visibility_v1"
+    },
+    {
+      "role": "event_visibility_batch",
+      "rust_path": "radroots_event_store::RadrootsEventStore::event_visibilities"
+    },
+    {
+      "role": "projection_lookup",
+      "rust_path": "radroots_event_store::RadrootsEventStore::food_availability_v1"
+    },
+    {
+      "role": "projection_recent",
+      "rust_path": "radroots_event_store::RadrootsEventStore::recent_food_availability_v1"
+    },
+    {
+      "role": "projection_search",
+      "rust_path": "radroots_event_store::RadrootsEventStore::search_food_availability_v1"
+    },
+    {
+      "role": "projection_audit",
+      "rust_path": "radroots_event_store::RadrootsEventStore::audit_food_availability_projection_v1"
+    },
+    {
+      "role": "result_vector_executor",
+      "rust_path": "food_availability_projection_v1_result_vector"
+    }
+  ],
+  "source_files": [
+    {
+      "role": "workspace_dependency_authority",
+      "path": "Cargo.toml",
+      "byte_length": 10836,
+      "sha256": "285532dbb0894204843a832880f136ceac5ee312a3203ff951fb0551fac63ec4",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_store_dependency_authority",
+      "path": "crates/event_store/Cargo.toml",
+      "byte_length": 1466,
+      "sha256": "9e82d57b64bb7fcf145ee8b919682dd6d788b5503be743d11326f5b882fb2d7e",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "blossom_public_surface",
+      "path": "crates/blossom/src/lib.rs",
+      "byte_length": 1335,
+      "sha256": "61ebee86f02887c45507bab052686da082f74ae26f23d18ff4019e02c70097bd",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "blossom_sha256_value_object",
+      "path": "crates/blossom/src/hash.rs",
+      "byte_length": 11251,
+      "sha256": "753eff6ef9a810045c88839d39a46b37d62a4ad0a5ea57aa30e2a8219e3cdbda",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "food_event_contract",
+      "path": "crates/event/src/food_availability.rs",
+      "byte_length": 45680,
+      "sha256": "1c8c3fba6514f9b246545b3305e8ac2742258857d1b813fa34c5fbefa6135e12",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "food_admission",
+      "path": "crates/event_codec/src/food_availability/admission.rs",
+      "byte_length": 5799,
+      "sha256": "727ebf8f086c14376aba745a0a02b269115fed01e8ce95f90fdd211b9640f842",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "registry_v7_admission",
+      "path": "crates/event_codec/src/admission/registry_v7.rs",
+      "byte_length": 5350,
+      "sha256": "755e63dd7ad1115c219e5a3ea540bef67d2770fc9f2a5aa6ba97c925c99bdced",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "registry_v7_food_projection",
+      "path": "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+      "byte_length": 26865,
+      "sha256": "908015346eaec97bee6f44fe2a524410b701529ac19a5dab4505706d40d527da",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_store_error_surface",
+      "path": "crates/event_store/src/error.rs",
+      "byte_length": 17557,
+      "sha256": "ac206fafdc67e4c25f4a2f1bcd38eb34ae224b38aca55894b1a9cc67242d8b1a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "generated_descriptor_registration",
+      "path": "crates/event_store/src/generated.rs",
+      "byte_length": 100,
+      "sha256": "ddd71b2245f307cac0c8ef835311d0dd9eb2fdaf9d2a76a6c9dc98e56f4faaec",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "public_surface",
+      "path": "crates/event_store/src/lib.rs",
+      "byte_length": 3419,
+      "sha256": "d5bc071309fd4ec9e26a3cfe9c0e7c00b5de5b6c248902b888891b39e6780d23",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "migration_registry",
+      "path": "crates/event_store/src/migrations.rs",
+      "byte_length": 55541,
+      "sha256": "ef62808fe75b5c0704567eecccfe23d0b11ae25d332bc5e38451ea2a446c535a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "model_registration",
+      "path": "crates/event_store/src/model.rs",
+      "byte_length": 33617,
+      "sha256": "79296b8f263aa06d17005795e4515f769f064ea6fd971eeb1296e1151debaf20",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "schema_hooks",
+      "path": "crates/event_store/src/schema.rs",
+      "byte_length": 97574,
+      "sha256": "6d259548559f32e259d3502787ccd4efbd22eebd1406dd7dd68c8f3145411543",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "store_ingest_and_wal_authority",
+      "path": "crates/event_store/src/store.rs",
+      "byte_length": 357693,
+      "sha256": "8bca94e5c7b26cee60a06ea327fcba385e6cbc51550f1774ef4d0488ffa2727b",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "addressable_transition_feed_model",
+      "path": "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+      "byte_length": 22314,
+      "sha256": "b1c6b0a68f34459f7e14bd63857596154c0aa3fd02dc6c1661d543bb681324a7",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "current_visibility_model",
+      "path": "crates/event_store/src/model/current_visibility_v1.rs",
+      "byte_length": 5691,
+      "sha256": "25ec92f45006e2f66f2e1c8b954a021334bb1595b849c4d8529f289d3f7aeb25",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "food_projection_model",
+      "path": "crates/event_store/src/model/food_availability_projection_v1.rs",
+      "byte_length": 17493,
+      "sha256": "1e5ff9c05a81fda223ed1a27ff18a1b08bcdeaec9047a13fdd577390b3e0fdb9",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "addressable_transition_feed_store",
+      "path": "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+      "byte_length": 40253,
+      "sha256": "fe23424aa1e6b39f9aba2dfa4470652b26b4990f91204a2bdfe379c03da9b610",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "current_visibility_store",
+      "path": "crates/event_store/src/store/current_visibility_v1.rs",
+      "byte_length": 15860,
+      "sha256": "8615086e674c30700305debcef11de5b3dbfe5aec735c0f58b4ac11caa518596",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "food_projection_store",
+      "path": "crates/event_store/src/store/food_availability_projection_v1.rs",
+      "byte_length": 49029,
+      "sha256": "0cec060c50c50d9333e0583e338fe311a1c64a1d586c222e391d8cef685cf871",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_protocol_storage",
+      "path": "crates/event_store/src/store/protocol_storage_v1.rs",
+      "byte_length": 10975,
+      "sha256": "155c74d27eee5db1d6f0f844f9d319604eefbbf640f4b2371ac5d0e370816e50",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_active_state_fast_validation",
+      "path": "crates/event_store/src/nip09/reconciliation_v1.rs",
+      "byte_length": 183733,
+      "sha256": "3bddb664491bd9abe878f5b2441d1230fb188368dae341f3425a2b035211366a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "post_core_capabilities",
+      "path": "crates/event_store/src/store/post_core_extension_capabilities.rs",
+      "byte_length": 1255,
+      "sha256": "cb434372156cb7ff31dac392d7095c2e5f44b128fae4e705516d6d000e2e2502",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "post_core_dispatcher",
+      "path": "crates/event_store/src/store/post_core_extension_dispatcher.rs",
+      "byte_length": 576,
+      "sha256": "df62ee92e9f165502d5e533997a47f533129fd3cffab2d9b2012e2ed22405f48",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "post_core_v2_extension",
+      "path": "crates/event_store/src/store/post_core_extensions_v2.rs",
+      "byte_length": 294,
+      "sha256": "8dcbc503ed9ea6fb06ed9a2a83b0804d928f9590b5706de25a057ad72c0d38d2",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "post_core_v2_storage",
+      "path": "crates/event_store/src/store/post_core_storage_v2.rs",
+      "byte_length": 632,
+      "sha256": "4b672770f3c34bf887e4cc949c068cb0c87396cb4af8efb6e13d39aa4e0d973a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_post_core_v1_extension",
+      "path": "crates/event_store/src/store/post_core_extensions_v1.rs",
+      "byte_length": 6935,
+      "sha256": "fb165704c64d982cf3be0a880c44985be6b375758451e94b2aaaf30881769f18",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_post_core_v1_storage",
+      "path": "crates/event_store/src/store/post_core_storage_v1.rs",
+      "byte_length": 16871,
+      "sha256": "a6dca0884762cec3c32e460d17662ced9d0335f30e79b3d5fdb3461259d3ec19",
+      "hash_algorithm": "sha256_bytes_v1"
+    }
+  ],
+  "public_api": [
+    "RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1",
+    "RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1",
+    "RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1",
+    "RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1",
+    "RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1",
+    "RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1",
+    "RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1",
+    "RADROOTS_FOOD_AVAILABILITY_PROJECTION_APPLY_PAGE_LIMIT_V1",
+    "RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1",
+    "RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_BYTES_V1",
+    "RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_TERMS_V1",
+    "RadrootsAddressableTransitionCauseV1",
+    "RadrootsAddressableTransitionCoordinateV1",
+    "RadrootsAddressableTransitionCursorV1",
+    "RadrootsAddressableTransitionEventReferenceV1",
+    "RadrootsAddressableTransitionOriginV1",
+    "RadrootsAddressableTransitionPageV1",
+    "RadrootsAddressableTransitionRawHeadDecisionV1",
+    "RadrootsAddressableTransitionScopeFingerprintV1",
+    "RadrootsAddressableTransitionScopeV1",
+    "RadrootsAddressableTransitionV1",
+    "RadrootsAddressableTransitionVisibilityV1",
+    "RadrootsCurrentEventVisibilityV1",
+    "RadrootsCurrentVisibilityDecisionV1",
+    "RadrootsFoodAvailabilitySearchQueryV1",
+    "RadrootsFoodAvailabilityStatusFilterV1",
+    "RadrootsNip09SuppressionEvidenceV1",
+    "RadrootsNip09SuppressionOutcome",
+    "RadrootsNip09SuppressionReason",
+    "RadrootsStoreProducedCanonicalEventV1",
+    "RadrootsStoredFoodAvailabilityImageV1",
+    "RadrootsStoredFoodAvailabilityV1"
+  ],
+  "result_vector": {
+    "canonical_path": "contracts/conformance/vectors/event_store/food_availability_projection.v1.json",
+    "mirror_path": "crates/event_store/tests/fixtures/food_availability_projection.v1.json",
+    "byte_length": 103659,
+    "sha256": "fca2b71b47736ed04ed1e908823b65b3fc3cf0366cb162128369fe328295bb63",
+    "hash_algorithm": "sha256_bytes_v1",
+    "executor_id": "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1",
+    "executor_path": "crates/event_store/tests/food_availability_projection_v1_result_vector.rs",
+    "executor_test": "food_availability_projection_v1_result_vector",
+    "executor_byte_length": 34075,
+    "executor_sha256": "9e8e11abae7bbc7dda30eab6f0a79074ffc3761aa6b955cff58c4c62fa581aa3",
+    "executor_hash_algorithm": "sha256_bytes_v1"
+  }
+}

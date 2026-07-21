@@ -842,8 +842,13 @@ async fn validate_hook_state_with_events(
 pub(crate) async fn validate_active_hook_state_fast(
     connection: &mut SqliteConnection,
 ) -> Result<(), RadrootsEventStoreError> {
-    let state = validate_structural_hook_state(connection).await?;
-    validate_latest_transitions_match_state(connection, state.generation).await
+    // Supported writes are guarded transactionally. Reopen validates only
+    // constant-cost authority bounds; full history/state and cursor inventory
+    // comparisons remain part of migration and rebuild audits.
+    validate_rebuild_marker_absent(connection).await?;
+    validate_structural_source_state_fast(connection)
+        .await
+        .map(|_| ())
 }
 
 async fn validate_structural_hook_state(
@@ -857,6 +862,12 @@ async fn validate_structural_source_state(
     connection: &mut SqliteConnection,
 ) -> Result<SourceState, RadrootsEventStoreError> {
     validate_projection_cursor_authority(connection).await?;
+    validate_structural_source_state_fast(connection).await
+}
+
+async fn validate_structural_source_state_fast(
+    connection: &mut SqliteConnection,
+) -> Result<SourceState, RadrootsEventStoreError> {
     let rows = sqlx::query(
         "SELECT state.active_generation, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, state.last_transition_seq, generation.generation_ordinal, (SELECT MAX(candidate.generation_ordinal) FROM radroots_event_store_source_generation AS candidate) AS max_generation_ordinal, generation.reconciliation_version, generation.addressable_feed_version, generation.event_contract_registry_version, generation.hook_id, generation.hook_manifest_sha256, generation.transition_floor_seq, generation.baseline_raw_event_count, generation.baseline_raw_tag_count, generation.baseline_raw_high_water_seq FROM radroots_event_store_source_state AS state JOIN radroots_event_store_source_generation AS generation ON generation.source_generation = state.active_generation WHERE state.singleton = 1",
     )

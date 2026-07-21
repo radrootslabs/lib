@@ -10,6 +10,7 @@ pub mod emit;
 pub mod error;
 mod event_head;
 mod geo;
+#[cfg(feature = "legacy-ingest")]
 pub mod ingest;
 pub mod sync_state;
 pub mod types;
@@ -20,6 +21,7 @@ pub use emit::{
     radroots_replica_sync_all, radroots_replica_sync_all_with_options,
 };
 pub use error::RadrootsReplicaEventsError;
+#[cfg(feature = "legacy-ingest")]
 pub use ingest::{
     RadrootsReplicaIdFactory, RadrootsReplicaIngestOutcome, radroots_replica_ingest_event_head,
     radroots_replica_ingest_event_with_factory,
@@ -34,7 +36,7 @@ pub use types::{
     RadrootsReplicaSyncBundle, RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest,
 };
 
-#[cfg(feature = "std")]
+#[cfg(feature = "legacy-ingest")]
 pub use ingest::{RadrootsReplicaDefaultIdFactory, radroots_replica_ingest_event};
 
 #[cfg(test)]

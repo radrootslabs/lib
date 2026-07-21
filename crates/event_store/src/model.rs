@@ -1,5 +1,37 @@
+mod addressable_transition_feed_v1;
+mod current_visibility_v1;
+mod food_availability_projection_v1;
 mod ingest_reconciliation_v1;
 pub(crate) mod reconciliation_v1;
+
+pub use addressable_transition_feed_v1::{
+    RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1,
+    RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1,
+    RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
+    RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1,
+    RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1,
+    RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1,
+    RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1, RadrootsAddressableTransitionCauseV1,
+    RadrootsAddressableTransitionCoordinateV1, RadrootsAddressableTransitionCursorV1,
+    RadrootsAddressableTransitionEventReferenceV1, RadrootsAddressableTransitionOriginV1,
+    RadrootsAddressableTransitionPageV1, RadrootsAddressableTransitionRawHeadDecisionV1,
+    RadrootsAddressableTransitionScopeFingerprintV1, RadrootsAddressableTransitionScopeV1,
+    RadrootsAddressableTransitionV1, RadrootsAddressableTransitionVisibilityV1,
+    RadrootsStoreProducedCanonicalEventV1,
+};
+pub use current_visibility_v1::{
+    RadrootsCurrentEventVisibilityV1, RadrootsCurrentVisibilityDecisionV1,
+    RadrootsNip09SuppressionEvidenceV1, RadrootsNip09SuppressionOutcome,
+    RadrootsNip09SuppressionReason,
+};
+pub use food_availability_projection_v1::{
+    RADROOTS_FOOD_AVAILABILITY_PROJECTION_APPLY_PAGE_LIMIT_V1,
+    RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1,
+    RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_BYTES_V1,
+    RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_TERMS_V1, RadrootsFoodAvailabilitySearchQueryV1,
+    RadrootsFoodAvailabilityStatusFilterV1, RadrootsStoredFoodAvailabilityImageV1,
+    RadrootsStoredFoodAvailabilityV1,
+};
 
 use crate::RadrootsEventStoreError;
 use radroots_event::RadrootsEventKind;
@@ -349,7 +381,15 @@ impl RadrootsStoredVisibleEventHead {
 pub enum RadrootsEventVisibility {
     Visible,
     NotAdmitted,
-    NotCurrent { raw_head_event_id: String },
+    NotCurrent {
+        raw_head_event_id: String,
+    },
+    Suppressed {
+        reason: RadrootsNip09SuppressionReason,
+        event_reference_request_id: Option<RadrootsEventId>,
+        address_reference_request_id: Option<RadrootsEventId>,
+        address_reference_cutoff: Option<u64>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

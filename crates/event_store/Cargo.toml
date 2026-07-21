@@ -17,6 +17,9 @@ sqlite = ["dep:getrandom", "dep:sqlx", "sqlx/sqlite-bundled"]
 runtime-tokio = ["sqlx/runtime-tokio"]
 
 [dependencies]
+radroots_blossom = { workspace = true, default-features = false, features = [
+  "std",
+] }
 radroots_event = { workspace = true, default-features = false, features = [
   "std",
   "serde",
@@ -38,7 +41,7 @@ thiserror = { workspace = true }
 [dev-dependencies]
 nostr = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

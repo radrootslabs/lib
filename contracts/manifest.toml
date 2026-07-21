@@ -80,4 +80,6 @@ require_conformance_vectors = true
 [policy.replica]
 forbid_legacy_alias_identifiers = true
 require_transport_agnostic_sync_contract = true
+# Emit is required in default builds; ingest is required only under the
+# explicit non-default legacy-ingest feature governed by contracts/replica.toml.
 require_deterministic_emit_ingest = true

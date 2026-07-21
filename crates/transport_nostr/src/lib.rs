@@ -15,12 +15,15 @@ pub use error::RadrootsRelayTransportError;
 pub use fetch::fetch_relay_events_blocking;
 #[cfg(feature = "storage")]
 pub use fetch::{
-    RadrootsMockRelayFetchAdapter, RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter,
-    RadrootsRelayFetchEventReceipt, RadrootsRelayFetchFailure, RadrootsRelayFetchFilters,
-    RadrootsRelayFetchItem, RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind,
-    RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest,
-    RadrootsRelayFetchedEvent, RadrootsRelayFetchedEventsReceipt, fetch_and_ingest_relay_events,
-    fetch_relay_events,
+    RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX, RadrootsMockRelayFetchAdapter,
+    RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventAdmission,
+    RadrootsRelayFetchEventReceipt, RadrootsRelayFetchEventValidStream,
+    RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,
+    RadrootsRelayFetchFailure, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
+    RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt,
+    RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest, RadrootsRelayFetchedEvent,
+    RadrootsRelayFetchedEventsReceipt, fetch_and_ingest_relay_events, fetch_relay_events,
 };
 #[cfg(feature = "storage")]
 pub use outbox::{

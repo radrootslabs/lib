@@ -4,9 +4,13 @@ mod admission_authority;
 mod artifact_bundle;
 mod comment_authority;
 mod deletion_authority;
+mod food_availability_projection;
 mod nip09_reconciliation;
 mod registry_v7;
 
+pub(crate) use food_availability_projection::{
+    validate_food_availability_projection_manifest, write_food_availability_projection_manifest,
+};
 pub(crate) use nip09_reconciliation::{
     validate_nip09_reconciliation_manifest, write_nip09_reconciliation_manifest,
 };
@@ -42,8 +46,12 @@ const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
 const NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/event_store/nip09_reconciliation.v1.json";
-const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 1] =
-    [NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE];
+const FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/event_store/food_availability_projection.v1.json";
+const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 2] = [
+    NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
+    FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
+];
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
 const KNOWLEDGE_MANIFEST_SHA256_RELATIVE: &str =
@@ -63,7 +71,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 20] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 21] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -103,6 +111,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 20] = [
     (
         NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
         "crates/event_store/tests/fixtures/nip09_reconciliation.v1.json",
+    ),
+    (
+        FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
+        "crates/event_store/tests/fixtures/food_availability_projection.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
@@ -1379,6 +1391,10 @@ pub struct ReplicaContractPolicy {
     pub classified_listing_operational_projection: String,
     pub classified_listing_excluded_or_rejected_head: String,
     pub classified_listing_head_only_ingest: String,
+    pub legacy_bare_envelope_ingest: String,
+    pub legacy_ingest_feature: String,
+    pub phase_1_ingest_replacement: String,
+    pub future_product_ingest_input: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4994,7 +5010,190 @@ fn parse_replica_transfer_constant(path: &Path, name: &str) -> Result<u32, Strin
     })
 }
 
+fn has_exact_legacy_ingest_cfg(attributes: &[syn::Attribute]) -> bool {
+    let mut cfg_attributes = attributes
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("cfg"));
+    let Some(attribute) = cfg_attributes.next() else {
+        return false;
+    };
+    if cfg_attributes.next().is_some() {
+        return false;
+    }
+    let syn::Meta::List(arguments) = &attribute.meta else {
+        return false;
+    };
+    let Ok(predicate) = arguments.parse_args::<syn::Meta>() else {
+        return false;
+    };
+    let syn::Meta::NameValue(feature) = predicate else {
+        return false;
+    };
+    if !feature.path.is_ident("feature") {
+        return false;
+    }
+    matches!(
+        feature.value,
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(value),
+            ..
+        }) if value.value() == "legacy-ingest"
+    )
+}
+
+fn replica_use_tree_references_ingest(tree: &syn::UseTree) -> bool {
+    match tree {
+        syn::UseTree::Path(path) => {
+            path.ident == "ingest" || replica_use_tree_references_ingest(&path.tree)
+        }
+        syn::UseTree::Name(name) => name.ident == "ingest",
+        syn::UseTree::Rename(rename) => rename.ident == "ingest",
+        syn::UseTree::Group(group) => group.items.iter().any(replica_use_tree_references_ingest),
+        syn::UseTree::Glob(_) => false,
+    }
+}
+
+fn collect_public_replica_ingest_exports<'a>(
+    items: &'a [syn::Item],
+    exports: &mut Vec<&'a syn::ItemUse>,
+) {
+    for item in items {
+        match item {
+            syn::Item::Use(export)
+                if matches!(&export.vis, syn::Visibility::Public(_))
+                    && replica_use_tree_references_ingest(&export.tree) =>
+            {
+                exports.push(export);
+            }
+            syn::Item::Mod(module) if matches!(&module.vis, syn::Visibility::Public(_)) => {
+                if let Some((_, nested_items)) = &module.content {
+                    collect_public_replica_ingest_exports(nested_items, exports);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn validate_replica_legacy_ingest_exports(lib_path: &Path, source: &str) -> Result<(), String> {
+    let syntax = syn::parse_file(source)
+        .map_err(|error| format!("parse replica sync source {}: {error}", lib_path.display()))?;
+    let ingest_modules = syntax
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Mod(module) if module.ident == "ingest" => Some(module),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if ingest_modules.len() != 1 {
+        return Err(format!(
+            "replica legacy ingest source {} must declare exactly one ingest module",
+            lib_path.display()
+        ));
+    }
+    let ingest_module = ingest_modules[0];
+    if !matches!(&ingest_module.vis, syn::Visibility::Public(_)) {
+        return Err(format!(
+            "replica legacy ingest module in {} must remain public",
+            lib_path.display()
+        ));
+    }
+    if !has_exact_legacy_ingest_cfg(&ingest_module.attrs) {
+        return Err(format!(
+            "replica legacy ingest module in {} must be guarded by exact #[cfg(feature = \"legacy-ingest\")]",
+            lib_path.display()
+        ));
+    }
+
+    let mut ingest_exports = Vec::new();
+    collect_public_replica_ingest_exports(&syntax.items, &mut ingest_exports);
+    if ingest_exports.is_empty() {
+        return Err(format!(
+            "replica legacy ingest source {} must publicly re-export the ingest API",
+            lib_path.display()
+        ));
+    }
+    if ingest_exports
+        .iter()
+        .any(|export| !has_exact_legacy_ingest_cfg(&export.attrs))
+    {
+        return Err(format!(
+            "every public replica ingest re-export in {} must be guarded by exact #[cfg(feature = \"legacy-ingest\")]",
+            lib_path.display()
+        ));
+    }
+    Ok(())
+}
+
 fn validate_replica_policy_source_witnesses(sync_root: &Path) -> Result<(), String> {
+    let cargo_path = sync_root.join("Cargo.toml");
+    let cargo_source = fs::read_to_string(&cargo_path)
+        .map_err(|error| format!("read {}: {error}", cargo_path.display()))?;
+    let cargo: toml::Value = toml::from_str(&cargo_source)
+        .map_err(|error| format!("parse {}: {error}", cargo_path.display()))?;
+    let features = cargo
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("replica sync {} must define features", cargo_path.display()))?;
+    let default_features = features
+        .get("default")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| {
+            format!(
+                "replica sync {} must define default features",
+                cargo_path.display()
+            )
+        })?;
+    let mut pending_default_features = default_features
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect::<Vec<_>>();
+    let mut visited_default_features = BTreeSet::new();
+    while let Some(feature) = pending_default_features.pop() {
+        if !visited_default_features.insert(feature) {
+            continue;
+        }
+        if feature == "legacy-ingest" {
+            return Err(format!(
+                "replica legacy-ingest must not be enabled by default features in {}",
+                cargo_path.display()
+            ));
+        }
+        if let Some(members) = features.get(feature).and_then(toml::Value::as_array) {
+            pending_default_features.extend(
+                members
+                    .iter()
+                    .filter_map(toml::Value::as_str)
+                    .filter(|member| features.contains_key(*member)),
+            );
+        }
+    }
+    let legacy_features = features
+        .get("legacy-ingest")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| {
+            format!(
+                "replica sync {} must define the explicit legacy-ingest feature",
+                cargo_path.display()
+            )
+        })?;
+    if !legacy_features
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .any(|feature| feature == "std")
+    {
+        return Err(format!(
+            "replica legacy-ingest feature in {} must enable std",
+            cargo_path.display()
+        ));
+    }
+
+    let lib_path = sync_root.join("src/lib.rs");
+    let lib_source = fs::read_to_string(&lib_path)
+        .map_err(|error| format!("read {}: {error}", lib_path.display()))?;
+    validate_replica_legacy_ingest_exports(&lib_path, &lib_source)?;
+
     let types_path = sync_root.join("src/types.rs");
     let types_source = fs::read_to_string(&types_path)
         .map_err(|error| format!("read {}: {error}", types_path.display()))?;
@@ -5199,6 +5398,26 @@ fn validate_replica_contract(bundle: &ContractBundle, workspace_root: &Path) -> 
             "classified_listing_head_only_ingest",
             replica.policy.classified_listing_head_only_ingest.as_str(),
             "reject_require_profile_aware",
+        ),
+        (
+            "legacy_bare_envelope_ingest",
+            replica.policy.legacy_bare_envelope_ingest.as_str(),
+            "explicit_non_default_feature_only",
+        ),
+        (
+            "legacy_ingest_feature",
+            replica.policy.legacy_ingest_feature.as_str(),
+            "legacy-ingest",
+        ),
+        (
+            "phase_1_ingest_replacement",
+            replica.policy.phase_1_ingest_replacement.as_str(),
+            "none",
+        ),
+        (
+            "future_product_ingest_input",
+            replica.policy.future_product_ingest_input.as_str(),
+            "store_produced_verified_valid_visible_admission",
         ),
     ] {
         if actual != expected {
@@ -8689,6 +8908,20 @@ name = "radroots_b"
 version = "1.0.0"
 edition = "2024"
 publish = false
+
+[features]
+default = ["std"]
+std = []
+legacy-ingest = ["std"]
+"#,
+        );
+        write_file(
+            &root.join("crates").join("b").join("src").join("lib.rs"),
+            r#"#[cfg(feature = "legacy-ingest")]
+pub mod ingest;
+
+#[cfg(feature = "legacy-ingest")]
+pub use ingest::{radroots_replica_ingest_event, RadrootsReplicaIngestOutcome};
 "#,
         );
         write_file(
@@ -8810,6 +9043,10 @@ classified_listing_head_selection = "raw_before_profile"
 classified_listing_operational_projection = "operational_partition_only"
 classified_listing_excluded_or_rejected_head = "remove_projection_and_advance"
 classified_listing_head_only_ingest = "reject_require_profile_aware"
+legacy_bare_envelope_ingest = "explicit_non_default_feature_only"
+legacy_ingest_feature = "legacy-ingest"
+phase_1_ingest_replacement = "none"
+future_product_ingest_input = "store_produced_verified_valid_visible_admission"
 
 [transfer]
 version = 2
@@ -10073,6 +10310,24 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                     "allow_head_only".to_string();
             },
         );
+        assert_replica_error(
+            "legacy_bare_envelope_ingest must be explicit_non_default_feature_only",
+            |bundle| {
+                bundle.replica.policy.legacy_bare_envelope_ingest = "default".to_string();
+            },
+        );
+        assert_replica_error("legacy_ingest_feature must be legacy-ingest", |bundle| {
+            bundle.replica.policy.legacy_ingest_feature = "std".to_string();
+        });
+        assert_replica_error("phase_1_ingest_replacement must be none", |bundle| {
+            bundle.replica.policy.phase_1_ingest_replacement = "legacy".to_string();
+        });
+        assert_replica_error(
+            "future_product_ingest_input must be store_produced_verified_valid_visible_admission",
+            |bundle| {
+                bundle.replica.policy.future_product_ingest_input = "bare_envelope".to_string();
+            },
+        );
         assert_replica_error("transfer.version must be 2", |bundle| {
             bundle.replica.transfer.version = 1;
         });
@@ -10104,10 +10359,75 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     #[test]
     fn replica_policy_source_witnesses_reject_runtime_drift() {
         let root = create_synthetic_workspace("replica_policy_source_drift");
+        let cargo_path = root.join("crates/b/Cargo.toml");
+        let lib_path = root.join("crates/b/src/lib.rs");
         let types_path = root.join("crates/b/src/types.rs");
         let emit_path = root.join("crates/b/src/emit.rs");
+        let cargo = fs::read_to_string(&cargo_path).expect("read replica cargo manifest");
+        let lib = fs::read_to_string(&lib_path).expect("read replica lib source");
         let types = fs::read_to_string(&types_path).expect("read replica types source");
         let emit = fs::read_to_string(&emit_path).expect("read replica emit source");
+
+        write_file(
+            &cargo_path,
+            &cargo.replace("std = []", "std = [\"legacy-ingest\"]"),
+        );
+        let bundle =
+            load_contract_bundle(&root).expect("load transitive default-feature drift contract");
+        let default_feature_error = validate_replica_contract(&bundle, &root)
+            .expect_err("transitively default legacy ingest feature must fail");
+        assert!(default_feature_error.contains("must not be enabled by default features"));
+
+        write_file(&cargo_path, &cargo);
+        write_file(
+            &lib_path,
+            &format!(
+                "{}\n/*\n#[cfg(feature = \"legacy-ingest\")]\npub mod ingest;\n*/\n",
+                lib.replace(
+                    "#[cfg(feature = \"legacy-ingest\")]\npub mod ingest;",
+                    "#[cfg(feature = \"std\")]\npub mod ingest;",
+                )
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load ingest-module drift contract");
+        let module_error = validate_replica_contract(&bundle, &root)
+            .expect_err("comment-only legacy guard witness must fail");
+        assert!(module_error.contains("must be guarded by exact"));
+
+        write_file(
+            &lib_path,
+            &format!("{lib}\npub use ingest::RadrootsReplicaIngestOutcome;\n"),
+        );
+        let bundle = load_contract_bundle(&root).expect("load second-reexport drift contract");
+        let reexport_error = validate_replica_contract(&bundle, &root)
+            .expect_err("ungated second ingest re-export must fail");
+        assert!(reexport_error.contains("every public replica ingest re-export"));
+
+        write_file(
+            &lib_path,
+            &lib.replacen(
+                "#[cfg(feature = \"legacy-ingest\")]\npub use ingest::{",
+                "#[cfg(any(feature = \"legacy-ingest\", feature = \"std\"))]\npub use ingest::{",
+                1,
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load broadened-reexport contract");
+        let broadened_error = validate_replica_contract(&bundle, &root)
+            .expect_err("broadened ingest re-export guard must fail");
+        assert!(broadened_error.contains("every public replica ingest re-export"));
+
+        write_file(
+            &lib_path,
+            &format!(
+                "{lib}\npub mod nested {{\n    pub use super::ingest::RadrootsReplicaIngestOutcome;\n}}\n"
+            ),
+        );
+        let bundle = load_contract_bundle(&root).expect("load nested-reexport drift contract");
+        let nested_error = validate_replica_contract(&bundle, &root)
+            .expect_err("ungated nested public ingest re-export must fail");
+        assert!(nested_error.contains("every public replica ingest re-export"));
+
+        write_file(&lib_path, &lib);
 
         write_file(
             &types_path,
@@ -11665,6 +11985,11 @@ publish = false
 
 [dependencies]
 dto_bindgen = { workspace = true, optional = true }
+
+[features]
+default = ["std"]
+std = []
+legacy-ingest = ["std"]
 "#,
         );
         validate_generic_release_preflight(&root)

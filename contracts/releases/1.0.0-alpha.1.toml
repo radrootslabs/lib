@@ -387,3 +387,35 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Seal and revalidate transport identity, remove policy-free relay deserialization, require typed nonempty fetch targets, reject forged adapter provenance, bind fetch observations to request time, bound caller-redacted diagnostics, constrain relay policies to trusted public configuration or exact loopback hosts, and require canonical reset and reseeding of unreleased-alpha state."
+
+[[changes]]
+id = "event-store-current-visibility-and-food-projection"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_constant_value",
+  "change_exported_field_type",
+  "change_exported_algorithm_behavior",
+]
+summary = "Advance the event store to schema version 3 with central current visibility, a generation-bound addressable transition feed, an atomic registry-v7 FoodAvailability projection and bounded search authority, typed Blossom digests, and an executable successor contract that preserves the frozen NIP-09 predecessor."
+
+[[changes]]
+id = "transport-event-outcomes-and-replica-quarantine"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_exported_field",
+  "add_enum_variant",
+  "remove_exported_field",
+  "remove_exported_module",
+  "remove_exported_function",
+  "change_exported_field_type",
+  "change_exported_algorithm_behavior",
+]
+summary = "Represent relay-event verification, contract admission, valid-stream eligibility, and current visibility as independent exhaustive outcomes; enforce hard raw-event, aggregate raw-JSON, and pre-parse per-event fetch bounds; and remove bare-envelope legacy replica ingestion from the default public feature surface."

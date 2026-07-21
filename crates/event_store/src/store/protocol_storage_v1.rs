@@ -11,7 +11,6 @@ use sqlx::{Row, Sqlite, Transaction};
 
 pub(super) struct RawHeadSnapshot {
     pub(super) raw_head: RadrootsStoredRawEventHead,
-    pub(super) raw_event: RadrootsStoredRawEvent,
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -130,10 +129,7 @@ pub(super) async fn raw_head_snapshot_in_transaction(
         }
         let raw_event = stored_raw_event_from_row(row)?;
         validate_raw_head_snapshot(coordinate, &raw_head, &raw_event)?;
-        Ok(RawHeadSnapshot {
-            raw_head,
-            raw_event,
-        })
+        Ok(RawHeadSnapshot { raw_head })
     })
     .transpose()
 }

@@ -89,10 +89,16 @@ publish policy both pass for the same source revision.
   observations, or heads. Read-only consumers can inspect the same fail-closed
   status summary from an initialized pool without duplicating schema-sensitive
   SQL or running migrations.
-- Nostr fetch-ingest receipts now distinguish admitted, unsupported, invalid,
-  malformed, inserted, duplicate, and ephemeral not-persisted events, carry
-  stable admission codes when classification occurs, and name valid-stream
-  eligibility directly. Local event-store failures now abort fetch ingest as
+- Nostr fetch-ingest receipts now report exhaustive verification, contract
+  admission, valid-stream, and current-visibility outcomes independently.
+  Verification failures no longer share an `invalid` bucket with contract
+  failures, unsupported admissions retain their stable code without masking
+  visibility, and persisted events obtain visibility from the event store's
+  central authority. Fetches enforce a 64,000 raw-event ceiling, a 64 MiB
+  aggregate raw-JSON prefix budget, and the 256 KiB per-event wire limit before
+  Radroots parses adapter raw JSON; after upstream SDK frame decoding, the
+  official SDK stream applies the same retained-prefix bounds before retaining
+  serialized adapter output. Local event-store failures abort fetch ingest as
   operational errors instead of being reported as malformed relay input.
 - Generic outbox APIs now reject every NIP-16 ephemeral event before durable
   queue persistence. Live-only events, including NIP-42 relay-auth and NIP-98
@@ -102,6 +108,16 @@ publish policy both pass for the same source revision.
 - Retired trade order-workflow and product-projection source files that were no
   longer compiled or exported have been removed. Current FoodAvailability
   projection ownership remains with the event store.
+- Event-store schema v3 adds one central current-visibility authority, a
+  generation-bound addressable transition feed, and an atomic focused
+  FoodAvailability projection with bounded FTS search. The successor contract
+  authenticates schema `0003`, registry-v7 admission, exact kind scope `30402`,
+  executable transition/projection vectors, and the frozen NIP-09 predecessor.
+  Stored Blossom image digests use the public typed SHA-256 value.
+- Bare-envelope replica ingestion is quarantined behind the explicit,
+  non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
+  surfaces only; a future product ingest boundary must consume a store-produced
+  verified, valid-stream-eligible, currently visible admission.
 - Blossom blob URLs now validate complete raw Unicode text before URL parsing
   and exact raw ASCII DNS label grammar before returning a typed value. Unicode
   control/format text, implicit IDNA conversion, empty labels, underscores,
@@ -213,13 +229,15 @@ publish policy both pass for the same source revision.
   Generic signing and client publication reject focused or mixed kind-`30402`
   profiles before signer access; signed-event relay remains transport-only.
   Typed signing and publication do not attest BUD-02 upload completion.
-- Legacy replica ingestion now verifies kind-`30402` signatures, selects the
-  raw addressable head before profile decoding, and sends only the Operational
-  Listing partition to its trade-product projection. Selected focused/generic
-  exclusions and invalid/ambiguous rejections remove an older projection while
-  advancing the head, preventing stale projection fallback. The public
-  head-only helper rejects kind `30402`; callers must use profile-aware
-  ingestion so the head and projection remain atomic.
+- Behind the explicit non-default `legacy-ingest` feature, legacy replica
+  ingestion verifies kind-`30402` signatures, selects the raw addressable head
+  before profile decoding, and sends only the Operational Listing partition to
+  its trade-product projection. Selected focused/generic exclusions and
+  invalid/ambiguous rejections remove an older projection while advancing the
+  head, preventing stale projection fallback. The feature-gated public
+  head-only helper rejects kind `30402`; callers must use profile-aware legacy
+  ingestion so the head and projection remain atomic. These helpers are not a
+  Phase 1 product ingest boundary.
 - Event-contract identification now selects Operational Listing only for its
   raw marker partition. Focused FoodAvailability is admission-only, while
   marker-free generic and mixed-marker NIP-99 events cannot be mislabeled as
