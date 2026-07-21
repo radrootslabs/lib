@@ -179,9 +179,19 @@ history access explicitly to SQLite's `main` database and reject governed
 temporary-schema collisions on the connection before authority reads or
 mutation. Reconciliation and migration integrity checks fail on foreign-key
 violations whose child table is declared as event-store-owned or uses the
-reserved namespace. Violations in unrelated shared-schema child tables remain
-caller-owned and visible through SQLite's full `foreign_key_check`; they do not
-block event-store migration or source rebuild.
+reserved namespace. Violations in unrelated shared-schema child tables with no
+dependency on event-store-owned tables remain caller-owned and do not block
+event-store migration or source rebuild. Raw-source rebuild bounds its
+caller-owned main-table and cumulative foreign-key-row inventories at 4,096
+each, then rejects every caller-owned inbound foreign key to the exact
+rebuild-mutated parent set before generation entropy or mutation. This refusal
+applies regardless of whether the declared action is `CASCADE`, `SET NULL`,
+`SET DEFAULT`,
+`RESTRICT`, or `NO ACTION`, preventing caller rows and their triggers from
+being changed as a side effect of derived-state replacement. The dependency
+inventory covers direct mutations, Food FTS5's virtual table and all five
+shadow tables, and the transition row in `sqlite_sequence`; this inventory is
+separate from the narrower post-rebuild scoped-integrity table set.
 
 Migration `0002_nip09` re-verifies the frozen raw JSON and immutable columns,
 rebuilds derived registry-v7 admission and raw-head facts, then creates one
@@ -192,15 +202,62 @@ authority before commit. Generations, NIP-09 facts, canonical addressable state,
 and transitions are immutable and generation-partitioned. The reconciliation
 version, addressable-feed version, registry version, hook-manifest digest, raw
 counts, raw high-water sequence, and transition floor are stored with each
-generation and validated on open. A supported current-schema full rebuild must
-also reset and replay the version-3 Food authority before that marker closes;
-this checkpoint does not yet expose such a maintenance operation. Repair of
-derived transition high-water or Food projection state is authorized only
-inside that future rebuild after the exact managed-v4 catalog, ledger, and
-migration history plus immutable raw/source lineage and capacity validate.
-Derived hook state is the repair target, not a repair precondition. A drifted
-managed-v3 database is rejected atomically before v4 changes begin; schema
-upgrade is not a repair path for corrupt v3 authority.
+generation and validated on open. `rebuild_from_raw_v1` is the supported
+current-schema maintenance operation. It validates an exact managed-v4 catalog,
+ledger, migration history, immutable raw/source lineage, and capacity without
+requiring derived hook health; derived NIP-09, current-visibility, transition,
+and FoodAvailability state is the repair target. The serialized transaction
+reverifies raw NIP-01 envelopes, appends a fresh generation, rebuilds and audits
+core visibility through an independent raw-snapshot oracle, explicitly resets
+and replays Food rows, images, cursor, and FTS, then closes the guarded marker
+and commits. `repair_file_from_raw_v1` provides the same operation for cold
+derived-state corruption without weakening ordinary constructors; the file
+path must already exist and no migration is attempted. Cold repair requires
+every store alias, independent pool, and direct SQL user of the database to
+remain quiesced. The canonical path, symlink targets, and file replacement or
+rename operations must also remain quiesced for the repair duration. The file
+must already use WAL journal mode; repair validates
+this with a read-only query and never changes journal mode on the validation
+connection. The API does not accept caller-provided pools because their
+connection callbacks and session state cannot be sealed. It instead
+canonicalizes the file identity and creates a fresh governed single-connection
+pool with deterministic future options. After validating that connection, it
+reserves the writer transaction. A second independent connection must resolve
+to the same canonical identity and fail a write probe against that reservation,
+proving the path shares the same SQLite lock domain before rebuild proceeds in
+the original validated transaction. Live in-memory stores use
+`rebuild_from_raw_v1`.
+A drifted managed-v3 database is rejected atomically before v4 changes begin;
+schema upgrade is not a repair path for corrupt v3 authority.
+`RawSourceRebuildStateDrift` exposes a
+`RadrootsEventStoreRawSourceRebuildDriftV1` category whose `code()` value is
+stable for programmatic handling: `managed_schema_authority`,
+`immutable_raw_authority`, `source_generation_lineage`,
+`addressable_transition_authority`, `derived_product_state_authority`, or
+`rebuild_postcondition`. Its `detail` text is non-contractual diagnostic
+context and must not be parsed by callers.
+
+The rebuild report contains prior and new source generations, the rebound
+capacity and raw high-water seal, a domain-separated digest of ordered immutable
+raw rows, and a generation-normalized digest of active product state. Repeated
+rebuilds preserve both logical digests while rotating generation identity.
+Every successful rebuild irreversibly appends one of the eight retained source
+generations and can return `SourceGenerationHistoryLimitReached`; generation
+rotation invalidates generic projection cursors lazily and rebinds the governed
+FoodAvailability cursor in the same transaction.
+Only the `radroots_event_store_addressable_head_transition` SQLite sequence is
+normalized. One case-insensitive target-alias cleanup is the sole shared
+sequence-table scan; the canonical target row is placed first so transition
+replay does not repeatedly scan unrelated AUTOINCREMENT rows, then that exact
+row is validated after replay. Every unrelated sequence row triple is
+preserved. Unrelated caller-owned tables, indices, foreign-key violations,
+generic projection cursors, and AUTOINCREMENT rows that have no schema
+dependency on a rebuild-mutated parent remain outside rebuild authority. Scoped
+post-rebuild integrity checks cover only event-store-owned tables and indices
+plus the owned Food FTS table. Caller-schema inventory excess returns a typed
+capacity refusal; a bounded inbound dependency returns its caller table,
+foreign-key id and sequence, columns, managed parent, and SQLite actions in a
+typed error.
 
 Every pending rebuild-bound migration, including `0002_nip09` and
 `0003_food_availability_projection`, preflights and then rechecks under the
@@ -264,6 +321,15 @@ returns a cursor bound to the active source generation.
 `compare_and_swap_projection_cursor` rejects a stale generation, version
 mismatch, sequence regression, a sequence beyond the raw high-water mark, and
 conflicting writers.
+
+Supported APIs and migrations enforce a 4,096-identity bound for caller-owned
+generic projection cursors. Prospective insertion of a new identity fails with
+`ProjectionCursorCapacityExceeded` before cursor mutation at that boundary;
+updating an existing identity remains valid. Migration-time reconciliation
+inventory validation uses bounded cap-plus-one probes rather than an unbounded
+cursor inventory scan. Ordinary current-v4 reopen and raw-source rebuild never
+enumerate or mutate this inventory. Existing cursors invalidate lazily when
+their source generation no longer matches the active generation.
 
 A consumer that needs a different projection version or encounters an
 unbound legacy cursor must call `prepare_projection_cursor_rebuild`, rebuild

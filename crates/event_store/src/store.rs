@@ -9,6 +9,8 @@ mod post_core_storage_v1;
 mod post_core_storage_v2;
 mod protocol_reconciliation_v1;
 mod protocol_storage_v1;
+#[cfg(test)]
+mod raw_source_rebuild_v1_tests;
 
 use self::current_visibility_v1::current_visibility_in_transaction;
 use self::post_core_extension_capabilities::PostCoreExtensionCapabilities;
@@ -37,14 +39,15 @@ use self::protocol_storage_v1::{raw_head_snapshot_in_transaction, stored_raw_eve
 use crate::RadrootsEventStoreError;
 use crate::model::{
     RadrootsCurrentVisibilityDecisionV1, RadrootsEventIngest, RadrootsEventIngestReceipt,
-    RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
-    RadrootsProjectionCursor, RadrootsProjectionRebuildPrior, RadrootsProjectionRebuildTicket,
-    RadrootsStoredEventTag, RadrootsStoredRawEvent, RadrootsStoredRawEventHead,
-    RadrootsStoredSellerReservation, RadrootsStoredSellerReservationLine,
-    RadrootsStoredTradeMissingParent, RadrootsStoredTradeMutation,
-    RadrootsStoredTradeMutationParent, RadrootsStoredTradeTransportEnvelope,
-    RadrootsStoredValidEvent, RadrootsStoredVisibleEvent, RadrootsStoredVisibleEventHead,
-    RadrootsTradeProjectionCheckpoint, RadrootsTransportObservationType,
+    RadrootsEventStoreRawSourceRebuildReportV1, RadrootsEventStoreSourceGeneration,
+    RadrootsEventStoreStatusSummary, RadrootsEventVisibility, RadrootsProjectionCursor,
+    RadrootsProjectionRebuildPrior, RadrootsProjectionRebuildTicket, RadrootsStoredEventTag,
+    RadrootsStoredRawEvent, RadrootsStoredRawEventHead, RadrootsStoredSellerReservation,
+    RadrootsStoredSellerReservationLine, RadrootsStoredTradeMissingParent,
+    RadrootsStoredTradeMutation, RadrootsStoredTradeMutationParent,
+    RadrootsStoredTradeTransportEnvelope, RadrootsStoredValidEvent, RadrootsStoredVisibleEvent,
+    RadrootsStoredVisibleEventHead, RadrootsTradeProjectionCheckpoint,
+    RadrootsTransportObservationType,
 };
 #[cfg(test)]
 use crate::model::{
@@ -53,7 +56,9 @@ use crate::model::{
 };
 #[cfg(test)]
 use crate::nip09::reconciliation_v1::ReconciliationProfile;
-use crate::nip09::reconciliation_v1::{active_source_generation, generation_from_blob};
+use crate::nip09::reconciliation_v1::{
+    active_source_generation, generation_from_blob, preflight_projection_cursor_insert_v1,
+};
 use crate::schema::{
     RadrootsEventStoreSchemaStatus, inspect_event_store_schema_status, migrate_event_store_schema,
     rollback_event_store_schema_offline,
@@ -82,7 +87,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{Connection, Row, SqliteConnection, SqlitePool};
 use std::collections::BTreeMap;
 use std::future::Future;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -207,6 +212,64 @@ impl RadrootsEventStore {
                 .await?;
         tx.commit().await?;
         Ok(capacity)
+    }
+
+    /// Rebuilds active product state solely from retained immutable raw rows.
+    ///
+    /// Every successful call appends one irreversible retained source
+    /// generation, up to the governed history limit, and invalidates generic
+    /// projection cursors by rotating the active generation. Calls at the
+    /// history limit return
+    /// [`RadrootsEventStoreError::SourceGenerationHistoryLimitReached`].
+    pub async fn rebuild_from_raw_v1(
+        &self,
+    ) -> Result<RadrootsEventStoreRawSourceRebuildReportV1, RadrootsEventStoreError> {
+        crate::nip09::reconciliation_v1::rebuild_from_raw_v1_on_pool(&self.pool).await
+    }
+
+    /// Repairs an exact managed-v4 file without exposing its invalid state.
+    ///
+    /// The database file must already exist, and the caller must quiesce every
+    /// store alias, independent pool, and direct SQL user of that file for the
+    /// duration of repair. The canonical path, symlink targets, and file
+    /// replacement or rename operations must also remain quiesced.
+    /// Caller-provided pools are intentionally unavailable;
+    /// their callbacks and session state cannot be sealed. This path creates a
+    /// fresh governed pool, never creates or migrates a schema, requires the
+    /// existing file to use WAL journal mode, and proves its canonical path
+    /// shares the reserved SQLite writer-lock domain before rebuilding in the
+    /// same validated transaction. It returns a usable store only after rebuild
+    /// commit. Every successful call appends one irreversible retained source
+    /// generation, up to the governed history limit, and invalidates generic
+    /// projection cursors by rotating the active generation. Calls at the
+    /// history limit return
+    /// [`RadrootsEventStoreError::SourceGenerationHistoryLimitReached`].
+    pub async fn repair_file_from_raw_v1(
+        path: impl AsRef<Path>,
+    ) -> Result<(Self, RadrootsEventStoreRawSourceRebuildReportV1), RadrootsEventStoreError> {
+        let canonical_path = canonical_raw_source_repair_main_path_v1(path.as_ref())?;
+        let options = SqliteConnectOptions::new()
+            .filename(&canonical_path)
+            .create_if_missing(false);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await?;
+        pool.set_connect_options(raw_source_repair_connect_options_v1(&canonical_path));
+        let mut connection = pool.acquire().await?;
+        prepare_raw_source_repair_connection_v1(&mut connection, &canonical_path).await?;
+        let transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        if let Err(primary) =
+            validate_raw_source_repair_canonical_lock_domain_v1(&canonical_path).await
+        {
+            return preserve_raw_source_repair_probe_failure(primary, transaction.rollback().await);
+        }
+        let report = crate::nip09::reconciliation_v1::rebuild_from_raw_v1_in_existing_transaction(
+            transaction,
+        )
+        .await?;
+        drop(connection);
+        Ok((Self { pool }, report))
     }
 
     /// Begins a serialized write transaction suitable for composed event-store writes.
@@ -540,9 +603,13 @@ impl RadrootsEventStore {
                 },
             );
         }
-        projection_cursor_unchecked(&mut tx, cursor.projection_id(), active_generation).await?;
+        let existing =
+            projection_cursor_unchecked(&mut tx, cursor.projection_id(), active_generation).await?;
         match expected_prior_sequence {
             None => {
+                if existing.is_none() {
+                    preflight_projection_cursor_insert_v1(&mut tx).await?;
+                }
                 let inserted = sqlx::query(
                     "INSERT OR IGNORE INTO projection_cursor(projection_id, projection_version, last_event_seq, updated_at_ms) VALUES (?, ?, ?, ?)",
                 )
@@ -724,6 +791,7 @@ impl RadrootsEventStore {
         .await?;
         match (expected_prior, actual_prior) {
             (RadrootsProjectionRebuildPrior::Missing, None) => {
+                preflight_projection_cursor_insert_v1(&mut tx).await?;
                 let inserted = sqlx::query(
                     "INSERT OR IGNORE INTO projection_cursor(projection_id, projection_version, last_event_seq, updated_at_ms) VALUES (?, ?, ?, ?)",
                 )
@@ -1167,7 +1235,6 @@ async fn configure_pool(
     file_backed: bool,
 ) -> Result<(), RadrootsEventStoreError> {
     let max_connections = pool.options().get_max_connections();
-    let existing_options = pool.connect_options();
     if !file_backed && max_connections != 1 {
         return Err(RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
             actual: max_connections,
@@ -1189,19 +1256,6 @@ async fn configure_pool(
         }
         validate_main_database_encoding(connection).await?;
         crate::schema::validate_event_store_temp_schema(connection).await?;
-    }
-
-    let mut connect_options = existing_options
-        .as_ref()
-        .clone()
-        .foreign_keys(true)
-        .busy_timeout(Duration::from_millis(5_000));
-    if file_backed {
-        connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
-    }
-    pool.set_connect_options(connect_options);
-
-    for connection in &mut connections {
         sqlx::query("PRAGMA foreign_keys = ON")
             .execute(&mut **connection)
             .await?;
@@ -1212,7 +1266,131 @@ async fn configure_pool(
             configure_file_journal_mode(connection).await?;
         }
     }
+    let existing_options = pool.connect_options();
+    let connect_options = existing_options
+        .as_ref()
+        .clone()
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_millis(5_000));
+    let connect_options = if file_backed {
+        connect_options.journal_mode(SqliteJournalMode::Wal)
+    } else {
+        connect_options
+    };
+    pool.set_connect_options(connect_options);
     Ok(())
+}
+
+async fn prepare_raw_source_repair_connection_v1(
+    connection: &mut SqliteConnection,
+    canonical_path: &Path,
+) -> Result<(), RadrootsEventStoreError> {
+    let main_filename = main_database_filename(connection).await?;
+    let actual = canonical_raw_source_repair_main_path_v1(Path::new(&main_filename))?;
+    if actual != canonical_path {
+        return Err(
+            RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
+                expected: canonical_path.display().to_string(),
+                actual: actual.display().to_string(),
+            },
+        );
+    }
+    validate_main_database_encoding(connection).await?;
+    crate::schema::validate_exact_managed_v4_for_raw_source_rebuild_v1(connection).await?;
+    validate_file_journal_mode_is_wal(connection).await?;
+    sqlx::query("PRAGMA foreign_keys = ON")
+        .execute(&mut *connection)
+        .await?;
+    sqlx::query("PRAGMA busy_timeout = 5000")
+        .execute(&mut *connection)
+        .await?;
+    Ok(())
+}
+
+fn raw_source_repair_connect_options_v1(canonical_path: &Path) -> SqliteConnectOptions {
+    SqliteConnectOptions::new()
+        .filename(canonical_path)
+        .create_if_missing(false)
+        .journal_mode(SqliteJournalMode::Wal)
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_millis(5_000))
+}
+
+async fn validate_raw_source_repair_canonical_lock_domain_v1(
+    canonical_path: &Path,
+) -> Result<(), RadrootsEventStoreError> {
+    let mut candidate = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(canonical_path)
+            .create_if_missing(false)
+            .foreign_keys(true)
+            .busy_timeout(Duration::ZERO),
+    )
+    .await?;
+    let candidate_filename = main_database_filename(&mut candidate).await?;
+    let candidate_path = canonical_raw_source_repair_main_path_v1(Path::new(&candidate_filename))?;
+    if candidate_path != canonical_path {
+        return Err(
+            RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
+                expected: canonical_path.display().to_string(),
+                actual: candidate_path.display().to_string(),
+            },
+        );
+    }
+    validate_main_database_encoding(&mut candidate).await?;
+    crate::schema::validate_exact_managed_v4_for_raw_source_rebuild_v1(&mut candidate).await?;
+    validate_file_journal_mode_is_wal(&mut candidate).await?;
+
+    let mut probe = candidate.begin().await?;
+    let write = sqlx::query(
+        "UPDATE main.radroots_event_store_write_lock SET lock_version = lock_version WHERE singleton = 1",
+    )
+    .execute(&mut *probe)
+    .await;
+    let rollback = probe.rollback().await;
+    match write {
+        Ok(_) => preserve_raw_source_repair_probe_failure(
+            RadrootsEventStoreError::RawSourceRepairCanonicalPathLockDomainMismatch {
+                canonical_path: canonical_path.display().to_string(),
+            },
+            rollback,
+        ),
+        Err(error) => {
+            if sqlite_error_is_busy_or_locked(&error) {
+                rollback?;
+                Ok(())
+            } else {
+                preserve_raw_source_repair_probe_failure(error.into(), rollback)
+            }
+        }
+    }
+}
+
+fn preserve_raw_source_repair_probe_failure<T>(
+    primary: RadrootsEventStoreError,
+    rollback: Result<(), sqlx::Error>,
+) -> Result<T, RadrootsEventStoreError> {
+    match rollback {
+        Ok(()) => Err(primary),
+        Err(rollback) => Err(
+            RadrootsEventStoreError::RawSourceRebuildTransactionRollbackFailed {
+                primary: Box::new(primary),
+                rollback,
+            },
+        ),
+    }
+}
+
+fn canonical_raw_source_repair_main_path_v1(
+    path: &Path,
+) -> Result<PathBuf, RadrootsEventStoreError> {
+    let filename = path.display().to_string();
+    std::fs::canonicalize(path).map_err(|source| {
+        RadrootsEventStoreError::RawSourceRepairMainDatabaseCanonicalizationFailed {
+            filename,
+            source,
+        }
+    })
 }
 
 async fn validate_main_database_encoding(
@@ -1253,6 +1431,18 @@ async fn configure_file_journal_mode(
     }
 }
 
+async fn validate_file_journal_mode_is_wal(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsEventStoreError> {
+    let actual: String = sqlx::query_scalar("PRAGMA main.journal_mode")
+        .fetch_one(&mut *connection)
+        .await?;
+    if actual == "wal" {
+        return Ok(());
+    }
+    Err(RadrootsEventStoreError::SqliteFileJournalModeNotWal { actual })
+}
+
 fn sqlite_error_is_busy(error: &sqlx::Error) -> bool {
     let sqlx::Error::Database(error) = error else {
         return false;
@@ -1261,6 +1451,16 @@ fn sqlite_error_is_busy(error: &sqlx::Error) -> bool {
         .code()
         .and_then(|code| code.parse::<i32>().ok())
         .is_some_and(|code| code & 0xff == 5)
+}
+
+fn sqlite_error_is_busy_or_locked(error: &sqlx::Error) -> bool {
+    let sqlx::Error::Database(error) = error else {
+        return false;
+    };
+    error
+        .code()
+        .and_then(|code| code.parse::<i32>().ok())
+        .is_some_and(|code| code & 0xff == 5 || code & 0xff == 6)
 }
 
 async fn main_database_filename(

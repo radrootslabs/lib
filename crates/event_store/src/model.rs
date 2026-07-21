@@ -2,6 +2,7 @@ mod addressable_transition_feed_v1;
 mod current_visibility_v1;
 mod food_availability_projection_v1;
 mod ingest_reconciliation_v1;
+mod raw_source_rebuild_v1;
 pub(crate) mod reconciliation_v1;
 
 pub use addressable_transition_feed_v1::{
@@ -31,6 +32,10 @@ pub use food_availability_projection_v1::{
     RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_TERMS_V1, RadrootsFoodAvailabilitySearchQueryV1,
     RadrootsFoodAvailabilityStatusFilterV1, RadrootsStoredFoodAvailabilityImageV1,
     RadrootsStoredFoodAvailabilityV1,
+};
+pub use raw_source_rebuild_v1::{
+    RadrootsEventStoreActiveProductStateDigestV1, RadrootsEventStoreImmutableRawDigestV1,
+    RadrootsEventStoreRawSourceRebuildReportV1,
 };
 
 use crate::RadrootsEventStoreError;

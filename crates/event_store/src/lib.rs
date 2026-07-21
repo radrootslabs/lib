@@ -20,11 +20,13 @@ mod store;
 
 #[cfg(feature = "sqlite")]
 pub use error::{
+    RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1,
     RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
     RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
     RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1, RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
-    RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1, RadrootsEventStoreError,
-    RadrootsEventStoreSourceCapacityResourceV1,
+    RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+    RadrootsEventStoreCallerInboundForeignKeyV1, RadrootsEventStoreError,
+    RadrootsEventStoreRawSourceRebuildDriftV1, RadrootsEventStoreSourceCapacityResourceV1,
 };
 #[cfg(feature = "sqlite")]
 pub use migrations::{
@@ -51,11 +53,13 @@ pub use model::{
     RadrootsAddressableTransitionV1, RadrootsAddressableTransitionVisibilityV1,
     RadrootsCurrentEventVisibilityV1, RadrootsCurrentVisibilityDecisionV1,
     RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
-    RadrootsEventPersistence, RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary,
-    RadrootsEventVisibility, RadrootsFoodAvailabilitySearchQueryV1,
-    RadrootsFoodAvailabilityStatusFilterV1, RadrootsNip09SuppressionEvidenceV1,
-    RadrootsNip09SuppressionOutcome, RadrootsNip09SuppressionReason, RadrootsProjectionCursor,
-    RadrootsProjectionRebuildPrior, RadrootsProjectionRebuildTicket, RadrootsRawHeadDecision,
+    RadrootsEventPersistence, RadrootsEventStoreActiveProductStateDigestV1,
+    RadrootsEventStoreImmutableRawDigestV1, RadrootsEventStoreRawSourceRebuildReportV1,
+    RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
+    RadrootsFoodAvailabilitySearchQueryV1, RadrootsFoodAvailabilityStatusFilterV1,
+    RadrootsNip09SuppressionEvidenceV1, RadrootsNip09SuppressionOutcome,
+    RadrootsNip09SuppressionReason, RadrootsProjectionCursor, RadrootsProjectionRebuildPrior,
+    RadrootsProjectionRebuildTicket, RadrootsRawHeadDecision,
     RadrootsStoreProducedCanonicalEventV1, RadrootsStoredEventTag,
     RadrootsStoredFoodAvailabilityImageV1, RadrootsStoredFoodAvailabilityV1,
     RadrootsStoredRawEvent, RadrootsStoredRawEventHead, RadrootsStoredSellerReservation,

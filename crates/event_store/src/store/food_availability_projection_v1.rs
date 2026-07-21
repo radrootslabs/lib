@@ -2,7 +2,6 @@ use super::addressable_transition_feed_v1::addressable_transition_page_in_transa
 use super::{
     RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStore, bool_from_i64, u64_from_i64,
 };
-use crate::RadrootsEventStoreError;
 use crate::generated::food_availability_projection_manifest as food_manifest;
 use crate::model::{
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
@@ -16,6 +15,7 @@ use crate::model::{
 use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
+use crate::{RadrootsEventStoreError, RadrootsEventStoreRawSourceRebuildDriftV1};
 use radroots_event::food_availability::RadrootsFoodIdentifier;
 use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 use radroots_event_codec::food_availability::inbound::{
@@ -136,6 +136,46 @@ pub(crate) async fn apply_food_availability_projection_hook_v1(
 ) -> Result<(), RadrootsEventStoreError> {
     apply_pending_food_availability_transitions_v1(connection).await?;
     validate_food_availability_projection_hook_v1(connection).await
+}
+
+pub(crate) async fn reset_and_replay_food_availability_from_raw_v1(
+    connection: &mut SqliteConnection,
+    active_generation: RadrootsEventStoreSourceGeneration,
+) -> Result<(), RadrootsEventStoreError> {
+    sqlx::query(
+        "DELETE FROM radroots_event_store_food_availability_image WHERE source_generation != ?",
+    )
+    .bind(active_generation.as_bytes().as_slice())
+    .execute(&mut *connection)
+    .await?;
+    sqlx::query(
+        "DELETE FROM radroots_event_store_food_availability_projection WHERE source_generation != ?",
+    )
+    .bind(active_generation.as_bytes().as_slice())
+    .execute(&mut *connection)
+    .await?;
+    sqlx::query("DELETE FROM radroots_event_store_food_availability_search_fts")
+        .execute(&mut *connection)
+        .await?;
+    sqlx::query(
+        "DELETE FROM radroots_event_store_food_availability_cursor WHERE source_generation != ?",
+    )
+    .bind(active_generation.as_bytes().as_slice())
+    .execute(&mut *connection)
+    .await?;
+
+    let residual_count: i64 = sqlx::query_scalar(
+        "SELECT (SELECT COUNT(*) FROM radroots_event_store_food_availability_image) + (SELECT COUNT(*) FROM radroots_event_store_food_availability_projection) + (SELECT COUNT(*) FROM radroots_event_store_food_availability_cursor) + (SELECT COUNT(*) FROM radroots_event_store_food_availability_search_fts)",
+    )
+    .fetch_one(&mut *connection)
+    .await?;
+    if residual_count != 0 {
+        return Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::DerivedProductStateAuthority,
+            detail: format!("FoodAvailability reset left {residual_count} stale derived row(s)"),
+        });
+    }
+    apply_pending_food_availability_transitions_v1(connection).await
 }
 
 pub(crate) async fn apply_pending_food_availability_transitions_v1(

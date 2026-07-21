@@ -19,8 +19,13 @@ let
         ../../.cargo
         ../../Cargo.toml
         ../../Cargo.lock
+        ../../flake.lock
         ../../CHANGELOG.md
         ../../README
+        ../../flake.nix
+        ../../build/nix/apps.nix
+        ../../build/nix/common.nix
+        ../../build/nix/toolchains.nix
         ../../dto_bindgen.toml
         ../../rust-toolchain.toml
         ../../contracts

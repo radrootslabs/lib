@@ -13,7 +13,7 @@ readme = "README"
 
 [features]
 default = ["sqlite", "runtime-tokio"]
-sqlite = ["dep:getrandom", "dep:sqlx", "sqlx/sqlite-bundled"]
+sqlite = ["dep:futures", "dep:getrandom", "dep:sqlx", "sqlx/sqlite-bundled"]
 runtime-tokio = ["sqlx/runtime-tokio"]
 
 [dependencies]
@@ -31,6 +31,7 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
 ] }
 radroots_transport = { workspace = true, default-features = false }
 hex = { workspace = true }
+futures = { workspace = true, optional = true }
 getrandom = { workspace = true, optional = true, features = ["std"] }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true, features = ["std"] }

@@ -137,6 +137,40 @@ publish policy both pass for the same source revision.
   `RadrootsEventStoreReconciliationResource` type and
   `ReconciliationCapacityExceeded` error variant are replaced by the
   versioned source-capacity resource and typed capacity/history errors.
+<!-- release-change: event-store-raw-source-rebuild-authority -->
+- Event-store schema v4 now exposes a versioned raw-source rebuild operation
+  that repairs governed derived NIP-09, current-visibility, and focused
+  FoodAvailability state from reverified immutable raw envelopes in one
+  `BEGIN IMMEDIATE` transaction. The typed report returns prior and new source
+  generations, the rebound capacity/high-water seal, a domain-separated
+  immutable-raw digest, and a generation-normalized active-product digest.
+  Rebuild drift exposes six stable typed authority categories while retaining
+  non-contractual diagnostic detail for operators.
+  The file-only repair entry point requires an existing exact managed-v4 WAL
+  database and returns a store only after repaired state commits. It creates a
+  deterministic single-connection pool and proves a fresh canonical-path
+  connection shares the validated SQLite writer-lock domain. Callers must
+  quiesce every alias, independent pool, direct SQL user, and filesystem path,
+  symlink, or file-replacement operation for the repair duration. The public
+  event-store error enum is now non-exhaustive so future typed recovery errors
+  do not repeatedly break downstream matches.
+  Rebuild preserves unrelated caller-owned tables with no schema dependency on
+  any rebuild-mutated parent, generic projection cursors, and unrelated SQLite
+  sequence row triples. Transition replay performs one shared
+  target-alias cleanup, places the governed target first, and validates that
+  exact row after replay; generic cursor inventory is instead
+  prospectively bounded at 4,096 identities and invalidates lazily after a
+  generation change.
+  Before entropy or mutation, rebuild also bounds caller-owned main tables and
+  cumulative foreign-key rows at 4,096 each and refuses every caller-owned
+  inbound foreign key to every directly or indirectly mutated parent,
+  regardless of its SQLite action, so derived replacement cannot cascade into
+  caller rows or triggers. The sealed parent inventory includes the Food FTS5
+  virtual table and all five shadows plus the governed `sqlite_sequence` row;
+  it remains separate from the narrower scoped-integrity inventory.
+  The executable raw-rebuild successor contract freezes the SourceMaintenance
+  predecessor and the `0001` through `0004` migration inventory; no schema
+  migration is added.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

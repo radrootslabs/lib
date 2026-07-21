@@ -14,6 +14,8 @@ pub const RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1: u64 = 64 * 1024 * 
 pub const RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1: u64 = 32 * 1024 * 1024;
 /// Maximum append-only source generations retained before fresh-store resync.
 pub const RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1: u32 = 8;
+/// Maximum caller-owned generic projection cursor identities in one store.
+pub const RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1: u32 = 4_096;
 
 /// Governed retained raw-source resource dimension.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,6 +49,86 @@ impl core::fmt::Display for RadrootsEventStoreSourceCapacityResourceV1 {
     }
 }
 
+/// Stable category for raw-source rebuild authority drift.
+///
+/// The category code is contractual. Error detail remains diagnostic context
+/// and must not be parsed by callers.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsEventStoreRawSourceRebuildDriftV1 {
+    /// The database is not the exact managed schema supported by repair.
+    ManagedSchemaAuthority,
+    /// Retained immutable raw events or tags are internally inconsistent.
+    ImmutableRawAuthority,
+    /// Retained source-generation history or baselines are inconsistent.
+    SourceGenerationLineage,
+    /// Addressable transition sequence authority is inconsistent.
+    AddressableTransitionAuthority,
+    /// Rebuilt visibility or projection state is inconsistent.
+    DerivedProductStateAuthority,
+    /// The rebuild could not establish its final atomic postconditions.
+    RebuildPostcondition,
+}
+
+impl RadrootsEventStoreRawSourceRebuildDriftV1 {
+    /// Stable machine-readable category code.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::ManagedSchemaAuthority => "managed_schema_authority",
+            Self::ImmutableRawAuthority => "immutable_raw_authority",
+            Self::SourceGenerationLineage => "source_generation_lineage",
+            Self::AddressableTransitionAuthority => "addressable_transition_authority",
+            Self::DerivedProductStateAuthority => "derived_product_state_authority",
+            Self::RebuildPostcondition => "rebuild_postcondition",
+        }
+    }
+}
+
+impl core::fmt::Display for RadrootsEventStoreRawSourceRebuildDriftV1 {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter.write_str(self.code())
+    }
+}
+
+/// Caller-owned foreign-key dependency that makes raw-source rebuild unsafe.
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Eq)]
+pub struct RadrootsEventStoreCallerInboundForeignKeyV1 {
+    pub child_table: String,
+    pub foreign_key_id: i64,
+    pub foreign_key_sequence: i64,
+    pub child_column: String,
+    pub parent_table: String,
+    pub parent_column: Option<String>,
+    pub on_update: String,
+    pub on_delete: String,
+    pub match_clause: String,
+}
+
+impl core::fmt::Display for RadrootsEventStoreCallerInboundForeignKeyV1 {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            formatter,
+            "{}:{} on `{}` (`{}` -> `{}`.",
+            self.foreign_key_id,
+            self.foreign_key_sequence,
+            self.child_table,
+            self.child_column,
+            self.parent_table,
+        )?;
+        match self.parent_column.as_deref() {
+            Some(parent_column) => write!(formatter, "`{parent_column}`")?,
+            None => formatter.write_str("<implicit primary key>")?,
+        }
+        write!(
+            formatter,
+            ", on update {}, on delete {}, match {})",
+            self.on_update, self.on_delete, self.match_clause,
+        )
+    }
+}
+
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum RadrootsEventStoreError {
     #[error("sqlx error: {0}")]
@@ -120,6 +202,20 @@ pub enum RadrootsEventStoreError {
     )]
     UnsafeInMemoryPoolConnectionCount { actual: u32 },
     #[error(
+        "raw-source repair SQLite main database identity mismatch: expected `{expected}`, found `{actual}`"
+    )]
+    RawSourceRepairDatabaseIdentityMismatch { expected: String, actual: String },
+    #[error(
+        "raw-source repair canonical path `{canonical_path}` does not share the validated SQLite main lock domain"
+    )]
+    RawSourceRepairCanonicalPathLockDomainMismatch { canonical_path: String },
+    #[error("raw-source repair could not canonicalize SQLite main database `{filename}`: {source}")]
+    RawSourceRepairMainDatabaseCanonicalizationFailed {
+        filename: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error(
         "event-store pool backing mismatch: file_backed={file_backed}, configured filename `{filename}`"
     )]
     SqlitePoolBackingMismatch { file_backed: bool, filename: String },
@@ -127,9 +223,7 @@ pub enum RadrootsEventStoreError {
     SqliteMainDatabaseUnavailable,
     #[error("event-store SQLite main database must use UTF-8 encoding; reported `{actual}`")]
     SqliteMainDatabaseEncodingNotUtf8 { actual: String },
-    #[error(
-        "event-store SQLite file connection did not enter WAL journal mode; reported `{actual}`"
-    )]
+    #[error("event-store SQLite file connection must use WAL journal mode; reported `{actual}`")]
     SqliteFileJournalModeNotWal { actual: String },
     #[error(
         "temporary schema object `{name}` ({object_type}, table `{table_name}`) collides with event-store authority"
@@ -228,6 +322,17 @@ pub enum RadrootsEventStoreError {
         primary: Box<RadrootsEventStoreError>,
         rollback: sqlx::Error,
     },
+    #[error("event-store raw-source rebuild authority is inconsistent ({kind}): {detail}")]
+    RawSourceRebuildStateDrift {
+        kind: RadrootsEventStoreRawSourceRebuildDriftV1,
+        detail: String,
+    },
+    #[error("raw-source rebuild failed: {primary}; transaction rollback also failed: {rollback}")]
+    RawSourceRebuildTransactionRollbackFailed {
+        #[source]
+        primary: Box<RadrootsEventStoreError>,
+        rollback: sqlx::Error,
+    },
     #[error("event-store source generation entropy is unavailable")]
     SourceGenerationEntropyUnavailable,
     #[error(
@@ -291,6 +396,20 @@ pub enum RadrootsEventStoreError {
         parent: String,
         foreign_key_index: i64,
     },
+    #[error(
+        "event-store raw-source rebuild caller main-table inventory exceeds bounded preflight capacity: observed at least {observed_at_least}, limit {limit}"
+    )]
+    RawSourceRebuildCallerTableCapacityExceeded { observed_at_least: u64, limit: u64 },
+    #[error(
+        "event-store raw-source rebuild caller foreign-key inventory exceeds bounded preflight capacity: observed at least {observed_at_least} rows, limit {limit}"
+    )]
+    RawSourceRebuildCallerForeignKeyCapacityExceeded { observed_at_least: u64, limit: u64 },
+    #[error(
+        "event-store raw-source rebuild does not support caller-owned foreign key {dependency}"
+    )]
+    RawSourceRebuildCallerInboundForeignKeyUnsupported {
+        dependency: Box<RadrootsEventStoreCallerInboundForeignKeyV1>,
+    },
     #[error("invalid stored enum value `{value}` for {field}")]
     InvalidStoredEnum { field: &'static str, value: String },
     #[error("invalid stored boolean value `{value}` for {field}; expected 0 or 1")]
@@ -348,6 +467,10 @@ pub enum RadrootsEventStoreError {
         proposed: i64,
         high_water: i64,
     },
+    #[error(
+        "event-store generic projection cursor capacity exceeded: current {current}, limit {limit}"
+    )]
+    ProjectionCursorCapacityExceeded { current: u32, limit: u32 },
     #[error(
         "projection `{projection_id}` version {projection_version} is already current for the active source generation"
     )]

@@ -420,6 +420,21 @@ semver_impacts = [
 summary = "Advance the event store to schema version 4 with prospective retained-source capacity enforcement across independent file pools, UTF-8 preflight before schema or journal mutation, bounded reopen recounts, rollback-protected finite generation history, coherent NIP-09 and FoodAvailability rebuild seals, typed capacity and recovery failures, and an authenticated executable SourceMaintenance successor contract that replaces exactly radroots_event_store_food_availability_image_delete_guard, radroots_event_store_food_availability_projection_delete_guard, and radroots_event_store_source_rebuild_marker_insert_guard; rejects drifted v3 upgrades atomically; restores the exact predecessor trigger SQL on rollback; and reserves future derived-state repair for an exact managed-v4 catalog, ledger, migration history, immutable raw/source lineage, and capacity without requiring derived hook health as a precondition."
 
 [[changes]]
+id = "event-store-raw-source-rebuild-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_exported_field",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_enum_variant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Add an authenticated managed-v4 raw-source rebuild and file-only cold-repair authority with stable typed drift categories, serialized generation rotation, independent immutable-raw visibility audit, typed generation-normalized product-state digests, bounded generic projection cursors, a bounded caller-schema dependency preflight over every directly or indirectly mutated parent including the full Food FTS5 table family and sqlite_sequence, target-first transition sequence normalization, separately scoped integrity checks, exact rollback failpoints, a canonical-path SQLite lock-domain probe, deterministic crate-owned connection policy, and an executable successor contract while freezing the SourceMaintenance predecessor and migration inventory."
+
+[[changes]]
 id = "transport-event-outcomes-and-replica-quarantine"
 classification = "breaking"
 semver_impacts = [

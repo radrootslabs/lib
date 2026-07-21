@@ -4593,6 +4593,7 @@ dependencies = [
 name = "radroots_event_store"
 version = "1.0.0-alpha.1"
 dependencies = [
+ "futures",
  "getrandom 0.2.17",
  "hex",
  "nostr",
