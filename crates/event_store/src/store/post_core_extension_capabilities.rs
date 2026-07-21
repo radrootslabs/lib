@@ -1,5 +1,7 @@
 use super::post_core_extensions_v1::apply_post_core_extensions_v1;
+use super::post_core_extensions_v2::apply_post_core_extensions_v2;
 use super::post_core_storage_v1::PostCoreStorageV1;
+use super::post_core_storage_v2::PostCoreStorageV2;
 use super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult;
 use crate::error::RadrootsEventStoreError;
 use crate::model::RadrootsEventIngest;
@@ -21,5 +23,10 @@ impl<'borrow, 'db> PostCoreExtensionCapabilities<'borrow, 'db> {
     ) -> Result<(), RadrootsEventStoreError> {
         let mut storage = PostCoreStorageV1::new(self.tx);
         apply_post_core_extensions_v1(&mut storage, ingest, result).await
+    }
+
+    pub(super) async fn apply_v2(&mut self) -> Result<(), RadrootsEventStoreError> {
+        let mut storage = PostCoreStorageV2::new(self.tx);
+        apply_post_core_extensions_v2(&mut storage).await
     }
 }

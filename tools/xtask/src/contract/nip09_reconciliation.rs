@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::artifact_bundle::{
     GeneratedArtifact, read_regular_file, validate_workspace_path, with_artifact_bundle_transaction,
 };
@@ -216,6 +218,83 @@ const GENERATED_DESCRIPTOR_RELATIVE: &str =
     "crates/event_store/src/generated/nip09_reconciliation_manifest.rs";
 const WRITE_COMMAND: &str = "cargo xtask contract nip09-reconciliation-manifest --write";
 
+const IMMUTABLE_MANIFEST_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/contracts/nip09_reconciliation_v1.manifest.json"
+);
+const IMMUTABLE_MANIFEST_SCHEMA_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/contracts/nip09_reconciliation_v1.manifest.schema.json"
+);
+const IMMUTABLE_MANIFEST_SHA256_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/contracts/nip09_reconciliation_v1.manifest.sha256"
+);
+const IMMUTABLE_GENERATED_DESCRIPTOR_BYTES: &[u8] =
+    include_bytes!("../../../../crates/event_store/src/generated/nip09_reconciliation_manifest.rs");
+
+#[derive(Clone, Copy)]
+struct ImmutableArtifactSpec {
+    relative: &'static str,
+    byte_length: usize,
+    sha256: &'static str,
+}
+
+const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 11] = [
+    ImmutableArtifactSpec {
+        relative: MANIFEST_RELATIVE,
+        byte_length: 537_538,
+        sha256: "74af832420ffbaa9805e89df3c0b34f126a443e1598f757e3372f407f9003b77",
+    },
+    ImmutableArtifactSpec {
+        relative: MANIFEST_SCHEMA_RELATIVE,
+        byte_length: 28_805,
+        sha256: "eac277641b197ec2e7690ae0a513640a4d93d5be713f1e96e9932cbd75cbfc58",
+    },
+    ImmutableArtifactSpec {
+        relative: MANIFEST_SHA256_RELATIVE,
+        byte_length: 65,
+        sha256: "1b4513933ecc96d7f07e48e27bd029bb2b791ebe9771ce516ba2cb3bb7b24080",
+    },
+    ImmutableArtifactSpec {
+        relative: GENERATED_DESCRIPTOR_RELATIVE,
+        byte_length: 586_039,
+        sha256: "406a760e9bed1e8fc89c8e7ae0976c7eff844de7427a3f473528c895439500b3",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_CANONICAL_RELATIVE,
+        byte_length: 10_405,
+        sha256: "31cd9507734ff3308436881622a626b9782b75b548d9f5e159e4125621855b9c",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_MIRROR_RELATIVE,
+        byte_length: 10_405,
+        sha256: "31cd9507734ff3308436881622a626b9782b75b548d9f5e159e4125621855b9c",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_EXECUTOR_RELATIVE,
+        byte_length: 18_446,
+        sha256: "ca2a2bf54062aa6ddf2e553fd624c7217a01ad56309487ce73fa58c47c06c208",
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_V1_UP_RELATIVE,
+        byte_length: 10_712,
+        sha256: MIGRATION_V1_UP_SHA256,
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_V1_DOWN_RELATIVE,
+        byte_length: 522,
+        sha256: MIGRATION_V1_DOWN_SHA256,
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_UP_RELATIVE,
+        byte_length: 81_614,
+        sha256: "0c1730ff36eaebd285f9c0c94b9b7346af60266afa55c24a18e30446d369581a",
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_DOWN_RELATIVE,
+        byte_length: 4_807,
+        sha256: "c51a099d9501f1e692c13d2226296a68ed9e6bfa5e8e46b2f12c6574dbe59e31",
+    },
+];
+
 const RUNTIME_DEPENDENCY_ALGORITHM: &str = "cargo_lock_resolved_semantic_subgraph_v1";
 const RUST_PRODUCTION_AST_SHA256_ALGORITHM: &str = "rust_production_ast_sha256_v1";
 const RUST_FULL_AST_SHA256_ALGORITHM: &str = "rust_full_ast_sha256_v1";
@@ -253,6 +332,30 @@ const PRIVILEGED_STORE_MODULE_NAMES: [&str; 6] = [
     "post_core_storage_v1",
     "protocol_reconciliation_v1",
     "protocol_storage_v1",
+];
+const SUCCESSOR_08C_STORE_MODULE_SOURCES: [&str; 5] = [
+    "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/store/current_visibility_v1.rs",
+    "crates/event_store/src/store/food_availability_projection_v1.rs",
+    "crates/event_store/src/store/post_core_extensions_v2.rs",
+    "crates/event_store/src/store/post_core_storage_v2.rs",
+];
+const SUCCESSOR_08C_STORE_MODULE_NAMES: [&str; 5] = [
+    "addressable_transition_feed_v1",
+    "current_visibility_v1",
+    "food_availability_projection_v1",
+    "post_core_extensions_v2",
+    "post_core_storage_v2",
+];
+const SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS: [&str; 8] = [
+    "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/model/current_visibility_v1.rs",
+    "crates/event_store/src/model/food_availability_projection_v1.rs",
+    "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/store/current_visibility_v1.rs",
+    "crates/event_store/src/store/food_availability_projection_v1.rs",
+    "crates/event_store/src/store/post_core_extensions_v2.rs",
+    "crates/event_store/src/store/post_core_storage_v2.rs",
 ];
 const EVENT_STORE_FIXED_PUBLIC_REEXPORTS: [&str; 40] = [
     "error::RadrootsEventStoreError",
@@ -295,6 +398,40 @@ const EVENT_STORE_FIXED_PUBLIC_REEXPORTS: [&str; 40] = [
     "store::RadrootsEventStore",
     "store::RadrootsTransportObservationRow",
     "store::inspect_event_store_status",
+];
+const SUCCESSOR_08C_PUBLIC_REEXPORTS: [&str; 32] = [
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1",
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1",
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1",
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1",
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1",
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1",
+    "model::RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1",
+    "model::RADROOTS_FOOD_AVAILABILITY_PROJECTION_APPLY_PAGE_LIMIT_V1",
+    "model::RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1",
+    "model::RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_BYTES_V1",
+    "model::RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_TERMS_V1",
+    "model::RadrootsAddressableTransitionCauseV1",
+    "model::RadrootsAddressableTransitionCoordinateV1",
+    "model::RadrootsAddressableTransitionCursorV1",
+    "model::RadrootsAddressableTransitionEventReferenceV1",
+    "model::RadrootsAddressableTransitionOriginV1",
+    "model::RadrootsAddressableTransitionPageV1",
+    "model::RadrootsAddressableTransitionRawHeadDecisionV1",
+    "model::RadrootsAddressableTransitionScopeFingerprintV1",
+    "model::RadrootsAddressableTransitionScopeV1",
+    "model::RadrootsAddressableTransitionV1",
+    "model::RadrootsAddressableTransitionVisibilityV1",
+    "model::RadrootsCurrentEventVisibilityV1",
+    "model::RadrootsCurrentVisibilityDecisionV1",
+    "model::RadrootsFoodAvailabilitySearchQueryV1",
+    "model::RadrootsFoodAvailabilityStatusFilterV1",
+    "model::RadrootsNip09SuppressionEvidenceV1",
+    "model::RadrootsNip09SuppressionOutcome",
+    "model::RadrootsNip09SuppressionReason",
+    "model::RadrootsStoreProducedCanonicalEventV1",
+    "model::RadrootsStoredFoodAvailabilityImageV1",
+    "model::RadrootsStoredFoodAvailabilityV1",
 ];
 const POST_CORE_STORAGE_METHODS: [&str; 4] = [
     "new",
@@ -2054,8 +2191,24 @@ where
 
 pub(crate) fn write_nip09_reconciliation_manifest(workspace_root: &Path) -> Result<(), String> {
     with_artifact_bundle_transaction(workspace_root, |transaction| {
-        let artifacts = expected_artifacts(workspace_root)?;
-        transaction.write(artifacts)?;
+        transaction.write(vec![
+            GeneratedArtifact {
+                relative: MANIFEST_RELATIVE,
+                contents: IMMUTABLE_MANIFEST_BYTES.to_vec(),
+            },
+            GeneratedArtifact {
+                relative: MANIFEST_SCHEMA_RELATIVE,
+                contents: IMMUTABLE_MANIFEST_SCHEMA_BYTES.to_vec(),
+            },
+            GeneratedArtifact {
+                relative: MANIFEST_SHA256_RELATIVE,
+                contents: IMMUTABLE_MANIFEST_SHA256_BYTES.to_vec(),
+            },
+            GeneratedArtifact {
+                relative: GENERATED_DESCRIPTOR_RELATIVE,
+                contents: IMMUTABLE_GENERATED_DESCRIPTOR_BYTES.to_vec(),
+            },
+        ])?;
         validate_nip09_reconciliation_manifest_under_lock(workspace_root)
     })
 }
@@ -2066,7 +2219,9 @@ pub(crate) fn validate_nip09_reconciliation_manifest(workspace_root: &Path) -> R
     })
 }
 
-fn validate_nip09_reconciliation_manifest_under_lock(workspace_root: &Path) -> Result<(), String> {
+pub(super) fn validate_nip09_reconciliation_manifest_under_lock(
+    workspace_root: &Path,
+) -> Result<(), String> {
     let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
     let manifest_value: Value = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
@@ -2079,7 +2234,6 @@ fn validate_nip09_reconciliation_manifest_under_lock(workspace_root: &Path) -> R
         .map_err(|error| format!("parse {MANIFEST_SCHEMA_RELATIVE}: {error}"))?;
     validate_canonical_json(MANIFEST_SCHEMA_RELATIVE, &schema_bytes, &schema)?;
     validate_manifest_json_schema(&schema, &manifest_value)?;
-    validate_manifest_shape(workspace_root, &manifest)?;
     let digest_bytes = read_regular_file(workspace_root, MANIFEST_SHA256_RELATIVE)?;
     validate_digest_sidecar(MANIFEST_SHA256_RELATIVE, &digest_bytes)?;
     let actual_digest = std::str::from_utf8(&digest_bytes[..64])
@@ -2089,27 +2243,265 @@ fn validate_nip09_reconciliation_manifest_under_lock(workspace_root: &Path) -> R
             "{MANIFEST_SHA256_RELATIVE} must match the checked-in manifest bytes"
         ));
     }
-    let descriptor_bytes = read_regular_file(workspace_root, GENERATED_DESCRIPTOR_RELATIVE)?;
 
-    let expected = expected_artifacts(workspace_root)?;
-    let expected_by_path = expected
-        .iter()
-        .map(|artifact| (artifact.relative, artifact.contents.as_slice()))
-        .collect::<BTreeMap<_, _>>();
-    for (relative, actual) in [
-        (MANIFEST_RELATIVE, manifest_bytes),
-        (MANIFEST_SCHEMA_RELATIVE, schema_bytes),
-        (MANIFEST_SHA256_RELATIVE, digest_bytes),
-        (GENERATED_DESCRIPTOR_RELATIVE, descriptor_bytes),
-    ] {
-        let expected = expected_by_path
-            .get(relative)
-            .ok_or_else(|| format!("missing generated artifact specification for {relative}"))?;
-        if actual.as_slice() != *expected {
-            return Err(stale_error(relative));
+    if manifest.schema_version != SCHEMA_VERSION
+        || manifest.hook_id != HOOK_ID
+        || manifest.migration.version != MIGRATION_VERSION
+        || manifest.migration.name != MIGRATION_NAME
+        || manifest.migration.up_sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[9].sha256
+        || manifest.migration.down_sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[10].sha256
+        || manifest.migration.schema_sha256 != SCHEMA_SHA256
+        || manifest.profile.reconciliation_version != RECONCILIATION_VERSION
+        || manifest.profile.addressable_feed_version != ADDRESSABLE_FEED_VERSION
+        || manifest.profile.event_contract_registry_version != EVENT_CONTRACT_REGISTRY_VERSION
+    {
+        return Err(format!(
+            "{MANIFEST_RELATIVE} does not describe the immutable NIP-09 predecessor identity"
+        ));
+    }
+
+    let vector_bytes = read_regular_file(workspace_root, RESULT_VECTOR_CANONICAL_RELATIVE)?;
+    let mirror_bytes = read_regular_file(workspace_root, RESULT_VECTOR_MIRROR_RELATIVE)?;
+    if vector_bytes != mirror_bytes {
+        return Err(format!(
+            "{RESULT_VECTOR_MIRROR_RELATIVE} must exactly mirror {RESULT_VECTOR_CANONICAL_RELATIVE}"
+        ));
+    }
+    let vector: ReconciliationResultVector = serde_json::from_slice(&vector_bytes)
+        .map_err(|error| format!("parse {RESULT_VECTOR_CANONICAL_RELATIVE}: {error}"))?;
+    validate_canonical_json(RESULT_VECTOR_CANONICAL_RELATIVE, &vector_bytes, &vector)?;
+    validate_result_vector(&vector)?;
+
+    for artifact in IMMUTABLE_PREDECESSOR_ARTIFACTS {
+        let bytes = read_regular_file(workspace_root, artifact.relative)?;
+        if bytes.len() != artifact.byte_length || sha256_hex(&bytes) != artifact.sha256 {
+            return Err(format!(
+                "immutable NIP-09 predecessor artifact {} does not match its authenticated byte identity",
+                artifact.relative
+            ));
         }
     }
 
+    Ok(())
+}
+
+pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
+    workspace_root: &Path,
+    superseded_paths: &[&str],
+) -> Result<(), String> {
+    let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
+    let manifest: Nip09ReconciliationManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    if superseded.len() != superseded_paths.len() {
+        return Err("successor predecessor-source supersession paths must be unique".to_owned());
+    }
+
+    let mut predecessor_paths = manifest
+        .frozen_sources
+        .iter()
+        .map(|source| source.path.as_str())
+        .chain(
+            manifest
+                .source_route_witnesses
+                .iter()
+                .map(|source| source.path.as_str()),
+        )
+        .chain(
+            manifest
+                .rust_item_witnesses
+                .iter()
+                .map(|source| source.path.as_str()),
+        )
+        .chain(
+            manifest
+                .rust_fragment_witnesses
+                .iter()
+                .map(|source| source.path.as_str()),
+        )
+        .chain(
+            manifest
+                .impl_resolution_witness
+                .impls
+                .iter()
+                .map(|source| source.path.as_str()),
+        )
+        .collect::<BTreeSet<_>>();
+    predecessor_paths.extend([
+        POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
+        POST_CORE_DISPATCHER_SOURCE_RELATIVE,
+        POST_CORE_EXTENSION_SOURCE_RELATIVE,
+        POST_CORE_STORAGE_SOURCE_RELATIVE,
+    ]);
+    if let Some(path) = superseded
+        .iter()
+        .find(|path| !predecessor_paths.contains(**path))
+    {
+        return Err(format!(
+            "successor supersession path `{path}` is not a predecessor-bound production source"
+        ));
+    }
+
+    if manifest.frozen_sources.len() != FROZEN_SOURCE_SPECS.len() {
+        return Err("immutable predecessor frozen-source inventory is incomplete".to_owned());
+    }
+    for (expected, spec) in manifest.frozen_sources.iter().zip(FROZEN_SOURCE_SPECS) {
+        if expected.role != spec.role || expected.path != spec.path {
+            return Err(format!(
+                "immutable predecessor frozen-source inventory drifted at `{}`",
+                spec.path
+            ));
+        }
+        if superseded.contains(spec.path) {
+            continue;
+        }
+        let current = describe_frozen_source(workspace_root, *spec)?;
+        require_predecessor_frozen_source_match(expected, &current)?;
+    }
+
+    if manifest.source_route_witnesses.len() != SOURCE_ROUTE_WITNESS_SPECS.len() {
+        return Err("immutable predecessor source-route inventory is incomplete".to_owned());
+    }
+    for (expected, spec) in manifest
+        .source_route_witnesses
+        .iter()
+        .zip(SOURCE_ROUTE_WITNESS_SPECS)
+    {
+        if expected.role != spec.role || expected.path != spec.path {
+            return Err(format!(
+                "immutable predecessor source-route inventory drifted at `{}`",
+                spec.path
+            ));
+        }
+        if superseded.contains(spec.path) {
+            continue;
+        }
+        let current = describe_source_route_witness(workspace_root, *spec)?;
+        if current != *expected {
+            return Err(format!(
+                "unchanged predecessor source-route authority `{}` drifted",
+                spec.path
+            ));
+        }
+    }
+
+    validate_predecessor_witness_subset(
+        "Rust item",
+        &manifest.rust_item_witnesses,
+        superseded_paths,
+        || describe_rust_item_witnesses(workspace_root),
+        |witness| witness.path.as_str(),
+    )?;
+    validate_predecessor_witness_subset(
+        "Rust fragment",
+        &manifest.rust_fragment_witnesses,
+        superseded_paths,
+        || describe_rust_fragment_witnesses(workspace_root),
+        |witness| witness.path.as_str(),
+    )?;
+
+    let predecessor_impl_paths = manifest
+        .impl_resolution_witness
+        .impls
+        .iter()
+        .map(|item| item.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let expected_impls = manifest
+        .impl_resolution_witness
+        .impls
+        .iter()
+        .filter(|item| !superseded.contains(item.path.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !expected_impls.is_empty() {
+        let current_impls = describe_impl_resolution_witness(workspace_root)?
+            .impls
+            .into_iter()
+            .filter(|item| {
+                predecessor_impl_paths.contains(item.path.as_str())
+                    && !superseded.contains(item.path.as_str())
+            })
+            .collect::<Vec<_>>();
+        if current_impls != expected_impls {
+            return Err(
+                "unchanged predecessor impl-resolution authority drifted from the immutable manifest"
+                    .to_owned(),
+            );
+        }
+    }
+
+    let post_core_paths = [
+        POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
+        POST_CORE_DISPATCHER_SOURCE_RELATIVE,
+        POST_CORE_EXTENSION_SOURCE_RELATIVE,
+        POST_CORE_STORAGE_SOURCE_RELATIVE,
+    ];
+    let superseded_post_core_count = post_core_paths
+        .iter()
+        .filter(|path| superseded.contains(**path))
+        .count();
+    if superseded_post_core_count == 0 {
+        let current = describe_post_core_sql_capability(workspace_root)?;
+        if current != manifest.post_core_sql_capability {
+            return Err(
+                "unchanged predecessor post-core SQL capability drifted from the immutable manifest"
+                    .to_owned(),
+            );
+        }
+    } else if superseded_post_core_count != post_core_paths.len() {
+        return Err(
+            "the successor must supersede either every or no predecessor post-core capability source"
+                .to_owned(),
+        );
+    }
+
+    validate_local_runtime_sources(workspace_root, &manifest.local_runtime_sources)?;
+    Ok(())
+}
+
+fn require_predecessor_frozen_source_match(
+    expected: &FrozenSourceDescriptor,
+    current: &FrozenSourceDescriptor,
+) -> Result<(), String> {
+    if current != expected {
+        return Err(format!(
+            "unchanged predecessor frozen-source authority `{}` drifted from the immutable manifest",
+            expected.path
+        ));
+    }
+    Ok(())
+}
+
+fn validate_predecessor_witness_subset<T, Describe, PathOf>(
+    label: &str,
+    expected: &[T],
+    superseded_paths: &[&str],
+    describe: Describe,
+    path_of: PathOf,
+) -> Result<(), String>
+where
+    T: Clone + PartialEq,
+    Describe: FnOnce() -> Result<Vec<T>, String>,
+    PathOf: Fn(&T) -> &str,
+{
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    let expected = expected
+        .iter()
+        .filter(|witness| !superseded.contains(path_of(witness)))
+        .cloned()
+        .collect::<Vec<_>>();
+    if expected.is_empty() {
+        return Ok(());
+    }
+    let current = describe()?
+        .into_iter()
+        .filter(|witness| !superseded.contains(path_of(witness)))
+        .collect::<Vec<_>>();
+    if current != expected {
+        return Err(format!(
+            "unchanged predecessor {label} witnesses drifted from the immutable manifest"
+        ));
+    }
     Ok(())
 }
 
@@ -2274,6 +2666,13 @@ fn describe_frozen_source(
     spec: FrozenSourceSpec,
 ) -> Result<FrozenSourceDescriptor, String> {
     let bytes = read_regular_file(workspace_root, spec.path)?;
+    describe_frozen_source_bytes(spec, &bytes)
+}
+
+fn describe_frozen_source_bytes(
+    spec: FrozenSourceSpec,
+    bytes: &[u8],
+) -> Result<FrozenSourceDescriptor, String> {
     let canonical = canonical_rust_ast(spec.path, &bytes, RustAstProfile::Production)?;
     let file = syn::parse_file(
         std::str::from_utf8(&canonical)
@@ -2488,15 +2887,33 @@ fn expected_event_store_migration_compiler_inputs(
             ));
         }
         if version > 2 {
-            for (field_name, expected) in [
-                ("hook", "EventStoreMigrationHook::None"),
-                ("hook_manifest_sha256", "None"),
-                ("event_contract_registry_version", "None"),
-            ] {
+            let expected_authority = if version == 3 && name == "food_availability_projection" {
+                [
+                    (
+                        "hook",
+                        "EventStoreMigrationHook::FoodAvailabilityProjectionV1",
+                    ),
+                    (
+                        "hook_manifest_sha256",
+                        "Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256,)",
+                    ),
+                    (
+                        "event_contract_registry_version",
+                        "Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,)",
+                    ),
+                ]
+            } else {
+                [
+                    ("hook", "EventStoreMigrationHook::None"),
+                    ("hook_manifest_sha256", "None"),
+                    ("event_contract_registry_version", "None"),
+                ]
+            };
+            for (field_name, expected) in expected_authority {
                 let actual = compact_tokens(field(relative, entry, field_name)?);
                 if actual != expected {
                     return Err(format!(
-                        "{relative} post-v2 migration {version} must remain hookless: field `{field_name}` expected `{expected}`, found `{actual}`"
+                        "{relative} post-v2 migration {version} has invalid versioned hook authority: field `{field_name}` expected `{expected}`, found `{actual}`"
                     ));
                 }
             }
@@ -2509,7 +2926,7 @@ fn expected_event_store_migration_compiler_inputs(
                 &format!("{direction}_sql"),
                 &expected_path,
             )?);
-            if version > 2 {
+            if version > 3 {
                 validate_hookless_post_v2_migration_sql_isolated(
                     workspace_root,
                     version,
@@ -5341,8 +5758,10 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
     }
     let expected_module_sources = PRIVILEGED_STORE_MODULE_SOURCES
         .into_iter()
+        .chain(SUCCESSOR_08C_STORE_MODULE_SOURCES)
         .map(str::to_owned)
-        .collect::<Vec<_>>();
+        .collect::<BTreeSet<_>>();
+    let actual_module_sources = actual_module_sources.into_iter().collect::<BTreeSet<_>>();
     if actual_module_sources != expected_module_sources {
         return Err(format!(
             "{EVENT_STORE_STORE_MODULE_ROOT_RELATIVE} source inventory is closed for this contract version: expected {expected_module_sources:?}, found {actual_module_sources:?}"
@@ -5350,7 +5769,7 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
     }
 
     let mut source_paths = vec![EVENT_STORE_STORE_SOURCE_RELATIVE.to_owned()];
-    source_paths.extend(actual_module_sources);
+    source_paths.extend(PRIVILEGED_STORE_MODULE_SOURCES.map(str::to_owned));
     let root_store_bytes = read_regular_file(workspace_root, EVENT_STORE_STORE_SOURCE_RELATIVE)?;
     let root_store =
         parse_canonical_production_rust(EVENT_STORE_STORE_SOURCE_RELATIVE, &root_store_bytes)?;
@@ -5391,14 +5810,6 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
         (
             EVENT_STORE_STORE_SOURCE_RELATIVE,
             "self::protocol_reconciliation_v1::validate_protocol_post_extensions",
-        ),
-        (
-            EVENT_STORE_STORE_SOURCE_RELATIVE,
-            "self::protocol_storage_v1::RawHeadSnapshot",
-        ),
-        (
-            EVENT_STORE_STORE_SOURCE_RELATIVE,
-            "self::protocol_storage_v1::raw_head_coordinate_for_stored_event",
         ),
         (
             EVENT_STORE_STORE_SOURCE_RELATIVE,
@@ -5522,6 +5933,7 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
         governed_regular_file_inventory(workspace_root, EVENT_STORE_SOURCE_ROOT_RELATIVE)?
             .into_iter()
             .filter(|relative| relative.ends_with(".rs"))
+            .filter(|relative| !SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS.contains(&relative.as_str()))
             .collect::<Vec<_>>();
     let mut definitions = Vec::new();
     let mut calls = Vec::new();
@@ -5835,7 +6247,78 @@ fn validate_event_store_trait_impl_authority(
         ));
     }
     if relative == EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE {
-        let actual_sha256 = sha256_hex(&canonical_json_bytes(&audit.inherent_impls)?);
+        let food_id_arm = exact_associated_match_arm(
+            relative,
+            file,
+            "EventStoreMigrationHook",
+            "id",
+            "FoodAvailabilityProjectionV1",
+        )?;
+        validate_exact_arm_expression(
+            relative,
+            "EventStoreMigrationHook::id FoodAvailabilityProjectionV1 arm",
+            &food_id_arm.body,
+            "food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID",
+        )?;
+        let food_manifest_arm = exact_associated_match_arm(
+            relative,
+            file,
+            "EventStoreMigrationHook",
+            "manifest_sha256",
+            "FoodAvailabilityProjectionV1",
+        )?;
+        validate_exact_arm_expression(
+            relative,
+            "EventStoreMigrationHook::manifest_sha256 FoodAvailabilityProjectionV1 arm",
+            &food_manifest_arm.body,
+            "Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256)",
+        )?;
+
+        let migration_impls = file
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                syn::Item::Impl(item)
+                    if item.trait_.is_none()
+                        && compact_tokens(item.self_ty.as_ref()) == "EventStoreMigrationHook" =>
+                {
+                    Some(item)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let [migration_impl] = migration_impls.as_slice() else {
+            return Err(format!(
+                "{relative} must contain exactly one EventStoreMigrationHook inherent impl"
+            ));
+        };
+        let mut predecessor_projection = (*migration_impl).clone();
+        let mut removed_food_arms = 0usize;
+        for item in &mut predecessor_projection.items {
+            let syn::ImplItem::Fn(function) = item else {
+                continue;
+            };
+            for statement in &mut function.block.stmts {
+                let syn::Stmt::Expr(syn::Expr::Match(expression), _) = statement else {
+                    continue;
+                };
+                let before = expression.arms.len();
+                expression.arms = expression
+                    .arms
+                    .iter()
+                    .filter(|arm| !syntax_contains_ident(&arm.pat, "FoodAvailabilityProjectionV1"))
+                    .cloned()
+                    .collect();
+                removed_food_arms += before - expression.arms.len();
+            }
+        }
+        if removed_food_arms != 2 {
+            return Err(format!(
+                "{relative} successor migration hook impl must add exactly two FoodAvailabilityProjectionV1 arms; found {removed_food_arms}"
+            ));
+        }
+        let predecessor_inherent_impls = vec![compact_tokens(&predecessor_projection)];
+        let actual_sha256 = sha256_hex(&canonical_json_bytes(&predecessor_inherent_impls)?);
         if actual_sha256 != EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256 {
             return Err(format!(
                 "{relative} migration inherent impl baseline drifted: expected {EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256}, found {actual_sha256}"
@@ -6132,7 +6615,9 @@ fn validate_event_store_lib_resolution_authority(
                     "{relative} reexports duplicate local binding `{binding}`"
                 ));
             }
-            if !EVENT_STORE_FIXED_PUBLIC_REEXPORTS.contains(&route.as_str()) {
+            if !EVENT_STORE_FIXED_PUBLIC_REEXPORTS.contains(&route.as_str())
+                && !SUCCESSOR_08C_PUBLIC_REEXPORTS.contains(&route.as_str())
+            {
                 return Err(format!(
                     "{relative} public export inventory is closed for this contract version; found unsupported reexport `{route}`"
                 ));
@@ -6142,9 +6627,11 @@ fn validate_event_store_lib_resolution_authority(
     }
     let expected_uses = EVENT_STORE_FIXED_PUBLIC_REEXPORTS
         .into_iter()
+        .chain(SUCCESSOR_08C_PUBLIC_REEXPORTS)
         .map(str::to_owned)
-        .collect::<Vec<_>>();
-    if actual_uses != expected_uses {
+        .collect::<BTreeSet<_>>();
+    let actual_use_set = actual_uses.iter().cloned().collect::<BTreeSet<_>>();
+    if actual_uses.len() != expected_uses.len() || actual_use_set != expected_uses {
         return Err(format!(
             "{relative} public export inventory drifted: expected {expected_uses:?}, found {actual_uses:?}"
         ));
@@ -6169,8 +6656,15 @@ fn validate_privileged_store_module_routes(relative: &str, file: &syn::File) -> 
                 "{relative} contains duplicate production module route `{name}`"
             ));
         }
-        if !PRIVILEGED_STORE_MODULE_NAMES.contains(&name.as_str())
-            || !is_inherited_visibility(&module.vis)
+        let predecessor_module = PRIVILEGED_STORE_MODULE_NAMES.contains(&name.as_str());
+        let successor_module = SUCCESSOR_08C_STORE_MODULE_NAMES.contains(&name.as_str());
+        let expected_visibility = if name == "food_availability_projection_v1" {
+            route_visibility(&module.vis) == Some(RouteVisibility::Crate)
+        } else {
+            is_inherited_visibility(&module.vis)
+        };
+        if (!predecessor_module && !successor_module)
+            || !expected_visibility
             || module.content.is_some()
             || !module.attrs.is_empty()
         {
@@ -6182,6 +6676,7 @@ fn validate_privileged_store_module_routes(relative: &str, file: &syn::File) -> 
     }
     let expected = PRIVILEGED_STORE_MODULE_NAMES
         .into_iter()
+        .chain(SUCCESSOR_08C_STORE_MODULE_NAMES)
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     if actual != expected {
@@ -6189,12 +6684,9 @@ fn validate_privileged_store_module_routes(relative: &str, file: &syn::File) -> 
             "{relative} governed module inventory drifted: expected {expected:?}, found {actual:?}"
         ));
     }
-    let actual_sha256 = sha256_hex(prettyplease::unparse(file).as_bytes());
-    if actual_sha256 != EVENT_STORE_STORE_ROOT_BASELINE_SHA256 {
-        return Err(format!(
-            "{relative} production baseline outside audited extension modules drifted: expected {EVENT_STORE_STORE_ROOT_BASELINE_SHA256}, found {actual_sha256}"
-        ));
-    }
+    // The immutable predecessor hashes the v1 root. Once the exact successor
+    // module inventory is present, the successor manifest owns the current
+    // root bytes while this validator continues to police its v1 authority.
     Ok(())
 }
 
@@ -7635,7 +8127,7 @@ fn describe_post_core_extension_boundary(
         .into_iter()
         .map(|(_, route)| route)
         .collect::<BTreeSet<_>>();
-    let expected_capability_uses = [
+    let mut expected_capability_uses = [
         "super::post_core_extensions_v1::apply_post_core_extensions_v1",
         "super::post_core_storage_v1::PostCoreStorageV1",
         "super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult",
@@ -7647,9 +8139,15 @@ fn describe_post_core_extension_boundary(
     .into_iter()
     .map(str::to_owned)
     .collect::<BTreeSet<_>>();
+    if !require_v1_only {
+        expected_capability_uses.extend([
+            "super::post_core_extensions_v2::apply_post_core_extensions_v2".to_owned(),
+            "super::post_core_storage_v2::PostCoreStorageV2".to_owned(),
+        ]);
+    }
     if capability_uses != expected_capability_uses {
         return Err(format!(
-            "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} imports drifted outside the exact v1 capability boundary"
+            "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} imports drifted outside the exact authenticated capability boundary"
         ));
     }
     if capabilities.items.iter().any(|item| {
@@ -7748,11 +8246,14 @@ fn describe_post_core_extension_boundary(
             "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} capability impl may contain only methods"
         ));
     }
-    if require_v1_only
-        && methods.keys().map(String::as_str).collect::<Vec<_>>() != ["apply_v1", "new"]
-    {
+    let expected_methods = if require_v1_only {
+        vec!["apply_v1", "new"]
+    } else {
+        vec!["apply_v1", "apply_v2", "new"]
+    };
+    if methods.keys().map(String::as_str).collect::<Vec<_>>() != expected_methods {
         return Err(format!(
-            "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} unauthenticated extension methods require a separately migration-bound contract"
+            "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} extension methods must match the exact migration-bound version inventory"
         ));
     }
     let constructor = methods.get("new").ok_or_else(|| {
@@ -7793,23 +8294,24 @@ fn describe_post_core_extension_boundary(
             "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} apply_v1 must retain the exact restricted storage-to-v1 extension route"
         ));
     }
-    for name in methods.keys() {
-        if matches!(name.as_str(), "new" | "apply_v1") {
-            continue;
-        }
-        let Some(version) = name.strip_prefix("apply_v") else {
-            return Err(format!(
-                "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} future capability method `{name}` must use an apply_vN version name"
-            ));
-        };
-        if version
-            .parse::<u32>()
-            .ok()
-            .filter(|version| *version > 1)
-            .is_none()
+    if !require_v1_only {
+        let apply_v2 = methods.get("apply_v2").expect("exact v2 inventory checked");
+        if compact_tokens(&apply_v2.sig)
+            != compact_source_tokens(
+                "async fn apply_v2(&mut self) -> Result<(), RadrootsEventStoreError>",
+            )
+            || compact_tokens(&apply_v2.block)
+                != compact_source_tokens(
+                    "{
+                        let mut storage = PostCoreStorageV2::new(self.tx);
+                        apply_post_core_extensions_v2(&mut storage).await
+                    }",
+                )
+            || !is_pub_super(&apply_v2.vis)
+            || !apply_v2.attrs.is_empty()
         {
             return Err(format!(
-                "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} future capability method `{name}` has an invalid extension version"
+                "{POST_CORE_CAPABILITIES_SOURCE_RELATIVE} apply_v2 must retain the exact restricted storage-to-v2 extension route"
             ));
         }
     }
@@ -7887,18 +8389,27 @@ fn describe_post_core_extension_boundary(
     }
     let mut versions = Vec::new();
     for (index, statement) in statements[..statements.len() - 1].iter().enumerate() {
-        let expected_prefix = format!("capabilities.apply_v{}(ingest,result).await?;", index + 1);
-        if compact_tokens(statement) != expected_prefix {
+        let version = index + 1;
+        let expected = match version {
+            1 => "capabilities.apply_v1(ingest,result).await?;".to_owned(),
+            2 if !require_v1_only => "capabilities.apply_v2().await?;".to_owned(),
+            _ => String::new(),
+        };
+        if compact_tokens(statement) != expected {
             return Err(format!(
-                "{POST_CORE_DISPATCHER_SOURCE_RELATIVE} extension call {} must be direct, contiguous, awaited, and question-mark propagated",
-                index + 1
+                "{POST_CORE_DISPATCHER_SOURCE_RELATIVE} extension call {version} must match its exact direct, contiguous, awaited, question-mark-propagated route"
             ));
         }
-        versions.push(index + 1);
+        versions.push(version);
     }
-    if require_v1_only && versions != [1] {
+    let expected_versions = if require_v1_only {
+        &[1][..]
+    } else {
+        &[1, 2][..]
+    };
+    if versions != expected_versions {
         return Err(format!(
-            "{POST_CORE_DISPATCHER_SOURCE_RELATIVE} later dispatcher calls require separately authenticated migration-bound extension contracts"
+            "{POST_CORE_DISPATCHER_SOURCE_RELATIVE} extension calls must match the exact migration-bound version inventory"
         ));
     }
 
@@ -10472,43 +10983,47 @@ fn validate_migration_registry_reachability(
     let function = exact_top_level_function(relative, file, "validate_migration_registry")?;
     let statements = &function.block.stmts;
     let ledger_guard = "if EVENT_STORE_LEDGER_CREATE_DDL.strip_prefix(\"CREATE TABLE main.\")!=EVENT_STORE_LEDGER_DDL.strip_prefix(\"CREATE TABLE \"){return Err(RadrootsEventStoreError::MigrationRegistryDefect{reason:\"main-qualified ledger creation DDL does not match canonical catalog DDL\".to_owned(),});}";
-    let manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::Nip09ReconciliationV1}){validate_generated_nip09_manifest_descriptor()?;}";
+    let predecessor_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::Nip09ReconciliationV1}){validate_generated_nip09_manifest_descriptor()?;}";
+    let successor_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::FoodAvailabilityProjectionV1}){validate_generated_food_availability_projection_manifest_descriptor()?;}";
     let range_guard = "if minimum==0||current<minimum||registry.is_empty(){return Err(RadrootsEventStoreError::MigrationRegistryDefect{reason:format!(\"migration version range {minimum}..={current} requires a non-empty positive registry\"),});}";
-    let valid = statements.len() == 9
+    let valid = statements.len() == 10
         && statements.first().is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(ledger_guard)
         })
         && statements.get(1).is_some_and(|statement| {
-            compact_tokens(statement) == compact_source_tokens(manifest_guard)
+            compact_tokens(statement) == compact_source_tokens(predecessor_manifest_guard)
         })
         && statements.get(2).is_some_and(|statement| {
+            compact_tokens(statement) == compact_source_tokens(successor_manifest_guard)
+        })
+        && statements.get(3).is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(range_guard)
         })
         && matches!(
-            statements.get(3),
+            statements.get(4),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("expected_version")
         )
         && matches!(
-            statements.get(4),
+            statements.get(5),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("owned_object_names")
         )
         && matches!(
-            statements.get(5),
+            statements.get(6),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("owned_table_names")
         )
         && matches!(
-            statements.get(6),
+            statements.get(7),
             Some(syn::Stmt::Expr(syn::Expr::ForLoop(_), _))
         )
         && matches!(
-            statements.get(7),
+            statements.get(8),
             Some(syn::Stmt::Expr(syn::Expr::If(_), _))
         )
         && statements
-            .get(8)
+            .get(9)
             .and_then(direct_statement_expression)
             .is_some_and(|expression| compact_tokens(expression) == "Ok(())");
     if !valid {
@@ -10679,7 +11194,7 @@ fn validate_schema_runtime_reachability<'a>(
                 }) {
                     return Ok(());
                 }
-                if has_pending_reconciliation_hook(&status, registry) {
+                if has_pending_source_capacity_hook(&status, registry) {
                     let mut connection = pool.acquire().await?;
                     validate_event_store_temp_schema_with_registry(
                         &mut connection,
@@ -14641,6 +15156,67 @@ mod tests {
         fs::read_to_string(repository_root().join(relative)).expect("repository Rust source")
     }
 
+    fn immutable_manifest() -> Nip09ReconciliationManifest {
+        serde_json::from_slice(IMMUTABLE_MANIFEST_BYTES).expect("immutable NIP-09 manifest")
+    }
+
+    fn restore_predecessor_compiler_manifest(workspace_root: &Path) {
+        let manifest_path = workspace_root.join(EVENT_STORE_CARGO_MANIFEST_RELATIVE);
+        let source = fs::read_to_string(&manifest_path).expect("event-store Cargo manifest");
+        let mut manifest: toml::Value =
+            toml::from_str(&source).expect("parse event-store Cargo manifest");
+        let dependencies = manifest
+            .get_mut("dependencies")
+            .and_then(toml::Value::as_table_mut)
+            .expect("event-store dependencies");
+        let blossom = dependencies
+            .remove("radroots_blossom")
+            .expect("successor Blossom compiler edge must be present in the live fixture");
+        let expected_blossom: toml::Value = toml::from_str(
+            "dependency = { workspace = true, default-features = false, features = [\"std\"] }",
+        )
+        .expect("parse expected Blossom dependency");
+        assert_eq!(
+            blossom,
+            expected_blossom
+                .get("dependency")
+                .expect("expected Blossom dependency")
+                .clone(),
+            "successor Blossom compiler edge must retain its exact semantic shape"
+        );
+        let tokio_features = manifest
+            .get_mut("dev-dependencies")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|dependencies| dependencies.get_mut("tokio"))
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|tokio| tokio.get_mut("features"))
+            .and_then(toml::Value::as_array_mut)
+            .expect("event-store Tokio development features");
+        assert_eq!(
+            tokio_features
+                .iter()
+                .map(toml::Value::as_str)
+                .collect::<Vec<_>>(),
+            [Some("macros"), Some("rt"), Some("sync")],
+            "successor Tokio development features must retain their exact semantic shape"
+        );
+        let sync_index = tokio_features
+            .iter()
+            .position(|feature| feature.as_str() == Some("sync"))
+            .expect("successor Tokio sync feature must be present in the live fixture");
+        tokio_features.remove(sync_index);
+        assert_eq!(
+            tokio_features
+                .iter()
+                .map(toml::Value::as_str)
+                .collect::<Vec<_>>(),
+            [Some("macros"), Some("rt")]
+        );
+        let predecessor =
+            toml::to_string_pretty(&manifest).expect("serialize predecessor Cargo manifest");
+        fs::write(manifest_path, predecessor).expect("restore predecessor compiler manifest");
+    }
+
     fn strip_outer_try(statement: &mut syn::Stmt) {
         let syn::Stmt::Expr(expression, _) = statement else {
             panic!("expected expression statement");
@@ -14686,6 +15262,10 @@ mod tests {
             RESULT_VECTOR_CANONICAL_RELATIVE,
             RESULT_VECTOR_MIRROR_RELATIVE,
             RESULT_VECTOR_EXECUTOR_RELATIVE,
+            MANIFEST_RELATIVE,
+            MANIFEST_SCHEMA_RELATIVE,
+            MANIFEST_SHA256_RELATIVE,
+            GENERATED_DESCRIPTOR_RELATIVE,
         ];
         for dependency in SEMANTIC_DEPENDENCY_SPECS {
             paths.push(dependency.canonical_path);
@@ -14695,6 +15275,7 @@ mod tests {
         }
         paths.extend(FROZEN_SOURCE_SPECS.iter().map(|source| source.path));
         paths.extend(SOURCE_ROUTE_WITNESS_SPECS.iter().map(|source| source.path));
+        paths.extend(SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS);
         paths.sort_unstable();
         paths.dedup();
         paths
@@ -14847,6 +15428,32 @@ route!(r#hex);
             canonical_rust_ast("raw_nonkeyword.rs", raw_nonkeyword, RustAstProfile::Full)
                 .expect("raw nonkeyword identity"),
             "raw syntax must not bypass semantic comparisons for nonkeyword identifiers"
+        );
+    }
+
+    #[test]
+    fn unchanged_predecessor_authority_drift_is_rejected() {
+        let manifest: Nip09ReconciliationManifest =
+            serde_json::from_slice(IMMUTABLE_MANIFEST_BYTES).expect("immutable manifest");
+        let spec = FROZEN_SOURCE_SPECS
+            .iter()
+            .copied()
+            .find(|spec| spec.path == "crates/event/src/deletion.rs")
+            .expect("unchanged predecessor authority spec");
+        let expected = manifest
+            .frozen_sources
+            .iter()
+            .find(|source| source.path == spec.path)
+            .expect("immutable predecessor source descriptor");
+        let mut mutated = fs::read(repository_root().join(spec.path)).expect("authority source");
+        mutated.extend_from_slice(b"\nconst PREDECESSOR_AUTHORITY_DRIFT: () = ();\n");
+        let current =
+            describe_frozen_source_bytes(spec, &mutated).expect("mutated production AST identity");
+        let error = require_predecessor_frozen_source_match(expected, &current)
+            .expect_err("production authority drift must fail");
+        assert!(
+            error.contains("unchanged predecessor frozen-source authority"),
+            "{error}"
         );
     }
 
@@ -15029,7 +15636,7 @@ route!(r#hex);
                 format!(
                     "{original}\nfn macro_bypass() {{\n    bypass_store_authority!();\n}}\n"
                 ),
-                "unsupported production code-generating macro",
+                "unsupported or non-builtin-resolved production macro",
             ),
             (
                 "qualified allowed-name macro injection",
@@ -15099,7 +15706,7 @@ route!(r#hex);
                 format!(
                     "{original}\nfn raw_macro_bypass() {{\n    crate::elsewhere::r#format!();\n}}\n"
                 ),
-                "production baseline",
+                "unsupported or non-builtin-resolved production macro",
             ),
             (
                 "arbitrary glob macro import",
@@ -15359,8 +15966,8 @@ route!(r#hex);
                 1,
             ),
             lib_original.replacen(
-                "RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,",
-                "RadrootsEventStoreSourceGeneration, RadrootsEventVisibility,",
+                "RadrootsEventStoreStatusSummary,\n    RadrootsEventVisibility,",
+                "RadrootsEventVisibility,",
                 1,
             ),
         ];
@@ -15732,9 +16339,12 @@ route!(r#hex);
         let workspace = synthetic_workspace();
         let schema_path = workspace.path().join(EVENT_STORE_SCHEMA_SOURCE_RELATIVE);
         let source = fs::read_to_string(&schema_path).expect("schema authority source");
+        let baseline_sha256 = sha256_hex(source.as_bytes());
         let baseline =
-            describe_nip09_v1_manifest(workspace.path()).expect("baseline NIP-09 v1 manifest");
-        let baseline = canonical_json_bytes(&baseline).expect("canonical baseline manifest");
+            parse_canonical_production_rust(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, source.as_bytes())
+                .expect("schema authority AST");
+        validate_schema_runtime_reachability(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &baseline)
+            .expect("current successor schema runtime authority");
 
         let mut hookless_mutation = syn::parse_file(&source).expect("schema authority AST");
         let hook_dispatch = hookless_mutation
@@ -15832,13 +16442,46 @@ route!(r#hex);
             ("import-rebound hook validator", import_rebind),
         ] {
             fs::write(&schema_path, mutation).expect("write schema authority mutation");
-            let mutated = describe_nip09_v1_manifest(workspace.path())
-                .unwrap_or_else(|error| panic!("{label} must remain describable: {error}"));
             assert_ne!(
-                canonical_json_bytes(&mutated).expect("canonical schema mutation"),
-                baseline,
-                "{label} must rotate the NIP-09 v1 manifest"
+                sha256_hex(&fs::read(&schema_path).expect("mutated schema bytes")),
+                baseline_sha256,
+                "{label} must rotate the successor's exact schema source descriptor"
             );
+            if label == "migration call-path early return" {
+                let mutated = parse_canonical_production_rust(
+                    EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                    &fs::read(&schema_path).expect("mutated schema source"),
+                )
+                .expect("mutated schema authority AST");
+                let migrate = exact_top_level_function(
+                    EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                    &mutated,
+                    "migrate_schema_on_connection",
+                )
+                .expect("mutated migration call path");
+                let current_version = migrate
+                    .block
+                    .stmts
+                    .iter()
+                    .find(|statement| {
+                        matches!(
+                            statement,
+                            syn::Stmt::Local(local)
+                                if local_pattern_ident(&local.pat).as_deref()
+                                    == Some("current_version")
+                        )
+                    })
+                    .expect("mutated current-version statement");
+                assert!(
+                    validate_no_diverging_control_flow(
+                        EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                        "migrate_schema_on_connection current_version",
+                        current_version,
+                    )
+                    .is_err(),
+                    "the structural divergence audit must reject the early-return bypass"
+                );
+            }
             fs::write(&schema_path, &source).expect("restore schema authority source");
         }
     }
@@ -16036,160 +16679,81 @@ route!(r#hex);
     #[test]
     fn post_core_extension_boundary_is_v1_stable_and_append_only() {
         let workspace = synthetic_workspace();
-        let baseline =
-            describe_nip09_v1_manifest(workspace.path()).expect("baseline NIP-09 v1 manifest");
-        let capabilities_path = workspace
-            .path()
-            .join(POST_CORE_CAPABILITIES_SOURCE_RELATIVE);
-        let capabilities =
-            fs::read_to_string(&capabilities_path).expect("capability boundary source");
-        let impl_end = capabilities
-            .rfind("\n}")
-            .expect("capability impl closing brace");
-        let extended_capabilities = format!(
-            "{}\n\n    pub(super) async fn apply_v2(\n        &mut self,\n        ingest: &RadrootsEventIngest,\n        result: &ProtocolReconciliationV1IngestResult,\n    ) -> Result<(), RadrootsEventStoreError> {{\n        let mut storage = super::post_core_storage_v2::PostCoreStorageV2::new(self.tx);\n        super::post_core_extensions_v2::apply_post_core_extensions_v2(\n            &mut storage,\n            ingest,\n            result,\n        )\n        .await\n    }}{}\n",
-            &capabilities[..impl_end],
-            capabilities[impl_end..].trim_end(),
+        let immutable = immutable_manifest();
+        let baseline = describe_post_core_extension_boundary(workspace.path(), false)
+            .expect("migration-bound v2 capability boundary");
+        assert_eq!(
+            baseline.capability_struct_ast_sha256,
+            immutable
+                .post_core_sql_capability
+                .capability_struct_ast_sha256
         );
-        fs::write(&capabilities_path, &extended_capabilities)
-            .expect("append future capability method");
-
-        let store_path = workspace.path().join(EVENT_STORE_STORE_SOURCE_RELATIVE);
-        let store = fs::read_to_string(&store_path).expect("store source");
-        let extended_store = store.replacen(
-            "mod post_core_extensions_v1;\nmod post_core_storage_v1;",
-            "mod post_core_extensions_v1;\nmod post_core_extensions_v2;\nmod post_core_storage_v1;\nmod post_core_storage_v2;",
-            1,
+        assert_eq!(
+            baseline.capability_constructor_ast_sha256,
+            immutable
+                .post_core_sql_capability
+                .capability_constructor_ast_sha256
         );
-        assert_ne!(
-            extended_store, store,
-            "future extension fixture must route its source modules"
+        assert_eq!(
+            baseline.capability_v1_method_ast_sha256,
+            immutable
+                .post_core_sql_capability
+                .capability_v1_method_ast_sha256
         );
-        fs::write(&store_path, extended_store).expect("route future extension modules");
-        fs::write(
-            workspace
-                .path()
-                .join("crates/event_store/src/store/post_core_storage_v2.rs"),
-            r#"use crate::error::RadrootsEventStoreError;
-use sqlx::{Sqlite, Transaction};
-
-pub(super) struct PostCoreStorageV2<'borrow, 'db> {
-    tx: &'borrow mut Transaction<'db, Sqlite>,
-}
-
-impl<'borrow, 'db> PostCoreStorageV2<'borrow, 'db> {
-    pub(super) fn new(tx: &'borrow mut Transaction<'db, Sqlite>) -> Self {
-        Self { tx }
-    }
-
-    pub(super) async fn insert_future_probe(
-        &mut self,
-        event_id: &str,
-    ) -> Result<(), RadrootsEventStoreError> {
-        sqlx::query(
-            "INSERT INTO future_event_ingest_probe(event_id) VALUES (?) \
-             ON CONFLICT(event_id) DO NOTHING",
-        )
-        .bind(event_id)
-        .execute(&mut **self.tx)
-        .await?;
-        Ok(())
-    }
-}
-"#,
-        )
-        .expect("write future restricted storage source");
-        fs::write(
-            workspace
-                .path()
-                .join("crates/event_store/src/store/post_core_extensions_v2.rs"),
-            r#"use super::post_core_storage_v2::PostCoreStorageV2;
-use super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult;
-use crate::error::RadrootsEventStoreError;
-use crate::model::RadrootsEventIngest;
-
-pub(super) async fn apply_post_core_extensions_v2(
-    storage: &mut PostCoreStorageV2<'_, '_>,
-    ingest: &RadrootsEventIngest,
-    _result: &ProtocolReconciliationV1IngestResult,
-) -> Result<(), RadrootsEventStoreError> {
-    storage
-        .insert_future_probe(ingest.event().id_str())
-        .await
-}
-"#,
-        )
-        .expect("write future extension source");
+        assert_eq!(
+            baseline.dispatcher_signature_sha256,
+            immutable
+                .post_core_sql_capability
+                .dispatcher_signature_sha256
+        );
+        assert_eq!(
+            baseline.dispatcher_v1_prefix_sha256,
+            immutable
+                .post_core_sql_capability
+                .dispatcher_v1_prefix_sha256
+        );
+        let error = describe_post_core_extension_boundary(workspace.path(), true)
+            .expect_err("v2 requires its separately authenticated successor contract");
+        assert!(
+            error.contains("authenticated capability boundary"),
+            "{error}"
+        );
 
         let dispatcher_path = workspace.path().join(POST_CORE_DISPATCHER_SOURCE_RELATIVE);
         let dispatcher = fs::read_to_string(&dispatcher_path).expect("dispatcher source");
-        let extended_dispatcher = dispatcher.replacen(
-            "    Ok(())",
-            "    capabilities.apply_v2(ingest, result).await?;\n    Ok(())",
-            1,
-        );
-        assert_ne!(
-            extended_dispatcher, dispatcher,
-            "future dispatcher fixture must append a call"
-        );
-        fs::write(&dispatcher_path, &extended_dispatcher).expect("append future dispatcher call");
-
-        let after =
-            describe_nip09_v1_manifest(workspace.path()).expect("future NIP-09 v1 projection");
-        assert_eq!(
-            canonical_json_bytes(&after).expect("future manifest bytes"),
-            canonical_json_bytes(&baseline).expect("baseline manifest bytes"),
-            "an append-only post-core extension must not rotate the persisted NIP-09 v1 contract"
-        );
-        let error = describe_post_core_extension_boundary(workspace.path(), true)
-            .expect_err("future extension requires a separately authenticated contract");
-        assert!(
-            error.contains("separately migration-bound contract"),
-            "{error}"
-        );
-        let error = validate_privileged_store_authority(workspace.path())
-            .expect_err("future extension requires explicit authority-policy evolution");
-        assert!(
-            error.contains("source inventory is closed")
-                || error.contains("event-store inherent impl authority drifted"),
-            "{error}"
-        );
-
-        describe_post_core_extension_boundary(workspace.path(), false)
-            .expect("v1 projection accepts a contiguous future extension");
         for mutation in [
-            extended_dispatcher.replacen(
-                "    capabilities.apply_v1(ingest, result).await?;\n    capabilities.apply_v2(ingest, result).await?;",
-                "    capabilities.apply_v2(ingest, result).await?;\n    capabilities.apply_v1(ingest, result).await?;",
+            dispatcher.replacen(
+                "    capabilities.apply_v1(ingest, result).await?;\n    capabilities.apply_v2().await?;",
+                "    capabilities.apply_v2().await?;\n    capabilities.apply_v1(ingest, result).await?;",
                 1,
             ),
-            extended_dispatcher.replacen(
+            dispatcher.replacen(
                 "capabilities.apply_v1(ingest, result).await?;",
                 "capabilities.apply_v1(ingest, result).await;",
                 1,
             ),
-            extended_dispatcher.replacen(
+            dispatcher.replacen(
                 "    capabilities.apply_v1(ingest, result).await?;",
                 "    if false { return Ok(()); }\n    capabilities.apply_v1(ingest, result).await?;",
                 1,
             ),
-            extended_dispatcher.replacen(
-                "capabilities.apply_v2(ingest, result).await?;",
-                "capabilities.apply_v3(ingest, result).await?;",
+            dispatcher.replacen(
+                "capabilities.apply_v2().await?;",
+                "capabilities.apply_v3().await?;",
                 1,
             ),
-            extended_dispatcher.replacen(
-                "    capabilities.apply_v2(ingest, result).await?;",
-                "    capabilities.apply_v1(ingest, result).await?;\n    capabilities.apply_v2(ingest, result).await?;",
+            dispatcher.replacen(
+                "    capabilities.apply_v2().await?;",
+                "    capabilities.apply_v1(ingest, result).await?;\n    capabilities.apply_v2().await?;",
                 1,
             ),
-            extended_dispatcher.replacen(
+            dispatcher.replacen(
                 "    capabilities.apply_v1(ingest, result).await?;",
                 "    let v1 = capabilities.apply_v1(ingest, result);\n    v1.await?;",
                 1,
             ),
         ] {
-            assert_ne!(mutation, extended_dispatcher, "dispatcher fixture must mutate");
+            assert_ne!(mutation, dispatcher, "dispatcher fixture must mutate");
             fs::write(&dispatcher_path, mutation).expect("write dispatcher mutation");
             assert!(
                 describe_post_core_extension_boundary(workspace.path(), false).is_err(),
@@ -16591,9 +17155,18 @@ pub(super) async fn apply_post_core_extensions_v2(
             .path()
             .join(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE);
         let source = fs::read_to_string(&migrations_path).expect("migration authority source");
-        let baseline =
-            describe_nip09_v1_manifest(workspace.path()).expect("baseline NIP-09 v1 manifest");
-        let baseline = canonical_json_bytes(&baseline).expect("canonical baseline manifest");
+        let baseline_sha256 = sha256_hex(source.as_bytes());
+        let baseline = parse_canonical_production_rust(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            source.as_bytes(),
+        )
+        .expect("migration authority AST");
+        validate_migration_registry_reachability(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &baseline)
+            .expect("current successor registry reachability");
+        validate_manifest_validator_reachability(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &baseline)
+            .expect("immutable predecessor descriptor reachability");
+        expected_event_store_migration_compiler_inputs(workspace.path(), &baseline)
+            .expect("current versioned migration compiler inputs");
 
         for (label, needle, replacement) in [
             (
@@ -16640,13 +17213,10 @@ pub(super) async fn apply_post_core_extensions_v2(
             let mutation = source.replacen(needle, replacement, 1);
             assert_ne!(mutation, source, "{label} fixture must mutate");
             fs::write(&migrations_path, mutation).expect("write migration authority mutation");
-            let mutated = describe_nip09_v1_manifest(workspace.path()).unwrap_or_else(|error| {
-                panic!("{label} mutation must remain describable: {error}")
-            });
             assert_ne!(
-                canonical_json_bytes(&mutated).expect("canonical mutated manifest"),
-                baseline,
-                "{label} mutation must rotate the NIP-09 v1 manifest"
+                sha256_hex(&fs::read(&migrations_path).expect("mutated migration bytes")),
+                baseline_sha256,
+                "{label} must rotate the successor's exact migration source descriptor"
             );
             fs::write(&migrations_path, &source).expect("restore migration authority source");
         }
@@ -16679,14 +17249,46 @@ pub(super) async fn apply_post_core_extensions_v2(
             .expect("up-byte-length initializer");
         *initializer.expr =
             syn::parse_str("{ return Ok(()); 0_u64 }").expect("early-return initializer");
-        fs::write(&migrations_path, prettyplease::unparse(&mutation))
+        let mutation = prettyplease::unparse(&mutation);
+        fs::write(&migrations_path, &mutation)
             .expect("write manifest-validator early-return mutation");
-        let mutated = describe_nip09_v1_manifest(workspace.path())
-            .expect("manifest-validator early-return mutation remains describable");
         assert_ne!(
-            canonical_json_bytes(&mutated).expect("canonical validator mutation"),
-            baseline,
-            "generated-manifest validator prologue early return must rotate the NIP-09 v1 manifest"
+            sha256_hex(mutation.as_bytes()),
+            baseline_sha256,
+            "generated-manifest validator bypass must rotate the successor source descriptor"
+        );
+        let mutation = parse_canonical_production_rust(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            mutation.as_bytes(),
+        )
+        .expect("manifest-validator early-return AST");
+        let validator = exact_top_level_function(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &mutation,
+            "validate_generated_nip09_manifest_descriptor",
+        )
+        .expect("mutated predecessor descriptor validator");
+        let up_byte_length = validator
+            .block
+            .stmts
+            .iter()
+            .find(|statement| {
+                matches!(
+                    statement,
+                    syn::Stmt::Local(local)
+                        if local_pattern_ident(&local.pat).as_deref()
+                            == Some("up_byte_length")
+                )
+            })
+            .expect("mutated up-byte-length statement");
+        assert!(
+            validate_no_diverging_control_flow(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                "validate_generated_nip09_manifest_descriptor up_byte_length",
+                up_byte_length,
+            )
+            .is_err(),
+            "the structural divergence audit must reject an early return"
         );
         fs::write(&migrations_path, &source).expect("restore migration authority source");
     }
@@ -16694,7 +17296,15 @@ pub(super) async fn apply_post_core_extensions_v2(
     #[test]
     fn hookless_future_migration_does_not_churn_nip09_v1_artifacts() {
         let workspace = synthetic_workspace();
-        let before = expected_artifacts(workspace.path()).expect("baseline artifacts");
+        let bundle_paths = [
+            MANIFEST_RELATIVE,
+            MANIFEST_SCHEMA_RELATIVE,
+            MANIFEST_SHA256_RELATIVE,
+            GENERATED_DESCRIPTOR_RELATIVE,
+        ];
+        let before = bundle_paths.map(|relative| {
+            read_regular_file(workspace.path(), relative).expect("baseline artifact")
+        });
         write_nip09_reconciliation_manifest(workspace.path())
             .expect("write baseline manifest bundle");
 
@@ -16704,14 +17314,14 @@ pub(super) async fn apply_post_core_extensions_v2(
         fs::write(
             workspace
                 .path()
-                .join("crates/event_store/migrations/0003_future_probe.up.sql"),
+                .join("crates/event_store/migrations/0004_future_probe.up.sql"),
             up_sql,
         )
         .expect("write future up migration");
         fs::write(
             workspace
                 .path()
-                .join("crates/event_store/migrations/0003_future_probe.down.sql"),
+                .join("crates/event_store/migrations/0004_future_probe.down.sql"),
             down_sql,
         )
         .expect("write future down migration");
@@ -16721,18 +17331,18 @@ pub(super) async fn apply_post_core_extensions_v2(
             .join(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE);
         let migrations = fs::read_to_string(&migrations_path).expect("migration registry source");
         let migrations = migrations.replacen(
-            "pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 2;",
             "pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 3;",
+            "pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 4;",
             1,
         );
         let registry_tail = "    },\n];\n\npub(crate) fn migration_for_version";
         let future_entry = format!(
             r#"    }},
     EventStoreMigration {{
-        version: 3,
+        version: 4,
         name: "future_probe",
-        up_sql: include_str!("../migrations/0003_future_probe.up.sql"),
-        down_sql: include_str!("../migrations/0003_future_probe.down.sql"),
+        up_sql: include_str!("../migrations/0004_future_probe.up.sql"),
+        down_sql: include_str!("../migrations/0004_future_probe.down.sql"),
         up_len: {},
         down_len: {},
         up_sha256: "{}",
@@ -16755,24 +17365,30 @@ pub(crate) fn migration_for_version"#,
         );
         let migrations = migrations.replacen(registry_tail, &future_entry, 1);
         assert!(
-            migrations.contains("version: 3"),
+            migrations.contains("version: 4"),
             "future migration fixture must extend the registry"
         );
         fs::write(&migrations_path, migrations).expect("write future migration registry");
 
-        let after = expected_artifacts(workspace.path()).expect("future-migration artifacts");
-        assert_eq!(after.len(), before.len());
-        for (before, after) in before.iter().zip(&after) {
-            assert_eq!(after.relative, before.relative);
+        let registry = parse_canonical_production_rust(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &fs::read(&migrations_path).expect("future migration registry"),
+        )
+        .expect("future migration registry AST");
+        expected_event_store_migration_compiler_inputs(workspace.path(), &registry)
+            .expect("versioned successor and isolated future compiler inputs");
+
+        for (relative, before) in bundle_paths.into_iter().zip(before) {
+            let after = read_regular_file(workspace.path(), relative).expect("future artifact");
             assert_eq!(
-                after.contents, before.contents,
+                after, before,
                 "{} must remain byte-identical for a hookless post-v2 migration",
-                before.relative
+                relative
             );
         }
         let future_up_path = workspace
             .path()
-            .join("crates/event_store/migrations/0003_future_probe.up.sql");
+            .join("crates/event_store/migrations/0004_future_probe.up.sql");
         for malicious_sql in [
             "INSERT INTO event_envelopes(raw_json) VALUES ('{}');\n",
             "INSERT INTO 'event_envelopes'(raw_json) VALUES ('{}');\n",
@@ -16815,9 +17431,9 @@ pub(crate) fn migration_for_version"#,
             fs::write(&future_up_path, malicious_sql).expect("write coupled future migration");
             let error = validate_hookless_post_v2_migration_sql_isolated(
                 workspace.path(),
-                3,
+                4,
                 "up",
-                "crates/event_store/migrations/0003_future_probe.up.sql",
+                "crates/event_store/migrations/0004_future_probe.up.sql",
             )
             .expect_err("hookless future migration must not couple to v1 authority");
             assert!(
@@ -16835,8 +17451,12 @@ pub(crate) fn migration_for_version"#,
     #[test]
     fn unrelated_future_product_sources_do_not_churn_nip09_v1_manifest() {
         let workspace = synthetic_workspace();
-        let before =
-            describe_nip09_v1_manifest(workspace.path()).expect("baseline NIP-09 v1 manifest");
+        let before = read_regular_file(workspace.path(), MANIFEST_RELATIVE)
+            .expect("immutable NIP-09 v1 manifest");
+        validate_nip09_reconciliation_manifest(workspace.path())
+            .expect("baseline immutable predecessor bundle");
+        validate_privileged_store_authority(workspace.path())
+            .expect("baseline current privileged store authority");
 
         let operational_listing_path = workspace
             .path()
@@ -16908,11 +17528,10 @@ pub(crate) fn migration_for_version"#,
         )
         .expect("reexport future event-store query row");
 
-        let after =
-            describe_nip09_v1_manifest(workspace.path()).expect("future NIP-09 v1 manifest");
         assert_eq!(
-            canonical_json_bytes(&after).expect("future manifest bytes"),
-            canonical_json_bytes(&before).expect("baseline manifest bytes"),
+            read_regular_file(workspace.path(), MANIFEST_RELATIVE)
+                .expect("unchanged immutable manifest"),
+            before,
             "unrelated future product sources must not rotate the immutable NIP-09 v1 hook manifest"
         );
         let error = validate_privileged_store_authority(workspace.path())
@@ -17121,8 +17740,9 @@ pub(crate) fn migration_for_version"#,
     #[test]
     fn nip09_v1_manifest_is_independent_of_post_core_transport_evolution() {
         let workspace = synthetic_workspace();
-        let before =
-            describe_nip09_v1_manifest(workspace.path()).expect("baseline NIP-09 v1 manifest");
+        let before = immutable_manifest();
+        let before_bytes = read_regular_file(workspace.path(), MANIFEST_RELATIVE)
+            .expect("immutable NIP-09 v1 manifest");
 
         assert!(
             before
@@ -17263,11 +17883,12 @@ version = "0.1.0"
         )
         .expect("extend future transport lock subgraph");
 
-        let after =
-            describe_nip09_v1_manifest(workspace.path()).expect("future NIP-09 v1 manifest");
+        validate_nip09_reconciliation_manifest(workspace.path())
+            .expect("transport evolution must not invalidate immutable predecessor artifacts");
         assert_eq!(
-            canonical_json_bytes(&after).expect("future manifest bytes"),
-            canonical_json_bytes(&before).expect("baseline manifest bytes"),
+            read_regular_file(workspace.path(), MANIFEST_RELATIVE)
+                .expect("unchanged immutable manifest"),
+            before_bytes,
             "post-core transport source, feature, and lock evolution must not rotate NIP-09 v1"
         );
     }
@@ -17751,7 +18372,7 @@ async fn nip09_reconciliation_v1_result_vector() {
         validate_cargo_feature_profile_shape(workspace.path(), &profile)
             .expect("empty marker feature shape");
 
-        let mut manifest = describe_nip09_v1_manifest(workspace.path()).expect("governed manifest");
+        let mut manifest = immutable_manifest();
         manifest.cargo_feature_profile = profile.clone();
         validate_manifest_json_schema(
             &manifest_schema(),
@@ -17793,10 +18414,8 @@ async fn nip09_reconciliation_v1_result_vector() {
 
     #[test]
     fn generated_descriptor_uses_rustfmt_stable_long_string_assignments() {
-        let workspace = synthetic_workspace();
-        let manifest =
-            describe_nip09_v1_manifest(workspace.path()).expect("governed NIP-09 manifest");
-        let manifest_bytes = canonical_json_bytes(&manifest).expect("canonical manifest");
+        let manifest = immutable_manifest();
+        let manifest_bytes = IMMUTABLE_MANIFEST_BYTES.to_vec();
         let manifest_sha256 = sha256_hex(&manifest_bytes);
         let descriptor = generated_descriptor(&manifest, &manifest_bytes, &manifest_sha256);
 
@@ -17841,6 +18460,7 @@ async fn nip09_reconciliation_v1_result_vector() {
     #[test]
     fn governed_compiler_inputs_reject_build_proc_macro_and_config_injection() {
         let workspace = synthetic_workspace();
+        restore_predecessor_compiler_manifest(workspace.path());
         validate_governed_compiler_inputs(workspace.path())
             .expect("baseline governed compiler inputs");
 
@@ -18041,10 +18661,7 @@ async fn nip09_reconciliation_v1_result_vector() {
 
     #[test]
     fn draft_2020_12_schema_is_executed_against_the_manifest() {
-        let workspace = synthetic_workspace();
-        let manifest =
-            serde_json::to_value(expected_manifest(workspace.path()).expect("expected manifest"))
-                .expect("manifest value");
+        let manifest = serde_json::to_value(immutable_manifest()).expect("manifest value");
         let schema = manifest_schema();
         validate_manifest_json_schema(&schema, &manifest).expect("valid schema instance");
 
@@ -18087,7 +18704,7 @@ async fn nip09_reconciliation_v1_result_vector() {
     #[test]
     fn manifest_shape_rejects_generated_frozen_sources() {
         let workspace = synthetic_workspace();
-        let mut manifest = expected_manifest(workspace.path()).expect("expected manifest");
+        let mut manifest = immutable_manifest();
         manifest.frozen_sources[0].path = GENERATED_DESCRIPTOR_RELATIVE.to_owned();
         let error = validate_manifest_shape(workspace.path(), &manifest)
             .expect_err("generated source must not be frozen");

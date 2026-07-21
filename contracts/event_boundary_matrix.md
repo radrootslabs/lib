@@ -105,13 +105,16 @@ The `radroots_nostr` `events` feature seals strict FoodAvailability wire parts
 behind a builder whose timestamp cannot be mutated after validation. It supports
 local signing and typed client publication; generic authoring rejects focused
 and mixed kind-`30402` profiles. Signed-event relay remains transport-only.
-Legacy replica ingestion verifies NIP-01 first, selects the raw addressable head
-before profile decoding, and routes only Operational Listing into its
-trade-product projection. Selected focused or generic exclusions and invalid or
-ambiguous rejections remove an older operational projection and still advance
-the raw head. The head-only replica helper rejects kind `30402`; these events
-require profile-aware ingestion so projection cleanup and head movement remain
-atomic.
+The non-default `legacy-ingest` replica feature verifies kind-`30402` NIP-01
+events first, selects the raw addressable head before profile decoding, and
+routes only Operational Listing into its trade-product projection. Selected
+focused or generic exclusions and invalid or ambiguous rejections remove an
+older operational projection and still advance the raw head. The head-only
+replica helper rejects kind `30402`; these events require profile-aware legacy
+ingestion so projection cleanup and head movement remain atomic. This
+bare-envelope module is absent from default builds and is not a Phase 1 product
+ingestion boundary. A future product replacement must accept only a
+store-produced verified, valid-stream-eligible, currently visible admission.
 
 A validated authored image proves local Blossom descriptor-to-byte agreement
 only. Successful BUD-02 upload completion and any raster, retrievability, or
@@ -301,7 +304,7 @@ not weaken or add effect fields to the request corpus.
 | document | 30361 | RadrootsDocument | events.document.publish, events.document.list, events.document.get | requires `d` and pubkey tags; optional address tag |
 | resource_area | 30370 | RadrootsResourceArea | events.resource_area.publish, events.resource_area.list, events.resource_area.get | addressable; GCS location and `g` tag required |
 | resource_cap | 30371 | RadrootsResourceHarvestCap | events.resource_cap.publish, events.resource_cap.list, events.resource_cap.get | addressable; required address, pubkey, key, start, and end tags |
-| food_availability | 30402 | RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder | food_availability.build_authored_draft, food_availability.project_verified_event, food_availability.verify_and_admit_event, food_availability.validate_revision | focused `radroots.food.availability.v1` profile; strict deterministic authoring, verified projection/admission, stable-coordinate revision validation, sealed Nostr signing/publication, generic-authoring reservation, and raw-head-first legacy replica partitioning; BUD-02 upload evidence remains a runtime prerequisite |
+| food_availability | 30402 | RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder | food_availability.build_authored_draft, food_availability.project_verified_event, food_availability.verify_and_admit_event, food_availability.validate_revision | focused `radroots.food.availability.v1` profile; strict deterministic authoring, verified projection/admission, stable-coordinate revision validation, sealed Nostr signing/publication, generic-authoring reservation, and raw-head-first partitioning only behind the non-default `legacy-ingest` replica feature; BUD-02 upload evidence remains a runtime prerequisite |
 | operational_listing | 30402 | RadrootsOperationalListing | events.operational_listing.publish, events.operational_listing.list, events.operational_listing.get | NIP-99 classified-listing kind with the richer Radroots operational profile; canonical Markdown content and tags; farm author required |
 | dvm_request | 5000-5999 | RadrootsJobRequest | events.dvm_request.publish, events.dvm_request.list, events.dvm_request.get | generic DVM request surface |
 | dvm_result | 6000-6999 | RadrootsJobResult | events.dvm_result.publish, events.dvm_result.list, events.dvm_result.get | generic DVM result surface |

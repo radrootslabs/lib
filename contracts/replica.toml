@@ -12,6 +12,8 @@ sync = "radroots_replica_sync"
 
 [policy]
 transport_agnostic_sync_core = true
+# Emit is part of the default sync surface; ingest determinism applies only to
+# the optional legacy feature named by legacy_ingest_feature below.
 deterministic_emit_and_ingest = true
 forbid_legacy_alias_identifiers = true
 profile_event_emission = "excluded"
@@ -21,6 +23,10 @@ classified_listing_head_selection = "raw_before_profile"
 classified_listing_operational_projection = "operational_partition_only"
 classified_listing_excluded_or_rejected_head = "remove_projection_and_advance"
 classified_listing_head_only_ingest = "reject_require_profile_aware"
+legacy_bare_envelope_ingest = "explicit_non_default_feature_only"
+legacy_ingest_feature = "legacy-ingest"
+phase_1_ingest_replacement = "none"
+future_product_ingest_input = "store_produced_verified_valid_visible_admission"
 
 [transfer]
 version = 2

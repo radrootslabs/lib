@@ -9,10 +9,15 @@ and synchronization interfaces for the `radroots` core libraries.
    sync flows;
  * event-emission helpers that materialize replica-facing events from local
    state;
- * ingest helpers, outcomes, and id-factory abstractions for applying incoming
-   events;
- * a `std` feature that adds default id generation and higher-level ingest
-   entry points.
+ * an explicit, non-default `legacy-ingest` feature for the historical
+   bare-envelope projection helpers;
+ * a `std` feature for the portable emit and sync surfaces without legacy
+   ingestion.
+
+The legacy ingest module is excluded from default builds. It accepts bare event
+envelopes and does not consume the event store's verified, valid-stream, and
+current-visibility typestates, so it is not a Phase 1 product ingestion API.
+New consumers must project only store-produced current visible admissions.
 
 ## Copyright
 

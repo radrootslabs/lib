@@ -1,4 +1,5 @@
 use crate::RadrootsEventStoreError;
+use crate::generated::food_availability_projection_manifest as food_manifest;
 use crate::generated::nip09_reconciliation_manifest as nip09_manifest;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -7,7 +8,7 @@ pub(crate) const EVENT_STORE_LEDGER_NAME: &str = "radroots_event_store_schema_mi
 pub(crate) const EVENT_STORE_RESERVED_PREFIX: &str = "radroots_event_store_";
 
 pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN: u32 = 1;
-pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 2;
+pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 3;
 
 pub(crate) const EVENT_STORE_LEDGER_DDL: &str = "CREATE TABLE radroots_event_store_schema_migrations (
   version INTEGER PRIMARY KEY NOT NULL CHECK (version > 0),
@@ -103,6 +104,7 @@ pub(crate) const EVENT_STORE_BASELINE_FTS5_TABLE_NAMES: &[&str] = &["listing_sea
 pub(crate) enum EventStoreMigrationHook {
     None,
     Nip09ReconciliationV1,
+    FoodAvailabilityProjectionV1,
 }
 
 impl EventStoreMigrationHook {
@@ -110,6 +112,9 @@ impl EventStoreMigrationHook {
         match self {
             Self::None => "none",
             Self::Nip09ReconciliationV1 => nip09_manifest::NIP09_RECONCILIATION_HOOK_ID,
+            Self::FoodAvailabilityProjectionV1 => {
+                food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID
+            }
         }
     }
 
@@ -119,9 +124,62 @@ impl EventStoreMigrationHook {
             Self::Nip09ReconciliationV1 => {
                 Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256)
             }
+            Self::FoodAvailabilityProjectionV1 => {
+                Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256)
+            }
         }
     }
 }
+
+pub(crate) const EVENT_STORE_FOOD_AVAILABILITY_OBJECT_NAMES: &[&str] = &[
+    "radroots_event_store_addressable_feed_generation_insert",
+    "radroots_event_store_addressable_feed_integrity_v1",
+    "radroots_event_store_addressable_feed_transition_insert",
+    "radroots_event_store_addressable_transition_coordinate_idx",
+    "radroots_event_store_current_visibility_head_lookup_idx",
+    "radroots_event_store_current_visibility_v1",
+    "radroots_event_store_food_availability_author_idx",
+    "radroots_event_store_food_availability_cursor",
+    "radroots_event_store_food_availability_cursor_delete_guard",
+    "radroots_event_store_food_availability_cursor_insert_guard",
+    "radroots_event_store_food_availability_cursor_update_guard",
+    "radroots_event_store_food_availability_image",
+    "radroots_event_store_food_availability_image_delete_guard",
+    "radroots_event_store_food_availability_image_insert_guard",
+    "radroots_event_store_food_availability_image_update_guard",
+    "radroots_event_store_food_availability_projection",
+    "radroots_event_store_food_availability_projection_delete_guard",
+    "radroots_event_store_food_availability_projection_insert_guard",
+    "radroots_event_store_food_availability_projection_update_guard",
+    "radroots_event_store_food_availability_read_v1",
+    "radroots_event_store_food_availability_recent_idx",
+    "radroots_event_store_food_availability_search_delete",
+    "radroots_event_store_food_availability_search_fts",
+    "radroots_event_store_food_availability_search_fts_config",
+    "radroots_event_store_food_availability_search_fts_content",
+    "radroots_event_store_food_availability_search_fts_data",
+    "radroots_event_store_food_availability_search_fts_docsize",
+    "radroots_event_store_food_availability_search_fts_idx",
+    "radroots_event_store_food_availability_search_insert",
+    "radroots_event_store_food_availability_status_idx",
+    "radroots_event_store_nip09_address_target_visibility_lookup_idx",
+];
+
+pub(crate) const EVENT_STORE_FOOD_AVAILABILITY_TABLE_NAMES: &[&str] = &[
+    "radroots_event_store_addressable_feed_integrity_v1",
+    "radroots_event_store_food_availability_cursor",
+    "radroots_event_store_food_availability_image",
+    "radroots_event_store_food_availability_projection",
+    "radroots_event_store_food_availability_search_fts",
+    "radroots_event_store_food_availability_search_fts_config",
+    "radroots_event_store_food_availability_search_fts_content",
+    "radroots_event_store_food_availability_search_fts_data",
+    "radroots_event_store_food_availability_search_fts_docsize",
+    "radroots_event_store_food_availability_search_fts_idx",
+];
+
+pub(crate) const EVENT_STORE_FOOD_AVAILABILITY_FTS5_TABLE_NAMES: &[&str] =
+    &["radroots_event_store_food_availability_search_fts"];
 
 pub(crate) const EVENT_STORE_NIP09_OBJECT_NAMES: &[&str] = &[
     "radroots_event_store_addressable_head_state",
@@ -278,6 +336,25 @@ pub(crate) const EVENT_STORE_MIGRATIONS: &[EventStoreMigration] = &[
             nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION,
         ),
     },
+    EventStoreMigration {
+        version: 3,
+        name: "food_availability_projection",
+        up_sql: include_str!("../migrations/0003_food_availability_projection.up.sql"),
+        down_sql: include_str!("../migrations/0003_food_availability_projection.down.sql"),
+        up_len: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_BYTE_LENGTH,
+        down_len: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_BYTE_LENGTH,
+        up_sha256: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_SHA256,
+        down_sha256: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_SHA256,
+        schema_sha256: food_manifest::FOOD_AVAILABILITY_PROJECTION_SCHEMA_SHA256,
+        owned_object_names: EVENT_STORE_FOOD_AVAILABILITY_OBJECT_NAMES,
+        owned_table_names: EVENT_STORE_FOOD_AVAILABILITY_TABLE_NAMES,
+        fts5_table_names: EVENT_STORE_FOOD_AVAILABILITY_FTS5_TABLE_NAMES,
+        hook: EventStoreMigrationHook::FoodAvailabilityProjectionV1,
+        hook_manifest_sha256: Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256),
+        event_contract_registry_version: Some(
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,
+        ),
+    },
 ];
 
 pub(crate) fn migration_for_version(
@@ -343,6 +420,12 @@ pub(crate) fn validate_migration_registry(
         .any(|migration| migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1)
     {
         validate_generated_nip09_manifest_descriptor()?;
+    }
+    if registry
+        .iter()
+        .any(|migration| migration.hook == EventStoreMigrationHook::FoodAvailabilityProjectionV1)
+    {
+        validate_generated_food_availability_projection_manifest_descriptor()?;
     }
     if minimum == 0 || current < minimum || registry.is_empty() {
         return Err(RadrootsEventStoreError::MigrationRegistryDefect {
@@ -468,6 +551,11 @@ pub(crate) fn validate_migration_registry(
                 EventStoreMigrationHook::Nip09ReconciliationV1,
                 Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256),
                 Some(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION),
+            )
+            | (
+                EventStoreMigrationHook::FoodAvailabilityProjectionV1,
+                Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256),
+                Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION),
             ) => {}
             (hook, manifest, registry_version) => {
                 return Err(RadrootsEventStoreError::MigrationRegistryDefect {
@@ -631,6 +719,190 @@ fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventSto
     ] {
         validate_sha256_literal(
             nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION,
+            field,
+            digest,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_generated_food_availability_projection_manifest_descriptor()
+-> Result<(), RadrootsEventStoreError> {
+    let bytes = food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_JSON.as_bytes();
+    if bytes.len() != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_BYTE_LENGTH {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated FoodAvailability projection manifest byte length is inconsistent"
+                .to_owned(),
+        });
+    }
+    validate_sha256_literal(
+        food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION,
+        "hook manifest",
+        food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256,
+    )?;
+    if sha256_hex(bytes) != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256 {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated FoodAvailability projection manifest digest is inconsistent"
+                .to_owned(),
+        });
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+        RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: format!(
+                "generated FoodAvailability projection manifest JSON is invalid: {error}"
+            ),
+        }
+    })?;
+    let up_byte_length =
+        u64::try_from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_BYTE_LENGTH)
+            .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+                reason: "generated FoodAvailability migration up byte length is out of range"
+                    .to_owned(),
+            })?;
+    let down_byte_length =
+        u64::try_from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_BYTE_LENGTH)
+            .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+                reason: "generated FoodAvailability migration down byte length is out of range"
+                    .to_owned(),
+            })?;
+    let expected_numbers = [
+        (
+            "/schema_version",
+            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION),
+        ),
+        (
+            "/migration/version",
+            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION),
+        ),
+        ("/migration/up/byte_length", up_byte_length),
+        ("/migration/down/byte_length", down_byte_length),
+        (
+            "/profile/projection_version",
+            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_VERSION),
+        ),
+        (
+            "/profile/addressable_feed_version",
+            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_FEED_VERSION),
+        ),
+        (
+            "/profile/event_contract_registry_version",
+            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION),
+        ),
+    ];
+    let expected_strings = [
+        (
+            "/contract_id",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_CONTRACT_ID,
+        ),
+        (
+            "/hook_id",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID,
+        ),
+        (
+            "/predecessor/manifest/sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256,
+        ),
+        (
+            "/migration/name",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME,
+        ),
+        (
+            "/migration/up/sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_SHA256,
+        ),
+        (
+            "/migration/down/sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_SHA256,
+        ),
+        (
+            "/migration/schema_sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_SCHEMA_SHA256,
+        ),
+        (
+            "/profile/scope_fingerprint_sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256,
+        ),
+        (
+            "/result_vector/sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_SHA256,
+        ),
+        (
+            "/result_vector/executor_id",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_ID,
+        ),
+        (
+            "/result_vector/executor_sha256",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_SHA256,
+        ),
+    ];
+    let numbers_match = expected_numbers.iter().all(|(pointer, expected)| {
+        manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
+    });
+    let strings_match = expected_strings.iter().all(|(pointer, expected)| {
+        manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
+    });
+    let scope_matches = manifest
+        .pointer("/profile/scope_kinds")
+        .and_then(|value| value.as_array())
+        .is_some_and(|scope| scope.len() == 1 && scope[0].as_u64() == Some(30_402));
+    if food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION != 1
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_CONTRACT_ID
+            != "radroots_event_store.food_availability_projection_v1"
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID != "food_availability_projection_v1"
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION != 3
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME
+            != "food_availability_projection"
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_VERSION != 1
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_FEED_VERSION != 1
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION != 7
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_KINDS != [30_402]
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256
+            != "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0"
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256
+            != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256
+        || food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_ID
+            != "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1"
+        || !numbers_match
+        || !strings_match
+        || !scope_matches
+    {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated FoodAvailability projection manifest metadata is inconsistent"
+                .to_owned(),
+        });
+    }
+    for (field, digest) in [
+        (
+            "migration up",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_SHA256,
+        ),
+        (
+            "migration down",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_SHA256,
+        ),
+        (
+            "schema",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_SCHEMA_SHA256,
+        ),
+        (
+            "scope fingerprint",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256,
+        ),
+        (
+            "predecessor manifest",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256,
+        ),
+        (
+            "result vector",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_SHA256,
+        ),
+        (
+            "result-vector executor",
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_SHA256,
+        ),
+    ] {
+        validate_sha256_literal(
+            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION,
             field,
             digest,
         )?;
@@ -874,7 +1146,7 @@ mod migration_framework {
     #[test]
     fn embedded_registry_is_contiguous_and_byte_pinned() {
         validate_embedded_migration_registry().expect("valid registry");
-        assert_eq!(EVENT_STORE_MIGRATIONS.len(), 2);
+        assert_eq!(EVENT_STORE_MIGRATIONS.len(), 3);
         assert_eq!(EVENT_STORE_MIGRATIONS[0].version, 1);
         assert_eq!(EVENT_STORE_MIGRATIONS[0].name, "event_store");
         assert_eq!(EVENT_STORE_MIGRATIONS[0].up_len, FROZEN_V1_UP_LEN);
@@ -898,6 +1170,19 @@ mod migration_framework {
         assert_eq!(
             EVENT_STORE_MIGRATIONS[1].event_contract_registry_version,
             Some(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION)
+        );
+        assert_eq!(EVENT_STORE_MIGRATIONS[2].version, 3);
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[2].name,
+            "food_availability_projection"
+        );
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[2].hook,
+            EventStoreMigrationHook::FoodAvailabilityProjectionV1
+        );
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[2].event_contract_registry_version,
+            Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION)
         );
     }
 

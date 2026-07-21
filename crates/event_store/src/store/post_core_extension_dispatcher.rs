@@ -9,5 +9,6 @@ pub(super) async fn dispatch_post_core_extensions(
     result: &ProtocolReconciliationV1IngestResult,
 ) -> Result<(), RadrootsEventStoreError> {
     capabilities.apply_v1(ingest, result).await?;
+    capabilities.apply_v2().await?;
     Ok(())
 }

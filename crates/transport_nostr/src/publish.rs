@@ -334,6 +334,7 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         RadrootsRelayTransportError::Transport(_) => RadrootsTransportError::InvalidTransportKind,
         RadrootsRelayTransportError::EmptyFetchFilters
         | RadrootsRelayTransportError::InvalidFetchLimit { .. }
+        | RadrootsRelayTransportError::FetchLimitTooLarge { .. }
         | RadrootsRelayTransportError::InvalidTimestamp { .. }
         | RadrootsRelayTransportError::InvalidIdempotencyKey { .. }
         | RadrootsRelayTransportError::RequiredTargetNotRequested { .. } => {
@@ -342,7 +343,10 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         #[cfg(feature = "storage")]
         RadrootsRelayTransportError::EventStore(_)
         | RadrootsRelayTransportError::Outbox(_)
-        | RadrootsRelayTransportError::MissingSignedOutboxEvent(_) => {
+        | RadrootsRelayTransportError::MissingSignedOutboxEvent(_)
+        | RadrootsRelayTransportError::MissingPersistedFetchReceiptEventId
+        | RadrootsRelayTransportError::MissingStoredEventVisibility { .. }
+        | RadrootsRelayTransportError::UnsupportedStoredEventVisibility { .. } => {
             RadrootsTransportError::InvalidTransportKind
         }
     }
@@ -480,6 +484,14 @@ mod contract_tests {
             RadrootsTransportError::InvalidTransportKind
         );
         assert_eq!(
+            nostr_error_to_transport_error(RadrootsRelayTransportError::FetchLimitTooLarge {
+                field: "max_events",
+                max: 1_000,
+                actual: 1_001,
+            }),
+            RadrootsTransportError::InvalidTransportKind
+        );
+        assert_eq!(
             nostr_error_to_transport_error(RadrootsRelayTransportError::InvalidTimestamp {
                 field: "now_ms",
                 value: -1,
@@ -522,6 +534,28 @@ mod contract_tests {
             assert_eq!(
                 nostr_error_to_transport_error(
                     RadrootsRelayTransportError::MissingSignedOutboxEvent(1),
+                ),
+                RadrootsTransportError::InvalidTransportKind
+            );
+            assert_eq!(
+                nostr_error_to_transport_error(
+                    RadrootsRelayTransportError::MissingPersistedFetchReceiptEventId,
+                ),
+                RadrootsTransportError::InvalidTransportKind
+            );
+            assert_eq!(
+                nostr_error_to_transport_error(
+                    RadrootsRelayTransportError::MissingStoredEventVisibility {
+                        event_id: "missing".to_owned(),
+                    },
+                ),
+                RadrootsTransportError::InvalidTransportKind
+            );
+            assert_eq!(
+                nostr_error_to_transport_error(
+                    RadrootsRelayTransportError::UnsupportedStoredEventVisibility {
+                        event_id: "unsupported".to_owned(),
+                    },
                 ),
                 RadrootsTransportError::InvalidTransportKind
             );

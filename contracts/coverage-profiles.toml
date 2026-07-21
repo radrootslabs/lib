@@ -22,3 +22,8 @@ test_threads = 1
 no_default_features = false
 features = ["blossom"]
 test_threads = 1
+
+[profiles.crates."radroots_replica_sync"]
+no_default_features = false
+features = ["legacy-ingest"]
+test_threads = 1

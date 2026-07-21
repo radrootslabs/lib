@@ -1,10 +1,16 @@
+mod addressable_transition_feed_v1;
+mod current_visibility_v1;
+pub(crate) mod food_availability_projection_v1;
 mod post_core_extension_capabilities;
 mod post_core_extension_dispatcher;
 mod post_core_extensions_v1;
+mod post_core_extensions_v2;
 mod post_core_storage_v1;
+mod post_core_storage_v2;
 mod protocol_reconciliation_v1;
 mod protocol_storage_v1;
 
+use self::current_visibility_v1::current_visibility_in_transaction;
 use self::post_core_extension_capabilities::PostCoreExtensionCapabilities;
 use self::post_core_extension_dispatcher::dispatch_post_core_extensions;
 #[cfg(test)]
@@ -27,13 +33,10 @@ use self::protocol_reconciliation_v1::apply_raw_event_head;
 use self::protocol_reconciliation_v1::{
     ingest_event_protocol_reconciliation_v1, validate_protocol_post_extensions,
 };
-use self::protocol_storage_v1::{
-    RawHeadSnapshot, raw_head_coordinate_for_stored_event, raw_head_snapshot_in_transaction,
-    stored_raw_event_from_row,
-};
+use self::protocol_storage_v1::{raw_head_snapshot_in_transaction, stored_raw_event_from_row};
 use crate::RadrootsEventStoreError;
 use crate::model::{
-    RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventIngestReceipt,
+    RadrootsCurrentVisibilityDecisionV1, RadrootsEventIngest, RadrootsEventIngestReceipt,
     RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,
     RadrootsProjectionCursor, RadrootsProjectionRebuildPrior, RadrootsProjectionRebuildTicket,
     RadrootsStoredEventTag, RadrootsStoredRawEvent, RadrootsStoredRawEventHead,
@@ -41,11 +44,12 @@ use crate::model::{
     RadrootsStoredTradeMissingParent, RadrootsStoredTradeMutation,
     RadrootsStoredTradeMutationParent, RadrootsStoredTradeTransportEnvelope,
     RadrootsStoredValidEvent, RadrootsStoredVisibleEvent, RadrootsStoredVisibleEventHead,
-    RadrootsTradeProjectionCheckpoint, RadrootsTransportObservationType, StoredEventClass,
+    RadrootsTradeProjectionCheckpoint, RadrootsTransportObservationType,
 };
 #[cfg(test)]
 use crate::model::{
-    RadrootsEventPersistence, RadrootsRawHeadDecision, RadrootsTransportObservation,
+    RadrootsEventAdmissionStatus, RadrootsEventPersistence, RadrootsRawHeadDecision,
+    RadrootsTransportObservation,
 };
 #[cfg(test)]
 use crate::nip09::reconciliation_v1::ReconciliationProfile;
@@ -61,9 +65,9 @@ use radroots_event::event_head::v1::RadrootsEventHeadCoordinate;
 use radroots_event::event_head::v1::{
     RadrootsEventHeadCandidateResult, event_head_candidate_for_nip01_event_v1,
 };
-#[cfg(test)]
-use radroots_event::ids::RadrootsEventId;
-use radroots_event::ids::{RadrootsDTag, RadrootsTradeId, RadrootsTradeMutationId};
+use radroots_event::ids::{
+    RadrootsDTag, RadrootsEventId, RadrootsTradeId, RadrootsTradeMutationId,
+};
 use radroots_event::trade::RadrootsTradeMutationKindV1;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
@@ -73,6 +77,8 @@ use radroots_transport::{
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{Connection, Row, SqliteConnection, SqlitePool};
+use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
@@ -166,7 +172,7 @@ impl RadrootsEventStore {
     }
 
     pub async fn pragma_journal_mode(&self) -> Result<String, RadrootsEventStoreError> {
-        query_string(&self.pool, "PRAGMA journal_mode").await
+        query_string(&self.pool, "PRAGMA main.journal_mode").await
     }
 
     pub async fn status_summary(
@@ -328,13 +334,86 @@ impl RadrootsEventStore {
         event_id: &str,
     ) -> Result<Option<RadrootsEventVisibility>, RadrootsEventStoreError> {
         let mut tx = self.pool.begin().await?;
-        let Some(snapshot) = visible_event_snapshot(&mut tx, event_id).await? else {
-            tx.commit().await?;
-            return Ok(None);
-        };
-        let visibility = visibility_from_snapshot(&snapshot);
+        let visibility = event_visibility_in_transaction(&mut tx, event_id).await?;
         tx.commit().await?;
-        Ok(Some(visibility?))
+        Ok(visibility)
+    }
+
+    /// Evaluates all requested event ids against one coherent database snapshot.
+    ///
+    /// Results preserve input order and cardinality, including duplicate or
+    /// missing ids, while each distinct id is evaluated only once. The request
+    /// is bounded by [`RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX`], and every id must
+    /// be canonical lowercase 32-byte hex. This is the batch authority for
+    /// callers that must not mix current-visibility decisions from different
+    /// SQLite snapshots.
+    pub async fn event_visibilities<I, S>(
+        &self,
+        event_ids: I,
+    ) -> Result<Vec<Option<RadrootsEventVisibility>>, RadrootsEventStoreError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.event_visibilities_with_probe(event_ids, |_| async {
+            Ok::<(), RadrootsEventStoreError>(())
+        })
+        .await
+    }
+
+    async fn event_visibilities_with_probe<I, S, F, Fut>(
+        &self,
+        event_ids: I,
+        mut after_evaluation: F,
+    ) -> Result<Vec<Option<RadrootsEventVisibility>>, RadrootsEventStoreError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+        F: FnMut(usize) -> Fut,
+        Fut: Future<Output = Result<(), RadrootsEventStoreError>>,
+    {
+        let max = RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX as usize;
+        let event_ids = event_ids
+            .into_iter()
+            .take(max.saturating_add(1))
+            .collect::<Vec<_>>();
+        if event_ids.len() > max {
+            return Err(RadrootsEventStoreError::EventVisibilityBatchTooLarge { max });
+        }
+        let event_ids = event_ids
+            .into_iter()
+            .map(|event_id| RadrootsEventId::parse(event_id.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut unique_event_ids = Vec::new();
+        let mut seen_event_ids = BTreeMap::new();
+        for event_id in &event_ids {
+            if seen_event_ids.insert(event_id.clone(), ()).is_none() {
+                unique_event_ids.push(event_id.clone());
+            }
+        }
+        if unique_event_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let mut evaluated = BTreeMap::new();
+        for (index, event_id) in unique_event_ids.into_iter().enumerate() {
+            let visibility = event_visibility_in_transaction(&mut tx, event_id.as_str()).await?;
+            evaluated.insert(event_id, visibility);
+            after_evaluation(index + 1).await?;
+        }
+        tx.commit().await?;
+
+        event_ids
+            .into_iter()
+            .map(|event_id| {
+                evaluated.get(&event_id).cloned().ok_or_else(|| {
+                    RadrootsEventStoreError::CurrentVisibilityDrift {
+                        reason: format!("event visibility batch lost evaluated id `{event_id}`"),
+                    }
+                })
+            })
+            .collect()
     }
 
     pub async fn visible_event(
@@ -342,15 +421,15 @@ impl RadrootsEventStore {
         event_id: &str,
     ) -> Result<Option<RadrootsStoredVisibleEvent>, RadrootsEventStoreError> {
         let mut tx = self.pool.begin().await?;
-        let Some(snapshot) = visible_event_snapshot(&mut tx, event_id).await? else {
+        let Some(current) = current_visibility_in_transaction(&mut tx, event_id).await? else {
             tx.commit().await?;
             return Ok(None);
         };
-        if visibility_from_snapshot(&snapshot)? != RadrootsEventVisibility::Visible {
+        if current.decision() != RadrootsCurrentVisibilityDecisionV1::Visible {
             tx.commit().await?;
             return Ok(None);
         }
-        let valid_event = RadrootsStoredValidEvent::try_from_raw(snapshot.raw_event)?;
+        let valid_event = RadrootsStoredValidEvent::try_from_raw(current.event)?;
         tx.commit().await?;
         Ok(Some(RadrootsStoredVisibleEvent::new(valid_event)))
     }
@@ -364,15 +443,19 @@ impl RadrootsEventStore {
             tx.commit().await?;
             return Ok(None);
         };
-        let RawHeadSnapshot {
-            raw_head,
-            raw_event,
-        } = snapshot;
-        if raw_event.admission_status != RadrootsEventAdmissionStatus::Admitted {
+        let raw_head = snapshot.raw_head;
+        let Some(current) =
+            current_visibility_in_transaction(&mut tx, raw_head.event_id.as_str()).await?
+        else {
+            return Err(RadrootsEventStoreError::StoredHeadInconsistent {
+                event_id: raw_head.event_id,
+            });
+        };
+        if current.decision() != RadrootsCurrentVisibilityDecisionV1::Visible {
             tx.commit().await?;
             return Ok(None);
         }
-        let valid_event = RadrootsStoredValidEvent::try_from_raw(raw_event)?;
+        let valid_event = RadrootsStoredValidEvent::try_from_raw(current.event().clone())?;
         let event = RadrootsStoredVisibleEvent::new(valid_event);
         tx.commit().await?;
         Ok(Some(RadrootsStoredVisibleEventHead::new(raw_head, event)))
@@ -969,6 +1052,46 @@ impl RadrootsEventStore {
     }
 }
 
+async fn event_visibility_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    event_id: &str,
+) -> Result<Option<RadrootsEventVisibility>, RadrootsEventStoreError> {
+    let Some(current) = current_visibility_in_transaction(tx, event_id).await? else {
+        return Ok(None);
+    };
+    let visibility = match current.decision() {
+        RadrootsCurrentVisibilityDecisionV1::Visible => RadrootsEventVisibility::Visible,
+        RadrootsCurrentVisibilityDecisionV1::NotAdmitted => RadrootsEventVisibility::NotAdmitted,
+        RadrootsCurrentVisibilityDecisionV1::NotCurrent => RadrootsEventVisibility::NotCurrent {
+            raw_head_event_id: current
+                .raw_head_event_id()
+                .ok_or_else(
+                    || RadrootsEventStoreError::StoredHeadCoordinateUnavailable {
+                        event_id: event_id.to_owned(),
+                    },
+                )?
+                .as_str()
+                .to_owned(),
+        },
+        RadrootsCurrentVisibilityDecisionV1::Suppressed => {
+            let evidence = current.suppression().ok_or_else(|| {
+                RadrootsEventStoreError::CurrentVisibilityDrift {
+                    reason: format!(
+                        "suppressed current visibility is missing evidence for `{event_id}`"
+                    ),
+                }
+            })?;
+            RadrootsEventVisibility::Suppressed {
+                reason: evidence.reason,
+                event_reference_request_id: evidence.event_reference_request_id.clone(),
+                address_reference_request_id: evidence.address_reference_request_id.clone(),
+                address_reference_cutoff: evidence.address_reference_cutoff,
+            }
+        }
+    };
+    Ok(Some(visibility))
+}
+
 /// Inspects an existing event-store pool without configuring or migrating it.
 ///
 /// The inspection uses one read transaction and applies the same fail-closed
@@ -1018,11 +1141,6 @@ pub struct RadrootsTransportObservationRow {
     pub last_observed_at_ms: i64,
     pub observation_count: i64,
     pub caller_redacted_message: Option<crate::model::RadrootsTransportObservationMessage>,
-}
-
-struct VisibleEventSnapshot {
-    raw_event: RadrootsStoredRawEvent,
-    raw_head_event_id: Option<String>,
 }
 
 async fn configure_pool(
@@ -1082,11 +1200,14 @@ async fn configure_file_journal_mode(
 ) -> Result<(), RadrootsEventStoreError> {
     let mut busy_retries = 0;
     loop {
-        match sqlx::query("PRAGMA journal_mode = WAL")
-            .execute(&mut *connection)
+        match sqlx::query_scalar::<_, String>("PRAGMA main.journal_mode = WAL")
+            .fetch_one(&mut *connection)
             .await
         {
-            Ok(_) => return Ok(()),
+            Ok(actual) if actual == "wal" => return Ok(()),
+            Ok(actual) => {
+                return Err(RadrootsEventStoreError::SqliteFileJournalModeNotWal { actual });
+            }
             Err(error)
                 if sqlite_error_is_busy(&error)
                     && busy_retries < FILE_JOURNAL_MODE_BUSY_RETRY_LIMIT =>
@@ -1336,71 +1457,6 @@ async fn validate_projection_cursor_high_water(
         });
     }
     Ok(())
-}
-
-async fn visible_event_snapshot(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    event_id: &str,
-) -> Result<Option<VisibleEventSnapshot>, RadrootsEventStoreError> {
-    let row = sqlx::query(
-        "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes WHERE event_id = ?",
-    )
-    .bind(event_id)
-    .fetch_optional(&mut **tx)
-    .await?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let raw_event = stored_raw_event_from_row(row)?;
-    let raw_head_event_id = match raw_event.event_class {
-        StoredEventClass::Regular | StoredEventClass::Ephemeral => None,
-        StoredEventClass::Replaceable | StoredEventClass::Addressable => {
-            let coordinate = raw_head_coordinate_for_stored_event(&raw_event)?;
-            raw_head_snapshot_in_transaction(tx, &coordinate)
-                .await?
-                .map(|snapshot| snapshot.raw_head.event_id)
-        }
-    };
-    Ok(Some(VisibleEventSnapshot {
-        raw_event,
-        raw_head_event_id,
-    }))
-}
-
-fn visibility_from_snapshot(
-    snapshot: &VisibleEventSnapshot,
-) -> Result<RadrootsEventVisibility, RadrootsEventStoreError> {
-    let event = &snapshot.raw_event;
-    match event.event_class {
-        StoredEventClass::Ephemeral => Err(
-            RadrootsEventStoreError::StoredRawEventClassificationInconsistent {
-                event_id: event.event_id.clone(),
-            },
-        ),
-        StoredEventClass::Regular
-            if event.admission_status != RadrootsEventAdmissionStatus::Admitted =>
-        {
-            Ok(RadrootsEventVisibility::NotAdmitted)
-        }
-        StoredEventClass::Regular => Ok(RadrootsEventVisibility::Visible),
-        StoredEventClass::Replaceable | StoredEventClass::Addressable => {
-            if event.admission_status != RadrootsEventAdmissionStatus::Admitted {
-                return Ok(RadrootsEventVisibility::NotAdmitted);
-            }
-            let raw_head_event_id = snapshot.raw_head_event_id.as_ref().ok_or_else(|| {
-                RadrootsEventStoreError::StoredHeadCoordinateUnavailable {
-                    event_id: event.event_id.clone(),
-                }
-            })?;
-            if raw_head_event_id == &event.event_id {
-                Ok(RadrootsEventVisibility::Visible)
-            } else {
-                Ok(RadrootsEventVisibility::NotCurrent {
-                    raw_head_event_id: raw_head_event_id.clone(),
-                })
-            }
-        }
-    }
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -1696,12 +1752,15 @@ mod tests {
         TagKind as RadrootsNostrTagKind, Timestamp as RadrootsNostrTimestamp,
     };
     use radroots_event::draft::RadrootsSignedEvent;
+    use radroots_event::food_availability::{
+        RadrootsFoodAvailabilityStatus, RadrootsFoodIdentifier,
+    };
     use radroots_event::ids::{
         RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsPublicKey,
     };
     use radroots_event::kinds::{
-        KIND_CLASSIFIED_LISTING, KIND_DELETION_REQUEST, KIND_GEOCHAT, KIND_LIST_SET_RELAY,
-        KIND_POST, KIND_PROFILE, KIND_RELAY_AUTH,
+        KIND_CALENDAR_DATE_EVENT, KIND_CLASSIFIED_LISTING, KIND_DELETION_REQUEST, KIND_FARM,
+        KIND_GEOCHAT, KIND_LIST_SET_RELAY, KIND_POST, KIND_PROFILE, KIND_RELAY_AUTH,
     };
     use radroots_event::trade::{
         RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
@@ -1714,7 +1773,7 @@ mod tests {
         canonical_trade_mutation_content,
     };
     use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
-    use std::collections::BTreeMap;
+    use radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -2037,6 +2096,52 @@ mod tests {
         ]
     }
 
+    fn admitted_operational_listing_tags(d_tag: &str, published_at: u64) -> Vec<Vec<String>> {
+        vec![
+            vec!["d".to_owned(), d_tag.to_owned()],
+            vec!["p".to_owned(), FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned()],
+            vec![
+                "a".to_owned(),
+                format!("{KIND_FARM}:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA"),
+            ],
+            vec!["key".to_owned(), "carrot-nantes".to_owned()],
+            vec!["title".to_owned(), "Nantes Carrots".to_owned()],
+            vec!["category".to_owned(), "produce".to_owned()],
+            vec![
+                "summary".to_owned(),
+                "Fresh bunches harvested in Saanich".to_owned(),
+            ],
+            vec!["published_at".to_owned(), published_at.to_string()],
+            vec!["radroots:primary_bin".to_owned(), "bunch".to_owned()],
+            vec![
+                "radroots:bin".to_owned(),
+                "bunch".to_owned(),
+                "1".to_owned(),
+                "each".to_owned(),
+            ],
+            vec![
+                "radroots:price".to_owned(),
+                "bunch".to_owned(),
+                "4".to_owned(),
+                "CAD".to_owned(),
+                "1".to_owned(),
+                "each".to_owned(),
+            ],
+            vec!["price".to_owned(), "4".to_owned(), "CAD".to_owned()],
+            vec!["inventory".to_owned(), "24".to_owned()],
+            vec!["status".to_owned(), "active".to_owned()],
+            vec!["delivery".to_owned(), "pickup".to_owned()],
+            vec![
+                "location".to_owned(),
+                "Saanich Peninsula".to_owned(),
+                "Victoria".to_owned(),
+                "BC".to_owned(),
+                "CA".to_owned(),
+            ],
+            vec!["g".to_owned(), "c28hr".to_owned()],
+        ]
+    }
+
     fn head_coordinate_for_event(event: &RadrootsSignedEvent) -> RadrootsEventHeadCoordinate {
         let RadrootsEventHeadCandidateResult::Candidate(candidate) =
             event_head_candidate_for_nip01_event_v1(event.envelope())
@@ -2070,6 +2175,62 @@ mod tests {
         signed_event_with_keys(keys, KIND_DELETION_REQUEST, created_at, tags, "")
     }
 
+    fn food_availability_event(
+        created_at: u32,
+        d_tag: &str,
+        title: &str,
+        summary: &str,
+        status: &str,
+        mut images: Vec<Vec<String>>,
+    ) -> RadrootsSignedEvent {
+        let mut tags = vec![
+            vec!["d".to_owned(), d_tag.to_owned()],
+            vec!["title".to_owned(), title.to_owned()],
+            vec!["summary".to_owned(), summary.to_owned()],
+            vec!["published_at".to_owned(), "100".to_owned()],
+            vec!["location".to_owned(), "Central Saanich, BC".to_owned()],
+            vec!["price".to_owned(), "3".to_owned(), "CAD".to_owned()],
+            vec!["radroots:price_unit".to_owned(), "lb".to_owned()],
+            vec![
+                "radroots:quantity".to_owned(),
+                "10".to_owned(),
+                "lb".to_owned(),
+            ],
+            vec!["status".to_owned(), status.to_owned()],
+        ];
+        tags.append(&mut images);
+        signed_event(
+            KIND_CLASSIFIED_LISTING,
+            created_at,
+            tags,
+            format!("{summary} Available in Victoria this week.").as_str(),
+        )
+    }
+
+    fn calendar_date_event(
+        created_at: u32,
+        d_tag: &str,
+        content: impl Into<String>,
+    ) -> RadrootsSignedEvent {
+        let content = content.into();
+        signed_event(
+            KIND_CALENDAR_DATE_EVENT,
+            created_at,
+            vec![
+                vec!["d".to_owned(), d_tag.to_owned()],
+                vec!["title".to_owned(), "Victoria Market Day".to_owned()],
+                vec!["start".to_owned(), "2026-07-20".to_owned()],
+                vec!["end".to_owned(), "2026-07-21".to_owned()],
+                vec!["location".to_owned(), "Victoria, BC".to_owned()],
+            ],
+            content.as_str(),
+        )
+    }
+
+    fn food_availability_coordinate(d_tag: &str) -> String {
+        format!("{KIND_CLASSIFIED_LISTING}:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:{d_tag}")
+    }
+
     fn addressable_coordinate(d_tag: &str) -> String {
         format!("{KIND_LIST_SET_RELAY}:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:{d_tag}")
     }
@@ -2083,6 +2244,18 @@ mod tests {
                 .await
                 .expect("v1 status"),
             RadrootsEventStoreSchemaStatus::Managed { version: 1 }
+        );
+    }
+
+    async fn rollback_store_to_v2(store: &RadrootsEventStore) {
+        rollback_event_store_schema_offline(store.pool(), 2)
+            .await
+            .expect("rollback to v2");
+        assert_eq!(
+            inspect_event_store_schema_status(store.pool())
+                .await
+                .expect("v2 status"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 2 }
         );
     }
 
@@ -2618,6 +2791,108 @@ mod tests {
         );
         assert_eq!(raw_authority_digest(&store).await, expected_raw_digest);
         validate_nip09_authority(&store).await;
+    }
+
+    #[tokio::test]
+    async fn food_projection_migration_backfills_v2_and_survives_rollback_reupgrade() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let food = food_availability_event(
+            200,
+            "migration-carrots",
+            "Nantes Carrots",
+            "Fresh bunches",
+            "active",
+            vec![vec![
+                "image".to_owned(),
+                "https://media.example/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.webp"
+                    .to_owned(),
+                "800x600".to_owned(),
+            ]],
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(food.clone(), 2_000))
+            .await
+            .expect("FoodAvailability ingest");
+        let generation = store.source_generation().await.expect("source generation");
+        let raw_digest = raw_authority_digest(&store).await;
+        let projected = store
+            .food_availability_v1(
+                &RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
+                &RadrootsFoodIdentifier::parse("migration-carrots").expect("identifier"),
+            )
+            .await
+            .expect("projection lookup")
+            .expect("projection");
+        assert_eq!(projected.event_id().as_str(), food.id_str());
+        assert_eq!(projected.images().len(), 1);
+        assert!(projected.images()[0].qualifies());
+        assert_eq!(
+            projected.images()[0].blossom_sha256(),
+            Some(
+                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                    "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                )
+                .expect("Blossom digest"),
+            )
+        );
+        let search = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Nantes Carrots")
+            .expect("search query");
+
+        for cycle in 0..2 {
+            rollback_store_to_v2(&store).await;
+            let successor_objects: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name LIKE 'radroots_event_store_food_availability_%' OR name IN ('radroots_event_store_addressable_feed_generation_insert', 'radroots_event_store_addressable_feed_integrity_v1', 'radroots_event_store_addressable_feed_transition_insert', 'radroots_event_store_addressable_transition_coordinate_idx', 'radroots_event_store_current_visibility_head_lookup_idx', 'radroots_event_store_current_visibility_v1', 'radroots_event_store_nip09_address_target_visibility_lookup_idx')",
+            )
+            .fetch_one(store.pool())
+            .await
+            .expect("successor object count");
+            assert_eq!(successor_objects, 0);
+            assert_eq!(raw_authority_digest(&store).await, raw_digest);
+            let transitions: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM radroots_event_store_addressable_head_transition WHERE kind = 30402",
+            )
+            .fetch_one(store.pool())
+            .await
+            .expect("v2 FoodAvailability transitions");
+            assert_eq!(transitions, 1);
+
+            migrate_store_with_generation(
+                &store,
+                [0x70 + u8::try_from(cycle).expect("bounded cycle"); 32],
+            )
+            .await
+            .expect("v2 to v3 re-upgrade");
+            assert_eq!(
+                store.source_generation().await.expect("generation"),
+                generation
+            );
+            assert_eq!(raw_authority_digest(&store).await, raw_digest);
+            let rebuilt = store
+                .food_availability_v1(
+                    &RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
+                    &RadrootsFoodIdentifier::parse("migration-carrots").expect("identifier"),
+                )
+                .await
+                .expect("rebuilt projection lookup")
+                .expect("rebuilt projection");
+            assert_eq!(rebuilt, projected);
+            let matches = store
+                .search_food_availability_v1(
+                    &search,
+                    crate::RadrootsFoodAvailabilityStatusFilterV1::Active,
+                    10,
+                )
+                .await
+                .expect("rebuilt FTS search");
+            assert_eq!(matches, vec![projected.clone()]);
+            let cursor_and_high_water: (i64, i64) = sqlx::query_as(
+                "SELECT cursor.last_transition_seq, source.last_transition_seq FROM radroots_event_store_food_availability_cursor AS cursor JOIN radroots_event_store_source_state AS source ON source.singleton = 1 WHERE cursor.singleton = 1",
+            )
+            .fetch_one(store.pool())
+            .await
+            .expect("projection cursor high-water");
+            assert_eq!(cursor_and_high_water.0, cursor_and_high_water.1);
+        }
     }
 
     #[tokio::test]
@@ -3649,6 +3924,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn file_journal_mode_configuration_rejects_successful_non_wal_result() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("immutable-delete.sqlite");
+        let mut writer = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("writer connection");
+        let initial_mode: String = sqlx::query_scalar("PRAGMA main.journal_mode = DELETE")
+            .fetch_one(&mut writer)
+            .await
+            .expect("delete journal mode");
+        assert_eq!(initial_mode, "delete");
+        writer.close().await.expect("close writer");
+
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new().filename(&path).immutable(true),
+        )
+        .await
+        .expect("immutable connection");
+
+        assert!(matches!(
+            configure_file_journal_mode(&mut connection).await,
+            Err(RadrootsEventStoreError::SqliteFileJournalModeNotWal { actual })
+                if actual == "delete"
+        ));
+    }
+
+    #[tokio::test]
     async fn open_pool_configures_every_file_connection_and_rejects_multi_connection_memory() {
         let memory_options = SqliteConnectOptions::from_str("sqlite::memory:")
             .expect("memory options")
@@ -3735,6 +4041,11 @@ mod tests {
                 .await
                 .expect("foreign keys");
             assert_eq!(foreign_keys, 1);
+            let journal_mode: String = sqlx::query_scalar("PRAGMA main.journal_mode")
+                .fetch_one(&mut **connection)
+                .await
+                .expect("journal mode");
+            assert_eq!(journal_mode, "wal");
             let orphan = sqlx::query(
                 "INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES ('missing', 0, 'd', 'value', '[\"d\",\"value\"]', NULL, NULL, 0)",
             )
@@ -4010,10 +4321,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         let first = RadrootsEventStore::open_file(&path).await.expect("first");
         assert_eq!(first.pragma_foreign_keys().await.expect("foreign_keys"), 1);
+        assert_eq!(first.pragma_journal_mode().await.expect("journal"), "wal");
         drop(first);
 
         let second = RadrootsEventStore::open_file(&path).await.expect("second");
         assert_eq!(second.pragma_foreign_keys().await.expect("foreign_keys"), 1);
+        assert_eq!(second.pragma_journal_mode().await.expect("journal"), "wal");
     }
 
     #[tokio::test]
@@ -5372,6 +5685,1926 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("visible head")
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn food_availability_projection_replaces_and_queries_real_ingest_events() {
+        const BLOSSOM_CARROTS: &str = "https://media.example/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.webp";
+        const BLOSSOM_DETAIL: &str = "https://media.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg";
+
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let carrots = food_availability_event(
+            200,
+            "nantes-carrots",
+            "Nantes Carrots",
+            "Fresh bunches",
+            "active",
+            vec![
+                vec![
+                    "image".to_owned(),
+                    BLOSSOM_CARROTS.to_owned(),
+                    "800x600".to_owned(),
+                ],
+                vec!["image".to_owned(), BLOSSOM_DETAIL.to_owned()],
+            ],
+        );
+        let kale = food_availability_event(
+            201,
+            "lacinato-kale",
+            "Lacinato Kale",
+            "Tender greens",
+            "active",
+            Vec::new(),
+        );
+
+        for (observed_at_ms, event) in [(10_000, &carrots), (10_001, &kale)] {
+            let receipt = store
+                .ingest_event(RadrootsEventIngest::new(event.clone(), observed_at_ms))
+                .await
+                .expect("food ingest");
+            assert_eq!(
+                receipt.admission_status,
+                RadrootsEventAdmissionStatus::Admitted
+            );
+            assert_eq!(
+                receipt.contract_id.as_deref(),
+                Some("radroots.food.availability.v1")
+            );
+        }
+        let initial_projection_count: i64 = sqlx::query_scalar(
+            "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("sealed projection count");
+        assert_eq!(initial_projection_count, 2);
+
+        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let carrot_id = RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier");
+        let projected = store
+            .food_availability_v1(&author, &carrot_id)
+            .await
+            .expect("food lookup")
+            .expect("projected carrots");
+        assert_eq!(projected.event_id().as_str(), carrots.id_str());
+        assert_eq!(projected.title().as_str(), "Nantes Carrots");
+        assert_eq!(projected.summary().as_str(), "Fresh bunches");
+        assert_eq!(projected.price().amount(), "3");
+        assert_eq!(projected.price().currency().as_str(), "CAD");
+        assert_eq!(projected.price().unit().as_str(), "lb");
+        assert_eq!(projected.quantity().expect("quantity").amount(), "10");
+        assert_eq!(projected.status(), RadrootsFoodAvailabilityStatus::Active);
+        assert_eq!(
+            projected.diagnostics(),
+            &[
+                RadrootsFoodAvailabilityImageDiagnostic::ShapeInvalid,
+                RadrootsFoodAvailabilityImageDiagnostic::DimensionsMissing,
+            ]
+        );
+        assert_eq!(projected.images().len(), 2);
+        assert!(projected.images()[0].qualifies());
+        assert_eq!(
+            projected.images()[0].blossom_sha256(),
+            Some(
+                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                    "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                )
+                .expect("Blossom digest"),
+            )
+        );
+        assert!(!projected.images()[1].qualifies());
+        assert_eq!(
+            projected.images()[1].blossom_sha256(),
+            Some(
+                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                )
+                .expect("Blossom digest"),
+            )
+        );
+
+        let active = store
+            .recent_food_availability_v1(crate::RadrootsFoodAvailabilityStatusFilterV1::Active, 10)
+            .await
+            .expect("active food");
+        assert_eq!(active.len(), 2);
+        let carrots_query =
+            crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Nantes Central Saanich")
+                .expect("search query");
+        let matches = store
+            .search_food_availability_v1(
+                &carrots_query,
+                crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                10,
+            )
+            .await
+            .expect("search");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].event_id().as_str(), carrots.id_str());
+        let summary_query = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Fresh")
+            .expect("summary search query");
+        let summary_matches = store
+            .search_food_availability_v1(
+                &summary_query,
+                crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                10,
+            )
+            .await
+            .expect("summary search");
+        assert_eq!(summary_matches.len(), 1);
+        assert_eq!(summary_matches[0].event_id().as_str(), carrots.id_str());
+
+        let sold = food_availability_event(
+            220,
+            "nantes-carrots",
+            "Nantes Carrots Sold",
+            "Farm stand sold out",
+            "sold",
+            Vec::new(),
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(sold.clone(), 10_002))
+            .await
+            .expect("sold replacement");
+
+        let replacement = store
+            .food_availability_v1(&author, &carrot_id)
+            .await
+            .expect("replacement lookup")
+            .expect("sold projection");
+        assert_eq!(replacement.event_id().as_str(), sold.id_str());
+        assert_eq!(replacement.status(), RadrootsFoodAvailabilityStatus::Sold);
+        assert_eq!(replacement.published_at().as_u64(), 100);
+        assert!(replacement.images().is_empty());
+        let replacement_projection_count: i64 = sqlx::query_scalar(
+            "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("sealed replacement projection count");
+        assert_eq!(replacement_projection_count, 2);
+        assert_eq!(
+            store
+                .current_event_visibility_v1(carrots.id_str())
+                .await
+                .expect("old visibility")
+                .expect("stored old revision")
+                .decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::NotCurrent
+        );
+        assert_eq!(
+            store
+                .current_event_visibility_v1(sold.id_str())
+                .await
+                .expect("sold visibility")
+                .expect("stored sold revision")
+                .decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::Visible
+        );
+
+        let active = store
+            .recent_food_availability_v1(crate::RadrootsFoodAvailabilityStatusFilterV1::Active, 10)
+            .await
+            .expect("active after replacement");
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].event_id().as_str(), kale.id_str());
+        let sold_rows = store
+            .recent_food_availability_v1(crate::RadrootsFoodAvailabilityStatusFilterV1::Sold, 10)
+            .await
+            .expect("sold food");
+        assert_eq!(sold_rows.len(), 1);
+        assert_eq!(sold_rows[0].event_id().as_str(), sold.id_str());
+
+        let stale_query = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Fresh bunches")
+            .expect("stale query");
+        assert!(
+            store
+                .search_food_availability_v1(
+                    &stale_query,
+                    crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                    10,
+                )
+                .await
+                .expect("stale search")
+                .is_empty()
+        );
+        let replacement_query = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Farm sold")
+            .expect("replacement query");
+        let replacement_matches = store
+            .search_food_availability_v1(
+                &replacement_query,
+                crate::RadrootsFoodAvailabilityStatusFilterV1::Sold,
+                10,
+            )
+            .await
+            .expect("replacement search");
+        assert_eq!(replacement_matches.len(), 1);
+        assert_eq!(replacement_matches[0].event_id().as_str(), sold.id_str());
+    }
+
+    #[tokio::test]
+    async fn food_availability_projection_guards_images_and_exhaustive_audit_detects_fts_drift() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let with_image = food_availability_event(
+            200,
+            "guarded-carrots",
+            "Guarded Carrots",
+            "Fresh harvest",
+            "active",
+            vec![vec![
+                "image".to_owned(),
+                "https://media.example/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.webp"
+                    .to_owned(),
+                "800x600".to_owned(),
+            ]],
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(with_image, 19_000))
+            .await
+            .expect("FoodAvailability ingest");
+
+        let image_delete = sqlx::query(
+            "DELETE FROM radroots_event_store_food_availability_image WHERE d_tag = 'guarded-carrots'",
+        )
+        .execute(store.pool())
+        .await
+        .expect_err("direct image delete must be guarded");
+        assert!(
+            image_delete
+                .to_string()
+                .contains("image delete is not backed by a pending retraction")
+        );
+        let cursor_update = sqlx::query(
+            "UPDATE radroots_event_store_food_availability_cursor SET last_transition_seq = last_transition_seq WHERE singleton = 1",
+        )
+        .execute(store.pool())
+        .await
+        .expect_err("projection cursor must reject direct writes");
+        assert!(
+            cursor_update
+                .to_string()
+                .contains("FoodAvailability cursor update is invalid")
+        );
+
+        let replacement = food_availability_event(
+            210,
+            "guarded-carrots",
+            "Guarded Carrots",
+            "Sold at market",
+            "sold",
+            Vec::new(),
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(replacement.clone(), 19_001))
+            .await
+            .expect("authorized replacement cascade");
+        let image_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_food_availability_image")
+                .fetch_one(store.pool())
+                .await
+                .expect("image count");
+        assert_eq!(image_count, 0);
+
+        let event_seq: i64 = sqlx::query_scalar(
+            "SELECT event_seq FROM radroots_event_store_food_availability_projection WHERE event_id = ?",
+        )
+        .bind(replacement.id_str())
+        .fetch_one(store.pool())
+        .await
+        .expect("replacement sequence");
+        sqlx::query(
+            "DELETE FROM radroots_event_store_food_availability_search_fts WHERE rowid = ?",
+        )
+        .bind(event_seq)
+        .execute(store.pool())
+        .await
+        .expect("test-only FTS corruption");
+        assert!(matches!(
+            store.audit_food_availability_projection_v1().await,
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn food_availability_exhaustive_audit_rejects_wrong_source_transition_authority() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        for event in [
+            food_availability_event(
+                200,
+                "transition-carrots",
+                "Transition Carrots",
+                "First harvest",
+                "active",
+                Vec::new(),
+            ),
+            food_availability_event(
+                201,
+                "transition-kale",
+                "Transition Kale",
+                "Second harvest",
+                "active",
+                Vec::new(),
+            ),
+        ] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, 19_100))
+                .await
+                .expect("FoodAvailability ingest");
+        }
+
+        let wrong_transition_seq: i64 = sqlx::query_scalar(
+            "SELECT source_transition_seq FROM radroots_event_store_food_availability_projection WHERE d_tag = 'transition-kale'",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("wrong-coordinate transition");
+        sqlx::query("DROP TRIGGER radroots_event_store_food_availability_projection_update_guard")
+            .execute(store.pool())
+            .await
+            .expect("trusted projection guard removal");
+        sqlx::query(
+            "UPDATE radroots_event_store_food_availability_projection SET source_transition_seq = ? WHERE d_tag = 'transition-carrots'",
+        )
+        .bind(wrong_transition_seq)
+        .execute(store.pool())
+        .await
+        .expect("trusted source-transition corruption");
+
+        let error = store
+            .audit_food_availability_projection_v1()
+            .await
+            .expect_err("wrong source transition must fail exhaustive audit");
+        assert!(
+            matches!(
+                error,
+                RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason }
+                    if reason.contains("source transition")
+            ),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn food_availability_exhaustive_audit_compares_exact_head_coordinates() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        store
+            .ingest_event(RadrootsEventIngest::new(
+                food_availability_event(
+                    200,
+                    "coordinate-carrots",
+                    "Coordinate Carrots",
+                    "Coordinate harvest",
+                    "active",
+                    Vec::new(),
+                ),
+                19_200,
+            ))
+            .await
+            .expect("FoodAvailability ingest");
+
+        let mut connection = store.pool().acquire().await.expect("trusted connection");
+        for statement in [
+            "DROP TRIGGER radroots_event_store_addressable_state_identity_update_guard",
+            "DROP TRIGGER radroots_event_store_addressable_state_old_update_guard",
+        ] {
+            sqlx::query(statement)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted head-state guard removal");
+        }
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable trusted foreign-key enforcement");
+        sqlx::query(
+            "UPDATE radroots_event_store_addressable_head_state SET d_tag = 'retargeted-carrots' WHERE d_tag = 'coordinate-carrots'",
+        )
+        .execute(&mut *connection)
+        .await
+        .expect("trusted head-coordinate corruption");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign-key enforcement");
+        drop(connection);
+
+        let error = store
+            .audit_food_availability_projection_v1()
+            .await
+            .expect_err("retargeted head coordinate must fail exhaustive audit");
+        assert!(
+            matches!(
+                error,
+                RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason }
+                    if reason.contains("coordinate witnesses")
+            ),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn food_availability_exhaustive_audit_reserves_wal_writer_before_snapshot_reads() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("food-audit-wal.sqlite");
+        let audit_store = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("audit store");
+        let writer_store = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("writer store");
+        audit_store
+            .ingest_event(RadrootsEventIngest::new(
+                food_availability_event(
+                    200,
+                    "wal-carrots",
+                    "WAL Carrots",
+                    "Serialized audit harvest",
+                    "active",
+                    Vec::new(),
+                ),
+                19_300,
+            ))
+            .await
+            .expect("FoodAvailability ingest");
+        assert_eq!(
+            audit_store
+                .pragma_journal_mode()
+                .await
+                .expect("journal mode"),
+            "wal"
+        );
+
+        let checkpoint_reached = std::sync::Arc::new(tokio::sync::Notify::new());
+        let checkpoint_release = std::sync::Arc::new(tokio::sync::Notify::new());
+        let audit_task = tokio::spawn(
+            super::food_availability_projection_v1::FOOD_AVAILABILITY_AUDIT_FTS_CHECKPOINT.scope(
+                (
+                    std::sync::Arc::clone(&checkpoint_reached),
+                    std::sync::Arc::clone(&checkpoint_release),
+                ),
+                async move { audit_store.audit_food_availability_projection_v1().await },
+            ),
+        );
+        checkpoint_reached.notified().await;
+
+        let writer_started = std::sync::Arc::new(tokio::sync::Notify::new());
+        let writer_started_task = std::sync::Arc::clone(&writer_started);
+        let writer_task = tokio::spawn(async move {
+            writer_started_task.notify_one();
+            let transaction = writer_store
+                .begin_write_transaction()
+                .await
+                .expect("competing writer transaction");
+            transaction.commit().await.expect("competing writer commit");
+        });
+        writer_started.notified().await;
+        tokio::task::yield_now().await;
+        assert!(
+            !writer_task.is_finished(),
+            "competing writer acquired while the audit was paused before FTS integrity-check"
+        );
+
+        checkpoint_release.notify_one();
+        audit_task
+            .await
+            .expect("audit task")
+            .expect("serialized exhaustive audit");
+        writer_task.await.expect("competing writer task");
+    }
+
+    #[tokio::test]
+    async fn food_availability_queries_enforce_limits_order_ties_and_execute_literal_fts_input() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let events = [
+            food_availability_event(
+                200,
+                "query-carrots",
+                "Query Carrots",
+                "Shared harvest",
+                "active",
+                Vec::new(),
+            ),
+            food_availability_event(
+                201,
+                "query-kale",
+                "Query Kale",
+                "Shared harvest",
+                "active",
+                Vec::new(),
+            ),
+            food_availability_event(
+                202,
+                "query-beets",
+                "Query Beets",
+                "Shared harvest",
+                "active",
+                Vec::new(),
+            ),
+        ];
+        for (index, event) in events.iter().enumerate() {
+            store
+                .ingest_event(RadrootsEventIngest::new(
+                    event.clone(),
+                    19_100 + i64::try_from(index).expect("index"),
+                ))
+                .await
+                .expect("query fixture ingest");
+        }
+
+        let mut expected_ids = events
+            .iter()
+            .map(|event| event.id_str().to_owned())
+            .collect::<Vec<_>>();
+        expected_ids.sort();
+        let recent = store
+            .recent_food_availability_v1(
+                crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,
+            )
+            .await
+            .expect("maximum-limit recent query");
+        assert_eq!(
+            recent
+                .iter()
+                .map(|projection| projection.event_id().as_str())
+                .collect::<Vec<_>>(),
+            expected_ids.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            store
+                .recent_food_availability_v1(crate::RadrootsFoodAvailabilityStatusFilterV1::Any, 1,)
+                .await
+                .expect("minimum-limit recent query")[0]
+                .event_id()
+                .as_str(),
+            expected_ids[0],
+        );
+        for invalid_limit in [0, RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX + 1] {
+            assert!(matches!(
+                store
+                    .recent_food_availability_v1(
+                        crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                        invalid_limit,
+                    )
+                    .await,
+                Err(RadrootsEventStoreError::QueryLimitOutOfRange { .. })
+            ));
+        }
+
+        let shared = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Shared")
+            .expect("shared search query");
+        let search = store
+            .search_food_availability_v1(
+                &shared,
+                crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,
+            )
+            .await
+            .expect("maximum-limit search query");
+        assert_eq!(
+            search
+                .iter()
+                .map(|projection| projection.event_id().as_str())
+                .collect::<Vec<_>>(),
+            expected_ids.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
+        for hostile in ["\"", "()", "title:", "*", "---", "OR title:beets*"] {
+            let query = crate::RadrootsFoodAvailabilitySearchQueryV1::parse(hostile)
+                .expect("literal hostile query");
+            store
+                .search_food_availability_v1(
+                    &query,
+                    crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                    1,
+                )
+                .await
+                .expect("hostile input remains a valid literal FTS query");
+        }
+        assert!(matches!(
+            store
+                .search_food_availability_v1(
+                    &shared,
+                    crate::RadrootsFoodAvailabilityStatusFilterV1::Any,
+                    0,
+                )
+                .await,
+            Err(RadrootsEventStoreError::QueryLimitOutOfRange { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn current_visibility_and_food_reads_use_bounded_authority_indexes() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let visibility_plan = explain_query_plan(
+            &store,
+            "EXPLAIN QUERY PLAN SELECT suppression_outcome, suppression_reason, event_reference_request_id, address_reference_request_id, address_reference_cutoff, current_visibility FROM radroots_event_store_current_visibility_v1 WHERE event_id = ?",
+            event_id('a').as_str(),
+        )
+        .await;
+        assert!(
+            visibility_plan.contains("radroots_event_store_nip09_event_target_lookup_idx"),
+            "{visibility_plan}"
+        );
+        assert!(
+            visibility_plan
+                .contains("radroots_event_store_nip09_address_target_visibility_lookup_idx"),
+            "{visibility_plan}"
+        );
+        assert!(
+            !visibility_plan.contains("USE TEMP B-TREE"),
+            "{visibility_plan}"
+        );
+
+        let food_sql = format!(
+            "EXPLAIN QUERY PLAN {}",
+            super::food_availability_projection_v1::FOOD_AVAILABILITY_RECENT_QUERY_V1
+        );
+        let food_plan = explain_query_plan(&store, food_sql.as_str(), "1000").await;
+        assert!(
+            food_plan.contains("radroots_event_store_food_availability_recent_idx"),
+            "{food_plan}"
+        );
+        assert!(
+            food_plan.contains("SEARCH head USING PRIMARY KEY"),
+            "{food_plan}"
+        );
+        assert!(
+            !food_plan.contains("radroots_event_store_nip09_event_target")
+                && !food_plan.contains("radroots_event_store_nip09_address_target"),
+            "{food_plan}"
+        );
+        assert!(!food_plan.contains("USE TEMP B-TREE"), "{food_plan}");
+    }
+
+    #[tokio::test]
+    async fn food_availability_retraction_never_resurrects_an_older_revision() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let active = food_availability_event(
+            200,
+            "nantes-carrots",
+            "Nantes Carrots",
+            "Fresh bunches",
+            "active",
+            Vec::new(),
+        );
+        let sold = food_availability_event(
+            220,
+            "nantes-carrots",
+            "Nantes Carrots Sold",
+            "Sold at market",
+            "sold",
+            Vec::new(),
+        );
+        let deletion = deletion_event(
+            &fixture_keys(),
+            230,
+            vec![vec![
+                "a".to_owned(),
+                food_availability_coordinate("nantes-carrots"),
+            ]],
+        );
+        let older = food_availability_event(
+            210,
+            "nantes-carrots",
+            "Nantes Carrots Older",
+            "Older active revision",
+            "active",
+            Vec::new(),
+        );
+        let recovered = food_availability_event(
+            240,
+            "nantes-carrots",
+            "Nantes Carrots Restocked",
+            "Fresh restock",
+            "active",
+            Vec::new(),
+        );
+        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let identifier = RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier");
+
+        for (observed_at_ms, event) in [(20_000, &active), (20_001, &sold)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event.clone(), observed_at_ms))
+                .await
+                .expect("food revision");
+        }
+        store
+            .ingest_event(RadrootsEventIngest::new(deletion.clone(), 20_002))
+            .await
+            .expect("address deletion");
+        assert!(
+            store
+                .food_availability_v1(&author, &identifier)
+                .await
+                .expect("retracted lookup")
+                .is_none()
+        );
+        let retracted_projection_count: i64 = sqlx::query_scalar(
+            "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("sealed retracted projection count");
+        assert_eq!(retracted_projection_count, 0);
+        let suppressed = store
+            .current_event_visibility_v1(sold.id_str())
+            .await
+            .expect("suppressed visibility")
+            .expect("stored sold revision");
+        assert_eq!(
+            suppressed.decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::Suppressed
+        );
+        let evidence = suppressed.suppression().expect("suppression evidence");
+        assert_eq!(
+            evidence.reason(),
+            crate::RadrootsNip09SuppressionReason::AddressReferenceAtOrBeforeCutoff
+        );
+        assert_eq!(
+            evidence
+                .address_reference_request_id()
+                .expect("address deletion id")
+                .as_str(),
+            deletion.id_str()
+        );
+        assert_eq!(evidence.address_reference_cutoff(), Some(230));
+
+        let older_receipt = store
+            .ingest_event(RadrootsEventIngest::new(older.clone(), 20_003))
+            .await
+            .expect("older late arrival");
+        assert_eq!(
+            older_receipt.raw_head_decision,
+            RadrootsRawHeadDecision::SkippedOlder
+        );
+        assert!(
+            store
+                .food_availability_v1(&author, &identifier)
+                .await
+                .expect("no resurrection lookup")
+                .is_none()
+        );
+        assert_eq!(
+            store
+                .current_event_visibility_v1(older.id_str())
+                .await
+                .expect("older visibility")
+                .expect("stored older revision")
+                .decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::NotCurrent
+        );
+
+        store
+            .ingest_event(RadrootsEventIngest::new(recovered.clone(), 20_004))
+            .await
+            .expect("post-cutoff replacement");
+        let projection = store
+            .food_availability_v1(&author, &identifier)
+            .await
+            .expect("recovered lookup")
+            .expect("recovered projection");
+        assert_eq!(projection.event_id().as_str(), recovered.id_str());
+        assert_eq!(projection.status(), RadrootsFoodAvailabilityStatus::Active);
+        let recovered_projection_count: i64 = sqlx::query_scalar(
+            "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("sealed recovered projection count");
+        assert_eq!(recovered_projection_count, 1);
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let page = store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect("transition page");
+        assert_eq!(page.transitions().len(), 4);
+        assert_eq!(page.source_high_water(), 4);
+        assert_eq!(page.next_cursor().last_transition_seq(), 4);
+        assert!(!page.has_more());
+        let deletion_cause = page.transitions()[2]
+            .cause_event()
+            .expect("deletion cause metadata");
+        assert_eq!(
+            deletion_cause.event().event_id().as_str(),
+            deletion.id_str()
+        );
+        assert_eq!(
+            deletion_cause.pubkey().as_str(),
+            FIXTURE_ALICE_PUBLIC_KEY_HEX
+        );
+        assert_eq!(deletion_cause.created_at(), 230);
+        assert_eq!(deletion_cause.kind(), KIND_DELETION_REQUEST);
+        assert_eq!(
+            deletion_cause.admission_status(),
+            RadrootsEventAdmissionStatus::Admitted
+        );
+        assert!(deletion_cause.admission_code().is_none());
+        assert!(deletion_cause.contract_id().is_some());
+        assert_eq!(
+            page.transitions()[2]
+                .retracted_event()
+                .expect("sold retraction")
+                .event_id()
+                .as_str(),
+            sold.id_str()
+        );
+        assert!(page.transitions()[2].visible_event().is_none());
+        assert_eq!(
+            page.transitions()[2]
+                .suppression()
+                .expect("feed suppression")
+                .reason(),
+            crate::RadrootsNip09SuppressionReason::AddressReferenceAtOrBeforeCutoff
+        );
+        assert_eq!(
+            page.transitions()[3]
+                .visible_event()
+                .expect("recovered canonical event")
+                .event_id()
+                .as_str(),
+            recovered.id_str()
+        );
+        assert!(page.transitions()[3].retracted_event().is_none());
+        assert_eq!(projection.source_transition_seq(), 4);
+        let cursor_state: (i64, i64) = sqlx::query_as(
+            "SELECT last_transition_seq, projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("projection cursor");
+        assert_eq!(cursor_state, (page.source_high_water(), 1));
+    }
+
+    #[tokio::test]
+    async fn admitted_operational_listing_retracts_food_until_a_later_food_revision() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let identifier =
+            RadrootsFoodIdentifier::parse("AAAAAAAAAAAAAAAAAAAAAg").expect("identifier");
+        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let food = food_availability_event(
+            200,
+            identifier.as_str(),
+            "Partition Carrots",
+            "Focused contract",
+            "active",
+            Vec::new(),
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(food, 29_000))
+            .await
+            .expect("focused FoodAvailability ingest");
+
+        let operational = signed_event(
+            KIND_CLASSIFIED_LISTING,
+            210,
+            admitted_operational_listing_tags(identifier.as_str(), 210),
+            "# Nantes Carrots\n\nFresh bunches harvested in Saanich",
+        );
+        let receipt = store
+            .ingest_event(RadrootsEventIngest::new(operational.clone(), 29_001))
+            .await
+            .expect("operational listing ingest");
+        assert_eq!(
+            receipt.admission_status,
+            RadrootsEventAdmissionStatus::Admitted
+        );
+        assert_eq!(
+            receipt.contract_id.as_deref(),
+            Some("radroots.operational_listing.published.v1"),
+        );
+        assert!(
+            store
+                .food_availability_v1(&author, &identifier)
+                .await
+                .expect("projection after operational head")
+                .is_none()
+        );
+        let retracted_count: i64 = sqlx::query_scalar(
+            "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("sealed operational-head count");
+        assert_eq!(retracted_count, 0);
+
+        let restored = food_availability_event(
+            220,
+            identifier.as_str(),
+            "Partition Carrots Restored",
+            "Focused contract restored",
+            "active",
+            Vec::new(),
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(restored.clone(), 29_002))
+            .await
+            .expect("restored FoodAvailability ingest");
+        assert_eq!(
+            store
+                .food_availability_v1(&author, &identifier)
+                .await
+                .expect("restored lookup")
+                .expect("restored projection")
+                .event_id()
+                .as_str(),
+            restored.id_str(),
+        );
+        let page = store
+            .addressable_transition_page_v1(
+                &crate::RadrootsAddressableTransitionScopeV1::food_availability(),
+                None,
+                64,
+            )
+            .await
+            .expect("partition transition page");
+        assert_eq!(page.transitions().len(), 3);
+        assert_eq!(
+            page.transitions()[1].contract_id(),
+            receipt.contract_id.as_deref()
+        );
+        assert_eq!(
+            page.transitions()[1]
+                .visible_event()
+                .expect("operational transition payload")
+                .event_id()
+                .as_str(),
+            operational.id_str(),
+        );
+        assert_eq!(
+            page.transitions()[1]
+                .retracted_event()
+                .expect("focused projection retraction")
+                .event_id()
+                .as_str(),
+            page.transitions()[0]
+                .visible_event()
+                .expect("initial focused payload")
+                .event_id()
+                .as_str(),
+        );
+    }
+
+    #[tokio::test]
+    async fn food_availability_projection_and_feed_rollback_atomically() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let initial_page = store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect("initial feed");
+        assert!(initial_page.transitions().is_empty());
+        assert_eq!(initial_page.next_cursor().last_transition_seq(), 0);
+        let initial_cursor = initial_page.next_cursor().clone();
+        let event = food_availability_event(
+            200,
+            "rollback-carrots",
+            "Rollback Carrots",
+            "Transaction fixture",
+            "active",
+            Vec::new(),
+        );
+        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let identifier = RadrootsFoodIdentifier::parse("rollback-carrots").expect("identifier");
+
+        let mut transaction = store.begin_write_transaction().await.expect("transaction");
+        store
+            .ingest_event_in_transaction(
+                &mut transaction,
+                RadrootsEventIngest::new(event.clone(), 30_000),
+            )
+            .await
+            .expect("transactional ingest");
+        let in_transaction: (i64, i64, i64) = sqlx::query_as(
+            "SELECT source.last_transition_seq, cursor.last_transition_seq, (SELECT COUNT(*) FROM radroots_event_store_food_availability_projection) FROM radroots_event_store_source_state AS source JOIN radroots_event_store_food_availability_cursor AS cursor ON cursor.singleton = 1 WHERE source.singleton = 1",
+        )
+        .fetch_one(&mut *transaction)
+        .await
+        .expect("transactional projection state");
+        assert_eq!(in_transaction, (1, 1, 1));
+        transaction.rollback().await.expect("rollback");
+
+        assert!(
+            store
+                .raw_event(event.id_str())
+                .await
+                .expect("raw event after rollback")
+                .is_none()
+        );
+        assert!(
+            store
+                .food_availability_v1(&author, &identifier)
+                .await
+                .expect("projection after rollback")
+                .is_none()
+        );
+        let after_rollback = store
+            .addressable_transition_page_v1(&scope, Some(&initial_cursor), 64)
+            .await
+            .expect("feed after rollback");
+        assert!(after_rollback.transitions().is_empty());
+        assert_eq!(after_rollback.source_high_water(), 0);
+        assert_eq!(after_rollback.next_cursor().last_transition_seq(), 0);
+        let cursor_after_rollback: i64 = sqlx::query_scalar(
+            "SELECT last_transition_seq FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("cursor after rollback");
+        assert_eq!(cursor_after_rollback, 0);
+
+        store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 30_001))
+            .await
+            .expect("committed ingest");
+        let committed = store
+            .food_availability_v1(&author, &identifier)
+            .await
+            .expect("committed projection")
+            .expect("projected event");
+        assert_eq!(committed.event_id().as_str(), event.id_str());
+        let committed_page = store
+            .addressable_transition_page_v1(&scope, Some(&initial_cursor), 64)
+            .await
+            .expect("committed feed");
+        assert_eq!(committed_page.transitions().len(), 1);
+        assert_eq!(committed_page.source_high_water(), 1);
+        assert_eq!(committed.source_transition_seq(), 1);
+    }
+
+    #[tokio::test]
+    async fn food_availability_wrong_author_deletion_preserves_projection() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let food = food_availability_event(
+            200,
+            "protected-carrots",
+            "Protected Carrots",
+            "Still available",
+            "active",
+            Vec::new(),
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(food.clone(), 35_000))
+            .await
+            .expect("food ingest");
+        let wrong_author_deletion = deletion_event(
+            &alternate_keys(),
+            210,
+            vec![vec!["e".to_owned(), food.id_str().to_owned()]],
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(
+                wrong_author_deletion.clone(),
+                35_001,
+            ))
+            .await
+            .expect("wrong-author deletion remains a valid event");
+
+        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let identifier = RadrootsFoodIdentifier::parse("protected-carrots").expect("identifier");
+        let projection = store
+            .food_availability_v1(&author, &identifier)
+            .await
+            .expect("projection lookup")
+            .expect("projection remains visible");
+        assert_eq!(projection.event_id().as_str(), food.id_str());
+        assert_eq!(projection.source_transition_seq(), 1);
+        let visibility = store
+            .current_event_visibility_v1(food.id_str())
+            .await
+            .expect("current visibility")
+            .expect("stored event");
+        assert_eq!(
+            visibility.decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::Visible
+        );
+        assert_eq!(
+            visibility
+                .suppression()
+                .expect("visibility evidence")
+                .reason(),
+            crate::RadrootsNip09SuppressionReason::RequestAuthorMismatch
+        );
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let page = store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect("transition page");
+        assert_eq!(page.transitions().len(), 2);
+        let unchanged = &page.transitions()[1];
+        assert_eq!(
+            unchanged
+                .visible_event()
+                .expect("same visible event")
+                .event_id()
+                .as_str(),
+            food.id_str()
+        );
+        assert!(unchanged.retracted_event().is_none());
+        assert_eq!(
+            unchanged
+                .cause_event()
+                .expect("deletion cause")
+                .event()
+                .event_id()
+                .as_str(),
+            wrong_author_deletion.id_str()
+        );
+    }
+
+    #[tokio::test]
+    async fn event_visibility_batches_validate_before_read_and_preserve_duplicate_order() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let event = signed_event(KIND_POST, 100, Vec::new(), "Victoria harvest update");
+        store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 36_000))
+            .await
+            .expect("event ingest");
+        let missing_event_id = "f".repeat(64);
+        let evaluation_count = Arc::new(AtomicUsize::new(0));
+        let probe_count = Arc::clone(&evaluation_count);
+        let visibilities = store
+            .event_visibilities_with_probe(
+                [
+                    event.id_str().to_owned(),
+                    missing_event_id.clone(),
+                    event.id_str().to_owned(),
+                ],
+                move |_| {
+                    let probe_count = Arc::clone(&probe_count);
+                    async move {
+                        probe_count.fetch_add(1, Ordering::SeqCst);
+                        Ok(())
+                    }
+                },
+            )
+            .await
+            .expect("visibility batch");
+        assert_eq!(
+            visibilities,
+            vec![
+                Some(RadrootsEventVisibility::Visible),
+                None,
+                Some(RadrootsEventVisibility::Visible),
+            ]
+        );
+        assert_eq!(evaluation_count.load(Ordering::SeqCst), 2);
+
+        let max = RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX as usize;
+        let exact_max = store
+            .event_visibilities(vec![event.id_str().to_owned(); max])
+            .await
+            .expect("maximum visibility batch");
+        assert_eq!(exact_max.len(), max);
+        assert!(
+            exact_max
+                .iter()
+                .all(|visibility| *visibility == Some(RadrootsEventVisibility::Visible))
+        );
+
+        let closed = RadrootsEventStore::open_memory()
+            .await
+            .expect("closed fixture");
+        closed.pool().close().await;
+        assert!(
+            closed
+                .event_visibilities(Vec::<String>::new())
+                .await
+                .expect("empty batch does not open a transaction")
+                .is_empty()
+        );
+        assert!(matches!(
+            closed
+                .event_visibilities([event.id_str().to_owned(), "not-an-event-id".to_owned(),])
+                .await,
+            Err(RadrootsEventStoreError::IdParse(_))
+        ));
+        assert!(matches!(
+            closed
+                .event_visibilities(vec![event.id_str().to_owned(); max + 1])
+                .await,
+            Err(RadrootsEventStoreError::EventVisibilityBatchTooLarge {
+                max: actual_max,
+            }) if actual_max == max
+        ));
+    }
+
+    #[tokio::test]
+    async fn event_visibility_batch_holds_one_snapshot_across_concurrent_head_commits() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("visibility-batch-snapshot.sqlite");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(2)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(path)
+                    .create_if_missing(true),
+            )
+            .await
+            .expect("file pool");
+        let store = RadrootsEventStore::open_pool(pool, true)
+            .await
+            .expect("file store");
+
+        let old_alice = signed_event_with_keys(
+            &fixture_keys(),
+            KIND_PROFILE,
+            100,
+            Vec::new(),
+            r#"{"name":"Alice"}"#,
+        );
+        let new_alice = signed_event_with_keys(
+            &fixture_keys(),
+            KIND_PROFILE,
+            200,
+            Vec::new(),
+            r#"{"name":"Alice Farm"}"#,
+        );
+        let old_bob = signed_event_with_keys(
+            &alternate_keys(),
+            KIND_PROFILE,
+            100,
+            Vec::new(),
+            r#"{"name":"Bob"}"#,
+        );
+        let new_bob = signed_event_with_keys(
+            &alternate_keys(),
+            KIND_PROFILE,
+            200,
+            Vec::new(),
+            r#"{"name":"Bob Farm"}"#,
+        );
+        for (observed_at_ms, event) in [(36_100, &old_alice), (36_101, &old_bob)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event.clone(), observed_at_ms))
+                .await
+                .expect("old profile ingest");
+        }
+
+        let concurrent_store = store.clone();
+        let committed_new_alice = new_alice.clone();
+        let committed_new_bob = new_bob.clone();
+        let snapshot = store
+            .event_visibilities_with_probe(
+                [old_alice.id_str(), old_bob.id_str()],
+                move |evaluated| {
+                    let concurrent_store = concurrent_store.clone();
+                    let new_alice = committed_new_alice.clone();
+                    let new_bob = committed_new_bob.clone();
+                    async move {
+                        if evaluated == 1 {
+                            concurrent_store
+                                .ingest_event(RadrootsEventIngest::new(new_alice, 36_200))
+                                .await?;
+                            concurrent_store
+                                .ingest_event(RadrootsEventIngest::new(new_bob, 36_201))
+                                .await?;
+                        }
+                        Ok(())
+                    }
+                },
+            )
+            .await
+            .expect("coherent visibility snapshot");
+        assert_eq!(
+            snapshot,
+            vec![
+                Some(RadrootsEventVisibility::Visible),
+                Some(RadrootsEventVisibility::Visible),
+            ]
+        );
+        for (old, new) in [(&old_alice, &new_alice), (&old_bob, &new_bob)] {
+            assert_eq!(
+                store
+                    .event_visibility(old.id_str())
+                    .await
+                    .expect("post-commit visibility"),
+                Some(RadrootsEventVisibility::NotCurrent {
+                    raw_head_event_id: new.id_str().to_owned(),
+                })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn current_visibility_agrees_for_regular_replaceable_and_addressable_reads() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let regular = signed_event(KIND_POST, 100, Vec::new(), "Victoria harvest update");
+        let older_profile = signed_event(KIND_PROFILE, 110, Vec::new(), "{\"name\":\"Alice\"}");
+        let newer_profile =
+            signed_event(KIND_PROFILE, 120, Vec::new(), "{\"name\":\"Alice Farm\"}");
+        let older_food = food_availability_event(
+            130,
+            "visibility-carrots",
+            "Visibility Carrots",
+            "First harvest",
+            "active",
+            Vec::new(),
+        );
+        let newer_food = food_availability_event(
+            140,
+            "visibility-carrots",
+            "Visibility Carrots",
+            "Second harvest",
+            "sold",
+            Vec::new(),
+        );
+        for (index, event) in [
+            &regular,
+            &older_profile,
+            &newer_profile,
+            &older_food,
+            &newer_food,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            store
+                .ingest_event(RadrootsEventIngest::new(
+                    event.clone(),
+                    37_000 + i64::try_from(index).expect("index"),
+                ))
+                .await
+                .expect("visibility fixture ingest");
+        }
+
+        let regular_current = store
+            .current_event_visibility_v1(regular.id_str())
+            .await
+            .expect("regular current visibility")
+            .expect("regular event");
+        assert_eq!(
+            regular_current.decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::Visible
+        );
+        assert!(regular_current.is_raw_head());
+        assert!(regular_current.raw_head_event_id().is_none());
+        assert_eq!(
+            store
+                .event_visibility(regular.id_str())
+                .await
+                .expect("regular compatibility visibility"),
+            Some(RadrootsEventVisibility::Visible)
+        );
+        assert!(
+            store
+                .visible_event(regular.id_str())
+                .await
+                .expect("regular visible event")
+                .is_some()
+        );
+
+        for (event, expected_head, expected_decision) in [
+            (
+                &older_profile,
+                newer_profile.id_str(),
+                crate::RadrootsCurrentVisibilityDecisionV1::NotCurrent,
+            ),
+            (
+                &newer_profile,
+                newer_profile.id_str(),
+                crate::RadrootsCurrentVisibilityDecisionV1::Visible,
+            ),
+            (
+                &older_food,
+                newer_food.id_str(),
+                crate::RadrootsCurrentVisibilityDecisionV1::NotCurrent,
+            ),
+            (
+                &newer_food,
+                newer_food.id_str(),
+                crate::RadrootsCurrentVisibilityDecisionV1::Visible,
+            ),
+        ] {
+            let current = store
+                .current_event_visibility_v1(event.id_str())
+                .await
+                .expect("coordinate current visibility")
+                .expect("coordinate event");
+            assert_eq!(current.decision(), expected_decision);
+            assert_eq!(
+                current
+                    .raw_head_event_id()
+                    .expect("coordinate raw head")
+                    .as_str(),
+                expected_head
+            );
+            assert_eq!(
+                store
+                    .visible_event(event.id_str())
+                    .await
+                    .expect("coordinate visible event")
+                    .is_some(),
+                expected_decision == crate::RadrootsCurrentVisibilityDecisionV1::Visible
+            );
+        }
+        assert!(
+            store
+                .visible_event_head(&profile_coordinate())
+                .await
+                .expect("profile visible head")
+                .is_some_and(|head| head.raw_head().event_id == newer_profile.id_str())
+        );
+        assert!(
+            store
+                .visible_event_head(&head_coordinate_for_event(&newer_food))
+                .await
+                .expect("food visible head")
+                .is_some_and(|head| head.raw_head().event_id == newer_food.id_str())
+        );
+
+        let regular_deletion = deletion_event(
+            &fixture_keys(),
+            150,
+            vec![vec!["e".to_owned(), regular.id_str().to_owned()]],
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(regular_deletion.clone(), 37_005))
+            .await
+            .expect("regular deletion");
+        assert_eq!(
+            store
+                .current_event_visibility_v1(regular.id_str())
+                .await
+                .expect("suppressed regular visibility")
+                .expect("stored regular event")
+                .decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::Suppressed
+        );
+        assert!(matches!(
+            store
+                .event_visibility(regular.id_str())
+                .await
+                .expect("regular compatibility suppression"),
+            Some(RadrootsEventVisibility::Suppressed {
+                reason: crate::RadrootsNip09SuppressionReason::EventIdReference,
+                event_reference_request_id: Some(request_id),
+                address_reference_request_id: None,
+                address_reference_cutoff: None,
+            }) if request_id.as_str() == regular_deletion.id_str()
+        ));
+        assert!(
+            store
+                .visible_event(regular.id_str())
+                .await
+                .expect("suppressed regular event")
+                .is_none()
+        );
+
+        let deletion_of_deletion = deletion_event(
+            &fixture_keys(),
+            160,
+            vec![vec!["e".to_owned(), regular_deletion.id_str().to_owned()]],
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(deletion_of_deletion, 37_006))
+            .await
+            .expect("deletion-of-deletion ingest");
+        let immune = store
+            .current_event_visibility_v1(regular_deletion.id_str())
+            .await
+            .expect("deletion request visibility")
+            .expect("stored deletion request");
+        assert_eq!(
+            immune.decision(),
+            crate::RadrootsCurrentVisibilityDecisionV1::Visible
+        );
+        let immune_evidence = immune.suppression().expect("kind-5 immunity evidence");
+        assert_eq!(
+            immune_evidence.reason(),
+            crate::RadrootsNip09SuppressionReason::DeletionRequestImmune
+        );
+        assert!(immune_evidence.event_reference_request_id().is_none());
+        assert!(immune_evidence.address_reference_request_id().is_none());
+        assert!(immune_evidence.address_reference_cutoff().is_none());
+        assert_eq!(
+            store
+                .event_visibility(regular_deletion.id_str())
+                .await
+                .expect("compatibility deletion-request visibility"),
+            Some(RadrootsEventVisibility::Visible)
+        );
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_advances_across_unrelated_kinds() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let first = food_availability_event(
+            200,
+            "first-food",
+            "First Food",
+            "First harvest",
+            "active",
+            Vec::new(),
+        );
+        let unrelated_first = signed_event(
+            30_340,
+            201,
+            vec![vec!["d".to_owned(), "unrelated".to_owned()]],
+            "unrelated addressable state",
+        );
+        let unrelated_second = signed_event(
+            30_340,
+            202,
+            vec![vec!["d".to_owned(), "unrelated".to_owned()]],
+            "new unrelated addressable state",
+        );
+        let second = food_availability_event(
+            203,
+            "second-food",
+            "Second Food",
+            "Second harvest",
+            "active",
+            Vec::new(),
+        );
+        for (index, event) in [&first, &unrelated_first, &unrelated_second, &second]
+            .into_iter()
+            .enumerate()
+        {
+            store
+                .ingest_event(RadrootsEventIngest::new(
+                    event.clone(),
+                    40_000 + i64::try_from(index).expect("index"),
+                ))
+                .await
+                .expect("addressable ingest");
+        }
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let first_page = store
+            .addressable_transition_page_v1(&scope, None, 1)
+            .await
+            .expect("first scoped page");
+        assert_eq!(first_page.transitions().len(), 1);
+        assert_eq!(
+            first_page.transitions()[0]
+                .visible_event()
+                .expect("first visible event")
+                .event_id()
+                .as_str(),
+            first.id_str()
+        );
+        assert_eq!(first_page.source_high_water(), 4);
+        assert_eq!(first_page.next_cursor().last_transition_seq(), 3);
+        assert!(first_page.has_more());
+
+        let second_page = store
+            .addressable_transition_page_v1(&scope, Some(first_page.next_cursor()), 1)
+            .await
+            .expect("second scoped page");
+        assert_eq!(second_page.transitions().len(), 1);
+        assert_eq!(
+            second_page.transitions()[0]
+                .visible_event()
+                .expect("second visible event")
+                .event_id()
+                .as_str(),
+            second.id_str()
+        );
+        assert_eq!(second_page.next_cursor().last_transition_seq(), 4);
+        assert!(!second_page.has_more());
+
+        let unrelated_scope =
+            crate::RadrootsAddressableTransitionScopeV1::new([30_340]).expect("scope");
+        assert!(matches!(
+            store
+                .addressable_transition_page_v1(
+                    &unrelated_scope,
+                    Some(first_page.next_cursor()),
+                    1,
+                )
+                .await,
+            Err(RadrootsEventStoreError::AddressableTransitionScopeMismatch)
+        ));
+        let generation_mismatch = crate::RadrootsAddressableTransitionCursorV1::new(
+            crate::RadrootsEventStoreSourceGeneration::from_bytes([0xff; 32]),
+            scope.fingerprint(),
+            3,
+        )
+        .expect("generation-mismatched cursor");
+        assert!(matches!(
+            store
+                .addressable_transition_page_v1(&scope, Some(&generation_mismatch), 1)
+                .await,
+            Err(RadrootsEventStoreError::AddressableTransitionSourceGenerationMismatch)
+        ));
+        let ahead = crate::RadrootsAddressableTransitionCursorV1::new(
+            first_page.next_cursor().source_generation(),
+            scope.fingerprint(),
+            5,
+        )
+        .expect("ahead cursor");
+        assert!(matches!(
+            store
+                .addressable_transition_page_v1(&scope, Some(&ahead), 1)
+                .await,
+            Err(RadrootsEventStoreError::AddressableTransitionCursorAhead {
+                cursor: 5,
+                high_water: 4,
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_pages_at_the_exact_transition_limit() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let mut expected_ids = Vec::new();
+        let mut transaction = store.begin_write_transaction().await.expect("transaction");
+        for index in 0..=crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1 {
+            let event = signed_event(
+                30_340,
+                500 + index,
+                vec![vec!["d".to_owned(), format!("page-limit-{index:02}")]],
+                "page-limit fixture",
+            );
+            expected_ids.push(event.id_str().to_owned());
+            store
+                .ingest_event_in_transaction(
+                    &mut transaction,
+                    RadrootsEventIngest::new(event, 45_100 + i64::from(index)),
+                )
+                .await
+                .expect("scoped transition ingest");
+        }
+        transaction.commit().await.expect("commit fixtures");
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::new([30_340]).expect("scope");
+        let first = store
+            .addressable_transition_page_v1(
+                &scope,
+                None,
+                crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1,
+            )
+            .await
+            .expect("full first page");
+        assert_eq!(
+            first.transitions().len(),
+            usize::try_from(crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1)
+                .expect("page limit"),
+        );
+        assert!(first.has_more());
+        assert_eq!(
+            first
+                .transitions()
+                .iter()
+                .map(|transition| transition.raw_head().event_id().as_str())
+                .collect::<Vec<_>>(),
+            expected_ids[..usize::try_from(
+                crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1
+            )
+            .expect("page limit")],
+        );
+
+        let second = store
+            .addressable_transition_page_v1(
+                &scope,
+                Some(first.next_cursor()),
+                crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1,
+            )
+            .await
+            .expect("continued page");
+        assert_eq!(second.transitions().len(), 1);
+        assert_eq!(
+            second.transitions()[0].raw_head().event_id().as_str(),
+            expected_ids.last().expect("last expected event"),
+        );
+        assert!(!second.has_more());
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_preserves_the_maximum_opaque_d_tag() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let d_tag = "d".repeat(crate::RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1);
+        let event = signed_event(
+            30_340,
+            204,
+            vec![vec!["d".to_owned(), d_tag.clone()]],
+            "maximum d-tag boundary",
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(event.clone(), 45_000))
+            .await
+            .expect("maximum d-tag ingest");
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::new([30_340]).expect("scope");
+        let page = store
+            .addressable_transition_page_v1(&scope, None, 1)
+            .await
+            .expect("maximum d-tag feed");
+        assert_eq!(page.transitions().len(), 1);
+        let transition = &page.transitions()[0];
+        assert_eq!(transition.coordinate().kind(), 30_340);
+        assert_eq!(transition.coordinate().d_tag(), d_tag);
+        assert_eq!(transition.raw_head().event_id().as_str(), event.id_str());
+        assert_eq!(transition.raw_head_created_at(), 204);
+        assert!(!page.has_more());
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_scan_boundary_does_not_skip_scoped_events() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let mut transaction = store.begin_write_transaction().await.expect("transaction");
+        for index in 0..crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1 {
+            let unrelated = signed_event(
+                30_340,
+                1_000 + index,
+                vec![vec!["d".to_owned(), "scan-boundary".to_owned()]],
+                "unrelated addressable transition",
+            );
+            store
+                .ingest_event_in_transaction(
+                    &mut transaction,
+                    RadrootsEventIngest::new(unrelated, 46_000 + i64::from(index)),
+                )
+                .await
+                .expect("unrelated transition ingest");
+        }
+        let food = food_availability_event(
+            3_000,
+            "scan-boundary-food",
+            "Scan Boundary Carrots",
+            "Scoped transition after unrelated traffic",
+            "active",
+            Vec::new(),
+        );
+        store
+            .ingest_event_in_transaction(
+                &mut transaction,
+                RadrootsEventIngest::new(food.clone(), 47_025),
+            )
+            .await
+            .expect("scoped transition ingest");
+        transaction.commit().await.expect("commit fixtures");
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let first = store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect("first scan page");
+        assert!(first.transitions().is_empty());
+        assert_eq!(
+            first.next_cursor().last_transition_seq(),
+            i64::from(crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1)
+        );
+        assert_eq!(
+            first.source_high_water(),
+            i64::from(crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1) + 1
+        );
+        assert!(first.has_more());
+
+        let second = store
+            .addressable_transition_page_v1(&scope, Some(first.next_cursor()), 64)
+            .await
+            .expect("second scan page");
+        assert_eq!(second.transitions().len(), 1);
+        assert_eq!(
+            second.transitions()[0]
+                .visible_event()
+                .expect("FoodAvailability canonical event")
+                .event_id()
+                .as_str(),
+            food.id_str()
+        );
+        assert_eq!(second.next_cursor().last_transition_seq(), 1_025);
+        assert!(!second.has_more());
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_payload_cap_continues_without_loss() {
+        const EVENT_COUNT: u32 = 33;
+
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let content = "x".repeat(radroots_event::wire::v1::DEFAULT_CONTENT_MAX_BYTES);
+        let mut expected_ids = Vec::new();
+        let mut transaction = store.begin_write_transaction().await.expect("transaction");
+        for index in 0..EVENT_COUNT {
+            let event = calendar_date_event(
+                4_000 + index,
+                format!("payload-cap-{index:02}").as_str(),
+                content.clone(),
+            );
+            expected_ids.push(event.id_str().to_owned());
+            store
+                .ingest_event_in_transaction(
+                    &mut transaction,
+                    RadrootsEventIngest::new(event, 48_000 + i64::from(index)),
+                )
+                .await
+                .expect("calendar transition ingest");
+        }
+        transaction.commit().await.expect("commit fixtures");
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::new([KIND_CALENDAR_DATE_EVENT])
+            .expect("calendar scope");
+        let mut cursor = None;
+        let mut actual_ids = Vec::new();
+        let mut page_count = 0_u32;
+        loop {
+            let page = store
+                .addressable_transition_page_v1(&scope, cursor.as_ref(), 64)
+                .await
+                .expect("payload-bounded page");
+            page_count += 1;
+            assert!(!page.transitions().is_empty());
+            for transition in page.transitions() {
+                actual_ids.push(
+                    transition
+                        .visible_event()
+                        .expect("admitted calendar canonical event")
+                        .event_id()
+                        .as_str()
+                        .to_owned(),
+                );
+            }
+            cursor = Some(page.next_cursor().clone());
+            if !page.has_more() {
+                break;
+            }
+        }
+        assert!(page_count > 1, "payload cap must force continuation");
+        assert_eq!(actual_ids, expected_ids);
+        assert_eq!(
+            cursor.expect("terminal cursor").last_transition_seq(),
+            i64::from(EVENT_COUNT)
+        );
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_distinguishes_gaps_from_corruption() {
+        let gap_store = RadrootsEventStore::open_memory().await.expect("gap store");
+        let first = food_availability_event(
+            200,
+            "gap-first",
+            "Gap First",
+            "First row",
+            "active",
+            Vec::new(),
+        );
+        let unrelated = signed_event(
+            30_340,
+            201,
+            vec![vec!["d".to_owned(), "gap-middle".to_owned()]],
+            "middle row",
+        );
+        let second = food_availability_event(
+            202,
+            "gap-second",
+            "Gap Second",
+            "Last row",
+            "active",
+            Vec::new(),
+        );
+        for event in [&first, &unrelated, &second] {
+            gap_store
+                .ingest_event(RadrootsEventIngest::new(event.clone(), 50_000))
+                .await
+                .expect("gap fixture ingest");
+        }
+        sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_delete_guard")
+            .execute(gap_store.pool())
+            .await
+            .expect("drop test-only delete guard");
+        sqlx::query(
+            "DELETE FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 2",
+        )
+        .execute(gap_store.pool())
+        .await
+        .expect("remove middle transition");
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        assert!(matches!(
+            gap_store
+                .addressable_transition_page_v1(&scope, None, 64)
+                .await,
+            Err(RadrootsEventStoreError::AddressableTransitionSequenceGap { .. })
+        ));
+
+        let corrupt_store = RadrootsEventStore::open_memory()
+            .await
+            .expect("corrupt store");
+        corrupt_store
+            .ingest_event(RadrootsEventIngest::new(first, 50_001))
+            .await
+            .expect("corruption fixture ingest");
+        sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_update_guard")
+            .execute(corrupt_store.pool())
+            .await
+            .expect("drop test-only update guard");
+        sqlx::query(
+            "UPDATE radroots_event_store_addressable_head_transition SET raw_head_created_at = raw_head_created_at + 1 WHERE transition_seq = 1",
+        )
+        .execute(corrupt_store.pool())
+        .await
+        .expect("corrupt transition metadata");
+        assert!(matches!(
+            corrupt_store
+                .addressable_transition_page_v1(&scope, None, 64)
+                .await,
+            Err(RadrootsEventStoreError::AddressableTransitionCorruption { .. })
+        ));
     }
 
     #[tokio::test]

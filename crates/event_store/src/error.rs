@@ -60,8 +60,50 @@ pub enum RadrootsEventStoreError {
     EmptyContractList,
     #[error("event-store contract list length {actual} exceeds {max}")]
     ContractListTooLarge { max: usize, actual: usize },
+    #[error("addressable transition scope cannot be empty")]
+    AddressableTransitionScopeEmpty,
+    #[error("addressable transition scope length {actual} exceeds {max}")]
+    AddressableTransitionScopeTooLarge { max: usize, actual: usize },
+    #[error("addressable transition scope kind {kind} is outside 30000..=39999")]
+    AddressableTransitionScopeKindInvalid { kind: u32 },
+    #[error("addressable transition cursor sequence cannot be negative: {value}")]
+    AddressableTransitionCursorNegative { value: i64 },
+    #[error("addressable transition cursor JSON is {actual} bytes; maximum is {max}")]
+    AddressableTransitionCursorTooLarge { max: usize, actual: usize },
+    #[error("addressable transition cursor field `{field}` is not canonical lowercase 32-byte hex")]
+    AddressableTransitionCursorEncoding { field: &'static str },
+    #[error(
+        "addressable transition cursor feed version mismatch: expected {expected}, found {actual}"
+    )]
+    AddressableTransitionFeedVersionMismatch { expected: u32, actual: u32 },
+    #[error("addressable transition cursor scope fingerprint does not match the requested scope")]
+    AddressableTransitionScopeMismatch,
+    #[error("addressable transition cursor source generation is no longer active")]
+    AddressableTransitionSourceGenerationMismatch,
+    #[error("addressable transition cursor {cursor} precedes the active generation floor {floor}")]
+    AddressableTransitionCursorExpired { cursor: i64, floor: i64 },
+    #[error("addressable transition cursor {cursor} is ahead of source high-water {high_water}")]
+    AddressableTransitionCursorAhead { cursor: i64, high_water: i64 },
+    #[error("addressable transition feed sequence interval has a gap: {reason}")]
+    AddressableTransitionSequenceGap { reason: String },
+    #[error("addressable transition feed contains corrupt authority: {reason}")]
+    AddressableTransitionCorruption { reason: String },
+    #[error("addressable transition canonical payload is {actual} bytes; page maximum is {max}")]
+    AddressableTransitionPagePayloadTooLarge { max: usize, actual: usize },
+    #[error("event-store current-visibility authority is inconsistent: {reason}")]
+    CurrentVisibilityDrift { reason: String },
+    #[error("FoodAvailability projection authority is inconsistent: {reason}")]
+    FoodAvailabilityProjectionDrift { reason: String },
+    #[error("FoodAvailability search query must not be empty")]
+    FoodAvailabilitySearchEmpty,
+    #[error("FoodAvailability search query is {actual} bytes; maximum is {max}")]
+    FoodAvailabilitySearchTooLarge { max: usize, actual: usize },
+    #[error("FoodAvailability search query has {actual} terms; maximum is {max}")]
+    FoodAvailabilitySearchTooManyTerms { max: usize, actual: usize },
     #[error("event-store query limit {actual} is outside {min}..={max}")]
     QueryLimitOutOfRange { min: u32, max: u32, actual: u32 },
+    #[error("event visibility batch contains more than {max} event ids")]
+    EventVisibilityBatchTooLarge { max: usize },
     #[error(
         "an in-memory event-store pool must have exactly one connection, configured maximum was {actual}"
     )]
@@ -72,6 +114,10 @@ pub enum RadrootsEventStoreError {
     SqlitePoolBackingMismatch { file_backed: bool, filename: String },
     #[error("event-store SQLite connection has no main database")]
     SqliteMainDatabaseUnavailable,
+    #[error(
+        "event-store SQLite file connection did not enter WAL journal mode; reported `{actual}`"
+    )]
+    SqliteFileJournalModeNotWal { actual: String },
     #[error(
         "temporary schema object `{name}` ({object_type}, table `{table_name}`) collides with event-store authority"
     )]

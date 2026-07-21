@@ -490,6 +490,122 @@ The raw SQL pool is a fully trusted escape hatch rather than a security
 boundary; arbitrary DML or reproduction of the internal maintenance protocol
 is outside the supported mutation contract.
 
+### Durable Visibility, Transition Feed, and Food Projection
+
+Event-store schema version `3` installs one central current-visibility authority,
+`radroots_event_store_current_visibility_v1`, for every persisted event. Ephemeral events never
+enter durable storage. Regular events are their own raw heads; replaceable and addressable events
+are compared with the current raw head for their coordinate. The authority composes that raw-head
+selection with registry-v7 admission and canonical NIP-09 evidence. All-event reads that claim
+current visibility, including `current_event_visibility_v1`, `event_visibility`, `visible_event`,
+and `visible_event_head`, must delegate to this view and fail closed on incoherent state. A current
+addressable product projection may instead join the transactionally maintained
+`radroots_event_store_addressable_head_state` materialization, but must bind the active generation,
+complete coordinate and head identity, admission, contract, visibility, and NIP-09 outcome. The
+FoodAvailability queries use that bounded specialization.
+
+The decision precedence is exact: a non-admitted event is `not_admitted`; otherwise an admitted
+event that is not the raw head is `not_current`; otherwise an admitted raw head with a suppressed
+NIP-09 outcome is `suppressed`; every remaining admitted raw head is `visible`. NIP-09 evidence is
+computed independently before the current-head decision, so an admitted `not_current` event can
+retain visible or suppressed historical evidence without becoming product-visible. Non-admitted
+events carry no NIP-09 evidence. Admitted events also retain the visible reasons for no authorized
+reference, an author mismatch, or an address cutoff that precedes the target. A persisted kind-`5`
+deletion request is immune, carries visible `deletion_request_immune` evidence with no request
+identifiers or cutoff, and cannot be suppressed by another kind-`5` request.
+
+Addressable transition feed version `1` accepts one through 64 input kinds, all in the
+`30000..=39999` range, and fingerprints their sorted, deduplicated canonical set. A cursor binds the
+active 32-byte source generation, feed version, exact scope fingerprint, and last scanned global
+transition sequence. With no cursor, scanning starts at the active generation floor. A cursor from
+another generation or scope is a mismatch, one below the floor is expired, one above the sealed
+high-water is ahead, and an absent sequence inside the sealed interval is corruption.
+
+Transition sequence is global rather than scope-local. A page therefore scans unrelated kinds and
+advances its cursor over them, checks sequence continuity, and reads at most 1024 transition rows.
+It returns at most the requested number of matching transitions, with a maximum request limit of
+64, and at most 4 MiB of visible raw-event JSON. If adding the next matching transition would cross
+either returned-item or aggregate-payload limit, the page stops before that transition and the next
+call retries it; a single matching row that alone exceeds the payload budget is a typed error. The
+page reports a fixed
+`source_high_water`, sets `has_more` from the last scanned sequence, and emits that sequence in its
+next cursor. It never advances past an unreturned matching transition.
+
+`RadrootsStoreProducedCanonicalEventV1` means the store selected a signature-verified, admitted,
+visible event at the instant represented by its containing transition. Historical transition pages
+can therefore carry a canonical payload whose event is `not_current` at the page's final
+high-water. The payload is replay input, not a detached proof of present visibility: consumers must
+apply every transition in sequence, including later retractions, and use the central current-
+visibility API when they need present-state authority. It does not mean that `raw_json` has a
+canonical JSON serialization. The wrapper exposes only the typed signed event id, author pubkey,
+created-at timestamp, kind, and verified opaque `raw_json`; it deliberately does not expose the
+backing `RadrootsStoredRawEvent` or duplicate its containing transition's generation/sequence
+witness. The remaining signed fields are available from `raw_json` through the verified event
+codec. Store `seq`, `inserted_at_ms`, `updated_at_ms`, source generation, and transition sequence
+are local database metadata and must not be persisted as cross-store event identity or replay
+authority. Consumers may transport `raw_json`, but must not infer cross-store equality from its JSON
+spelling instead of the signed event id.
+
+FoodAvailability projection version `1` has the sole scope kind `30402` and contract
+`radroots.food.availability.v1`. The post-core v2 capability applies pending global transitions in
+the same write transaction after protocol reconciliation. Its cursor advances over unrelated
+global transitions as well as matching ones. A visible admitted focused replacement is reverified
+and registry-v7 reprojected before insertion. A deletion, suppression, selected invalid event, or
+selected event outside the focused contract retracts the existing row for the author plus `d`
+coordinate. It never restores an older event; a later replacement created after an address-deletion
+cutoff can become visible and project normally. Projection rows are unique by generation, author,
+and `d`; image rows cascade with their parent, and projection insertion or deletion updates FTS5
+through database triggers in the same transaction.
+
+Point lookup uses author plus typed FoodAvailability identifier. Recent and search queries accept
+the `Any`, `Active`, or `Sold` status filter and a limit from 1 through 1000. Both return only the
+current visible projection and order by `published_at DESC, event_id ASC`. Search covers title,
+summary, content, and location. Its input is at most 256 UTF-8 bytes and 16 nonempty terms split on
+Unicode whitespace or control characters; terms are escaped as quoted FTS5 literals joined with
+`AND`, so caller input cannot introduce column selectors, operators, prefix matching, or grouping.
+Every returned projection row is bounded by the query limit and is individually checked against a
+fresh signature verification and registry-v7 reprojection of its immutable raw event, including its
+ordered image projection. Food point, recent, and search reads bind each row to the active
+generation's persisted addressable-head authority, including its exact head identity, admission,
+contract, and visible NIP-09 outcome. That state is maintained by the same transactional
+current-visibility predicate; bounded Food reads do not recompute deletion-reference history for
+every result row.
+
+For `RadrootsStoredFoodAvailabilityImageV1`, `qualifies()` means only that tolerant inbound image
+projection produced no structural diagnostics. An ordinary valid HTTP(S) URL with valid dimensions
+can therefore qualify while `blossom_sha256()` is `None`. A digest extracted from a Blossom-shaped
+URL is structural metadata, not evidence that bytes hash to it or that upload, retrieval, decoding,
+safety, or availability succeeded. Strict product authoring still requires an approved
+byte-verified descriptor, and publication still requires runtime BUD-02 upload-completion evidence.
+Blossom-specific client behavior must require the typed digest and the applicable runtime evidence,
+not `qualifies()` alone.
+
+The FoodAvailability cursor seals active source generation, feed version, projection version, exact
+scope fingerprint, hook-manifest SHA-256, last transition sequence, and a nonnegative projected-row
+count. The addressable feed seal binds the same generation's floor, high-water, and contiguous
+count. Each supported projection page compare-and-swaps the prior sequence and row count; it can
+advance by at most 1024 global transitions and change the row count by at most 64 and no more than
+the number of scoped transitions in that interval.
+
+Ordinary schema inspection and FoodAvailability point, recent, and search reads use one bounded
+fast authority check. It verifies the active generation, feed floor/high-water/count seal,
+feed/projection/scope/manifest identity, cursor equality with the source high-water, and the
+nonnegative sealed row count without scanning all projection or FTS rows. Explicit migration,
+supported rebuild, and conformance integrity paths must call
+`audit_food_availability_projection_v1`: the exhaustive audit reverifies and reprojects every
+projected signed event, compares all columns and ordered images, binds each row to the active
+generation's latest applicable transition for its exact Food coordinate and visible event, requires
+the exact admitted and visible head-coordinate witness set and sealed projection and FTS counts, compares
+each FTS shadow row, and runs SQLite's FTS5 integrity check. The governed Food read view joins
+immutable raw JSON and aggregates ordered image rows so a bounded point/recent/search result does
+not issue per-row SQL lookups before those cryptographic checks.
+
+The fast seal detects drift across supported typed transactions; it is not a claim to detect
+arbitrary direct SQL, disk modification, or FTS index corruption on every hot-path read. `pool()` is
+a trusted escape hatch outside the supported mutation guarantees. A caller that uses it assumes
+authority for any resulting state; only a governed migration, rebuild, or conformance path that
+invokes the exhaustive validator can re-establish integrity evidence for that state.
+
 `RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.
 
@@ -580,16 +696,18 @@ mixed-marker kind-`30402` events before signer access. Marker-free generic NIP-9
 operational-only builders remain available for explicit compatibility, while relaying an already
 signed event remains transport-only and establishes no Radroots authoring claim.
 
-Legacy replica ingestion verifies kind-`30402` identifiers and signatures before acquiring its
-write transaction, then selects the raw addressable head before profile decoding. Only the
+Behind the explicit non-default `legacy-ingest` feature, legacy replica ingestion verifies
+kind-`30402` identifiers and signatures before acquiring its write transaction, then selects the
+raw addressable head before profile decoding. Only the
 Operational Listing partition can reach the legacy trade-product projection. A signature-valid,
 coordinate-valid, selected focused event or marker-free generic NIP-99 event advances the raw head
 as excluded; selected invalid focused, mixed-marker, and malformed operational profiles advance it
 as rejected. Every selected excluded or rejected replacement removes an older operational
 projection, so stale events cannot resurrect it. A signature failure changes neither the raw head
 nor the projection; a missing or invalid `d` tag fails before an addressable head can be selected.
-The public head-only helper rejects kind `30402`, which must use profile-aware ingestion so head and
-projection changes remain atomic.
+The feature-gated public head-only helper rejects kind `30402`, which must use profile-aware legacy
+ingestion so head and projection changes remain atomic. Neither helper is a Phase 1 product ingest
+boundary.
 
 The typed Nostr boundary does not prove BUD-02 upload completion. Every media-bearing caller must
 obtain successful Blossom upload evidence before signing or publishing; byte-verified descriptors
