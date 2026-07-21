@@ -54,11 +54,14 @@ use crate::model::{
 #[cfg(test)]
 use crate::nip09::reconciliation_v1::ReconciliationProfile;
 use crate::nip09::reconciliation_v1::{active_source_generation, generation_from_blob};
-#[cfg(test)]
-use crate::schema::destroy_event_store_schema_for_test;
 use crate::schema::{
     RadrootsEventStoreSchemaStatus, inspect_event_store_schema_status, migrate_event_store_schema,
     rollback_event_store_schema_offline,
+};
+#[cfg(test)]
+use crate::schema::{
+    destroy_event_store_schema_for_test,
+    rollback_event_store_schema_offline_destructive_for_migration_test,
 };
 use radroots_event::event_head::v1::RadrootsEventHeadCoordinate;
 #[cfg(test)]
@@ -188,6 +191,22 @@ impl RadrootsEventStore {
         let generation = active_source_generation(&mut tx).await?;
         tx.commit().await?;
         Ok(generation)
+    }
+
+    /// Returns the fast persisted raw-source capacity seal for one snapshot.
+    ///
+    /// This validates the seal against active source and generation metadata
+    /// without rescanning raw rows. Migration and database reopen perform the
+    /// full raw-source recount.
+    pub async fn source_capacity_v1(
+        &self,
+    ) -> Result<crate::RadrootsEventStoreSourceCapacityV1, RadrootsEventStoreError> {
+        let mut tx = self.pool.begin().await?;
+        let capacity =
+            crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(&mut tx)
+                .await?;
+        tx.commit().await?;
+        Ok(capacity)
     }
 
     /// Begins a serialized write transaction suitable for composed event-store writes.
@@ -1168,6 +1187,7 @@ async fn configure_pool(
                 filename: main_filename,
             });
         }
+        validate_main_database_encoding(connection).await?;
         crate::schema::validate_event_store_temp_schema(connection).await?;
     }
 
@@ -1193,6 +1213,18 @@ async fn configure_pool(
         }
     }
     Ok(())
+}
+
+async fn validate_main_database_encoding(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsEventStoreError> {
+    let actual: String = sqlx::query_scalar("PRAGMA main.encoding")
+        .fetch_one(&mut *connection)
+        .await?;
+    if actual == "UTF-8" {
+        return Ok(());
+    }
+    Err(RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual })
 }
 
 async fn configure_file_journal_mode(
@@ -1772,8 +1804,12 @@ mod tests {
         RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1, canonical_jcs_value,
         canonical_trade_mutation_content,
     };
-    use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
+    use radroots_event::wire::{
+        DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, RadrootsNip01EventWire,
+        compute_canonical_nip01_event_id,
+    };
     use radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic;
+    use std::sync::Arc;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
@@ -1800,6 +1836,17 @@ mod tests {
             _generation: &mut [u8; 32],
         ) -> Result<(), RadrootsEventStoreError> {
             Err(RadrootsEventStoreError::SourceGenerationEntropyUnavailable)
+        }
+    }
+
+    struct PanickingGeneration;
+
+    impl crate::nip09::reconciliation_v1::SourceGenerationProvider for PanickingGeneration {
+        fn fill_generation(
+            &self,
+            _generation: &mut [u8; 32],
+        ) -> Result<(), RadrootsEventStoreError> {
+            panic!("generation entropy was requested after the retained-history preflight")
         }
     }
 
@@ -2044,6 +2091,89 @@ mod tests {
         RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
+    fn raw_source_text_bytes(event: &RadrootsSignedEvent) -> (u64, u64) {
+        let tags = event.tags_as_vec();
+        let tags_json = serde_json::to_string(&tags).expect("tags JSON");
+        let event_bytes = [
+            event.id_str(),
+            event.pubkey_str(),
+            tags_json.as_str(),
+            event.content(),
+            event.sig_str(),
+            event.raw_json(),
+        ]
+        .into_iter()
+        .map(str::len)
+        .sum::<usize>();
+        let tag_bytes = tags
+            .iter()
+            .map(|tag| {
+                let tag_json = serde_json::to_string(tag).expect("tag JSON");
+                event.id_str().len()
+                    + tag.first().map_or(0, String::len)
+                    + tag.get(1).map_or(0, String::len)
+                    + tag_json.len()
+            })
+            .sum::<usize>();
+        (
+            u64::try_from(event_bytes).expect("event byte count fits u64"),
+            u64::try_from(tag_bytes).expect("tag byte count fits u64"),
+        )
+    }
+
+    async fn initialize_utf16le_database(path: &Path) {
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("UTF-16 fixture connection");
+        sqlx::query("PRAGMA main.encoding = 'UTF-16le'")
+            .execute(&mut connection)
+            .await
+            .expect("set UTF-16LE before schema creation");
+        sqlx::query("CREATE TABLE encoding_anchor (value TEXT NOT NULL)")
+            .execute(&mut connection)
+            .await
+            .expect("materialize UTF-16LE database");
+        sqlx::query("DROP TABLE encoding_anchor")
+            .execute(&mut connection)
+            .await
+            .expect("return UTF-16LE database to empty catalog");
+        let actual: String = sqlx::query_scalar("PRAGMA main.encoding")
+            .fetch_one(&mut connection)
+            .await
+            .expect("read fixture encoding");
+        assert_eq!(actual, "UTF-16le");
+        connection.close().await.expect("close UTF-16 fixture");
+    }
+
+    async fn assert_utf16le_database_was_not_mutated(path: &Path) {
+        let mut connection =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(path))
+                .await
+                .expect("UTF-16 verification connection");
+        let encoding: String = sqlx::query_scalar("PRAGMA main.encoding")
+            .fetch_one(&mut connection)
+            .await
+            .expect("verification encoding");
+        let journal_mode: String = sqlx::query_scalar("PRAGMA main.journal_mode")
+            .fetch_one(&mut connection)
+            .await
+            .expect("verification journal mode");
+        let event_store_objects: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'radroots_event_store_schema_migrations' OR name = 'event_envelopes' OR name LIKE 'radroots_event_store_%'",
+        )
+        .fetch_one(&mut connection)
+        .await
+        .expect("verification event-store catalog");
+        assert_eq!(encoding, "UTF-16le");
+        assert_eq!(journal_mode, "delete");
+        assert_eq!(event_store_objects, 0);
+        connection.close().await.expect("close UTF-16 verifier");
+    }
+
     fn synthetic_signed_event(
         kind: u32,
         created_at: u64,
@@ -2236,9 +2366,9 @@ mod tests {
     }
 
     async fn rollback_store_to_v1(store: &RadrootsEventStore) {
-        rollback_event_store_schema_offline(store.pool(), 1)
+        rollback_event_store_schema_offline_destructive_for_migration_test(store.pool(), 1)
             .await
-            .expect("rollback to v1");
+            .expect("test-only destructive rollback to v1");
         assert_eq!(
             inspect_event_store_schema_status(store.pool())
                 .await
@@ -2794,6 +2924,184 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn current_v4_rebuild_rotates_capacity_and_food_authority_end_to_end() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let food = food_availability_event(
+            210,
+            "v4-rebuild-carrots",
+            "Nantes Carrots",
+            "Fresh bunches",
+            "active",
+            Vec::new(),
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(food.clone(), 2_100))
+            .await
+            .expect("FoodAvailability ingest");
+        let before = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before rebuild");
+        let raw_digest = raw_authority_digest(&store).await;
+        let target_generation = [0x44; 32];
+
+        let mut transaction = store
+            .begin_write_transaction()
+            .await
+            .expect("rebuild transaction");
+        crate::nip09::reconciliation_v1::apply_reconciliation_hook(
+            &mut transaction,
+            &FixedGeneration(target_generation),
+            crate::nip09::reconciliation_v1::ReconciliationCapacityLimits::production(),
+        )
+        .await
+        .expect("current-v4 rebuild");
+        transaction
+            .commit()
+            .await
+            .expect("commit current-v4 rebuild");
+
+        let after = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after rebuild");
+        assert_eq!(after.source_generation().as_bytes(), &target_generation);
+        assert_eq!(after.raw_event_count(), before.raw_event_count());
+        assert_eq!(after.raw_tag_count(), before.raw_tag_count());
+        assert_eq!(after.raw_event_text_bytes(), before.raw_event_text_bytes());
+        assert_eq!(after.raw_tag_text_bytes(), before.raw_tag_text_bytes());
+        assert_eq!(after.raw_high_water_seq(), before.raw_high_water_seq());
+        assert_eq!(
+            after.retained_generation_count(),
+            before.retained_generation_count() + 1
+        );
+        assert_eq!(
+            after.retained_generation_limit(),
+            before.retained_generation_limit()
+        );
+        assert_eq!(raw_authority_digest(&store).await, raw_digest);
+        let marker_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_source_rebuild_marker")
+                .fetch_one(store.pool())
+                .await
+                .expect("rebuild marker count");
+        assert_eq!(marker_count, 0);
+        let cursor_generation: Vec<u8> = sqlx::query_scalar(
+            "SELECT source_generation FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("FoodAvailability cursor generation");
+        assert_eq!(cursor_generation, target_generation);
+        let projected = store
+            .food_availability_v1(
+                &RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
+                &RadrootsFoodIdentifier::parse("v4-rebuild-carrots").expect("identifier"),
+            )
+            .await
+            .expect("projection lookup")
+            .expect("projection after rebuild");
+        assert_eq!(projected.event_id().as_str(), food.id_str());
+        validate_nip09_authority(&store).await;
+        store
+            .audit_food_availability_projection_v1()
+            .await
+            .expect("FoodAvailability authority after rebuild");
+    }
+
+    #[tokio::test]
+    async fn ninth_current_v4_rebuild_is_typed_and_preflight_atomic() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        for ordinal in 2_u8..=8 {
+            let mut transaction = store
+                .begin_write_transaction()
+                .await
+                .expect("rebuild transaction");
+            crate::nip09::reconciliation_v1::apply_reconciliation_hook(
+                &mut transaction,
+                &FixedGeneration([ordinal; 32]),
+                crate::nip09::reconciliation_v1::ReconciliationCapacityLimits::production(),
+            )
+            .await
+            .expect("rebuild through retained generation eight");
+            transaction.commit().await.expect("commit rebuild");
+        }
+
+        let capacity_before = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity at generation limit");
+        assert_eq!(capacity_before.retained_generation_count(), 8);
+        let source_before = source_authority_snapshot(&store).await;
+        let raw_before = raw_authority_digest(&store).await;
+        let nip09_before = normalized_nip09_snapshot(&store).await;
+        let food_before: (Vec<u8>, i64, i64) = sqlx::query_as(
+            "SELECT source_generation, last_transition_seq, projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("FoodAvailability cursor at generation limit");
+        let derived_before: (i64, i64, i64) = sqlx::query_as(
+            "SELECT (SELECT COUNT(*) FROM radroots_event_store_source_generation), (SELECT COUNT(*) FROM radroots_event_store_addressable_head_transition), (SELECT COUNT(*) FROM radroots_event_store_addressable_feed_integrity_v1)",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("derived authority counts at generation limit");
+        assert_eq!(derived_before.0, 8);
+
+        let mut transaction = store
+            .begin_write_transaction()
+            .await
+            .expect("ninth rebuild transaction");
+        let error = crate::nip09::reconciliation_v1::apply_reconciliation_hook(
+            &mut transaction,
+            &PanickingGeneration,
+            crate::nip09::reconciliation_v1::ReconciliationCapacityLimits::production(),
+        )
+        .await
+        .expect_err("ninth rebuild must fail before entropy or mutation");
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::SourceGenerationHistoryLimitReached {
+                current: 8,
+                limit: 8,
+            }
+        ));
+        transaction
+            .commit()
+            .await
+            .expect("commit mutation-free rejected rebuild transaction");
+
+        assert_eq!(
+            store
+                .source_capacity_v1()
+                .await
+                .expect("capacity after rejected rebuild"),
+            capacity_before
+        );
+        assert_eq!(source_authority_snapshot(&store).await, source_before);
+        assert_eq!(raw_authority_digest(&store).await, raw_before);
+        assert_eq!(normalized_nip09_snapshot(&store).await, nip09_before);
+        let food_after: (Vec<u8>, i64, i64) = sqlx::query_as(
+            "SELECT source_generation, last_transition_seq, projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("FoodAvailability cursor after rejected rebuild");
+        assert_eq!(food_after, food_before);
+        let derived_after: (i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT (SELECT COUNT(*) FROM radroots_event_store_source_generation), (SELECT COUNT(*) FROM radroots_event_store_addressable_head_transition), (SELECT COUNT(*) FROM radroots_event_store_addressable_feed_integrity_v1), (SELECT COUNT(*) FROM radroots_event_store_source_rebuild_marker)",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("derived authority counts after rejected rebuild");
+        assert_eq!(
+            derived_after,
+            (derived_before.0, derived_before.1, derived_before.2, 0)
+        );
+    }
+
+    #[tokio::test]
     async fn food_projection_migration_backfills_v2_and_survives_rollback_reupgrade() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let food = food_availability_event(
@@ -3001,7 +3309,7 @@ mod tests {
             }
         );
         assert_eq!(
-            crate::RadrootsEventStoreReconciliationResource::RawTagBytes.as_str(),
+            crate::RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes.as_str(),
             "total retained raw-source tag row text bytes"
         );
         let store = RadrootsEventStore::open_memory().await.expect("open");
@@ -3039,51 +3347,59 @@ mod tests {
 
         let below_limit_cases = [
             (
-                crate::RadrootsEventStoreReconciliationResource::RawEvents,
+                crate::RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
                 crate::nip09::reconciliation_v1::ReconciliationCapacityLimits {
                     raw_events: 0,
                     ..exact_limits
                 },
+                0,
                 1,
                 0,
             ),
             (
-                crate::RadrootsEventStoreReconciliationResource::RawTags,
+                crate::RadrootsEventStoreSourceCapacityResourceV1::RawTags,
                 crate::nip09::reconciliation_v1::ReconciliationCapacityLimits {
                     raw_tags: 0,
                     ..exact_limits
                 },
+                0,
                 1,
                 0,
             ),
             (
-                crate::RadrootsEventStoreReconciliationResource::RawEventBytes,
+                crate::RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
                 crate::nip09::reconciliation_v1::ReconciliationCapacityLimits {
                     raw_event_bytes: exact_limits.raw_event_bytes - 1,
                     ..exact_limits
                 },
+                0,
                 exact_limits.raw_event_bytes,
                 exact_limits.raw_event_bytes - 1,
             ),
             (
-                crate::RadrootsEventStoreReconciliationResource::RawTagBytes,
+                crate::RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
                 crate::nip09::reconciliation_v1::ReconciliationCapacityLimits {
                     raw_tag_bytes: exact_limits.raw_tag_bytes - 1,
                     ..exact_limits
                 },
+                0,
                 exact_limits.raw_tag_bytes,
                 exact_limits.raw_tag_bytes - 1,
             ),
         ];
-        for (resource, limits, expected_actual, expected_limit) in below_limit_cases {
+        for (resource, limits, expected_current, expected_requested, expected_limit) in
+            below_limit_cases
+        {
             assert!(matches!(
                 migrate_store_with_generation_and_limits(&store, [0x67; 32], limits).await,
-                Err(RadrootsEventStoreError::ReconciliationCapacityExceeded {
+                Err(RadrootsEventStoreError::SourceCapacityExceeded {
                     resource: actual_resource,
-                    actual,
+                    current,
+                    requested,
                     limit,
                 }) if actual_resource == resource
-                    && actual == expected_actual
+                    && current == expected_current
+                    && requested == expected_requested
                     && limit == expected_limit
             ));
             assert_eq!(
@@ -3124,6 +3440,14 @@ mod tests {
             .execute(store.pool())
             .await
             .expect("oversized legacy pubkey");
+        let oversized_raw_event_bytes: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(length(CAST(event_id AS BLOB)) + length(CAST(pubkey AS BLOB)) + length(CAST(tags_json AS BLOB)) + length(CAST(content AS BLOB)) + length(CAST(sig AS BLOB)) + length(CAST(raw_json AS BLOB))), 0) FROM event_envelopes",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("oversized raw event bytes");
+        let oversized_raw_event_bytes =
+            u64::try_from(oversized_raw_event_bytes).expect("oversized raw event bytes");
         let limits = crate::nip09::reconciliation_v1::ReconciliationCapacityLimits {
             raw_event_bytes: u64::try_from(prior_raw_event_bytes).expect("prior raw event bytes"),
             ..crate::nip09::reconciliation_v1::ReconciliationCapacityLimits::production()
@@ -3140,11 +3464,15 @@ mod tests {
         );
         assert!(matches!(
             error,
-            RadrootsEventStoreError::ReconciliationCapacityExceeded {
-                resource: crate::RadrootsEventStoreReconciliationResource::RawEventBytes,
-                actual,
+            RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: crate::RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+                current,
+                requested,
                 limit,
-            } if actual > limit && limit == limits.raw_event_bytes
+            } if current == 0
+                && requested == oversized_raw_event_bytes
+                && requested > limit
+                && limit == limits.raw_event_bytes
         ));
         assert_eq!(
             inspect_event_store_schema_status(store.pool())
@@ -3955,6 +4283,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn open_file_rejects_utf16_main_database_before_schema_or_journal_mutation() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("open-file-utf16.sqlite");
+        initialize_utf16le_database(&path).await;
+
+        let error = match RadrootsEventStore::open_file(&path).await {
+            Ok(_) => panic!("UTF-16 main database must be rejected"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual }
+                if actual == "UTF-16le"
+        ));
+        assert_utf16le_database_was_not_mutated(&path).await;
+    }
+
+    #[tokio::test]
+    async fn open_pool_rejects_utf16_main_database_before_schema_or_journal_mutation() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("open-pool-utf16.sqlite");
+        initialize_utf16le_database(&path).await;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(2)
+            .connect_with(SqliteConnectOptions::new().filename(&path))
+            .await
+            .expect("UTF-16 pool");
+
+        let error = match RadrootsEventStore::open_pool(pool, true).await {
+            Ok(_) => panic!("UTF-16 supplied pool must be rejected"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual }
+                if actual == "UTF-16le"
+        ));
+        assert_utf16le_database_was_not_mutated(&path).await;
+    }
+
+    #[tokio::test]
     async fn open_pool_configures_every_file_connection_and_rejects_multi_connection_memory() {
         let memory_options = SqliteConnectOptions::from_str("sqlite::memory:")
             .expect("memory options")
@@ -4431,7 +4800,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let clone = store.clone();
 
         store
-            .rollback_to_schema_version_and_close(1)
+            .rollback_to_schema_version_and_close(3)
             .await
             .expect("terminal rollback");
 
@@ -4440,6 +4809,68 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             clone.schema_status().await,
             Err(RadrootsEventStoreError::Sqlx(sqlx::Error::PoolClosed))
         ));
+    }
+
+    #[tokio::test]
+    async fn utf8_file_reopen_preserves_non_ascii_and_nul_capacity_accounting() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("utf8-capacity-reopen.sqlite");
+        let store = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("UTF-8 file store");
+        let event = signed_event(
+            KIND_POST,
+            10,
+            vec![
+                vec!["t".to_owned(), "Victoria vegetables 野菜\0".to_owned()],
+                vec!["location".to_owned(), "Victoria, B.C., Canada".to_owned()],
+            ],
+            "Café-grown carrots 🥕 in Victoria\0",
+        );
+        let event_id = event.id_str().to_owned();
+        let expected_tag_count =
+            u64::try_from(event.tags_as_vec().len()).expect("tag count fits u64");
+        let (expected_event_bytes, expected_tag_bytes) = raw_source_text_bytes(&event);
+
+        store
+            .ingest_event(RadrootsEventIngest::new(event, 1_000))
+            .await
+            .expect("non-ASCII and NUL ingest");
+        let before_reopen = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before reopen");
+        assert_eq!(before_reopen.raw_event_count(), 1);
+        assert_eq!(before_reopen.raw_tag_count(), expected_tag_count);
+        assert_eq!(before_reopen.raw_event_text_bytes(), expected_event_bytes);
+        assert_eq!(before_reopen.raw_tag_text_bytes(), expected_tag_bytes);
+        store.pool().close().await;
+
+        let reopened = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("reopen UTF-8 file store");
+        assert_eq!(
+            reopened
+                .source_capacity_v1()
+                .await
+                .expect("capacity after reopen"),
+            before_reopen
+        );
+        let stored = reopened
+            .raw_event(&event_id)
+            .await
+            .expect("raw event after reopen")
+            .expect("stored raw event after reopen");
+        assert_eq!(stored.content, "Café-grown carrots 🥕 in Victoria\0");
+        let tags = reopened
+            .tags_for_event(&event_id)
+            .await
+            .expect("stored tags after reopen");
+        assert_eq!(tags.len(), 2);
+        assert_eq!(
+            tags[0].tag_value.as_deref(),
+            Some("Victoria vegetables 野菜\0")
+        );
     }
 
     #[tokio::test]
@@ -4457,7 +4888,15 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .ingest_event(ingest.clone())
             .await
             .expect("first ingest");
+        let capacity_after_first = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after first ingest");
         let second = store.ingest_event(ingest).await.expect("second ingest");
+        let capacity_after_duplicate = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after duplicate ingest");
         let stored = store
             .raw_event(event.id_str())
             .await
@@ -4466,6 +4905,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         assert!(first.persistence.is_inserted());
         assert!(second.persistence.is_duplicate());
+        assert_eq!(capacity_after_duplicate, capacity_after_first);
         assert_eq!(first.persistence.sequence(), second.persistence.sequence());
         assert_eq!(first.persistence.sequence(), Some(stored.seq));
         assert_eq!(
@@ -4491,6 +4931,364 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("tags")
                 .len(),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn independent_file_pools_serialize_the_last_raw_event_byte_capacity_slot() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("capacity-last-slot-race.sqlite");
+        let contender_a = signed_event(KIND_POST, 101, Vec::new(), "race-a");
+        let contender_b = signed_event(KIND_POST, 102, Vec::new(), "race-b");
+        let contender_bytes = raw_source_text_bytes(&contender_a).0;
+        assert_eq!(raw_source_text_bytes(&contender_b).0, contender_bytes);
+
+        const FILLER_CREATED_AT_BASE: u32 = 1_000_000;
+        let filler_base = signed_event(KIND_POST, FILLER_CREATED_AT_BASE, Vec::new(), "");
+        let filler_base_bytes = raw_source_text_bytes(&filler_base).0;
+        let filler_target = crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1
+            .checked_sub(contender_bytes)
+            .expect("one contender fits the production byte limit");
+        let full_content_len = DEFAULT_CONTENT_MAX_BYTES - 4_096;
+        let full_content = "v".repeat(full_content_len);
+        let full_filler = signed_event(
+            KIND_POST,
+            FILLER_CREATED_AT_BASE,
+            Vec::new(),
+            full_content.as_str(),
+        );
+        assert!(full_filler.raw_json().len() <= DEFAULT_RAW_JSON_MAX_BYTES);
+        let full_filler_bytes = raw_source_text_bytes(&full_filler).0;
+        let content_shape_for_target = |target: u64| {
+            let adjustment = target.checked_sub(filler_base_bytes)?;
+            let (ascii_len, append_nul) = if adjustment % 2 == 0 {
+                (adjustment / 2, false)
+            } else {
+                (adjustment.checked_sub(7)? / 2, true)
+            };
+            (ascii_len <= u64::try_from(full_content_len).ok()?)
+                .then_some((usize::try_from(ascii_len).ok()?, append_nul))
+        };
+
+        let mut full_filler_count = filler_target / full_filler_bytes;
+        let mut tail_total = filler_target % full_filler_bytes;
+        let tail_targets = if tail_total == 0 {
+            Vec::new()
+        } else if content_shape_for_target(tail_total).is_some() {
+            vec![tail_total]
+        } else {
+            full_filler_count = full_filler_count
+                .checked_sub(1)
+                .expect("filler target admits a two-event exact tail");
+            tail_total += full_filler_bytes;
+            let lower = filler_base_bytes.max(tail_total - full_filler_bytes);
+            let upper = full_filler_bytes.min(tail_total - filler_base_bytes);
+            let first = (lower..=upper)
+                .take(16)
+                .find(|candidate| {
+                    content_shape_for_target(*candidate).is_some()
+                        && content_shape_for_target(tail_total - *candidate).is_some()
+                })
+                .expect("two bounded filler events can represent the exact tail");
+            vec![first, tail_total - first]
+        };
+
+        let filler_store = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("filler store");
+        let mut filler_transaction = filler_store
+            .begin_write_transaction()
+            .await
+            .expect("filler transaction");
+        let mut filler_count = 0_u64;
+        for index in 0..full_filler_count {
+            let created_at = FILLER_CREATED_AT_BASE
+                + u32::try_from(index).expect("bounded full filler index fits u32");
+            let filler = signed_event(KIND_POST, created_at, Vec::new(), full_content.as_str());
+            assert_eq!(raw_source_text_bytes(&filler).0, full_filler_bytes);
+            filler_store
+                .ingest_event_in_transaction(
+                    &mut filler_transaction,
+                    RadrootsEventIngest::new(filler, 1_000 + i64::from(created_at)),
+                )
+                .await
+                .expect("coherent full filler ingest");
+            filler_count += 1;
+        }
+        for target in tail_targets {
+            let (ascii_len, append_nul) =
+                content_shape_for_target(target).expect("validated exact tail shape");
+            let mut content = "v".repeat(ascii_len);
+            if append_nul {
+                content.push('\0');
+            }
+            let created_at = FILLER_CREATED_AT_BASE
+                + u32::try_from(filler_count).expect("bounded tail filler index fits u32");
+            let filler = signed_event(KIND_POST, created_at, Vec::new(), content.as_str());
+            assert!(filler.raw_json().len() <= DEFAULT_RAW_JSON_MAX_BYTES);
+            assert_eq!(raw_source_text_bytes(&filler).0, target);
+            filler_store
+                .ingest_event_in_transaction(
+                    &mut filler_transaction,
+                    RadrootsEventIngest::new(filler, 1_000 + i64::from(created_at)),
+                )
+                .await
+                .expect("coherent exact-tail filler ingest");
+            filler_count += 1;
+        }
+        filler_transaction
+            .commit()
+            .await
+            .expect("commit coherent filler source");
+        let before_race = filler_store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before last-slot race");
+        assert_eq!(before_race.raw_event_count(), filler_count);
+        assert_eq!(before_race.raw_event_text_bytes(), filler_target);
+        filler_store.pool().close().await;
+
+        let contender_a_id = contender_a.id_str().to_owned();
+        let contender_b_id = contender_b.id_str().to_owned();
+        let store_a = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("first independent store");
+        let store_b = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("second independent store");
+        let barrier = Arc::new(tokio::sync::Barrier::new(3));
+        let barrier_a = barrier.clone();
+        let first = tokio::spawn(async move {
+            barrier_a.wait().await;
+            let result = store_a
+                .ingest_event(RadrootsEventIngest::new(contender_a, 1_100))
+                .await;
+            (store_a, result)
+        });
+        let barrier_b = barrier.clone();
+        let second = tokio::spawn(async move {
+            barrier_b.wait().await;
+            let result = store_b
+                .ingest_event(RadrootsEventIngest::new(contender_b, 1_200))
+                .await;
+            (store_b, result)
+        });
+        barrier.wait().await;
+        let (first, second) = tokio::join!(first, second);
+        let (store_a, result_a) = first.expect("first contender task");
+        let (store_b, result_b) = second.expect("second contender task");
+        let (accepted, rejected) = match (result_a, result_b) {
+            (Ok(accepted), Err(rejected)) | (Err(rejected), Ok(accepted)) => (accepted, rejected),
+            _ => panic!("exactly one contender must consume the last capacity slot"),
+        };
+        assert!(accepted.persistence.is_inserted());
+        assert!(matches!(
+            rejected,
+            RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: crate::RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+                current: crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
+                requested,
+                limit: crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
+            } if requested == contender_bytes
+        ));
+        store_a.pool().close().await;
+        store_b.pool().close().await;
+
+        let reopened = RadrootsEventStore::open_file(&path)
+            .await
+            .expect("clean full reopen after last-slot race");
+        let after_race = reopened
+            .source_capacity_v1()
+            .await
+            .expect("capacity after last-slot race");
+        assert_eq!(after_race.raw_event_count(), filler_count + 1);
+        assert_eq!(
+            after_race.raw_event_text_bytes(),
+            crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1
+        );
+        let retained_contenders: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM event_envelopes WHERE event_id = ? OR event_id = ?",
+        )
+        .bind(contender_a_id)
+        .bind(contender_b_id)
+        .fetch_one(reopened.pool())
+        .await
+        .expect("retained contender count");
+        assert_eq!(retained_contenders, 1);
+    }
+
+    #[tokio::test]
+    async fn exact_capacity_boundary_allows_duplicate_observation_and_ephemeral_noop() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let retained = signed_event(KIND_POST, 20, Vec::new(), "retained at boundary");
+        store
+            .ingest_event(RadrootsEventIngest::new(retained.clone(), 1_000))
+            .await
+            .expect("initial durable ingest");
+
+        let source_guard: String = sqlx::query_scalar(
+            "SELECT sql FROM main.sqlite_schema WHERE type = 'trigger' AND name = 'radroots_event_store_source_state_authority_update_guard'",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("source-state update guard SQL");
+        let capacity_guard: String = sqlx::query_scalar(
+            "SELECT sql FROM main.sqlite_schema WHERE type = 'trigger' AND name = 'radroots_event_store_source_capacity_update_guard'",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("capacity update guard SQL");
+        let mut transaction = store
+            .begin_write_transaction()
+            .await
+            .expect("boundary fixture transaction");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_state_authority_update_guard")
+            .execute(&mut *transaction)
+            .await
+            .expect("remove source-state guard in rolled-back fixture");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_capacity_update_guard")
+            .execute(&mut *transaction)
+            .await
+            .expect("remove capacity guard in rolled-back fixture");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET raw_event_count = ? WHERE singleton = 1",
+        )
+        .bind(
+            i64::try_from(crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1)
+                .expect("production event-count limit fits SQLite"),
+        )
+        .execute(&mut *transaction)
+        .await
+        .expect("place source state at event-count boundary");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_capacity_v1 SET raw_event_count = ? WHERE singleton = 1",
+        )
+        .bind(
+            i64::try_from(crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1)
+                .expect("production event-count limit fits SQLite"),
+        )
+        .execute(&mut *transaction)
+        .await
+        .expect("place capacity seal at event-count boundary");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(source_guard))
+            .execute(&mut *transaction)
+            .await
+            .expect("restore exact source-state guard");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(capacity_guard))
+            .execute(&mut *transaction)
+            .await
+            .expect("restore exact capacity guard");
+
+        let at_limit = crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(
+            &mut transaction,
+        )
+        .await
+        .expect("fast capacity seal at exact limit");
+        assert_eq!(
+            at_limit.raw_event_count(),
+            crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1
+        );
+        let duplicate_observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "wss://capacity-boundary.example.test",
+            RadrootsTransportObservationType::Subscription,
+            1_100,
+        )
+        .expect("duplicate observation");
+        let duplicate = store
+            .ingest_event_in_transaction(
+                &mut transaction,
+                RadrootsEventIngest::new(retained.clone(), 1_100)
+                    .with_observation(duplicate_observation),
+            )
+            .await
+            .expect("duplicate does not charge capacity at the exact boundary");
+        assert!(duplicate.persistence.is_duplicate());
+        let observation_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM event_transport_observation WHERE event_id = ?",
+        )
+        .bind(retained.id_str())
+        .fetch_one(&mut *transaction)
+        .await
+        .expect("duplicate observation count");
+        assert_eq!(observation_count, 1);
+        assert_eq!(
+            crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(
+                &mut transaction,
+            )
+            .await
+            .expect("capacity after duplicate"),
+            at_limit
+        );
+
+        let unique = signed_event(KIND_POST, 21, Vec::new(), "one event over boundary");
+        assert!(matches!(
+            store
+                .ingest_event_in_transaction(
+                    &mut transaction,
+                    RadrootsEventIngest::new(unique.clone(), 1_200),
+                )
+                .await,
+            Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: crate::RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+                current: crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
+                requested: 1,
+                limit: crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
+            })
+        ));
+        let ephemeral = signed_event(KIND_GEOCHAT, 22, Vec::new(), "live-only boundary event");
+        let ephemeral_observation = RadrootsTransportObservation::new(
+            RadrootsTransportKind::Nostr,
+            "wss://ephemeral-boundary.example.test",
+            RadrootsTransportObservationType::Subscription,
+            1_300,
+        )
+        .expect("ephemeral observation");
+        let ephemeral_receipt = store
+            .ingest_event_in_transaction(
+                &mut transaction,
+                RadrootsEventIngest::new(ephemeral.clone(), 1_300)
+                    .with_observation(ephemeral_observation),
+            )
+            .await
+            .expect("ephemeral event is not charged at the exact boundary");
+        assert_eq!(
+            ephemeral_receipt.persistence,
+            RadrootsEventPersistence::NotPersisted
+        );
+        let ephemeral_observation_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM event_transport_observation WHERE event_id = ?",
+        )
+        .bind(ephemeral.id_str())
+        .fetch_one(&mut *transaction)
+        .await
+        .expect("ephemeral observation count");
+        assert_eq!(ephemeral_observation_count, 0);
+        assert_eq!(
+            crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(
+                &mut transaction,
+            )
+            .await
+            .expect("capacity after ephemeral event"),
+            at_limit
+        );
+        transaction
+            .rollback()
+            .await
+            .expect("roll back exact-bound fixture");
+        assert!(
+            store
+                .raw_event(unique.id_str())
+                .await
+                .expect("unique raw event after rollback")
+                .is_none()
+        );
+        assert!(
+            store
+                .raw_event(ephemeral.id_str())
+                .await
+                .expect("ephemeral raw event after rollback")
+                .is_none()
         );
     }
 
@@ -4531,6 +5329,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         .fetch_one(store.pool())
         .await
         .expect("before");
+        let capacity_before_duplicate = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before alternate-encoding duplicate");
 
         let receipt = store
             .ingest_event(RadrootsEventIngest::new(second_event, 1_200))
@@ -4543,8 +5345,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         .fetch_one(store.pool())
         .await
         .expect("after");
+        let capacity_after_duplicate = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after alternate-encoding duplicate");
 
         assert!(receipt.persistence.is_duplicate());
+        assert_eq!(capacity_after_duplicate, capacity_before_duplicate);
         assert_eq!(
             receipt.admission_status,
             RadrootsEventAdmissionStatus::Admitted
@@ -4779,6 +5586,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             )
             .await
             .expect("prior caller work");
+        let capacity_after_prior =
+            crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(&mut tx)
+                .await
+                .expect("capacity after prior caller work");
         let error = store
             .ingest_event_in_transaction(
                 &mut tx,
@@ -4791,6 +5602,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             RadrootsEventStoreError::MigrationHookStateDrift { ref reason, .. }
                 if reason.contains("post-core extensions changed protocol-owned authority")
         ));
+        let capacity_after_rollback =
+            crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(&mut tx)
+                .await
+                .expect("capacity after failed nested ingest");
+        assert_eq!(capacity_after_rollback, capacity_after_prior);
         tx.commit()
             .await
             .expect("caller may commit prior work after failed ingest");
@@ -4855,6 +5671,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         .expect("transition count");
         assert_eq!(trade_mutation_count, 0);
         assert_eq!(transition_count, 0);
+        assert_eq!(
+            store
+                .source_capacity_v1()
+                .await
+                .expect("committed capacity after rollback"),
+            capacity_after_prior
+        );
     }
 
     #[tokio::test]
@@ -5306,6 +6129,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     async fn unsupported_verified_events_are_stored_but_not_projected() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let event = signed_event(999, 11, Vec::new(), "unsupported");
+        let capacity_before = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before unsupported ingest");
         let receipt = store
             .ingest_event(RadrootsEventIngest::new(event.clone(), 2_000))
             .await
@@ -5315,6 +6142,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("get")
             .expect("stored");
+        let capacity_after_insert = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after unsupported ingest");
 
         assert_eq!(
             receipt.admission_status,
@@ -5326,6 +6157,21 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             RadrootsEventAdmissionStatus::Unsupported
         );
         assert!(!stored.valid_stream_eligible);
+        assert_eq!(
+            capacity_after_insert.raw_event_count(),
+            capacity_before.raw_event_count() + 1
+        );
+        assert_eq!(
+            capacity_after_insert.raw_tag_count(),
+            capacity_before.raw_tag_count()
+        );
+        assert!(
+            capacity_after_insert.raw_event_text_bytes() > capacity_before.raw_event_text_bytes()
+        );
+        assert_eq!(
+            capacity_after_insert.raw_tag_text_bytes(),
+            capacity_before.raw_tag_text_bytes()
+        );
         assert!(
             store
                 .valid_event(event.id_str())
@@ -5338,7 +6184,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .ingest_event(RadrootsEventIngest::new(event, 2_100))
             .await
             .expect("duplicate");
+        let capacity_after_duplicate = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after unsupported duplicate");
         assert!(duplicate.persistence.is_duplicate());
+        assert_eq!(capacity_after_duplicate, capacity_after_insert);
         assert_eq!(
             duplicate.raw_head_decision,
             RadrootsRawHeadDecision::NotHeadSelected
@@ -5445,6 +6296,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     #[tokio::test]
     async fn ephemeral_admission_outcomes_are_never_persisted() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
+        let capacity_before = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before ephemeral ingests");
         let admitted = signed_event(KIND_GEOCHAT, 15, Vec::new(), "hello");
         let unsupported = signed_event(29_999, 16, Vec::new(), "unsupported");
         let invalid = signed_event(KIND_RELAY_AUTH, 17, Vec::new(), "not-json");
@@ -5543,6 +6398,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(status.valid_stream_events, 0);
         assert_eq!(status.transport_observations, 0);
         assert_eq!(
+            store
+                .source_capacity_v1()
+                .await
+                .expect("capacity after ephemeral ingests"),
+            capacity_before
+        );
+        assert_eq!(
             admitted_receipt.raw_head_decision,
             RadrootsRawHeadDecision::NotPersisted
         );
@@ -5621,6 +6483,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     #[tokio::test]
     async fn ambiguous_classified_listing_shape_is_invalid_but_still_updates_the_raw_head() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
+        let capacity_before = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity before invalid durable ingest");
         let event = signed_event(
             KIND_CLASSIFIED_LISTING,
             17,
@@ -5637,6 +6503,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .ingest_event(RadrootsEventIngest::new(event.clone(), 2_275))
             .await
             .expect("ingest");
+        let capacity_after = store
+            .source_capacity_v1()
+            .await
+            .expect("capacity after invalid durable ingest");
 
         assert_eq!(
             receipt.admission_status,
@@ -5648,6 +6518,16 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(!receipt.valid_stream_eligible);
         assert_eq!(receipt.raw_head_decision, RadrootsRawHeadDecision::Applied);
+        assert_eq!(
+            capacity_after.raw_event_count(),
+            capacity_before.raw_event_count() + 1
+        );
+        assert_eq!(
+            capacity_after.raw_tag_count(),
+            capacity_before.raw_tag_count() + 3
+        );
+        assert!(capacity_after.raw_event_text_bytes() > capacity_before.raw_event_text_bytes());
+        assert!(capacity_after.raw_tag_text_bytes() > capacity_before.raw_tag_text_bytes());
         assert!(
             store
                 .raw_event(event.id_str())

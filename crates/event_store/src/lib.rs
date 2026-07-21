@@ -14,10 +14,18 @@ mod nip09;
 #[cfg(feature = "sqlite")]
 mod schema;
 #[cfg(feature = "sqlite")]
+mod source_maintenance_v1;
+#[cfg(feature = "sqlite")]
 mod store;
 
 #[cfg(feature = "sqlite")]
-pub use error::{RadrootsEventStoreError, RadrootsEventStoreReconciliationResource};
+pub use error::{
+    RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
+    RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
+    RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1, RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
+    RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1, RadrootsEventStoreError,
+    RadrootsEventStoreSourceCapacityResourceV1,
+};
 #[cfg(feature = "sqlite")]
 pub use migrations::{
     RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT, RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
@@ -60,6 +68,8 @@ pub use model::{
 };
 #[cfg(feature = "sqlite")]
 pub use schema::{RadrootsEventStoreSchemaStatus, inspect_event_store_schema_status};
+#[cfg(feature = "sqlite")]
+pub use source_maintenance_v1::RadrootsEventStoreSourceCapacityV1;
 #[cfg(feature = "sqlite")]
 pub use store::{
     RADROOTS_EVENT_STORE_CONTRACT_QUERY_LIMIT_MAX, RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX,

@@ -114,6 +114,29 @@ publish policy both pass for the same source revision.
   authenticates schema `0003`, registry-v7 admission, exact kind scope `30402`,
   executable transition/projection vectors, and the frozen NIP-09 predecessor.
   Stored Blossom image digests use the public typed SHA-256 value.
+- Event-store schema v4 adds a persisted raw-source capacity seal for event
+  rows, tag rows, and their governed UTF-8 text bytes. Unique durable ingest
+  now refuses prospective capacity excess before mutation, database reopen
+  performs a bounded full recount, and independent file pools serialize an
+  exact final capacity slot. Every supplied main database must report UTF-8
+  before schema or journal mutation. Retained source history stops at eight
+  generations before requesting fresh-store replacement and resync, and
+  production rollback cannot cross the migration that introduced that
+  append-only history. The
+  authenticated SourceMaintenance successor binds the immutable schema-v3
+  predecessor, migration and runtime sources, breaking capacity-error API
+  replacements, and an executable result vector. Schema v4 is intentionally
+  non-additive: it replaces exactly the Food projection delete guard, Food image
+  delete guard, and source rebuild-marker insert guard, requires that exact
+  symmetric catalog delta, and restores the exact v3 trigger SQL on rollback.
+  A drifted v3 predecessor is rejected atomically rather than repaired during
+  upgrade; repair authorization is reserved for a future rebuild after exact
+  managed-v4 catalog, ledger, and migration history plus immutable raw/source
+  lineage and capacity validation. Derived hook state is the repair target,
+  not a repair precondition. The former
+  `RadrootsEventStoreReconciliationResource` type and
+  `ReconciliationCapacityExceeded` error variant are replaced by the
+  versioned source-capacity resource and typed capacity/history errors.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

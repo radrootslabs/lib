@@ -17,6 +17,42 @@ const SCHEMA_VERSION: u32 = 1;
 const HOOK_ID: &str = "nip09_reconciliation_v1";
 const MIGRATION_VERSION: u32 = 2;
 const MIGRATION_NAME: &str = "nip09";
+const SOURCE_MAINTENANCE_MIGRATION_VERSION: u32 = 4;
+const SOURCE_MAINTENANCE_MIGRATION_NAME: &str = "source_maintenance";
+const SOURCE_MAINTENANCE_PRIVILEGED_TERMINALS: [&str; 9] = [
+    "apply_source_maintenance_hook_v1",
+    "preflight_unique_raw_source_append_v1",
+    "raw_source_capacity_delta_v1",
+    "advance_source_capacity_after_insert_v1",
+    "preflight_source_generation_append_v1",
+    "bind_source_capacity_to_generation_v1",
+    "validate_source_capacity_authority_fast_v1",
+    "validate_source_capacity_authority_full_v1",
+    "validate_no_persisted_ephemeral_raw_rows_v1",
+];
+const PRIVILEGED_TERMINAL_NAMES: [&str; 21] = [
+    "validate_event_store_temp_schema",
+    "validate_main_database_encoding",
+    "validate_rollback_preserves_source_generation_history",
+    "apply_migration_up",
+    "apply_migration_down",
+    "apply_migration_hook",
+    "validate_migration_hook_state",
+    "validate_active_hook_state_fast",
+    "ingest_event_protocol_reconciliation_v1",
+    "dispatch_post_core_extensions",
+    "apply_post_core_extensions_v1",
+    "validate_protocol_post_extensions",
+    "apply_source_maintenance_hook_v1",
+    "preflight_unique_raw_source_append_v1",
+    "raw_source_capacity_delta_v1",
+    "advance_source_capacity_after_insert_v1",
+    "preflight_source_generation_append_v1",
+    "bind_source_capacity_to_generation_v1",
+    "validate_source_capacity_authority_fast_v1",
+    "validate_source_capacity_authority_full_v1",
+    "validate_no_persisted_ephemeral_raw_rows_v1",
+];
 const RECONCILIATION_VERSION: u32 = 1;
 const ADDRESSABLE_FEED_VERSION: u32 = 1;
 const EVENT_CONTRACT_REGISTRY_VERSION: u32 = 7;
@@ -357,6 +393,8 @@ const SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS: [&str; 8] = [
     "crates/event_store/src/store/post_core_extensions_v2.rs",
     "crates/event_store/src/store/post_core_storage_v2.rs",
 ];
+const SUCCESSOR_08D_SOURCE_PATHS: [&str; 1] = ["crates/event_store/src/source_maintenance_v1.rs"];
+const SUCCESSOR_08D_LIB_MODULES: [&str; 1] = ["source_maintenance_v1"];
 const EVENT_STORE_FIXED_PUBLIC_REEXPORTS: [&str; 40] = [
     "error::RadrootsEventStoreError",
     "error::RadrootsEventStoreReconciliationResource",
@@ -432,6 +470,17 @@ const SUCCESSOR_08C_PUBLIC_REEXPORTS: [&str; 32] = [
     "model::RadrootsStoreProducedCanonicalEventV1",
     "model::RadrootsStoredFoodAvailabilityImageV1",
     "model::RadrootsStoredFoodAvailabilityV1",
+];
+const SUCCESSOR_08D_RETIRED_PUBLIC_REEXPORTS: [&str; 1] =
+    ["error::RadrootsEventStoreReconciliationResource"];
+const SUCCESSOR_08D_PUBLIC_REEXPORTS: [&str; 7] = [
+    "error::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1",
+    "error::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1",
+    "error::RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1",
+    "error::RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1",
+    "error::RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1",
+    "error::RadrootsEventStoreSourceCapacityResourceV1",
+    "source_maintenance_v1::RadrootsEventStoreSourceCapacityV1",
 ];
 const POST_CORE_STORAGE_METHODS: [&str; 4] = [
     "new",
@@ -2285,19 +2334,22 @@ pub(super) fn validate_nip09_reconciliation_manifest_under_lock(
     Ok(())
 }
 
-pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
+pub(super) fn nip09_predecessor_production_source_paths_under_lock(
     workspace_root: &Path,
-    superseded_paths: &[&str],
-) -> Result<(), String> {
+) -> Result<BTreeSet<String>, String> {
     let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
     let manifest: Nip09ReconciliationManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
-    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
-    if superseded.len() != superseded_paths.len() {
-        return Err("successor predecessor-source supersession paths must be unique".to_owned());
-    }
+    Ok(nip09_predecessor_production_source_paths(&manifest)
+        .into_iter()
+        .map(str::to_owned)
+        .collect())
+}
 
-    let mut predecessor_paths = manifest
+fn nip09_predecessor_production_source_paths(
+    manifest: &Nip09ReconciliationManifest,
+) -> BTreeSet<&str> {
+    let mut paths = manifest
         .frozen_sources
         .iter()
         .map(|source| source.path.as_str())
@@ -2327,12 +2379,28 @@ pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
                 .map(|source| source.path.as_str()),
         )
         .collect::<BTreeSet<_>>();
-    predecessor_paths.extend([
+    paths.extend([
         POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
         POST_CORE_DISPATCHER_SOURCE_RELATIVE,
         POST_CORE_EXTENSION_SOURCE_RELATIVE,
         POST_CORE_STORAGE_SOURCE_RELATIVE,
     ]);
+    paths
+}
+
+pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
+    workspace_root: &Path,
+    superseded_paths: &[&str],
+) -> Result<(), String> {
+    let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
+    let manifest: Nip09ReconciliationManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    if superseded.len() != superseded_paths.len() {
+        return Err("successor predecessor-source supersession paths must be unique".to_owned());
+    }
+
+    let predecessor_paths = nip09_predecessor_production_source_paths(&manifest);
     if let Some(path) = superseded
         .iter()
         .find(|path| !predecessor_paths.contains(**path))
@@ -2543,7 +2611,7 @@ fn expected_manifest(workspace_root: &Path) -> Result<Nip09ReconciliationManifes
     validate_governed_support_source_tree_baselines(workspace_root)?;
     validate_route_facade_baselines(workspace_root)?;
     describe_post_core_extension_boundary(workspace_root, true)?;
-    validate_privileged_store_authority(workspace_root)?;
+    validate_current_event_store_successor_authority(workspace_root)?;
     describe_nip09_v1_manifest(workspace_root)
 }
 
@@ -2673,7 +2741,7 @@ fn describe_frozen_source_bytes(
     spec: FrozenSourceSpec,
     bytes: &[u8],
 ) -> Result<FrozenSourceDescriptor, String> {
-    let canonical = canonical_rust_ast(spec.path, &bytes, RustAstProfile::Production)?;
+    let canonical = canonical_rust_ast(spec.path, bytes, RustAstProfile::Production)?;
     let file = syn::parse_file(
         std::str::from_utf8(&canonical)
             .map_err(|error| format!("{} canonical source must be UTF-8: {error}", spec.path))?,
@@ -2783,7 +2851,7 @@ fn expected_event_store_migration_compiler_inputs(
         ));
     }
 
-    fn field<'a>(
+    fn raw_field<'a>(
         relative: &str,
         entry: &'a syn::ExprStruct,
         name: &str,
@@ -2798,7 +2866,15 @@ fn expected_event_store_migration_compiler_inputs(
                 "{relative} future-compatible migration entry must contain field `{name}` exactly once"
             ));
         };
-        Ok(peel_expression(&field.expr))
+        Ok(&field.expr)
+    }
+
+    fn field<'a>(
+        relative: &str,
+        entry: &'a syn::ExprStruct,
+        name: &str,
+    ) -> Result<&'a syn::Expr, String> {
+        Ok(peel_expression(raw_field(relative, entry, name)?))
     }
 
     fn integer_field(relative: &str, entry: &syn::ExprStruct, name: &str) -> Result<u32, String> {
@@ -2886,9 +2962,9 @@ fn expected_event_store_migration_compiler_inputs(
                 "{relative} migration {version} name must be non-empty lowercase snake_case"
             ));
         }
-        if version > 2 {
-            let expected_authority = if version == 3 && name == "food_availability_projection" {
-                [
+        let hookless = if version > 2 {
+            let expected_authority = match (version, name.as_str()) {
+                (3, "food_availability_projection") => [
                     (
                         "hook",
                         "EventStoreMigrationHook::FoodAvailabilityProjectionV1",
@@ -2901,14 +2977,25 @@ fn expected_event_store_migration_compiler_inputs(
                         "event_contract_registry_version",
                         "Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,)",
                     ),
-                ]
-            } else {
-                [
+                ],
+                (SOURCE_MAINTENANCE_MIGRATION_VERSION, SOURCE_MAINTENANCE_MIGRATION_NAME) => [
+                    ("hook", "EventStoreMigrationHook::SourceMaintenanceV1"),
+                    (
+                        "hook_manifest_sha256",
+                        "Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256,)",
+                    ),
+                    (
+                        "event_contract_registry_version",
+                        "Some(source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,)",
+                    ),
+                ],
+                _ => [
                     ("hook", "EventStoreMigrationHook::None"),
                     ("hook_manifest_sha256", "None"),
                     ("event_contract_registry_version", "None"),
-                ]
+                ],
             };
+            let hookless = expected_authority[0].1 == "EventStoreMigrationHook::None";
             for (field_name, expected) in expected_authority {
                 let actual = compact_tokens(field(relative, entry, field_name)?);
                 if actual != expected {
@@ -2917,7 +3004,19 @@ fn expected_event_store_migration_compiler_inputs(
                     ));
                 }
             }
-        }
+            if hookless {
+                let replacements =
+                    compact_tokens(raw_field(relative, entry, "replaced_object_names")?);
+                if replacements != "&[]" {
+                    return Err(format!(
+                        "{relative} hookless post-v2 migration {version} must not declare predecessor replacements without separately authenticated successor authority; found `{replacements}`"
+                    ));
+                }
+            }
+            hookless
+        } else {
+            false
+        };
         for direction in ["up", "down"] {
             let expected_path = format!("../migrations/{version:04}_{name}.{direction}.sql");
             inputs.push(include_str_field(
@@ -2926,7 +3025,7 @@ fn expected_event_store_migration_compiler_inputs(
                 &format!("{direction}_sql"),
                 &expected_path,
             )?);
-            if version > 3 {
+            if version > 2 && hookless {
                 validate_hookless_post_v2_migration_sql_isolated(
                     workspace_root,
                     version,
@@ -3608,6 +3707,10 @@ fn protected_v1_migration_object_names(workspace_root: &Path) -> Result<BTreeSet
         read_regular_file(workspace_root, EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE)?;
     let migrations =
         parse_canonical_production_rust(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &migrations_bytes)?;
+    validate_event_store_migrations_import_authority(
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+        &migrations,
+    )?;
     for name in [
         "EVENT_STORE_BASELINE_OBJECT_NAMES",
         "EVENT_STORE_BASELINE_TABLE_NAMES",
@@ -5735,6 +5838,138 @@ struct PrivilegedStoreCallSite {
     route: String,
 }
 
+fn validate_exact_top_level_imports(
+    relative: &str,
+    file: &syn::File,
+    expected: &[&str],
+) -> Result<(), String> {
+    let actual = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Use(item) => Some(compact_tokens(item)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let expected = expected
+        .iter()
+        .map(|item| compact_source_tokens(item))
+        .collect::<Vec<_>>();
+    if actual != expected {
+        return Err(format!(
+            "{relative} production top-level import authority drifted: expected {expected:?}, found {actual:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_event_store_migrations_import_authority(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    validate_exact_top_level_imports(
+        relative,
+        file,
+        &[
+            "use crate::RadrootsEventStoreError;",
+            "use crate::generated::food_availability_projection_manifest as food_manifest;",
+            "use crate::generated::nip09_reconciliation_manifest as nip09_manifest;",
+            "use crate::generated::source_maintenance_manifest;",
+            "use sha2::{Digest, Sha256};",
+            "use std::collections::BTreeSet;",
+        ],
+    )
+}
+
+fn validate_event_store_schema_import_authority(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    validate_exact_top_level_imports(
+        relative,
+        file,
+        &[
+            "use crate::RadrootsEventStoreError;",
+            r#"use crate::migrations::{
+                EVENT_STORE_LEDGER_CREATE_DDL, EVENT_STORE_LEDGER_DDL, EVENT_STORE_LEDGER_NAME,
+                EVENT_STORE_MIGRATIONS, EventStoreMigration, EventStoreMigrationHook,
+                RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT, RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+                is_event_store_governed_schema_name, is_event_store_owned_table_name,
+                migration_for_version, sqlite_identifier_starts_with,
+                validate_embedded_migration_registry, validate_migration_registry,
+            };"#,
+            "use sha2::{Digest, Sha256};",
+            "use sqlx::{Row, Sqlite, SqliteConnection, SqlitePool, Transaction};",
+            "use std::collections::{BTreeMap, BTreeSet};",
+            r#"use crate::nip09::reconciliation_v1::{
+                OsSourceGenerationProvider, ReconciliationCapacityLimits,
+                SourceGenerationProvider, apply_reconciliation_hook,
+                validate_active_hook_state_fast, validate_reconciliation_capacity,
+            };"#,
+            r#"use crate::source_maintenance_v1::{
+                apply_source_maintenance_hook_v1,
+                validate_no_persisted_ephemeral_raw_rows_v1,
+                validate_source_capacity_authority_full_v1,
+            };"#,
+            r#"use crate::store::food_availability_projection_v1::{
+                apply_food_availability_projection_hook_v1,
+                validate_food_availability_projection_hook_state_fast_v1,
+            };"#,
+        ],
+    )
+}
+
+pub(super) fn validate_current_event_store_successor_authority(
+    workspace_root: &Path,
+) -> Result<(), String> {
+    validate_privileged_store_authority(workspace_root)?;
+
+    let migrations_bytes =
+        read_regular_file(workspace_root, EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE)?;
+    let migrations =
+        parse_canonical_production_rust(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &migrations_bytes)?;
+    validate_event_store_migrations_import_authority(
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+        &migrations,
+    )?;
+    let expected_inputs =
+        expected_event_store_migration_compiler_inputs(workspace_root, &migrations)?;
+    validate_compiler_macro_inputs(
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+        &migrations,
+        &expected_inputs,
+    )?;
+    validate_migration_registry_reachability(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &migrations)?;
+    validate_manifest_validator_reachability(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &migrations)?;
+    validate_source_maintenance_manifest_validator_reachability(
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+        &migrations,
+    )?;
+    validate_event_store_schema_name_matchers(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &migrations)?;
+    validate_source_maintenance_migration_bindings(
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+        &migrations,
+    )?;
+    validate_event_store_migration_support_authority(
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+        &migrations,
+    )?;
+
+    let schema_bytes = read_regular_file(workspace_root, EVENT_STORE_SCHEMA_SOURCE_RELATIVE)?;
+    let schema =
+        parse_canonical_production_rust(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &schema_bytes)?;
+    validate_event_store_schema_import_authority(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &schema)?;
+    validate_schema_runtime_reachability(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &schema)?;
+    validate_schema_migration_execution_authority(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &schema)?;
+    validate_source_maintenance_schema_dispatch(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &schema)?;
+    validate_source_generation_rollback_authority(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &schema)?;
+
+    let store_bytes = read_regular_file(workspace_root, EVENT_STORE_STORE_SOURCE_RELATIVE)?;
+    let store = parse_canonical_production_rust(EVENT_STORE_STORE_SOURCE_RELATIVE, &store_bytes)?;
+    validate_sqlite_encoding_preflight_authority(EVENT_STORE_STORE_SOURCE_RELATIVE, &store)?;
+    validate_source_maintenance_runtime_token_authority(workspace_root)
+}
+
 fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), String> {
     let lib_bytes = read_regular_file(workspace_root, EVENT_STORE_LIB_SOURCE_RELATIVE)?;
     let lib_source = std::str::from_utf8(&lib_bytes).map_err(|error| {
@@ -5859,6 +6094,22 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "super::protocol_storage_v1::stored_raw_event_from_row",
         ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::advance_source_capacity_after_insert_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::preflight_unique_raw_source_append_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::raw_source_capacity_delta_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1",
+        ),
     ]
     .into_iter()
     .map(|(relative, route)| (relative.to_owned(), route.to_owned()))
@@ -5871,45 +6122,89 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
 
     let expected_calls = [
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "associated:source_capacity_v1",
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:inspect_event_store_status",
             "crate::schema::validate_event_store_temp_schema",
         ),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "free:configure_pool",
+            "validate_main_database_encoding",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:configure_pool",
             "crate::schema::validate_event_store_temp_schema",
         ),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:ingest_event_in_transaction",
             "crate::schema::validate_event_store_temp_schema",
         ),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:ingest_event_in_transaction",
             "ingest_event_protocol_reconciliation_v1",
         ),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:ingest_event_in_transaction",
             "PostCoreExtensionCapabilities::new",
         ),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:ingest_event_in_transaction",
             "dispatch_post_core_extensions",
         ),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:ingest_event_in_transaction",
             "validate_protocol_post_extensions",
         ),
-        ("associated:apply_v1", "PostCoreStorageV1::new"),
-        ("associated:apply_v1", "apply_post_core_extensions_v1"),
+        (
+            POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
+            "associated:apply_v1",
+            "PostCoreStorageV1::new",
+        ),
+        (
+            POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
+            "associated:apply_v1",
+            "apply_post_core_extensions_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "raw_source_capacity_delta_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "preflight_unique_raw_source_append_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "advance_source_capacity_after_insert_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:read_protocol_post_extension_authority_seal",
+            "validate_source_capacity_authority_fast_v1",
+        ),
     ]
     .into_iter()
-    .enumerate()
-    .map(|(index, (function, route))| PrivilegedStoreCallSite {
-        relative: if index < 7 {
-            EVENT_STORE_STORE_SOURCE_RELATIVE
-        } else {
-            POST_CORE_CAPABILITIES_SOURCE_RELATIVE
-        }
-        .to_owned(),
+    .map(|(relative, function, route)| PrivilegedStoreCallSite {
+        relative: relative.to_owned(),
         function: function.to_owned(),
         route: route.to_owned(),
     })
@@ -5933,41 +6228,50 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
         governed_regular_file_inventory(workspace_root, EVENT_STORE_SOURCE_ROOT_RELATIVE)?
             .into_iter()
             .filter(|relative| relative.ends_with(".rs"))
-            .filter(|relative| !SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS.contains(&relative.as_str()))
             .collect::<Vec<_>>();
     let mut definitions = Vec::new();
     let mut calls = Vec::new();
+    let mut imports = Vec::new();
     for relative in source_paths {
         let bytes = read_regular_file(workspace_root, &relative)?;
         let file = parse_canonical_production_rust(&relative, &bytes)?;
-        let expected_macro_inputs = match relative.as_str() {
-            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE => {
-                expected_event_store_migration_compiler_inputs(workspace_root, &file)?
-            }
-            RESULT_VECTOR_EXECUTOR_RELATIVE => [
-                "include_bytes!(\"../../../tests/fixtures/nip09_reconciliation.v1.json\")",
-                "include_str!(\"../../../migrations/0001_event_store.up.sql\")",
-                "include_str!(\"../../../migrations/0002_nip09.up.sql\")",
-            ]
-            .map(str::to_owned)
-            .to_vec(),
-            _ => Vec::new(),
-        };
-        validate_compiler_macro_inputs(&relative, &file, &expected_macro_inputs)?;
-        validate_event_store_module_source_graph(&relative, &file)?;
-        validate_event_store_trait_impl_authority(&relative, &file)?;
+        if !SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS.contains(&relative.as_str()) {
+            let expected_macro_inputs = match relative.as_str() {
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE => {
+                    expected_event_store_migration_compiler_inputs(workspace_root, &file)?
+                }
+                RESULT_VECTOR_EXECUTOR_RELATIVE => [
+                    "include_bytes!(\"../../../tests/fixtures/nip09_reconciliation.v1.json\")",
+                    "include_str!(\"../../../migrations/0001_event_store.up.sql\")",
+                    "include_str!(\"../../../migrations/0002_nip09.up.sql\")",
+                ]
+                .map(str::to_owned)
+                .to_vec(),
+                _ => Vec::new(),
+            };
+            validate_compiler_macro_inputs(&relative, &file, &expected_macro_inputs)?;
+            validate_event_store_module_source_graph(&relative, &file)?;
+            validate_event_store_trait_impl_authority(&relative, &file)?;
+        }
         let mut audit = PrivilegedTerminalAudit {
             relative: &relative,
             current_function: None,
             direct_callee: false,
+            scope_depth: 0,
             definitions: Vec::new(),
             calls: Vec::new(),
+            imports: Vec::new(),
             error: None,
         };
         syn::visit::Visit::visit_file(&mut audit, &file);
-        let (mut file_definitions, mut file_calls) = audit.finish()?;
+        let PrivilegedTerminalAuthority {
+            definitions: mut file_definitions,
+            calls: mut file_calls,
+            imports: mut file_imports,
+        } = audit.finish()?;
         definitions.append(&mut file_definitions);
         calls.append(&mut file_calls);
+        imports.append(&mut file_imports);
     }
     definitions.sort();
     calls.sort_by(|left, right| {
@@ -5977,11 +6281,91 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
             &right.route,
         ))
     });
+    imports.sort();
+
+    let mut expected_imports = [
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "self::post_core_extension_dispatcher::dispatch_post_core_extensions",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "self::protocol_reconciliation_v1::ingest_event_protocol_reconciliation_v1",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "self::protocol_reconciliation_v1::validate_protocol_post_extensions",
+        ),
+        (
+            POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
+            "super::post_core_extensions_v1::apply_post_core_extensions_v1",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::nip09::reconciliation_v1::validate_active_hook_state_fast",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::apply_source_maintenance_hook_v1",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_no_persisted_ephemeral_raw_rows_v1",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_full_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::advance_source_capacity_after_insert_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::preflight_unique_raw_source_append_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::raw_source_capacity_delta_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1",
+        ),
+    ]
+    .into_iter()
+    .map(|(relative, route)| (relative.to_owned(), route.to_owned()))
+    .collect::<Vec<_>>();
+    expected_imports.sort();
+    if imports != expected_imports {
+        return Err(format!(
+            "event-store SourceMaintenance privileged import authority drifted: expected {expected_imports:?}, found {imports:?}"
+        ));
+    }
 
     let mut expected_definitions = [
+        (EVENT_STORE_SCHEMA_SOURCE_RELATIVE, "apply_migration_down"),
+        (EVENT_STORE_SCHEMA_SOURCE_RELATIVE, "apply_migration_hook"),
+        (EVENT_STORE_SCHEMA_SOURCE_RELATIVE, "apply_migration_up"),
         (
             EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
             "validate_event_store_temp_schema",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "validate_migration_hook_state",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "validate_rollback_preserves_source_generation_history",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "validate_main_database_encoding",
+        ),
+        (
+            "crates/event_store/src/nip09/reconciliation_v1.rs",
+            "validate_active_hook_state_fast",
         ),
         (
             POST_CORE_DISPATCHER_SOURCE_RELATIVE,
@@ -5999,6 +6383,42 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "validate_protocol_post_extensions",
         ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "advance_source_capacity_after_insert_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "apply_source_maintenance_hook_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "bind_source_capacity_to_generation_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "preflight_source_generation_append_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "preflight_unique_raw_source_append_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "raw_source_capacity_delta_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "validate_no_persisted_ephemeral_raw_rows_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "validate_source_capacity_authority_full_v1",
+        ),
     ]
     .into_iter()
     .map(|(relative, name)| PrivilegedTerminalDefinition {
@@ -6014,6 +6434,11 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
     }
 
     let mut expected_calls = [
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "free:configure_pool",
+            "validate_main_database_encoding",
+        ),
         (
             EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:configure_pool",
@@ -6058,6 +6483,146 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
             POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
             "associated:apply_v1",
             "apply_post_core_extensions_v1",
+        ),
+        (
+            "crates/event_store/src/nip09/reconciliation_v1.rs",
+            "free:apply_reconciliation_hook",
+            "crate::source_maintenance_v1::bind_source_capacity_to_generation_v1",
+        ),
+        (
+            "crates/event_store/src/nip09/reconciliation_v1.rs",
+            "free:apply_reconciliation_hook",
+            "crate::source_maintenance_v1::preflight_source_generation_append_v1",
+        ),
+        (
+            "crates/event_store/src/nip09/reconciliation_v1.rs",
+            "free:apply_reconciliation_hook",
+            "validate_active_hook_state_fast",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:apply_migration_hook",
+            "apply_source_maintenance_hook_v1",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:migrate_event_store_schema_with_registry_and_generation_provider",
+            "validate_no_persisted_ephemeral_raw_rows_v1",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:migrate_schema_on_connection",
+            "apply_migration_hook",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:migrate_schema_on_connection",
+            "apply_migration_up",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:migrate_schema_on_connection",
+            "apply_migration_up",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:migrate_schema_on_connection",
+            "validate_no_persisted_ephemeral_raw_rows_v1",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:rollback_schema_on_connection",
+            "apply_migration_down",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:rollback_schema_on_connection",
+            "validate_rollback_preserves_source_generation_history",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:validate_applied_migration_hooks",
+            "validate_migration_hook_state",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:validate_migration_hook_state",
+            "validate_active_hook_state_fast",
+        ),
+        (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "free:validate_migration_hook_state",
+            "validate_source_capacity_authority_full_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:advance_source_capacity_after_insert_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:apply_source_maintenance_hook_v1",
+            "validate_no_persisted_ephemeral_raw_rows_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:apply_source_maintenance_hook_v1",
+            "validate_source_capacity_authority_full_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:bind_source_capacity_to_generation_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:preflight_source_generation_append_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:preflight_unique_raw_source_append_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:validate_source_capacity_authority_full_v1",
+            "validate_no_persisted_ephemeral_raw_rows_v1",
+        ),
+        (
+            "crates/event_store/src/source_maintenance_v1.rs",
+            "free:validate_source_capacity_authority_full_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "associated:source_capacity_v1",
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "advance_source_capacity_after_insert_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "preflight_unique_raw_source_append_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "raw_source_capacity_delta_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:ingest_event_protocol_reconciliation_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "free:read_protocol_post_extension_authority_seal",
+            "validate_source_capacity_authority_fast_v1",
         ),
     ]
     .into_iter()
@@ -6174,7 +6739,7 @@ fn validate_event_store_trait_impl_authority(
         "crates/event_store/src/error.rs" => &[
             (
                 "core::fmt::Display",
-                "RadrootsEventStoreReconciliationResource",
+                "RadrootsEventStoreSourceCapacityResourceV1",
             ),
             ("From<RadrootsTransportError>", "RadrootsEventStoreError"),
         ],
@@ -6200,7 +6765,7 @@ fn validate_event_store_trait_impl_authority(
         ));
     }
     let expected_inherent_self_types: &[&str] = match relative {
-        "crates/event_store/src/error.rs" => &["RadrootsEventStoreReconciliationResource"],
+        "crates/event_store/src/error.rs" => &["RadrootsEventStoreSourceCapacityResourceV1"],
         EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE => &["EventStoreMigrationHook"],
         "crates/event_store/src/model.rs" => &[
             "RadrootsTransportObservationMessage",
@@ -6230,6 +6795,9 @@ fn validate_event_store_trait_impl_authority(
             "TransitionOrigin",
         ],
         EVENT_STORE_STORE_SOURCE_RELATIVE => &["RadrootsEventStore"],
+        "crates/event_store/src/source_maintenance_v1.rs" => {
+            &["RadrootsEventStoreSourceCapacityV1"]
+        }
         POST_CORE_CAPABILITIES_SOURCE_RELATIVE => &["PostCoreExtensionCapabilities<'borrow,'db>"],
         POST_CORE_STORAGE_SOURCE_RELATIVE => {
             &["TradeProjectionWrite<'a>", "PostCoreStorageV1<'borrow,'db>"]
@@ -6273,6 +6841,32 @@ fn validate_event_store_trait_impl_authority(
             &food_manifest_arm.body,
             "Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256)",
         )?;
+        let source_id_arm = exact_associated_match_arm(
+            relative,
+            file,
+            "EventStoreMigrationHook",
+            "id",
+            "SourceMaintenanceV1",
+        )?;
+        validate_exact_arm_expression(
+            relative,
+            "EventStoreMigrationHook::id SourceMaintenanceV1 arm",
+            &source_id_arm.body,
+            "source_maintenance_manifest::SOURCE_MAINTENANCE_HOOK_ID",
+        )?;
+        let source_manifest_arm = exact_associated_match_arm(
+            relative,
+            file,
+            "EventStoreMigrationHook",
+            "manifest_sha256",
+            "SourceMaintenanceV1",
+        )?;
+        validate_exact_arm_expression(
+            relative,
+            "EventStoreMigrationHook::manifest_sha256 SourceMaintenanceV1 arm",
+            &source_manifest_arm.body,
+            "Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256)",
+        )?;
 
         let migration_impls = file
             .items
@@ -6294,6 +6888,7 @@ fn validate_event_store_trait_impl_authority(
         };
         let mut predecessor_projection = (*migration_impl).clone();
         let mut removed_food_arms = 0usize;
+        let mut removed_source_maintenance_arms = 0usize;
         for item in &mut predecessor_projection.items {
             let syn::ImplItem::Fn(function) = item else {
                 continue;
@@ -6310,11 +6905,24 @@ fn validate_event_store_trait_impl_authority(
                     .cloned()
                     .collect();
                 removed_food_arms += before - expression.arms.len();
+                let before = expression.arms.len();
+                expression.arms = expression
+                    .arms
+                    .iter()
+                    .filter(|arm| !syntax_contains_ident(&arm.pat, "SourceMaintenanceV1"))
+                    .cloned()
+                    .collect();
+                removed_source_maintenance_arms += before - expression.arms.len();
             }
         }
         if removed_food_arms != 2 {
             return Err(format!(
                 "{relative} successor migration hook impl must add exactly two FoodAvailabilityProjectionV1 arms; found {removed_food_arms}"
+            ));
+        }
+        if removed_source_maintenance_arms != 2 {
+            return Err(format!(
+                "{relative} authenticated SourceMaintenance migration hook impl must add exactly two SourceMaintenanceV1 arms; found {removed_source_maintenance_arms}"
             ));
         }
         let predecessor_inherent_impls = vec![compact_tokens(&predecessor_projection)];
@@ -6332,22 +6940,29 @@ struct PrivilegedTerminalAudit<'a> {
     relative: &'a str,
     current_function: Option<String>,
     direct_callee: bool,
+    scope_depth: usize,
     definitions: Vec<PrivilegedTerminalDefinition>,
     calls: Vec<PrivilegedStoreCallSite>,
+    imports: Vec<(String, String)>,
     error: Option<String>,
 }
 
+struct PrivilegedTerminalAuthority {
+    definitions: Vec<PrivilegedTerminalDefinition>,
+    calls: Vec<PrivilegedStoreCallSite>,
+    imports: Vec<(String, String)>,
+}
+
 impl PrivilegedTerminalAudit<'_> {
-    fn finish(
-        self,
-    ) -> Result<
-        (
-            Vec<PrivilegedTerminalDefinition>,
-            Vec<PrivilegedStoreCallSite>,
-        ),
-        String,
-    > {
-        self.error.map_or(Ok((self.definitions, self.calls)), Err)
+    fn finish(self) -> Result<PrivilegedTerminalAuthority, String> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+        Ok(PrivilegedTerminalAuthority {
+            definitions: self.definitions,
+            calls: self.calls,
+            imports: self.imports,
+        })
     }
 
     fn fail(&mut self, reason: impl Into<String>) {
@@ -6365,6 +6980,14 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedTerminalAudit<'_> {
     fn visit_item_fn(&mut self, function: &'ast syn::ItemFn) {
         let name = function.sig.ident.to_string();
         if is_privileged_terminal(&name) {
+            if self.current_function.is_some()
+                || !is_authoritative_privileged_terminal_definition(self.relative, &name)
+            {
+                self.fail(format!(
+                    "shadows privileged authority with function `{name}`"
+                ));
+                return;
+            }
             self.definitions.push(PrivilegedTerminalDefinition {
                 relative: self.relative.to_owned(),
                 name: name.clone(),
@@ -6376,6 +6999,13 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedTerminalAudit<'_> {
     }
 
     fn visit_impl_item_fn(&mut self, function: &'ast syn::ImplItemFn) {
+        if is_privileged_terminal(&function.sig.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with associated function `{}`",
+                function.sig.ident
+            ));
+            return;
+        }
         let previous = self
             .current_function
             .replace(format!("associated:{}", function.sig.ident));
@@ -6384,6 +7014,13 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedTerminalAudit<'_> {
     }
 
     fn visit_trait_item_fn(&mut self, function: &'ast syn::TraitItemFn) {
+        if is_privileged_terminal(&function.sig.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with trait function `{}`",
+                function.sig.ident
+            ));
+            return;
+        }
         let previous = self
             .current_function
             .replace(format!("trait:{}", function.sig.ident));
@@ -6394,20 +7031,154 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedTerminalAudit<'_> {
     fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
         let mut routes = Vec::new();
         flatten_use_tree("", &item_use.tree, &mut routes);
+        if let Some(route) = routes.iter().find(|route| route.ends_with("::*")) {
+            self.fail(format!(
+                "uses unauditable glob import `{route}` in privileged source scope"
+            ));
+            return;
+        }
         if let Some(route) = routes.iter().find(|route| {
             let source = route
                 .split_once(" as ")
                 .map_or(route.as_str(), |(source, _)| source);
             route.contains(" as ")
-                && use_route_local_binding(source)
+                && (use_route_local_binding(source)
                     .is_some_and(is_privileged_terminal_or_storage_type)
+                    || use_route_local_binding(route)
+                        .is_some_and(is_privileged_terminal_or_storage_type))
         }) {
             self.fail(format!(
                 "aliases or reexports privileged source terminal through `{route}`"
             ));
             return;
         }
+        for route in routes
+            .iter()
+            .filter(|route| use_route_local_binding(route).is_some_and(is_privileged_terminal))
+        {
+            if self.scope_depth != 0
+                || !is_inherited_visibility(&item_use.vis)
+                || !item_use.attrs.is_empty()
+                || !is_approved_privileged_terminal_import(self.relative, route)
+            {
+                self.fail(format!(
+                    "privileged terminal import `{route}` must be an exact private top-level approved route"
+                ));
+                return;
+            }
+            self.imports
+                .push((self.relative.to_owned(), route.to_owned()));
+        }
+        if let Some(route) = routes.iter().find(|route| {
+            use_route_local_binding(route).is_some_and(is_privileged_terminal_or_storage_type)
+                && (self.scope_depth != 0 || !is_inherited_visibility(&item_use.vis))
+        }) {
+            self.fail(format!(
+                "privileged terminal import `{route}` must remain private and top-level"
+            ));
+            return;
+        }
         syn::visit::visit_item_use(self, item_use);
+    }
+
+    fn visit_block(&mut self, block: &'ast syn::Block) {
+        self.scope_depth += 1;
+        syn::visit::visit_block(self, block);
+        self.scope_depth -= 1;
+    }
+
+    fn visit_item_mod(&mut self, module: &'ast syn::ItemMod) {
+        if is_privileged_terminal(&module.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with module `{}`",
+                module.ident
+            ));
+            return;
+        }
+        if module.content.is_some() {
+            self.scope_depth += 1;
+            syn::visit::visit_item_mod(self, module);
+            self.scope_depth -= 1;
+        } else {
+            syn::visit::visit_item_mod(self, module);
+        }
+    }
+
+    fn visit_pat_ident(&mut self, pattern: &'ast syn::PatIdent) {
+        if is_privileged_terminal(&pattern.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with binding `{}`",
+                pattern.ident
+            ));
+            return;
+        }
+        syn::visit::visit_pat_ident(self, pattern);
+    }
+
+    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
+        if is_privileged_terminal(&item.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with const `{}`",
+                item.ident
+            ));
+            return;
+        }
+        syn::visit::visit_item_const(self, item);
+    }
+
+    fn visit_item_static(&mut self, item: &'ast syn::ItemStatic) {
+        if is_privileged_terminal(&item.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with static `{}`",
+                item.ident
+            ));
+            return;
+        }
+        syn::visit::visit_item_static(self, item);
+    }
+
+    fn visit_item_type(&mut self, item: &'ast syn::ItemType) {
+        if is_privileged_terminal(&item.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with type alias `{}`",
+                item.ident
+            ));
+            return;
+        }
+        syn::visit::visit_item_type(self, item);
+    }
+
+    fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
+        if is_privileged_terminal(&item.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with struct constructor `{}`",
+                item.ident
+            ));
+            return;
+        }
+        syn::visit::visit_item_struct(self, item);
+    }
+
+    fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
+        if is_privileged_terminal(&item.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with enum `{}`",
+                item.ident
+            ));
+            return;
+        }
+        syn::visit::visit_item_enum(self, item);
+    }
+
+    fn visit_item_union(&mut self, item: &'ast syn::ItemUnion) {
+        if is_privileged_terminal(&item.ident.to_string()) {
+            self.fail(format!(
+                "shadows privileged authority with union `{}`",
+                item.ident
+            ));
+            return;
+        }
+        syn::visit::visit_item_union(self, item);
     }
 
     fn visit_expr_call(&mut self, expression: &'ast syn::ExprCall) {
@@ -6466,17 +7237,10 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedTerminalAudit<'_> {
     }
 
     fn visit_macro(&mut self, item: &'ast syn::Macro) {
-        if [
-            "validate_event_store_temp_schema",
-            "ingest_event_protocol_reconciliation_v1",
-            "dispatch_post_core_extensions",
-            "apply_post_core_extensions_v1",
-            "validate_protocol_post_extensions",
-            "PostCoreExtensionCapabilities",
-            "PostCoreStorageV1",
-        ]
-        .iter()
-        .any(|name| syntax_contains_ident(item, name))
+        if PRIVILEGED_TERMINAL_NAMES
+            .iter()
+            .chain(["PostCoreExtensionCapabilities", "PostCoreStorageV1"].iter())
+            .any(|name| syntax_contains_ident(item, name))
         {
             self.fail(format!(
                 "references privileged terminal through macro `{}`",
@@ -6489,19 +7253,101 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedTerminalAudit<'_> {
 }
 
 fn is_privileged_terminal(name: &str) -> bool {
-    matches!(
-        name,
-        "validate_event_store_temp_schema"
-            | "ingest_event_protocol_reconciliation_v1"
-            | "dispatch_post_core_extensions"
-            | "apply_post_core_extensions_v1"
-            | "validate_protocol_post_extensions"
-    )
+    PRIVILEGED_TERMINAL_NAMES.contains(&name)
 }
 
 fn is_privileged_terminal_or_storage_type(name: &str) -> bool {
     is_privileged_terminal(name)
         || matches!(name, "PostCoreExtensionCapabilities" | "PostCoreStorageV1")
+}
+
+fn is_authoritative_privileged_terminal_definition(relative: &str, name: &str) -> bool {
+    matches!(
+        (relative, name),
+        (EVENT_STORE_SCHEMA_SOURCE_RELATIVE, "apply_migration_down")
+            | (EVENT_STORE_SCHEMA_SOURCE_RELATIVE, "apply_migration_hook")
+            | (EVENT_STORE_SCHEMA_SOURCE_RELATIVE, "apply_migration_up")
+            | (
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                "validate_event_store_temp_schema"
+            )
+            | (
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                "validate_migration_hook_state"
+            )
+            | (
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                "validate_rollback_preserves_source_generation_history"
+            )
+            | (
+                "crates/event_store/src/nip09/reconciliation_v1.rs",
+                "validate_active_hook_state_fast"
+            )
+            | (
+                EVENT_STORE_STORE_SOURCE_RELATIVE,
+                "validate_main_database_encoding"
+            )
+            | (
+                POST_CORE_DISPATCHER_SOURCE_RELATIVE,
+                "dispatch_post_core_extensions"
+            )
+            | (
+                POST_CORE_EXTENSION_SOURCE_RELATIVE,
+                "apply_post_core_extensions_v1"
+            )
+            | (
+                EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+                "ingest_event_protocol_reconciliation_v1"
+            )
+            | (
+                EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+                "validate_protocol_post_extensions"
+            )
+    ) || (relative == "crates/event_store/src/source_maintenance_v1.rs"
+        && SOURCE_MAINTENANCE_PRIVILEGED_TERMINALS.contains(&name))
+}
+
+fn is_approved_privileged_terminal_import(relative: &str, route: &str) -> bool {
+    matches!(
+        (relative, route),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "self::post_core_extension_dispatcher::dispatch_post_core_extensions"
+        ) | (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "self::protocol_reconciliation_v1::ingest_event_protocol_reconciliation_v1"
+        ) | (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "self::protocol_reconciliation_v1::validate_protocol_post_extensions"
+        ) | (
+            POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
+            "super::post_core_extensions_v1::apply_post_core_extensions_v1"
+        ) | (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::nip09::reconciliation_v1::validate_active_hook_state_fast"
+        ) | (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::apply_source_maintenance_hook_v1"
+        ) | (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_no_persisted_ephemeral_raw_rows_v1"
+        ) | (
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_full_v1"
+        ) | (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::advance_source_capacity_after_insert_v1"
+        ) | (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::preflight_unique_raw_source_append_v1"
+        ) | (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::raw_source_capacity_delta_v1"
+        ) | (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1"
+        )
+    )
 }
 
 fn validate_event_store_lib_resolution_authority(
@@ -6552,7 +7398,21 @@ fn validate_event_store_lib_resolution_authority(
             ));
         }
     }
-    let required_module_names = required_modules.into_iter().collect::<BTreeSet<_>>();
+    let predecessor_module_names = required_modules.into_iter().collect::<BTreeSet<_>>();
+    if !predecessor_module_names.is_subset(
+        &module_names
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+    ) {
+        return Err(format!(
+            "{relative} must retain every predecessor-governed private `sqlite` module; found {module_names:?}"
+        ));
+    }
+    let required_module_names = predecessor_module_names
+        .into_iter()
+        .chain(SUCCESSOR_08D_LIB_MODULES)
+        .collect::<BTreeSet<_>>();
     if module_names
         .iter()
         .map(String::as_str)
@@ -6560,7 +7420,7 @@ fn validate_event_store_lib_resolution_authority(
         != required_module_names
     {
         return Err(format!(
-            "{relative} must contain exactly the seven governed private `sqlite` modules; found {module_names:?}"
+            "{relative} must contain exactly the predecessor modules plus the authenticated SourceMaintenance private `sqlite` module; found {module_names:?}"
         ));
     }
 
@@ -6615,8 +7475,11 @@ fn validate_event_store_lib_resolution_authority(
                     "{relative} reexports duplicate local binding `{binding}`"
                 ));
             }
-            if !EVENT_STORE_FIXED_PUBLIC_REEXPORTS.contains(&route.as_str())
+            let inherited_current = EVENT_STORE_FIXED_PUBLIC_REEXPORTS.contains(&route.as_str())
+                && !SUCCESSOR_08D_RETIRED_PUBLIC_REEXPORTS.contains(&route.as_str());
+            if !inherited_current
                 && !SUCCESSOR_08C_PUBLIC_REEXPORTS.contains(&route.as_str())
+                && !SUCCESSOR_08D_PUBLIC_REEXPORTS.contains(&route.as_str())
             {
                 return Err(format!(
                     "{relative} public export inventory is closed for this contract version; found unsupported reexport `{route}`"
@@ -6627,7 +7490,9 @@ fn validate_event_store_lib_resolution_authority(
     }
     let expected_uses = EVENT_STORE_FIXED_PUBLIC_REEXPORTS
         .into_iter()
+        .filter(|route| !SUCCESSOR_08D_RETIRED_PUBLIC_REEXPORTS.contains(route))
         .chain(SUCCESSOR_08C_PUBLIC_REEXPORTS)
+        .chain(SUCCESSOR_08D_PUBLIC_REEXPORTS)
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     let actual_use_set = actual_uses.iter().cloned().collect::<BTreeSet<_>>();
@@ -6784,8 +7649,12 @@ fn is_privileged_store_import_route(route: &str) -> bool {
     ]
     .iter()
     .any(|segment| source_route.split("::").any(|actual| actual == *segment))
-        || use_route_local_binding(source_route).is_some_and(is_governed_store_import_binding)
-        || use_route_local_binding(route).is_some_and(is_governed_store_import_binding)
+        || use_route_local_binding(source_route).is_some_and(|binding| {
+            is_governed_store_import_binding(binding) || is_privileged_terminal(binding)
+        })
+        || use_route_local_binding(route).is_some_and(|binding| {
+            is_governed_store_import_binding(binding) || is_privileged_terminal(binding)
+        })
         || route.ends_with("::*")
 }
 
@@ -6821,14 +7690,7 @@ fn is_governed_store_import_binding(binding: &str) -> bool {
 }
 
 fn is_privileged_store_value_binding(binding: &str) -> bool {
-    matches!(
-        binding,
-        "dispatch_post_core_extensions"
-            | "apply_post_core_extensions_v1"
-            | "ingest_event_protocol_reconciliation_v1"
-            | "validate_event_store_temp_schema"
-            | "validate_protocol_post_extensions"
-    )
+    is_privileged_terminal(binding)
 }
 
 struct PrivilegedStoreReferenceAudit<'a> {
@@ -7215,6 +8077,9 @@ fn is_authoritative_privileged_store_definition(relative: &str, name: &str) -> b
     matches!(
         (relative, name),
         (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "validate_main_database_encoding"
+        ) | (
             POST_CORE_DISPATCHER_SOURCE_RELATIVE,
             "dispatch_post_core_extensions"
         ) | (
@@ -7265,35 +8130,24 @@ fn is_allowed_privileged_store_attribute(attribute: &syn::Attribute) -> bool {
 }
 
 fn is_privileged_store_call_route(route: &str) -> bool {
-    matches!(
-        route.rsplit("::").next(),
-        Some(
-            "ingest_event_protocol_reconciliation_v1"
-                | "dispatch_post_core_extensions"
-                | "apply_post_core_extensions_v1"
-                | "validate_protocol_post_extensions"
-                | "validate_event_store_temp_schema"
-        )
-    ) || route
-        .split("::")
-        .collect::<Vec<_>>()
-        .windows(2)
-        .any(|segments| {
-            segments == ["PostCoreExtensionCapabilities", "new"]
-                || segments == ["PostCoreStorageV1", "new"]
-        })
+    route
+        .rsplit("::")
+        .next()
+        .is_some_and(is_privileged_terminal)
+        || route
+            .split("::")
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|segments| {
+                segments == ["PostCoreExtensionCapabilities", "new"]
+                    || segments == ["PostCoreStorageV1", "new"]
+            })
 }
 
 fn expression_contains_privileged_store_authority(node: &impl ToTokens) -> bool {
-    [
-        "ingest_event_protocol_reconciliation_v1",
-        "dispatch_post_core_extensions",
-        "apply_post_core_extensions_v1",
-        "validate_protocol_post_extensions",
-        "validate_event_store_temp_schema",
-    ]
-    .iter()
-    .any(|ident| syntax_contains_ident(node, ident))
+    PRIVILEGED_TERMINAL_NAMES
+        .iter()
+        .any(|ident| syntax_contains_ident(node, ident))
         || (["PostCoreExtensionCapabilities", "PostCoreStorageV1"]
             .iter()
             .any(|name| syntax_contains_ident(node, name))
@@ -10984,9 +11838,10 @@ fn validate_migration_registry_reachability(
     let statements = &function.block.stmts;
     let ledger_guard = "if EVENT_STORE_LEDGER_CREATE_DDL.strip_prefix(\"CREATE TABLE main.\")!=EVENT_STORE_LEDGER_DDL.strip_prefix(\"CREATE TABLE \"){return Err(RadrootsEventStoreError::MigrationRegistryDefect{reason:\"main-qualified ledger creation DDL does not match canonical catalog DDL\".to_owned(),});}";
     let predecessor_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::Nip09ReconciliationV1}){validate_generated_nip09_manifest_descriptor()?;}";
-    let successor_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::FoodAvailabilityProjectionV1}){validate_generated_food_availability_projection_manifest_descriptor()?;}";
+    let food_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::FoodAvailabilityProjectionV1}){validate_generated_food_availability_projection_manifest_descriptor()?;}";
+    let source_maintenance_manifest_guard = "if registry.iter().any(|migration|migration.hook==EventStoreMigrationHook::SourceMaintenanceV1){validate_generated_source_maintenance_manifest_descriptor()?;}";
     let range_guard = "if minimum==0||current<minimum||registry.is_empty(){return Err(RadrootsEventStoreError::MigrationRegistryDefect{reason:format!(\"migration version range {minimum}..={current} requires a non-empty positive registry\"),});}";
-    let valid = statements.len() == 10
+    let valid = statements.len() == 12
         && statements.first().is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(ledger_guard)
         })
@@ -10994,41 +11849,50 @@ fn validate_migration_registry_reachability(
             compact_tokens(statement) == compact_source_tokens(predecessor_manifest_guard)
         })
         && statements.get(2).is_some_and(|statement| {
-            compact_tokens(statement) == compact_source_tokens(successor_manifest_guard)
+            compact_tokens(statement) == compact_source_tokens(food_manifest_guard)
         })
         && statements.get(3).is_some_and(|statement| {
+            compact_tokens(statement) == compact_source_tokens(source_maintenance_manifest_guard)
+        })
+        && statements.get(4).is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(range_guard)
         })
         && matches!(
-            statements.get(4),
+            statements.get(5),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("expected_version")
         )
         && matches!(
-            statements.get(5),
+            statements.get(6),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("owned_object_names")
         )
         && matches!(
-            statements.get(6),
+            statements.get(7),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("owned_table_names")
         )
         && matches!(
-            statements.get(7),
+            statements.get(8),
+            Some(syn::Stmt::Local(local))
+                if local_pattern_ident(&local.pat).as_deref() == Some("migration_hook_ids")
+        )
+        && matches!(
+            statements.get(9),
             Some(syn::Stmt::Expr(syn::Expr::ForLoop(_), _))
         )
         && matches!(
-            statements.get(8),
+            statements.get(10),
             Some(syn::Stmt::Expr(syn::Expr::If(_), _))
         )
         && statements
-            .get(9)
+            .get(11)
             .and_then(direct_statement_expression)
             .is_some_and(|expression| compact_tokens(expression) == "Ok(())");
     if !valid {
         return Err(format!(
-            "{relative} `validate_migration_registry` authoritative top-level statement skeleton drifted"
+            "{relative} `validate_migration_registry` authoritative top-level statement skeleton drifted: found {:?}",
+            statements.iter().map(compact_tokens).collect::<Vec<_>>()
         ));
     }
     Ok(())
@@ -11092,6 +11956,849 @@ fn validate_manifest_validator_reachability(
     if !valid {
         return Err(format!(
             "{relative} generated-manifest validator authoritative top-level statement skeleton drifted"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_source_maintenance_manifest_validator_reachability(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    const EXPECTED_TOKEN_SHA256: &str =
+        "711c977666d6a7e3ce3c1759e6ca7a9811bab9690bffda8994b605b8f6c539a2";
+
+    let function = exact_top_level_function(
+        relative,
+        file,
+        "validate_generated_source_maintenance_manifest_descriptor",
+    )?;
+    let statements = &function.block.stmts;
+    let expected_locals = [
+        (1, "bytes"),
+        (5, "manifest"),
+        (6, "expected_numbers"),
+        (7, "expected_strings"),
+        (8, "numbers_match"),
+        (9, "strings_match"),
+        (10, "string_array_matches"),
+    ];
+    let valid = statements.len() == 14
+        && matches!(statements.first(), Some(syn::Stmt::Item(syn::Item::Use(_))))
+        && expected_locals.iter().all(|(index, name)| {
+            matches!(
+                statements.get(*index),
+                Some(syn::Stmt::Local(local))
+                    if local_pattern_ident(&local.pat).as_deref() == Some(*name)
+            )
+        })
+        && matches!(
+            statements.get(2),
+            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
+        )
+        && statements
+            .get(3)
+            .and_then(direct_statement_expression)
+            .and_then(|expression| direct_try_function_call(expression, "validate_sha256_literal"))
+            .is_some()
+        && matches!(
+            statements.get(4),
+            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
+        )
+        && matches!(
+            statements.get(11),
+            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
+        )
+        && matches!(
+            statements.get(12),
+            Some(syn::Stmt::Expr(syn::Expr::ForLoop(_), _))
+        )
+        && statements
+            .get(13)
+            .and_then(direct_statement_expression)
+            .is_some_and(|expression| compact_tokens(expression) == "Ok(())");
+    if !valid {
+        return Err(format!(
+            "{relative} generated SourceMaintenance manifest validator authoritative statement skeleton drifted"
+        ));
+    }
+
+    for (binding, accessor) in [("numbers_match", "as_u64"), ("strings_match", "as_str")] {
+        let expression = statements
+            .iter()
+            .find_map(|statement| match statement {
+                syn::Stmt::Local(local)
+                    if local_pattern_ident(&local.pat).as_deref() == Some(binding) =>
+                {
+                    local.init.as_ref().map(|init| init.expr.as_ref())
+                }
+                _ => None,
+            })
+            .expect("validated descriptor local");
+        validate_manifest_pointer_check(relative, binding, expression, accessor)?;
+    }
+    let array_matcher = statements
+        .get(10)
+        .and_then(direct_statement_expression)
+        .ok_or_else(|| format!("{relative} SourceMaintenance array matcher is missing"))?;
+    use syn::visit::Visit;
+    let mut array_routes = RustCallRouteCollector { routes: Vec::new() };
+    array_routes.visit_expr(array_matcher);
+    for route in [
+        "method:pointer",
+        "method:as_array",
+        "method:is_some_and",
+        "method:zip",
+    ] {
+        if !array_routes
+            .routes
+            .iter()
+            .any(|candidate| candidate == route)
+        {
+            return Err(format!(
+                "{relative} SourceMaintenance array matcher is missing semantic route `{route}`"
+            ));
+        }
+    }
+    let digest_loop = match statements.get(12) {
+        Some(syn::Stmt::Expr(syn::Expr::ForLoop(expression), _)) => expression,
+        _ => unreachable!("validated descriptor loop"),
+    };
+    if digest_loop.body.stmts.len() != 1
+        || digest_loop
+            .body
+            .stmts
+            .first()
+            .and_then(direct_statement_expression)
+            .and_then(|expression| direct_try_function_call(expression, "validate_sha256_literal"))
+            .is_none()
+    {
+        return Err(format!(
+            "{relative} SourceMaintenance descriptor digest loop must directly propagate validate_sha256_literal"
+        ));
+    }
+
+    let actual_sha256 = sha256_hex(compact_tokens(function).as_bytes());
+    if actual_sha256 != EXPECTED_TOKEN_SHA256 {
+        return Err(format!(
+            "{relative} generated SourceMaintenance manifest validator exact token authority drifted: expected {EXPECTED_TOKEN_SHA256}, found {actual_sha256}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_source_maintenance_migration_bindings(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    let entry = exact_const_struct_array_element(
+        relative,
+        file,
+        "EVENT_STORE_MIGRATIONS",
+        "version",
+        u64::from(SOURCE_MAINTENANCE_MIGRATION_VERSION),
+    )?;
+    let expected_entry = r#"EventStoreMigration {
+        version: 4,
+        name: "source_maintenance",
+        up_sql: include_str!("../migrations/0004_source_maintenance.up.sql"),
+        down_sql: include_str!("../migrations/0004_source_maintenance.down.sql"),
+        up_len: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_BYTE_LENGTH,
+        down_len: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_BYTE_LENGTH,
+        up_sha256: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_SHA256,
+        down_sha256: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256,
+        schema_sha256: source_maintenance_manifest::SOURCE_MAINTENANCE_SCHEMA_SHA256,
+        owned_object_names: EVENT_STORE_SOURCE_MAINTENANCE_OBJECT_NAMES,
+        replaced_object_names: EVENT_STORE_SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
+        owned_table_names: EVENT_STORE_SOURCE_MAINTENANCE_TABLE_NAMES,
+        fts5_table_names: &[],
+        hook: EventStoreMigrationHook::SourceMaintenanceV1,
+        hook_manifest_sha256: Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256,),
+        event_contract_registry_version: Some(
+            source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,
+        ),
+    }"#;
+    let actual_entry = compact_tokens(entry);
+    let expected_entry = compact_source_tokens(expected_entry);
+    if actual_entry != expected_entry {
+        return Err(format!(
+            "{relative} SourceMaintenance v4 migration entry authority drifted: expected `{expected_entry}`, found `{actual_entry}`"
+        ));
+    }
+
+    let loop_expression = exact_direct_for_loop(
+        relative,
+        file,
+        "validate_migration_registry",
+        "(index,migration)",
+        "registry.iter().enumerate()",
+    )?;
+    let arm = exact_direct_loop_match_arm(
+        relative,
+        "validate_migration_registry",
+        loop_expression,
+        &[
+            "migration.hook",
+            "migration.hook_manifest_sha256",
+            "migration.event_contract_registry_version",
+        ],
+        "SourceMaintenanceV1",
+    )?;
+    let expected_pattern = r#"(EventStoreMigrationHook::None, None, None)
+        | (
+            EventStoreMigrationHook::Nip09ReconciliationV1,
+            Some(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256),
+            Some(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION,),
+        )
+        | (
+            EventStoreMigrationHook::FoodAvailabilityProjectionV1,
+            Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256),
+            Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,),
+        )
+        | (
+            EventStoreMigrationHook::SourceMaintenanceV1,
+            Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256),
+            Some(source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,),
+        )"#;
+    if compact_tokens(&arm.pat) != compact_source_tokens(expected_pattern)
+        || arm.guard.is_some()
+        || compact_tokens(&arm.body) != "{}"
+    {
+        return Err(format!(
+            "{relative} SourceMaintenance registry tuple authority drifted: expected pattern `{}`, found pattern `{}`, guard {:?}, body `{}`",
+            compact_source_tokens(expected_pattern),
+            compact_tokens(&arm.pat),
+            arm.guard
+                .as_ref()
+                .map(|(_, expression)| compact_tokens(expression)),
+            compact_tokens(&arm.body),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_event_store_migration_support_authority(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    const EXPECTED: [(&str, &str); 9] = [
+        (
+            "EVENT_STORE_LEDGER_DDL",
+            "adb8845fa244f2d4503fd52eeea9488c214da9375727a0e77905233ad3d5b701",
+        ),
+        (
+            "EVENT_STORE_LEDGER_CREATE_DDL",
+            "ecaced87b78196cc220fb2c785a7ee2db047bf08a27876066758f79a48ea8648",
+        ),
+        (
+            "EVENT_STORE_BASELINE_FTS5_TABLE_NAMES",
+            "4ab01dfd843eb33e82fae3d9503000f9c0292ce4e6f61f18aeee33ebc15360d3",
+        ),
+        (
+            "EventStoreMigration",
+            "3552624482aa3c698ebcc88e5d3497e35d30d3646ea0605d2c192acc21006ee2",
+        ),
+        (
+            "EVENT_STORE_MIGRATIONS[version=1]",
+            "0f763874f3fb73f2a41701ec623bae3629464243d70de797d842cdde45ab847e",
+        ),
+        (
+            "migration_for_version",
+            "896f4fd8a67ba6dc17262f117fd74b0df74ee75f3cf0066bfddd90fb58d84a96",
+        ),
+        (
+            "validate_embedded_migration_input",
+            "526a7971d0736588d66cf95cca4063ebd3a4497c6f0c2c7ba96b39d09ee07259",
+        ),
+        (
+            "validate_migration_registry",
+            "e6cf2795b0308a51ef5958ce91f41877fb9c73f8f4c7008c90b1e5e70b37364a",
+        ),
+        (
+            "validate_generated_nip09_manifest_descriptor",
+            "44d44c3c35a8ea923d9fce80afea4a9db35e9225172090c831fd151bd2c5d4a1",
+        ),
+    ];
+
+    let tokens = [
+        compact_tokens(exact_executor_const(
+            file,
+            relative,
+            "EVENT_STORE_LEDGER_DDL",
+        )?),
+        compact_tokens(exact_executor_const(
+            file,
+            relative,
+            "EVENT_STORE_LEDGER_CREATE_DDL",
+        )?),
+        compact_tokens(exact_executor_const(
+            file,
+            relative,
+            "EVENT_STORE_BASELINE_FTS5_TABLE_NAMES",
+        )?),
+        compact_tokens(exact_top_level_struct(
+            relative,
+            file,
+            "EventStoreMigration",
+        )?),
+        compact_tokens(exact_const_struct_array_element(
+            relative,
+            file,
+            "EVENT_STORE_MIGRATIONS",
+            "version",
+            1,
+        )?),
+        compact_tokens(exact_top_level_function(
+            relative,
+            file,
+            "migration_for_version",
+        )?),
+        compact_tokens(exact_top_level_function(
+            relative,
+            file,
+            "validate_embedded_migration_input",
+        )?),
+        compact_tokens(exact_top_level_function(
+            relative,
+            file,
+            "validate_migration_registry",
+        )?),
+        compact_tokens(exact_top_level_function(
+            relative,
+            file,
+            "validate_generated_nip09_manifest_descriptor",
+        )?),
+    ];
+    let drift = EXPECTED
+        .iter()
+        .zip(tokens)
+        .filter_map(|((label, expected), tokens)| {
+            let actual = sha256_hex(tokens.as_bytes());
+            (actual != *expected).then(|| format!("{label}={actual} (expected {expected})"))
+        })
+        .collect::<Vec<_>>();
+    if !drift.is_empty() {
+        return Err(format!(
+            "{relative} active migration support token authority drifted: {}",
+            drift.join(", ")
+        ));
+    }
+    Ok(())
+}
+
+fn validate_source_maintenance_schema_dispatch(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    for (function, called) in [
+        ("apply_migration_hook", "apply_source_maintenance_hook_v1"),
+        (
+            "validate_migration_hook_state",
+            "validate_source_capacity_authority_full_v1",
+        ),
+    ] {
+        let arm = exact_tail_match_arm(
+            relative,
+            file,
+            function,
+            "migration.hook",
+            "SourceMaintenanceV1",
+        )?;
+        validate_direct_arm_awaited_call(
+            relative,
+            &format!("`{function}` SourceMaintenanceV1 arm"),
+            &arm.body,
+            called,
+        )?;
+        if arm.guard.is_some() {
+            return Err(format!(
+                "{relative} `{function}` SourceMaintenanceV1 arm must remain unguarded"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_schema_migration_execution_authority(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    for (name, expected) in [
+        (
+            "apply_migration_up",
+            r#"async fn apply_migration_up(
+                connection: &mut SqliteConnection,
+                registry: &[EventStoreMigration],
+                migration: &EventStoreMigration,
+            ) -> Result<(), RadrootsEventStoreError> {
+                let before = read_catalog(connection).await?;
+                sqlx::raw_sql(migration.up_sql)
+                    .execute(&mut *connection)
+                    .await?;
+                let after = read_catalog(connection).await?;
+                validate_catalog_delta(&before, &after, migration, "up")?;
+                validate_schema_fingerprint(connection, registry, migration).await
+            }"#,
+        ),
+        (
+            "apply_migration_down",
+            r#"async fn apply_migration_down(
+                connection: &mut SqliteConnection,
+                migration: &EventStoreMigration,
+            ) -> Result<(), RadrootsEventStoreError> {
+                let before = read_catalog(connection).await?;
+                sqlx::raw_sql(migration.down_sql)
+                    .execute(&mut *connection)
+                    .await?;
+                let after = read_catalog(connection).await?;
+                validate_catalog_delta(&before, &after, migration, "down")
+            }"#,
+        ),
+        (
+            "validate_catalog_delta",
+            r#"fn validate_catalog_delta(
+                before: &[CatalogRow],
+                after: &[CatalogRow],
+                migration: &EventStoreMigration,
+                direction: &'static str,
+            ) -> Result<(), RadrootsEventStoreError> {
+                let before = before
+                    .iter()
+                    .map(|row| (row.name.as_str(), row))
+                    .collect::<BTreeMap<_, _>>();
+                let after = after
+                    .iter()
+                    .map(|row| (row.name.as_str(), row))
+                    .collect::<BTreeMap<_, _>>();
+                let added = after
+                    .keys()
+                    .filter(|name| !before.contains_key(**name))
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                let removed = before
+                    .keys()
+                    .filter(|name| !after.contains_key(**name))
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                let changed = before
+                    .iter()
+                    .filter_map(|(name, row)| {
+                        after
+                            .get(name)
+                            .filter(|after_row| *after_row != row)
+                            .map(|_| *name)
+                    })
+                    .collect::<BTreeSet<_>>();
+                let expected = migration
+                    .owned_object_names
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+                let expected_changed = migration
+                    .replaced_object_names
+                    .iter()
+                    .copied()
+                    .collect::<BTreeSet<_>>();
+
+                let valid = match direction {
+                    "up" => added == expected && removed.is_empty() && changed == expected_changed,
+                    "down" => removed == expected && added.is_empty() && changed == expected_changed,
+                    _ => false,
+                };
+                if !valid {
+                    return Err(RadrootsEventStoreError::MigrationCatalogDeltaMismatch {
+                        version: migration.version,
+                        direction,
+                        reason: format!(
+                            "expected {} objects {expected:?} and changed replacement objects {expected_changed:?}; added {added:?}, removed {removed:?}, changed {changed:?}",
+                            if direction == "up" {
+                                "added"
+                            } else {
+                                "removed"
+                            }
+                        ),
+                    });
+                }
+                Ok(())
+            }"#,
+        ),
+        (
+            "apply_migration_hook",
+            r#"async fn apply_migration_hook(
+                connection: &mut SqliteConnection,
+                migration: &EventStoreMigration,
+                generation_provider: &dyn SourceGenerationProvider,
+                reconciliation_limits: ReconciliationCapacityLimits,
+            ) -> Result<(), RadrootsEventStoreError> {
+                match migration.hook {
+                    EventStoreMigrationHook::None => Ok(()),
+                    EventStoreMigrationHook::Nip09ReconciliationV1 => {
+                        apply_reconciliation_hook(
+                            connection,
+                            generation_provider,
+                            reconciliation_limits,
+                        ).await
+                    }
+                    EventStoreMigrationHook::FoodAvailabilityProjectionV1 => {
+                        apply_food_availability_projection_hook_v1(connection).await
+                    }
+                    EventStoreMigrationHook::SourceMaintenanceV1 => {
+                        apply_source_maintenance_hook_v1(connection).await
+                    }
+                }
+            }"#,
+        ),
+        (
+            "validate_migration_hook_state",
+            r#"async fn validate_migration_hook_state(
+                connection: &mut SqliteConnection,
+                migration: &EventStoreMigration,
+            ) -> Result<(), RadrootsEventStoreError> {
+                match migration.hook {
+                    EventStoreMigrationHook::None => Ok(()),
+                    EventStoreMigrationHook::Nip09ReconciliationV1 => {
+                        validate_active_hook_state_fast(connection).await
+                    }
+                    EventStoreMigrationHook::FoodAvailabilityProjectionV1 => {
+                        validate_food_availability_projection_hook_state_fast_v1(connection).await
+                    }
+                    EventStoreMigrationHook::SourceMaintenanceV1 => {
+                        validate_source_capacity_authority_full_v1(connection).await
+                    }
+                }
+            }"#,
+        ),
+    ] {
+        let actual = exact_top_level_function(relative, file, name)?;
+        let expected_file = parse_canonical_production_rust(
+            &format!("authoritative {relative}:{name}"),
+            expected.as_bytes(),
+        )?;
+        let expected = exact_top_level_function(relative, &expected_file, name)?;
+        if compact_tokens(actual) != compact_tokens(expected) {
+            return Err(format!(
+                "{relative} authoritative schema migration execution function `{name}` signature or control flow drifted"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_sqlite_encoding_preflight_authority(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    let configure_pool = exact_top_level_function(relative, file, "configure_pool")?;
+    let expected_configure_pool = r#"
+        async fn configure_pool(
+            pool: &SqlitePool,
+            file_backed: bool,
+        ) -> Result<(), RadrootsEventStoreError> {
+            let max_connections = pool.options().get_max_connections();
+            let existing_options = pool.connect_options();
+            if !file_backed && max_connections != 1 {
+                return Err(RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
+                    actual: max_connections,
+                });
+            }
+
+            let mut connections = Vec::with_capacity(max_connections as usize);
+            for _ in 0..max_connections {
+                connections.push(pool.acquire().await?);
+            }
+            for connection in &mut connections {
+                let main_filename = main_database_filename(connection).await?;
+                let database_is_memory = main_filename.is_empty();
+                if file_backed == database_is_memory {
+                    return Err(RadrootsEventStoreError::SqlitePoolBackingMismatch {
+                        file_backed,
+                        filename: main_filename,
+                    });
+                }
+                validate_main_database_encoding(connection).await?;
+                crate::schema::validate_event_store_temp_schema(connection).await?;
+            }
+
+            let mut connect_options = existing_options
+                .as_ref()
+                .clone()
+                .foreign_keys(true)
+                .busy_timeout(Duration::from_millis(5_000));
+            if file_backed {
+                connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
+            }
+            pool.set_connect_options(connect_options);
+
+            for connection in &mut connections {
+                sqlx::query("PRAGMA foreign_keys = ON")
+                    .execute(&mut **connection)
+                    .await?;
+                sqlx::query("PRAGMA busy_timeout = 5000")
+                    .execute(&mut **connection)
+                    .await?;
+                if file_backed {
+                    configure_file_journal_mode(connection).await?;
+                }
+            }
+            Ok(())
+        }
+    "#;
+    if compact_tokens(configure_pool) != compact_source_tokens(expected_configure_pool) {
+        return Err(format!(
+            "{relative} `configure_pool` must validate every main database as UTF-8 after backing classification and before TEMP-schema, connection-option, PRAGMA, or journal mutation"
+        ));
+    }
+
+    let validator = exact_top_level_function(relative, file, "validate_main_database_encoding")?;
+    let expected_validator = r#"
+        async fn validate_main_database_encoding(
+            connection: &mut SqliteConnection,
+        ) -> Result<(), RadrootsEventStoreError> {
+            let actual: String = sqlx::query_scalar("PRAGMA main.encoding")
+                .fetch_one(&mut *connection)
+                .await?;
+            if actual == "UTF-8" {
+                return Ok(());
+            }
+            Err(RadrootsEventStoreError::SqliteMainDatabaseEncodingNotUtf8 { actual, })
+        }
+    "#;
+    if compact_tokens(validator) != compact_source_tokens(expected_validator) {
+        return Err(format!(
+            "{relative} `validate_main_database_encoding` UTF-8 query or typed failure authority drifted: expected `{}`, found `{}`",
+            compact_source_tokens(expected_validator),
+            compact_tokens(validator),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_source_generation_rollback_authority(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    let policies = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Enum(item) if item.ident == "SourceGenerationHistoryRollbackPolicy" => {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let [policy] = policies.as_slice() else {
+        return Err(format!(
+            "{relative} must define exactly one production `SourceGenerationHistoryRollbackPolicy`; found {}",
+            policies.len()
+        ));
+    };
+    let expected_policy = r#"
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum SourceGenerationHistoryRollbackPolicy {
+            Preserve,
+        }
+    "#;
+    if compact_tokens(policy) != compact_source_tokens(expected_policy) {
+        return Err(format!(
+            "{relative} production `SourceGenerationHistoryRollbackPolicy` must contain only `Preserve`"
+        ));
+    }
+
+    let wrapper =
+        exact_top_level_function(relative, file, "rollback_event_store_schema_with_registry")?;
+    let expected_wrapper = r#"
+        async fn rollback_event_store_schema_with_registry(
+            pool: &SqlitePool,
+            registry: &[EventStoreMigration],
+            minimum: u32,
+            supported_current: u32,
+            target: u32,
+        ) -> Result<(), RadrootsEventStoreError> {
+            rollback_event_store_schema_with_registry_inner(
+                pool,
+                registry,
+                minimum,
+                supported_current,
+                target,
+                SourceGenerationHistoryRollbackPolicy::Preserve,
+            )
+            .await
+        }
+    "#;
+    if compact_tokens(wrapper) != compact_source_tokens(expected_wrapper) {
+        return Err(format!(
+            "{relative} production rollback registry wrapper must directly select and await the `Preserve` policy"
+        ));
+    }
+
+    let rollback = exact_top_level_function(relative, file, "rollback_schema_on_connection")?;
+    let expected_signature = compact_source_tokens(
+        r#"async fn rollback_schema_on_connection(
+            connection: &mut SqliteConnection,
+            registry: &[EventStoreMigration],
+            supported_current: u32,
+            target: u32,
+            source_generation_history_policy: SourceGenerationHistoryRollbackPolicy,
+        ) -> Result<(), RadrootsEventStoreError>"#,
+    );
+    if !rollback.attrs.is_empty()
+        || !matches!(rollback.vis, syn::Visibility::Inherited)
+        || compact_tokens(&rollback.sig) != expected_signature
+        || rollback.block.stmts.len() != 6
+    {
+        return Err(format!(
+            "{relative} `rollback_schema_on_connection` signature or six-statement authority skeleton drifted"
+        ));
+    }
+    for (index, expected) in [
+        r#"let RadrootsEventStoreSchemaStatus::Managed {
+                version: current_version
+            } = inspect_schema_on_connection(connection, registry, supported_current,).await?
+            else {
+                return Err(RadrootsEventStoreError::RollbackUnmanaged);
+            };"#,
+        r#"if target > current_version {
+                return Err(RadrootsEventStoreError::RollbackAhead {
+                    current: current_version,
+                    target,
+                });
+            }"#,
+        r#"if source_generation_history_policy == SourceGenerationHistoryRollbackPolicy::Preserve {
+                validate_rollback_preserves_source_generation_history(
+                    registry,
+                    current_version,
+                    target,
+                )?;
+            }"#,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if compact_tokens(&rollback.block.stmts[index]) != compact_source_tokens(expected) {
+            return Err(format!(
+                "{relative} `rollback_schema_on_connection` authoritative preflight statement {} drifted: expected `{}`, found `{}`",
+                index + 1,
+                compact_source_tokens(expected),
+                compact_tokens(&rollback.block.stmts[index]),
+            ));
+        }
+    }
+    if !matches!(
+        rollback.block.stmts.get(3),
+        Some(syn::Stmt::Expr(syn::Expr::ForLoop(loop_expression), _))
+            if compact_tokens(&loop_expression.pat) == "version"
+                && compact_tokens(&loop_expression.expr)
+                    == "((target+1)..=current_version).rev()"
+    ) {
+        return Err(format!(
+            "{relative} source-generation rollback guard must remain immediately before the direct down-migration loop"
+        ));
+    }
+
+    let validator = exact_top_level_function(
+        relative,
+        file,
+        "validate_rollback_preserves_source_generation_history",
+    )?;
+    let expected_validator = r#"
+        fn validate_rollback_preserves_source_generation_history(
+            registry: &[EventStoreMigration],
+            current: u32,
+            target: u32,
+        ) -> Result<(), RadrootsEventStoreError> {
+            let Some(floor) = registry
+                .iter()
+                .find(|migration| {
+                    migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1
+                })
+                .map(|migration| migration.version)
+            else {
+                return Ok(());
+            };
+            if current < floor || target >= floor {
+                return Ok(());
+            }
+
+            Err(RadrootsEventStoreError::RollbackWouldDiscardSourceGenerationHistory {
+                current,
+                target,
+                floor,
+            })
+        }
+    "#;
+    if compact_tokens(validator) != compact_source_tokens(expected_validator) {
+        return Err(format!(
+            "{relative} source-generation rollback floor derivation or typed rejection authority drifted: expected `{}`, found `{}`",
+            compact_source_tokens(expected_validator),
+            compact_tokens(validator),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_source_maintenance_runtime_token_authority(
+    workspace_root: &Path,
+) -> Result<(), String> {
+    const SOURCE_RUNTIME_AST_SHA256: &str =
+        "181576a5de365cf664b8a87091c30b0389ce0be90e7d1cc16fd7170342f6c2bc";
+    const FUNCTION_SPECS: [(&str, &str, &str); 4] = [
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "ingest_event_protocol_reconciliation_v1",
+            "f8d26e1d4e1a362c7335f1ba58ad6f1bac2f119162b15ca1067391756149d1e3",
+        ),
+        (
+            EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
+            "read_protocol_post_extension_authority_seal",
+            "490e59d21fb84f3321c593ffb67a4d1ada1e5cc8373ed41e2c6834114f2a6ef9",
+        ),
+        (
+            "crates/event_store/src/nip09/reconciliation_v1.rs",
+            "apply_reconciliation_hook",
+            "41a0bc1f4e529528f9bc13be28b4a31305156124282c1c7e955ed2e4a56e86d2",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "associated:RadrootsEventStore::source_capacity_v1",
+            "176c41b212e8d9d4ae3a53cf61dfade6d34b802f5bb649b18f66ffc769d5bade",
+        ),
+    ];
+
+    let source_relative = "crates/event_store/src/source_maintenance_v1.rs";
+    let source_bytes = read_regular_file(workspace_root, source_relative)?;
+    let canonical_source =
+        canonical_rust_ast(source_relative, &source_bytes, RustAstProfile::Production)?;
+    let mut drift = Vec::new();
+    let source_sha256 = sha256_hex(&canonical_source);
+    if source_sha256 != SOURCE_RUNTIME_AST_SHA256 {
+        drift.push(format!(
+            "{source_relative}={source_sha256} (expected {SOURCE_RUNTIME_AST_SHA256})"
+        ));
+    }
+
+    for (relative, function, expected_sha256) in FUNCTION_SPECS {
+        let bytes = read_regular_file(workspace_root, relative)?;
+        let file = parse_canonical_production_rust(relative, &bytes)?;
+        let tokens = if let Some(method) = function.strip_prefix("associated:") {
+            let (owner, method) = method.split_once("::").ok_or_else(|| {
+                format!("invalid associated SourceMaintenance witness `{function}`")
+            })?;
+            compact_tokens(exact_associated_function(relative, &file, owner, method)?)
+        } else {
+            compact_tokens(exact_top_level_function(relative, &file, function)?)
+        };
+        let actual_sha256 = sha256_hex(tokens.as_bytes());
+        if actual_sha256 != expected_sha256 {
+            drift.push(format!(
+                "{relative}:{function}={actual_sha256} (expected {expected_sha256})"
+            ));
+        }
+    }
+    if !drift.is_empty() {
+        return Err(format!(
+            "current SourceMaintenance runtime exact token authority drifted: {}",
+            drift.join(", ")
         ));
     }
     Ok(())
@@ -11204,6 +12911,11 @@ fn validate_schema_runtime_reachability<'a>(
                         &mut connection,
                         reconciliation_limits
                     ).await?;
+                    if has_pending_source_maintenance_hook(&status, registry) {
+                        validate_no_persisted_ephemeral_raw_rows_v1(
+                            &mut connection
+                        ).await?;
+                    }
                 }
                 let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
                 let result = migrate_schema_on_connection(
@@ -11285,7 +12997,7 @@ fn validate_schema_runtime_reachability<'a>(
         ),
     ];
 
-    EXPECTED
+    let functions = EXPECTED
         .iter()
         .map(|(name, expected)| {
             let function = exact_top_level_function(relative, file, name)?;
@@ -11298,7 +13010,120 @@ fn validate_schema_runtime_reachability<'a>(
             }
             Ok(function)
         })
-        .collect()
+        .collect::<Result<Vec<_>, String>>()?;
+    let migrate = exact_top_level_function(relative, file, "migrate_schema_on_connection")?;
+    let current_version = migrate
+        .block
+        .stmts
+        .iter()
+        .find(|statement| {
+            matches!(
+                statement,
+                syn::Stmt::Local(local)
+                    if local_pattern_ident(&local.pat).as_deref() == Some("current_version")
+            )
+        })
+        .ok_or_else(|| {
+            format!(
+                "{relative} authoritative schema runtime is missing the direct `current_version` initializer"
+            )
+        })?;
+    let expected_current_version = parse_canonical_production_rust(
+        "authoritative migrate_schema_on_connection current_version initializer",
+        br#"fn expected() {
+            let current_version = match status {
+                RadrootsEventStoreSchemaStatus::Uninitialized => {
+                    apply_migration_up(connection, registry, &registry[0]).await?;
+                    create_ledger(connection).await?;
+                    insert_ledger_row(connection, &registry[0]).await?;
+                    registry[0].version
+                }
+                RadrootsEventStoreSchemaStatus::UnledgeredBaseline => {
+                    create_ledger(connection).await?;
+                    insert_ledger_row(connection, &registry[0]).await?;
+                    registry[0].version
+                }
+                RadrootsEventStoreSchemaStatus::Managed { version }
+                    if version == supported_current =>
+                {
+                    return Ok(());
+                }
+                RadrootsEventStoreSchemaStatus::Managed { version } => version,
+            };
+        }"#,
+    )?;
+    let expected_current_version =
+        exact_top_level_function(relative, &expected_current_version, "expected")?
+            .block
+            .stmts
+            .first()
+            .expect("authoritative current-version initializer");
+    if compact_tokens(current_version) != compact_tokens(expected_current_version) {
+        return Err(format!(
+            "{relative} authoritative schema runtime `migrate_schema_on_connection` current-version control flow drifted"
+        ));
+    }
+    validate_migration_hook_loop_reachability(relative, file)?;
+    Ok(functions)
+}
+
+fn validate_migration_hook_loop_reachability(
+    relative: &str,
+    file: &syn::File,
+) -> Result<(), String> {
+    let apply_loop = exact_direct_for_loop(
+        relative,
+        file,
+        "migrate_schema_on_connection",
+        "migration",
+        "registry.iter().filter(|migration|migration.version>current_version)",
+    )?;
+    let source_preflight = r#"if matches!(
+        migration.hook,
+        EventStoreMigrationHook::Nip09ReconciliationV1
+            | EventStoreMigrationHook::FoodAvailabilityProjectionV1
+            | EventStoreMigrationHook::SourceMaintenanceV1
+    ) {
+        validate_reconciliation_capacity(connection, reconciliation_limits).await?;
+        if migration.hook == EventStoreMigrationHook::SourceMaintenanceV1 {
+            validate_no_persisted_ephemeral_raw_rows_v1(connection).await?;
+        }
+    }"#;
+    if apply_loop.body.stmts.first().is_none_or(|statement| {
+        compact_tokens(statement) != compact_source_tokens(source_preflight)
+    }) {
+        return Err(format!(
+            "{relative} `migrate_schema_on_connection` SourceMaintenance preflight or error propagation drifted"
+        ));
+    }
+    for called in [
+        "apply_migration_up",
+        "apply_migration_hook",
+        "validate_applied_migration_hooks",
+        "insert_ledger_row",
+    ] {
+        exact_direct_loop_awaited_call(
+            relative,
+            "migrate_schema_on_connection",
+            apply_loop,
+            called,
+        )?;
+    }
+
+    let validate_loop = exact_direct_for_loop(
+        relative,
+        file,
+        "validate_applied_migration_hooks",
+        "migration",
+        "registry.iter().filter(|migration|migration.version<=current)",
+    )?;
+    exact_direct_loop_awaited_call(
+        relative,
+        "validate_applied_migration_hooks",
+        validate_loop,
+        "validate_migration_hook_state",
+    )?;
+    Ok(())
 }
 
 fn validate_no_diverging_control_flow(
@@ -11739,7 +13564,7 @@ fn exact_direct_for_loop<'a>(
         ));
     };
     let (expected_statement_count, expected_index) = match function {
-        "validate_migration_registry" => (9, 6),
+        "validate_migration_registry" => (12, 9),
         "migrate_schema_on_connection" => (5, 2),
         "validate_applied_migration_hooks" => (2, 0),
         _ => {
@@ -11772,9 +13597,9 @@ fn exact_direct_loop_match_arm<'a>(
     variant: &str,
 ) -> Result<&'a syn::Arm, String> {
     if function == "validate_migration_registry"
-        && (loop_expression.body.stmts.len() != 14
+        && (loop_expression.body.stmts.len() != 20
             || !matches!(
-                loop_expression.body.stmts.get(12),
+                loop_expression.body.stmts.get(18),
                 Some(syn::Stmt::Expr(syn::Expr::Match(_), _))
             ))
     {
@@ -11849,9 +13674,12 @@ fn exact_direct_loop_awaited_call<'a>(
     loop_expression: &'a syn::ExprForLoop,
     called: &str,
 ) -> Result<&'a syn::ExprAwait, String> {
-    let (expected_statement_count, expected_index) = match function {
-        "migrate_schema_on_connection" => (5, 2),
-        "validate_applied_migration_hooks" => (1, 0),
+    let (expected_statement_count, expected_index) = match (function, called) {
+        ("migrate_schema_on_connection", "apply_migration_up") => (5, 1),
+        ("migrate_schema_on_connection", "apply_migration_hook") => (5, 2),
+        ("migrate_schema_on_connection", "validate_applied_migration_hooks") => (5, 3),
+        ("migrate_schema_on_connection", "insert_ledger_row") => (5, 4),
+        ("validate_applied_migration_hooks", "validate_migration_hook_state") => (1, 0),
         _ => {
             return Err(format!(
                 "{relative} `{function}` is not an approved awaited-loop witness"
@@ -15257,6 +17085,8 @@ mod tests {
             MIGRATION_V1_DOWN_RELATIVE,
             MIGRATION_UP_RELATIVE,
             MIGRATION_DOWN_RELATIVE,
+            "crates/event_store/migrations/0004_source_maintenance.up.sql",
+            "crates/event_store/migrations/0004_source_maintenance.down.sql",
             REGISTRY_INVENTORY_RELATIVE,
             "contracts/event_store/event_contract_registry_v7.inventory.sha256",
             RESULT_VECTOR_CANONICAL_RELATIVE,
@@ -15266,6 +17096,13 @@ mod tests {
             MANIFEST_SCHEMA_RELATIVE,
             MANIFEST_SHA256_RELATIVE,
             GENERATED_DESCRIPTOR_RELATIVE,
+            "contracts/conformance/vectors/event_store/source_maintenance.v1.json",
+            "crates/event_store/tests/fixtures/source_maintenance.v1.json",
+            "crates/event_store/tests/source_maintenance_v1_result_vector.rs",
+            "crates/event_store/contracts/source_maintenance_v1.manifest.json",
+            "crates/event_store/contracts/source_maintenance_v1.manifest.schema.json",
+            "crates/event_store/contracts/source_maintenance_v1.manifest.sha256",
+            "crates/event_store/src/generated/source_maintenance_manifest.rs",
         ];
         for dependency in SEMANTIC_DEPENDENCY_SPECS {
             paths.push(dependency.canonical_path);
@@ -15276,6 +17113,8 @@ mod tests {
         paths.extend(FROZEN_SOURCE_SPECS.iter().map(|source| source.path));
         paths.extend(SOURCE_ROUTE_WITNESS_SPECS.iter().map(|source| source.path));
         paths.extend(SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS);
+        paths.extend(SUCCESSOR_08D_SOURCE_PATHS);
+        paths.extend(super::super::source_maintenance::source_contract_fixture_source_paths());
         paths.sort_unstable();
         paths.dedup();
         paths
@@ -15580,7 +17419,7 @@ route!(r#hex);
                     "#[cfg(any())]\nuse self::post_core_extension_dispatcher::dispatch_post_core_extensions;",
                     1,
                 ),
-                "privileged cross-module import routes drifted",
+                "SourceMaintenance privileged import authority drifted",
             ),
             (
                 "extra associated core bypass call",
@@ -15791,7 +17630,8 @@ route!(r#hex);
             .expect_err("privileged sibling source must fail");
         assert!(
             error.contains("privileged cross-module import routes drifted")
-                || error.contains("source inventory is closed"),
+                || error.contains("source inventory is closed")
+                || error.contains("privileged terminal import"),
             "{error}"
         );
 
@@ -15982,6 +17822,90 @@ route!(r#hex);
             );
             fs::write(&lib_path, &lib_original).expect("restore event-store lib source");
         }
+
+        let food_path = workspace
+            .path()
+            .join("crates/event_store/src/store/food_availability_projection_v1.rs");
+        let food_original = fs::read_to_string(&food_path).expect("08C Food store source");
+        let food_mutations = [
+            (
+                "08C direct SourceMaintenance terminal call",
+                format!(
+                    "{food_original}\nasync fn source_terminal_bypass(connection: &mut sqlx::SqliteConnection) {{\n    let _ = crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1(connection).await;\n}}\n"
+                ),
+            ),
+            (
+                "08C SourceMaintenance alias import",
+                format!(
+                    "{food_original}\nuse crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1 as bypass;\n"
+                ),
+            ),
+            (
+                "08C SourceMaintenance glob import",
+                format!("{food_original}\nuse crate::source_maintenance_v1::*;\n"),
+            ),
+            (
+                "08C SourceMaintenance macro reference",
+                format!(
+                    "{food_original}\nfn source_terminal_macro_bypass() {{ stringify!(validate_source_capacity_authority_fast_v1); }}\n"
+                ),
+            ),
+            (
+                "08C SourceMaintenance associated-function shadow",
+                format!(
+                    "{food_original}\nstruct SourceTerminalShadow;\nimpl SourceTerminalShadow {{ fn validate_source_capacity_authority_fast_v1() {{}} }}\n"
+                ),
+            ),
+            (
+                "08C SourceMaintenance trait-function shadow",
+                format!(
+                    "{food_original}\ntrait SourceTerminalShadow {{ fn preflight_unique_raw_source_append_v1(); }}\n"
+                ),
+            ),
+        ];
+        for (label, mutation) in food_mutations {
+            fs::write(&food_path, mutation).expect("write 08C terminal bypass");
+            let error = validate_privileged_store_authority(workspace.path())
+                .expect_err("08C SourceMaintenance terminal bypass must fail");
+            assert!(
+                error.contains("privileged terminal")
+                    || error.contains("privileged authority")
+                    || error.contains("glob import"),
+                "{label} produced unexpected error: {error}"
+            );
+            fs::write(&food_path, &food_original).expect("restore 08C Food source");
+        }
+
+        let protocol_path = workspace
+            .path()
+            .join(EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE);
+        let protocol_original =
+            fs::read_to_string(&protocol_path).expect("protocol reconciliation source");
+        let mut protocol_shadow =
+            syn::parse_file(&protocol_original).expect("protocol reconciliation AST");
+        let ingest = protocol_shadow
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function)
+                    if function.sig.ident == "ingest_event_protocol_reconciliation_v1" =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("approved SourceMaintenance caller");
+        ingest.block.stmts.insert(
+            0,
+            syn::parse_str("let validate_source_capacity_authority_fast_v1 = || ();")
+                .expect("terminal shadow binding"),
+        );
+        fs::write(&protocol_path, prettyplease::unparse(&protocol_shadow))
+            .expect("write approved-caller terminal shadow");
+        let error = validate_privileged_store_authority(workspace.path())
+            .expect_err("approved-caller terminal shadow must fail");
+        assert!(error.contains("shadows privileged authority"), "{error}");
+        fs::write(&protocol_path, protocol_original).expect("restore protocol source");
     }
 
     #[test]
@@ -16078,7 +18002,7 @@ route!(r#hex);
     #[test]
     fn migration_reachability_requires_guard_order_and_error_propagation() {
         let source = repository_source(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE);
-        let mut file = parse_canonical_production_rust(
+        let file = parse_canonical_production_rust(
             EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
             source.as_bytes(),
         )
@@ -16087,6 +18011,16 @@ route!(r#hex);
             .expect("authoritative registry reachability");
         validate_manifest_validator_reachability(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &file)
             .expect("authoritative manifest-validator reachability");
+        validate_source_maintenance_manifest_validator_reachability(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &file,
+        )
+        .expect("authoritative SourceMaintenance descriptor reachability");
+        validate_source_maintenance_migration_bindings(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &file,
+        )
+        .expect("authoritative SourceMaintenance migration bindings");
 
         let mut early_return_file = file.clone();
         let early_return_registry = early_return_file
@@ -16112,7 +18046,8 @@ route!(r#hex);
             "an early success return before the generated-manifest guard must fail"
         );
 
-        let registry = file
+        let mut reordered_predecessor_guards = file.clone();
+        let registry = reordered_predecessor_guards
             .items
             .iter_mut()
             .find_map(|item| match item {
@@ -16126,10 +18061,76 @@ route!(r#hex);
         assert!(
             validate_migration_registry_reachability(
                 EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
-                &file,
+                &reordered_predecessor_guards,
             )
             .is_err(),
-            "moving the manifest guard behind the range guard must fail"
+            "reordering the predecessor manifest guards must fail"
+        );
+
+        let mut missing_source_guard = file.clone();
+        let registry = missing_source_guard
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function) if function.sig.ident == "validate_migration_registry" => {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("registry validator");
+        registry.block.stmts.remove(3);
+        assert!(
+            validate_migration_registry_reachability(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                &missing_source_guard,
+            )
+            .is_err(),
+            "removing the SourceMaintenance descriptor guard must fail"
+        );
+
+        let mut reordered_source_guard = file.clone();
+        let registry = reordered_source_guard
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function) if function.sig.ident == "validate_migration_registry" => {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("registry validator");
+        registry.block.stmts.swap(3, 4);
+        assert!(
+            validate_migration_registry_reachability(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                &reordered_source_guard,
+            )
+            .is_err(),
+            "moving the SourceMaintenance guard behind the range guard must fail"
+        );
+
+        let mut discarded_source_guard_result = file.clone();
+        let registry = discarded_source_guard_result
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function) if function.sig.ident == "validate_migration_registry" => {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("registry validator");
+        let syn::Stmt::Expr(syn::Expr::If(source_guard), _) = &mut registry.block.stmts[3] else {
+            panic!("SourceMaintenance manifest guard");
+        };
+        strip_outer_try(&mut source_guard.then_branch.stmts[0]);
+        assert!(
+            validate_migration_registry_reachability(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                &discarded_source_guard_result,
+            )
+            .is_err(),
+            "discarding the SourceMaintenance descriptor validator Result must fail"
         );
 
         let mut file = parse_canonical_production_rust(
@@ -16186,44 +18187,44 @@ route!(r#hex);
             .is_err(),
             "discarding manifest SHA validation must fail"
         );
+
+        let mut source_descriptor_bypass = parse_canonical_production_rust(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            source.as_bytes(),
+        )
+        .expect("migration AST");
+        let descriptor = source_descriptor_bypass
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function)
+                    if function.sig.ident
+                        == "validate_generated_source_maintenance_manifest_descriptor" =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("SourceMaintenance descriptor validator");
+        descriptor.block = syn::parse_str("{ Ok(()) }").expect("no-op descriptor body");
+        assert!(
+            validate_source_maintenance_manifest_validator_reachability(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                &source_descriptor_bypass,
+            )
+            .is_err(),
+            "a no-op SourceMaintenance descriptor body must fail while its registry call remains"
+        );
     }
 
     #[test]
     fn migration_hook_loops_require_awaited_question_mark_propagation() {
         let source = repository_source(EVENT_STORE_SCHEMA_SOURCE_RELATIVE);
-        let validate = |file: &syn::File| -> Result<(), String> {
-            let apply_loop = exact_direct_for_loop(
-                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
-                file,
-                "migrate_schema_on_connection",
-                "migration",
-                "registry.iter().filter(|migration|migration.version>current_version)",
-            )?;
-            exact_direct_loop_awaited_call(
-                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
-                "migrate_schema_on_connection",
-                apply_loop,
-                "apply_migration_hook",
-            )?;
-            let validate_loop = exact_direct_for_loop(
-                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
-                file,
-                "validate_applied_migration_hooks",
-                "migration",
-                "registry.iter().filter(|migration|migration.version<=current)",
-            )?;
-            exact_direct_loop_awaited_call(
-                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
-                "validate_applied_migration_hooks",
-                validate_loop,
-                "validate_migration_hook_state",
-            )?;
-            Ok(())
-        };
         let file =
             parse_canonical_production_rust(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, source.as_bytes())
                 .expect("schema AST");
-        validate(&file).expect("authoritative hook propagation");
+        validate_migration_hook_loop_reachability(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &file)
+            .expect("authoritative hook propagation");
 
         for (function_name, loop_statement_index) in [
             ("migrate_schema_on_connection", 2usize),
@@ -16255,7 +18256,11 @@ route!(r#hex);
                 .expect("hook loop");
             strip_outer_try(&mut loop_expression.body.stmts[loop_statement_index]);
             assert!(
-                validate(&file).is_err(),
+                validate_migration_hook_loop_reachability(
+                    EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                    &file,
+                )
+                .is_err(),
                 "discarding `{function_name}` hook Result must fail"
             );
         }
@@ -16299,6 +18304,56 @@ route!(r#hex);
             );
         }
 
+        let source_preflight = r#"        if has_pending_source_maintenance_hook(&status, registry) {
+            validate_no_persisted_ephemeral_raw_rows_v1(&mut connection).await?;
+        }
+"#;
+        let begin_immediate =
+            "    let mut transaction = pool.begin_with(\"BEGIN IMMEDIATE\").await?;\n";
+        let preflight_mutations = [
+            (
+                "removed SourceMaintenance persisted-ephemeral preflight",
+                source.replacen(source_preflight, "", 1),
+            ),
+            (
+                "discarded SourceMaintenance persisted-ephemeral preflight Result",
+                source.replacen(
+                    "validate_no_persisted_ephemeral_raw_rows_v1(&mut connection).await?;",
+                    "validate_no_persisted_ephemeral_raw_rows_v1(&mut connection).await;",
+                    1,
+                ),
+            ),
+            (
+                "SourceMaintenance preflight moved after BEGIN IMMEDIATE",
+                source.replacen(source_preflight, "", 1).replacen(
+                    begin_immediate,
+                    &format!("{begin_immediate}{source_preflight}"),
+                    1,
+                ),
+            ),
+            (
+                "unguarded SourceMaintenance persisted-ephemeral preflight",
+                source.replacen(
+                    source_preflight,
+                    "        validate_no_persisted_ephemeral_raw_rows_v1(&mut connection).await?;\n",
+                    1,
+                ),
+            ),
+        ];
+        for (label, mutation) in preflight_mutations {
+            assert_ne!(mutation, source, "{label} fixture must mutate");
+            let file = parse_canonical_production_rust(
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                mutation.as_bytes(),
+            )
+            .expect("mutated SourceMaintenance preflight AST");
+            assert!(
+                validate_schema_runtime_reachability(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &file)
+                    .is_err(),
+                "{label} must fail closed"
+            );
+        }
+
         for (label, mutation) in [
             (
                 "TEMP LIKE wildcard filter",
@@ -16332,6 +18387,236 @@ route!(r#hex);
                 "{label} produced unexpected error: {error}"
             );
         }
+    }
+
+    #[test]
+    fn sqlite_encoding_preflight_rejects_ordering_and_propagation_bypasses() {
+        let source = repository_source(EVENT_STORE_STORE_SOURCE_RELATIVE);
+        let baseline =
+            parse_canonical_production_rust(EVENT_STORE_STORE_SOURCE_RELATIVE, source.as_bytes())
+                .expect("store AST");
+        validate_sqlite_encoding_preflight_authority(EVENT_STORE_STORE_SOURCE_RELATIVE, &baseline)
+            .expect("authoritative SQLite encoding preflight");
+
+        for mutation in ["remove", "discard", "after_temp", "before_backing"] {
+            let mut file = baseline.clone();
+            let configure_pool = file
+                .items
+                .iter_mut()
+                .find_map(|item| match item {
+                    syn::Item::Fn(function) if function.sig.ident == "configure_pool" => {
+                        Some(function)
+                    }
+                    _ => None,
+                })
+                .expect("configure_pool");
+            let syn::Stmt::Expr(syn::Expr::ForLoop(preflight), _) =
+                &mut configure_pool.block.stmts[5]
+            else {
+                panic!("encoding preflight loop");
+            };
+            match mutation {
+                "remove" => {
+                    preflight.body.stmts.remove(3);
+                }
+                "discard" => strip_outer_try(&mut preflight.body.stmts[3]),
+                "after_temp" => preflight.body.stmts.swap(3, 4),
+                "before_backing" => preflight.body.stmts.swap(2, 3),
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_sqlite_encoding_preflight_authority(
+                    EVENT_STORE_STORE_SOURCE_RELATIVE,
+                    &file,
+                )
+                .is_err(),
+                "SQLite encoding `{mutation}` bypass must fail closed"
+            );
+        }
+
+        let mut no_op = baseline;
+        let validator = no_op
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function)
+                    if function.sig.ident == "validate_main_database_encoding" =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("encoding validator");
+        validator.block = syn::parse_str("{ Ok(()) }").expect("no-op encoding validator");
+        assert!(
+            validate_sqlite_encoding_preflight_authority(
+                EVENT_STORE_STORE_SOURCE_RELATIVE,
+                &no_op,
+            )
+            .is_err(),
+            "a no-op encoding validator must fail closed"
+        );
+    }
+
+    #[test]
+    fn source_generation_rollback_guard_rejects_policy_and_ordering_bypasses() {
+        let source = repository_source(EVENT_STORE_SCHEMA_SOURCE_RELATIVE);
+        let baseline =
+            parse_canonical_production_rust(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, source.as_bytes())
+                .expect("schema AST");
+        validate_source_generation_rollback_authority(
+            EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+            &baseline,
+        )
+        .expect("authoritative source-generation rollback guard");
+
+        let mut wrapper_bypass = baseline.clone();
+        let wrapper = wrapper_bypass
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function)
+                    if function.sig.ident == "rollback_event_store_schema_with_registry" =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("production rollback wrapper");
+        wrapper.block = syn::parse_str("{ Ok(()) }").expect("rollback wrapper bypass");
+        assert!(
+            validate_source_generation_rollback_authority(
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                &wrapper_bypass,
+            )
+            .is_err(),
+            "a production rollback wrapper that omits `Preserve` must fail closed"
+        );
+
+        for mutation in ["remove", "discard", "after_down_loop"] {
+            let mut file = baseline.clone();
+            let rollback = file
+                .items
+                .iter_mut()
+                .find_map(|item| match item {
+                    syn::Item::Fn(function)
+                        if function.sig.ident == "rollback_schema_on_connection" =>
+                    {
+                        Some(function)
+                    }
+                    _ => None,
+                })
+                .expect("rollback implementation");
+            match mutation {
+                "remove" => {
+                    rollback.block.stmts.remove(2);
+                }
+                "discard" => {
+                    let syn::Stmt::Expr(syn::Expr::If(guard), _) = &mut rollback.block.stmts[2]
+                    else {
+                        panic!("source-generation rollback guard");
+                    };
+                    strip_outer_try(&mut guard.then_branch.stmts[0]);
+                }
+                "after_down_loop" => rollback.block.stmts.swap(2, 3),
+                _ => unreachable!(),
+            }
+            assert!(
+                validate_source_generation_rollback_authority(
+                    EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                    &file,
+                )
+                .is_err(),
+                "source-generation rollback `{mutation}` bypass must fail closed"
+            );
+        }
+
+        let mut policy_bypass = baseline.clone();
+        let policy = policy_bypass
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Enum(item) if item.ident == "SourceGenerationHistoryRollbackPolicy" => {
+                    Some(item)
+                }
+                _ => None,
+            })
+            .expect("rollback policy enum");
+        policy
+            .variants
+            .push(syn::parse_str("AllowDestructive").expect("production bypass variant"));
+        assert!(
+            validate_source_generation_rollback_authority(
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                &policy_bypass,
+            )
+            .is_err(),
+            "a second production rollback policy must fail closed"
+        );
+
+        let mut no_op = baseline;
+        let validator = no_op
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function)
+                    if function.sig.ident
+                        == "validate_rollback_preserves_source_generation_history" =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("rollback floor validator");
+        validator.block = syn::parse_str("{ Ok(()) }").expect("no-op rollback validator");
+        assert!(
+            validate_source_generation_rollback_authority(
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                &no_op,
+            )
+            .is_err(),
+            "a no-op rollback floor validator must fail closed"
+        );
+    }
+
+    #[test]
+    fn standalone_source_contract_rejects_marker_preserving_schema_early_return() {
+        let workspace = synthetic_workspace();
+        super::super::source_maintenance::validate_schema_capacity_authority(workspace.path())
+            .expect("baseline SourceMaintenance marker layer");
+
+        let schema_path = workspace.path().join(EVENT_STORE_SCHEMA_SOURCE_RELATIVE);
+        let source = fs::read_to_string(&schema_path).expect("schema source");
+        let mut mutation = syn::parse_file(&source).expect("schema AST");
+        let outer = mutation
+            .items
+            .iter_mut()
+            .find_map(|item| match item {
+                syn::Item::Fn(function)
+                    if function.sig.ident
+                        == "migrate_event_store_schema_with_registry_and_generation_provider" =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .expect("outer migration route");
+        outer.block.stmts.insert(
+            0,
+            syn::parse_str("if std::hint::black_box(false) { return Ok(()); }")
+                .expect("marker-preserving early return"),
+        );
+        fs::write(&schema_path, prettyplease::unparse(&mutation))
+            .expect("write marker-preserving schema bypass");
+
+        super::super::source_maintenance::validate_schema_capacity_authority(workspace.path())
+            .expect("marker-only layer intentionally preserves all ordered witnesses");
+        let error = super::super::source_maintenance::validate_source_contract(workspace.path())
+            .expect_err("standalone SourceMaintenance authority must reject the early return");
+        assert!(
+            error.contains("authoritative schema runtime"),
+            "unexpected active governance error: {error}"
+        );
     }
 
     #[test]
@@ -16425,6 +18710,15 @@ route!(r#hex);
         let import_rebind = format!(
             "{import_rebind}\nasync fn validate_active_hook_state_fast(\n    connection: &mut SqliteConnection,\n) -> Result<(), RadrootsEventStoreError> {{\n    sqlx::query(\"DELETE FROM event_envelopes\").execute(&mut *connection).await?;\n    Ok(())\n}}\n"
         );
+        let catalog_delta_bypass = source.replacen(
+            "changed == expected_changed",
+            "changed.is_subset(&expected_changed)",
+            1,
+        );
+        assert_ne!(
+            catalog_delta_bypass, source,
+            "catalog-delta bypass fixture must mutate"
+        );
 
         for (label, mutation) in [
             (
@@ -16440,19 +18734,57 @@ route!(r#hex);
                 prettyplease::unparse(&call_path_bypass),
             ),
             ("import-rebound hook validator", import_rebind),
+            ("widened replacement catalog delta", catalog_delta_bypass),
         ] {
             fs::write(&schema_path, mutation).expect("write schema authority mutation");
+            let mutated_bytes = fs::read(&schema_path).expect("mutated schema bytes");
             assert_ne!(
-                sha256_hex(&fs::read(&schema_path).expect("mutated schema bytes")),
+                sha256_hex(&mutated_bytes),
                 baseline_sha256,
                 "{label} must rotate the successor's exact schema source descriptor"
             );
+            let mutated =
+                parse_canonical_production_rust(EVENT_STORE_SCHEMA_SOURCE_RELATIVE, &mutated_bytes)
+                    .expect("mutated schema authority AST");
+            let (structural_error, expected_error) = match label {
+                "malicious hookless migration arm"
+                | "bypassed migration SQL application"
+                | "widened replacement catalog delta" => (
+                    validate_schema_migration_execution_authority(
+                        EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                        &mutated,
+                    )
+                    .expect_err("migration execution mutation must fail closed"),
+                    "authoritative schema migration execution",
+                ),
+                "migration call-path early return" => (
+                    validate_schema_runtime_reachability(
+                        EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                        &mutated,
+                    )
+                    .err()
+                    .expect("migration call-path mutation must fail closed"),
+                    "authoritative schema runtime",
+                ),
+                "import-rebound hook validator" => (
+                    validate_privileged_store_authority(workspace.path())
+                        .expect_err("hook-validator rebind must fail closed"),
+                    "privileged",
+                ),
+                _ => unreachable!(),
+            };
+            assert!(
+                structural_error.contains(expected_error),
+                "unexpected {label} structural error: {structural_error}"
+            );
+            let active_error =
+                super::super::source_maintenance::validate_source_contract(workspace.path())
+                    .expect_err("standalone SourceMaintenance contract must reject schema bypass");
+            assert!(
+                active_error.contains(expected_error),
+                "unexpected active {label} error: {active_error}"
+            );
             if label == "migration call-path early return" {
-                let mutated = parse_canonical_production_rust(
-                    EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
-                    &fs::read(&schema_path).expect("mutated schema source"),
-                )
-                .expect("mutated schema authority AST");
                 let migrate = exact_top_level_function(
                     EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
                     &mutated,
@@ -16483,6 +18815,78 @@ route!(r#hex);
                 );
             }
             fs::write(&schema_path, &source).expect("restore schema authority source");
+        }
+    }
+
+    #[test]
+    fn successor_import_authority_rejects_direct_external_rebindings() {
+        let workspace = synthetic_workspace();
+        for (relative, label, needle, replacement) in [
+            (
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                "NIP-09 apply and validation routes",
+                "use crate::nip09::reconciliation_v1::{",
+                "use arbitrary_external::{",
+            ),
+            (
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                "Food apply and validation routes",
+                "use crate::store::food_availability_projection_v1::{",
+                "use arbitrary_external::{",
+            ),
+            (
+                EVENT_STORE_SCHEMA_SOURCE_RELATIVE,
+                "migration helper routes",
+                "use crate::migrations::{",
+                "use arbitrary_external::{",
+            ),
+            (
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                "NIP-09 generated manifest route",
+                "use crate::generated::nip09_reconciliation_manifest as nip09_manifest;",
+                "use arbitrary_external::nip09_reconciliation_manifest as nip09_manifest;",
+            ),
+            (
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                "Food generated manifest route",
+                "use crate::generated::food_availability_projection_manifest as food_manifest;",
+                "use arbitrary_external::food_availability_projection_manifest as food_manifest;",
+            ),
+            (
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                "SourceMaintenance generated manifest route",
+                "use crate::generated::source_maintenance_manifest;",
+                "use arbitrary_external::source_maintenance_manifest;",
+            ),
+        ] {
+            let path = workspace.path().join(relative);
+            let source = fs::read_to_string(&path).expect("successor import authority source");
+            let mutation = source.replacen(needle, replacement, 1);
+            assert_ne!(mutation, source, "{label} fixture must mutate");
+            fs::write(&path, &mutation).expect("write external import rebind");
+            let mutation = parse_canonical_production_rust(relative, mutation.as_bytes())
+                .expect("external import rebind AST");
+            let structural_error = if relative == EVENT_STORE_SCHEMA_SOURCE_RELATIVE {
+                validate_event_store_schema_import_authority(relative, &mutation)
+            } else {
+                validate_event_store_migrations_import_authority(relative, &mutation)
+            }
+            .expect_err("external import rebind must fail exact route authority");
+            assert!(
+                structural_error.contains("production top-level import authority"),
+                "unexpected {label} structural error: {structural_error}"
+            );
+            let active_error =
+                super::super::source_maintenance::validate_source_contract(workspace.path())
+                    .expect_err(
+                        "standalone SourceMaintenance contract must reject external rebind",
+                    );
+            assert!(
+                active_error.contains("production top-level import authority")
+                    || active_error.contains("privileged terminal import"),
+                "unexpected active {label} error: {active_error}"
+            );
+            fs::write(&path, source).expect("restore successor import authority source");
         }
     }
 
@@ -17165,8 +19569,78 @@ route!(r#hex);
             .expect("current successor registry reachability");
         validate_manifest_validator_reachability(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE, &baseline)
             .expect("immutable predecessor descriptor reachability");
+        validate_source_maintenance_manifest_validator_reachability(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &baseline,
+        )
+        .expect("SourceMaintenance descriptor reachability");
+        validate_source_maintenance_migration_bindings(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &baseline,
+        )
+        .expect("SourceMaintenance v4 binding authority");
+        validate_event_store_migrations_import_authority(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &baseline,
+        )
+        .expect("migration import authority");
+        validate_event_store_migration_support_authority(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &baseline,
+        )
+        .expect("active migration support authority");
         expected_event_store_migration_compiler_inputs(workspace.path(), &baseline)
             .expect("current versioned migration compiler inputs");
+
+        for (label, needle, replacement) in [
+            (
+                "SourceMaintenance v4 version",
+                "        version: 4,\n        name: \"source_maintenance\",",
+                "        version: 5,\n        name: \"source_maintenance\",",
+            ),
+            (
+                "SourceMaintenance v4 hook",
+                "        hook: EventStoreMigrationHook::SourceMaintenanceV1,",
+                "        hook: EventStoreMigrationHook::None,",
+            ),
+            (
+                "SourceMaintenance v4 manifest hash",
+                "        hook_manifest_sha256: Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256),",
+                "        hook_manifest_sha256: Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256),",
+            ),
+            (
+                "SourceMaintenance v4 registry version",
+                "            source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,",
+                "            food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,",
+            ),
+            (
+                "SourceMaintenance v4 replacement inventory binding",
+                "        replaced_object_names: EVENT_STORE_SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,",
+                "        replaced_object_names: &[],",
+            ),
+        ] {
+            let mutation = source.replacen(needle, replacement, 1);
+            assert_ne!(mutation, source, "{label} fixture must mutate");
+            fs::write(&migrations_path, &mutation).expect("write v4 authority mutation");
+            let mutation = parse_canonical_production_rust(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                mutation.as_bytes(),
+            )
+            .expect("mutated SourceMaintenance v4 AST");
+            assert!(
+                expected_event_store_migration_compiler_inputs(workspace.path(), &mutation)
+                    .is_err()
+                    || validate_source_maintenance_migration_bindings(
+                        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                        &mutation,
+                    )
+                    .is_err(),
+                "{label} drift must fail closed"
+            );
+            super::super::source_maintenance::validate_source_contract(workspace.path())
+                .expect_err("standalone SourceMaintenance contract must reject v4 binding drift");
+            fs::write(&migrations_path, &source).expect("restore migration authority source");
+        }
 
         for (label, needle, replacement) in [
             (
@@ -17209,6 +19683,26 @@ route!(r#hex);
                 "    let mut expected_version = minimum;",
                 "    let mut expected_version = { return Ok(()); minimum };",
             ),
+            (
+                "duplicate hook reuse guard",
+                "            if !migration_hook_ids.insert(migration.hook.id()) {",
+                "            if false && !migration_hook_ids.insert(migration.hook.id()) {",
+            ),
+            (
+                "canonical hook migration binding",
+                "            if migration.version != canonical_version || migration.name != canonical_name {",
+                "            if false && (migration.version != canonical_version || migration.name != canonical_name) {",
+            ),
+            (
+                "exact predecessor replacement ownership",
+                "            if prior_owners.len() != 1 {",
+                "            if prior_owners.is_empty() {",
+            ),
+            (
+                "predecessor table replacement prohibition",
+                "            if prior_owner.owned_table_names.contains(object_name)\n                || prior_owner.fts5_table_names.contains(object_name)",
+                "            if prior_owner.owned_table_names.contains(object_name)\n                && prior_owner.fts5_table_names.contains(object_name)",
+            ),
         ] {
             let mutation = source.replacen(needle, replacement, 1);
             assert_ne!(mutation, source, "{label} fixture must mutate");
@@ -17218,38 +19712,51 @@ route!(r#hex);
                 baseline_sha256,
                 "{label} must rotate the successor's exact migration source descriptor"
             );
+            let mutation = parse_canonical_production_rust(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                &fs::read(&migrations_path).expect("mutated migration bytes"),
+            )
+            .expect("mutated migration support AST");
+            let structural_error = match validate_event_store_migration_support_authority(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                &mutation,
+            ) {
+                Ok(()) => panic!("{label} active migration support mutation must fail closed"),
+                Err(error) => error,
+            };
+            assert!(
+                structural_error.contains("active migration support token authority"),
+                "unexpected {label} structural error: {structural_error}"
+            );
+            let active_error =
+                super::super::source_maintenance::validate_source_contract(workspace.path())
+                    .expect_err(
+                        "standalone SourceMaintenance contract must reject migration support drift",
+                    );
+            assert!(
+                active_error.contains("active migration support token authority"),
+                "unexpected active {label} error: {active_error}"
+            );
             fs::write(&migrations_path, &source).expect("restore migration authority source");
         }
 
-        let mut mutation = syn::parse_file(&source).expect("migration authority AST");
-        let validator = mutation
-            .items
-            .iter_mut()
-            .find_map(|item| match item {
-                syn::Item::Fn(function)
-                    if function.sig.ident == "validate_generated_nip09_manifest_descriptor" =>
-                {
-                    Some(function)
-                }
-                _ => None,
-            })
-            .expect("generated-manifest validator");
-        let initializer = validator
-            .block
-            .stmts
-            .iter_mut()
-            .find_map(|statement| match statement {
-                syn::Stmt::Local(local)
-                    if local_pattern_ident(&local.pat).as_deref() == Some("up_byte_length") =>
-                {
-                    local.init.as_mut()
-                }
-                _ => None,
-            })
-            .expect("up-byte-length initializer");
-        *initializer.expr =
-            syn::parse_str("{ return Ok(()); 0_u64 }").expect("early-return initializer");
-        let mutation = prettyplease::unparse(&mutation);
+        let mutation = source.replacen(
+            r#"    let up_byte_length = u64::try_from(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH,
+    )
+    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
+        reason: "generated NIP-09 migration up byte length is out of range".to_owned(),
+    })?;"#,
+            r#"    let up_byte_length = {
+        return Ok(());
+        0_u64
+    };"#,
+            1,
+        );
+        assert_ne!(
+            mutation, source,
+            "generated-manifest validator fixture must mutate only its initializer"
+        );
         fs::write(&migrations_path, &mutation)
             .expect("write manifest-validator early-return mutation");
         assert_ne!(
@@ -17290,7 +19797,76 @@ route!(r#hex);
             .is_err(),
             "the structural divergence audit must reject an early return"
         );
+        let structural_error = validate_event_store_migration_support_authority(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            &mutation,
+        )
+        .expect_err("predecessor descriptor bypass must fail active support authority");
+        assert!(structural_error.contains("active migration support token authority"));
+        let active_error =
+            super::super::source_maintenance::validate_source_contract(workspace.path())
+                .expect_err("standalone SourceMaintenance contract must reject predecessor bypass");
+        assert!(
+            active_error.contains("active migration support token authority"),
+            "unexpected active predecessor descriptor error: {active_error}"
+        );
         fs::write(&migrations_path, &source).expect("restore migration authority source");
+    }
+
+    #[test]
+    fn source_replacement_inventory_and_sql_restoration_are_active_authority() {
+        let workspace = synthetic_workspace();
+        let migrations_path = workspace
+            .path()
+            .join(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE);
+        let migrations = fs::read_to_string(&migrations_path).expect("migration registry source");
+        let replacement_mutation = migrations.replacen(
+            "    \"radroots_event_store_food_availability_image_delete_guard\",\n",
+            "",
+            1,
+        );
+        assert_ne!(
+            replacement_mutation, migrations,
+            "replacement inventory fixture must mutate"
+        );
+        fs::write(&migrations_path, replacement_mutation)
+            .expect("write replacement inventory mutation");
+        let error = super::super::source_maintenance::validate_source_contract(workspace.path())
+            .expect_err("replacement inventory drift must fail active SourceMaintenance authority");
+        assert!(
+            error.contains("migration catalog differs"),
+            "unexpected replacement inventory error: {error}"
+        );
+        fs::write(&migrations_path, migrations).expect("restore migration registry source");
+
+        for (relative, label, needle, replacement) in [
+            (
+                "crates/event_store/migrations/0004_source_maintenance.up.sql",
+                "widened managed-v4 marker predicate",
+                "      AND NEW.prior_last_transition_seq = state.last_transition_seq\n",
+                "      AND NEW.prior_last_transition_seq >= state.last_transition_seq\n",
+            ),
+            (
+                "crates/event_store/migrations/0004_source_maintenance.down.sql",
+                "omitted exact v3 marker restoration predicate",
+                "      AND NEW.transition_floor_seq = state.last_transition_seq\n",
+                "",
+            ),
+        ] {
+            let path = workspace.path().join(relative);
+            let source = fs::read_to_string(&path).expect("replacement SQL source");
+            let mutation = source.replacen(needle, replacement, 1);
+            assert_ne!(mutation, source, "{label} fixture must mutate");
+            fs::write(&path, mutation).expect("write replacement SQL mutation");
+            let error =
+                super::super::source_maintenance::validate_source_contract(workspace.path())
+                    .expect_err("replacement SQL drift must fail exact migration identity");
+            assert!(
+                error.contains("reviewed v4 identity"),
+                "unexpected {label} error: {error}"
+            );
+            fs::write(&path, source).expect("restore replacement SQL source");
+        }
     }
 
     #[test]
@@ -17314,14 +19890,14 @@ route!(r#hex);
         fs::write(
             workspace
                 .path()
-                .join("crates/event_store/migrations/0004_future_probe.up.sql"),
+                .join("crates/event_store/migrations/0005_future_probe.up.sql"),
             up_sql,
         )
         .expect("write future up migration");
         fs::write(
             workspace
                 .path()
-                .join("crates/event_store/migrations/0004_future_probe.down.sql"),
+                .join("crates/event_store/migrations/0005_future_probe.down.sql"),
             down_sql,
         )
         .expect("write future down migration");
@@ -17331,24 +19907,25 @@ route!(r#hex);
             .join(EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE);
         let migrations = fs::read_to_string(&migrations_path).expect("migration registry source");
         let migrations = migrations.replacen(
-            "pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 3;",
             "pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 4;",
+            "pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 5;",
             1,
         );
         let registry_tail = "    },\n];\n\npub(crate) fn migration_for_version";
         let future_entry = format!(
             r#"    }},
     EventStoreMigration {{
-        version: 4,
+        version: 5,
         name: "future_probe",
-        up_sql: include_str!("../migrations/0004_future_probe.up.sql"),
-        down_sql: include_str!("../migrations/0004_future_probe.down.sql"),
+        up_sql: include_str!("../migrations/0005_future_probe.up.sql"),
+        down_sql: include_str!("../migrations/0005_future_probe.down.sql"),
         up_len: {},
         down_len: {},
         up_sha256: "{}",
         down_sha256: "{}",
         schema_sha256: "0000000000000000000000000000000000000000000000000000000000000000",
         owned_object_names: &["radroots_event_store_future_probe"],
+        replaced_object_names: &[],
         owned_table_names: &["radroots_event_store_future_probe"],
         fts5_table_names: &[],
         hook: EventStoreMigrationHook::None,
@@ -17365,10 +19942,11 @@ pub(crate) fn migration_for_version"#,
         );
         let migrations = migrations.replacen(registry_tail, &future_entry, 1);
         assert!(
-            migrations.contains("version: 4"),
+            migrations.contains("version: 5")
+                && migrations.contains("../migrations/0005_future_probe.up.sql"),
             "future migration fixture must extend the registry"
         );
-        fs::write(&migrations_path, migrations).expect("write future migration registry");
+        fs::write(&migrations_path, &migrations).expect("write future migration registry");
 
         let registry = parse_canonical_production_rust(
             EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
@@ -17377,6 +19955,60 @@ pub(crate) fn migration_for_version"#,
         .expect("future migration registry AST");
         expected_event_store_migration_compiler_inputs(workspace.path(), &registry)
             .expect("versioned successor and isolated future compiler inputs");
+
+        for (field, needle, replacement) in [
+            (
+                "hook_manifest_sha256",
+                "hook_manifest_sha256: None",
+                "hook_manifest_sha256: Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256)",
+            ),
+            (
+                "event_contract_registry_version",
+                "event_contract_registry_version: None",
+                "event_contract_registry_version: Some(source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION)",
+            ),
+        ] {
+            let mut invalid = migrations.clone();
+            let index = invalid
+                .rfind(needle)
+                .expect("future hookless field must be the final matching field");
+            invalid.replace_range(index..index + needle.len(), replacement);
+            let invalid = parse_canonical_production_rust(
+                EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+                invalid.as_bytes(),
+            )
+            .expect("invalid future hook authority AST");
+            let error = expected_event_store_migration_compiler_inputs(workspace.path(), &invalid)
+                .expect_err("hookless v5 migration must reject non-None authority");
+            assert!(
+                error.contains(field) && error.contains("versioned hook authority"),
+                "unexpected v5 `{field}` error: {error}"
+            );
+        }
+
+        let mut invalid_replacements = migrations.clone();
+        let needle = "replaced_object_names: &[]";
+        let index = invalid_replacements
+            .rfind(needle)
+            .expect("future hookless replacement field must be the final matching field");
+        invalid_replacements.replace_range(
+            index..index + needle.len(),
+            "replaced_object_names: &[\"radroots_event_store_food_availability_projection_delete_guard\"]",
+        );
+        let invalid_replacements = parse_canonical_production_rust(
+            EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
+            invalid_replacements.as_bytes(),
+        )
+        .expect("invalid future replacement authority AST");
+        let error =
+            expected_event_store_migration_compiler_inputs(workspace.path(), &invalid_replacements)
+                .expect_err("hookless v5 migration must reject predecessor replacements");
+        assert!(
+            error.contains("hookless post-v2 migration 5")
+                && error.contains("predecessor replacements")
+                && error.contains("separately authenticated successor authority"),
+            "unexpected v5 replacement authority error: {error}"
+        );
 
         for (relative, before) in bundle_paths.into_iter().zip(before) {
             let after = read_regular_file(workspace.path(), relative).expect("future artifact");
@@ -17388,7 +20020,7 @@ pub(crate) fn migration_for_version"#,
         }
         let future_up_path = workspace
             .path()
-            .join("crates/event_store/migrations/0004_future_probe.up.sql");
+            .join("crates/event_store/migrations/0005_future_probe.up.sql");
         for malicious_sql in [
             "INSERT INTO event_envelopes(raw_json) VALUES ('{}');\n",
             "INSERT INTO 'event_envelopes'(raw_json) VALUES ('{}');\n",
@@ -17431,9 +20063,9 @@ pub(crate) fn migration_for_version"#,
             fs::write(&future_up_path, malicious_sql).expect("write coupled future migration");
             let error = validate_hookless_post_v2_migration_sql_isolated(
                 workspace.path(),
-                4,
+                5,
                 "up",
-                "crates/event_store/migrations/0004_future_probe.up.sql",
+                "crates/event_store/migrations/0005_future_probe.up.sql",
             )
             .expect_err("hookless future migration must not couple to v1 authority");
             assert!(

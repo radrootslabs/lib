@@ -20,6 +20,7 @@ fn usage() {
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
     eprintln!("  cargo xtask contract nip09-reconciliation-manifest [--write]");
     eprintln!("  cargo xtask contract food-availability-projection-manifest [--write]");
+    eprintln!("  cargo xtask contract source-maintenance-manifest [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
@@ -64,10 +65,7 @@ fn validate_contract() -> Result<(), String> {
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
-        .and_then(|_| contract::validate_event_contract_registry_v7_inventory(&root))
-        .and_then(|_| contract::validate_nip09_reconciliation_manifest(&root))
-        .and_then(|_| contract::validate_food_availability_projection_manifest(&root))
-        .and_then(|_| contract::validate_knowledge_contract_manifest(&root))
+        .and_then(|_| contract::validate_artifact_contracts(&root))
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -78,6 +76,7 @@ fn release_preflight() -> Result<(), String> {
 
 fn release_preflight_at(root: &Path) -> Result<(), String> {
     dto_roots::check(root)?;
+    contract::validate_artifact_contracts(root)?;
     contract::validate_release_preflight(root)
 }
 
@@ -118,6 +117,15 @@ fn run_contract(args: &[String]) -> Result<(), String> {
             _ => Err(
                 "food-availability-projection-manifest accepts no arguments or exactly --write"
                     .to_string(),
+            ),
+        },
+        Some("source-maintenance-manifest") => match &args[1..] {
+            [] => contract::validate_source_maintenance_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_source_maintenance_manifest(&workspace_root())
+            }
+            _ => Err(
+                "source-maintenance-manifest accepts no arguments or exactly --write".to_string(),
             ),
         },
         Some("knowledge-manifest") => {
@@ -234,6 +242,12 @@ mod tests {
         ])
         .expect_err("invalid FoodAvailability projection manifest mode");
         assert!(invalid_food.contains("exactly --write"));
+        let invalid_source_maintenance = run_contract(&[
+            "source-maintenance-manifest".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid SourceMaintenance manifest mode");
+        assert!(invalid_source_maintenance.contains("exactly --write"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
@@ -331,6 +345,8 @@ mod tests {
             .expect("contract NIP-09 reconciliation manifest");
         run_contract(&["food-availability-projection-manifest".to_string()])
             .expect("contract FoodAvailability projection manifest");
+        run_contract(&["source-maintenance-manifest".to_string()])
+            .expect("contract SourceMaintenance manifest");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }

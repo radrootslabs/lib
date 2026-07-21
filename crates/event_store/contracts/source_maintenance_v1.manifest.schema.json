@@ -1,0 +1,493 @@
+{
+  "$defs": {
+    "accounting": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "sqlite_cast_blob_octet_sum_v1"
+        },
+        "nullable_raw_tag_columns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "raw_event_columns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "raw_tag_columns": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "algorithm",
+        "raw_event_columns",
+        "raw_tag_columns",
+        "nullable_raw_tag_columns"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_event_text_bytes": {
+          "const": 67108864
+        },
+        "raw_events": {
+          "const": 25000
+        },
+        "raw_tag_text_bytes": {
+          "const": 33554432
+        },
+        "raw_tags": {
+          "const": 250000
+        },
+        "retained_source_generations": {
+          "const": 8
+        }
+      },
+      "required": [
+        "raw_events",
+        "raw_tags",
+        "raw_event_text_bytes",
+        "raw_tag_text_bytes",
+        "retained_source_generations"
+      ],
+      "type": "object"
+    },
+    "source_file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://radroots.org/contracts/event-store/source-maintenance-v1-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_id": {
+      "const": "radroots_event_store.source_maintenance_v1"
+    },
+    "entry_points": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rust_path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "rust_path"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "hook_id": {
+      "const": "source_maintenance_v1"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "migration": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog": {
+          "additionalProperties": false,
+          "properties": {
+            "fts5_tables": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "objects": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "replaced_objects": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "tables": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "objects",
+            "replaced_objects",
+            "tables",
+            "fts5_tables"
+          ],
+          "type": "object"
+        },
+        "down": {
+          "$ref": "#/$defs/file"
+        },
+        "name": {
+          "const": "source_maintenance"
+        },
+        "schema_sha256": {
+          "const": "d526d96ea02be12b4b0aed99e97cfdde17c4474ace67111506a7b900ee78b186"
+        },
+        "up": {
+          "$ref": "#/$defs/file"
+        },
+        "version": {
+          "const": 4
+        }
+      },
+      "required": [
+        "version",
+        "name",
+        "up",
+        "down",
+        "schema_sha256",
+        "catalog"
+      ],
+      "type": "object"
+    },
+    "predecessor": {
+      "additionalProperties": false,
+      "properties": {
+        "hook_id": {
+          "const": "food_availability_projection_v1"
+        },
+        "manifest": {
+          "$ref": "#/$defs/file"
+        }
+      },
+      "required": [
+        "hook_id",
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "public_api": {
+      "additionalProperties": false,
+      "properties": {
+        "added_symbols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "breaking_replacements": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "removed": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "replacement": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "removed",
+              "replacement"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "error_variants": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inherited_predecessor_symbols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "methods": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "removed_symbols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "inherited_predecessor_symbols",
+        "added_symbols",
+        "methods",
+        "error_variants",
+        "removed_symbols",
+        "breaking_replacements"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "canonical_path": {
+          "const": "contracts/conformance/vectors/event_store/source_maintenance.v1.json"
+        },
+        "executor_byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "executor_hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "executor_id": {
+          "const": "radroots_event_store.source_maintenance_v1.result_vector_executor.v1"
+        },
+        "executor_path": {
+          "const": "crates/event_store/tests/source_maintenance_v1_result_vector.rs"
+        },
+        "executor_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "executor_test": {
+          "const": "source_maintenance_v1_result_vector"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "mirror_path": {
+          "const": "crates/event_store/tests/fixtures/source_maintenance.v1.json"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canonical_path",
+        "mirror_path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm",
+        "executor_id",
+        "executor_path",
+        "executor_test",
+        "executor_byte_length",
+        "executor_sha256",
+        "executor_hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "$ref": "#/$defs/source_file"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "source_maintenance": {
+      "additionalProperties": false,
+      "properties": {
+        "accounting": {
+          "$ref": "#/$defs/accounting"
+        },
+        "capacity_authority_id": {
+          "const": "radroots_event_store_source_capacity_v1"
+        },
+        "event_contract_registry_version": {
+          "const": 7
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "rebuild_seal": {
+          "additionalProperties": false,
+          "properties": {
+            "active_generation_authority": {
+              "const": "radroots_event_store_source_state"
+            },
+            "food_hook_id": {
+              "const": "food_availability_projection_v1"
+            },
+            "food_manifest_sha256": {
+              "const": "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23"
+            },
+            "food_scope_fingerprint_sha256": {
+              "const": "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0"
+            },
+            "marker_close_authority": {
+              "const": "radroots_event_store_source_capacity_marker_close_guard"
+            },
+            "nip09_hook_id": {
+              "const": "nip09_reconciliation_v1"
+            },
+            "nip09_manifest_sha256": {
+              "const": "74af832420ffbaa9805e89df3c0b34f126a443e1598f757e3372f407f9003b77"
+            }
+          },
+          "required": [
+            "nip09_hook_id",
+            "nip09_manifest_sha256",
+            "food_hook_id",
+            "food_manifest_sha256",
+            "food_scope_fingerprint_sha256",
+            "active_generation_authority",
+            "marker_close_authority"
+          ],
+          "type": "object"
+        },
+        "reopen_validation": {
+          "additionalProperties": false,
+          "properties": {
+            "generation_history_validation": {
+              "const": "bounded_count_plus_active_ordinal_v1"
+            },
+            "mode": {
+              "const": "bounded_full_raw_recount_v1"
+            },
+            "raw_event_rejection_scan_bound": {
+              "const": 25001
+            },
+            "raw_tag_rejection_scan_bound": {
+              "const": 250001
+            },
+            "retained_generation_rejection_scan_bound": {
+              "const": 9
+            }
+          },
+          "required": [
+            "mode",
+            "raw_event_rejection_scan_bound",
+            "raw_tag_rejection_scan_bound",
+            "generation_history_validation",
+            "retained_generation_rejection_scan_bound"
+          ],
+          "type": "object"
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "event_contract_registry_version",
+        "capacity_authority_id",
+        "accounting",
+        "limits",
+        "reopen_validation",
+        "rebuild_seal"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "hook_id",
+    "manifest_schema",
+    "predecessor",
+    "migration",
+    "source_maintenance",
+    "entry_points",
+    "source_files",
+    "public_api",
+    "result_vector"
+  ],
+  "title": "Radroots event-store SourceMaintenance v1 manifest",
+  "type": "object"
+}

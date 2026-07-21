@@ -15,6 +15,10 @@ use crate::nip09::reconciliation_v1::{
     OsSourceGenerationProvider, ReconciliationCapacityLimits, SourceGenerationProvider,
     apply_reconciliation_hook, validate_active_hook_state_fast, validate_reconciliation_capacity,
 };
+use crate::source_maintenance_v1::{
+    apply_source_maintenance_hook_v1, validate_no_persisted_ephemeral_raw_rows_v1,
+    validate_source_capacity_authority_full_v1,
+};
 use crate::store::food_availability_projection_v1::{
     apply_food_availability_projection_hook_v1,
     validate_food_availability_projection_hook_state_fast_v1,
@@ -47,6 +51,13 @@ struct AppliedMigration {
     up_sha256: String,
     down_sha256: String,
     schema_sha256: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SourceGenerationHistoryRollbackPolicy {
+    Preserve,
+    #[cfg(test)]
+    AllowDestructiveForMigrationTest,
 }
 
 pub async fn inspect_event_store_schema_status(
@@ -160,6 +171,9 @@ async fn migrate_event_store_schema_with_registry_and_generation_provider(
         let mut connection = pool.acquire().await?;
         validate_event_store_temp_schema_with_registry(&mut connection, registry).await?;
         validate_reconciliation_capacity(&mut connection, reconciliation_limits).await?;
+        if has_pending_source_maintenance_hook(&status, registry) {
+            validate_no_persisted_ephemeral_raw_rows_v1(&mut connection).await?;
+        }
     }
 
     let mut transaction = pool.begin_with("BEGIN IMMEDIATE").await?;
@@ -189,7 +203,23 @@ fn has_pending_source_capacity_hook(
                 migration.hook,
                 EventStoreMigrationHook::Nip09ReconciliationV1
                     | EventStoreMigrationHook::FoodAvailabilityProjectionV1
+                    | EventStoreMigrationHook::SourceMaintenanceV1
             )
+    })
+}
+
+fn has_pending_source_maintenance_hook(
+    status: &RadrootsEventStoreSchemaStatus,
+    registry: &[EventStoreMigration],
+) -> bool {
+    let current_version = match status {
+        RadrootsEventStoreSchemaStatus::Uninitialized => return false,
+        RadrootsEventStoreSchemaStatus::UnledgeredBaseline => registry[0].version,
+        RadrootsEventStoreSchemaStatus::Managed { version } => *version,
+    };
+    registry.iter().any(|migration| {
+        migration.version > current_version
+            && migration.hook == EventStoreMigrationHook::SourceMaintenanceV1
     })
 }
 
@@ -207,12 +237,47 @@ pub(crate) async fn rollback_event_store_schema_offline(
     .await
 }
 
+#[cfg(test)]
+pub(crate) async fn rollback_event_store_schema_offline_destructive_for_migration_test(
+    pool: &SqlitePool,
+    target: u32,
+) -> Result<(), RadrootsEventStoreError> {
+    rollback_event_store_schema_with_registry_inner(
+        pool,
+        EVENT_STORE_MIGRATIONS,
+        RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+        RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        target,
+        SourceGenerationHistoryRollbackPolicy::AllowDestructiveForMigrationTest,
+    )
+    .await
+}
+
 async fn rollback_event_store_schema_with_registry(
     pool: &SqlitePool,
     registry: &[EventStoreMigration],
     minimum: u32,
     supported_current: u32,
     target: u32,
+) -> Result<(), RadrootsEventStoreError> {
+    rollback_event_store_schema_with_registry_inner(
+        pool,
+        registry,
+        minimum,
+        supported_current,
+        target,
+        SourceGenerationHistoryRollbackPolicy::Preserve,
+    )
+    .await
+}
+
+async fn rollback_event_store_schema_with_registry_inner(
+    pool: &SqlitePool,
+    registry: &[EventStoreMigration],
+    minimum: u32,
+    supported_current: u32,
+    target: u32,
+    source_generation_history_policy: SourceGenerationHistoryRollbackPolicy,
 ) -> Result<(), RadrootsEventStoreError> {
     if target < minimum {
         return Err(RadrootsEventStoreError::RollbackBelowVersionFloor {
@@ -222,8 +287,14 @@ async fn rollback_event_store_schema_with_registry(
     }
     validate_migration_registry(registry, minimum, supported_current)?;
     let mut transaction = pool.begin_with("BEGIN EXCLUSIVE").await?;
-    let result =
-        rollback_schema_on_connection(&mut transaction, registry, supported_current, target).await;
+    let result = rollback_schema_on_connection(
+        &mut transaction,
+        registry,
+        supported_current,
+        target,
+        source_generation_history_policy,
+    )
+    .await;
     finish_schema_transaction(transaction, result).await
 }
 
@@ -302,8 +373,12 @@ async fn migrate_schema_on_connection(
             migration.hook,
             EventStoreMigrationHook::Nip09ReconciliationV1
                 | EventStoreMigrationHook::FoodAvailabilityProjectionV1
+                | EventStoreMigrationHook::SourceMaintenanceV1
         ) {
             validate_reconciliation_capacity(connection, reconciliation_limits).await?;
+            if migration.hook == EventStoreMigrationHook::SourceMaintenanceV1 {
+                validate_no_persisted_ephemeral_raw_rows_v1(connection).await?;
+            }
         }
         apply_migration_up(connection, registry, migration).await?;
         apply_migration_hook(
@@ -333,6 +408,7 @@ async fn rollback_schema_on_connection(
     registry: &[EventStoreMigration],
     supported_current: u32,
     target: u32,
+    source_generation_history_policy: SourceGenerationHistoryRollbackPolicy,
 ) -> Result<(), RadrootsEventStoreError> {
     let RadrootsEventStoreSchemaStatus::Managed {
         version: current_version,
@@ -345,6 +421,9 @@ async fn rollback_schema_on_connection(
             current: current_version,
             target,
         });
+    }
+    if source_generation_history_policy == SourceGenerationHistoryRollbackPolicy::Preserve {
+        validate_rollback_preserves_source_generation_history(registry, current_version, target)?;
     }
 
     for version in ((target + 1)..=current_version).rev() {
@@ -382,6 +461,31 @@ async fn rollback_schema_on_connection(
             reason: format!("rollback completed in unexpected state {status:?}"),
         }),
     }
+}
+
+fn validate_rollback_preserves_source_generation_history(
+    registry: &[EventStoreMigration],
+    current: u32,
+    target: u32,
+) -> Result<(), RadrootsEventStoreError> {
+    let Some(floor) = registry
+        .iter()
+        .find(|migration| migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1)
+        .map(|migration| migration.version)
+    else {
+        return Ok(());
+    };
+    if current < floor || target >= floor {
+        return Ok(());
+    }
+
+    Err(
+        RadrootsEventStoreError::RollbackWouldDiscardSourceGenerationHistory {
+            current,
+            target,
+            floor,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -493,10 +597,15 @@ fn validate_catalog_delta(
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
+    let expected_changed = migration
+        .replaced_object_names
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
 
     let valid = match direction {
-        "up" => added == expected && removed.is_empty() && changed.is_empty(),
-        "down" => removed == expected && added.is_empty() && changed.is_empty(),
+        "up" => added == expected && removed.is_empty() && changed == expected_changed,
+        "down" => removed == expected && added.is_empty() && changed == expected_changed,
         _ => false,
     };
     if !valid {
@@ -504,7 +613,7 @@ fn validate_catalog_delta(
             version: migration.version,
             direction,
             reason: format!(
-                "expected {} objects {expected:?}; added {added:?}, removed {removed:?}, changed {changed:?}",
+                "expected {} objects {expected:?} and changed replacement objects {expected_changed:?}; added {added:?}, removed {removed:?}, changed {changed:?}",
                 if direction == "up" {
                     "added"
                 } else {
@@ -629,6 +738,9 @@ async fn apply_migration_hook(
         EventStoreMigrationHook::FoodAvailabilityProjectionV1 => {
             apply_food_availability_projection_hook_v1(connection).await
         }
+        EventStoreMigrationHook::SourceMaintenanceV1 => {
+            apply_source_maintenance_hook_v1(connection).await
+        }
     }
 }
 
@@ -643,6 +755,9 @@ async fn validate_migration_hook_state(
         }
         EventStoreMigrationHook::FoodAvailabilityProjectionV1 => {
             validate_food_availability_projection_hook_state_fast_v1(connection).await
+        }
+        EventStoreMigrationHook::SourceMaintenanceV1 => {
+            validate_source_capacity_authority_full_v1(connection).await
         }
     }
 }
@@ -958,7 +1073,7 @@ mod migration_framework {
     use crate::migrations::sha256_hex;
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
     use std::str::FromStr;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     const SYNTHETIC_V2_UP: &str = "CREATE TABLE radroots_event_store_v2_parent (
   id INTEGER PRIMARY KEY NOT NULL
@@ -1010,6 +1125,7 @@ DROP TABLE radroots_event_store_v2_parent;";
             down_sha256: leaked_sha256(SYNTHETIC_V2_DOWN),
             schema_sha256,
             owned_object_names: SYNTHETIC_V2_OBJECT_NAMES,
+            replaced_object_names: &[],
             owned_table_names: SYNTHETIC_V2_TABLE_NAMES,
             fts5_table_names: NO_FTS5_TABLES,
             hook: crate::migrations::EventStoreMigrationHook::None,
@@ -1048,6 +1164,30 @@ DROP TABLE radroots_event_store_v2_parent;";
             .execute(pool)
             .await
             .expect("baseline schema");
+    }
+
+    async fn schema_object_sql(pool: &SqlitePool, name: &str) -> String {
+        sqlx::query_scalar("SELECT sql FROM main.sqlite_schema WHERE name = ?")
+            .bind(name)
+            .fetch_one(pool)
+            .await
+            .expect("schema object SQL")
+    }
+
+    async fn insert_test_rebuild_marker(
+        connection: &mut SqliteConnection,
+        target_generation: &[u8; 32],
+        transition_floor_seq: i64,
+        prior_last_transition_seq: i64,
+    ) -> Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO radroots_event_store_source_rebuild_marker(singleton, barrier_key, target_generation, target_generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq, prior_active_generation, prior_raw_event_count, prior_raw_tag_count, prior_raw_high_water_seq, prior_last_transition_seq) SELECT 1, 1, ?, generation.generation_ordinal + 1, generation.reconciliation_version, generation.addressable_feed_version, generation.event_contract_registry_version, generation.hook_id, generation.hook_manifest_sha256, ?, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, state.active_generation, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, ? FROM radroots_event_store_source_state AS state JOIN radroots_event_store_source_generation AS generation ON generation.source_generation = state.active_generation WHERE state.singleton = 1",
+        )
+        .bind(target_generation.as_slice())
+        .bind(transition_floor_seq)
+        .bind(prior_last_transition_seq)
+        .execute(connection)
+        .await
     }
 
     #[tokio::test]
@@ -1121,9 +1261,10 @@ DROP TABLE radroots_event_store_v2_parent;";
         assert!(
             matches!(
                 error,
-                RadrootsEventStoreError::ReconciliationCapacityExceeded {
-                    resource: crate::RadrootsEventStoreReconciliationResource::RawEvents,
-                    actual: 1,
+                RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: crate::RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+                    current: 0,
+                    requested: 1,
                     limit: 0,
                 }
             ),
@@ -1186,9 +1327,10 @@ DROP TABLE radroots_event_store_v2_parent;";
         assert!(
             matches!(
                 error,
-                RadrootsEventStoreError::ReconciliationCapacityExceeded {
-                    resource: crate::RadrootsEventStoreReconciliationResource::RawEvents,
-                    actual: 1,
+                RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: crate::RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+                    current: 0,
+                    requested: 1,
                     limit: 0,
                 }
             ),
@@ -1214,6 +1356,239 @@ DROP TABLE radroots_event_store_v2_parent;";
         .await
         .expect("v3 ledger count");
         assert_eq!(v3_ledger_count, 0);
+
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            &EVENT_STORE_MIGRATIONS[..3],
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            3,
+        )
+        .await
+        .expect("install v3 schema");
+        sqlx::query(
+            "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 1, 1, '[]', '', ?, '{}', 'verified', 'unsupported', NULL, 'regular', 0, 1, 1)",
+        )
+        .bind("1".repeat(64))
+        .bind("2".repeat(64))
+        .bind("3".repeat(128))
+        .execute(&pool)
+        .await
+        .expect("post-v3 raw event");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET raw_event_count = 1, raw_high_water_seq = (SELECT MAX(seq) FROM event_envelopes) WHERE singleton = 1",
+        )
+        .execute(&pool)
+        .await
+        .expect("advance post-v3 source authority");
+
+        let mut transaction = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("v4 migration transaction");
+        let result = migrate_schema_on_connection(
+            &mut transaction,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            &OsSourceGenerationProvider,
+            limits,
+        )
+        .await;
+        let error = finish_schema_transaction(transaction, result)
+            .await
+            .expect_err("v4 capacity excess must fail");
+        assert!(
+            matches!(
+                error,
+                RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: crate::RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+                    current: 0,
+                    requested: 1,
+                    limit: 0,
+                }
+            ),
+            "unexpected v4 capacity failure: {error:?}"
+        );
+        assert_eq!(
+            inspect_event_store_schema_status(&pool)
+                .await
+                .expect("v3 status after rejected v4 migration"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 3 }
+        );
+        let v4_object_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'radroots_event_store_source_capacity_v1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 object count");
+        assert_eq!(v4_object_count, 0);
+        let v4_ledger_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM radroots_event_store_schema_migrations WHERE version = 4",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 ledger count");
+        assert_eq!(v4_ledger_count, 0);
+    }
+
+    #[tokio::test]
+    async fn v3_to_v4_under_limit_backfills_exact_capacity_and_preserves_source() {
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            &EVENT_STORE_MIGRATIONS[..3],
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            3,
+        )
+        .await
+        .expect("install v3 schema");
+        sqlx::query("CREATE TABLE caller_state(id INTEGER PRIMARY KEY, value TEXT NOT NULL)")
+            .execute(&pool)
+            .await
+            .expect("create unrelated caller table");
+        sqlx::query("INSERT INTO caller_state(id, value) VALUES (1, 'preserve')")
+            .execute(&pool)
+            .await
+            .expect("seed unrelated caller row");
+        let event_id = "7".repeat(64);
+        sqlx::query(
+            "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 1, 1, '[]', 'under-limit', ?, '{}', 'verified', 'unsupported', NULL, 'regular', 0, 1, 1)",
+        )
+        .bind(event_id.as_str())
+        .bind("8".repeat(64))
+        .bind("9".repeat(128))
+        .execute(&pool)
+        .await
+        .expect("post-v3 raw event");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET raw_event_count = 1, raw_high_water_seq = (SELECT MAX(seq) FROM event_envelopes) WHERE singleton = 1",
+        )
+        .execute(&pool)
+        .await
+        .expect("advance post-v3 source authority");
+        let generation_before: Vec<u8> = sqlx::query_scalar(
+            "SELECT active_generation FROM radroots_event_store_source_state WHERE singleton = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v3 source generation");
+        let event_bytes: i64 = sqlx::query_scalar(
+            "SELECT length(CAST(event_id AS BLOB)) + length(CAST(pubkey AS BLOB)) + length(CAST(tags_json AS BLOB)) + length(CAST(content AS BLOB)) + length(CAST(sig AS BLOB)) + length(CAST(raw_json AS BLOB)) FROM event_envelopes WHERE event_id = ?",
+        )
+        .bind(event_id.as_str())
+        .fetch_one(&pool)
+        .await
+        .expect("raw event byte authority");
+
+        migrate_event_store_schema_with_registry(
+            &pool,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        )
+        .await
+        .expect("migrate under-limit v3 source to v4");
+
+        assert_eq!(
+            inspect_event_store_schema_status(&pool)
+                .await
+                .expect("v4 status"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 4 }
+        );
+        let capacity: (Vec<u8>, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT source_generation, raw_event_count, raw_tag_count, raw_event_bytes, raw_tag_bytes, retained_generation_count, retained_generation_limit FROM radroots_event_store_source_capacity_v1 WHERE singleton = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 capacity authority");
+        assert_eq!(capacity, (generation_before, 1, 0, event_bytes, 0, 1, 8));
+        let preserved: (i64, String) = sqlx::query_as(
+            "SELECT (SELECT COUNT(*) FROM event_envelopes WHERE event_id = ?), (SELECT value FROM caller_state WHERE id = 1)",
+        )
+        .bind(event_id)
+        .fetch_one(&pool)
+        .await
+        .expect("preserved source and caller state");
+        assert_eq!(preserved, (1, "preserve".to_owned()));
+    }
+
+    #[tokio::test]
+    async fn v4_rejects_persisted_legacy_ephemeral_rows_atomically() {
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            &EVENT_STORE_MIGRATIONS[..3],
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            3,
+        )
+        .await
+        .expect("install v3 schema");
+        let event_id = "4".repeat(64);
+        sqlx::query(
+            "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, 1, 20000, '[]', '', ?, '{}', 'verified', 'unsupported', NULL, 'ephemeral', 0, 1, 1)",
+        )
+        .bind(event_id.as_str())
+        .bind("5".repeat(64))
+        .bind("6".repeat(128))
+        .execute(&pool)
+        .await
+        .expect("legacy persisted ephemeral row");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET raw_event_count = 1, raw_high_water_seq = (SELECT MAX(seq) FROM event_envelopes) WHERE singleton = 1",
+        )
+        .execute(&pool)
+        .await
+        .expect("advance legacy source authority");
+
+        let mut transaction = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("v4 migration transaction");
+        let result = migrate_schema_on_connection(
+            &mut transaction,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            &OsSourceGenerationProvider,
+            ReconciliationCapacityLimits::production(),
+        )
+        .await;
+        let error = finish_schema_transaction(transaction, result)
+            .await
+            .expect_err("persisted ephemeral source must reject v4");
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::PersistedEphemeralRawEvent {
+                ref event_id,
+                kind: 20_000,
+            } if event_id == &"4".repeat(64)
+        ));
+        assert_eq!(
+            inspect_event_store_schema_status(&pool)
+                .await
+                .expect("v3 remains valid after rejected v4 migration"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 3 }
+        );
+        let v4_object_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'radroots_event_store_source_capacity_v1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 object count");
+        assert_eq!(v4_object_count, 0);
+        let v4_ledger_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM radroots_event_store_schema_migrations WHERE version = 4",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 ledger count");
+        assert_eq!(v4_ledger_count, 0);
+        let raw_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM event_envelopes WHERE event_id = ?")
+                .bind(event_id)
+                .fetch_one(&pool)
+                .await
+                .expect("legacy raw row remains after rollback");
+        assert_eq!(raw_count, 1);
     }
 
     #[tokio::test]
@@ -1487,6 +1862,7 @@ DROP TABLE event_envelopes;";
             down_sha256: ZERO_SHA256,
             schema_sha256: ZERO_SHA256,
             owned_object_names: DELTA_OBJECT_NAMES,
+            replaced_object_names: &[],
             owned_table_names: DELTA_TABLE_NAMES,
             fts5_table_names: NO_FTS5_TABLES,
             hook: EventStoreMigrationHook::None,
@@ -2054,7 +2430,7 @@ DROP TABLE event_envelopes;";
         ));
 
         let unknown = AppliedMigration {
-            version: 4,
+            version: 5,
             name: "future".to_owned(),
             up_sha256: "0".repeat(64),
             down_sha256: "1".repeat(64),
@@ -2066,12 +2442,13 @@ DROP TABLE event_envelopes;";
                     row(&EVENT_STORE_MIGRATIONS[0]),
                     row(&EVENT_STORE_MIGRATIONS[1]),
                     row(&EVENT_STORE_MIGRATIONS[2]),
+                    row(&EVENT_STORE_MIGRATIONS[3]),
                     unknown
                 ],
                 EVENT_STORE_MIGRATIONS,
-                4
+                5
             ),
-            Err(RadrootsEventStoreError::UnknownMigration { version: 4 })
+            Err(RadrootsEventStoreError::UnknownMigration { version: 5 })
         ));
     }
 
@@ -2098,7 +2475,7 @@ DROP TABLE event_envelopes;";
     }
 
     #[tokio::test]
-    async fn rollback_rejects_below_floor_ahead_and_unmanaged_targets() {
+    async fn rollback_rejects_below_floor_ahead_unmanaged_and_generation_destructive_targets() {
         let unmanaged = memory_pool().await;
         assert!(matches!(
             rollback_event_store_schema_offline(&unmanaged, 1).await,
@@ -2124,9 +2501,89 @@ DROP TABLE event_envelopes;";
                 target
             }) if target == ahead
         ));
+        let history_before: Vec<(Vec<u8>, i64)> = sqlx::query_as(
+            "SELECT source_generation, generation_ordinal FROM radroots_event_store_source_generation ORDER BY generation_ordinal",
+        )
+        .fetch_all(&managed)
+        .await
+        .expect("source-generation history before rejected rollback");
+        assert!(matches!(
+            rollback_event_store_schema_offline(&managed, 1).await,
+            Err(
+                RadrootsEventStoreError::RollbackWouldDiscardSourceGenerationHistory {
+                    current: RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+                    target: 1,
+                    floor: 2,
+                }
+            )
+        ));
+        assert_eq!(
+            inspect_event_store_schema_status(&managed)
+                .await
+                .expect("current status after rejected rollback"),
+            RadrootsEventStoreSchemaStatus::Managed {
+                version: RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            }
+        );
+        assert_eq!(
+            sqlx::query_as::<_, (Vec<u8>, i64)>(
+                "SELECT source_generation, generation_ordinal FROM radroots_event_store_source_generation ORDER BY generation_ordinal",
+            )
+            .fetch_all(&managed)
+            .await
+            .expect("source-generation history after rejected rollback"),
+            history_before
+        );
+
+        rollback_event_store_schema_offline_destructive_for_migration_test(&managed, 1)
+            .await
+            .expect("test-only destructive rollback to v1");
         rollback_event_store_schema_offline(&managed, 1)
             .await
-            .expect("idempotent rollback");
+            .expect("v1 to v1 idempotent rollback");
+    }
+
+    #[tokio::test]
+    async fn rollback_cannot_bypass_generation_history_guard_through_version_three() {
+        let managed = memory_pool().await;
+        migrate_event_store_schema(&managed)
+            .await
+            .expect("migration");
+        rollback_event_store_schema_offline(&managed, 3)
+            .await
+            .expect("rollback to history-preserving v3");
+        let history_before: Vec<(Vec<u8>, i64)> = sqlx::query_as(
+            "SELECT source_generation, generation_ordinal FROM radroots_event_store_source_generation ORDER BY generation_ordinal",
+        )
+        .fetch_all(&managed)
+        .await
+        .expect("v3 source-generation history");
+
+        assert!(matches!(
+            rollback_event_store_schema_offline(&managed, 1).await,
+            Err(
+                RadrootsEventStoreError::RollbackWouldDiscardSourceGenerationHistory {
+                    current: 3,
+                    target: 1,
+                    floor: 2,
+                }
+            )
+        ));
+        assert_eq!(
+            inspect_event_store_schema_status(&managed)
+                .await
+                .expect("v3 status after rejected bypass"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 3 }
+        );
+        assert_eq!(
+            sqlx::query_as::<_, (Vec<u8>, i64)>(
+                "SELECT source_generation, generation_ordinal FROM radroots_event_store_source_generation ORDER BY generation_ordinal",
+            )
+            .fetch_all(&managed)
+            .await
+            .expect("v3 source-generation history after rejected bypass"),
+            history_before
+        );
     }
 
     #[tokio::test]
@@ -2237,6 +2694,7 @@ INSERT INTO radroots_event_store_missing_v2(id) VALUES (1);";
             down_sha256: leaked_sha256(DOWN),
             schema_sha256: ZERO_SHA256,
             owned_object_names: OBJECTS,
+            replaced_object_names: &[],
             owned_table_names: OBJECTS,
             fts5_table_names: NO_FTS5_TABLES,
             hook: crate::migrations::EventStoreMigrationHook::None,
@@ -2394,6 +2852,659 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         ));
     }
 
+    #[test]
+    fn registry_rejects_invalid_predecessor_replacement_declarations() {
+        const BASELINE_REPLACEMENT: &[&str] = &["event_envelope_kind_created_idx"];
+        const DUPLICATE_REPLACEMENTS: &[&str] = &[
+            "radroots_event_store_source_rebuild_marker_insert_guard",
+            "radroots_event_store_source_rebuild_marker_insert_guard",
+        ];
+        const MISSING_REPLACEMENT: &[&str] = &["radroots_event_store_missing_guard"];
+        const CURRENT_OWNED_REPLACEMENT: &[&str] =
+            &["radroots_event_store_source_capacity_insert_guard"];
+        const TABLE_REPLACEMENT: &[&str] = &["radroots_event_store_source_state"];
+
+        let mut baseline = EVENT_STORE_MIGRATIONS[0];
+        baseline.replaced_object_names = BASELINE_REPLACEMENT;
+        assert!(matches!(
+            validate_migration_registry(&[baseline], 1, 1),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.contains("baseline migration cannot replace")
+        ));
+
+        let mut hookless = synthetic_v2_descriptor(ZERO_SHA256);
+        hookless.replaced_object_names = BASELINE_REPLACEMENT;
+        assert!(matches!(
+            validate_migration_registry(&[EVENT_STORE_MIGRATIONS[0], hookless], 1, 2),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.contains("without an authenticated successor hook")
+        ));
+
+        for (replacements, expected_reason) in [
+            (DUPLICATE_REPLACEMENTS, "declared more than once"),
+            (MISSING_REPLACEMENT, "exactly one prior migration"),
+            (CURRENT_OWNED_REPLACEMENT, "also newly owned"),
+            (TABLE_REPLACEMENT, "only non-table schema objects"),
+        ] {
+            let mut v4 = EVENT_STORE_MIGRATIONS[3];
+            v4.replaced_object_names = replacements;
+            let registry = [
+                EVENT_STORE_MIGRATIONS[0],
+                EVENT_STORE_MIGRATIONS[1],
+                EVENT_STORE_MIGRATIONS[2],
+                v4,
+            ];
+            assert!(matches!(
+                validate_migration_registry(&registry, 1, 4),
+                Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                    if reason.contains(expected_reason)
+            ));
+        }
+    }
+
+    #[test]
+    fn registry_binds_authenticated_hooks_to_one_canonical_migration() {
+        let mut duplicate = EVENT_STORE_MIGRATIONS[1];
+        duplicate.version = 3;
+        duplicate.name = "duplicate_nip09";
+        assert!(matches!(
+            validate_migration_registry(
+                &[EVENT_STORE_MIGRATIONS[0], EVENT_STORE_MIGRATIONS[1], duplicate],
+                1,
+                3,
+            ),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.contains("migration hook `nip09_reconciliation_v1` is declared more than once")
+        ));
+
+        let mut misbound = EVENT_STORE_MIGRATIONS[3];
+        misbound.version = 2;
+        misbound.name = "future_replacement";
+        assert!(matches!(
+            validate_migration_registry(&[EVENT_STORE_MIGRATIONS[0], misbound], 1, 2),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.contains("bound to canonical migration 4 `source_maintenance`")
+        ));
+    }
+
+    #[tokio::test]
+    async fn migration_catalog_delta_requires_exact_symmetric_replacements() {
+        const ADDED_OBJECTS: &[&str] = &["radroots_event_store_replacement_probe"];
+        const REPLACED_OBJECTS: &[&str] = &["event_envelope_kind_created_idx"];
+        const EXTRA_REPLACEMENTS: &[&str] = &[
+            "event_envelope_kind_created_idx",
+            "event_envelope_projection_idx",
+        ];
+        let pool = memory_pool().await;
+        install_unledgered_baseline(&pool).await;
+        let original_index_sql = schema_object_sql(&pool, REPLACED_OBJECTS[0]).await;
+        let mut connection = pool.acquire().await.expect("connection");
+        let before = read_catalog(&mut connection).await.expect("before catalog");
+        sqlx::raw_sql(
+            "DROP INDEX event_envelope_kind_created_idx;
+             CREATE INDEX event_envelope_kind_created_idx
+             ON event_envelopes(kind, event_id);
+             CREATE TABLE radroots_event_store_replacement_probe (
+               id INTEGER PRIMARY KEY NOT NULL
+             ) STRICT;",
+        )
+        .execute(&mut *connection)
+        .await
+        .expect("replacement up delta");
+        let changed = read_catalog(&mut connection)
+            .await
+            .expect("changed catalog");
+        let mut migration = synthetic_v2_descriptor(ZERO_SHA256);
+        migration.owned_object_names = ADDED_OBJECTS;
+        migration.owned_table_names = ADDED_OBJECTS;
+        migration.replaced_object_names = REPLACED_OBJECTS;
+        validate_catalog_delta(&before, &changed, &migration, "up")
+            .expect("exact up replacement delta");
+
+        let mut undeclared = migration;
+        undeclared.replaced_object_names = &[];
+        assert!(matches!(
+            validate_catalog_delta(&before, &changed, &undeclared, "up"),
+            Err(RadrootsEventStoreError::MigrationCatalogDeltaMismatch { .. })
+        ));
+        let mut missing = migration;
+        missing.replaced_object_names = EXTRA_REPLACEMENTS;
+        assert!(matches!(
+            validate_catalog_delta(&before, &changed, &missing, "up"),
+            Err(RadrootsEventStoreError::MigrationCatalogDeltaMismatch { .. })
+        ));
+        let mut add_remove_masquerade = changed.clone();
+        add_remove_masquerade.retain(|row| row.name != REPLACED_OBJECTS[0]);
+        assert!(matches!(
+            validate_catalog_delta(&before, &add_remove_masquerade, &migration, "up"),
+            Err(RadrootsEventStoreError::MigrationCatalogDeltaMismatch { .. })
+        ));
+
+        sqlx::raw_sql("DROP TABLE radroots_event_store_replacement_probe;")
+            .execute(&mut *connection)
+            .await
+            .expect("remove added object");
+        sqlx::raw_sql("DROP INDEX event_envelope_kind_created_idx;")
+            .execute(&mut *connection)
+            .await
+            .expect("remove replacement index");
+        sqlx::query(sqlx::AssertSqlSafe(original_index_sql.clone()))
+            .execute(&mut *connection)
+            .await
+            .expect("restore predecessor index");
+        let restored = read_catalog(&mut connection)
+            .await
+            .expect("restored catalog");
+        validate_catalog_delta(&changed, &restored, &migration, "down")
+            .expect("exact down replacement delta");
+        assert_eq!(
+            restored
+                .iter()
+                .find(|row| row.name == REPLACED_OBJECTS[0])
+                .and_then(|row| row.sql.as_deref()),
+            Some(original_index_sql.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn v4_marker_open_allows_repairing_prior_transition_high_water_drift() {
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        )
+        .await
+        .expect("install v4 schema");
+
+        let authority_guard = schema_object_sql(
+            &pool,
+            "radroots_event_store_source_state_authority_update_guard",
+        )
+        .await;
+        sqlx::query("DROP TRIGGER radroots_event_store_source_state_authority_update_guard")
+            .execute(&pool)
+            .await
+            .expect("temporarily remove state authority guard");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET last_transition_seq = 7 WHERE singleton = 1",
+        )
+        .execute(&pool)
+        .await
+        .expect("drift derived transition high-water");
+        sqlx::query(sqlx::AssertSqlSafe(authority_guard))
+            .execute(&pool)
+            .await
+            .expect("restore state authority guard");
+        let mut connection = pool.acquire().await.expect("fingerprint connection");
+        validate_schema_fingerprint(
+            &mut connection,
+            EVENT_STORE_MIGRATIONS,
+            &EVENT_STORE_MIGRATIONS[3],
+        )
+        .await
+        .expect("exact v4 catalog after drift fixture");
+        drop(connection);
+
+        let target_generation = [0x91; 32];
+        let mut transaction = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("marker transaction");
+        let wrong_prior = insert_test_rebuild_marker(&mut transaction, &target_generation, 0, 6)
+            .await
+            .expect_err("marker must still bind the exact prior transition high-water");
+        assert!(wrong_prior.as_database_error().is_some_and(|error| {
+            error
+                .message()
+                .contains("exact raw and prior source authority")
+        }));
+        let wrong_floor = insert_test_rebuild_marker(&mut transaction, &target_generation, 1, 7)
+            .await
+            .expect_err("marker must bind the actual retained transition maximum");
+        assert!(wrong_floor.as_database_error().is_some_and(|error| {
+            error
+                .message()
+                .contains("exact raw and prior source authority")
+        }));
+        let inserted = insert_test_rebuild_marker(&mut transaction, &target_generation, 0, 7)
+            .await
+            .expect("derived transition drift is repairable under v4");
+        assert_eq!(inserted.rows_affected(), 1);
+        let marker_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_source_rebuild_marker")
+                .fetch_one(&mut *transaction)
+                .await
+                .expect("marker count");
+        assert_eq!(marker_count, 1);
+
+        let appended = sqlx::query(
+            "INSERT INTO radroots_event_store_source_generation(source_generation, generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq) SELECT target_generation, target_generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1",
+        )
+        .execute(&mut *transaction)
+        .await
+        .expect("append repair generation");
+        assert_eq!(appended.rows_affected(), 1);
+        let rotated = sqlx::query(
+            "UPDATE radroots_event_store_source_state SET active_generation = ?, raw_event_count = 0, raw_tag_count = 0, raw_high_water_seq = 0, last_transition_seq = 0 WHERE singleton = 1 AND active_generation = (SELECT prior_active_generation FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1) AND raw_event_count = (SELECT prior_raw_event_count FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1) AND raw_tag_count = (SELECT prior_raw_tag_count FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1) AND raw_high_water_seq = (SELECT prior_raw_high_water_seq FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1) AND last_transition_seq = (SELECT prior_last_transition_seq FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1)",
+        )
+        .bind(target_generation.as_slice())
+        .execute(&mut *transaction)
+        .await
+        .expect("rotate source state through exact marker CAS");
+        assert_eq!(rotated.rows_affected(), 1);
+        let repaired: (Vec<u8>, i64, i64) = sqlx::query_as(
+            "SELECT state.active_generation, state.last_transition_seq, COALESCE(MAX(transition.transition_seq), 0) FROM radroots_event_store_source_state AS state LEFT JOIN radroots_event_store_addressable_head_transition AS transition ON transition.source_generation = state.active_generation WHERE state.singleton = 1 GROUP BY state.active_generation, state.last_transition_seq",
+        )
+        .fetch_one(&mut *transaction)
+        .await
+        .expect("repaired transition authority");
+        assert_eq!(repaired.0.as_slice(), target_generation.as_slice());
+        assert_eq!(repaired.1, repaired.2);
+        assert_eq!(repaired.1, 0);
+        transaction
+            .rollback()
+            .await
+            .expect("rollback marker fixture");
+    }
+
+    #[tokio::test]
+    async fn v3_to_v4_rejects_prior_transition_drift_atomically() {
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            &EVENT_STORE_MIGRATIONS[..3],
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            3,
+        )
+        .await
+        .expect("install managed v3 schema");
+        let healthy_state: (Vec<u8>, i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT active_generation, raw_event_count, raw_tag_count, raw_high_water_seq, last_transition_seq FROM radroots_event_store_source_state WHERE singleton = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("healthy v3 source state");
+        let authority_guard = schema_object_sql(
+            &pool,
+            "radroots_event_store_source_state_authority_update_guard",
+        )
+        .await;
+        let mut predecessor_trigger_sql = BTreeMap::new();
+        for name in crate::migrations::EVENT_STORE_SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES {
+            predecessor_trigger_sql.insert(*name, schema_object_sql(&pool, name).await);
+        }
+        let ledger_before: Vec<(i64, String, String, String, String)> = sqlx::query_as(
+            "SELECT version, name, up_sha256, down_sha256, schema_sha256 FROM radroots_event_store_schema_migrations ORDER BY version",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("v3 ledger before drift");
+
+        let mut corruption = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("v3 corruption fixture transaction");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_state_authority_update_guard")
+            .execute(&mut *corruption)
+            .await
+            .expect("temporarily remove state authority guard");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET last_transition_seq = 7 WHERE singleton = 1",
+        )
+        .execute(&mut *corruption)
+        .await
+        .expect("drift managed v3 transition high-water");
+        sqlx::query(sqlx::AssertSqlSafe(authority_guard.clone()))
+            .execute(&mut *corruption)
+            .await
+            .expect("restore exact v3 state authority guard");
+        corruption
+            .commit()
+            .await
+            .expect("commit corrupt managed-v3 fixture");
+        let corrupt_state: (Vec<u8>, i64, i64, i64, i64) = sqlx::query_as(
+            "SELECT active_generation, raw_event_count, raw_tag_count, raw_high_water_seq, last_transition_seq FROM radroots_event_store_source_state WHERE singleton = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("committed corrupt v3 source state");
+        assert_eq!(corrupt_state.4, 7);
+        assert_ne!(corrupt_state, healthy_state);
+
+        let error = migrate_event_store_schema_with_registry(
+            &pool,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        )
+        .await
+        .expect_err("v4 upgrade must not repair corrupt managed-v3 hook state");
+        assert!(
+            matches!(
+                error,
+                RadrootsEventStoreError::MigrationHookStateDrift {
+                    hook_id: "nip09_reconciliation_v1",
+                    ..
+                }
+            ),
+            "unexpected managed-v3 drift failure: {error:?}"
+        );
+
+        assert_eq!(
+            sqlx::query_as::<_, (Vec<u8>, i64, i64, i64, i64)>(
+                "SELECT active_generation, raw_event_count, raw_tag_count, raw_high_water_seq, last_transition_seq FROM radroots_event_store_source_state WHERE singleton = 1",
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("corrupt state after rejected upgrade"),
+            corrupt_state
+        );
+        let ledger_after: Vec<(i64, String, String, String, String)> = sqlx::query_as(
+            "SELECT version, name, up_sha256, down_sha256, schema_sha256 FROM radroots_event_store_schema_migrations ORDER BY version",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("ledger after rejected upgrade");
+        assert_eq!(ledger_after, ledger_before);
+        assert_eq!(
+            ledger_after.iter().map(|row| row.0).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        let v4_objects: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'radroots_event_store_source_capacity_v1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 object count after failed upgrade");
+        assert_eq!(v4_objects, 0);
+        let v4_ledger_rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM radroots_event_store_schema_migrations WHERE version = 4",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("v4 ledger row count after failed upgrade");
+        assert_eq!(v4_ledger_rows, 0);
+        for (name, sql) in &predecessor_trigger_sql {
+            assert_eq!(schema_object_sql(&pool, name).await, *sql);
+        }
+
+        let mut repair = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("v3 fixture repair transaction");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_state_authority_update_guard")
+            .execute(&mut *repair)
+            .await
+            .expect("temporarily remove state authority guard for repair");
+        sqlx::query(
+            "UPDATE radroots_event_store_source_state SET last_transition_seq = ? WHERE singleton = 1",
+        )
+        .bind(healthy_state.4)
+        .execute(&mut *repair)
+        .await
+        .expect("repair v3 transition high-water fixture");
+        sqlx::query(sqlx::AssertSqlSafe(authority_guard))
+            .execute(&mut *repair)
+            .await
+            .expect("restore exact v3 state authority guard after repair");
+        repair.commit().await.expect("commit v3 fixture repair");
+        assert_eq!(
+            inspect_event_store_schema_status_with_registry(
+                &pool,
+                EVENT_STORE_MIGRATIONS,
+                RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            )
+            .await
+            .expect("managed v3 status after explicit fixture repair"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 3 }
+        );
+    }
+
+    #[tokio::test]
+    async fn v4_food_reset_requires_marker_rotation_and_preserves_target_rows() {
+        const PROJECTION_INSERT_GUARD: &str =
+            "radroots_event_store_food_availability_projection_insert_guard";
+        const IMAGE_INSERT_GUARD: &str =
+            "radroots_event_store_food_availability_image_insert_guard";
+        const CURSOR_DELETE_GUARD: &str =
+            "radroots_event_store_food_availability_cursor_delete_guard";
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        )
+        .await
+        .expect("install v4 schema");
+        let active_generation: Vec<u8> = sqlx::query_scalar(
+            "SELECT active_generation FROM radroots_event_store_source_state WHERE singleton = 1",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("active generation");
+        let target_generation = [0x92; 32];
+        assert_ne!(active_generation.as_slice(), target_generation.as_slice());
+
+        let mut connection = pool.acquire().await.expect("fixture connection");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable fixture foreign keys");
+        let mut guard_definitions = Vec::new();
+        for guard in [
+            PROJECTION_INSERT_GUARD,
+            IMAGE_INSERT_GUARD,
+            CURSOR_DELETE_GUARD,
+        ] {
+            let definition: String =
+                sqlx::query_scalar("SELECT sql FROM main.sqlite_schema WHERE name = ?")
+                    .bind(guard)
+                    .fetch_one(&mut *connection)
+                    .await
+                    .expect("fixture guard definition");
+            let drop_statement = format!("DROP TRIGGER {guard}");
+            sqlx::query(sqlx::AssertSqlSafe(drop_statement))
+                .execute(&mut *connection)
+                .await
+                .expect("drop fixture guard");
+            guard_definitions.push(definition);
+        }
+        sqlx::query("DELETE FROM radroots_event_store_food_availability_cursor")
+            .execute(&mut *connection)
+            .await
+            .expect("remove Food cursor fixture");
+        let author = "a".repeat(64);
+        for (generation, event_id, event_seq, d_tag) in [
+            (
+                active_generation.as_slice(),
+                "b".repeat(64),
+                1_i64,
+                "historical",
+            ),
+            (
+                target_generation.as_slice(),
+                "c".repeat(64),
+                2_i64,
+                "target",
+            ),
+        ] {
+            sqlx::query(
+                "INSERT INTO radroots_event_store_food_availability_projection(source_generation, kind, pubkey, d_tag, event_id, event_seq, created_at, contract_id, content, title, summary, published_at, location, price_amount, price_currency, price_unit, quantity_amount, quantity_unit, status, diagnostic_codes_json, source_transition_seq) VALUES (?, 30402, ?, ?, ?, ?, 10, 'radroots.food.availability.v1', 'fixture', 'Fixture', 'Fixture summary', 10, 'Victoria, BC', '3', 'CAD', 'lb', NULL, NULL, 'active', '[]', 1)",
+            )
+            .bind(generation)
+            .bind(author.as_str())
+            .bind(d_tag)
+            .bind(event_id)
+            .bind(event_seq)
+            .execute(&mut *connection)
+            .await
+            .expect("insert Food projection fixture");
+            sqlx::query(
+                "INSERT INTO radroots_event_store_food_availability_image(source_generation, pubkey, d_tag, image_index, raw_tag_json, url, width, height, blossom_sha256, qualifies, diagnostic_codes_json) VALUES (?, ?, ?, 0, '[\"image\",\"https://media.example/fixture.webp\"]', NULL, NULL, NULL, NULL, 0, '[]')",
+            )
+            .bind(generation)
+            .bind(author.as_str())
+            .bind(d_tag)
+            .execute(&mut *connection)
+            .await
+            .expect("insert Food image fixture");
+        }
+        for definition in guard_definitions {
+            sqlx::query(sqlx::AssertSqlSafe(definition))
+                .execute(&mut *connection)
+                .await
+                .expect("restore fixture guard");
+        }
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore fixture foreign keys");
+        drop(connection);
+
+        for table in [
+            "radroots_event_store_food_availability_image",
+            "radroots_event_store_food_availability_projection",
+        ] {
+            let statement = format!("DELETE FROM {table} WHERE source_generation = ?");
+            let error = sqlx::query(sqlx::AssertSqlSafe(statement))
+                .bind(active_generation.as_slice())
+                .execute(&pool)
+                .await
+                .expect_err("marker-free Food reset must fail");
+            assert!(error.as_database_error().is_some());
+        }
+
+        let mut transaction = pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .expect("Food reset transaction");
+        insert_test_rebuild_marker(&mut transaction, &target_generation, 0, 0)
+            .await
+            .expect("open rebuild marker");
+        let pre_rotation = sqlx::query(
+            "DELETE FROM radroots_event_store_food_availability_image WHERE source_generation = ?",
+        )
+        .bind(active_generation.as_slice())
+        .execute(&mut *transaction)
+        .await
+        .expect_err("marker alone must not authorize Food reset");
+        assert!(pre_rotation.as_database_error().is_some());
+
+        let appended = sqlx::query(
+            "INSERT INTO radroots_event_store_source_generation(source_generation, generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq) SELECT target_generation, target_generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1",
+        )
+        .execute(&mut *transaction)
+        .await
+        .expect("append target generation");
+        assert_eq!(appended.rows_affected(), 1);
+        let rotated = sqlx::query(
+            "UPDATE radroots_event_store_source_state SET active_generation = ?, raw_event_count = 0, raw_tag_count = 0, raw_high_water_seq = 0, last_transition_seq = 0 WHERE singleton = 1",
+        )
+        .bind(target_generation.as_slice())
+        .execute(&mut *transaction)
+        .await
+        .expect("rotate source state");
+        assert_eq!(rotated.rows_affected(), 1);
+
+        for table in [
+            "radroots_event_store_food_availability_image",
+            "radroots_event_store_food_availability_projection",
+        ] {
+            let statement = format!("DELETE FROM {table} WHERE source_generation = ?");
+            let deleted = sqlx::query(sqlx::AssertSqlSafe(statement))
+                .bind(active_generation.as_slice())
+                .execute(&mut *transaction)
+                .await
+                .expect("post-rotation historical Food reset");
+            assert_eq!(deleted.rows_affected(), 1);
+        }
+        for table in [
+            "radroots_event_store_food_availability_image",
+            "radroots_event_store_food_availability_projection",
+        ] {
+            let statement = format!("DELETE FROM {table} WHERE source_generation = ?");
+            let error = sqlx::query(sqlx::AssertSqlSafe(statement))
+                .bind(target_generation.as_slice())
+                .execute(&mut *transaction)
+                .await
+                .expect_err("active target-generation Food rows must remain guarded");
+            assert!(error.as_database_error().is_some());
+        }
+        let remaining: (i64, i64) = sqlx::query_as(
+            "SELECT (SELECT COUNT(*) FROM radroots_event_store_food_availability_projection WHERE source_generation = ?), (SELECT COUNT(*) FROM radroots_event_store_food_availability_image WHERE source_generation = ?)",
+        )
+        .bind(target_generation.as_slice())
+        .bind(target_generation.as_slice())
+        .fetch_one(&mut *transaction)
+        .await
+        .expect("target Food rows");
+        assert_eq!(remaining, (1, 1));
+        transaction
+            .rollback()
+            .await
+            .expect("rollback Food reset fixture");
+    }
+
+    #[tokio::test]
+    async fn v4_down_restores_exact_predecessor_trigger_sql_and_fingerprint() {
+        const REPLACED: &[&str] = &[
+            "radroots_event_store_food_availability_image_delete_guard",
+            "radroots_event_store_food_availability_projection_delete_guard",
+            "radroots_event_store_source_rebuild_marker_insert_guard",
+        ];
+        let pool = memory_pool().await;
+        migrate_event_store_schema_with_registry(
+            &pool,
+            &EVENT_STORE_MIGRATIONS[..3],
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            3,
+        )
+        .await
+        .expect("install v3 schema");
+        let mut predecessor_sql = BTreeMap::new();
+        for name in REPLACED {
+            predecessor_sql.insert(*name, schema_object_sql(&pool, name).await);
+        }
+
+        migrate_event_store_schema_with_registry(
+            &pool,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        )
+        .await
+        .expect("upgrade to v4");
+        for name in REPLACED {
+            assert_ne!(schema_object_sql(&pool, name).await, predecessor_sql[*name]);
+        }
+
+        rollback_event_store_schema_with_registry(
+            &pool,
+            EVENT_STORE_MIGRATIONS,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN,
+            RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            3,
+        )
+        .await
+        .expect("rollback v4 to v3");
+        for name in REPLACED {
+            assert_eq!(schema_object_sql(&pool, name).await, predecessor_sql[*name]);
+        }
+        assert_eq!(
+            inspect_event_store_schema_status_with_registry(
+                &pool,
+                EVENT_STORE_MIGRATIONS,
+                RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+            )
+            .await
+            .expect("restored v3 status"),
+            RadrootsEventStoreSchemaStatus::Managed { version: 3 }
+        );
+    }
+
     #[tokio::test]
     async fn synthetic_v2_owned_objects_are_fingerprinted_and_foreign_keys_are_checked() {
         let registry = synthetic_v2_registry().await;
@@ -2480,6 +3591,7 @@ CREATE TABLE forgotten_v2_table (
             down_sha256: leaked_sha256(DOWN),
             schema_sha256: ZERO_SHA256,
             owned_object_names: OBJECTS,
+            replaced_object_names: &[],
             owned_table_names: OBJECTS,
             fts5_table_names: NO_FTS5_TABLES,
             hook: crate::migrations::EventStoreMigrationHook::None,
@@ -2520,7 +3632,7 @@ CREATE TABLE forgotten_v2_table (
             SqliteConnectOptions::new()
                 .filename(&path)
                 .create_if_missing(true)
-                .busy_timeout(Duration::from_millis(100))
+                .busy_timeout(Duration::ZERO)
         };
         let first = SqlitePoolOptions::new()
             .max_connections(1)
@@ -2540,14 +3652,9 @@ CREATE TABLE forgotten_v2_table (
             .begin_with("BEGIN IMMEDIATE")
             .await
             .expect("writer transaction");
-        let started = Instant::now();
         migrate_event_store_schema(&second)
             .await
             .expect("read-only fast path");
-        assert!(
-            started.elapsed() < Duration::from_secs(1),
-            "current-schema migration attempted to wait for a writer lock"
-        );
         writer.rollback().await.expect("release writer");
     }
 

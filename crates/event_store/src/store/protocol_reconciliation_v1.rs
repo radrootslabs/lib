@@ -9,6 +9,10 @@ use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
     persist_event_coordinate_after_insert, synchronize_after_insert, validate_source_raw_authority,
 };
+use crate::source_maintenance_v1::{
+    advance_source_capacity_after_insert_v1, preflight_unique_raw_source_append_v1,
+    raw_source_capacity_delta_v1, validate_source_capacity_authority_fast_v1,
+};
 use radroots_event::contract::registry_v7::RadrootsEventContract;
 use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
 use radroots_event::event_head::v1::{
@@ -54,8 +58,12 @@ struct ProtocolPostExtensionAuthoritySeal {
     baseline_raw_high_water_seq: i64,
     raw_event_count: i64,
     raw_tag_count: i64,
+    raw_event_bytes: u64,
+    raw_tag_bytes: u64,
     raw_high_water_seq: i64,
     last_transition_seq: i64,
+    retained_generation_count: u32,
+    retained_generation_limit: u32,
     actual_raw_high_water_seq: i64,
     global_transition_min_seq: Option<i64>,
     global_transition_max_seq: Option<i64>,
@@ -71,6 +79,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
 ) -> Result<ProtocolReconciliationV1IngestResult, RadrootsEventStoreError> {
     acquire_event_store_write_lock(tx).await?;
     let profile = validate_source_raw_authority(tx).await?;
+    validate_source_capacity_authority_fast_v1(tx).await?;
     let event = ingest.event();
     let admission = EventAdmission::for_profile(profile, ingest.verified_event())?;
     let kind_class = event.kind_class();
@@ -95,6 +104,18 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
     let tags = event.tags_as_vec();
     let tags_json = serde_json::to_string(&tags)?;
     let event_id = event.id_str().to_owned();
+    let existing_raw_event: i64 =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM event_envelopes WHERE event_id = ?)")
+            .bind(event_id.as_str())
+            .fetch_one(&mut **tx)
+            .await?;
+    let capacity_delta = if existing_raw_event == 0 {
+        let delta = raw_source_capacity_delta_v1(ingest, tags_json.as_str())?;
+        preflight_unique_raw_source_append_v1(tx, delta).await?;
+        Some(delta)
+    } else {
+        None
+    };
     let insert = insert_raw_event(
         tx,
         ingest,
@@ -113,6 +134,12 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
         .await?
         .decision;
     if inserted {
+        let capacity_delta =
+            capacity_delta.ok_or_else(|| RadrootsEventStoreError::SourceCapacityStateDrift {
+                reason: format!(
+                    "unique raw event `{event_id}` was inserted after duplicate preflight"
+                ),
+            })?;
         synchronize_after_insert(
             tx,
             ingest,
@@ -123,6 +150,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
             &raw_head_decision,
         )
         .await?;
+        advance_source_capacity_after_insert_v1(tx, capacity_delta, insert.seq).await?;
     }
 
     let post_extension_authority_seal = read_protocol_post_extension_authority_seal(tx).await?;
@@ -149,6 +177,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
 async fn read_protocol_post_extension_authority_seal(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<ProtocolPostExtensionAuthoritySeal, RadrootsEventStoreError> {
+    let source_capacity = validate_source_capacity_authority_fast_v1(tx).await?;
     let actual_raw_high_water_seq: i64 =
         sqlx::query_scalar("SELECT seq FROM event_envelopes ORDER BY seq DESC LIMIT 1")
             .fetch_optional(&mut **tx)
@@ -271,8 +300,12 @@ async fn read_protocol_post_extension_authority_seal(
         baseline_raw_high_water_seq: source_row.try_get("baseline_raw_high_water_seq")?,
         raw_event_count,
         raw_tag_count,
+        raw_event_bytes: source_capacity.raw_event_text_bytes(),
+        raw_tag_bytes: source_capacity.raw_tag_text_bytes(),
         raw_high_water_seq,
         last_transition_seq,
+        retained_generation_count: source_capacity.retained_generation_count(),
+        retained_generation_limit: source_capacity.retained_generation_limit(),
         actual_raw_high_water_seq,
         global_transition_min_seq,
         global_transition_max_seq,
@@ -315,8 +348,12 @@ fn protocol_post_extension_authority_matches(
         baseline_raw_high_water_seq: expected_baseline_raw_high_water_seq,
         raw_event_count: expected_raw_event_count,
         raw_tag_count: expected_raw_tag_count,
+        raw_event_bytes: expected_raw_event_bytes,
+        raw_tag_bytes: expected_raw_tag_bytes,
         raw_high_water_seq: expected_raw_high_water_seq,
         last_transition_seq: expected_last_transition_seq,
+        retained_generation_count: expected_retained_generation_count,
+        retained_generation_limit: expected_retained_generation_limit,
         actual_raw_high_water_seq: expected_actual_raw_high_water_seq,
         global_transition_min_seq: expected_global_transition_min_seq,
         global_transition_max_seq: expected_global_transition_max_seq,
@@ -339,8 +376,12 @@ fn protocol_post_extension_authority_matches(
         baseline_raw_high_water_seq: actual_baseline_raw_high_water_seq,
         raw_event_count: actual_state_raw_event_count,
         raw_tag_count: actual_state_raw_tag_count,
+        raw_event_bytes: actual_raw_event_bytes,
+        raw_tag_bytes: actual_raw_tag_bytes,
         raw_high_water_seq: actual_state_raw_high_water_seq,
         last_transition_seq: actual_last_transition_seq,
+        retained_generation_count: actual_retained_generation_count,
+        retained_generation_limit: actual_retained_generation_limit,
         actual_raw_high_water_seq: actual_observed_raw_high_water_seq,
         global_transition_min_seq: actual_global_transition_min_seq,
         global_transition_max_seq: actual_global_transition_max_seq,
@@ -363,8 +404,12 @@ fn protocol_post_extension_authority_matches(
         && expected_baseline_raw_high_water_seq == actual_baseline_raw_high_water_seq
         && expected_raw_event_count == actual_state_raw_event_count
         && expected_raw_tag_count == actual_state_raw_tag_count
+        && expected_raw_event_bytes == actual_raw_event_bytes
+        && expected_raw_tag_bytes == actual_raw_tag_bytes
         && expected_raw_high_water_seq == actual_state_raw_high_water_seq
         && expected_last_transition_seq == actual_last_transition_seq
+        && expected_retained_generation_count == actual_retained_generation_count
+        && expected_retained_generation_limit == actual_retained_generation_limit
         && expected_actual_raw_high_water_seq == actual_observed_raw_high_water_seq
         && expected_global_transition_min_seq == actual_global_transition_min_seq
         && expected_global_transition_max_seq == actual_global_transition_max_seq

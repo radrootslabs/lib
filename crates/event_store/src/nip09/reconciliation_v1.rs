@@ -11,7 +11,12 @@ use crate::model::reconciliation_v1::{
     RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventStoreSourceGeneration,
     RadrootsRawHeadDecision, StoredEventClass, tag_semantic_name, tag_value_type_name,
 };
-use crate::{RadrootsEventStoreError, RadrootsEventStoreReconciliationResource};
+use crate::{
+    RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
+    RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
+    RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1, RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
+    RadrootsEventStoreError, RadrootsEventStoreSourceCapacityResourceV1,
+};
 use radroots_event::contract::registry_v7::RadrootsEventContract;
 use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
 use radroots_event::event_head::v1::{
@@ -40,11 +45,7 @@ mod result_vector_executor;
 
 const RECONCILIATION_SNAPSHOT_BATCH_SIZE: i64 = 512;
 const RECONCILIATION_SNAPSHOT_BATCH_LEN: usize = 512;
-const RECONCILIATION_RAW_EVENT_LIMIT: u64 = 25_000;
-const RECONCILIATION_RAW_TAG_LIMIT: u64 = 250_000;
-const RECONCILIATION_RAW_EVENT_BYTE_LIMIT: u64 = 64 * 1024 * 1024;
-const RECONCILIATION_RAW_TAG_BYTE_LIMIT: u64 = 32 * 1024 * 1024;
-
+const RECONCILIATION_SNAPSHOT_BATCH_COUNT: u64 = 512;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ReconciliationCapacityLimits {
     pub(crate) raw_events: u64,
@@ -56,68 +57,70 @@ pub(crate) struct ReconciliationCapacityLimits {
 impl ReconciliationCapacityLimits {
     pub(crate) const fn production() -> Self {
         Self {
-            raw_events: RECONCILIATION_RAW_EVENT_LIMIT,
-            raw_tags: RECONCILIATION_RAW_TAG_LIMIT,
-            raw_event_bytes: RECONCILIATION_RAW_EVENT_BYTE_LIMIT,
-            raw_tag_bytes: RECONCILIATION_RAW_TAG_BYTE_LIMIT,
+            raw_events: RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
+            raw_tags: RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1,
+            raw_event_bytes: RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
+            raw_tag_bytes: RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
         }
     }
 
-    const fn limit(self, resource: RadrootsEventStoreReconciliationResource) -> u64 {
+    pub(crate) const fn limit(self, resource: RadrootsEventStoreSourceCapacityResourceV1) -> u64 {
         match resource {
-            RadrootsEventStoreReconciliationResource::RawEvents => self.raw_events,
-            RadrootsEventStoreReconciliationResource::RawTags => self.raw_tags,
-            RadrootsEventStoreReconciliationResource::RawEventBytes => self.raw_event_bytes,
-            RadrootsEventStoreReconciliationResource::RawTagBytes => self.raw_tag_bytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents => self.raw_events,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags => self.raw_tags,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes => self.raw_event_bytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes => self.raw_tag_bytes,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct ReconciliationCapacity {
-    raw_events: u64,
-    raw_tags: u64,
-    raw_event_bytes: u64,
-    raw_tag_bytes: u64,
+pub(crate) struct ReconciliationCapacity {
+    pub(crate) raw_events: u64,
+    pub(crate) raw_tags: u64,
+    pub(crate) raw_event_bytes: u64,
+    pub(crate) raw_tag_bytes: u64,
 }
 
 impl ReconciliationCapacity {
-    fn value(self, resource: RadrootsEventStoreReconciliationResource) -> u64 {
+    pub(crate) fn value(self, resource: RadrootsEventStoreSourceCapacityResourceV1) -> u64 {
         match resource {
-            RadrootsEventStoreReconciliationResource::RawEvents => self.raw_events,
-            RadrootsEventStoreReconciliationResource::RawTags => self.raw_tags,
-            RadrootsEventStoreReconciliationResource::RawEventBytes => self.raw_event_bytes,
-            RadrootsEventStoreReconciliationResource::RawTagBytes => self.raw_tag_bytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents => self.raw_events,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags => self.raw_tags,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes => self.raw_event_bytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes => self.raw_tag_bytes,
         }
     }
 
-    fn value_mut(&mut self, resource: RadrootsEventStoreReconciliationResource) -> &mut u64 {
+    fn value_mut(&mut self, resource: RadrootsEventStoreSourceCapacityResourceV1) -> &mut u64 {
         match resource {
-            RadrootsEventStoreReconciliationResource::RawEvents => &mut self.raw_events,
-            RadrootsEventStoreReconciliationResource::RawTags => &mut self.raw_tags,
-            RadrootsEventStoreReconciliationResource::RawEventBytes => &mut self.raw_event_bytes,
-            RadrootsEventStoreReconciliationResource::RawTagBytes => &mut self.raw_tag_bytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents => &mut self.raw_events,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags => &mut self.raw_tags,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes => &mut self.raw_event_bytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes => &mut self.raw_tag_bytes,
         }
     }
 
     fn checked_add(
         &mut self,
         limits: ReconciliationCapacityLimits,
-        resource: RadrootsEventStoreReconciliationResource,
+        resource: RadrootsEventStoreSourceCapacityResourceV1,
         amount: u64,
     ) -> Result<(), RadrootsEventStoreError> {
         let limit = limits.limit(resource);
         let actual = self.value(resource).checked_add(amount).ok_or(
-            RadrootsEventStoreError::ReconciliationCapacityExceeded {
+            RadrootsEventStoreError::SourceCapacityExceeded {
                 resource,
-                actual: u64::MAX,
+                current: self.value(resource),
+                requested: amount,
                 limit,
             },
         )?;
         if actual > limit {
-            return Err(RadrootsEventStoreError::ReconciliationCapacityExceeded {
+            return Err(RadrootsEventStoreError::SourceCapacityExceeded {
                 resource,
-                actual,
+                current: self.value(resource),
+                requested: amount,
                 limit,
             });
         }
@@ -127,17 +130,18 @@ impl ReconciliationCapacity {
 
     fn validate(self, limits: ReconciliationCapacityLimits) -> Result<(), RadrootsEventStoreError> {
         for resource in [
-            RadrootsEventStoreReconciliationResource::RawEvents,
-            RadrootsEventStoreReconciliationResource::RawTags,
-            RadrootsEventStoreReconciliationResource::RawEventBytes,
-            RadrootsEventStoreReconciliationResource::RawTagBytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
         ] {
             let actual = self.value(resource);
             let limit = limits.limit(resource);
             if actual > limit {
-                return Err(RadrootsEventStoreError::ReconciliationCapacityExceeded {
+                return Err(RadrootsEventStoreError::SourceCapacityExceeded {
                     resource,
-                    actual,
+                    current: actual,
+                    requested: 0,
                     limit,
                 });
             }
@@ -489,44 +493,13 @@ pub(crate) async fn validate_reconciliation_capacity(
     connection: &mut SqliteConnection,
     limits: ReconciliationCapacityLimits,
 ) -> Result<(), RadrootsEventStoreError> {
-    measure_reconciliation_capacity(connection)
+    measure_reconciliation_capacity_bounded(connection, limits)
         .await?
         .validate(limits)
 }
 
-async fn measure_reconciliation_capacity(
-    connection: &mut SqliteConnection,
-) -> Result<ReconciliationCapacity, RadrootsEventStoreError> {
-    // SQLite's maximum database size is well below i64::MAX bytes. Rust still
-    // performs checked sign conversion, and the loader independently performs
-    // checked per-row accumulation before retaining a bounded snapshot.
-    let row = sqlx::query(
-        "SELECT (SELECT COUNT(*) FROM event_envelopes) AS raw_events, (SELECT COUNT(*) FROM event_envelope_tags) AS raw_tags, (SELECT COALESCE(SUM(length(CAST(event_id AS BLOB)) + length(CAST(pubkey AS BLOB)) + length(CAST(tags_json AS BLOB)) + length(CAST(content AS BLOB)) + length(CAST(sig AS BLOB)) + length(CAST(raw_json AS BLOB))), 0) FROM event_envelopes) AS raw_event_bytes, (SELECT COALESCE(SUM(length(CAST(event_id AS BLOB)) + length(CAST(tag_name AS BLOB)) + COALESCE(length(CAST(tag_value AS BLOB)), 0) + length(CAST(tag_json AS BLOB))), 0) FROM event_envelope_tags) AS raw_tag_bytes",
-    )
-    .fetch_one(&mut *connection)
-    .await?;
-    Ok(ReconciliationCapacity {
-        raw_events: reconciliation_capacity_value(
-            RadrootsEventStoreReconciliationResource::RawEvents,
-            row.try_get("raw_events")?,
-        )?,
-        raw_tags: reconciliation_capacity_value(
-            RadrootsEventStoreReconciliationResource::RawTags,
-            row.try_get("raw_tags")?,
-        )?,
-        raw_event_bytes: reconciliation_capacity_value(
-            RadrootsEventStoreReconciliationResource::RawEventBytes,
-            row.try_get("raw_event_bytes")?,
-        )?,
-        raw_tag_bytes: reconciliation_capacity_value(
-            RadrootsEventStoreReconciliationResource::RawTagBytes,
-            row.try_get("raw_tag_bytes")?,
-        )?,
-    })
-}
-
 fn reconciliation_capacity_value(
-    resource: RadrootsEventStoreReconciliationResource,
+    resource: RadrootsEventStoreSourceCapacityResourceV1,
     value: i64,
 ) -> Result<u64, RadrootsEventStoreError> {
     u64::try_from(value).map_err(|_| RadrootsEventStoreError::MigrationHookStateDrift {
@@ -540,6 +513,7 @@ pub(crate) async fn apply_reconciliation_hook(
     generation_provider: &dyn SourceGenerationProvider,
     limits: ReconciliationCapacityLimits,
 ) -> Result<(), RadrootsEventStoreError> {
+    crate::source_maintenance_v1::preflight_source_generation_append_v1(connection).await?;
     validate_rebuild_marker_absent(connection).await?;
     validate_projection_cursor_authority(connection).await?;
     let snapshot = load_reconciliation_snapshot(connection, limits).await?;
@@ -646,6 +620,17 @@ pub(crate) async fn apply_reconciliation_hook(
     )
     .await?;
     validate_rebuild_hook_state_with_events(connection, plan.generation, &events).await?;
+    if crate::source_maintenance_v1::bind_source_capacity_to_generation_v1(
+        connection,
+        plan.generation,
+    )
+    .await?
+    {
+        crate::store::food_availability_projection_v1::apply_food_availability_projection_hook_v1(
+            connection,
+        )
+        .await?;
+    }
     close_source_rebuild_marker(connection, plan.generation).await?;
     validate_sqlite_integrity_after_rebuild(connection).await?;
     validate_active_hook_state_fast(connection).await
@@ -1369,7 +1354,7 @@ async fn load_reconciliation_snapshot(
     connection: &mut SqliteConnection,
     limits: ReconciliationCapacityLimits,
 ) -> Result<ReconciliationSnapshot, RadrootsEventStoreError> {
-    let measured_capacity = measure_snapshot_capacity_bounded(connection, limits).await?;
+    let measured_capacity = measure_reconciliation_capacity_bounded(connection, limits).await?;
     let mut loaded_capacity = ReconciliationCapacity::default();
     let mut tags_by_event = BTreeMap::<String, Vec<StoredRawTag>>::new();
     let mut next_tag_rowid = i64::MIN;
@@ -1391,14 +1376,14 @@ async fn load_reconciliation_snapshot(
             let tag_json: String = row.try_get("tag_json")?;
             loaded_capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawTags,
+                RadrootsEventStoreSourceCapacityResourceV1::RawTags,
                 1,
             )?;
             loaded_capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawTagBytes,
+                RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
                 text_payload_bytes(
-                    RadrootsEventStoreReconciliationResource::RawTagBytes,
+                    RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
                     limits,
                     [
                         event_id.len(),
@@ -1453,14 +1438,14 @@ async fn load_reconciliation_snapshot(
             let raw_json: String = row.try_get("raw_json")?;
             loaded_capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawEvents,
+                RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
                 1,
             )?;
             loaded_capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawEventBytes,
+                RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
                 text_payload_bytes(
-                    RadrootsEventStoreReconciliationResource::RawEventBytes,
+                    RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
                     limits,
                     [
                         event_id.len(),
@@ -1570,18 +1555,20 @@ fn compare_raw_tags(
     Ok(())
 }
 
-async fn measure_snapshot_capacity_bounded(
+pub(crate) async fn measure_reconciliation_capacity_bounded(
     connection: &mut SqliteConnection,
     limits: ReconciliationCapacityLimits,
 ) -> Result<ReconciliationCapacity, RadrootsEventStoreError> {
     let mut capacity = ReconciliationCapacity::default();
     let mut next_event_seq = i64::MIN;
     loop {
+        let (page_size, page_len) =
+            bounded_capacity_page_len(capacity.raw_events, limits.raw_events);
         let rows = sqlx::query(
             "SELECT seq, length(CAST(event_id AS BLOB)) + length(CAST(pubkey AS BLOB)) + length(CAST(tags_json AS BLOB)) + length(CAST(content AS BLOB)) + length(CAST(sig AS BLOB)) + length(CAST(raw_json AS BLOB)) AS raw_bytes FROM event_envelopes WHERE seq >= ? ORDER BY seq LIMIT ?",
         )
         .bind(next_event_seq)
-        .bind(RECONCILIATION_SNAPSHOT_BATCH_SIZE)
+        .bind(page_size)
         .fetch_all(&mut *connection)
         .await?;
         let row_count = rows.len();
@@ -1589,14 +1576,14 @@ async fn measure_snapshot_capacity_bounded(
             let seq: i64 = row.try_get("seq")?;
             capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawEvents,
+                RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
                 1,
             )?;
             capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawEventBytes,
+                RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
                 reconciliation_capacity_value(
-                    RadrootsEventStoreReconciliationResource::RawEventBytes,
+                    RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
                     row.try_get("raw_bytes")?,
                 )?,
             )?;
@@ -1609,28 +1596,33 @@ async fn measure_snapshot_capacity_bounded(
                 }
             })?;
         }
-        if row_count < RECONCILIATION_SNAPSHOT_BATCH_LEN {
+        if row_count < page_len {
             break;
         }
     }
 
     let mut next_tag_rowid = i64::MIN;
     loop {
+        let (page_size, page_len) = bounded_capacity_page_len(capacity.raw_tags, limits.raw_tags);
         let rows = sqlx::query(
             "SELECT rowid AS tag_rowid, length(CAST(event_id AS BLOB)) + length(CAST(tag_name AS BLOB)) + COALESCE(length(CAST(tag_value AS BLOB)), 0) + length(CAST(tag_json AS BLOB)) AS raw_bytes FROM event_envelope_tags WHERE rowid >= ? ORDER BY rowid LIMIT ?",
         )
         .bind(next_tag_rowid)
-        .bind(RECONCILIATION_SNAPSHOT_BATCH_SIZE)
+        .bind(page_size)
         .fetch_all(&mut *connection)
         .await?;
         let row_count = rows.len();
         for row in rows {
-            capacity.checked_add(limits, RadrootsEventStoreReconciliationResource::RawTags, 1)?;
             capacity.checked_add(
                 limits,
-                RadrootsEventStoreReconciliationResource::RawTagBytes,
+                RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+                1,
+            )?;
+            capacity.checked_add(
+                limits,
+                RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
                 reconciliation_capacity_value(
-                    RadrootsEventStoreReconciliationResource::RawTagBytes,
+                    RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
                     row.try_get("raw_bytes")?,
                 )?,
             )?;
@@ -1642,11 +1634,22 @@ async fn measure_snapshot_capacity_bounded(
                 }
             })?;
         }
-        if row_count < RECONCILIATION_SNAPSHOT_BATCH_LEN {
+        if row_count < page_len {
             break;
         }
     }
     Ok(capacity)
+}
+
+fn bounded_capacity_page_len(current: u64, limit: u64) -> (i64, usize) {
+    let page_count = limit
+        .saturating_sub(current)
+        .saturating_add(1)
+        .min(RECONCILIATION_SNAPSHOT_BATCH_COUNT);
+    (
+        i64::try_from(page_count).unwrap_or(RECONCILIATION_SNAPSHOT_BATCH_SIZE),
+        usize::try_from(page_count).unwrap_or(RECONCILIATION_SNAPSHOT_BATCH_LEN),
+    )
 }
 
 async fn update_derived_tags(
@@ -3542,24 +3545,25 @@ fn i64_from_usize(field: &'static str, value: usize) -> Result<i64, RadrootsEven
 }
 
 fn text_payload_bytes<const N: usize>(
-    resource: RadrootsEventStoreReconciliationResource,
+    resource: RadrootsEventStoreSourceCapacityResourceV1,
     limits: ReconciliationCapacityLimits,
     lengths: [usize; N],
 ) -> Result<u64, RadrootsEventStoreError> {
     let limit = limits.limit(resource);
     lengths.into_iter().try_fold(0_u64, |total, length| {
-        let length = u64::try_from(length).map_err(|_| {
-            RadrootsEventStoreError::ReconciliationCapacityExceeded {
+        let length =
+            u64::try_from(length).map_err(|_| RadrootsEventStoreError::SourceCapacityExceeded {
                 resource,
-                actual: u64::MAX,
+                current: u64::MAX,
+                requested: 0,
                 limit,
-            }
-        })?;
+            })?;
         total
             .checked_add(length)
-            .ok_or(RadrootsEventStoreError::ReconciliationCapacityExceeded {
+            .ok_or(RadrootsEventStoreError::SourceCapacityExceeded {
                 resource,
-                actual: u64::MAX,
+                current: u64::MAX,
+                requested: 0,
                 limit,
             })
     })
@@ -3608,6 +3612,30 @@ mod tests {
         ) -> Result<(), RadrootsEventStoreError> {
             Err(RadrootsEventStoreError::SourceGenerationEntropyUnavailable)
         }
+    }
+
+    #[test]
+    fn bounded_capacity_page_len_caps_gross_source_probe_at_one_over() {
+        for limit in [25_000_u64, 250_000_u64] {
+            let mut current = 0_u64;
+            loop {
+                let (sqlite_limit, fetched_len) = bounded_capacity_page_len(current, limit);
+                assert_eq!(
+                    usize::try_from(sqlite_limit).expect("positive bounded page limit"),
+                    fetched_len
+                );
+                assert!((1..=RECONCILIATION_SNAPSHOT_BATCH_LEN).contains(&fetched_len));
+                let fetched = current + u64::try_from(fetched_len).expect("bounded page length");
+                if fetched > limit {
+                    assert_eq!(fetched, limit + 1);
+                    break;
+                }
+                current = fetched;
+            }
+        }
+        assert_eq!(bounded_capacity_page_len(24_576, 25_000), (425, 425));
+        assert_eq!(bounded_capacity_page_len(249_856, 250_000), (145, 145));
+        assert_eq!(bounded_capacity_page_len(25_000, 25_000), (1, 1));
     }
 
     #[tokio::test]

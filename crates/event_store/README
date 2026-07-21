@@ -49,8 +49,21 @@ tags, observations, or heads. Their ingest receipt carries
 `RadrootsEventPersistence::NotPersisted`; repeated delivery remains live-only
 and is never reported as a durable duplicate.
 
-Schema version 3 composes NIP-09 reconciliation with a generation-bound current
-visibility view, generic addressable transition feed, and focused kind-`30402`
+Every unique durable event is charged prospectively against the retained
+raw-source event, tag, event-text-byte, and tag-text-byte limits before its raw
+row is inserted. Admitted, unsupported, and contract-invalid durable events are
+charged identically because all remain part of rebuild authority. Event-id
+existence is checked first, so a duplicate at an exact capacity boundary still
+follows the observation path without consuming capacity. The source-capacity
+seal advances in the same savepoint as raw and derived authority; any ingest
+failure rolls all four dimensions back. `source_capacity_v1` exposes the fast
+persisted seal. Migration and database reopen perform the exhaustive raw-row
+recount.
+
+Schema version 4 adds persisted source-capacity and retained-generation
+authority to the version-3 composition of NIP-09 reconciliation with a
+generation-bound current visibility view, generic addressable transition feed,
+and focused kind-`30402`
 FoodAvailability projection. Version 2 stores generation-partitioned event
 coordinate facts, admitted deletion-request facts, normalized event and address
 targets, canonical addressable-head state, and ordered transition history.
@@ -76,10 +89,18 @@ boundary. A caller that executes arbitrary DML, reproduces an internal
 maintenance protocol, disables connection invariants, or changes the schema
 can subvert derived authority and is outside the supported mutation model.
 Typed event-store methods are the supported integrity-enforced write surface.
+Replacing a database shared with unrelated caller-owned tables also removes
+that unrelated state. Capacity recovery therefore requires a new disposable
+event-cache database, not replacement of a shared application database.
 
 `open_pool` inspects the opened main database rather than trusting URL text,
 validates the declared backing mode, rejects multi-connection in-memory pools,
-and configures every file-pool connection with foreign-key enforcement and the
+and requires `PRAGMA main.encoding` to report exactly `UTF-8` on every supplied
+connection before any schema or journal mutation. This makes Rust prospective
+UTF-8 byte accounting identical to the SQLite `CAST(... AS BLOB)` authority;
+pre-created UTF-16 databases fail with
+`SqliteMainDatabaseEncodingNotUtf8` and are not remediated in place. The store
+then configures every file-pool connection with foreign-key enforcement and the
 required busy timeout before migrations or writes. Backing inspection uses
 SQLite's non-shadowable `PRAGMA database_list`. Every supplied connection is
 also checked for temporary schema objects whose name or target table collides
@@ -122,10 +143,17 @@ than quadratic per-ingest scans.
 ## Schema authority
 
 Every constructor converges the database through a versioned migration
-authority whose current version is `3`. The frozen `0001_event_store`,
-`0002_nip09`, and additive `0003_food_availability_projection` SQL inputs are
-pinned by byte length and SHA-256 in the embedded registry. Fresh databases
-install them transactionally; an existing
+authority whose current version is `4`. The frozen `0001_event_store`,
+`0002_nip09`, and `0003_food_availability_projection` predecessors remain
+byte-identical and byte-pinned. The non-additive `0004_source_maintenance` is
+also pinned by byte length and SHA-256 in the embedded registry. It
+authenticates exactly three predecessor-trigger replacements:
+`radroots_event_store_food_availability_image_delete_guard`,
+`radroots_event_store_food_availability_projection_delete_guard`, and
+`radroots_event_store_source_rebuild_marker_insert_guard`. Its declared catalog
+delta requires exactly those three definitions to change while its new owned
+objects are added or removed; the down migration restores the exact version-3
+trigger SQL. Fresh databases install the migrations transactionally; an existing
 unledgered database is adopted only when its exact 46-object SQLite catalog
 matches the frozen version-1 baseline fingerprint. Partial schemas, altered
 tables, attached indexes or triggers, counterfeit ledgers, history gaps,
@@ -166,7 +194,13 @@ version, addressable-feed version, registry version, hook-manifest digest, raw
 counts, raw high-water sequence, and transition floor are stored with each
 generation and validated on open. A supported current-schema full rebuild must
 also reset and replay the version-3 Food authority before that marker closes;
-this checkpoint does not yet expose such a maintenance operation.
+this checkpoint does not yet expose such a maintenance operation. Repair of
+derived transition high-water or Food projection state is authorized only
+inside that future rebuild after the exact managed-v4 catalog, ledger, and
+migration history plus immutable raw/source lineage and capacity validate.
+Derived hook state is the repair target, not a repair precondition. A drifted
+managed-v3 database is rejected atomically before v4 changes begin; schema
+upgrade is not a repair path for corrupt v3 authority.
 
 Every pending rebuild-bound migration, including `0002_nip09` and
 `0003_food_availability_projection`, preflights and then rechecks under the
@@ -177,17 +211,37 @@ FTS authority are derived. Reconciliation loads both raw authorities in checked
 512-row pages. Candidate heads evaluate only the exact event- and
 address-target request indices, merging shared matches once in canonical
 request order without cloning request payloads. Exceeding a dimension returns
-`ReconciliationCapacityExceeded` before schema changes; local cache owners can
-reduce or rebuild the cache and retry.
+`SourceCapacityExceeded` before schema changes or durable append. Raw rows are
+never pruned in place. Recovery is to select a bounded source set and resync it
+into a new disposable cache.
+
+Source generations are append-only and never pruned. At most eight generations
+may be retained, bounding how many partitions of generation-scoped NIP-09
+logical authority can accumulate. For the governed 25,000-event and
+250,000-tag source limits, the audited generation-partitioned NIP-09 bound is
+`4E + 2T + 2 = 600,002` logical rows per generation: generation, coordinate,
+request, combined event/address target, head-state, transition, and feed-
+integrity rows. Eight retained generations therefore admit at most 4,800,016
+such logical rows. The current Food projection and FTS authority are reset
+rather than retained for every generation. This is only a logical-row bound;
+it is not a total SQLite row-count, byte-size, index-entry, or FTS-segment
+bound. Once the eighth generation is retained, rebuild returns
+`SourceGenerationHistoryLimitReached` with the current count and limit. The
+supported recovery is replacement and resync into a fresh disposable cache,
+subject to the shared-database warning above.
 
 `inspect_event_store_schema_status` classifies a pool as `Uninitialized`,
 `UnledgeredBaseline`, or `Managed` without configuring or migrating it.
 `schema_status` exposes the same read-only inspection on an opened store.
 `rollback_to_schema_version_and_close` validates every descending step under
-`BEGIN EXCLUSIVE`, cannot cross the public version floor, consumes the store,
-and closes its shared pool on every outcome. Independent SQLite pools for the
-same file must be quiesced before this offline maintenance operation.
-Destructive removal is intentionally unavailable in the public API.
+`BEGIN EXCLUSIVE`, cannot cross the public version floor, and cannot cross the
+applied NIP-09 source-generation migration because doing so would discard its
+append-only history. `RollbackWouldDiscardSourceGenerationHistory` reports the
+current, requested, and protected floor versions before any down migration is
+applied. The operation consumes the store and closes its shared pool on every
+outcome. Independent SQLite pools for the same file must be quiesced before
+this offline maintenance operation. Destructive removal is intentionally
+unavailable in the public API.
 
 ## Status inspection
 

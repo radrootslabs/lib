@@ -7,6 +7,7 @@ mod deletion_authority;
 mod food_availability_projection;
 mod nip09_reconciliation;
 mod registry_v7;
+mod source_maintenance;
 
 pub(crate) use food_availability_projection::{
     validate_food_availability_projection_manifest, write_food_availability_projection_manifest,
@@ -16,6 +17,9 @@ pub(crate) use nip09_reconciliation::{
 };
 pub(crate) use registry_v7::{
     validate_event_contract_registry_v7_inventory, write_event_contract_registry_v7_inventory,
+};
+pub(crate) use source_maintenance::{
+    validate_source_maintenance_manifest, write_source_maintenance_manifest,
 };
 
 use crate::coverage::{CoveragePolicyFile, CoverageThresholds, read_coverage_policy};
@@ -40,6 +44,14 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), String> {
+    validate_event_contract_registry_v7_inventory(workspace_root)?;
+    validate_nip09_reconciliation_manifest(workspace_root)?;
+    validate_food_availability_projection_manifest(workspace_root)?;
+    validate_source_maintenance_manifest(workspace_root)?;
+    validate_knowledge_contract_manifest(workspace_root)
+}
+
 const ROOT_RELEASE_POLICY_RELATIVE: &str =
     "foundation/contracts/release_runtime/mounted_rust_crates/publish-policy.toml";
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
@@ -48,9 +60,12 @@ const NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/event_store/nip09_reconciliation.v1.json";
 const FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/event_store/food_availability_projection.v1.json";
-const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 2] = [
+const SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/event_store/source_maintenance.v1.json";
+const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 3] = [
     NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
     FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
+    SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE,
 ];
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
@@ -71,7 +86,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 21] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 22] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -115,6 +130,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 21] = [
     (
         FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
         "crates/event_store/tests/fixtures/food_availability_projection.v1.json",
+    ),
+    (
+        SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE,
+        "crates/event_store/tests/fixtures/source_maintenance.v1.json",
     ),
     (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",

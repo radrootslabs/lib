@@ -4,10 +4,21 @@ use radroots_event::wire::RadrootsEventWireError;
 use radroots_event_codec::verification::RadrootsNip01VerificationError;
 use radroots_transport::RadrootsTransportError;
 
-/// Resource dimension that bounded NIP-09 reconciliation exceeded.
+/// Maximum retained raw event rows in one event store.
+pub const RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1: u64 = 25_000;
+/// Maximum retained raw tag rows in one event store.
+pub const RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1: u64 = 250_000;
+/// Maximum governed UTF-8 bytes in retained raw event text columns.
+pub const RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1: u64 = 64 * 1024 * 1024;
+/// Maximum governed UTF-8 bytes in retained raw tag text columns.
+pub const RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1: u64 = 32 * 1024 * 1024;
+/// Maximum append-only source generations retained before fresh-store resync.
+pub const RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1: u32 = 8;
+
+/// Governed retained raw-source resource dimension.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum RadrootsEventStoreReconciliationResource {
+pub enum RadrootsEventStoreSourceCapacityResourceV1 {
     /// Number of retained raw-source event rows.
     RawEvents,
     /// Number of retained raw-source tag rows.
@@ -18,7 +29,7 @@ pub enum RadrootsEventStoreReconciliationResource {
     RawTagBytes,
 }
 
-impl RadrootsEventStoreReconciliationResource {
+impl RadrootsEventStoreSourceCapacityResourceV1 {
     /// Stable diagnostic label used by the typed capacity error.
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -30,7 +41,7 @@ impl RadrootsEventStoreReconciliationResource {
     }
 }
 
-impl core::fmt::Display for RadrootsEventStoreReconciliationResource {
+impl core::fmt::Display for RadrootsEventStoreSourceCapacityResourceV1 {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str(self.as_str())
     }
@@ -114,6 +125,8 @@ pub enum RadrootsEventStoreError {
     SqlitePoolBackingMismatch { file_backed: bool, filename: String },
     #[error("event-store SQLite connection has no main database")]
     SqliteMainDatabaseUnavailable,
+    #[error("event-store SQLite main database must use UTF-8 encoding; reported `{actual}`")]
+    SqliteMainDatabaseEncodingNotUtf8 { actual: String },
     #[error(
         "event-store SQLite file connection did not enter WAL journal mode; reported `{actual}`"
     )]
@@ -189,6 +202,14 @@ pub enum RadrootsEventStoreError {
     RollbackBelowVersionFloor { floor: u32, target: u32 },
     #[error("event-store rollback target {target} is ahead of managed version {current}")]
     RollbackAhead { current: u32, target: u32 },
+    #[error(
+        "event-store rollback from version {current} to {target} would discard retained source-generation history; minimum retained-history schema version is {floor}"
+    )]
+    RollbackWouldDiscardSourceGenerationHistory {
+        current: u32,
+        target: u32,
+        floor: u32,
+    },
     #[error("event-store rollback requires a managed schema")]
     RollbackUnmanaged,
     #[error(
@@ -210,15 +231,26 @@ pub enum RadrootsEventStoreError {
     #[error("event-store source generation entropy is unavailable")]
     SourceGenerationEntropyUnavailable,
     #[error(
-        "event-store NIP-09 reconciliation {resource} capacity exceeded: observed {actual}, limit {limit}"
+        "event-store retained source {resource} capacity exceeded: current {current}, requested additional {requested}, limit {limit}; durable append refused, retain a bounded source set in a new disposable cache"
     )]
-    /// Refuses a one-time local-store migration before unbounded retention or
-    /// partial writes; callers can recover by pruning or rebuilding the cache.
-    ReconciliationCapacityExceeded {
-        resource: RadrootsEventStoreReconciliationResource,
-        actual: u64,
+    /// Refuses migration or prospective durable ingest before the retained raw
+    /// source can become unrebuildable. Immutable raw rows are never pruned.
+    SourceCapacityExceeded {
+        resource: RadrootsEventStoreSourceCapacityResourceV1,
+        current: u64,
+        requested: u64,
         limit: u64,
     },
+    #[error(
+        "event-store retained source generation limit reached: current {current}, limit {limit}; replace and resync into a fresh store"
+    )]
+    SourceGenerationHistoryLimitReached { current: u32, limit: u32 },
+    #[error(
+        "event-store retained source contains ephemeral event `{event_id}` of kind {kind}; ephemeral events must be discarded"
+    )]
+    PersistedEphemeralRawEvent { event_id: String, kind: i64 },
+    #[error("event-store retained source capacity authority is inconsistent: {reason}")]
+    SourceCapacityStateDrift { reason: String },
     #[error("event-store migration hook `{hook_id}` state is invalid: {reason}")]
     MigrationHookStateDrift {
         hook_id: &'static str,

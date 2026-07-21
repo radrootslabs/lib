@@ -404,6 +404,22 @@ semver_impacts = [
 summary = "Advance the event store to schema version 3 with central current visibility, a generation-bound addressable transition feed, an atomic registry-v7 FoodAvailability projection and bounded search authority, typed Blossom digests, and an executable successor contract that preserves the frozen NIP-09 predecessor."
 
 [[changes]]
+id = "event-store-source-maintenance-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "remove_exported_type",
+  "change_exported_enum_variant",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Advance the event store to schema version 4 with prospective retained-source capacity enforcement across independent file pools, UTF-8 preflight before schema or journal mutation, bounded reopen recounts, rollback-protected finite generation history, coherent NIP-09 and FoodAvailability rebuild seals, typed capacity and recovery failures, and an authenticated executable SourceMaintenance successor contract that replaces exactly radroots_event_store_food_availability_image_delete_guard, radroots_event_store_food_availability_projection_delete_guard, and radroots_event_store_source_rebuild_marker_insert_guard; rejects drifted v3 upgrades atomically; restores the exact predecessor trigger SQL on rollback; and reserves future derived-state repair for an exact managed-v4 catalog, ledger, migration history, immutable raw/source lineage, and capacity without requiring derived hook health as a precondition."
+
+[[changes]]
 id = "transport-event-outcomes-and-replica-quarantine"
 classification = "breaking"
 semver_impacts = [

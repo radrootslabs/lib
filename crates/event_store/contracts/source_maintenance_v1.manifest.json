@@ -1,0 +1,357 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_event_store.source_maintenance_v1",
+  "hook_id": "source_maintenance_v1",
+  "manifest_schema": {
+    "path": "crates/event_store/contracts/source_maintenance_v1.manifest.schema.json",
+    "byte_length": 12315,
+    "sha256": "ad4a6c8ae9488fc8033792bc6952af04687f312901c1847d8c668a62913bb642",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "predecessor": {
+    "hook_id": "food_availability_projection_v1",
+    "manifest": {
+      "path": "crates/event_store/contracts/food_availability_projection_v1.manifest.json",
+      "byte_length": 17455,
+      "sha256": "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+      "hash_algorithm": "sha256_bytes_v1"
+    }
+  },
+  "migration": {
+    "version": 4,
+    "name": "source_maintenance",
+    "up": {
+      "path": "crates/event_store/migrations/0004_source_maintenance.up.sql",
+      "byte_length": 19841,
+      "sha256": "425dc799f392b87f265a6fb81f89c4a1c7a5db8391ab0380970708cb9c66704d",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "down": {
+      "path": "crates/event_store/migrations/0004_source_maintenance.down.sql",
+      "byte_length": 5172,
+      "sha256": "fe44fd53c51545c08ea479b385e6781079dab70fc63da2a3c205d727a00ce860",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "schema_sha256": "d526d96ea02be12b4b0aed99e97cfdde17c4474ace67111506a7b900ee78b186",
+    "catalog": {
+      "objects": [
+        "radroots_event_store_source_capacity_delete_guard",
+        "radroots_event_store_source_capacity_insert_guard",
+        "radroots_event_store_source_capacity_marker_close_guard",
+        "radroots_event_store_source_capacity_update_guard",
+        "radroots_event_store_source_capacity_v1",
+        "radroots_event_store_source_generation_capacity_advance",
+        "radroots_event_store_source_generation_capacity_guard"
+      ],
+      "replaced_objects": [
+        "radroots_event_store_food_availability_image_delete_guard",
+        "radroots_event_store_food_availability_projection_delete_guard",
+        "radroots_event_store_source_rebuild_marker_insert_guard"
+      ],
+      "tables": [
+        "radroots_event_store_source_capacity_v1"
+      ],
+      "fts5_tables": []
+    }
+  },
+  "source_maintenance": {
+    "version": 1,
+    "event_contract_registry_version": 7,
+    "capacity_authority_id": "radroots_event_store_source_capacity_v1",
+    "accounting": {
+      "algorithm": "sqlite_cast_blob_octet_sum_v1",
+      "raw_event_columns": [
+        "event_id",
+        "pubkey",
+        "tags_json",
+        "content",
+        "sig",
+        "raw_json"
+      ],
+      "raw_tag_columns": [
+        "event_id",
+        "tag_name",
+        "tag_value",
+        "tag_json"
+      ],
+      "nullable_raw_tag_columns": [
+        "tag_value"
+      ]
+    },
+    "limits": {
+      "raw_events": 25000,
+      "raw_tags": 250000,
+      "raw_event_text_bytes": 67108864,
+      "raw_tag_text_bytes": 33554432,
+      "retained_source_generations": 8
+    },
+    "reopen_validation": {
+      "mode": "bounded_full_raw_recount_v1",
+      "raw_event_rejection_scan_bound": 25001,
+      "raw_tag_rejection_scan_bound": 250001,
+      "generation_history_validation": "bounded_count_plus_active_ordinal_v1",
+      "retained_generation_rejection_scan_bound": 9
+    },
+    "rebuild_seal": {
+      "nip09_hook_id": "nip09_reconciliation_v1",
+      "nip09_manifest_sha256": "74af832420ffbaa9805e89df3c0b34f126a443e1598f757e3372f407f9003b77",
+      "food_hook_id": "food_availability_projection_v1",
+      "food_manifest_sha256": "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+      "food_scope_fingerprint_sha256": "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0",
+      "active_generation_authority": "radroots_event_store_source_state",
+      "marker_close_authority": "radroots_event_store_source_capacity_marker_close_guard"
+    }
+  },
+  "entry_points": [
+    {
+      "role": "migration_registry",
+      "rust_path": "radroots_event_store::migrations::EVENT_STORE_MIGRATIONS[3]"
+    },
+    {
+      "role": "migration_apply_hook",
+      "rust_path": "radroots_event_store::schema::apply_migration_hook"
+    },
+    {
+      "role": "migration_validation_hook",
+      "rust_path": "radroots_event_store::schema::validate_migration_hook_state"
+    },
+    {
+      "role": "capacity_query",
+      "rust_path": "radroots_event_store::RadrootsEventStore::source_capacity_v1"
+    },
+    {
+      "role": "raw_append_preflight",
+      "rust_path": "radroots_event_store::source_maintenance_v1::preflight_unique_raw_source_append_v1"
+    },
+    {
+      "role": "raw_append_advance",
+      "rust_path": "radroots_event_store::source_maintenance_v1::advance_source_capacity_after_insert_v1"
+    },
+    {
+      "role": "generation_append_preflight",
+      "rust_path": "radroots_event_store::source_maintenance_v1::preflight_source_generation_append_v1"
+    },
+    {
+      "role": "generation_rebuild_bind",
+      "rust_path": "radroots_event_store::source_maintenance_v1::bind_source_capacity_to_generation_v1"
+    },
+    {
+      "role": "sqlite_encoding_preflight",
+      "rust_path": "radroots_event_store::store::validate_main_database_encoding"
+    },
+    {
+      "role": "source_generation_history_rollback_guard",
+      "rust_path": "radroots_event_store::schema::validate_rollback_preserves_source_generation_history"
+    },
+    {
+      "role": "result_vector_executor",
+      "rust_path": "source_maintenance_v1_result_vector"
+    }
+  ],
+  "source_files": [
+    {
+      "role": "event_store_error_and_limits",
+      "path": "crates/event_store/src/error.rs",
+      "byte_length": 19421,
+      "sha256": "4772e041cb20a4963afb2f3159804c777e2f2be61bfdb6ee267e7a7c04258972",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "generated_descriptor_registration",
+      "path": "crates/event_store/src/generated.rs",
+      "byte_length": 144,
+      "sha256": "6b0a8d6f249bd4fc3f878d37cb5e418680f0f1be2d9eec2518dedf03efc47121",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "public_surface",
+      "path": "crates/event_store/src/lib.rs",
+      "byte_length": 3844,
+      "sha256": "3cd9653bcb752fb3c4442d4904b98a0a6208011a9a238125b7b7073d7f4e312b",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "migration_registry",
+      "path": "crates/event_store/src/migrations.rs",
+      "byte_length": 73585,
+      "sha256": "a47477d04759ec6e71d14d3d05459864eae78fce0e3c2481a1b03147f04637f7",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_model_public_surface",
+      "path": "crates/event_store/src/model.rs",
+      "byte_length": 33617,
+      "sha256": "79296b8f263aa06d17005795e4515f769f064ea6fd971eeb1296e1151debaf20",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "source_generation_rebuild_authority",
+      "path": "crates/event_store/src/nip09/reconciliation_v1.rs",
+      "byte_length": 184407,
+      "sha256": "c455d40fc736e3db264f567c7809af7bd897d89be8a33dfb21667a6ef6b8d6c6",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "schema_migration_and_reopen_authority",
+      "path": "crates/event_store/src/schema.rs",
+      "byte_length": 146146,
+      "sha256": "93b060e80d3edd73f86208e4bf698fa9d53eaf1eeb04526c9261fb8b5726fb0d",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "public_store_and_transaction_authority",
+      "path": "crates/event_store/src/store.rs",
+      "byte_length": 394574,
+      "sha256": "db57dc3e35e64c7194683142fe55edba853671a829269449dd2273056dfc3a0e",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "raw_ingest_capacity_authority",
+      "path": "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+      "byte_length": 30140,
+      "sha256": "210112eeaa6975a3b4fbb97d5c52588f8c6d8d07975e531d39737fd11235de51",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "source_maintenance_runtime",
+      "path": "crates/event_store/src/source_maintenance_v1.rs",
+      "byte_length": 51756,
+      "sha256": "f8d5b62f0613104aa86658d5bf1baade92c7df83f00ef0cddadd734b9797afca",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "artifact_transaction_authority",
+      "path": "tools/xtask/src/contract/artifact_bundle.rs",
+      "byte_length": 38279,
+      "sha256": "f326ea57b56d40135f95b6b1e15961f66eed363337180a6d12a5ea903e1a9a29",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_successor_governance",
+      "path": "tools/xtask/src/contract/food_availability_projection.rs",
+      "byte_length": 194875,
+      "sha256": "63cc3e6985741e2002ae59f56500bf8d6e0a8246f97a0b8b7f2d2372ef0642e0",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "transitive_predecessor_membership_governance",
+      "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
+      "byte_length": 834200,
+      "sha256": "155374b306f3b30f6095dbfc203150c928b7418e646764011b0401996a636f84",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "source_maintenance_governance",
+      "path": "tools/xtask/src/contract/source_maintenance.rs",
+      "byte_length": 176693,
+      "sha256": "88ea58150c49faaad7dde6c9cc89a92ad6b693b112fd55041ac17984bc5c6700",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "contract_command_authority",
+      "path": "tools/xtask/src/contract.rs",
+      "byte_length": 479173,
+      "sha256": "15b3e754ed6794c8f4c48d7bd316b05ff90578137adb0275e1febdf2891707b4",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "xtask_dispatch_and_release_preflight",
+      "path": "tools/xtask/src/main.rs",
+      "byte_length": 14077,
+      "sha256": "d815e65241e47143a51dd87d95e014d975be1d9b94075f3920e4812f41188353",
+      "hash_algorithm": "sha256_bytes_v1"
+    }
+  ],
+  "public_api": {
+    "inherited_predecessor_symbols": [
+      "RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1",
+      "RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1",
+      "RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1",
+      "RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1",
+      "RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1",
+      "RADROOTS_ADDRESSABLE_TRANSITION_PAGE_SCAN_MAX_V1",
+      "RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1",
+      "RADROOTS_FOOD_AVAILABILITY_PROJECTION_APPLY_PAGE_LIMIT_V1",
+      "RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1",
+      "RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_BYTES_V1",
+      "RADROOTS_FOOD_AVAILABILITY_SEARCH_QUERY_MAX_TERMS_V1",
+      "RadrootsAddressableTransitionCauseV1",
+      "RadrootsAddressableTransitionCoordinateV1",
+      "RadrootsAddressableTransitionCursorV1",
+      "RadrootsAddressableTransitionEventReferenceV1",
+      "RadrootsAddressableTransitionOriginV1",
+      "RadrootsAddressableTransitionPageV1",
+      "RadrootsAddressableTransitionRawHeadDecisionV1",
+      "RadrootsAddressableTransitionScopeFingerprintV1",
+      "RadrootsAddressableTransitionScopeV1",
+      "RadrootsAddressableTransitionV1",
+      "RadrootsAddressableTransitionVisibilityV1",
+      "RadrootsCurrentEventVisibilityV1",
+      "RadrootsCurrentVisibilityDecisionV1",
+      "RadrootsFoodAvailabilitySearchQueryV1",
+      "RadrootsFoodAvailabilityStatusFilterV1",
+      "RadrootsNip09SuppressionEvidenceV1",
+      "RadrootsNip09SuppressionOutcome",
+      "RadrootsNip09SuppressionReason",
+      "RadrootsStoreProducedCanonicalEventV1",
+      "RadrootsStoredFoodAvailabilityImageV1",
+      "RadrootsStoredFoodAvailabilityV1"
+    ],
+    "added_symbols": [
+      "RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1",
+      "RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1",
+      "RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1",
+      "RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1",
+      "RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1",
+      "RadrootsEventStoreSourceCapacityResourceV1",
+      "RadrootsEventStoreSourceCapacityV1"
+    ],
+    "methods": [
+      "RadrootsEventStore::source_capacity_v1",
+      "RadrootsEventStoreSourceCapacityResourceV1::as_str",
+      "RadrootsEventStoreSourceCapacityV1::source_generation",
+      "RadrootsEventStoreSourceCapacityV1::raw_event_count",
+      "RadrootsEventStoreSourceCapacityV1::raw_tag_count",
+      "RadrootsEventStoreSourceCapacityV1::raw_event_text_bytes",
+      "RadrootsEventStoreSourceCapacityV1::raw_tag_text_bytes",
+      "RadrootsEventStoreSourceCapacityV1::raw_high_water_seq",
+      "RadrootsEventStoreSourceCapacityV1::retained_generation_count",
+      "RadrootsEventStoreSourceCapacityV1::retained_generation_limit"
+    ],
+    "error_variants": [
+      "SourceCapacityExceeded",
+      "SourceGenerationHistoryLimitReached",
+      "PersistedEphemeralRawEvent",
+      "SourceCapacityStateDrift",
+      "SqliteMainDatabaseEncodingNotUtf8",
+      "RollbackWouldDiscardSourceGenerationHistory"
+    ],
+    "removed_symbols": [
+      "RadrootsEventStoreReconciliationResource",
+      "RadrootsEventStoreError::ReconciliationCapacityExceeded"
+    ],
+    "breaking_replacements": [
+      {
+        "removed": "RadrootsEventStoreReconciliationResource",
+        "replacement": "RadrootsEventStoreSourceCapacityResourceV1"
+      },
+      {
+        "removed": "RadrootsEventStoreError::ReconciliationCapacityExceeded",
+        "replacement": "RadrootsEventStoreError::SourceCapacityExceeded"
+      }
+    ]
+  },
+  "result_vector": {
+    "canonical_path": "contracts/conformance/vectors/event_store/source_maintenance.v1.json",
+    "mirror_path": "crates/event_store/tests/fixtures/source_maintenance.v1.json",
+    "byte_length": 16253,
+    "sha256": "997aba2604a2b9d199fb87dc9d07942ca50d91863aeadcf3eeacf16d191dd71f",
+    "hash_algorithm": "sha256_bytes_v1",
+    "executor_id": "radroots_event_store.source_maintenance_v1.result_vector_executor.v1",
+    "executor_path": "crates/event_store/tests/source_maintenance_v1_result_vector.rs",
+    "executor_test": "source_maintenance_v1_result_vector",
+    "executor_byte_length": 23510,
+    "executor_sha256": "a7487afdfe19fc5fc794811d0f0e6035203e1aabcf0a33a1d398f6b3555d38f3",
+    "executor_hash_algorithm": "sha256_bytes_v1"
+  }
+}

@@ -1,6 +1,7 @@
 use crate::RadrootsEventStoreError;
 use crate::generated::food_availability_projection_manifest as food_manifest;
 use crate::generated::nip09_reconciliation_manifest as nip09_manifest;
+use crate::generated::source_maintenance_manifest;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -8,7 +9,7 @@ pub(crate) const EVENT_STORE_LEDGER_NAME: &str = "radroots_event_store_schema_mi
 pub(crate) const EVENT_STORE_RESERVED_PREFIX: &str = "radroots_event_store_";
 
 pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN: u32 = 1;
-pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 3;
+pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 4;
 
 pub(crate) const EVENT_STORE_LEDGER_DDL: &str = "CREATE TABLE radroots_event_store_schema_migrations (
   version INTEGER PRIMARY KEY NOT NULL CHECK (version > 0),
@@ -105,6 +106,7 @@ pub(crate) enum EventStoreMigrationHook {
     None,
     Nip09ReconciliationV1,
     FoodAvailabilityProjectionV1,
+    SourceMaintenanceV1,
 }
 
 impl EventStoreMigrationHook {
@@ -115,6 +117,7 @@ impl EventStoreMigrationHook {
             Self::FoodAvailabilityProjectionV1 => {
                 food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID
             }
+            Self::SourceMaintenanceV1 => source_maintenance_manifest::SOURCE_MAINTENANCE_HOOK_ID,
         }
     }
 
@@ -127,9 +130,31 @@ impl EventStoreMigrationHook {
             Self::FoodAvailabilityProjectionV1 => {
                 Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256)
             }
+            Self::SourceMaintenanceV1 => {
+                Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256)
+            }
         }
     }
 }
+
+pub(crate) const EVENT_STORE_SOURCE_MAINTENANCE_OBJECT_NAMES: &[&str] = &[
+    "radroots_event_store_source_capacity_delete_guard",
+    "radroots_event_store_source_capacity_insert_guard",
+    "radroots_event_store_source_capacity_marker_close_guard",
+    "radroots_event_store_source_capacity_update_guard",
+    "radroots_event_store_source_capacity_v1",
+    "radroots_event_store_source_generation_capacity_advance",
+    "radroots_event_store_source_generation_capacity_guard",
+];
+
+pub(crate) const EVENT_STORE_SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES: &[&str] = &[
+    "radroots_event_store_food_availability_image_delete_guard",
+    "radroots_event_store_food_availability_projection_delete_guard",
+    "radroots_event_store_source_rebuild_marker_insert_guard",
+];
+
+pub(crate) const EVENT_STORE_SOURCE_MAINTENANCE_TABLE_NAMES: &[&str] =
+    &["radroots_event_store_source_capacity_v1"];
 
 pub(crate) const EVENT_STORE_FOOD_AVAILABILITY_OBJECT_NAMES: &[&str] = &[
     "radroots_event_store_addressable_feed_generation_insert",
@@ -292,6 +317,7 @@ pub(crate) struct EventStoreMigration {
     pub(crate) down_sha256: &'static str,
     pub(crate) schema_sha256: &'static str,
     pub(crate) owned_object_names: &'static [&'static str],
+    pub(crate) replaced_object_names: &'static [&'static str],
     pub(crate) owned_table_names: &'static [&'static str],
     pub(crate) fts5_table_names: &'static [&'static str],
     pub(crate) hook: EventStoreMigrationHook,
@@ -311,6 +337,7 @@ pub(crate) const EVENT_STORE_MIGRATIONS: &[EventStoreMigration] = &[
         down_sha256: "fa84d587f657f601947eaeb9cd239c962a48f6fcdce723588476e8d22f3c1f53",
         schema_sha256: "5b1f92779640f1a2dbd75e37a96996bda6c8be58883190f69eb3eced22a48f03",
         owned_object_names: EVENT_STORE_BASELINE_OBJECT_NAMES,
+        replaced_object_names: &[],
         owned_table_names: EVENT_STORE_BASELINE_TABLE_NAMES,
         fts5_table_names: EVENT_STORE_BASELINE_FTS5_TABLE_NAMES,
         hook: EventStoreMigrationHook::None,
@@ -328,6 +355,7 @@ pub(crate) const EVENT_STORE_MIGRATIONS: &[EventStoreMigration] = &[
         down_sha256: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_SHA256,
         schema_sha256: nip09_manifest::NIP09_RECONCILIATION_SCHEMA_SHA256,
         owned_object_names: EVENT_STORE_NIP09_OBJECT_NAMES,
+        replaced_object_names: &[],
         owned_table_names: EVENT_STORE_NIP09_TABLE_NAMES,
         fts5_table_names: &[],
         hook: EventStoreMigrationHook::Nip09ReconciliationV1,
@@ -347,12 +375,33 @@ pub(crate) const EVENT_STORE_MIGRATIONS: &[EventStoreMigration] = &[
         down_sha256: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_SHA256,
         schema_sha256: food_manifest::FOOD_AVAILABILITY_PROJECTION_SCHEMA_SHA256,
         owned_object_names: EVENT_STORE_FOOD_AVAILABILITY_OBJECT_NAMES,
+        replaced_object_names: &[],
         owned_table_names: EVENT_STORE_FOOD_AVAILABILITY_TABLE_NAMES,
         fts5_table_names: EVENT_STORE_FOOD_AVAILABILITY_FTS5_TABLE_NAMES,
         hook: EventStoreMigrationHook::FoodAvailabilityProjectionV1,
         hook_manifest_sha256: Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256),
         event_contract_registry_version: Some(
             food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,
+        ),
+    },
+    EventStoreMigration {
+        version: 4,
+        name: "source_maintenance",
+        up_sql: include_str!("../migrations/0004_source_maintenance.up.sql"),
+        down_sql: include_str!("../migrations/0004_source_maintenance.down.sql"),
+        up_len: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_BYTE_LENGTH,
+        down_len: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_BYTE_LENGTH,
+        up_sha256: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_SHA256,
+        down_sha256: source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256,
+        schema_sha256: source_maintenance_manifest::SOURCE_MAINTENANCE_SCHEMA_SHA256,
+        owned_object_names: EVENT_STORE_SOURCE_MAINTENANCE_OBJECT_NAMES,
+        replaced_object_names: EVENT_STORE_SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
+        owned_table_names: EVENT_STORE_SOURCE_MAINTENANCE_TABLE_NAMES,
+        fts5_table_names: &[],
+        hook: EventStoreMigrationHook::SourceMaintenanceV1,
+        hook_manifest_sha256: Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256),
+        event_contract_registry_version: Some(
+            source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,
         ),
     },
 ];
@@ -427,6 +476,12 @@ pub(crate) fn validate_migration_registry(
     {
         validate_generated_food_availability_projection_manifest_descriptor()?;
     }
+    if registry
+        .iter()
+        .any(|migration| migration.hook == EventStoreMigrationHook::SourceMaintenanceV1)
+    {
+        validate_generated_source_maintenance_manifest_descriptor()?;
+    }
     if minimum == 0 || current < minimum || registry.is_empty() {
         return Err(RadrootsEventStoreError::MigrationRegistryDefect {
             reason: format!(
@@ -438,7 +493,43 @@ pub(crate) fn validate_migration_registry(
     let mut expected_version = minimum;
     let mut owned_object_names = BTreeSet::new();
     let mut owned_table_names = BTreeSet::new();
+    let mut migration_hook_ids = BTreeSet::new();
     for (index, migration) in registry.iter().enumerate() {
+        let canonical_hook_migration = match migration.hook {
+            EventStoreMigrationHook::None => None,
+            EventStoreMigrationHook::Nip09ReconciliationV1 => Some((
+                nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION,
+                nip09_manifest::NIP09_RECONCILIATION_MIGRATION_NAME,
+            )),
+            EventStoreMigrationHook::FoodAvailabilityProjectionV1 => Some((
+                food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION,
+                food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME,
+            )),
+            EventStoreMigrationHook::SourceMaintenanceV1 => Some((
+                source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION,
+                source_maintenance_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME,
+            )),
+        };
+        if let Some((canonical_version, canonical_name)) = canonical_hook_migration {
+            if !migration_hook_ids.insert(migration.hook.id()) {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration hook `{}` is declared more than once",
+                        migration.hook.id()
+                    ),
+                });
+            }
+            if migration.version != canonical_version || migration.name != canonical_name {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration hook `{}` is bound to canonical migration {canonical_version} `{canonical_name}`, not migration {} `{}`",
+                        migration.hook.id(),
+                        migration.version,
+                        migration.name
+                    ),
+                });
+            }
+        }
         if migration.version != expected_version {
             return Err(RadrootsEventStoreError::MigrationRegistryDefect {
                 reason: format!(
@@ -482,6 +573,78 @@ pub(crate) fn validate_migration_registry(
                 return Err(RadrootsEventStoreError::MigrationRegistryDefect {
                     reason: format!(
                         "owned schema object `{object_name}` is declared more than once"
+                    ),
+                });
+            }
+        }
+        if index == 0 && !migration.replaced_object_names.is_empty() {
+            return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                reason: "the baseline migration cannot replace predecessor schema objects"
+                    .to_owned(),
+            });
+        }
+        if !migration.replaced_object_names.is_empty()
+            && (migration.hook == EventStoreMigrationHook::None
+                || migration.hook_manifest_sha256.is_none()
+                || migration.event_contract_registry_version.is_none())
+        {
+            return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                reason: format!(
+                    "migration version {} replaces predecessor schema objects without an authenticated successor hook",
+                    migration.version
+                ),
+            });
+        }
+        let mut migration_replacement_names = BTreeSet::new();
+        for object_name in migration.replaced_object_names {
+            validate_owned_schema_name(migration.version, "replacement object", object_name)?;
+            if !object_name.starts_with(EVENT_STORE_RESERVED_PREFIX) {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration version {} replacement object `{object_name}` is outside the reserved `{EVENT_STORE_RESERVED_PREFIX}` namespace",
+                        migration.version
+                    ),
+                });
+            }
+            if !migration_replacement_names.insert(*object_name) {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration version {} replacement object `{object_name}` is declared more than once",
+                        migration.version
+                    ),
+                });
+            }
+            if migration.owned_object_names.contains(object_name)
+                || migration.owned_table_names.contains(object_name)
+            {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration version {} replacement object `{object_name}` is also newly owned by that migration",
+                        migration.version
+                    ),
+                });
+            }
+            let prior_owners = registry[..index]
+                .iter()
+                .filter(|prior| prior.owned_object_names.contains(object_name))
+                .collect::<Vec<_>>();
+            if prior_owners.len() != 1 {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration version {} replacement object `{object_name}` must be owned by exactly one prior migration; found {} owners",
+                        migration.version,
+                        prior_owners.len()
+                    ),
+                });
+            }
+            let prior_owner = prior_owners[0];
+            if prior_owner.owned_table_names.contains(object_name)
+                || prior_owner.fts5_table_names.contains(object_name)
+            {
+                return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                    reason: format!(
+                        "migration version {} replacement object `{object_name}` is a predecessor table; only non-table schema objects may be replaced",
+                        migration.version
                     ),
                 });
             }
@@ -556,6 +719,13 @@ pub(crate) fn validate_migration_registry(
                 EventStoreMigrationHook::FoodAvailabilityProjectionV1,
                 Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256),
                 Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION),
+            )
+            | (
+                EventStoreMigrationHook::SourceMaintenanceV1,
+                Some(source_maintenance_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256),
+                Some(
+                    source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
             ) => {}
             (hook, manifest, registry_version) => {
                 return Err(RadrootsEventStoreError::MigrationRegistryDefect {
@@ -910,6 +1080,224 @@ fn validate_generated_food_availability_projection_manifest_descriptor()
     Ok(())
 }
 
+fn validate_generated_source_maintenance_manifest_descriptor() -> Result<(), RadrootsEventStoreError>
+{
+    use source_maintenance_manifest as source_manifest;
+
+    let bytes = source_manifest::SOURCE_MAINTENANCE_MANIFEST_JSON.as_bytes();
+    if bytes.len() != source_manifest::SOURCE_MAINTENANCE_MANIFEST_BYTE_LENGTH {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated source-maintenance manifest byte length is inconsistent".to_owned(),
+        });
+    }
+    validate_sha256_literal(
+        source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION,
+        "hook manifest",
+        source_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256,
+    )?;
+    if sha256_hex(bytes) != source_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256 {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated source-maintenance manifest digest is inconsistent".to_owned(),
+        });
+    }
+    let manifest: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
+        RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: format!("generated source-maintenance manifest JSON is invalid: {error}"),
+        }
+    })?;
+    let expected_numbers = [
+        (
+            "/schema_version",
+            u64::from(source_manifest::SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION),
+        ),
+        (
+            "/migration/version",
+            u64::from(source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION),
+        ),
+        (
+            "/migration/up/byte_length",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_BYTE_LENGTH as u64,
+        ),
+        (
+            "/migration/down/byte_length",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_BYTE_LENGTH as u64,
+        ),
+        (
+            "/source_maintenance/version",
+            u64::from(source_manifest::SOURCE_MAINTENANCE_CAPACITY_VERSION),
+        ),
+        (
+            "/source_maintenance/event_contract_registry_version",
+            u64::from(source_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION),
+        ),
+        (
+            "/source_maintenance/limits/raw_events",
+            source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT,
+        ),
+        (
+            "/source_maintenance/limits/raw_tags",
+            source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT,
+        ),
+        (
+            "/source_maintenance/limits/raw_event_text_bytes",
+            source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT,
+        ),
+        (
+            "/source_maintenance/limits/raw_tag_text_bytes",
+            source_manifest::SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT,
+        ),
+        (
+            "/source_maintenance/limits/retained_source_generations",
+            u64::from(source_manifest::SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT),
+        ),
+    ];
+    let expected_strings = [
+        (
+            "/contract_id",
+            source_manifest::SOURCE_MAINTENANCE_CONTRACT_ID,
+        ),
+        ("/hook_id", source_manifest::SOURCE_MAINTENANCE_HOOK_ID),
+        (
+            "/predecessor/hook_id",
+            source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID,
+        ),
+        (
+            "/predecessor/manifest/sha256",
+            source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256,
+        ),
+        (
+            "/migration/name",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME,
+        ),
+        (
+            "/migration/up/sha256",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_SHA256,
+        ),
+        (
+            "/migration/down/sha256",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256,
+        ),
+        (
+            "/migration/schema_sha256",
+            source_manifest::SOURCE_MAINTENANCE_SCHEMA_SHA256,
+        ),
+        (
+            "/source_maintenance/capacity_authority_id",
+            source_manifest::SOURCE_MAINTENANCE_CAPACITY_AUTHORITY_ID,
+        ),
+        (
+            "/source_maintenance/accounting/algorithm",
+            source_manifest::SOURCE_MAINTENANCE_ACCOUNTING_ALGORITHM,
+        ),
+        (
+            "/result_vector/sha256",
+            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_SHA256,
+        ),
+        (
+            "/result_vector/executor_id",
+            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_ID,
+        ),
+        (
+            "/result_vector/executor_sha256",
+            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_SHA256,
+        ),
+    ];
+    let numbers_match = expected_numbers.iter().all(|(pointer, expected)| {
+        manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
+    });
+    let strings_match = expected_strings.iter().all(|(pointer, expected)| {
+        manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
+    });
+    let string_array_matches = |pointer: &str, expected: &[&str]| {
+        manifest
+            .pointer(pointer)
+            .and_then(|value| value.as_array())
+            .is_some_and(|values| {
+                values.len() == expected.len()
+                    && values
+                        .iter()
+                        .zip(expected)
+                        .all(|(value, expected)| value.as_str() == Some(*expected))
+            })
+    };
+    if source_manifest::SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION != 1
+        || source_manifest::SOURCE_MAINTENANCE_CONTRACT_ID
+            != "radroots_event_store.source_maintenance_v1"
+        || source_manifest::SOURCE_MAINTENANCE_HOOK_ID != "source_maintenance_v1"
+        || source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION != 4
+        || source_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME != "source_maintenance"
+        || source_manifest::SOURCE_MAINTENANCE_CAPACITY_VERSION != 1
+        || source_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION
+            != food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION
+        || source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID
+            != food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID
+        || source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256
+            != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256
+        || source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT
+            != crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1
+        || source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT
+            != crate::RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1
+        || source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT
+            != crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1
+        || source_manifest::SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT
+            != crate::RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1
+        || source_manifest::SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT
+            != crate::RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
+        || !numbers_match
+        || !strings_match
+        || !string_array_matches(
+            "/migration/catalog/replaced_objects",
+            source_manifest::SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
+        )
+        || !string_array_matches(
+            "/source_maintenance/accounting/raw_event_columns",
+            source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COLUMNS,
+        )
+        || !string_array_matches(
+            "/source_maintenance/accounting/raw_tag_columns",
+            source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COLUMNS,
+        )
+        || !string_array_matches(
+            "/source_maintenance/accounting/nullable_raw_tag_columns",
+            source_manifest::SOURCE_MAINTENANCE_NULLABLE_RAW_TAG_COLUMNS,
+        )
+    {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: "generated source-maintenance manifest metadata is inconsistent".to_owned(),
+        });
+    }
+    for (field, digest) in [
+        (
+            "migration up",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_SHA256,
+        ),
+        (
+            "migration down",
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256,
+        ),
+        ("schema", source_manifest::SOURCE_MAINTENANCE_SCHEMA_SHA256),
+        (
+            "predecessor manifest",
+            source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256,
+        ),
+        (
+            "result vector",
+            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_SHA256,
+        ),
+        (
+            "result-vector executor",
+            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_SHA256,
+        ),
+    ] {
+        validate_sha256_literal(
+            source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION,
+            field,
+            digest,
+        )?;
+    }
+    Ok(())
+}
+
 fn validate_owned_schema_name(
     version: u32,
     object_kind: &'static str,
@@ -1146,7 +1534,7 @@ mod migration_framework {
     #[test]
     fn embedded_registry_is_contiguous_and_byte_pinned() {
         validate_embedded_migration_registry().expect("valid registry");
-        assert_eq!(EVENT_STORE_MIGRATIONS.len(), 3);
+        assert_eq!(EVENT_STORE_MIGRATIONS.len(), 4);
         assert_eq!(EVENT_STORE_MIGRATIONS[0].version, 1);
         assert_eq!(EVENT_STORE_MIGRATIONS[0].name, "event_store");
         assert_eq!(EVENT_STORE_MIGRATIONS[0].up_len, FROZEN_V1_UP_LEN);
@@ -1183,6 +1571,16 @@ mod migration_framework {
         assert_eq!(
             EVENT_STORE_MIGRATIONS[2].event_contract_registry_version,
             Some(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION)
+        );
+        assert_eq!(EVENT_STORE_MIGRATIONS[3].version, 4);
+        assert_eq!(EVENT_STORE_MIGRATIONS[3].name, "source_maintenance");
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[3].hook,
+            EventStoreMigrationHook::SourceMaintenanceV1
+        );
+        assert_eq!(
+            EVENT_STORE_MIGRATIONS[3].event_contract_registry_version,
+            Some(source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,)
         );
     }
 

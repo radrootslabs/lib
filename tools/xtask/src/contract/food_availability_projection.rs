@@ -1,11 +1,13 @@
+#![allow(dead_code)]
+
 use super::artifact_bundle::{
     GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
 };
 use super::nip09_reconciliation::{
+    nip09_predecessor_production_source_paths_under_lock,
     validate_nip09_predecessor_production_sources_under_lock,
     validate_nip09_reconciliation_manifest_under_lock,
 };
-use super::registry_v7::validate_event_contract_registry_v7_inventory_under_lock;
 use quote::ToTokens;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -74,6 +76,77 @@ const WRITE_COMMAND: &str = "cargo xtask contract food-availability-projection-m
 const HASH_ALGORITHM: &str = "sha256_bytes_v1";
 const EVENT_STORE_LIB_RELATIVE: &str = "crates/event_store/src/lib.rs";
 const EVENT_STORE_MODEL_RELATIVE: &str = "crates/event_store/src/model.rs";
+
+const IMMUTABLE_MANIFEST_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/contracts/food_availability_projection_v1.manifest.json"
+);
+const IMMUTABLE_MANIFEST_SCHEMA_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/contracts/food_availability_projection_v1.manifest.schema.json"
+);
+const IMMUTABLE_MANIFEST_SHA256_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/contracts/food_availability_projection_v1.manifest.sha256"
+);
+const IMMUTABLE_GENERATED_DESCRIPTOR_BYTES: &[u8] = include_bytes!(
+    "../../../../crates/event_store/src/generated/food_availability_projection_manifest.rs"
+);
+const IMMUTABLE_RESULT_VECTOR_BYTES: &[u8] = include_bytes!(
+    "../../../../contracts/conformance/vectors/event_store/food_availability_projection.v1.json"
+);
+
+#[derive(Clone, Copy)]
+struct ImmutableArtifactSpec {
+    relative: &'static str,
+    byte_length: usize,
+    sha256: &'static str,
+}
+
+const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 9] = [
+    ImmutableArtifactSpec {
+        relative: MANIFEST_RELATIVE,
+        byte_length: 17_455,
+        sha256: "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+    },
+    ImmutableArtifactSpec {
+        relative: MANIFEST_SCHEMA_RELATIVE,
+        byte_length: 7_964,
+        sha256: "39171f6ef872a8d1483bc3d55049df5e0d110d9131c5adb4450b7c418f546910",
+    },
+    ImmutableArtifactSpec {
+        relative: MANIFEST_SHA256_RELATIVE,
+        byte_length: 65,
+        sha256: "4ac4c79a946ccb1a11726cbafc18e2e016f08f3f6797964400dea3494c66dbc5",
+    },
+    ImmutableArtifactSpec {
+        relative: GENERATED_DESCRIPTOR_RELATIVE,
+        byte_length: 21_437,
+        sha256: "90908da53ab9572f45f5916ccc2652736b7ea26ba6dd202a4f69af1e651b564b",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_CANONICAL_RELATIVE,
+        byte_length: 103_659,
+        sha256: "fca2b71b47736ed04ed1e908823b65b3fc3cf0366cb162128369fe328295bb63",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_MIRROR_RELATIVE,
+        byte_length: 103_659,
+        sha256: "fca2b71b47736ed04ed1e908823b65b3fc3cf0366cb162128369fe328295bb63",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_EXECUTOR_RELATIVE,
+        byte_length: 34_075,
+        sha256: "9e8e11abae7bbc7dda30eab6f0a79074ffc3761aa6b955cff58c4c62fa581aa3",
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_UP_RELATIVE,
+        byte_length: 23_683,
+        sha256: "4e7edfb981b25f76055efc7802ec30b4034eeae9b9c0809ea4ea7c574678748a",
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_DOWN_RELATIVE,
+        byte_length: 1_755,
+        sha256: "29d663320109d9dd0df6a00b6a53d8d988438d01f7a66960a9d4ba3482ffffb8",
+    },
+];
 
 const GOVERNED_PUBLIC_API_MODULES: &[&str] = &[
     "addressable_transition_feed_v1",
@@ -731,11 +804,7 @@ pub(crate) fn write_food_availability_projection_manifest(
     workspace_root: &Path,
 ) -> Result<(), String> {
     with_artifact_bundle_transaction(workspace_root, |transaction| {
-        validate_nip09_reconciliation_manifest_under_lock(workspace_root)?;
-        validate_predecessor_production_source_coverage(workspace_root)?;
-        validate_event_contract_registry_v7_inventory_under_lock(workspace_root)?;
-        let artifacts = expected_artifacts(workspace_root)?;
-        transaction.write(artifacts)?;
+        transaction.write(immutable_generated_artifacts())?;
         validate_food_availability_projection_manifest_under_lock(workspace_root)
     })
 }
@@ -748,12 +817,10 @@ pub(crate) fn validate_food_availability_projection_manifest(
     })
 }
 
-fn validate_food_availability_projection_manifest_under_lock(
+pub(super) fn validate_food_availability_projection_manifest_under_lock(
     workspace_root: &Path,
 ) -> Result<(), String> {
     validate_nip09_reconciliation_manifest_under_lock(workspace_root)?;
-    validate_predecessor_production_source_coverage(workspace_root)?;
-    validate_event_contract_registry_v7_inventory_under_lock(workspace_root)?;
 
     let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
     let manifest_value: Value = serde_json::from_slice(&manifest_bytes)
@@ -778,14 +845,63 @@ fn validate_food_availability_projection_manifest_under_lock(
         ));
     }
 
-    let expected = expected_artifacts(workspace_root)?;
-    for artifact in expected {
+    if manifest.migration.up.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[7].sha256
+        || manifest.migration.down.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[8].sha256
+        || manifest.result_vector.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[4].sha256
+        || manifest.result_vector.executor_sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[6].sha256
+    {
+        return Err(format!(
+            "{MANIFEST_RELATIVE} does not describe the immutable FoodAvailability predecessor identity"
+        ));
+    }
+
+    let vector_bytes = read_regular_file(workspace_root, RESULT_VECTOR_CANONICAL_RELATIVE)?;
+    let mirror_bytes = read_regular_file(workspace_root, RESULT_VECTOR_MIRROR_RELATIVE)?;
+    if vector_bytes != mirror_bytes {
+        return Err(format!(
+            "{RESULT_VECTOR_MIRROR_RELATIVE} must exactly mirror {RESULT_VECTOR_CANONICAL_RELATIVE}"
+        ));
+    }
+    let vector: ProjectionResultVector = serde_json::from_slice(&vector_bytes)
+        .map_err(|error| format!("parse {RESULT_VECTOR_CANONICAL_RELATIVE}: {error}"))?;
+    validate_canonical_json(RESULT_VECTOR_CANONICAL_RELATIVE, &vector_bytes, &vector)?;
+    validate_result_vector(&vector)?;
+
+    for artifact in IMMUTABLE_PREDECESSOR_ARTIFACTS {
         let actual = read_regular_file(workspace_root, artifact.relative)?;
-        if actual != artifact.contents {
-            return Err(stale_error(artifact.relative));
+        if actual.len() != artifact.byte_length || sha256_hex(&actual) != artifact.sha256 {
+            return Err(format!(
+                "immutable FoodAvailability predecessor artifact {} does not match its authenticated byte identity",
+                artifact.relative
+            ));
         }
     }
     Ok(())
+}
+
+fn immutable_generated_artifacts() -> Vec<GeneratedArtifact> {
+    vec![
+        GeneratedArtifact {
+            relative: MANIFEST_RELATIVE,
+            contents: IMMUTABLE_MANIFEST_BYTES.to_vec(),
+        },
+        GeneratedArtifact {
+            relative: MANIFEST_SCHEMA_RELATIVE,
+            contents: IMMUTABLE_MANIFEST_SCHEMA_BYTES.to_vec(),
+        },
+        GeneratedArtifact {
+            relative: MANIFEST_SHA256_RELATIVE,
+            contents: IMMUTABLE_MANIFEST_SHA256_BYTES.to_vec(),
+        },
+        GeneratedArtifact {
+            relative: GENERATED_DESCRIPTOR_RELATIVE,
+            contents: IMMUTABLE_GENERATED_DESCRIPTOR_BYTES.to_vec(),
+        },
+        GeneratedArtifact {
+            relative: RESULT_VECTOR_MIRROR_RELATIVE,
+            contents: IMMUTABLE_RESULT_VECTOR_BYTES.to_vec(),
+        },
+    ]
 }
 
 fn expected_artifacts(workspace_root: &Path) -> Result<Vec<GeneratedArtifact>, String> {
@@ -826,7 +942,7 @@ fn describe_manifest(
     schema_bytes: &[u8],
 ) -> Result<FoodAvailabilityProjectionManifest, String> {
     validate_source_contract(workspace_root)?;
-    validate_predecessor_production_source_coverage(workspace_root)?;
+    validate_predecessor_production_source_coverage(workspace_root, &[])?;
 
     let predecessor_bytes = read_regular_file(workspace_root, PREDECESSOR_MANIFEST_RELATIVE)?;
     if predecessor_bytes.len() != PREDECESSOR_MANIFEST_BYTE_LENGTH
@@ -921,7 +1037,10 @@ fn describe_manifest(
     })
 }
 
-fn validate_predecessor_production_source_coverage(workspace_root: &Path) -> Result<(), String> {
+fn validate_predecessor_production_source_coverage(
+    workspace_root: &Path,
+    downstream_nip09_superseded_paths: &[&str],
+) -> Result<(), String> {
     for path in PREDECESSOR_SUPERSEDED_SOURCE_PATHS {
         if !SOURCE_SPECS.iter().any(|source| source.path == *path) {
             return Err(format!(
@@ -929,10 +1048,152 @@ fn validate_predecessor_production_source_coverage(workspace_root: &Path) -> Res
             ));
         }
     }
-    validate_nip09_predecessor_production_sources_under_lock(
-        workspace_root,
-        PREDECESSOR_SUPERSEDED_SOURCE_PATHS,
-    )
+    let superseded_paths = PREDECESSOR_SUPERSEDED_SOURCE_PATHS
+        .iter()
+        .copied()
+        .chain(downstream_nip09_superseded_paths.iter().copied())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    validate_nip09_predecessor_production_sources_under_lock(workspace_root, &superseded_paths)
+}
+
+pub(super) fn validate_food_availability_projection_predecessor_production_sources_under_lock(
+    workspace_root: &Path,
+    superseded_paths: &[&str],
+) -> Result<(), String> {
+    validate_food_availability_projection_manifest_under_lock(workspace_root)?;
+    let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
+    let manifest: FoodAvailabilityProjectionManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
+
+    let (food_superseded_paths, nip09_superseded_paths) =
+        partition_downstream_predecessor_supersessions(workspace_root, superseded_paths)?;
+    validate_food_predecessor_source_inventory(&manifest, &food_superseded_paths, |spec| {
+        describe_source_file(workspace_root, spec)
+    })?;
+    require_predecessor_file_match(
+        "registry inventory",
+        &manifest.registry_inventory,
+        &descriptor_for_file(workspace_root, REGISTRY_INVENTORY_RELATIVE)?,
+    )?;
+    require_predecessor_file_match(
+        "FoodAvailability profile vector",
+        &manifest.food_profile_vector,
+        &descriptor_for_file(workspace_root, FOOD_PROFILE_VECTOR_RELATIVE)?,
+    )?;
+    validate_predecessor_production_source_coverage(workspace_root, &nip09_superseded_paths)
+}
+
+fn partition_downstream_predecessor_supersessions<'a>(
+    workspace_root: &Path,
+    superseded_paths: &'a [&'a str],
+) -> Result<(Vec<&'a str>, Vec<&'a str>), String> {
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    if superseded.len() != superseded_paths.len() {
+        return Err("successor predecessor-source supersession paths must be unique".to_owned());
+    }
+    let food_paths = SOURCE_SPECS
+        .iter()
+        .map(|source| source.path)
+        .collect::<BTreeSet<_>>();
+    let nip09_paths = nip09_predecessor_production_source_paths_under_lock(workspace_root)?;
+    let mut food_superseded_paths = Vec::new();
+    let mut nip09_superseded_paths = Vec::new();
+    for path in superseded_paths {
+        if food_paths.contains(path) {
+            food_superseded_paths.push(*path);
+        }
+        if nip09_paths.contains(*path) {
+            nip09_superseded_paths.push(*path);
+        }
+        if !food_paths.contains(path) && !nip09_paths.contains(*path) {
+            return Err(format!(
+                "successor supersession path `{path}` is not bound by either the FoodAvailability or NIP-09 predecessor"
+            ));
+        }
+    }
+    Ok((food_superseded_paths, nip09_superseded_paths))
+}
+
+fn validate_food_predecessor_source_inventory<Describe>(
+    manifest: &FoodAvailabilityProjectionManifest,
+    superseded_paths: &[&str],
+    mut describe: Describe,
+) -> Result<(), String>
+where
+    Describe: FnMut(SourceSpec) -> Result<SourceFileDescriptor, String>,
+{
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    if superseded.len() != superseded_paths.len() {
+        return Err("successor predecessor-source supersession paths must be unique".to_owned());
+    }
+
+    let predecessor_paths = SOURCE_SPECS
+        .iter()
+        .map(|source| source.path)
+        .collect::<BTreeSet<_>>();
+    if let Some(path) = superseded
+        .iter()
+        .find(|path| !predecessor_paths.contains(**path))
+    {
+        return Err(format!(
+            "successor supersession path `{path}` is not a FoodAvailability predecessor-bound production source"
+        ));
+    }
+
+    if manifest.source_files.len() != SOURCE_SPECS.len() {
+        return Err(
+            "immutable FoodAvailability predecessor source inventory is incomplete".to_owned(),
+        );
+    }
+    for (expected, spec) in manifest.source_files.iter().zip(SOURCE_SPECS) {
+        if expected.role != spec.role || expected.path != spec.path {
+            return Err(format!(
+                "immutable FoodAvailability predecessor source inventory drifted at `{}`",
+                spec.path
+            ));
+        }
+        if superseded.contains(spec.path) {
+            continue;
+        }
+        let current = describe(*spec)?;
+        if current != *expected {
+            return Err(format!(
+                "unchanged FoodAvailability predecessor source authority `{}` drifted from the immutable manifest",
+                spec.path
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_predecessor_file_match(
+    label: &str,
+    expected: &FileDescriptor,
+    current: &FileDescriptor,
+) -> Result<(), String> {
+    if current != expected {
+        return Err(format!(
+            "unchanged FoodAvailability predecessor {label} `{}` drifted from the immutable manifest",
+            expected.path
+        ));
+    }
+    Ok(())
+}
+
+fn describe_source_file(
+    workspace_root: &Path,
+    spec: SourceSpec,
+) -> Result<SourceFileDescriptor, String> {
+    let bytes = read_regular_file(workspace_root, spec.path)?;
+    Ok(SourceFileDescriptor {
+        role: spec.role.to_owned(),
+        path: spec.path.to_owned(),
+        byte_length: byte_length(spec.path, &bytes)?,
+        sha256: sha256_hex(&bytes),
+        hash_algorithm: HASH_ALGORITHM.to_owned(),
+    })
 }
 
 fn descriptor_for_file(workspace_root: &Path, relative: &str) -> Result<FileDescriptor, String> {
@@ -3556,6 +3817,7 @@ fn stale_error(relative: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn repository_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -3563,6 +3825,228 @@ mod tests {
             .and_then(Path::parent)
             .expect("xtask manifest has a workspace root")
             .to_path_buf()
+    }
+
+    fn immutable_manifest() -> FoodAvailabilityProjectionManifest {
+        serde_json::from_slice(IMMUTABLE_MANIFEST_BYTES)
+            .expect("immutable FoodAvailability manifest")
+    }
+
+    fn copy_file(source_root: &Path, destination_root: &Path, relative: &str) {
+        let destination = destination_root.join(relative);
+        fs::create_dir_all(destination.parent().expect("fixture parent"))
+            .expect("create fixture parent");
+        fs::copy(source_root.join(relative), destination).expect("copy fixture");
+    }
+
+    fn immutable_artifact_workspace() -> tempfile::TempDir {
+        const NIP09_ARTIFACTS: &[&str] = &[
+            "crates/event_store/contracts/nip09_reconciliation_v1.manifest.json",
+            "crates/event_store/contracts/nip09_reconciliation_v1.manifest.schema.json",
+            "crates/event_store/contracts/nip09_reconciliation_v1.manifest.sha256",
+            "crates/event_store/src/generated/nip09_reconciliation_manifest.rs",
+            "contracts/conformance/vectors/event_store/nip09_reconciliation.v1.json",
+            "crates/event_store/tests/fixtures/nip09_reconciliation.v1.json",
+            "crates/event_store/src/nip09/reconciliation_v1/result_vector_executor.rs",
+            "crates/event_store/migrations/0001_event_store.up.sql",
+            "crates/event_store/migrations/0001_event_store.down.sql",
+            "crates/event_store/migrations/0002_nip09.up.sql",
+            "crates/event_store/migrations/0002_nip09.down.sql",
+        ];
+
+        let workspace = tempfile::TempDir::new().expect("workspace");
+        let repository = repository_root();
+        for relative in NIP09_ARTIFACTS.iter().copied().chain(
+            IMMUTABLE_PREDECESSOR_ARTIFACTS
+                .iter()
+                .map(|artifact| artifact.relative),
+        ) {
+            copy_file(&repository, workspace.path(), relative);
+        }
+        workspace
+    }
+
+    #[test]
+    fn immutable_food_predecessor_artifacts_match_authenticated_identities() {
+        let root = repository_root();
+        for artifact in IMMUTABLE_PREDECESSOR_ARTIFACTS {
+            let bytes = read_regular_file(&root, artifact.relative).expect("immutable artifact");
+            assert_eq!(bytes.len(), artifact.byte_length, "{}", artifact.relative);
+            assert_eq!(sha256_hex(&bytes), artifact.sha256, "{}", artifact.relative);
+        }
+    }
+
+    #[test]
+    fn legacy_writer_restores_only_generated_immutable_artifacts() {
+        let workspace = immutable_artifact_workspace();
+        fs::write(workspace.path().join(MANIFEST_RELATIVE), b"tampered\n")
+            .expect("tamper manifest");
+        fs::write(
+            workspace.path().join(RESULT_VECTOR_MIRROR_RELATIVE),
+            b"tampered\n",
+        )
+        .expect("tamper result-vector mirror");
+        let changed_source = workspace.path().join("crates/event_store/src/error.rs");
+        fs::create_dir_all(changed_source.parent().expect("source parent"))
+            .expect("create source parent");
+        fs::write(&changed_source, b"successor-owned source bytes\n")
+            .expect("write changed source");
+
+        write_food_availability_projection_manifest(workspace.path())
+            .expect("restore immutable generated artifacts");
+        assert_eq!(
+            fs::read(workspace.path().join(MANIFEST_RELATIVE)).expect("restored manifest"),
+            IMMUTABLE_MANIFEST_BYTES
+        );
+        assert_eq!(
+            fs::read(workspace.path().join(RESULT_VECTOR_MIRROR_RELATIVE))
+                .expect("restored result-vector mirror"),
+            IMMUTABLE_RESULT_VECTOR_BYTES
+        );
+        assert_eq!(
+            fs::read(changed_source).expect("changed source"),
+            b"successor-owned source bytes\n"
+        );
+    }
+
+    #[test]
+    fn legacy_writer_cannot_rebaseline_an_authored_immutable_artifact() {
+        let workspace = immutable_artifact_workspace();
+        fs::write(
+            workspace.path().join(RESULT_VECTOR_EXECUTOR_RELATIVE),
+            b"tampered\n",
+        )
+        .expect("tamper executor");
+        let error = write_food_availability_projection_manifest(workspace.path())
+            .expect_err("immutable executor drift must fail");
+        assert!(
+            error.contains("immutable FoodAvailability predecessor artifact")
+                && error.contains(RESULT_VECTOR_EXECUTOR_RELATIVE),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn predecessor_source_inventory_rejects_duplicate_unknown_and_unsuperseded_drift() {
+        let manifest = immutable_manifest();
+        let descriptors = manifest.source_files.clone();
+        let describe = |spec: SourceSpec| {
+            descriptors
+                .iter()
+                .find(|source| source.path == spec.path)
+                .cloned()
+                .ok_or_else(|| format!("missing fixture source {}", spec.path))
+        };
+        validate_food_predecessor_source_inventory(&manifest, &[], describe)
+            .expect("complete immutable predecessor inventory");
+
+        let path = SOURCE_SPECS[0].path;
+        let error = validate_food_predecessor_source_inventory(&manifest, &[path, path], |_| {
+            unreachable!("duplicates fail before source reads")
+        })
+        .expect_err("duplicate supersession must fail");
+        assert!(error.contains("must be unique"), "{error}");
+
+        let error = validate_food_predecessor_source_inventory(
+            &manifest,
+            &["crates/event_store/src/not_bound.rs"],
+            |_| unreachable!("unknown paths fail before source reads"),
+        )
+        .expect_err("unknown supersession must fail");
+        assert!(
+            error.contains("not a FoodAvailability predecessor-bound"),
+            "{error}"
+        );
+
+        let drift_path = SOURCE_SPECS[0].path;
+        let descriptors = manifest.source_files.clone();
+        let error = validate_food_predecessor_source_inventory(&manifest, &[], |spec| {
+            let mut source = descriptors
+                .iter()
+                .find(|source| source.path == spec.path)
+                .cloned()
+                .expect("fixture source");
+            if spec.path == drift_path {
+                source.sha256 = "00".repeat(32);
+            }
+            Ok(source)
+        })
+        .expect_err("unsuperseded source drift must fail");
+        assert!(
+            error.contains("unchanged FoodAvailability predecessor source authority")
+                && error.contains(drift_path),
+            "{error}"
+        );
+
+        let descriptors = manifest.source_files.clone();
+        validate_food_predecessor_source_inventory(&manifest, &[drift_path], |spec| {
+            assert_ne!(spec.path, drift_path, "superseded source must not be read");
+            descriptors
+                .iter()
+                .find(|source| source.path == spec.path)
+                .cloned()
+                .ok_or_else(|| format!("missing fixture source {}", spec.path))
+        })
+        .expect("an explicitly superseded source is delegated to the successor");
+    }
+
+    #[test]
+    fn downstream_nip09_only_supersession_is_transitively_validated() {
+        const SOURCE_MAINTENANCE_SUPERSEDED_PATHS: &[&str] = &[
+            "crates/event_store/src/error.rs",
+            "crates/event_store/src/generated.rs",
+            "crates/event_store/src/lib.rs",
+            "crates/event_store/src/migrations.rs",
+            "crates/event_store/src/model.rs",
+            "crates/event_store/src/nip09/reconciliation_v1.rs",
+            "crates/event_store/src/schema.rs",
+            "crates/event_store/src/store.rs",
+            "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+        ];
+
+        let root = repository_root();
+        let (food_paths, nip09_paths) = partition_downstream_predecessor_supersessions(
+            &root,
+            &[
+                "crates/event_store/src/error.rs",
+                "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+            ],
+        )
+        .expect("overlapping and NIP-09-only predecessor ownership");
+        assert_eq!(food_paths, ["crates/event_store/src/error.rs"]);
+        assert_eq!(
+            nip09_paths,
+            [
+                "crates/event_store/src/error.rs",
+                "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+            ]
+        );
+        validate_food_availability_projection_predecessor_production_sources_under_lock(
+            &root,
+            SOURCE_MAINTENANCE_SUPERSEDED_PATHS,
+        )
+        .expect("Food and transitive NIP-09 successor source coverage");
+
+        let mut duplicate = SOURCE_MAINTENANCE_SUPERSEDED_PATHS.to_vec();
+        duplicate.push("crates/event_store/src/store/protocol_reconciliation_v1.rs");
+        let error =
+            validate_food_availability_projection_predecessor_production_sources_under_lock(
+                &root, &duplicate,
+            )
+            .expect_err("duplicate transitive supersession must fail");
+        assert!(error.contains("must be unique"), "{error}");
+
+        let mut unknown = SOURCE_MAINTENANCE_SUPERSEDED_PATHS.to_vec();
+        unknown.push("crates/event_store/src/store/not_predecessor_bound.rs");
+        let error =
+            validate_food_availability_projection_predecessor_production_sources_under_lock(
+                &root, &unknown,
+            )
+            .expect_err("unknown transitive supersession must fail");
+        assert!(
+            error.contains("not bound by either the FoodAvailability or NIP-09 predecessor"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -3688,138 +4172,6 @@ mod tests {
         )
         .expect_err("non-indexed visibility ordering must fail");
         assert!(error.contains("visibility ordering"), "{error}");
-    }
-
-    #[test]
-    fn predecessor_fast_open_validation_remains_constant_cost() {
-        let root = repository_root();
-        let source = read_regular_file(&root, "crates/event_store/src/nip09/reconciliation_v1.rs")
-            .expect("predecessor source");
-        let source = std::str::from_utf8(&source).expect("UTF-8 predecessor source");
-        validate_fast_active_hook_source(source).expect("constant-cost fast-open validation");
-
-        let exhaustive = source.replacen(
-            "validate_structural_source_state_fast(connection)",
-            "validate_structural_source_state(connection)",
-            1,
-        );
-        assert_ne!(exhaustive, source, "fast-open mutation must apply");
-        let error = validate_fast_active_hook_source(&exhaustive)
-            .expect_err("exhaustive open-time scan must fail");
-        assert!(error.contains("constant-cost"), "{error}");
-    }
-
-    #[test]
-    fn source_capacity_preflight_and_recheck_authority_is_structurally_sealed() {
-        const OUTER_PREFLIGHT: &str = r#"    if has_pending_source_capacity_hook(&status, registry) {
-        let mut connection = pool.acquire().await?;
-        validate_event_store_temp_schema_with_registry(&mut connection, registry).await?;
-        validate_reconciliation_capacity(&mut connection, reconciliation_limits).await?;
-    }
-"#;
-        const OUTER_DECOY: &str = r#"    if false {
-        if has_pending_source_capacity_hook(&status, registry) {
-            let mut connection = pool.acquire().await?;
-            validate_event_store_temp_schema_with_registry(&mut connection, registry).await?;
-            validate_reconciliation_capacity(&mut connection, reconciliation_limits).await?;
-        }
-    }
-"#;
-        const INNER_RECHECK_AND_APPLY: &str = r#"        if matches!(
-            migration.hook,
-            EventStoreMigrationHook::Nip09ReconciliationV1
-                | EventStoreMigrationHook::FoodAvailabilityProjectionV1
-        ) {
-            validate_reconciliation_capacity(connection, reconciliation_limits).await?;
-        }
-        apply_migration_up(connection, registry, migration).await?;
-"#;
-        const INNER_APPLY_THEN_RECHECK: &str = r#"        apply_migration_up(connection, registry, migration).await?;
-        if matches!(
-            migration.hook,
-            EventStoreMigrationHook::Nip09ReconciliationV1
-                | EventStoreMigrationHook::FoodAvailabilityProjectionV1
-        ) {
-            validate_reconciliation_capacity(connection, reconciliation_limits).await?;
-        }
-"#;
-        const OUTER_HOOK_SET: &str = r#"EventStoreMigrationHook::Nip09ReconciliationV1
-                    | EventStoreMigrationHook::FoodAvailabilityProjectionV1"#;
-        const INNER_HOOK_SET: &str = r#"EventStoreMigrationHook::Nip09ReconciliationV1
-                | EventStoreMigrationHook::FoodAvailabilityProjectionV1"#;
-
-        let root = repository_root();
-        let source = read_regular_file(&root, "crates/event_store/src/schema.rs")
-            .expect("event-store schema source");
-        let source = std::str::from_utf8(&source).expect("UTF-8 schema source");
-        validate_source_capacity_authority(source).expect("governed source-capacity authority");
-
-        let outer_before_begin = format!(
-            "{OUTER_PREFLIGHT}\n    let mut transaction = pool.begin_with(\"BEGIN IMMEDIATE\").await?;\n"
-        );
-        let outer_after_begin = format!(
-            "    let mut transaction = pool.begin_with(\"BEGIN IMMEDIATE\").await?;\n{OUTER_PREFLIGHT}"
-        );
-        let mutations = [
-            (
-                "outer capacity removal",
-                source.replacen(
-                    "        validate_reconciliation_capacity(&mut connection, reconciliation_limits).await?;\n",
-                    "",
-                    1,
-                ),
-            ),
-            (
-                "inner capacity removal",
-                source.replacen(
-                    "            validate_reconciliation_capacity(connection, reconciliation_limits).await?;\n",
-                    "",
-                    1,
-                ),
-            ),
-            (
-                "unreachable outer decoy",
-                source.replacen(OUTER_PREFLIGHT, OUTER_DECOY, 1),
-            ),
-            (
-                "outer preflight after BEGIN IMMEDIATE",
-                source.replacen(&outer_before_begin, &outer_after_begin, 1),
-            ),
-            (
-                "inner recheck after migration DDL",
-                source.replacen(
-                    INNER_RECHECK_AND_APPLY,
-                    INNER_APPLY_THEN_RECHECK,
-                    1,
-                ),
-            ),
-            (
-                "outer selector covers one hook only",
-                source.replacen(
-                    OUTER_HOOK_SET,
-                    "EventStoreMigrationHook::FoodAvailabilityProjectionV1",
-                    1,
-                ),
-            ),
-            (
-                "inner recheck covers one hook only",
-                source.replacen(
-                    INNER_HOOK_SET,
-                    "EventStoreMigrationHook::Nip09ReconciliationV1",
-                    1,
-                ),
-            ),
-        ];
-
-        for (label, mutation) in mutations {
-            assert_ne!(
-                mutation, source,
-                "source-capacity mutation must apply: {label}"
-            );
-            let error = validate_source_capacity_authority(&mutation)
-                .expect_err("source-capacity mutation must fail");
-            assert!(error.contains("source-capacity"), "{label}: {error}");
-        }
     }
 
     #[test]
@@ -4145,45 +4497,15 @@ mod tests {
     }
 
     #[test]
-    fn public_api_is_exhaustive_and_structurally_reexported() {
-        let root = repository_root();
-        let model_bytes =
-            read_regular_file(&root, EVENT_STORE_MODEL_RELATIVE).expect("event-store model source");
-        let model_source = std::str::from_utf8(&model_bytes).expect("UTF-8 model source");
-        let lib_bytes =
-            read_regular_file(&root, EVENT_STORE_LIB_RELATIVE).expect("event-store lib source");
-        let lib_source = std::str::from_utf8(&lib_bytes).expect("UTF-8 lib source");
-        let advertised = PUBLIC_API
-            .iter()
-            .map(|name| (*name).to_owned())
-            .collect::<Vec<_>>();
-        validate_public_api_sources(model_source, lib_source, &advertised)
-            .expect("governed successor public API");
-
-        let mut omitted = advertised.clone();
-        omitted.retain(|name| name != "RadrootsAddressableTransitionCauseV1");
-        let error = validate_public_api_sources(model_source, lib_source, &omitted)
-            .expect_err("omitted manifest symbol must fail");
-        assert!(error.contains("PUBLIC_API is not exhaustive"), "{error}");
-
-        let removed = lib_source.replacen("RadrootsAddressableTransitionCauseV1,", "", 1);
-        assert_ne!(removed, lib_source, "removal mutation must apply");
-        let error = validate_public_api_sources(model_source, &removed, &advertised)
-            .expect_err("removed crate-root export must fail");
-        assert!(error.contains("does not re-export"), "{error}");
-
-        let renamed = lib_source.replacen(
-            "RadrootsAddressableTransitionCauseV1",
-            "RadrootsAddressableTransitionCauseV1 as RadrootsAddressableTransitionCauseRenamedV1",
-            1,
+    fn immutable_public_api_inventory_is_exact() {
+        let mut manifest = immutable_manifest();
+        assert_eq!(
+            manifest.public_api,
+            PUBLIC_API
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect::<Vec<_>>()
         );
-        assert_ne!(renamed, lib_source, "rename mutation must apply");
-        let error = validate_public_api_sources(model_source, &renamed, &advertised)
-            .expect_err("renamed crate-root export must fail");
-        assert!(error.contains("non-renamed"), "{error}");
-
-        let schema_bytes = canonical_json_bytes(&manifest_schema()).expect("schema bytes");
-        let mut manifest = describe_manifest(&root, &schema_bytes).expect("manifest");
         manifest
             .public_api
             .retain(|name| name != "RadrootsAddressableTransitionCauseV1");
@@ -4312,10 +4634,9 @@ mod tests {
 
     #[test]
     fn schema_rejects_unknown_manifest_fields() {
-        let root = repository_root();
-        let schema = manifest_schema();
-        let schema_bytes = canonical_json_bytes(&schema).expect("schema bytes");
-        let manifest = describe_manifest(&root, &schema_bytes).expect("manifest");
+        let schema: Value = serde_json::from_slice(IMMUTABLE_MANIFEST_SCHEMA_BYTES)
+            .expect("immutable manifest schema");
+        let manifest = immutable_manifest();
         let mut value = serde_json::to_value(manifest).expect("manifest value");
         value
             .as_object_mut()
@@ -4328,12 +4649,9 @@ mod tests {
 
     #[test]
     fn generated_descriptor_covers_runtime_pointer_constants() {
-        let root = repository_root();
-        let schema_bytes = canonical_json_bytes(&manifest_schema()).expect("schema bytes");
-        let manifest = describe_manifest(&root, &schema_bytes).expect("manifest");
-        let manifest_bytes = canonical_json_bytes(&manifest).expect("manifest bytes");
-        let digest = sha256_hex(&manifest_bytes);
-        let descriptor = generated_descriptor(&manifest, &manifest_bytes, &digest);
+        let manifest = immutable_manifest();
+        let descriptor = std::str::from_utf8(IMMUTABLE_GENERATED_DESCRIPTOR_BYTES)
+            .expect("UTF-8 immutable generated descriptor");
         assert_eq!(manifest.migration.schema_sha256, SCHEMA_SHA256);
         for name in [
             "FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION",
@@ -4362,6 +4680,6 @@ mod tests {
                 "{name} must use the rustfmt-stable one-line assignment"
             );
         }
-        syn::parse_file(&descriptor).expect("generated descriptor parses as Rust");
+        syn::parse_file(descriptor).expect("generated descriptor parses as Rust");
     }
 }
