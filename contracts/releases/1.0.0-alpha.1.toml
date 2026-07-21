@@ -450,3 +450,9 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Represent relay-event verification, contract admission, valid-stream eligibility, and current visibility as independent exhaustive outcomes; enforce hard raw-event, aggregate raw-JSON, and pre-parse per-event fetch bounds; and remove bare-envelope legacy replica ingestion from the default public feature surface."
+
+[[changes]]
+id = "trade-validation-receipt-no-std"
+classification = "fix"
+semver_impacts = ["fix_packaging_metadata"]
+summary = "Restore the supported radroots_trade no-std serde_json feature lane by removing the std-bound error derive and importing alloc macros explicitly."

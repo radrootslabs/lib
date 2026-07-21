@@ -74,7 +74,6 @@ sha2 = { workspace = true, default-features = false, optional = true }
 sqlx = { workspace = true, default-features = false, features = [
   "derive",
 ], optional = true }
-thiserror = { workspace = true }
 
 [dev-dependencies]
 nostr = { workspace = true }

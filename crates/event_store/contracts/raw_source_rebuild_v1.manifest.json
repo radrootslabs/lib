@@ -849,8 +849,8 @@
     {
       "role": "workspace_lockfile_authority",
       "path": "Cargo.lock",
-      "byte_length": 216965,
-      "sha256": "f26bf62f77e48914c89c15e689fdbc6799928e9603cab38f50c0c65a0c405edf",
+      "byte_length": 216944,
+      "sha256": "d827b8c5aceb550b62fcc9b98804f97bbaf6bca95a59b1011a9927ba5aa2e49f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -1213,15 +1213,15 @@
     {
       "role": "release_breaking_change_authority",
       "path": "contracts/releases/1.0.0-alpha.1.toml",
-      "byte_length": 19840,
-      "sha256": "946d90dacc9db522825898dbb5d9d424b020a22fe53b80ec15eb67c5f1d8cd2d",
+      "byte_length": 20117,
+      "sha256": "de9ebc61c61d7143512ae9a1368bd52bb7309b8f8129eee32a456143079f7191",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "release_note_authority",
       "path": "CHANGELOG.md",
-      "byte_length": 28939,
-      "sha256": "61b9d2a9050e4123bc5324aebf6e54393b9b1efdc2145a4a2cf6c009a4345b23",
+      "byte_length": 29172,
+      "sha256": "a0a840cfd52a41f470de55f909e39c6b9eb056d6c191a16864338da2ca07cfb0",
       "hash_algorithm": "sha256_bytes_v1"
     }
   ],

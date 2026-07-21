@@ -353,6 +353,10 @@ publish policy both pass for the same source revision.
   Borrowed-transaction ingests use nested savepoints so a failed call cannot
   leave partial event-store writes available for the caller to commit.
 
+- The `radroots_trade` validation-receipt feature now preserves its documented
+  no-std plus `serde_json` build. Its error contract uses `core::fmt`, and alloc
+  macros are imported explicitly instead of relying on the std prelude.
+
 ### Removed
 
 - The duplicate private operational listing parser in `radroots_trade` was
