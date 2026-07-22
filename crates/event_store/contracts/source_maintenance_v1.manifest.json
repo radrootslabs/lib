@@ -150,6 +150,13 @@
   ],
   "source_files": [
     {
+      "role": "workspace_dependency_authority",
+      "path": "Cargo.toml",
+      "byte_length": 10725,
+      "sha256": "e1975711f349abc7651b29dd1144613865084206eba9f59c92da05ff9dabb6b5",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
       "role": "event_store_error_and_limits",
       "path": "crates/event_store/src/error.rs",
       "byte_length": 19421,
@@ -229,29 +236,29 @@
     {
       "role": "predecessor_successor_governance",
       "path": "tools/xtask/src/contract/food_availability_projection.rs",
-      "byte_length": 194875,
-      "sha256": "63cc3e6985741e2002ae59f56500bf8d6e0a8246f97a0b8b7f2d2372ef0642e0",
+      "byte_length": 194901,
+      "sha256": "01fe9546c95244b4197b3d2a6cec3d72e1f7c48f088bc93f168b5e2e4977b048",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 834200,
-      "sha256": "155374b306f3b30f6095dbfc203150c928b7418e646764011b0401996a636f84",
+      "byte_length": 833937,
+      "sha256": "0d326a4e459b2026f7ae9fc57a9741def98a2cd1ee6fbdf89713157d964d2547",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
-      "byte_length": 176693,
-      "sha256": "88ea58150c49faaad7dde6c9cc89a92ad6b693b112fd55041ac17984bc5c6700",
+      "byte_length": 176811,
+      "sha256": "c22612787364ae417fd4da582130f5fe934820ba0f40f92a47b4eeeb6dffbf16",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 476059,
-      "sha256": "ae86cbc1bb629869f1fedec00ef1871ffdcbf329e607f31ad817d65de15fcff8",
+      "byte_length": 479999,
+      "sha256": "3c9a51a467fa806c1f38a76149289ca5d0e6fb6d7d897cc6fe4883118a939410",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

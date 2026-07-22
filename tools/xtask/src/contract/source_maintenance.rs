@@ -243,6 +243,10 @@ struct SourceSpec {
 
 const SOURCE_SPECS: &[SourceSpec] = &[
     SourceSpec {
+        role: "workspace_dependency_authority",
+        path: "Cargo.toml",
+    },
+    SourceSpec {
         role: "event_store_error_and_limits",
         path: "crates/event_store/src/error.rs",
     },
@@ -314,6 +318,7 @@ pub(super) fn source_contract_fixture_source_paths() -> Vec<&'static str> {
 }
 
 const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
+    "Cargo.toml",
     "crates/event_store/src/error.rs",
     "crates/event_store/src/generated.rs",
     "crates/event_store/src/lib.rs",

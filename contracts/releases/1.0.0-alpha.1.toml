@@ -13,6 +13,13 @@ operations = "contracts/operations.toml"
 replica = "contracts/replica.toml"
 conformance = "contracts/conformance"
 publish_policy = "contracts/releases/publish_policy.toml"
+sqlite_runtime = "contracts/releases/sqlite_runtime.toml"
+
+[[changes]]
+id = "registry-sqlite-provenance"
+classification = "fix"
+semver_impacts = ["fix_packaging_metadata"]
+summary = "Replace the local SQLite source patch with the checksummed crates.io bundled runtime and record its registry provenance."
 
 [[changes]]
 id = "standalone-release-authority"

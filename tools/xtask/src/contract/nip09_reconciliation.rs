@@ -209,7 +209,7 @@ const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 23] = [
     "unicode-general-category",
     "url_nostd",
 ];
-const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 8] = [
+const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     (
         CORE_CARGO_MANIFEST_RELATIVE,
         "36ec909334f7bf1d8353753bcc0651f66f808307e30f4d7441595c7bd51f7d3d",
@@ -237,10 +237,6 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 8] = [
     (
         "Cargo.toml#governed-workspace-dependencies",
         "0aa0aeb7988745aad1101c820a340c8ac04a5833c2ec7f7c997b5d9dfac010a3",
-    ),
-    (
-        "Cargo.toml#patch",
-        "6558dcb0d04a827d2cc836e9fb34fb86ef5de5550642c9c5ed4ea8a18472f5f0",
     ),
 ];
 
@@ -2523,7 +2519,9 @@ pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
         );
     }
 
-    validate_local_runtime_sources(workspace_root, &manifest.local_runtime_sources)?;
+    // The v1 manifest retains immutable evidence for the source tree used when
+    // it was issued. Current SQLite provenance is governed by the release
+    // contract and must not require that historical tree to remain vendored.
     Ok(())
 }
 
@@ -14585,13 +14583,11 @@ xtask = "run -q -p xtask --"
         "Cargo.toml#governed-workspace-dependencies".to_owned(),
         sha256_hex(&canonical_json_bytes(&governed_workspace_dependencies)?),
     ));
-    let patch = workspace_manifest
-        .get("patch")
-        .ok_or_else(|| format!("{WORKSPACE_CARGO_MANIFEST_RELATIVE} must declare [patch]"))?;
-    actual_identities.push((
-        "Cargo.toml#patch".to_owned(),
-        sha256_hex(&canonical_json_bytes(patch)?),
-    ));
+    if workspace_manifest.get("patch").is_some() {
+        return Err(format!(
+            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must not override registry sources with [patch]"
+        ));
+    }
 
     let expected_identities = GOVERNED_DEPENDENCY_TABLE_SHA256
         .iter()
@@ -17132,10 +17128,6 @@ mod tests {
             {
                 copy_file(&repository, workspace.path(), &relative);
             }
-        }
-        for relative in LOCAL_SQLITE_REQUIRED_FILES {
-            let relative = format!("{LOCAL_SQLITE_SOURCE_RELATIVE}/{relative}");
-            copy_file(&repository, workspace.path(), &relative);
         }
         workspace
     }

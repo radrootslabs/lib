@@ -30,7 +30,6 @@ public = [
   "radroots_trade",
 ]
 internal = [
-  "libsqlite3-sys",
   "radroots_authority",
   "radroots_event_store",
   "radroots_mesh",

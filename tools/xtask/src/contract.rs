@@ -78,12 +78,12 @@ const FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/food_availability/profile.v1.json";
 const RELEASES_ROOT_RELATIVE: &str = "contracts/releases";
 const RELEASE_POLICY_RELATIVE: &str = "contracts/releases/publish_policy.toml";
+const SQLITE_RUNTIME_CONTRACT_RELATIVE: &str = "contracts/releases/sqlite_runtime.toml";
 const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
 const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
 const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 22] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
@@ -1624,6 +1624,31 @@ struct ReleaseRecordArtifacts {
     replica: String,
     conformance: String,
     publish_policy: String,
+    #[serde(default)]
+    sqlite_runtime: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SqliteRuntimeContract {
+    schema_version: u32,
+    package: SqliteRuntimePackage,
+    activation: SqliteRuntimeActivation,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SqliteRuntimePackage {
+    name: String,
+    version: String,
+    source: String,
+    checksum: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SqliteRuntimeActivation {
+    route: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1705,6 +1730,7 @@ struct CargoLockPackage {
     name: String,
     version: String,
     source: Option<String>,
+    checksum: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3751,22 +3777,20 @@ fn validate_workspace_version_lockstep(
     for member in &workspace_manifest.workspace.members {
         let package_path = workspace_root.join(member).join("Cargo.toml");
         let package = parse_toml::<VersionedPackageCargoManifest>(&package_path)?;
-        if member != VENDORED_WORKSPACE_MEMBER_RELATIVE {
-            match package.package.version {
-                PackageVersionSource::Literal(ref version) if version == contract_version => {}
-                PackageVersionSource::Literal(version) => {
-                    return Err(format!(
-                        "workspace member {member} package version {version} must match contract version {contract_version}"
-                    ));
-                }
-                PackageVersionSource::Workspace { workspace } => {
-                    return Err(format!(
-                        "workspace member {member} must set an explicit package version {contract_version}, not version.workspace = {workspace}, so mounted path consumers preserve the public package version"
-                    ));
-                }
+        match package.package.version {
+            PackageVersionSource::Literal(ref version) if version == contract_version => {}
+            PackageVersionSource::Literal(version) => {
+                return Err(format!(
+                    "workspace member {member} package version {version} must match contract version {contract_version}"
+                ));
             }
-            governed_packages.insert(member.clone(), package.package.name.clone());
+            PackageVersionSource::Workspace { workspace } => {
+                return Err(format!(
+                    "workspace member {member} must set an explicit package version {contract_version}, not version.workspace = {workspace}, so mounted path consumers preserve the public package version"
+                ));
+            }
         }
+        governed_packages.insert(member.clone(), package.package.name.clone());
 
         if package.package.name.starts_with("radroots_") {
             let dependency = workspace_manifest
@@ -3798,9 +3822,6 @@ fn validate_workspace_version_lockstep(
         let Some(path) = dependency.path.as_deref() else {
             continue;
         };
-        if path == VENDORED_WORKSPACE_MEMBER_RELATIVE {
-            continue;
-        }
         if governed_packages.contains_key(path)
             && dependency.version.as_deref() != Some(exact_requirement.as_str())
         {
@@ -3905,7 +3926,7 @@ fn validate_release_record(
         ));
     }
 
-    let expected_artifacts = [
+    let mut expected_artifacts = vec![
         (
             record.artifacts.changelog.as_str(),
             CHANGELOG_RELATIVE,
@@ -3937,6 +3958,9 @@ fn validate_release_record(
             false,
         ),
     ];
+    if let Some(sqlite_runtime) = record.artifacts.sqlite_runtime.as_deref() {
+        expected_artifacts.push((sqlite_runtime, SQLITE_RUNTIME_CONTRACT_RELATIVE, false));
+    }
     for (actual, expected, directory) in expected_artifacts {
         if actual != expected {
             return Err(format!(
@@ -4048,7 +4072,101 @@ fn validate_release_record(
         return Err("a major version transition requires a breaking release change".to_string());
     }
 
+    let declares_registry_sqlite = change_ids.contains("registry-sqlite-provenance");
+    if declares_registry_sqlite != record.artifacts.sqlite_runtime.is_some() {
+        return Err(format!(
+            "release change registry-sqlite-provenance and artifact {SQLITE_RUNTIME_CONTRACT_RELATIVE} must be declared together"
+        ));
+    }
+    if declares_registry_sqlite {
+        validate_sqlite_runtime_contract(workspace_root)?;
+    }
+
     validate_changelog_release_notes(workspace_root, contract_version)
+}
+
+fn validate_sqlite_runtime_contract(workspace_root: &Path) -> Result<(), String> {
+    const PACKAGE_NAME: &str = "libsqlite3-sys";
+    const PACKAGE_VERSION: &str = "0.37.0";
+    const PACKAGE_SOURCE: &str = "registry+https://github.com/rust-lang/crates.io-index";
+    const ACTIVATION_ROUTE: [&str; 3] = [
+        "radroots_event_store/sqlite",
+        "sqlx/sqlite-bundled",
+        "libsqlite3-sys/bundled",
+    ];
+
+    let contract = parse_toml::<SqliteRuntimeContract>(
+        &workspace_root.join(SQLITE_RUNTIME_CONTRACT_RELATIVE),
+    )?;
+    if contract.schema_version != 1
+        || contract.package.name != PACKAGE_NAME
+        || contract.package.version != PACKAGE_VERSION
+        || contract.package.source != PACKAGE_SOURCE
+        || contract.activation.route != ACTIVATION_ROUTE
+    {
+        return Err(format!(
+            "{SQLITE_RUNTIME_CONTRACT_RELATIVE} must govern the exact crates.io bundled SQLite runtime identity and activation route"
+        ));
+    }
+    if contract.package.checksum.len() != 64
+        || !contract
+            .package
+            .checksum
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(format!(
+            "{SQLITE_RUNTIME_CONTRACT_RELATIVE} package.checksum must be a lowercase SHA-256 digest"
+        ));
+    }
+
+    let lock = parse_toml::<CargoLockManifest>(&workspace_root.join("Cargo.lock"))?;
+    let matches = lock
+        .package
+        .iter()
+        .filter(|package| {
+            package.name == contract.package.name
+                && package.version == contract.package.version
+                && package.source.as_deref() == Some(contract.package.source.as_str())
+                && package.checksum.as_deref() == Some(contract.package.checksum.as_str())
+        })
+        .count();
+    if matches != 1 {
+        return Err(format!(
+            "Cargo.lock must contain exactly one package matching {SQLITE_RUNTIME_CONTRACT_RELATIVE}"
+        ));
+    }
+
+    let workspace = parse_toml::<WorkspaceCargoManifest>(&workspace_root.join("Cargo.toml"))?;
+    for member in workspace.workspace.members {
+        let package =
+            parse_toml::<PackageCargoManifest>(&workspace_root.join(&member).join("Cargo.toml"))?;
+        if package.package.name == PACKAGE_NAME {
+            return Err(format!(
+                "workspace member {member} must not vendor registry package {PACKAGE_NAME}"
+            ));
+        }
+    }
+
+    let event_store = fs::read_to_string(workspace_root.join("crates/event_store/Cargo.toml"))
+        .map_err(|error| format!("read crates/event_store/Cargo.toml: {error}"))?;
+    let event_store: toml::Value = toml::from_str(&event_store)
+        .map_err(|error| format!("parse crates/event_store/Cargo.toml: {error}"))?;
+    let sqlite_features = event_store
+        .get("features")
+        .and_then(|features| features.get("sqlite"))
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "crates/event_store/Cargo.toml must define features.sqlite".to_string())?;
+    if !sqlite_features
+        .iter()
+        .any(|feature| feature.as_str() == Some("sqlx/sqlite-bundled"))
+    {
+        return Err(
+            "crates/event_store/Cargo.toml features.sqlite must activate sqlx/sqlite-bundled"
+                .to_string(),
+        );
+    }
+    Ok(())
 }
 
 fn validate_changelog_release_notes(
@@ -4602,9 +4720,7 @@ fn coverage_required_workspace_crates(workspace_root: &Path) -> Result<BTreeSet<
 }
 
 fn coverage_policy_excludes_workspace_crate(crate_name: &str) -> bool {
-    crate_name == "libsqlite3-sys"
-        || crate_name.contains("_simplex_")
-        || crate_name.starts_with("simplex_")
+    crate_name.contains("_simplex_") || crate_name.starts_with("simplex_")
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -10730,7 +10846,7 @@ pub enum RadrootsCoreUnitDimension {
         write_file(
             &root.join("Cargo.toml"),
             r#"[workspace]
-members = ["crates/a", "crates/libsqlite3_sys_3_53_3", "crates/radroots_simplex_probe", "crates/simplex_probe"]
+members = ["crates/a", "crates/radroots_simplex_probe", "crates/simplex_probe"]
 resolver = "2"
 "#,
         );
@@ -10738,17 +10854,6 @@ resolver = "2"
             &root.join("crates").join("a").join("Cargo.toml"),
             r#"[package]
 name = "radroots_a"
-version = "1.0.0"
-edition = "2024"
-"#,
-        );
-        write_file(
-            &root
-                .join("crates")
-                .join("libsqlite3_sys_3_53_3")
-                .join("Cargo.toml"),
-            r#"[package]
-name = "libsqlite3-sys"
 version = "1.0.0"
 edition = "2024"
 "#,
@@ -10781,7 +10886,6 @@ edition = "2024"
                 .into_iter()
                 .collect::<BTreeSet<_>>()
         );
-        assert!(coverage_policy_excludes_workspace_crate("libsqlite3-sys"));
         assert!(coverage_policy_excludes_workspace_crate(
             "radroots_simplex_probe"
         ));

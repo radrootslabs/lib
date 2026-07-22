@@ -3993,6 +3993,7 @@ mod tests {
     #[test]
     fn downstream_nip09_only_supersession_is_transitively_validated() {
         const SOURCE_MAINTENANCE_SUPERSEDED_PATHS: &[&str] = &[
+            "Cargo.toml",
             "crates/event_store/src/error.rs",
             "crates/event_store/src/generated.rs",
             "crates/event_store/src/lib.rs",
