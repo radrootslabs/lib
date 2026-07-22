@@ -456,3 +456,9 @@ id = "trade-validation-receipt-no-std"
 classification = "fix"
 semver_impacts = ["fix_packaging_metadata"]
 summary = "Restore the supported radroots_trade no-std serde_json feature lane by removing the std-bound error derive and importing alloc macros explicitly."
+
+[[changes]]
+id = "trade-sp1-remote-proof-fixture"
+classification = "breaking"
+semver_impacts = ["change_exported_constant_value", "fix_packaging_metadata"]
+summary = "Regenerate the remote SP1 Core proof fixture for the validator-set witness identity, exercise real cryptographic verification, and allow the SP1-pinned guest compiler to trail the workspace Rust version during locked guest builds."

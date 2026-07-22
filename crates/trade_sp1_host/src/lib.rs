@@ -80,7 +80,7 @@ pub struct RadrootsSp1TradeProofArtifact {
 
 pub const RADROOTS_SP1_TRADE_PROOF_ARTIFACT_SCHEMA_VERSION: u32 = 1;
 pub const RADROOTS_SP1_TRADE_REMOTE_PROVER_SCHEMA_VERSION: u32 = 1;
-pub const RADROOTS_SP1_TRADE_SP1_VERSION_LINE: &str = "sp1-sdk-6.2.1";
+pub const RADROOTS_SP1_TRADE_SP1_VERSION_LINE: &str = "sp1-sdk-6.2.3";
 pub const RADROOTS_SP1_TRADE_PROOF_CODEC: &str = "sp1-proof-with-public-values-bincode";
 pub const RADROOTS_SP1_TRADE_VERIFYING_KEY_CODEC: &str = "sp1-verifying-key-bincode";
 
@@ -2931,6 +2931,26 @@ mod tests {
         verified_remote_returned_proof_fixture();
     }
 
+    #[test]
+    fn sp1_version_line_matches_locked_dependency() {
+        let output = std::process::Command::new(env!("CARGO"))
+            .args(["pkgid", "--locked", "-p", "sp1-sdk", "--offline"])
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output()
+            .expect("cargo pkgid");
+        assert!(output.status.success(), "cargo pkgid must succeed");
+        let package_id = core::str::from_utf8(&output.stdout)
+            .expect("cargo pkgid UTF-8")
+            .trim();
+        let version = super::RADROOTS_SP1_TRADE_SP1_VERSION_LINE
+            .strip_prefix("sp1-sdk-")
+            .expect("SP1 version-line prefix");
+        assert!(
+            package_id.ends_with(&format!("#sp1-sdk@{version}")),
+            "SP1 version line must match the locked package id: {package_id}"
+        );
+    }
+
     #[cfg(all(feature = "sp1_verify", radroots_sp1_real_proof_tests))]
     #[tokio::test]
     async fn remote_returned_proof_artifact_real_sp1_verifies() {
@@ -2956,7 +2976,9 @@ mod tests {
             .expect_err("identity mismatch");
         assert_eq!(err, RadrootsSp1TradeHostError::Sp1ProgramHashMismatch);
 
-        let mut public_values_mismatch = request.witness;
+        let mut public_values_mismatch = remote_returned_proof_fixture()
+            .remote_prover_request
+            .witness;
         public_values_mismatch.inventory_sequence += 1;
         let mismatch_execution =
             super::execute_order_acceptance_public_values(&public_values_mismatch)

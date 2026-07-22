@@ -356,6 +356,10 @@ publish policy both pass for the same source revision.
 - The `radroots_trade` validation-receipt feature now preserves its documented
   no-std plus `serde_json` build. Its error contract uses `core::fmt`, and alloc
   macros are imported explicitly instead of relying on the std prelude.
+- The checked-in remote SP1 Core proof fixture now covers the validator-set
+  witness identity and cryptographically verifies against the current guest.
+  Guest builds explicitly allow the SP1-pinned compiler to trail the workspace
+  Rust version while retaining locked dependencies.
 
 ### Removed
 

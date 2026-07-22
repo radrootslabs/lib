@@ -22,6 +22,7 @@ fn build_guest_elf() {
     let args = sp1_build::BuildArgs {
         binaries: vec!["radroots_sp1_trade_order_acceptance_guest".to_string()],
         features: vec!["sp1_guest".to_string()],
+        ignore_rust_version: true,
         locked: true,
         ..sp1_build::BuildArgs::default()
     };
