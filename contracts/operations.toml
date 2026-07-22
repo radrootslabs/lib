@@ -262,6 +262,7 @@ public = [
 
 [errors]
 classes = [
+  "none",
   "encode_error",
   "parse_error",
   "validation_error",
@@ -680,6 +681,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_profile.implementation]
 rust_modules = [
   "crates/event/src/profile.rs",
+  "crates/event_codec/src/profile/authored.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -690,6 +692,7 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_profile.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_profile.valid"]
 
 [operations.phase1_publication_artifact_build_update]
 domain = "publication"
@@ -705,6 +708,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_update.implementation]
 rust_modules = [
   "crates/event/src/post.rs",
+  "crates/event_codec/src/post/authored.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -715,6 +719,7 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_update.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_update.valid"]
 
 [operations.phase1_publication_artifact_build_photo_update]
 domain = "publication"
@@ -730,6 +735,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_photo_update.implementation]
 rust_modules = [
   "crates/event/src/post.rs",
+  "crates/event_codec/src/post/authored.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -740,6 +746,7 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_photo_update.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_photo_update.valid"]
 
 [operations.phase1_publication_artifact_build_ask]
 domain = "publication"
@@ -755,6 +762,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_ask.implementation]
 rust_modules = [
   "crates/event/src/post.rs",
+  "crates/event_codec/src/post/authored.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -765,6 +773,7 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_ask.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_ask.valid"]
 
 [operations.phase1_publication_artifact_build_calendar_date_event]
 domain = "publication"
@@ -780,6 +789,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_calendar_date_event.implementation]
 rust_modules = [
   "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/encode.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -790,6 +800,7 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_calendar_date_event.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_calendar_date_event.valid"]
 
 [operations.phase1_publication_artifact_build_calendar_time_event]
 domain = "publication"
@@ -805,6 +816,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_calendar_time_event.implementation]
 rust_modules = [
   "crates/event/src/calendar.rs",
+  "crates/event_codec/src/calendar/encode.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -815,6 +827,7 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_calendar_time_event.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_calendar_time_event.valid"]
 
 [operations.phase1_publication_artifact_build_food_availability]
 domain = "publication"
@@ -830,6 +843,7 @@ transport = "none"
 [operations.phase1_publication_artifact_build_food_availability.implementation]
 rust_modules = [
   "crates/event/src/food_availability.rs",
+  "crates/event_codec/src/food_availability/authored.rs",
   "crates/event_codec/src/wire/publication.rs",
 ]
 rust_types = [
@@ -840,10 +854,32 @@ rust_types = [
 
 [operations.phase1_publication_artifact_build_food_availability.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.build_food_availability.valid"]
 
-[operations.phase1_publication_artifact_reload]
+[operations.phase1_publication_artifact_to_canonical_json]
 domain = "publication"
-id = "publication_artifact.reload"
+id = "publication_artifact.to_canonical_json"
+stability = "beta"
+inputs = ["RadrootsPhase1PublicationArtifact"]
+outputs = ["Bytes"]
+error_class = "none"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_to_canonical_json.implementation]
+rust_modules = ["crates/event_codec/src/wire/publication.rs"]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+]
+
+[operations.phase1_publication_artifact_to_canonical_json.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = ["publication_artifact.to_canonical_json.valid"]
+
+[operations.phase1_publication_artifact_from_canonical_json]
+domain = "publication"
+id = "publication_artifact.from_canonical_json"
 stability = "beta"
 inputs = ["Bytes"]
 outputs = ["RadrootsPhase1PublicationArtifact"]
@@ -852,15 +888,27 @@ deterministic = true
 signing = "none"
 transport = "none"
 
-[operations.phase1_publication_artifact_reload.implementation]
-rust_modules = ["crates/event_codec/src/wire/publication.rs"]
+[operations.phase1_publication_artifact_from_canonical_json.implementation]
+rust_modules = [
+  "crates/event_codec/src/calendar/decode.rs",
+  "crates/event_codec/src/food_availability/inbound.rs",
+  "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+  "crates/event_codec/src/post/authored.rs",
+  "crates/event_codec/src/post/inbound.rs",
+  "crates/event_codec/src/post/inbound/registry_v7.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
 rust_types = [
   "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
   "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
 ]
 
-[operations.phase1_publication_artifact_reload.conformance]
+[operations.phase1_publication_artifact_from_canonical_json.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+case_kinds = [
+  "publication_artifact.from_canonical_json.valid",
+  "publication_artifact.from_canonical_json.invalid",
+]
 
 [operations.profile_build_authored_draft]
 domain = "profile"

@@ -174,13 +174,16 @@ publish policy both pass for the same source revision.
 <!-- release-change: phase1-publication-artifact -->
 - The `serde_json` event-codec surface now exposes a sealed Phase 1 publication
   artifact constructed only from strict authored Profile, Update, PhotoUpdate,
-  Ask, date/time Event, and FoodAvailability models. Exact canonical JSON binds
-  the operation and event-contract profile, author, frozen unsigned draft,
-  expected NIP-01 id, and a full-URL media commitment inventory under a
-  domain-separated digest. Strict bounded reload rejects unknown fields,
-  alternate encodings, cross-profile promotion, stale identifiers, media
-  drift, and digest tampering without claiming restored byte verification,
-  upload completion, signature authenticity, or signer authority.
+  Ask, date/time Event, and FoodAvailability models. The exact version-1
+  envelope places the expected NIP-01 id at top level after the frozen draft,
+  exposes only explicit canonical-byte encode/decode operations, and binds all
+  fields except the digest under an ASCII-domain, single-NUL SHA-256 preimage.
+  Construction and reload enforce the 2 MiB artifact, 256 KiB signed-event,
+  and 4,096-reference bounds plus complete case-preserving Blossom URL
+  commitments. Strict reload rejects unknown or duplicate fields, alternate
+  encodings, cross-profile promotion, stale identifiers, media drift, and
+  digest tampering without claiming restored byte verification, upload
+  completion, signature authenticity, or signer authority.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

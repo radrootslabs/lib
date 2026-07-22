@@ -33,6 +33,10 @@
           "minLength": 1,
           "type": "string"
         },
+        "serialized_semantic_variant": {
+          "minLength": 1,
+          "type": "string"
+        },
         "strict_input": {
           "minLength": 1,
           "type": "string"
@@ -40,6 +44,7 @@
       },
       "required": [
         "semantic_variant",
+        "serialized_semantic_variant",
         "event_variant",
         "strict_input",
         "constructor",
@@ -82,6 +87,7 @@
       "properties": {
         "error_class": {
           "enum": [
+            "none",
             "validation_error",
             "parse_error"
           ]
@@ -91,7 +97,10 @@
           "type": "string"
         },
         "output": {
-          "const": "RadrootsPhase1PublicationArtifact"
+          "enum": [
+            "RadrootsPhase1PublicationArtifact",
+            "Bytes"
+          ]
         },
         "signing": {
           "const": "none"
@@ -155,12 +164,10 @@
       "additionalProperties": false,
       "properties": {
         "artifact_max_bytes": {
-          "minimum": 1,
-          "type": "integer"
+          "const": 2097152
         },
         "canonical_encoding": {
-          "minLength": 1,
-          "type": "string"
+          "const": "serde_json_compact_struct_field_order_v1"
         },
         "constructors": {
           "items": {
@@ -171,75 +178,140 @@
           "type": "array"
         },
         "denied_inputs": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
+          "const": [
+            "arbitrary_event_draft",
+            "raw_json",
+            "numeric_kind",
+            "signed_event",
+            "private_key",
+            "signer"
+          ]
         },
         "digest_algorithm": {
-          "minLength": 1,
-          "type": "string"
+          "const": "sha256_domain_nul_canonical_json_v1"
         },
         "digest_domain": {
-          "minLength": 1,
-          "type": "string"
+          "const": "radroots.phase1.publication-artifact.v1"
+        },
+        "digest_domain_terminator": {
+          "const": "0x00"
+        },
+        "digest_preimage": {
+          "const": "ascii_domain_then_single_nul_then_canonical_envelope_without_digest_v1"
+        },
+        "draft_fields": {
+          "const": [
+            "created_at",
+            "kind",
+            "tags",
+            "content"
+          ]
+        },
+        "envelope_fields": {
+          "const": [
+            "schema_version",
+            "semantic_variant",
+            "authored_operation_id",
+            "event_contract_id",
+            "expected_author",
+            "draft",
+            "expected_event_id",
+            "media_references",
+            "artifact_digest"
+          ]
         },
         "event_subvariants": {
-          "items": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "maxItems": 2,
-          "minItems": 2,
-          "type": "array"
+          "const": [
+            "date",
+            "time"
+          ]
+        },
+        "media_reference_fields": {
+          "const": [
+            "url",
+            "sha256",
+            "size",
+            "media_type"
+          ]
+        },
+        "media_reference_identity": {
+          "const": "exact_case_preserving_approved_url_with_descriptor_commitment_v1"
         },
         "media_reference_max_count": {
-          "minimum": 1,
-          "type": "integer"
+          "const": 4096
         },
-        "persisted_fields": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
+        "post_fallback_url_requirement": {
+          "const": "approved_blossom_url_extension_optional_v1"
+        },
+        "primary_media_url_requirement": {
+          "const": "blossom_hash_path_extension_required_v1"
         },
         "reload_capability": {
-          "minLength": 1,
-          "type": "string"
+          "const": "persisted_artifact_only_no_prior_capability_restoration_v1"
         },
         "schema_version": {
           "const": 1
         },
-        "semantic_variants": {
-          "items": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "maxItems": 6,
-          "minItems": 6,
-          "type": "array"
+        "semantic_roles": {
+          "const": [
+            "profile",
+            "update",
+            "photo_update",
+            "ask",
+            "event",
+            "food_availability"
+          ]
+        },
+        "serialized_semantic_variants": {
+          "const": [
+            "profile",
+            "update",
+            "photo_update",
+            "ask",
+            "event_date",
+            "event_time",
+            "food_availability"
+          ]
+        },
+        "signed_event_wire_max_bytes": {
+          "const": 262144
         },
         "threat_boundary": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "type": "array"
+          "const": [
+            "detects_accidental_corruption",
+            "detects_payload_only_modification",
+            "detects_digest_only_modification",
+            "does_not_authenticate_actor_rewriting_payload_and_digest",
+            "does_not_survive_validator_binary_or_host_compromise",
+            "does_not_restore_byte_verification_or_upload_completion",
+            "does_not_replace_nip01_id_and_signature_verification"
+          ]
+        },
+        "validator": {
+          "const": "validate_phase1_publication_artifact"
         }
       },
       "required": [
         "schema_version",
-        "semantic_variants",
+        "validator",
+        "semantic_roles",
+        "serialized_semantic_variants",
         "event_subvariants",
         "canonical_encoding",
         "artifact_max_bytes",
+        "signed_event_wire_max_bytes",
         "media_reference_max_count",
+        "envelope_fields",
+        "draft_fields",
+        "media_reference_fields",
+        "media_reference_identity",
+        "primary_media_url_requirement",
+        "post_fallback_url_requirement",
         "digest_algorithm",
         "digest_domain",
+        "digest_domain_terminator",
+        "digest_preimage",
         "constructors",
-        "persisted_fields",
         "denied_inputs",
         "reload_capability",
         "threat_boundary"
@@ -284,8 +356,8 @@
       "items": {
         "$ref": "#/$defs/operation"
       },
-      "maxItems": 8,
-      "minItems": 8,
+      "maxItems": 9,
+      "minItems": 9,
       "type": "array"
     },
     "predecessor": {

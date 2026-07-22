@@ -285,7 +285,7 @@ semver_impacts = [
   "add_exported_constant",
   "add_conformance_vector",
 ]
-summary = "Add an authored-only, canonical, tamper-evident persistence artifact for the closed Phase 1 Profile, root Post, typed Event, and FoodAvailability publication set."
+summary = "Add the authored-only Phase 1 publication artifact with seven typed leaves, exact top-level NIP-01 id placement, explicit canonical-byte encode/decode operations, bounded signed-event and artifact wires, complete Blossom URL commitments, and a single-NUL domain-separated digest."
 
 [[changes]]
 id = "event-store-validity-visibility-split"

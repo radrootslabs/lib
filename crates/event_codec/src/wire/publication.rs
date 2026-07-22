@@ -43,7 +43,8 @@ use radroots_event::{
         RadrootsNip05Identifier,
     },
     wire::{
-        DEFAULT_CONTENT_MAX_BYTES, RadrootsNip01EventWireParts, compute_canonical_nip01_event_id,
+        DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, RadrootsNip01EventWireParts,
+        compute_canonical_nip01_event_id,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -57,10 +58,12 @@ use crate::{
 };
 
 pub const RADROOTS_PHASE1_PUBLICATION_ARTIFACT_SCHEMA_VERSION: u32 = 1;
-pub const RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES: usize = 512 * 1024;
+pub const RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES: usize = 2 * 1024 * 1024;
 pub const RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT: usize = 4096;
+pub const RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES: usize = DEFAULT_RAW_JSON_MAX_BYTES;
 
-const ARTIFACT_DIGEST_DOMAIN: &[u8] = b"radroots.phase1.publication-artifact.v1\0";
+const ARTIFACT_DIGEST_DOMAIN: &[u8] = b"radroots.phase1.publication-artifact.v1";
+const ARTIFACT_DIGEST_DOMAIN_TERMINATOR: &[u8] = b"\0";
 const PROFILE_OPERATION_ID: &str = "profile.build_authored_draft";
 const PROFILE_CONTRACT_ID: &str = "radroots.profile.metadata.v1";
 const UPDATE_OPERATION_ID: &str = "social.update.build_authored_draft";
@@ -192,7 +195,6 @@ pub struct RadrootsPhase1PublicationDraft {
     kind: u32,
     tags: Vec<Vec<String>>,
     content: String,
-    expected_event_id: RadrootsEventId,
 }
 
 impl RadrootsPhase1PublicationDraft {
@@ -210,10 +212,6 @@ impl RadrootsPhase1PublicationDraft {
 
     pub fn content(&self) -> &str {
         &self.content
-    }
-
-    pub fn expected_event_id(&self) -> &RadrootsEventId {
-        &self.expected_event_id
     }
 }
 
@@ -339,6 +337,7 @@ pub struct RadrootsPhase1PublicationArtifact {
     semantic_variant: RadrootsPhase1PublicationSemanticVariant,
     expected_author: RadrootsPublicKey,
     draft: RadrootsPhase1PublicationDraft,
+    expected_event_id: RadrootsEventId,
     media_references: Vec<RadrootsPhase1PublicationMediaReference>,
     artifact_digest: RadrootsPhase1PublicationArtifactDigest,
     canonical_json: Vec<u8>,
@@ -498,16 +497,16 @@ impl RadrootsPhase1PublicationArtifact {
         &self.draft
     }
 
+    pub fn expected_event_id(&self) -> &RadrootsEventId {
+        &self.expected_event_id
+    }
+
     pub fn media_references(&self) -> &[RadrootsPhase1PublicationMediaReference] {
         &self.media_references
     }
 
     pub const fn artifact_digest(&self) -> RadrootsPhase1PublicationArtifactDigest {
         self.artifact_digest
-    }
-
-    pub fn canonical_json(&self) -> &[u8] {
-        &self.canonical_json
     }
 
     pub fn to_canonical_json(&self) -> Vec<u8> {
@@ -548,16 +547,15 @@ impl RadrootsPhase1PublicationArtifact {
             });
         }
         let expected_author = parse_expected_author(&wire.expected_author)?;
-        let expected_event_id = RadrootsEventId::parse(&wire.draft.expected_event_id)
-            .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidExpectedEventId)?;
+        let expected_event_id = parse_expected_event_id(&wire.expected_event_id)?;
         let draft = RadrootsPhase1PublicationDraft {
             created_at: wire.draft.created_at,
             kind: wire.draft.kind,
             tags: wire.draft.tags,
             content: wire.draft.content,
-            expected_event_id,
         };
-        validate_draft_identifier(&expected_author, &draft)?;
+        validate_draft_identifier(&expected_author, &draft, &expected_event_id)?;
+        validate_signed_event_wire_size(&expected_author, &draft, &expected_event_id)?;
 
         if wire.media_references.len() > RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT {
             return Err(
@@ -585,8 +583,13 @@ impl RadrootsPhase1PublicationArtifact {
 
         let artifact_digest =
             RadrootsPhase1PublicationArtifactDigest::parse(&wire.artifact_digest)?;
-        let computed =
-            compute_artifact_digest(variant, &expected_author, &draft, &media_references)?;
+        let computed = compute_artifact_digest(
+            variant,
+            &expected_author,
+            &draft,
+            &expected_event_id,
+            &media_references,
+        )?;
         if computed != artifact_digest {
             return Err(RadrootsPhase1PublicationArtifactError::DigestMismatch);
         }
@@ -594,6 +597,7 @@ impl RadrootsPhase1PublicationArtifact {
             variant,
             &expected_author,
             &draft,
+            &expected_event_id,
             &media_references,
             artifact_digest,
         )?;
@@ -604,6 +608,7 @@ impl RadrootsPhase1PublicationArtifact {
             semantic_variant: variant,
             expected_author,
             draft,
+            expected_event_id,
             media_references,
             artifact_digest,
             canonical_json,
@@ -647,15 +652,21 @@ impl RadrootsPhase1PublicationArtifact {
             kind: parts.kind,
             tags: parts.tags,
             content: parts.content,
-            expected_event_id,
         };
+        validate_signed_event_wire_size(&expected_author, &draft, &expected_event_id)?;
         validate_phase1_publication_profile(variant, &draft, &media_references)?;
-        let artifact_digest =
-            compute_artifact_digest(variant, &expected_author, &draft, &media_references)?;
+        let artifact_digest = compute_artifact_digest(
+            variant,
+            &expected_author,
+            &draft,
+            &expected_event_id,
+            &media_references,
+        )?;
         let canonical_json = serialize_artifact(
             variant,
             &expected_author,
             &draft,
+            &expected_event_id,
             &media_references,
             artifact_digest,
         )?;
@@ -669,6 +680,7 @@ impl RadrootsPhase1PublicationArtifact {
             semantic_variant: variant,
             expected_author,
             draft,
+            expected_event_id,
             media_references,
             artifact_digest,
             canonical_json,
@@ -681,8 +693,8 @@ impl RadrootsPhase1PublicationArtifact {
 pub fn validate_phase1_publication_artifact(
     artifact: &RadrootsPhase1PublicationArtifact,
 ) -> Result<(), RadrootsPhase1PublicationArtifactError> {
-    let reloaded =
-        RadrootsPhase1PublicationArtifact::from_canonical_json(artifact.canonical_json())?;
+    let canonical_json = artifact.to_canonical_json();
+    let reloaded = RadrootsPhase1PublicationArtifact::from_canonical_json(&canonical_json)?;
     if &reloaded != artifact {
         return Err(RadrootsPhase1PublicationArtifactError::ArtifactStateMismatch);
     }
@@ -693,6 +705,7 @@ pub fn validate_phase1_publication_artifact(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsPhase1PublicationArtifactError {
     ArtifactTooLarge { max: usize, actual: usize },
+    EventWireTooLarge { max: usize, actual: usize },
     TooManyMediaReferences { max: usize, actual: usize },
     InvalidJson,
     NonCanonicalJson,
@@ -724,6 +737,7 @@ impl RadrootsPhase1PublicationArtifactError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::ArtifactTooLarge { .. } => "publication_artifact_too_large",
+            Self::EventWireTooLarge { .. } => "publication_event_wire_too_large",
             Self::TooManyMediaReferences { .. } => "publication_media_count_exceeded",
             Self::InvalidJson => "publication_artifact_invalid_json",
             Self::NonCanonicalJson => "publication_artifact_non_canonical_json",
@@ -759,6 +773,10 @@ impl fmt::Display for RadrootsPhase1PublicationArtifactError {
             Self::ArtifactTooLarge { max, actual } => write!(
                 formatter,
                 "publication artifact is {actual} bytes; maximum is {max}"
+            ),
+            Self::EventWireTooLarge { max, actual } => write!(
+                formatter,
+                "publication event wire is {actual} bytes; maximum is {max}"
             ),
             Self::TooManyMediaReferences { max, actual } => write!(
                 formatter,
@@ -801,9 +819,21 @@ fn parse_expected_author(
     Ok(author)
 }
 
+fn parse_expected_event_id(
+    value: &str,
+) -> Result<RadrootsEventId, RadrootsPhase1PublicationArtifactError> {
+    let event_id = RadrootsEventId::parse(value)
+        .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidExpectedEventId)?;
+    if event_id.as_str() != value {
+        return Err(RadrootsPhase1PublicationArtifactError::InvalidExpectedEventId);
+    }
+    Ok(event_id)
+}
+
 fn validate_draft_identifier(
     author: &RadrootsPublicKey,
     draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &RadrootsEventId,
 ) -> Result<(), RadrootsPhase1PublicationArtifactError> {
     let computed = compute_canonical_nip01_event_id(
         author.as_str(),
@@ -813,10 +843,55 @@ fn validate_draft_identifier(
         &draft.content,
     )
     .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidDraft)?;
-    if computed != draft.expected_event_id {
+    if &computed != expected_event_id {
         return Err(RadrootsPhase1PublicationArtifactError::ExpectedEventIdMismatch);
     }
     Ok(())
+}
+
+#[derive(Serialize)]
+struct SignedEventSizeWire<'a> {
+    id: &'a str,
+    pubkey: &'a str,
+    created_at: u64,
+    kind: u32,
+    tags: &'a [Vec<String>],
+    content: &'a str,
+    sig: &'a str,
+}
+
+fn validate_signed_event_wire_size(
+    author: &RadrootsPublicKey,
+    draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &RadrootsEventId,
+) -> Result<(), RadrootsPhase1PublicationArtifactError> {
+    let actual = signed_event_wire_size(author, draft, expected_event_id)?;
+    if actual > RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES {
+        return Err(RadrootsPhase1PublicationArtifactError::EventWireTooLarge {
+            max: RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES,
+            actual,
+        });
+    }
+    Ok(())
+}
+
+fn signed_event_wire_size(
+    author: &RadrootsPublicKey,
+    draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &RadrootsEventId,
+) -> Result<usize, RadrootsPhase1PublicationArtifactError> {
+    let signature = "0".repeat(128);
+    Ok(serde_json::to_vec(&SignedEventSizeWire {
+        id: expected_event_id.as_str(),
+        pubkey: author.as_str(),
+        created_at: draft.created_at,
+        kind: draft.kind,
+        tags: &draft.tags,
+        content: &draft.content,
+        sig: &signature,
+    })
+    .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?
+    .len())
 }
 
 fn post_media_references(
@@ -939,14 +1014,16 @@ fn validate_profile(
     if canonical != draft.content {
         return Err(RadrootsPhase1PublicationArtifactError::InvalidProfile);
     }
-    validate_media_urls(
-        content
-            .picture
-            .iter()
-            .chain(content.banner.iter())
-            .map(String::as_str),
-        media,
-    )
+    let urls = content
+        .picture
+        .iter()
+        .chain(content.banner.iter())
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    for url in &urls {
+        validate_primary_media_url(url, media)?;
+    }
+    validate_media_urls(urls.into_iter(), media)
 }
 
 fn validate_update(
@@ -1023,6 +1100,7 @@ fn validate_post(
         urls.push(url);
         urls.extend(imeta.fallbacks().iter().map(String::as_str));
         let reference = media_reference_for_url(media, url)?;
+        validate_primary_media_reference(reference)?;
         if reference.sha256.to_hex() != sha256
             || reference.media_type.as_str() != media_type
             || reference.size != size
@@ -1170,6 +1248,9 @@ fn validate_calendar_media(
     if common.legacy_name().is_some() {
         return Err(RadrootsPhase1PublicationArtifactError::InvalidCalendarProfile);
     }
+    if let Some(image) = common.image() {
+        validate_primary_media_url(image.as_str(), media)?;
+    }
     validate_media_urls(common.image().into_iter().map(|url| url.as_str()), media)
 }
 
@@ -1224,6 +1305,7 @@ fn validate_food_availability(
             url.to_string(),
             dimensions.to_string(),
         ]);
+        validate_primary_media_url(url, media)?;
         urls.push(url);
     }
     if canonical != draft.tags || projection.content().as_str() != draft.content {
@@ -1255,6 +1337,28 @@ fn media_reference_for_url<'a>(
         .ok_or(RadrootsPhase1PublicationArtifactError::MediaInventoryMismatch)
 }
 
+fn validate_primary_media_url(
+    url: &str,
+    media: &[RadrootsPhase1PublicationMediaReference],
+) -> Result<(), RadrootsPhase1PublicationArtifactError> {
+    validate_primary_media_reference(media_reference_for_url(media, url)?)
+}
+
+fn validate_primary_media_reference(
+    reference: &RadrootsPhase1PublicationMediaReference,
+) -> Result<(), RadrootsPhase1PublicationArtifactError> {
+    if reference
+        .url
+        .as_blob_url()
+        .hash_path()
+        .extension()
+        .is_none()
+    {
+        return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
+    }
+    Ok(())
+}
+
 fn validate_media_urls<'a>(
     urls: impl Iterator<Item = &'a str>,
     media: &[RadrootsPhase1PublicationMediaReference],
@@ -1280,7 +1384,6 @@ struct DraftWire {
     kind: u32,
     tags: Vec<Vec<String>>,
     content: String,
-    expected_event_id: String,
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1301,6 +1404,7 @@ struct ArtifactWire {
     event_contract_id: String,
     expected_author: String,
     draft: DraftWire,
+    expected_event_id: String,
     media_references: Vec<MediaReferenceWire>,
     artifact_digest: String,
 }
@@ -1313,6 +1417,7 @@ struct ArtifactPayloadWire<'a> {
     event_contract_id: &'a str,
     expected_author: &'a str,
     draft: DraftWire,
+    expected_event_id: &'a str,
     media_references: Vec<MediaReferenceWire>,
 }
 
@@ -1320,6 +1425,7 @@ fn artifact_payload_wire<'a>(
     variant: RadrootsPhase1PublicationSemanticVariant,
     author: &'a RadrootsPublicKey,
     draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &'a RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
 ) -> ArtifactPayloadWire<'a> {
     ArtifactPayloadWire {
@@ -1333,8 +1439,8 @@ fn artifact_payload_wire<'a>(
             kind: draft.kind,
             tags: draft.tags.clone(),
             content: draft.content.clone(),
-            expected_event_id: draft.expected_event_id.as_str().to_string(),
         },
+        expected_event_id: expected_event_id.as_str(),
         media_references: media
             .iter()
             .map(RadrootsPhase1PublicationMediaReference::to_wire)
@@ -1346,12 +1452,20 @@ fn compute_artifact_digest(
     variant: RadrootsPhase1PublicationSemanticVariant,
     author: &RadrootsPublicKey,
     draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
 ) -> Result<RadrootsPhase1PublicationArtifactDigest, RadrootsPhase1PublicationArtifactError> {
-    let payload = serde_json::to_vec(&artifact_payload_wire(variant, author, draft, media))
-        .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?;
+    let payload = serde_json::to_vec(&artifact_payload_wire(
+        variant,
+        author,
+        draft,
+        expected_event_id,
+        media,
+    ))
+    .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?;
     let mut hasher = Sha256::new();
     hasher.update(ARTIFACT_DIGEST_DOMAIN);
+    hasher.update(ARTIFACT_DIGEST_DOMAIN_TERMINATOR);
     hasher.update(payload);
     Ok(RadrootsPhase1PublicationArtifactDigest(
         hasher.finalize().into(),
@@ -1362,10 +1476,11 @@ fn serialize_artifact(
     variant: RadrootsPhase1PublicationSemanticVariant,
     author: &RadrootsPublicKey,
     draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
     digest: RadrootsPhase1PublicationArtifactDigest,
 ) -> Result<Vec<u8>, RadrootsPhase1PublicationArtifactError> {
-    let payload = artifact_payload_wire(variant, author, draft, media);
+    let payload = artifact_payload_wire(variant, author, draft, expected_event_id, media);
     serde_json::to_vec(&ArtifactWire {
         schema_version: payload.schema_version,
         semantic_variant: payload.semantic_variant.to_string(),
@@ -1373,8 +1488,109 @@ fn serialize_artifact(
         event_contract_id: payload.event_contract_id.to_string(),
         expected_author: payload.expected_author.to_string(),
         draft: payload.draft,
+        expected_event_id: payload.expected_event_id.to_string(),
         media_references: payload.media_references,
         artifact_digest: digest.to_hex(),
     })
     .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const AUTHOR: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+    #[test]
+    fn signed_event_wire_size_accepts_exact_limit_and_rejects_one_over() {
+        let author = RadrootsPublicKey::parse(AUTHOR).unwrap();
+        let mut draft = RadrootsPhase1PublicationDraft {
+            created_at: 1_784_347_200,
+            kind: KIND_POST,
+            tags: Vec::new(),
+            content: String::new(),
+        };
+        let empty_id = event_id(&author, &draft);
+        let base = signed_event_wire_size(&author, &draft, &empty_id).unwrap();
+        let available = RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES - base;
+        draft.content = "\0".repeat(available / 6) + &"x".repeat(available % 6);
+        assert!(draft.content.len() <= DEFAULT_CONTENT_MAX_BYTES);
+
+        let exact_id = event_id(&author, &draft);
+        assert_eq!(
+            signed_event_wire_size(&author, &draft, &exact_id).unwrap(),
+            RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES
+        );
+        validate_signed_event_wire_size(&author, &draft, &exact_id).unwrap();
+
+        draft.content.push('x');
+        let oversized_id = event_id(&author, &draft);
+        assert_eq!(
+            validate_signed_event_wire_size(&author, &draft, &oversized_id),
+            Err(RadrootsPhase1PublicationArtifactError::EventWireTooLarge {
+                max: RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES,
+                actual: RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES + 1,
+            })
+        );
+    }
+
+    #[test]
+    fn publication_artifact_digest_has_exactly_one_nul_domain_terminator() {
+        let author = RadrootsPublicKey::parse(AUTHOR).unwrap();
+        let draft = RadrootsPhase1PublicationDraft {
+            created_at: 1_784_347_200,
+            kind: KIND_POST,
+            tags: Vec::new(),
+            content: "Carrots harvested today".to_string(),
+        };
+        let expected_event_id = event_id(&author, &draft);
+        let payload = serde_json::to_vec(&artifact_payload_wire(
+            RadrootsPhase1PublicationSemanticVariant::Update,
+            &author,
+            &draft,
+            &expected_event_id,
+            &[],
+        ))
+        .unwrap();
+        let actual = compute_artifact_digest(
+            RadrootsPhase1PublicationSemanticVariant::Update,
+            &author,
+            &draft,
+            &expected_event_id,
+            &[],
+        )
+        .unwrap();
+
+        let mut exact = Sha256::new();
+        exact.update(b"radroots.phase1.publication-artifact.v1");
+        exact.update([0]);
+        exact.update(&payload);
+        let exact: [u8; 32] = exact.finalize().into();
+        assert_eq!(actual.as_bytes(), &exact);
+
+        for prefix in [
+            b"radroots.phase1.publication-artifact.v1".as_slice(),
+            b"radroots.phase1.publication-artifact.v1\0\0".as_slice(),
+        ] {
+            let mut alternate = Sha256::new();
+            alternate.update(prefix);
+            alternate.update(&payload);
+            let alternate: [u8; 32] = alternate.finalize().into();
+            assert_ne!(actual.as_bytes(), &alternate);
+        }
+    }
+
+    fn event_id(
+        author: &RadrootsPublicKey,
+        draft: &RadrootsPhase1PublicationDraft,
+    ) -> RadrootsEventId {
+        compute_canonical_nip01_event_id(
+            author.as_str(),
+            draft.created_at,
+            draft.kind,
+            &draft.tags,
+            &draft.content,
+        )
+        .unwrap()
+    }
 }

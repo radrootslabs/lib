@@ -4,7 +4,7 @@
   "vectors": [
     {
       "id": "profile_round_trip",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_profile.valid",
       "input": { "fixture": "profile" },
       "expected": {
         "semantic_variant": "profile",
@@ -13,14 +13,15 @@
         "event_kind": 0,
         "media_count": 2,
         "expected_event_id": "a7d081b9c142e3a68245bafe1921b0e0dd88f886406e7165a9729f6c57026289",
-        "artifact_digest": "10db30ccd1ec4986a43f9ac2fefe201f582e8965ac0c36f0fe467b066194fa21",
+        "artifact_digest": "e296ed63312d58b4e3ee160d4ca3457eb922920d3116329ca498f08e402215b0",
         "canonical_json_bytes": 1305,
-        "canonical_json_sha256": "9ddaee58d68cce2a400880c62a2c3f4b3b11765a2136b3c930f474ec28680b43"
+        "canonical_json_sha256": "131d8131bb821179e6fd64c5201d01bee384451d09c20d789860439ef05620e8",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"profile\",\"authored_operation_id\":\"profile.build_authored_draft\",\"event_contract_id\":\"radroots.profile.metadata.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"victoria-farm\\\",\\\"display_name\\\":\\\"Victoria Farm\\\",\\\"about\\\":\\\"Seasonal produce from the Saanich Peninsula\\\",\\\"picture\\\":\\\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\\\",\\\"banner\\\":\\\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\\\",\\\"nip05\\\":\\\"farm@example.com\\\",\\\"bot\\\":false}\"},\"expected_event_id\":\"a7d081b9c142e3a68245bafe1921b0e0dd88f886406e7165a9729f6c57026289\",\"media_references\":[{\"url\":\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\",\"sha256\":\"512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a\",\"size\":15,\"media_type\":\"image/png\"},{\"url\":\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\",\"sha256\":\"fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145\",\"size\":14,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"e296ed63312d58b4e3ee160d4ca3457eb922920d3116329ca498f08e402215b0\"}"
       }
     },
     {
       "id": "update_round_trip",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_update.valid",
       "input": { "fixture": "update" },
       "expected": {
         "semantic_variant": "update",
@@ -29,14 +30,15 @@
         "event_kind": 1,
         "media_count": 0,
         "expected_event_id": "7f2d9dbbd6d2f3db1e83338ea2e669b2458e62ded159de15a3fa98dcf9f164e3",
-        "artifact_digest": "345676a88a68663b16ab22f44117589f7a429aae0fbd6bd5f168e5fc7b2df8ab",
+        "artifact_digest": "9ad318496bd4a710fbc7f3e0f6d5a01de808d352db91ca56a12e710904784cc5",
         "canonical_json_bytes": 525,
-        "canonical_json_sha256": "69d0b7aaec8e2fb3d85a677ef9ac1b6d3eb56d05b9ba7b98737687bfba074110"
+        "canonical_json_sha256": "21be0d18a7f5812f7fa14600f46e0948480d2525eb1dcab416bb4ef99ca731c6",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"update\",\"authored_operation_id\":\"social.update.build_authored_draft\",\"event_contract_id\":\"radroots.social.update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[],\"content\":\"Carrots harvested today\"},\"expected_event_id\":\"7f2d9dbbd6d2f3db1e83338ea2e669b2458e62ded159de15a3fa98dcf9f164e3\",\"media_references\":[],\"artifact_digest\":\"9ad318496bd4a710fbc7f3e0f6d5a01de808d352db91ca56a12e710904784cc5\"}"
       }
     },
     {
       "id": "photo_update_round_trip",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_photo_update.valid",
       "input": { "fixture": "photo_update" },
       "expected": {
         "semantic_variant": "photo_update",
@@ -45,14 +47,15 @@
         "event_kind": 1,
         "media_count": 2,
         "expected_event_id": "e592229776cd2a0d0e25a701f4629c0a5dc6e08481a235623d50da6ee8e8f438",
-        "artifact_digest": "e9b83a57a78adaf2740ec0fd819c8754d96ae325d5a6f785be99e0267fa29251",
+        "artifact_digest": "9ed6b7a6fcec3b07bd0c9179fd5b6ecf74517390051e3c2bd1659be62a26c197",
         "canonical_json_bytes": 1415,
-        "canonical_json_sha256": "ebb29fa48adda8660f35218d879bcf1535d5584bead441ba10f996b54bcdbc76"
+        "canonical_json_sha256": "38caab5242ae70fe2e36b39658dba7e6f723b2bd4fa512c8f166387c17faf69c",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"photo_update\",\"authored_operation_id\":\"social.photo_update.build_authored_draft\",\"event_contract_id\":\"radroots.social.photo_update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"Strawberries at the farm stand https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"e592229776cd2a0d0e25a701f4629c0a5dc6e08481a235623d50da6ee8e8f438\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"9ed6b7a6fcec3b07bd0c9179fd5b6ecf74517390051e3c2bd1659be62a26c197\"}"
       }
     },
     {
       "id": "ask_round_trip_with_fallback",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_ask.valid",
       "input": { "fixture": "ask" },
       "expected": {
         "semantic_variant": "ask",
@@ -61,14 +64,15 @@
         "event_kind": 1,
         "media_count": 2,
         "expected_event_id": "bd45fbbb5bfb8a5aa32df81d240e5f3bd56b0f8cde3a20b3f7d455801373fe48",
-        "artifact_digest": "cfb3c4c74ec56edb5d4bbbed6c08f33cf9202a16c12e3fd41e54839ba8fe1762",
+        "artifact_digest": "41eddea199bba97adebef4ce433ebfa05d97978ce8464ed3d52762ab717c2a3c",
         "canonical_json_bytes": 1411,
-        "canonical_json_sha256": "b7f3eec4930f40642e69c90ab293d2fc8f370c95286794c33d55cda942a1f696"
+        "canonical_json_sha256": "4985ad0919758e3747f0548409854deb77b9734825ab597623e5c6b566e2d5c7",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"ask\",\"authored_operation_id\":\"social.ask.build_authored_draft\",\"event_contract_id\":\"radroots.social.ask.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"t\",\"radroots-ask\"],[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"When will strawberries be ready? https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"bd45fbbb5bfb8a5aa32df81d240e5f3bd56b0f8cde3a20b3f7d455801373fe48\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"41eddea199bba97adebef4ce433ebfa05d97978ce8464ed3d52762ab717c2a3c\"}"
       }
     },
     {
       "id": "event_date_round_trip",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_calendar_date_event.valid",
       "input": { "fixture": "event_date" },
       "expected": {
         "semantic_variant": "event_date",
@@ -77,14 +81,15 @@
         "event_kind": 31922,
         "media_count": 1,
         "expected_event_id": "bea82662b6acf2f1272c8335a24bb0957e35d22c2b29d3e30c094ad7398dc7c7",
-        "artifact_digest": "0a5b30799263dff58fd88e5b581eca13b0eb324dfe2698471459821af847d040",
+        "artifact_digest": "0ec5162ab80988999aac62329d4cfc9c7efce6a82bbda539a723347d73596eb3",
         "canonical_json_bytes": 1013,
-        "canonical_json_sha256": "1eba894c4f19b4c4f9dc62e47feb4ce0b1c232b24bc57ca80aa29c007916efd1"
+        "canonical_json_sha256": "46b015e34556762f3d7ca592cd3dc6d4d5652ff085c7d8a8dc458d5897cf0b22",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_date\",\"authored_operation_id\":\"social.calendar_date_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.date_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31922,\"tags\":[[\"d\",\"farmers-market-2026\"],[\"title\",\"Moss Street Farmers Market\"],[\"start\",\"2026-07-25\"],[\"end\",\"2026-07-26\"],[\"location\",\"Victoria, BC\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"Saturday market in Victoria\"},\"expected_event_id\":\"bea82662b6acf2f1272c8335a24bb0957e35d22c2b29d3e30c094ad7398dc7c7\",\"media_references\":[{\"url\":\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\",\"sha256\":\"0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8\",\"size\":10,\"media_type\":\"image/jpeg\"}],\"artifact_digest\":\"0ec5162ab80988999aac62329d4cfc9c7efce6a82bbda539a723347d73596eb3\"}"
       }
     },
     {
       "id": "event_time_round_trip",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_calendar_time_event.valid",
       "input": { "fixture": "event_time" },
       "expected": {
         "semantic_variant": "event_time",
@@ -93,14 +98,15 @@
         "event_kind": 31923,
         "media_count": 1,
         "expected_event_id": "2088ed11cd8c1495a82e6f5198ed2ee98e0cbc599f22d7f3380892155dc55894",
-        "artifact_digest": "a0cdbfdbc6a7067ee65ce6564c5660435074bf85c42baaa52694a03833dcada9",
+        "artifact_digest": "56bfb4bed87559a58922343905a73c0c96dd0a57f94ff0955caecf0589198638",
         "canonical_json_bytes": 1013,
-        "canonical_json_sha256": "512561b622c5c86e8d5e28045778f0eb9abf8f9eab89cb7ada000d42c6ffd61a"
+        "canonical_json_sha256": "58e3c7e684bc774c35b08b246075076b5286d51639eb0651ed5b6362d958639e",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_time\",\"authored_operation_id\":\"social.calendar_time_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.time_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31923,\"tags\":[[\"d\",\"farm-tour-2026\"],[\"title\",\"Saanich Farm Tour\"],[\"start\",\"1785003600\"],[\"end\",\"1785007200\"],[\"D\",\"20659\"],[\"start_tzid\",\"America/Vancouver\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"A one-hour farm tour\"},\"expected_event_id\":\"2088ed11cd8c1495a82e6f5198ed2ee98e0cbc599f22d7f3380892155dc55894\",\"media_references\":[{\"url\":\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\",\"sha256\":\"0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8\",\"size\":10,\"media_type\":\"image/jpeg\"}],\"artifact_digest\":\"56bfb4bed87559a58922343905a73c0c96dd0a57f94ff0955caecf0589198638\"}"
       }
     },
     {
       "id": "food_availability_round_trip",
-      "kind": "publication_artifact.round_trip.valid",
+      "kind": "publication_artifact.build_food_availability.valid",
       "input": { "fixture": "food_availability" },
       "expected": {
         "semantic_variant": "food_availability",
@@ -109,152 +115,219 @@
         "event_kind": 30402,
         "media_count": 1,
         "expected_event_id": "76b60f1b178c0dbdc14a87de36151ea6b04a866ce50e34a0ccae2f406f514e81",
-        "artifact_digest": "ff04d736df4b1dd01b17197ef0e9c88678133057130623377954332a9ce3e6b3",
+        "artifact_digest": "f0989cb993194af4a2f907ad8337e50378d2757c536a09afb4055a681043a7d8",
         "canonical_json_bytes": 1132,
-        "canonical_json_sha256": "b7d55bf0c75acdae53f670cd6a263c036fe619c73601eac5a03c6ef58d91695f"
+        "canonical_json_sha256": "525dc96e87b79b1ef3aa67c711cccd8b8e6c205665770ebcb8283035b7b496da",
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"food_availability\",\"authored_operation_id\":\"food_availability.build_authored_draft\",\"event_contract_id\":\"radroots.food.availability.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":30402,\"tags\":[[\"d\",\"nantes-carrots\"],[\"title\",\"Nantes Carrots\"],[\"summary\",\"Fresh bunches\"],[\"published_at\",\"1784347140\"],[\"location\",\"Central Saanich, BC\"],[\"price\",\"3\",\"CAD\"],[\"radroots:price_unit\",\"lb\"],[\"radroots:quantity\",\"24\",\"lb\"],[\"status\",\"active\"],[\"image\",\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"1200x800\"]],\"content\":\"Fresh Nantes carrots available this week.\"},\"expected_event_id\":\"76b60f1b178c0dbdc14a87de36151ea6b04a866ce50e34a0ccae2f406f514e81\",\"media_references\":[{\"url\":\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"sha256\":\"8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e\",\"size\":14,\"media_type\":\"image/png\"}],\"artifact_digest\":\"f0989cb993194af4a2f907ad8337e50378d2757c536a09afb4055a681043a7d8\"}"
+      }
+    },
+    {
+      "id": "canonical_json_serialization",
+      "kind": "publication_artifact.to_canonical_json.valid",
+      "input": { "fixture": "profile" },
+      "expected": {
+        "canonical_json_bytes": 1305,
+        "canonical_json_sha256": "131d8131bb821179e6fd64c5201d01bee384451d09c20d789860439ef05620e8"
+      }
+    },
+    {
+      "id": "canonical_json_reload",
+      "kind": "publication_artifact.from_canonical_json.valid",
+      "input": { "fixture": "profile" },
+      "expected": {
+        "semantic_variant": "profile",
+        "canonical_json_sha256": "131d8131bb821179e6fd64c5201d01bee384451d09c20d789860439ef05620e8"
       }
     },
     {
       "id": "leading_whitespace_is_noncanonical",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "leading_whitespace" },
       "expected": { "error": "publication_artifact_non_canonical_json" }
     },
     {
+      "id": "artifact_exact_byte_limit_reaches_parser",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "artifact_exact_byte_limit" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
+      "id": "artifact_one_byte_over_limit_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "artifact_one_over_byte_limit" },
+      "expected": { "error": "publication_artifact_too_large" }
+    },
+    {
       "id": "unknown_field_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "unknown_field" },
       "expected": { "error": "publication_artifact_invalid_json" }
     },
     {
       "id": "unknown_draft_field_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "unknown_draft_field" },
       "expected": { "error": "publication_artifact_invalid_json" }
     },
     {
+      "id": "nested_expected_event_id_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "nested_expected_event_id" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
+      "id": "missing_expected_event_id_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "missing_expected_event_id" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
+      "id": "malformed_expected_event_id_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "malformed_expected_event_id" },
+      "expected": { "error": "publication_expected_event_id_invalid" }
+    },
+    {
+      "id": "uppercase_expected_event_id_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "uppercase_expected_event_id" },
+      "expected": { "error": "publication_expected_event_id_invalid" }
+    },
+    {
+      "id": "duplicate_expected_event_id_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "duplicate_expected_event_id" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
       "id": "unknown_media_field_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "unknown_media_field" },
       "expected": { "error": "publication_artifact_invalid_json" }
     },
     {
       "id": "json_field_order_is_noncanonical",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "json_field_order" },
       "expected": { "error": "publication_artifact_non_canonical_json" }
     },
     {
       "id": "unknown_version_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "schema_version" },
       "expected": { "error": "publication_artifact_version_unsupported" }
     },
     {
       "id": "cross_variant_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "all_cross_variants" },
       "expected": { "error": "publication_authored_operation_mismatch" }
     },
     {
       "id": "operation_mismatch_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "operation_id" },
       "expected": { "error": "publication_authored_operation_mismatch" }
     },
     {
       "id": "contract_mismatch_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "contract_id" },
       "expected": { "error": "publication_event_contract_mismatch" }
     },
     {
       "id": "kind_mismatch_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "kind" },
       "expected": { "error": "publication_kind_mismatch" }
     },
     {
       "id": "author_mismatch_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "author" },
       "expected": { "error": "publication_expected_author_invalid" }
     },
     {
       "id": "created_at_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "created_at" },
       "expected": { "error": "publication_expected_event_id_mismatch" }
     },
     {
       "id": "draft_tags_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "draft_tags" },
       "expected": { "error": "publication_expected_event_id_mismatch" }
     },
     {
       "id": "draft_content_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "draft_content" },
       "expected": { "error": "publication_expected_event_id_mismatch" }
     },
     {
       "id": "noncanonical_nip05_is_rejected_after_id_rebuild",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "noncanonical_nip05" },
       "expected": { "error": "publication_profile_invalid" }
     },
     {
       "id": "empty_ask_content_is_rejected_after_id_rebuild",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "ask", "mutation": "empty_ask_content" },
       "expected": { "error": "publication_post_profile_invalid" }
     },
     {
       "id": "expected_event_id_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "expected_event_id" },
       "expected": { "error": "publication_expected_event_id_mismatch" }
     },
     {
       "id": "digest_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "digest" },
       "expected": { "error": "publication_artifact_digest_mismatch" }
     },
     {
       "id": "media_order_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "media_order" },
       "expected": { "error": "publication_media_inventory_non_canonical" }
     },
     {
       "id": "profile_media_commitment_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "media_size" },
       "expected": { "error": "publication_artifact_digest_mismatch" }
     },
     {
       "id": "media_url_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "media_url" },
       "expected": { "error": "publication_media_inventory_mismatch" }
     },
     {
+      "id": "noncanonical_media_url_casing_is_rejected",
+      "kind": "publication_artifact.from_canonical_json.invalid",
+      "input": { "fixture": "profile", "mutation": "media_url_casing" },
+      "expected": { "error": "publication_media_reference_invalid" }
+    },
+    {
       "id": "media_hash_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "media_hash" },
       "expected": { "error": "publication_media_reference_invalid" }
     },
     {
       "id": "media_type_tamper_is_rejected",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "profile", "mutation": "media_type" },
       "expected": { "error": "publication_artifact_digest_mismatch" }
     },
     {
       "id": "post_media_commitment_must_match_imeta",
-      "kind": "publication_artifact.reload.invalid",
+      "kind": "publication_artifact.from_canonical_json.invalid",
       "input": { "fixture": "photo_update", "mutation": "media_size" },
       "expected": { "error": "publication_media_inventory_mismatch" }
     }

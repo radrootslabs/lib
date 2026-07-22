@@ -5,6 +5,7 @@ use radroots_event_codec::wire::publication::{
     RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES,
     RADROOTS_PHASE1_PUBLICATION_ARTIFACT_SCHEMA_VERSION,
     RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT,
+    RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -130,20 +131,58 @@ const PUBLIC_TYPES: &[&str] = &[
     "RadrootsPhase1PublicationArtifactError",
 ];
 
-const VALID_VECTOR_IDS: &[&str] = &[
-    "profile_round_trip",
-    "update_round_trip",
-    "photo_update_round_trip",
-    "ask_round_trip_with_fallback",
-    "event_date_round_trip",
-    "event_time_round_trip",
-    "food_availability_round_trip",
+const VALID_VECTOR_CASES: &[(&str, &str)] = &[
+    (
+        "profile_round_trip",
+        "publication_artifact.build_profile.valid",
+    ),
+    (
+        "update_round_trip",
+        "publication_artifact.build_update.valid",
+    ),
+    (
+        "photo_update_round_trip",
+        "publication_artifact.build_photo_update.valid",
+    ),
+    (
+        "ask_round_trip_with_fallback",
+        "publication_artifact.build_ask.valid",
+    ),
+    (
+        "event_date_round_trip",
+        "publication_artifact.build_calendar_date_event.valid",
+    ),
+    (
+        "event_time_round_trip",
+        "publication_artifact.build_calendar_time_event.valid",
+    ),
+    (
+        "food_availability_round_trip",
+        "publication_artifact.build_food_availability.valid",
+    ),
+    (
+        "canonical_json_serialization",
+        "publication_artifact.to_canonical_json.valid",
+    ),
+    (
+        "canonical_json_reload",
+        "publication_artifact.from_canonical_json.valid",
+    ),
 ];
+
+const INVALID_VECTOR_KIND: &str = "publication_artifact.from_canonical_json.invalid";
 
 const REQUIRED_INVALID_VECTOR_IDS: &[&str] = &[
     "leading_whitespace_is_noncanonical",
+    "artifact_exact_byte_limit_reaches_parser",
+    "artifact_one_byte_over_limit_is_rejected",
     "unknown_field_is_rejected",
     "unknown_draft_field_is_rejected",
+    "nested_expected_event_id_is_rejected",
+    "missing_expected_event_id_is_rejected",
+    "malformed_expected_event_id_is_rejected",
+    "uppercase_expected_event_id_is_rejected",
+    "duplicate_expected_event_id_is_rejected",
     "unknown_media_field_is_rejected",
     "json_field_order_is_noncanonical",
     "unknown_version_is_rejected",
@@ -162,6 +201,7 @@ const REQUIRED_INVALID_VECTOR_IDS: &[&str] = &[
     "media_order_is_rejected",
     "profile_media_commitment_tamper_is_rejected",
     "media_url_tamper_is_rejected",
+    "noncanonical_media_url_casing_is_rejected",
     "media_hash_tamper_is_rejected",
     "media_type_tamper_is_rejected",
     "post_media_commitment_must_match_imeta",
@@ -171,7 +211,7 @@ const RAW_IMMUTABLE_ARTIFACTS: &[ImmutableArtifactSpec] = &[
     ImmutableArtifactSpec::new(
         RAW_MANIFEST_RELATIVE,
         45_449,
-        "b8737a9c5836517114e7df6c2194c46e3c200093e12c4e6297165d2b9dae56a1",
+        "cde4346fe1f3fce6ec97c7a6c17c4f7e96800456b1a0fdab2d9c86ad87c08b37",
     ),
     ImmutableArtifactSpec::new(
         RAW_MANIFEST_SCHEMA_RELATIVE,
@@ -181,12 +221,12 @@ const RAW_IMMUTABLE_ARTIFACTS: &[ImmutableArtifactSpec] = &[
     ImmutableArtifactSpec::new(
         RAW_MANIFEST_SHA256_RELATIVE,
         65,
-        "737ee2e4ecd400e1c647e80422c432cd2955d7c7cc04fdf3f9993551480e7957",
+        "ac399b4cc9ea589d441c310e0edbef6459d7f4b9c5761fa3055df69c676d8fa9",
     ),
     ImmutableArtifactSpec::new(
         RAW_GENERATED_DESCRIPTOR_RELATIVE,
         50_735,
-        "20ad0d83304bb4ea3aeb0b37fc068891f1f2e5a0c3abc93d1a9932770330307c",
+        "b092c04d7892a441a723ed61958d084f67412da763c887531dbfb79b66973f98",
     ),
     ImmutableArtifactSpec::new(
         RAW_VECTOR_RELATIVE,
@@ -241,6 +281,7 @@ const GOVERNED_COMPILER_TABLES: &[(&str, &str, &str)] = &[
 const CONSTRUCTORS: &[ConstructorSpec] = &[
     ConstructorSpec {
         semantic_variant: "profile",
+        serialized_semantic_variant: "profile",
         event_variant: None,
         strict_input: "RadrootsAuthoredProfile",
         constructor: "from_profile",
@@ -251,6 +292,7 @@ const CONSTRUCTORS: &[ConstructorSpec] = &[
     },
     ConstructorSpec {
         semantic_variant: "update",
+        serialized_semantic_variant: "update",
         event_variant: None,
         strict_input: "RadrootsAuthoredUpdate",
         constructor: "from_update",
@@ -261,6 +303,7 @@ const CONSTRUCTORS: &[ConstructorSpec] = &[
     },
     ConstructorSpec {
         semantic_variant: "photo_update",
+        serialized_semantic_variant: "photo_update",
         event_variant: None,
         strict_input: "RadrootsAuthoredPhotoUpdate",
         constructor: "from_photo_update",
@@ -271,6 +314,7 @@ const CONSTRUCTORS: &[ConstructorSpec] = &[
     },
     ConstructorSpec {
         semantic_variant: "ask",
+        serialized_semantic_variant: "ask",
         event_variant: None,
         strict_input: "RadrootsAuthoredAsk",
         constructor: "from_ask",
@@ -281,6 +325,7 @@ const CONSTRUCTORS: &[ConstructorSpec] = &[
     },
     ConstructorSpec {
         semantic_variant: "event",
+        serialized_semantic_variant: "event_date",
         event_variant: Some("date"),
         strict_input: "RadrootsAuthoredCalendarDateEvent",
         constructor: "from_calendar_date_event",
@@ -291,6 +336,7 @@ const CONSTRUCTORS: &[ConstructorSpec] = &[
     },
     ConstructorSpec {
         semantic_variant: "event",
+        serialized_semantic_variant: "event_time",
         event_variant: Some("time"),
         strict_input: "RadrootsAuthoredCalendarTimeEvent",
         constructor: "from_calendar_time_event",
@@ -301,6 +347,7 @@ const CONSTRUCTORS: &[ConstructorSpec] = &[
     },
     ConstructorSpec {
         semantic_variant: "food_availability",
+        serialized_semantic_variant: "food_availability",
         event_variant: None,
         strict_input: "RadrootsFoodAvailabilityDetails",
         constructor: "from_food_availability",
@@ -331,6 +378,7 @@ impl ImmutableArtifactSpec {
 #[derive(Clone, Copy)]
 struct ConstructorSpec {
     semantic_variant: &'static str,
+    serialized_semantic_variant: &'static str,
     event_variant: Option<&'static str>,
     strict_input: &'static str,
     constructor: &'static str,
@@ -396,15 +444,25 @@ struct RegistryDescriptor {
 #[serde(deny_unknown_fields)]
 struct ArtifactDescriptor {
     schema_version: u32,
-    semantic_variants: Vec<String>,
+    validator: String,
+    semantic_roles: Vec<String>,
+    serialized_semantic_variants: Vec<String>,
     event_subvariants: Vec<String>,
     canonical_encoding: String,
     artifact_max_bytes: u64,
+    signed_event_wire_max_bytes: u64,
     media_reference_max_count: u64,
+    envelope_fields: Vec<String>,
+    draft_fields: Vec<String>,
+    media_reference_fields: Vec<String>,
+    media_reference_identity: String,
+    primary_media_url_requirement: String,
+    post_fallback_url_requirement: String,
     digest_algorithm: String,
     digest_domain: String,
+    digest_domain_terminator: String,
+    digest_preimage: String,
     constructors: Vec<ConstructorDescriptor>,
-    persisted_fields: Vec<String>,
     denied_inputs: Vec<String>,
     reload_capability: String,
     threat_boundary: Vec<String>,
@@ -414,6 +472,7 @@ struct ArtifactDescriptor {
 #[serde(deny_unknown_fields)]
 struct ConstructorDescriptor {
     semantic_variant: String,
+    serialized_semantic_variant: String,
     event_variant: Option<String>,
     strict_input: String,
     constructor: String,
@@ -623,7 +682,8 @@ fn describe_manifest(
 fn expected_artifact_descriptor() -> ArtifactDescriptor {
     ArtifactDescriptor {
         schema_version: RADROOTS_PHASE1_PUBLICATION_ARTIFACT_SCHEMA_VERSION,
-        semantic_variants: [
+        validator: "validate_phase1_publication_artifact".to_owned(),
+        semantic_roles: [
             "profile",
             "update",
             "photo_update",
@@ -634,16 +694,59 @@ fn expected_artifact_descriptor() -> ArtifactDescriptor {
         .into_iter()
         .map(str::to_owned)
         .collect(),
+        serialized_semantic_variants: [
+            "profile",
+            "update",
+            "photo_update",
+            "ask",
+            "event_date",
+            "event_time",
+            "food_availability",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
         event_subvariants: ["date", "time"].into_iter().map(str::to_owned).collect(),
         canonical_encoding: "serde_json_compact_struct_field_order_v1".to_owned(),
         artifact_max_bytes: RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES as u64,
+        signed_event_wire_max_bytes: RADROOTS_PHASE1_PUBLICATION_SIGNED_EVENT_MAX_BYTES as u64,
         media_reference_max_count: RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT as u64,
+        envelope_fields: [
+            "schema_version",
+            "semantic_variant",
+            "authored_operation_id",
+            "event_contract_id",
+            "expected_author",
+            "draft",
+            "expected_event_id",
+            "media_references",
+            "artifact_digest",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
+        draft_fields: ["created_at", "kind", "tags", "content"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        media_reference_fields: ["url", "sha256", "size", "media_type"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        media_reference_identity:
+            "exact_case_preserving_approved_url_with_descriptor_commitment_v1".to_owned(),
+        primary_media_url_requirement: "blossom_hash_path_extension_required_v1".to_owned(),
+        post_fallback_url_requirement: "approved_blossom_url_extension_optional_v1".to_owned(),
         digest_algorithm: "sha256_domain_nul_canonical_json_v1".to_owned(),
-        digest_domain: "radroots.phase1.publication-artifact.v1\0".to_owned(),
+        digest_domain: "radroots.phase1.publication-artifact.v1".to_owned(),
+        digest_domain_terminator: "0x00".to_owned(),
+        digest_preimage: "ascii_domain_then_single_nul_then_canonical_envelope_without_digest_v1"
+            .to_owned(),
         constructors: CONSTRUCTORS
             .iter()
             .map(|spec| ConstructorDescriptor {
                 semantic_variant: spec.semantic_variant.to_owned(),
+                serialized_semantic_variant: spec.serialized_semantic_variant.to_owned(),
                 event_variant: spec.event_variant.map(str::to_owned),
                 strict_input: spec.strict_input.to_owned(),
                 constructor: format!("RadrootsPhase1PublicationArtifact::{}", spec.constructor),
@@ -653,26 +756,6 @@ fn expected_artifact_descriptor() -> ArtifactDescriptor {
                 kind: spec.kind,
             })
             .collect(),
-        persisted_fields: [
-            "schema_version",
-            "semantic_variant",
-            "authored_operation_id",
-            "event_contract_id",
-            "expected_author",
-            "draft.created_at",
-            "draft.kind",
-            "draft.tags",
-            "draft.content",
-            "draft.expected_event_id",
-            "media_references[].url",
-            "media_references[].sha256",
-            "media_references[].size",
-            "media_references[].media_type",
-            "artifact_digest",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect(),
         denied_inputs: [
             "arbitrary_event_draft",
             "raw_json",
@@ -711,14 +794,24 @@ fn expected_operation_descriptors() -> Vec<OperationDescriptor> {
             signing: "none".to_owned(),
             transport: "none".to_owned(),
         })
-        .chain([OperationDescriptor {
-            id: "publication_artifact.reload".to_owned(),
-            strict_input: "Bytes".to_owned(),
-            output: "RadrootsPhase1PublicationArtifact".to_owned(),
-            error_class: "parse_error".to_owned(),
-            signing: "none".to_owned(),
-            transport: "none".to_owned(),
-        }])
+        .chain([
+            OperationDescriptor {
+                id: "publication_artifact.to_canonical_json".to_owned(),
+                strict_input: "RadrootsPhase1PublicationArtifact".to_owned(),
+                output: "Bytes".to_owned(),
+                error_class: "none".to_owned(),
+                signing: "none".to_owned(),
+                transport: "none".to_owned(),
+            },
+            OperationDescriptor {
+                id: "publication_artifact.from_canonical_json".to_owned(),
+                strict_input: "Bytes".to_owned(),
+                output: "RadrootsPhase1PublicationArtifact".to_owned(),
+                error_class: "parse_error".to_owned(),
+                signing: "none".to_owned(),
+                transport: "none".to_owned(),
+            },
+        ])
         .collect()
 }
 
@@ -894,6 +987,20 @@ fn validate_package_shape(
 
 fn validate_operations_authority(workspace_root: &Path) -> Result<(), String> {
     let manifest = parse_toml(workspace_root, OPERATIONS_RELATIVE)?;
+    let error_classes = toml_string_array(
+        OPERATIONS_RELATIVE,
+        manifest
+            .get("errors")
+            .and_then(|value| value.get("classes")),
+    )?;
+    if error_classes
+        .iter()
+        .filter(|value| value.as_str() == "none")
+        .count()
+        != 1
+    {
+        return Err("error classes must contain none exactly once".to_owned());
+    }
     let domains = toml_string_array(
         OPERATIONS_RELATIVE,
         manifest
@@ -930,34 +1037,44 @@ fn validate_operations_authority(workspace_root: &Path) -> Result<(), String> {
         .get("operations")
         .and_then(toml::Value::as_table)
         .ok_or_else(|| "operations.toml must declare [operations]".to_owned())?;
-    if operations.contains_key("phase1_publication_artifact_build") {
-        return Err("ambiguous aggregate publication build operation is forbidden".to_owned());
+    for forbidden in [
+        "phase1_publication_artifact_build",
+        "phase1_publication_artifact_reload",
+    ] {
+        if operations.contains_key(forbidden) {
+            return Err(format!(
+                "obsolete publication operation {forbidden} is forbidden"
+            ));
+        }
     }
-    for (index, expected) in expected_operation_descriptors().iter().enumerate() {
-        let key = if index < CONSTRUCTORS.len() {
-            format!(
-                "phase1_publication_artifact_build_{}",
-                expected
-                    .id
-                    .strip_prefix("publication_artifact.build_")
-                    .expect("constructor operation prefix")
-            )
-        } else {
-            "phase1_publication_artifact_reload".to_owned()
-        };
+    for expected in expected_operation_descriptors() {
+        let (key, expected_inputs) =
+            if let Some(suffix) = expected.id.strip_prefix("publication_artifact.build_") {
+                (
+                    format!("phase1_publication_artifact_build_{suffix}"),
+                    vec![
+                        expected.strict_input.clone(),
+                        "u64".to_owned(),
+                        "String".to_owned(),
+                    ],
+                )
+            } else {
+                match expected.id.as_str() {
+                    "publication_artifact.to_canonical_json" => (
+                        "phase1_publication_artifact_to_canonical_json".to_owned(),
+                        vec![expected.strict_input.clone()],
+                    ),
+                    "publication_artifact.from_canonical_json" => (
+                        "phase1_publication_artifact_from_canonical_json".to_owned(),
+                        vec![expected.strict_input.clone()],
+                    ),
+                    other => return Err(format!("unknown publication operation {other}")),
+                }
+            };
         let operation = operations
             .get(&key)
             .and_then(toml::Value::as_table)
             .ok_or_else(|| format!("operations.toml is missing {key}"))?;
-        let expected_inputs = if index < CONSTRUCTORS.len() {
-            vec![
-                expected.strict_input.clone(),
-                "u64".to_owned(),
-                "String".to_owned(),
-            ]
-        } else {
-            vec!["Bytes".to_owned()]
-        };
         require_toml_string(operation, "domain", "publication", &key)?;
         require_toml_string(operation, "id", &expected.id, &key)?;
         require_toml_string(operation, "stability", "beta", &key)?;
@@ -969,8 +1086,7 @@ fn validate_operations_authority(workspace_root: &Path) -> Result<(), String> {
             .and_then(toml::Value::as_bool)
             != Some(true)
             || toml_string_array(&key, operation.get("inputs"))? != expected_inputs
-            || toml_string_array(&key, operation.get("outputs"))?
-                != ["RadrootsPhase1PublicationArtifact"]
+            || toml_string_array(&key, operation.get("outputs"))? != [expected.output.clone()]
         {
             return Err(format!("{key} signature or determinism drifted"));
         }
@@ -992,6 +1108,17 @@ fn validate_operations_authority(workspace_root: &Path) -> Result<(), String> {
             .and_then(toml::Value::as_table)
             .ok_or_else(|| format!("{key} conformance is missing"))?;
         require_toml_string(conformance, "vector", VECTOR_RELATIVE, &key)?;
+        let expected_case_kinds = if expected.id == "publication_artifact.from_canonical_json" {
+            vec![
+                "publication_artifact.from_canonical_json.valid".to_owned(),
+                "publication_artifact.from_canonical_json.invalid".to_owned(),
+            ]
+        } else {
+            vec![format!("{}.valid", expected.id)]
+        };
+        if toml_string_array(&key, conformance.get("case_kinds"))? != expected_case_kinds {
+            return Err(format!("{key} conformance case kinds drifted"));
+        }
     }
     Ok(())
 }
@@ -1053,15 +1180,27 @@ fn validate_result_vector(workspace_root: &Path) -> Result<ValidatedResultVector
         if !case.input.is_object() || !case.expected.is_object() {
             return Err(format!("vector case {} must use object data", case.id));
         }
-        match case.kind.as_str() {
-            "publication_artifact.round_trip.valid" => valid.push(case.id),
-            "publication_artifact.reload.invalid" => invalid.push(case.id),
-            other => return Err(format!("vector case uses unknown kind {other}")),
+        if case.kind == INVALID_VECTOR_KIND {
+            invalid.push(case.id);
+        } else if VALID_VECTOR_CASES
+            .iter()
+            .any(|(id, kind)| *id == case.id && *kind == case.kind)
+        {
+            valid.push((case.id, case.kind));
+        } else {
+            return Err(format!(
+                "vector case {} uses unknown or mismatched kind {}",
+                case.id, case.kind
+            ));
         }
     }
-    if valid != VALID_VECTOR_IDS {
+    let expected_valid = VALID_VECTOR_CASES
+        .iter()
+        .map(|(id, kind)| ((*id).to_owned(), (*kind).to_owned()))
+        .collect::<Vec<_>>();
+    if valid != expected_valid {
         return Err(format!(
-            "{VECTOR_RELATIVE} valid inventory drifted: expected {VALID_VECTOR_IDS:?}, found {valid:?}"
+            "{VECTOR_RELATIVE} valid inventory drifted: expected {expected_valid:?}, found {valid:?}"
         ));
     }
     for required in REQUIRED_INVALID_VECTOR_IDS {
@@ -1077,7 +1216,7 @@ fn validate_result_vector(workspace_root: &Path) -> Result<ValidatedResultVector
         }
     }
     Ok(ValidatedResultVector {
-        valid_case_ids: valid,
+        valid_case_ids: valid.into_iter().map(|(id, _)| id).collect(),
         invalid_case_ids: invalid,
         bytes,
     })
@@ -1454,54 +1593,64 @@ fn manifest_schema() -> Value {
                 "additionalProperties": false,
                 "required": [
                     "schema_version",
-                    "semantic_variants",
+                    "validator",
+                    "semantic_roles",
+                    "serialized_semantic_variants",
                     "event_subvariants",
                     "canonical_encoding",
                     "artifact_max_bytes",
+                    "signed_event_wire_max_bytes",
                     "media_reference_max_count",
+                    "envelope_fields",
+                    "draft_fields",
+                    "media_reference_fields",
+                    "media_reference_identity",
+                    "primary_media_url_requirement",
+                    "post_fallback_url_requirement",
                     "digest_algorithm",
                     "digest_domain",
+                    "digest_domain_terminator",
+                    "digest_preimage",
                     "constructors",
-                    "persisted_fields",
                     "denied_inputs",
                     "reload_capability",
                     "threat_boundary"
                 ],
                 "properties": {
                     "schema_version": {"const": 1},
-                    "semantic_variants": {
-                        "type": "array",
-                        "minItems": 6,
-                        "maxItems": 6,
-                        "items": {"type": "string", "minLength": 1}
-                    },
-                    "event_subvariants": {
-                        "type": "array",
-                        "minItems": 2,
-                        "maxItems": 2,
-                        "items": {"type": "string", "minLength": 1}
-                    },
-                    "canonical_encoding": {"type": "string", "minLength": 1},
-                    "artifact_max_bytes": {"type": "integer", "minimum": 1},
-                    "media_reference_max_count": {"type": "integer", "minimum": 1},
-                    "digest_algorithm": {"type": "string", "minLength": 1},
-                    "digest_domain": {"type": "string", "minLength": 1},
+                    "validator": {"const": "validate_phase1_publication_artifact"},
+                    "semantic_roles": {"const": ["profile", "update", "photo_update", "ask", "event", "food_availability"]},
+                    "serialized_semantic_variants": {"const": ["profile", "update", "photo_update", "ask", "event_date", "event_time", "food_availability"]},
+                    "event_subvariants": {"const": ["date", "time"]},
+                    "canonical_encoding": {"const": "serde_json_compact_struct_field_order_v1"},
+                    "artifact_max_bytes": {"const": 2097152},
+                    "signed_event_wire_max_bytes": {"const": 262144},
+                    "media_reference_max_count": {"const": 4096},
+                    "envelope_fields": {"const": ["schema_version", "semantic_variant", "authored_operation_id", "event_contract_id", "expected_author", "draft", "expected_event_id", "media_references", "artifact_digest"]},
+                    "draft_fields": {"const": ["created_at", "kind", "tags", "content"]},
+                    "media_reference_fields": {"const": ["url", "sha256", "size", "media_type"]},
+                    "media_reference_identity": {"const": "exact_case_preserving_approved_url_with_descriptor_commitment_v1"},
+                    "primary_media_url_requirement": {"const": "blossom_hash_path_extension_required_v1"},
+                    "post_fallback_url_requirement": {"const": "approved_blossom_url_extension_optional_v1"},
+                    "digest_algorithm": {"const": "sha256_domain_nul_canonical_json_v1"},
+                    "digest_domain": {"const": "radroots.phase1.publication-artifact.v1"},
+                    "digest_domain_terminator": {"const": "0x00"},
+                    "digest_preimage": {"const": "ascii_domain_then_single_nul_then_canonical_envelope_without_digest_v1"},
                     "constructors": {
                         "type": "array",
                         "minItems": 7,
                         "maxItems": 7,
                         "items": {"$ref": "#/$defs/constructor"}
                     },
-                    "persisted_fields": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-                    "denied_inputs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
-                    "reload_capability": {"type": "string", "minLength": 1},
-                    "threat_boundary": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+                    "denied_inputs": {"const": ["arbitrary_event_draft", "raw_json", "numeric_kind", "signed_event", "private_key", "signer"]},
+                    "reload_capability": {"const": "persisted_artifact_only_no_prior_capability_restoration_v1"},
+                    "threat_boundary": {"const": ["detects_accidental_corruption", "detects_payload_only_modification", "detects_digest_only_modification", "does_not_authenticate_actor_rewriting_payload_and_digest", "does_not_survive_validator_binary_or_host_compromise", "does_not_restore_byte_verification_or_upload_completion", "does_not_replace_nip01_id_and_signature_verification"]}
                 }
             },
             "operations": {
                 "type": "array",
-                "minItems": 8,
-                "maxItems": 8,
+                "minItems": 9,
+                "maxItems": 9,
                 "items": {"$ref": "#/$defs/operation"}
             },
             "predecessor_source_supersessions": {
@@ -1582,6 +1731,7 @@ fn manifest_schema() -> Value {
                 "additionalProperties": false,
                 "required": [
                     "semantic_variant",
+                    "serialized_semantic_variant",
                     "event_variant",
                     "strict_input",
                     "constructor",
@@ -1592,6 +1742,7 @@ fn manifest_schema() -> Value {
                 ],
                 "properties": {
                     "semantic_variant": {"type": "string", "minLength": 1},
+                    "serialized_semantic_variant": {"type": "string", "minLength": 1},
                     "event_variant": {"type": ["string", "null"]},
                     "strict_input": {"type": "string", "minLength": 1},
                     "constructor": {"type": "string", "minLength": 1},
@@ -1608,8 +1759,8 @@ fn manifest_schema() -> Value {
                 "properties": {
                     "id": {"type": "string", "minLength": 1},
                     "strict_input": {"type": "string", "minLength": 1},
-                    "output": {"const": "RadrootsPhase1PublicationArtifact"},
-                    "error_class": {"enum": ["validation_error", "parse_error"]},
+                    "output": {"enum": ["RadrootsPhase1PublicationArtifact", "Bytes"]},
+                    "error_class": {"enum": ["none", "validation_error", "parse_error"]},
                     "signing": {"const": "none"},
                     "transport": {"const": "none"}
                 }

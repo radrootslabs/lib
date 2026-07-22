@@ -24,9 +24,10 @@ use radroots_event::{
     wire::compute_canonical_nip01_event_id,
 };
 use radroots_event_codec::wire::publication::{
-    RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES, RadrootsPhase1PublicationArtifact,
-    RadrootsPhase1PublicationArtifactError, RadrootsPhase1PublicationEventVariant,
-    RadrootsPhase1PublicationSemanticVariant, validate_phase1_publication_artifact,
+    RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES, RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT,
+    RadrootsPhase1PublicationArtifact, RadrootsPhase1PublicationArtifactError,
+    RadrootsPhase1PublicationEventVariant, RadrootsPhase1PublicationSemanticVariant,
+    validate_phase1_publication_artifact,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -69,6 +70,7 @@ struct VectorExpected {
     artifact_digest: Option<String>,
     canonical_json_bytes: Option<usize>,
     canonical_json_sha256: Option<String>,
+    canonical_json: Option<String>,
     error: Option<String>,
 }
 
@@ -77,13 +79,13 @@ fn publication_artifact_conformance_vector_executes_every_case() {
     let suite: VectorSuite = serde_json::from_str(PUBLICATION_ARTIFACT_VECTOR).unwrap();
     assert_eq!(suite.suite, "phase1_publication_artifact");
     assert_eq!(suite.contract_version, "1.0.0");
-    assert_eq!(suite.vectors.len(), 31);
+    assert_eq!(suite.vectors.len(), 41);
     let artifacts = all_artifacts();
 
     for case in suite.vectors {
         let artifact = artifact_fixture(&artifacts, &case.input.fixture);
         match case.kind.as_str() {
-            "publication_artifact.round_trip.valid" => {
+            kind if kind.starts_with("publication_artifact.build_") && kind.ends_with(".valid") => {
                 assert_eq!(case.input.mutation, None, "{}", case.id);
                 assert_eq!(
                     artifact.semantic_variant().as_str(),
@@ -116,7 +118,7 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     case.id
                 );
                 assert_eq!(
-                    artifact.draft().expected_event_id().as_str(),
+                    artifact.expected_event_id().as_str(),
                     case.expected.expected_event_id.as_deref().unwrap(),
                     "{}",
                     case.id
@@ -128,20 +130,26 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     case.id
                 );
                 assert_eq!(
-                    artifact.canonical_json().len(),
+                    artifact.to_canonical_json().len(),
                     case.expected.canonical_json_bytes.unwrap(),
                     "{}",
                     case.id
                 );
                 assert_eq!(
-                    RadrootsBlossomSha256::digest(artifact.canonical_json()).to_hex(),
+                    RadrootsBlossomSha256::digest(&artifact.to_canonical_json()).to_hex(),
                     case.expected.canonical_json_sha256.unwrap(),
                     "{}",
                     case.id
                 );
                 assert_eq!(
+                    artifact.to_canonical_json(),
+                    case.expected.canonical_json.unwrap().as_bytes(),
+                    "{}",
+                    case.id
+                );
+                assert_eq!(
                     RadrootsPhase1PublicationArtifact::from_canonical_json(
-                        artifact.canonical_json()
+                        &artifact.to_canonical_json()
                     )
                     .unwrap(),
                     *artifact,
@@ -149,7 +157,42 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     case.id
                 );
             }
-            "publication_artifact.reload.invalid" => {
+            "publication_artifact.to_canonical_json.valid" => {
+                assert_eq!(case.input.mutation, None, "{}", case.id);
+                let bytes = artifact.to_canonical_json();
+                assert_eq!(
+                    bytes.len(),
+                    case.expected.canonical_json_bytes.unwrap(),
+                    "{}",
+                    case.id
+                );
+                assert_eq!(
+                    RadrootsBlossomSha256::digest(&bytes).to_hex(),
+                    case.expected.canonical_json_sha256.unwrap(),
+                    "{}",
+                    case.id
+                );
+            }
+            "publication_artifact.from_canonical_json.valid" => {
+                assert_eq!(case.input.mutation, None, "{}", case.id);
+                let bytes = artifact.to_canonical_json();
+                let reloaded =
+                    RadrootsPhase1PublicationArtifact::from_canonical_json(&bytes).unwrap();
+                assert_eq!(
+                    reloaded.semantic_variant().as_str(),
+                    case.expected.semantic_variant.as_deref().unwrap(),
+                    "{}",
+                    case.id
+                );
+                assert_eq!(
+                    RadrootsBlossomSha256::digest(&reloaded.to_canonical_json()).to_hex(),
+                    case.expected.canonical_json_sha256.unwrap(),
+                    "{}",
+                    case.id
+                );
+                assert_eq!(reloaded, *artifact, "{}", case.id);
+            }
+            "publication_artifact.from_canonical_json.invalid" => {
                 if case.input.mutation.as_deref() == Some("all_cross_variants") {
                     assert_every_cross_variant_is_rejected(
                         &artifacts,
@@ -159,7 +202,7 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     continue;
                 }
                 let bytes = mutate_artifact(
-                    artifact.canonical_json(),
+                    &artifact.to_canonical_json(),
                     case.input.mutation.as_deref().unwrap(),
                 );
                 assert_eq!(
@@ -244,12 +287,12 @@ fn publication_artifact_round_trips_every_closed_variant() {
         assert_eq!(artifact.expected_author().as_str(), AUTHOR);
         assert_eq!(artifact.draft().kind(), kind);
         assert_eq!(artifact.media_references().len(), media_count);
-        assert!(artifact.canonical_json().len() <= RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES);
+        let canonical_json = artifact.to_canonical_json();
+        assert!(canonical_json.len() <= RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES);
         let reloaded =
-            RadrootsPhase1PublicationArtifact::from_canonical_json(artifact.canonical_json())
-                .unwrap();
+            RadrootsPhase1PublicationArtifact::from_canonical_json(&canonical_json).unwrap();
         assert_eq!(&reloaded, artifact);
-        assert_eq!(reloaded.to_canonical_json(), artifact.canonical_json());
+        assert_eq!(reloaded.to_canonical_json(), canonical_json);
         validate_phase1_publication_artifact(artifact).unwrap();
     }
 }
@@ -285,7 +328,8 @@ fn publication_artifact_accepts_text_only_ask() {
         RadrootsPhase1PublicationSemanticVariant::Ask
     );
     assert_eq!(
-        RadrootsPhase1PublicationArtifact::from_canonical_json(artifact.canonical_json()).unwrap(),
+        RadrootsPhase1PublicationArtifact::from_canonical_json(&artifact.to_canonical_json())
+            .unwrap(),
         artifact
     );
 }
@@ -293,10 +337,10 @@ fn publication_artifact_accepts_text_only_ask() {
 #[test]
 fn publication_artifact_reload_rejects_cross_variant_and_every_envelope_tamper() {
     let artifact = &all_artifacts()[0];
-    let canonical = artifact.canonical_json();
+    let canonical = artifact.to_canonical_json();
 
     let mut leading_space = vec![b' '];
-    leading_space.extend_from_slice(canonical);
+    leading_space.extend_from_slice(&canonical);
     assert_error(
         &leading_space,
         RadrootsPhase1PublicationArtifactError::NonCanonicalJson,
@@ -337,26 +381,26 @@ fn publication_artifact_reload_rejects_cross_variant_and_every_envelope_tamper()
             RadrootsPhase1PublicationArtifactError::DigestMismatch,
         ),
     ] {
-        let mut value: Value = serde_json::from_slice(canonical).unwrap();
+        let mut value: Value = serde_json::from_slice(&canonical).unwrap();
         value[field] = replacement;
         assert_error(&serde_json::to_vec(&value).unwrap(), expected);
     }
 
-    let mut value: Value = serde_json::from_slice(canonical).unwrap();
+    let mut value: Value = serde_json::from_slice(&canonical).unwrap();
     value["draft"]["content"] = Value::from("changed");
     assert_error(
         &serde_json::to_vec(&value).unwrap(),
         RadrootsPhase1PublicationArtifactError::ExpectedEventIdMismatch,
     );
 
-    let mut value: Value = serde_json::from_slice(canonical).unwrap();
-    value["draft"]["expected_event_id"] = Value::from("00".repeat(32));
+    let mut value: Value = serde_json::from_slice(&canonical).unwrap();
+    value["expected_event_id"] = Value::from("00".repeat(32));
     assert_error(
         &serde_json::to_vec(&value).unwrap(),
         RadrootsPhase1PublicationArtifactError::ExpectedEventIdMismatch,
     );
 
-    let mut value: Value = serde_json::from_slice(canonical).unwrap();
+    let mut value: Value = serde_json::from_slice(&canonical).unwrap();
     value["unknown"] = Value::Bool(true);
     assert_error(
         &serde_json::to_vec(&value).unwrap(),
@@ -365,16 +409,60 @@ fn publication_artifact_reload_rejects_cross_variant_and_every_envelope_tamper()
 }
 
 #[test]
+fn publication_artifact_envelope_uses_the_exact_contract_field_order() {
+    let canonical = String::from_utf8(all_artifacts()[0].to_canonical_json()).unwrap();
+    let fields = [
+        "\"schema_version\"",
+        "\"semantic_variant\"",
+        "\"authored_operation_id\"",
+        "\"event_contract_id\"",
+        "\"expected_author\"",
+        "\"draft\"",
+        "\"expected_event_id\"",
+        "\"media_references\"",
+        "\"artifact_digest\"",
+    ];
+    let positions = fields.map(|field| {
+        canonical
+            .find(field)
+            .unwrap_or_else(|| panic!("missing {field}"))
+    });
+    assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
+
+    let draft_start = canonical.find("\"draft\":{").unwrap();
+    let draft_end = canonical[draft_start..]
+        .find("},\"expected_event_id\"")
+        .map(|offset| draft_start + offset)
+        .unwrap();
+    let draft = &canonical[draft_start..draft_end];
+    let draft_positions = ["\"created_at\"", "\"kind\"", "\"tags\"", "\"content\""].map(|field| {
+        draft
+            .find(field)
+            .unwrap_or_else(|| panic!("missing {field}"))
+    });
+    assert!(draft_positions.windows(2).all(|pair| pair[0] < pair[1]));
+    let media = &canonical[positions[7]..positions[8]];
+    let media_positions = ["\"url\"", "\"sha256\"", "\"size\"", "\"media_type\""].map(|field| {
+        media
+            .find(field)
+            .unwrap_or_else(|| panic!("missing {field}"))
+    });
+    assert!(media_positions.windows(2).all(|pair| pair[0] < pair[1]));
+    let value: Value = serde_json::from_str(&canonical).unwrap();
+    assert!(value["expected_event_id"].is_string());
+}
+
+#[test]
 fn publication_artifact_reload_rejects_media_order_and_commitment_tamper() {
     let artifact = &all_artifacts()[0];
-    let mut value: Value = serde_json::from_slice(artifact.canonical_json()).unwrap();
+    let mut value: Value = serde_json::from_slice(&artifact.to_canonical_json()).unwrap();
     value["media_references"].as_array_mut().unwrap().reverse();
     assert_error(
         &serde_json::to_vec(&value).unwrap(),
         RadrootsPhase1PublicationArtifactError::NonCanonicalMediaInventory,
     );
 
-    let mut value: Value = serde_json::from_slice(artifact.canonical_json()).unwrap();
+    let mut value: Value = serde_json::from_slice(&artifact.to_canonical_json()).unwrap();
     value["media_references"][0]["size"] = Value::from(999);
     assert_error(
         &serde_json::to_vec(&value).unwrap(),
@@ -382,7 +470,7 @@ fn publication_artifact_reload_rejects_media_order_and_commitment_tamper() {
     );
 
     let photo = &all_artifacts()[2];
-    let mut value: Value = serde_json::from_slice(photo.canonical_json()).unwrap();
+    let mut value: Value = serde_json::from_slice(&photo.to_canonical_json()).unwrap();
     value["media_references"][0]["size"] = Value::from(999);
     assert_error(
         &serde_json::to_vec(&value).unwrap(),
@@ -392,6 +480,12 @@ fn publication_artifact_reload_rejects_media_order_and_commitment_tamper() {
 
 #[test]
 fn publication_artifact_decode_is_bounded_before_json_parsing() {
+    let exact = vec![b' '; RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES];
+    assert_eq!(
+        RadrootsPhase1PublicationArtifact::from_canonical_json(&exact).unwrap_err(),
+        RadrootsPhase1PublicationArtifactError::InvalidJson
+    );
+
     let bytes = vec![b' '; RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES + 1];
     assert_eq!(
         RadrootsPhase1PublicationArtifact::from_canonical_json(&bytes).unwrap_err(),
@@ -399,6 +493,106 @@ fn publication_artifact_decode_is_bounded_before_json_parsing() {
             max: RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES,
             actual: bytes.len(),
         }
+    );
+}
+
+#[test]
+fn publication_artifact_media_count_accepts_exact_limit_and_rejects_one_over() {
+    let artifact = &all_artifacts()[1];
+    let mut value: Value = serde_json::from_slice(&artifact.to_canonical_json()).unwrap();
+    let sha256 = "11".repeat(32);
+    let references = (0..RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT)
+        .map(|index| {
+            serde_json::json!({
+                "url": format!("https://media-{index:04}.example/{sha256}.png"),
+                "sha256": sha256.clone(),
+                "size": 1,
+                "media_type": "image/png"
+            })
+        })
+        .collect::<Vec<_>>();
+    value["media_references"] = Value::Array(references.clone());
+    assert_error(
+        &serde_json::to_vec(&value).unwrap(),
+        RadrootsPhase1PublicationArtifactError::InvalidPostProfile,
+    );
+
+    let mut one_over = references;
+    one_over.push(serde_json::json!({
+        "url": format!("https://media-4096.example/{sha256}.png"),
+        "sha256": sha256,
+        "size": 1,
+        "media_type": "image/png"
+    }));
+    value["media_references"] = Value::Array(one_over);
+    assert_error(
+        &serde_json::to_vec(&value).unwrap(),
+        RadrootsPhase1PublicationArtifactError::TooManyMediaReferences {
+            max: RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT,
+            actual: RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT + 1,
+        },
+    );
+}
+
+#[test]
+fn publication_artifact_reload_requires_extensions_for_primary_media() {
+    let artifacts = all_artifacts();
+    for (index, host) in [
+        (0, "media.example"),
+        (2, "media.example"),
+        (4, "events.example"),
+        (6, "food.example"),
+    ] {
+        let mut value: Value =
+            serde_json::from_slice(&artifacts[index].to_canonical_json()).unwrap();
+        let reference = value["media_references"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|reference| reference["url"].as_str().unwrap().contains(host))
+            .unwrap();
+        let original = reference["url"].as_str().unwrap().to_string();
+        let extension_start = original.rfind('.').unwrap();
+        let extensionless = original[..extension_start].to_string();
+        reference["url"] = Value::from(extensionless.clone());
+        replace_json_string(&mut value["draft"], &original, &extensionless);
+        rebuild_expected_event_id(&mut value);
+        assert_error(
+            &serde_json::to_vec(&value).unwrap(),
+            RadrootsPhase1PublicationArtifactError::InvalidMediaReference,
+        );
+    }
+}
+
+#[test]
+fn publication_artifact_reload_accepts_extensionless_post_fallback() {
+    let image = authored_image(
+        b"extensionless-fallback",
+        "media.example",
+        "webp",
+        "image/webp",
+    );
+    let hash = image.descriptor().sha256();
+    let fallback = RadrootsBlossomBlobUrl::parse(&format!("https://backup.example/{hash}"))
+        .unwrap()
+        .approve()
+        .unwrap();
+    let post_image = RadrootsAuthoredPostImage::new(
+        image,
+        RadrootsPostImageDimensions::new(1200, 900).unwrap(),
+        "Fresh strawberries",
+    )
+    .unwrap()
+    .try_with_fallback(fallback)
+    .unwrap();
+    let url = post_image.url().to_string();
+    let ask =
+        RadrootsAuthoredAsk::new(format!("Available this week? {url}"), vec![post_image]).unwrap();
+    let artifact = RadrootsPhase1PublicationArtifact::from_ask(&ask, CREATED_AT, AUTHOR).unwrap();
+    assert_eq!(
+        RadrootsPhase1PublicationArtifact::from_canonical_json(&artifact.to_canonical_json())
+            .unwrap(),
+        artifact
     );
 }
 
@@ -429,7 +623,7 @@ fn assert_every_cross_variant_is_rejected(
             if target == artifact.semantic_variant().as_str() {
                 continue;
             }
-            let mut value: Value = serde_json::from_slice(artifact.canonical_json()).unwrap();
+            let mut value: Value = serde_json::from_slice(&artifact.to_canonical_json()).unwrap();
             value["semantic_variant"] = Value::from(target);
             let error = RadrootsPhase1PublicationArtifact::from_canonical_json(
                 &serde_json::to_vec(&value).unwrap(),
@@ -460,15 +654,44 @@ fn artifact_fixture<'a>(
 }
 
 fn mutate_artifact(canonical: &[u8], mutation: &str) -> Vec<u8> {
-    if mutation == "leading_whitespace" {
-        let mut bytes = vec![b' '];
-        bytes.extend_from_slice(canonical);
-        return bytes;
+    match mutation {
+        "leading_whitespace" => {
+            let mut bytes = vec![b' '];
+            bytes.extend_from_slice(canonical);
+            return bytes;
+        }
+        "artifact_exact_byte_limit" => {
+            return vec![b' '; RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES];
+        }
+        "artifact_one_over_byte_limit" => {
+            return vec![b' '; RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES + 1];
+        }
+        "duplicate_expected_event_id" => {
+            return duplicate_expected_event_id(canonical);
+        }
+        _ => {}
     }
     let mut value: Value = serde_json::from_slice(canonical).unwrap();
     match mutation {
         "unknown_field" => value["unknown"] = Value::Bool(true),
         "unknown_draft_field" => value["draft"]["unknown"] = Value::Bool(true),
+        "nested_expected_event_id" => {
+            value["draft"]["expected_event_id"] = value["expected_event_id"].clone();
+        }
+        "missing_expected_event_id" => {
+            value.as_object_mut().unwrap().remove("expected_event_id");
+        }
+        "malformed_expected_event_id" => {
+            value["expected_event_id"] = Value::from("not-an-event-id");
+        }
+        "uppercase_expected_event_id" => {
+            value["expected_event_id"] = Value::from(
+                value["expected_event_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_ascii_uppercase(),
+            );
+        }
         "unknown_media_field" => value["media_references"][0]["unknown"] = Value::Bool(true),
         "json_field_order" => {}
         "schema_version" => value["schema_version"] = Value::from(2),
@@ -497,7 +720,7 @@ fn mutate_artifact(canonical: &[u8], mutation: &str) -> Vec<u8> {
             rebuild_expected_event_id(&mut value);
         }
         "expected_event_id" => {
-            value["draft"]["expected_event_id"] = Value::from("00".repeat(32));
+            value["expected_event_id"] = Value::from("00".repeat(32));
         }
         "digest" => value["artifact_digest"] = Value::from("00".repeat(32)),
         "media_order" => value["media_references"].as_array_mut().unwrap().reverse(),
@@ -507,11 +730,27 @@ fn mutate_artifact(canonical: &[u8], mutation: &str) -> Vec<u8> {
             value["media_references"][0]["url"] =
                 Value::from(url.replacen("https://media.example", "https://alternate.example", 1));
         }
+        "media_url_casing" => {
+            let url = value["media_references"][0]["url"].as_str().unwrap();
+            value["media_references"][0]["url"] =
+                Value::from(url.replacen("https://", "HTTPS://", 1));
+        }
         "media_hash" => value["media_references"][0]["sha256"] = Value::from("00".repeat(32)),
         "media_type" => value["media_references"][0]["media_type"] = Value::from("image/jpeg"),
         other => panic!("unknown publication mutation {other}"),
     }
     serde_json::to_vec(&value).unwrap()
+}
+
+fn duplicate_expected_event_id(canonical: &[u8]) -> Vec<u8> {
+    let value: Value = serde_json::from_slice(canonical).unwrap();
+    let event_id = value["expected_event_id"].as_str().unwrap();
+    let field = format!("\"expected_event_id\":\"{event_id}\"");
+    let duplicate = format!("{field},{field}");
+    let canonical = core::str::from_utf8(canonical).unwrap();
+    let mutated = canonical.replacen(&field, &duplicate, 1);
+    assert_ne!(mutated, canonical);
+    mutated.into_bytes()
 }
 
 fn rebuild_expected_event_id(value: &mut Value) {
@@ -520,11 +759,28 @@ fn rebuild_expected_event_id(value: &mut Value) {
     let kind = value["draft"]["kind"].as_u64().unwrap() as u32;
     let tags: Vec<Vec<String>> = serde_json::from_value(value["draft"]["tags"].clone()).unwrap();
     let content = value["draft"]["content"].as_str().unwrap();
-    value["draft"]["expected_event_id"] = Value::from(
+    value["expected_event_id"] = Value::from(
         compute_canonical_nip01_event_id(author, created_at, kind, &tags, content)
             .unwrap()
             .to_string(),
     );
+}
+
+fn replace_json_string(value: &mut Value, from: &str, to: &str) {
+    match value {
+        Value::String(string) => *string = string.replace(from, to),
+        Value::Array(values) => {
+            for value in values {
+                replace_json_string(value, from, to);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values_mut() {
+                replace_json_string(value, from, to);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn all_artifacts() -> Vec<RadrootsPhase1PublicationArtifact> {

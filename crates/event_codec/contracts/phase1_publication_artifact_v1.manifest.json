@@ -4,8 +4,8 @@
   "authority_id": "phase1_publication_artifact_v1",
   "manifest_schema": {
     "path": "crates/event_codec/contracts/phase1_publication_artifact_v1.manifest.schema.json",
-    "byte_length": 9568,
-    "sha256": "c8d25afc65de8c21a83decefa62036385cb826d58248cc070cd1948ffcab1ec4",
+    "byte_length": 11972,
+    "sha256": "1d72cee2754e7ac45105d79b1ecf7d44251991be7a18ba106166e962000e8320",
     "hash_algorithm": "sha256_bytes_v1"
   },
   "predecessor": {
@@ -13,7 +13,7 @@
     "manifest": {
       "path": "crates/event_store/contracts/raw_source_rebuild_v1.manifest.json",
       "byte_length": 45449,
-      "sha256": "b8737a9c5836517114e7df6c2194c46e3c200093e12c4e6297165d2b9dae56a1",
+      "sha256": "cde4346fe1f3fce6ec97c7a6c17c4f7e96800456b1a0fdab2d9c86ad87c08b37",
       "hash_algorithm": "sha256_bytes_v1"
     }
   },
@@ -35,7 +35,8 @@
   },
   "artifact": {
     "schema_version": 1,
-    "semantic_variants": [
+    "validator": "validate_phase1_publication_artifact",
+    "semantic_roles": [
       "profile",
       "update",
       "photo_update",
@@ -43,18 +44,57 @@
       "event",
       "food_availability"
     ],
+    "serialized_semantic_variants": [
+      "profile",
+      "update",
+      "photo_update",
+      "ask",
+      "event_date",
+      "event_time",
+      "food_availability"
+    ],
     "event_subvariants": [
       "date",
       "time"
     ],
     "canonical_encoding": "serde_json_compact_struct_field_order_v1",
-    "artifact_max_bytes": 524288,
+    "artifact_max_bytes": 2097152,
+    "signed_event_wire_max_bytes": 262144,
     "media_reference_max_count": 4096,
+    "envelope_fields": [
+      "schema_version",
+      "semantic_variant",
+      "authored_operation_id",
+      "event_contract_id",
+      "expected_author",
+      "draft",
+      "expected_event_id",
+      "media_references",
+      "artifact_digest"
+    ],
+    "draft_fields": [
+      "created_at",
+      "kind",
+      "tags",
+      "content"
+    ],
+    "media_reference_fields": [
+      "url",
+      "sha256",
+      "size",
+      "media_type"
+    ],
+    "media_reference_identity": "exact_case_preserving_approved_url_with_descriptor_commitment_v1",
+    "primary_media_url_requirement": "blossom_hash_path_extension_required_v1",
+    "post_fallback_url_requirement": "approved_blossom_url_extension_optional_v1",
     "digest_algorithm": "sha256_domain_nul_canonical_json_v1",
-    "digest_domain": "radroots.phase1.publication-artifact.v1\u0000",
+    "digest_domain": "radroots.phase1.publication-artifact.v1",
+    "digest_domain_terminator": "0x00",
+    "digest_preimage": "ascii_domain_then_single_nul_then_canonical_envelope_without_digest_v1",
     "constructors": [
       {
         "semantic_variant": "profile",
+        "serialized_semantic_variant": "profile",
         "event_variant": null,
         "strict_input": "RadrootsAuthoredProfile",
         "constructor": "RadrootsPhase1PublicationArtifact::from_profile",
@@ -65,6 +105,7 @@
       },
       {
         "semantic_variant": "update",
+        "serialized_semantic_variant": "update",
         "event_variant": null,
         "strict_input": "RadrootsAuthoredUpdate",
         "constructor": "RadrootsPhase1PublicationArtifact::from_update",
@@ -75,6 +116,7 @@
       },
       {
         "semantic_variant": "photo_update",
+        "serialized_semantic_variant": "photo_update",
         "event_variant": null,
         "strict_input": "RadrootsAuthoredPhotoUpdate",
         "constructor": "RadrootsPhase1PublicationArtifact::from_photo_update",
@@ -85,6 +127,7 @@
       },
       {
         "semantic_variant": "ask",
+        "serialized_semantic_variant": "ask",
         "event_variant": null,
         "strict_input": "RadrootsAuthoredAsk",
         "constructor": "RadrootsPhase1PublicationArtifact::from_ask",
@@ -95,6 +138,7 @@
       },
       {
         "semantic_variant": "event",
+        "serialized_semantic_variant": "event_date",
         "event_variant": "date",
         "strict_input": "RadrootsAuthoredCalendarDateEvent",
         "constructor": "RadrootsPhase1PublicationArtifact::from_calendar_date_event",
@@ -105,6 +149,7 @@
       },
       {
         "semantic_variant": "event",
+        "serialized_semantic_variant": "event_time",
         "event_variant": "time",
         "strict_input": "RadrootsAuthoredCalendarTimeEvent",
         "constructor": "RadrootsPhase1PublicationArtifact::from_calendar_time_event",
@@ -115,6 +160,7 @@
       },
       {
         "semantic_variant": "food_availability",
+        "serialized_semantic_variant": "food_availability",
         "event_variant": null,
         "strict_input": "RadrootsFoodAvailabilityDetails",
         "constructor": "RadrootsPhase1PublicationArtifact::from_food_availability",
@@ -123,23 +169,6 @@
         "event_contract_id": "radroots.food.availability.v1",
         "kind": 30402
       }
-    ],
-    "persisted_fields": [
-      "schema_version",
-      "semantic_variant",
-      "authored_operation_id",
-      "event_contract_id",
-      "expected_author",
-      "draft.created_at",
-      "draft.kind",
-      "draft.tags",
-      "draft.content",
-      "draft.expected_event_id",
-      "media_references[].url",
-      "media_references[].sha256",
-      "media_references[].size",
-      "media_references[].media_type",
-      "artifact_digest"
     ],
     "denied_inputs": [
       "arbitrary_event_draft",
@@ -218,7 +247,15 @@
       "transport": "none"
     },
     {
-      "id": "publication_artifact.reload",
+      "id": "publication_artifact.to_canonical_json",
+      "strict_input": "RadrootsPhase1PublicationArtifact",
+      "output": "Bytes",
+      "error_class": "none",
+      "signing": "none",
+      "transport": "none"
+    },
+    {
+      "id": "publication_artifact.from_canonical_json",
       "strict_input": "Bytes",
       "output": "RadrootsPhase1PublicationArtifact",
       "error_class": "parse_error",
@@ -245,8 +282,8 @@
     {
       "role": "release_notes",
       "path": "CHANGELOG.md",
-      "byte_length": 29665,
-      "sha256": "9433606926a70efc33e89658d9a1cf807d1fe51c31d1135f5f3d4dd188546e5b",
+      "byte_length": 29887,
+      "sha256": "957fe99c958e3ee9fe1667dc481c715fbf409d9a8cf7bb6ee9f72bee73cfebf2",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -266,15 +303,15 @@
     {
       "role": "operations_authority",
       "path": "contracts/operations.toml",
-      "byte_length": 73838,
-      "sha256": "45faa0dc3f71bc6b75c59e6746b25a2689e33cf09d6c6bbbaf8311defc9ef2d4",
+      "byte_length": 75859,
+      "sha256": "5bd81e76f4adaad23e1ff76576152802e6abd70607f65fcc39a737920da03aeb",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "release_authority",
       "path": "contracts/releases/1.0.0-alpha.1.toml",
-      "byte_length": 20216,
-      "sha256": "c7b5a9878c71720027f97357c11cfdd624acac9ccf7a6d6011c7a12d186708aa",
+      "byte_length": 20333,
+      "sha256": "8f00dacf80ca415c56ace3228f21c2ff9ec64c66bb5a3e585f9042e5dbde590a",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -910,8 +947,8 @@
     {
       "role": "event_codec_documentation",
       "path": "crates/event_codec/README",
-      "byte_length": 20441,
-      "sha256": "b8a88edb2a82aaf06a33b7cdedb48ea9c5d66eee52e961bf5cbc1e709f0969f6",
+      "byte_length": 21360,
+      "sha256": "ed2bda152f594c3c9b751399870e0738c5debb12c63103e94862182c1bccf3a8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -2142,15 +2179,15 @@
     {
       "role": "public_production_source",
       "path": "crates/event_codec/src/wire/publication.rs",
-      "byte_length": 52207,
-      "sha256": "7edf56bf53680f14f0a684cf7ab34a85a4a4d367d858ab0dafdb7285a444d860",
+      "byte_length": 59609,
+      "sha256": "18046b34c831c56ceee0a21a65c48072a7b05de41f0087095ed6f0354335170e",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "publication_vector_executor",
       "path": "crates/event_codec/tests/publication_artifact.rs",
-      "byte_length": 24811,
-      "sha256": "1762d456f0c2958011fd66edf6e0bc8c19c7ebb5ace45a157fca3de1cfb606cd",
+      "byte_length": 34582,
+      "sha256": "7a31169eac4217a38cb3ef25eb9213f2f89e11fb17e76ceaf7449b34225e98af",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -2247,8 +2284,8 @@
     {
       "role": "xtask_manifest_authority",
       "path": "tools/xtask/Cargo.toml",
-      "byte_length": 1097,
-      "sha256": "7e858f4f33913f986c565be2a31c41615ea0585c9e19572363ef5cae36cafdc9",
+      "byte_length": 1173,
+      "sha256": "b915e0289bf7390d3c4194aaed1e748cf5e591426e0443c310775ddc7d7f63a5",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -2268,15 +2305,15 @@
     {
       "role": "publication_contract_governance",
       "path": "tools/xtask/src/contract/phase1_publication_artifact.rs",
-      "byte_length": 62736,
-      "sha256": "a52c8c6de697789176fbd1cc2e4b48795397f38b5bf1a43029520f5399f4d707",
+      "byte_length": 69965,
+      "sha256": "a636682f52e12920a93ef0709cac6ebf76a4ef68cba8e0d22390e8a7a81babe7",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "superseded_raw_rebuild_contract_governance",
       "path": "tools/xtask/src/contract/raw_source_rebuild.rs",
-      "byte_length": 294574,
-      "sha256": "e9b7b50fbe4e1d5890137dd634f7ddcece2fdd9aaf68904d4c4e3510d4ff5d05",
+      "byte_length": 297547,
+      "sha256": "e8cf84ba8f27432d0ba7aefa01fc61f9e37810d48f407fa2b9c7c969e5c76724",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -2290,8 +2327,8 @@
   "result_vector": {
     "canonical_path": "contracts/conformance/vectors/publication/phase1_artifact.v1.json",
     "mirror_path": "crates/event_codec/tests/fixtures/phase1_publication_artifact.v1.json",
-    "byte_length": 11213,
-    "sha256": "dadf61674ae27672c22f924a9ff0636fce2d5eab6c37f8305c1c702e5a899ee8",
+    "byte_length": 23113,
+    "sha256": "ec18c687d5b0710a48624ddb620d89157e6b645dbea8bb91c62e3a111d20c622",
     "hash_algorithm": "sha256_bytes_v1",
     "executor_path": "crates/event_codec/tests/publication_artifact.rs",
     "executor_test": "publication_artifact_conformance_vector_executes_every_case",
@@ -2302,12 +2339,21 @@
       "ask_round_trip_with_fallback",
       "event_date_round_trip",
       "event_time_round_trip",
-      "food_availability_round_trip"
+      "food_availability_round_trip",
+      "canonical_json_serialization",
+      "canonical_json_reload"
     ],
     "invalid_case_ids": [
       "leading_whitespace_is_noncanonical",
+      "artifact_exact_byte_limit_reaches_parser",
+      "artifact_one_byte_over_limit_is_rejected",
       "unknown_field_is_rejected",
       "unknown_draft_field_is_rejected",
+      "nested_expected_event_id_is_rejected",
+      "missing_expected_event_id_is_rejected",
+      "malformed_expected_event_id_is_rejected",
+      "uppercase_expected_event_id_is_rejected",
+      "duplicate_expected_event_id_is_rejected",
       "unknown_media_field_is_rejected",
       "json_field_order_is_noncanonical",
       "unknown_version_is_rejected",
@@ -2326,6 +2372,7 @@
       "media_order_is_rejected",
       "profile_media_commitment_tamper_is_rejected",
       "media_url_tamper_is_rejected",
+      "noncanonical_media_url_casing_is_rejected",
       "media_hash_tamper_is_rejected",
       "media_type_tamper_is_rejected",
       "post_media_commitment_must_match_imeta"
