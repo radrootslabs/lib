@@ -1,0 +1,262 @@
+{
+  "suite": "phase1_publication_artifact",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "profile_round_trip",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "profile" },
+      "expected": {
+        "semantic_variant": "profile",
+        "operation_id": "profile.build_authored_draft",
+        "contract_id": "radroots.profile.metadata.v1",
+        "event_kind": 0,
+        "media_count": 2,
+        "expected_event_id": "a7d081b9c142e3a68245bafe1921b0e0dd88f886406e7165a9729f6c57026289",
+        "artifact_digest": "10db30ccd1ec4986a43f9ac2fefe201f582e8965ac0c36f0fe467b066194fa21",
+        "canonical_json_bytes": 1305,
+        "canonical_json_sha256": "9ddaee58d68cce2a400880c62a2c3f4b3b11765a2136b3c930f474ec28680b43"
+      }
+    },
+    {
+      "id": "update_round_trip",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "update" },
+      "expected": {
+        "semantic_variant": "update",
+        "operation_id": "social.update.build_authored_draft",
+        "contract_id": "radroots.social.update.v1",
+        "event_kind": 1,
+        "media_count": 0,
+        "expected_event_id": "7f2d9dbbd6d2f3db1e83338ea2e669b2458e62ded159de15a3fa98dcf9f164e3",
+        "artifact_digest": "345676a88a68663b16ab22f44117589f7a429aae0fbd6bd5f168e5fc7b2df8ab",
+        "canonical_json_bytes": 525,
+        "canonical_json_sha256": "69d0b7aaec8e2fb3d85a677ef9ac1b6d3eb56d05b9ba7b98737687bfba074110"
+      }
+    },
+    {
+      "id": "photo_update_round_trip",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "photo_update" },
+      "expected": {
+        "semantic_variant": "photo_update",
+        "operation_id": "social.photo_update.build_authored_draft",
+        "contract_id": "radroots.social.photo_update.v1",
+        "event_kind": 1,
+        "media_count": 2,
+        "expected_event_id": "e592229776cd2a0d0e25a701f4629c0a5dc6e08481a235623d50da6ee8e8f438",
+        "artifact_digest": "e9b83a57a78adaf2740ec0fd819c8754d96ae325d5a6f785be99e0267fa29251",
+        "canonical_json_bytes": 1415,
+        "canonical_json_sha256": "ebb29fa48adda8660f35218d879bcf1535d5584bead441ba10f996b54bcdbc76"
+      }
+    },
+    {
+      "id": "ask_round_trip_with_fallback",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "ask" },
+      "expected": {
+        "semantic_variant": "ask",
+        "operation_id": "social.ask.build_authored_draft",
+        "contract_id": "radroots.social.ask.v1",
+        "event_kind": 1,
+        "media_count": 2,
+        "expected_event_id": "bd45fbbb5bfb8a5aa32df81d240e5f3bd56b0f8cde3a20b3f7d455801373fe48",
+        "artifact_digest": "cfb3c4c74ec56edb5d4bbbed6c08f33cf9202a16c12e3fd41e54839ba8fe1762",
+        "canonical_json_bytes": 1411,
+        "canonical_json_sha256": "b7f3eec4930f40642e69c90ab293d2fc8f370c95286794c33d55cda942a1f696"
+      }
+    },
+    {
+      "id": "event_date_round_trip",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "event_date" },
+      "expected": {
+        "semantic_variant": "event_date",
+        "operation_id": "social.calendar_date_event.build_authored_draft",
+        "contract_id": "radroots.calendar.date_event.v1",
+        "event_kind": 31922,
+        "media_count": 1,
+        "expected_event_id": "bea82662b6acf2f1272c8335a24bb0957e35d22c2b29d3e30c094ad7398dc7c7",
+        "artifact_digest": "0a5b30799263dff58fd88e5b581eca13b0eb324dfe2698471459821af847d040",
+        "canonical_json_bytes": 1013,
+        "canonical_json_sha256": "1eba894c4f19b4c4f9dc62e47feb4ce0b1c232b24bc57ca80aa29c007916efd1"
+      }
+    },
+    {
+      "id": "event_time_round_trip",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "event_time" },
+      "expected": {
+        "semantic_variant": "event_time",
+        "operation_id": "social.calendar_time_event.build_authored_draft",
+        "contract_id": "radroots.calendar.time_event.v1",
+        "event_kind": 31923,
+        "media_count": 1,
+        "expected_event_id": "2088ed11cd8c1495a82e6f5198ed2ee98e0cbc599f22d7f3380892155dc55894",
+        "artifact_digest": "a0cdbfdbc6a7067ee65ce6564c5660435074bf85c42baaa52694a03833dcada9",
+        "canonical_json_bytes": 1013,
+        "canonical_json_sha256": "512561b622c5c86e8d5e28045778f0eb9abf8f9eab89cb7ada000d42c6ffd61a"
+      }
+    },
+    {
+      "id": "food_availability_round_trip",
+      "kind": "publication_artifact.round_trip.valid",
+      "input": { "fixture": "food_availability" },
+      "expected": {
+        "semantic_variant": "food_availability",
+        "operation_id": "food_availability.build_authored_draft",
+        "contract_id": "radroots.food.availability.v1",
+        "event_kind": 30402,
+        "media_count": 1,
+        "expected_event_id": "76b60f1b178c0dbdc14a87de36151ea6b04a866ce50e34a0ccae2f406f514e81",
+        "artifact_digest": "ff04d736df4b1dd01b17197ef0e9c88678133057130623377954332a9ce3e6b3",
+        "canonical_json_bytes": 1132,
+        "canonical_json_sha256": "b7d55bf0c75acdae53f670cd6a263c036fe619c73601eac5a03c6ef58d91695f"
+      }
+    },
+    {
+      "id": "leading_whitespace_is_noncanonical",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "leading_whitespace" },
+      "expected": { "error": "publication_artifact_non_canonical_json" }
+    },
+    {
+      "id": "unknown_field_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "unknown_field" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
+      "id": "unknown_draft_field_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "unknown_draft_field" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
+      "id": "unknown_media_field_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "unknown_media_field" },
+      "expected": { "error": "publication_artifact_invalid_json" }
+    },
+    {
+      "id": "json_field_order_is_noncanonical",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "json_field_order" },
+      "expected": { "error": "publication_artifact_non_canonical_json" }
+    },
+    {
+      "id": "unknown_version_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "schema_version" },
+      "expected": { "error": "publication_artifact_version_unsupported" }
+    },
+    {
+      "id": "cross_variant_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "all_cross_variants" },
+      "expected": { "error": "publication_authored_operation_mismatch" }
+    },
+    {
+      "id": "operation_mismatch_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "operation_id" },
+      "expected": { "error": "publication_authored_operation_mismatch" }
+    },
+    {
+      "id": "contract_mismatch_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "contract_id" },
+      "expected": { "error": "publication_event_contract_mismatch" }
+    },
+    {
+      "id": "kind_mismatch_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "kind" },
+      "expected": { "error": "publication_kind_mismatch" }
+    },
+    {
+      "id": "author_mismatch_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "author" },
+      "expected": { "error": "publication_expected_author_invalid" }
+    },
+    {
+      "id": "created_at_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "created_at" },
+      "expected": { "error": "publication_expected_event_id_mismatch" }
+    },
+    {
+      "id": "draft_tags_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "draft_tags" },
+      "expected": { "error": "publication_expected_event_id_mismatch" }
+    },
+    {
+      "id": "draft_content_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "draft_content" },
+      "expected": { "error": "publication_expected_event_id_mismatch" }
+    },
+    {
+      "id": "noncanonical_nip05_is_rejected_after_id_rebuild",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "noncanonical_nip05" },
+      "expected": { "error": "publication_profile_invalid" }
+    },
+    {
+      "id": "empty_ask_content_is_rejected_after_id_rebuild",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "ask", "mutation": "empty_ask_content" },
+      "expected": { "error": "publication_post_profile_invalid" }
+    },
+    {
+      "id": "expected_event_id_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "expected_event_id" },
+      "expected": { "error": "publication_expected_event_id_mismatch" }
+    },
+    {
+      "id": "digest_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "digest" },
+      "expected": { "error": "publication_artifact_digest_mismatch" }
+    },
+    {
+      "id": "media_order_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "media_order" },
+      "expected": { "error": "publication_media_inventory_non_canonical" }
+    },
+    {
+      "id": "profile_media_commitment_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "media_size" },
+      "expected": { "error": "publication_artifact_digest_mismatch" }
+    },
+    {
+      "id": "media_url_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "media_url" },
+      "expected": { "error": "publication_media_inventory_mismatch" }
+    },
+    {
+      "id": "media_hash_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "media_hash" },
+      "expected": { "error": "publication_media_reference_invalid" }
+    },
+    {
+      "id": "media_type_tamper_is_rejected",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "profile", "mutation": "media_type" },
+      "expected": { "error": "publication_artifact_digest_mismatch" }
+    },
+    {
+      "id": "post_media_commitment_must_match_imeta",
+      "kind": "publication_artifact.reload.invalid",
+      "input": { "fixture": "photo_update", "mutation": "media_size" },
+      "expected": { "error": "publication_media_inventory_mismatch" }
+    }
+  ]
+}

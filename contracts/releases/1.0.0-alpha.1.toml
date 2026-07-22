@@ -277,6 +277,17 @@ semver_impacts = [
 summary = "Add one signature-verified event admission operation that preserves typed product admissions, applies complete registry validation to generic contracts, and distinguishes unsupported matching, invalid shapes, Post-to-Reply routing, and kind-30402 profile exclusions."
 
 [[changes]]
+id = "phase1-publication-artifact"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_conformance_vector",
+]
+summary = "Add an authored-only, canonical, tamper-evident persistence artifact for the closed Phase 1 Profile, root Post, typed Event, and FoodAvailability publication set."
+
+[[changes]]
 id = "event-store-validity-visibility-split"
 classification = "breaking"
 semver_impacts = [

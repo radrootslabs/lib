@@ -15,6 +15,7 @@ domains = [
   "trade_validation",
   "social",
   "knowledge",
+  "publication",
 ]
 
 [shared_types]
@@ -98,6 +99,13 @@ public = [
   "RadrootsProfileAdmissionError",
   "RadrootsNip05IdentityVerification",
   "RadrootsUnverifiedProfileMediaReference",
+  "RadrootsPhase1PublicationEventVariant",
+  "RadrootsPhase1PublicationSemanticVariant",
+  "RadrootsPhase1PublicationDraft",
+  "RadrootsPhase1PublicationMediaReference",
+  "RadrootsPhase1PublicationArtifactDigest",
+  "RadrootsPhase1PublicationArtifact",
+  "RadrootsPhase1PublicationArtifactError",
   "RadrootsFarm",
   "RadrootsOperationalListing",
   "RadrootsPost",
@@ -653,6 +661,206 @@ case_kinds = [
   "food_availability.validate_revision.valid",
   "food_availability.validate_revision.invalid",
 ]
+
+[operations.phase1_publication_artifact_build_profile]
+domain = "publication"
+id = "publication_artifact.build_profile"
+stability = "beta"
+inputs = [
+  "RadrootsAuthoredProfile",
+  "u64",
+  "String",
+]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_profile.implementation]
+rust_modules = [
+  "crates/event/src/profile.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_profile.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_build_update]
+domain = "publication"
+id = "publication_artifact.build_update"
+stability = "beta"
+inputs = ["RadrootsAuthoredUpdate", "u64", "String"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_update.implementation]
+rust_modules = [
+  "crates/event/src/post.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_update.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_build_photo_update]
+domain = "publication"
+id = "publication_artifact.build_photo_update"
+stability = "beta"
+inputs = ["RadrootsAuthoredPhotoUpdate", "u64", "String"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_photo_update.implementation]
+rust_modules = [
+  "crates/event/src/post.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_photo_update.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_build_ask]
+domain = "publication"
+id = "publication_artifact.build_ask"
+stability = "beta"
+inputs = ["RadrootsAuthoredAsk", "u64", "String"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_ask.implementation]
+rust_modules = [
+  "crates/event/src/post.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_ask.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_build_calendar_date_event]
+domain = "publication"
+id = "publication_artifact.build_calendar_date_event"
+stability = "beta"
+inputs = ["RadrootsAuthoredCalendarDateEvent", "u64", "String"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_calendar_date_event.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_calendar_date_event.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_build_calendar_time_event]
+domain = "publication"
+id = "publication_artifact.build_calendar_time_event"
+stability = "beta"
+inputs = ["RadrootsAuthoredCalendarTimeEvent", "u64", "String"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_calendar_time_event.implementation]
+rust_modules = [
+  "crates/event/src/calendar.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_calendar_time_event.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_build_food_availability]
+domain = "publication"
+id = "publication_artifact.build_food_availability"
+stability = "beta"
+inputs = ["RadrootsFoodAvailabilityDetails", "u64", "String"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_build_food_availability.implementation]
+rust_modules = [
+  "crates/event/src/food_availability.rs",
+  "crates/event_codec/src/wire/publication.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationSemanticVariant",
+]
+
+[operations.phase1_publication_artifact_build_food_availability.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+
+[operations.phase1_publication_artifact_reload]
+domain = "publication"
+id = "publication_artifact.reload"
+stability = "beta"
+inputs = ["Bytes"]
+outputs = ["RadrootsPhase1PublicationArtifact"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_artifact_reload.implementation]
+rust_modules = ["crates/event_codec/src/wire/publication.rs"]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifactError",
+]
+
+[operations.phase1_publication_artifact_reload.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
 
 [operations.profile_build_authored_draft]
 domain = "profile"

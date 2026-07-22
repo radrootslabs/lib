@@ -1,5 +1,12 @@
 # radroots_event_codec
 
+The optional `serde_json` feature includes the sealed Phase 1 publication
+artifact. It accepts only the strict authored Profile, Update, PhotoUpdate,
+Ask, date/time Event, and FoodAvailability models and emits bounded canonical
+JSON suitable for persistence. Reloading validates the exact profile, NIP-01
+identifier, media inventory, and domain-separated digest, but does not restore
+byte-verification, upload, signing, or authenticity capabilities.
+
 This is the README for `radroots_event_codec`, which provides canonical event
 codecs and tag builders for the `radroots` core libraries.
 

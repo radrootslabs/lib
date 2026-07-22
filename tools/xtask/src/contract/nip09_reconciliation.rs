@@ -17323,6 +17323,37 @@ mod tests {
         let predecessor =
             toml::to_string_pretty(&manifest).expect("serialize predecessor Cargo manifest");
         fs::write(manifest_path, predecessor).expect("restore predecessor compiler manifest");
+
+        let codec_manifest_path = workspace_root.join(EVENT_CODEC_CARGO_MANIFEST_RELATIVE);
+        let codec_source =
+            fs::read_to_string(&codec_manifest_path).expect("event-codec Cargo manifest");
+        let mut codec_manifest: toml::Value =
+            toml::from_str(&codec_source).expect("parse event-codec Cargo manifest");
+        let serde_json_features = codec_manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|features| features.get_mut("serde_json"))
+            .and_then(toml::Value::as_array_mut)
+            .expect("event-codec serde_json feature");
+        assert_eq!(
+            serde_json_features
+                .iter()
+                .map(toml::Value::as_str)
+                .collect::<Vec<_>>(),
+            [
+                Some("serde"),
+                Some("dep:hex"),
+                Some("dep:serde_json"),
+                Some("dep:sha2"),
+            ],
+            "publication successor feature edges must retain their exact semantic shape"
+        );
+        serde_json_features
+            .retain(|feature| !matches!(feature.as_str(), Some("dep:hex" | "dep:sha2")));
+        let codec_predecessor = toml::to_string_pretty(&codec_manifest)
+            .expect("serialize predecessor event-codec Cargo manifest");
+        fs::write(codec_manifest_path, codec_predecessor)
+            .expect("restore predecessor event-codec compiler manifest");
     }
 
     fn strip_outer_try(statement: &mut syn::Stmt) {

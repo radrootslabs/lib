@@ -1,0 +1,421 @@
+{
+  "$defs": {
+    "constructor": {
+      "additionalProperties": false,
+      "properties": {
+        "authored_operation_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "constructor": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_contract_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_variant": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "publication_operation_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "semantic_variant": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "strict_input": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "semantic_variant",
+        "event_variant",
+        "strict_input",
+        "constructor",
+        "publication_operation_id",
+        "authored_operation_id",
+        "event_contract_id",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "operation": {
+      "additionalProperties": false,
+      "properties": {
+        "error_class": {
+          "enum": [
+            "validation_error",
+            "parse_error"
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "output": {
+          "const": "RadrootsPhase1PublicationArtifact"
+        },
+        "signing": {
+          "const": "none"
+        },
+        "strict_input": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "transport": {
+          "const": "none"
+        }
+      },
+      "required": [
+        "id",
+        "strict_input",
+        "output",
+        "error_class",
+        "signing",
+        "transport"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://radroots.org/contracts/event-codec/phase1-publication-artifact-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_max_bytes": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "canonical_encoding": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "constructors": {
+          "items": {
+            "$ref": "#/$defs/constructor"
+          },
+          "maxItems": 7,
+          "minItems": 7,
+          "type": "array"
+        },
+        "denied_inputs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "digest_algorithm": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "digest_domain": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_subvariants": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "media_reference_max_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "persisted_fields": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reload_capability": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "semantic_variants": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 6,
+          "minItems": 6,
+          "type": "array"
+        },
+        "threat_boundary": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "semantic_variants",
+        "event_subvariants",
+        "canonical_encoding",
+        "artifact_max_bytes",
+        "media_reference_max_count",
+        "digest_algorithm",
+        "digest_domain",
+        "constructors",
+        "persisted_fields",
+        "denied_inputs",
+        "reload_capability",
+        "threat_boundary"
+      ],
+      "type": "object"
+    },
+    "authority_id": {
+      "const": "phase1_publication_artifact_v1"
+    },
+    "contract_id": {
+      "const": "radroots_event_codec.phase1_publication_artifact_v1"
+    },
+    "event_contract_registry": {
+      "additionalProperties": false,
+      "properties": {
+        "evolution": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "inventory": {
+          "$ref": "#/$defs/file"
+        },
+        "sidecar": {
+          "$ref": "#/$defs/file"
+        },
+        "version": {
+          "const": 7
+        }
+      },
+      "required": [
+        "version",
+        "inventory",
+        "sidecar",
+        "evolution"
+      ],
+      "type": "object"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/operation"
+      },
+      "maxItems": 8,
+      "minItems": 8,
+      "type": "array"
+    },
+    "predecessor": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "const": "radroots_event_store.raw_source_rebuild_v1"
+        },
+        "manifest": {
+          "$ref": "#/$defs/file"
+        }
+      },
+      "required": [
+        "contract_id",
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "predecessor_source_supersessions": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 6,
+      "minItems": 6,
+      "type": "array"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "change_id": {
+          "const": "phase1-publication-artifact"
+        },
+        "changelog_marker": {
+          "const": "<!-- release-change: phase1-publication-artifact -->"
+        },
+        "changelog_path": {
+          "const": "CHANGELOG.md"
+        },
+        "record_path": {
+          "const": "contracts/releases/1.0.0-alpha.1.toml"
+        }
+      },
+      "required": [
+        "record_path",
+        "change_id",
+        "changelog_path",
+        "changelog_marker"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "canonical_path": {
+          "const": "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
+        },
+        "executor_path": {
+          "const": "crates/event_codec/tests/publication_artifact.rs"
+        },
+        "executor_test": {
+          "const": "publication_artifact_conformance_vector_executes_every_case"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "invalid_case_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 24,
+          "type": "array"
+        },
+        "mirror_path": {
+          "const": "crates/event_codec/tests/fixtures/phase1_publication_artifact.v1.json"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "valid_case_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 7,
+          "type": "array"
+        }
+      },
+      "required": [
+        "canonical_path",
+        "mirror_path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm",
+        "executor_path",
+        "executor_test",
+        "valid_case_ids",
+        "invalid_case_ids"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "predecessor",
+    "event_contract_registry",
+    "artifact",
+    "operations",
+    "predecessor_source_supersessions",
+    "source_files",
+    "result_vector",
+    "release"
+  ],
+  "title": "Radroots Phase 1 Publication Artifact Contract",
+  "type": "object"
+}
