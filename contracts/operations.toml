@@ -667,11 +667,7 @@ case_kinds = [
 domain = "publication"
 id = "publication_artifact.build_profile"
 stability = "beta"
-inputs = [
-  "RadrootsAuthoredProfile",
-  "u64",
-  "String",
-]
+inputs = ["RadrootsAuthoredProfile", "u64", "String"]
 outputs = ["RadrootsPhase1PublicationArtifact"]
 error_class = "validation_error"
 deterministic = true
