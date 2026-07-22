@@ -11,6 +11,8 @@
 //! signer, or control the host/database. NIP-01 id and signature verification
 //! remain the cryptographic authenticity boundary.
 
+pub mod allowlist;
+
 #[cfg(not(feature = "std"))]
 use alloc::{
     format,
