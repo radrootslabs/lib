@@ -898,8 +898,8 @@
     {
       "role": "xtask_manifest_authority",
       "path": "tools/xtask/Cargo.toml",
-      "byte_length": 1097,
-      "sha256": "7e858f4f33913f986c565be2a31c41615ea0585c9e19572363ef5cae36cafdc9",
+      "byte_length": 1173,
+      "sha256": "b915e0289bf7390d3c4194aaed1e748cf5e591426e0443c310775ddc7d7f63a5",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -1192,8 +1192,8 @@
     {
       "role": "raw_source_rebuild_governance",
       "path": "tools/xtask/src/contract/raw_source_rebuild.rs",
-      "byte_length": 294540,
-      "sha256": "543c21131346381a833f9e063fd535efd0d0e192419aefa1f60e9b0f68475866",
+      "byte_length": 297513,
+      "sha256": "db938d9f59308f32751dcd561ecce52f7269075f70304bbce372d67ae798946c",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
