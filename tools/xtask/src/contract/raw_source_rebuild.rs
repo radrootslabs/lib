@@ -99,8 +99,14 @@ const CONTRACT_LANE_SOURCE_RELATIVE: &str = "build/nix/common.nix";
 const TOOLCHAIN_ROUTING_SOURCE_RELATIVE: &str = "build/nix/toolchains.nix";
 const RUST_TOOLCHAIN_RELATIVE: &str = "rust-toolchain.toml";
 const XTASK_MANIFEST_RELATIVE: &str = "tools/xtask/Cargo.toml";
-const XTASK_REQUIRED_DISABLED_AUTO_TARGET_FLAGS: &[&str] =
-    &["autolib", "autotests", "autoexamples", "autobenches"];
+const XTASK_REQUIRED_DISABLED_AUTO_TARGET_FLAGS: &[&str] = &[
+    "build",
+    "autolib",
+    "autobins",
+    "autotests",
+    "autoexamples",
+    "autobenches",
+];
 const XTASK_FORBIDDEN_AUTO_TARGET_PATHS: &[&str] = &[
     "tools/xtask/build.rs",
     "tools/xtask/src/lib.rs",
@@ -605,7 +611,7 @@ const DELEGATED_COMPILER_SOURCE_PINS: &[(&str, &str)] = &[
     ),
     (
         XTASK_MANIFEST_RELATIVE,
-        "7e858f4f33913f986c565be2a31c41615ea0585c9e19572363ef5cae36cafdc9",
+        "b915e0289bf7390d3c4194aaed1e748cf5e591426e0443c310775ddc7d7f63a5",
     ),
 ];
 
@@ -1703,16 +1709,27 @@ fn validate_xtask_manifest_authority(workspace_root: &Path) -> Result<(), String
             ));
         }
     }
+    let explicit_bins = manifest
+        .get("bin")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| {
+            format!("{XTASK_MANIFEST_RELATIVE} must declare exactly one explicit [[bin]] target")
+        })?;
+    let exact_main_bin = explicit_bins.len() == 1
+        && explicit_bins[0].as_table().is_some_and(|target| {
+            target.len() == 2
+                && target.get("name").and_then(toml::Value::as_str) == Some("xtask")
+                && target.get("path").and_then(toml::Value::as_str) == Some("src/main.rs")
+        });
     if package.get("name").and_then(toml::Value::as_str) != Some("xtask")
         || package.get("publish").and_then(toml::Value::as_bool) != Some(false)
-        || package.contains_key("build")
-        || package.contains_key("autobins")
-        || ["lib", "bin", "example", "test", "bench"]
+        || !exact_main_bin
+        || ["lib", "example", "test", "bench"]
             .iter()
             .any(|target| manifest.get(*target).is_some())
     {
         return Err(format!(
-            "{XTASK_MANIFEST_RELATIVE} must remain the unpublished single default-binary xtask package with no build script, autobins override, or explicit additional Cargo targets"
+            "{XTASK_MANIFEST_RELATIVE} must remain the unpublished xtask package with build and automatic target discovery disabled, exactly one explicit `xtask` binary at `src/main.rs`, and no additional Cargo targets"
         ));
     }
     for relative in XTASK_FORBIDDEN_AUTO_TARGET_PATHS {
@@ -6549,6 +6566,64 @@ mod tests {
                     "{flag} {label} error must identify the exact flag: {error}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn xtask_explicit_main_binary_rejects_omission_retargeting_and_additions() {
+        let root = workspace_root();
+        let manifest =
+            regular_utf8_source(&root, XTASK_MANIFEST_RELATIVE).expect("current xtask manifest");
+        let exact_target = "[[bin]]\nname = \"xtask\"\npath = \"src/main.rs\"\n";
+        assert!(
+            manifest.contains(exact_target),
+            "explicit xtask binary fixture must match the governed target"
+        );
+
+        for (mutation, label) in [
+            (manifest.replacen(exact_target, "", 1), "omission"),
+            (
+                manifest.replacen(
+                    exact_target,
+                    "[[bin]]\nname = \"injected\"\npath = \"src/main.rs\"\n",
+                    1,
+                ),
+                "name retarget",
+            ),
+            (
+                manifest.replacen(
+                    "path = \"src/main.rs\"\n",
+                    "path = \"src/injected.rs\"\n",
+                    1,
+                ),
+                "path retarget",
+            ),
+            (
+                format!("{manifest}\n[[bin]]\nname = \"injected\"\npath = \"src/injected.rs\"\n"),
+                "additional target",
+            ),
+            (
+                manifest.replacen(
+                    "path = \"src/main.rs\"\n",
+                    "path = \"src/main.rs\"\ntest = false\n",
+                    1,
+                ),
+                "additional target field",
+            ),
+        ] {
+            assert_ne!(mutation, manifest, "{label} fixture must mutate");
+            let workspace = tempfile::tempdir().expect("xtask binary fixture workspace");
+            let path = workspace.path().join(XTASK_MANIFEST_RELATIVE);
+            fs::create_dir_all(path.parent().expect("xtask manifest fixture parent"))
+                .expect("create xtask manifest fixture parent");
+            fs::write(&path, mutation).expect("write xtask binary mutation");
+            let error = validate_xtask_manifest_authority(workspace.path())
+                .expect_err("xtask binary target mutation must fail closed");
+            assert!(
+                error.contains("exactly one explicit")
+                    || error.contains("exactly one explicit `xtask` binary"),
+                "{label} error must identify the exact binary authority: {error}"
+            );
         }
     }
 
