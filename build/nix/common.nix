@@ -112,6 +112,7 @@ let
     "radroots_nostr"
     "radroots_nostr_connect"
     "radroots_nostr_signer"
+    "radroots_outbox"
   ];
   coreContractCargoArgs =
     lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates)

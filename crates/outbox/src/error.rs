@@ -4,6 +4,7 @@ use radroots_transport::RadrootsTransportError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum RadrootsOutboxError {
     #[error("SQLx error: {0}")]
     Sqlx(#[from] sqlx::Error),
@@ -45,6 +46,129 @@ pub enum RadrootsOutboxError {
 
     #[error("SQLite outbox file connection did not enter WAL journal mode; reported `{actual}`")]
     SqliteFileJournalModeNotWal { actual: String },
+
+    #[error("SQLite outbox connection has no main database")]
+    SqliteMainDatabaseUnavailable,
+
+    #[error("SQLite outbox main database must use UTF-8 encoding; reported `{actual}`")]
+    SqliteMainDatabaseEncodingNotUtf8 { actual: String },
+
+    #[error("SQLite outbox connection must enforce foreign keys; reported {actual}")]
+    SqliteForeignKeysNotEnabled { actual: i64 },
+
+    #[error(
+        "temporary schema object `{name}` ({object_type}, table `{table_name}`) collides with outbox authority"
+    )]
+    TemporarySchemaCollision {
+        object_type: String,
+        name: String,
+        table_name: String,
+    },
+
+    #[error("outbox migration registry defect: {reason}")]
+    MigrationRegistryDefect { reason: String },
+
+    #[error(
+        "embedded outbox migration {version} {direction} length mismatch: expected {expected}, found {actual}"
+    )]
+    EmbeddedMigrationLengthMismatch {
+        version: u32,
+        direction: &'static str,
+        expected: usize,
+        actual: usize,
+    },
+
+    #[error(
+        "embedded outbox migration {version} {direction} checksum mismatch: expected {expected}, found {actual}"
+    )]
+    EmbeddedMigrationChecksumMismatch {
+        version: u32,
+        direction: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[error("outbox migration {version} {direction} catalog delta mismatch: {reason}")]
+    MigrationCatalogDeltaMismatch {
+        version: u32,
+        direction: &'static str,
+        reason: String,
+    },
+
+    #[error("outbox governed catalog exceeds the supported {max} rows")]
+    GovernedCatalogCapacityExceeded { max: usize },
+
+    #[error("unmanaged outbox schema has fingerprint {actual_schema_sha256}")]
+    UnmanagedSchema { actual_schema_sha256: String },
+
+    #[error("outbox migration ledger catalog is invalid: {reason}")]
+    MigrationLedgerDrift { reason: String },
+
+    #[error("outbox migration history gap: expected version {expected}, found {actual:?}")]
+    MigrationHistoryGap { expected: u32, actual: Option<u32> },
+
+    #[error("outbox migration history references unknown version {version}")]
+    UnknownMigration { version: u32 },
+
+    #[error("outbox schema version {database} is newer than supported version {current}")]
+    SchemaTooNew { current: u32, database: i64 },
+
+    #[error("outbox migration {version} name drift: expected `{expected}`, found `{actual}`")]
+    MigrationHistoryNameDrift {
+        version: u32,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[error(
+        "outbox migration {version} {field} checksum drift: expected {expected}, found {actual}"
+    )]
+    MigrationHistoryChecksumDrift {
+        version: u32,
+        field: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[error(
+        "outbox schema fingerprint mismatch at version {version}: expected {expected}, found {actual}"
+    )]
+    SchemaFingerprintMismatch {
+        version: u32,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[error("outbox rollback target {target} is below the supported version floor {floor}")]
+    RollbackBelowVersionFloor { floor: u32, target: u32 },
+
+    #[error("outbox rollback target {target} is ahead of managed version {current}")]
+    RollbackAhead { current: u32, target: u32 },
+
+    #[error("outbox rollback requires a managed schema")]
+    RollbackUnmanaged,
+
+    #[error(
+        "outbox schema operation failed: {primary}; transaction rollback also failed: {rollback}"
+    )]
+    MigrationTransactionRollbackFailed {
+        #[source]
+        primary: Box<RadrootsOutboxError>,
+        rollback: sqlx::Error,
+    },
+
+    #[error("outbox SQLite integrity check failed: {detail}")]
+    IntegrityCheckFailed { detail: String },
+
+    #[error(
+        "outbox foreign-key violation in `{table}` row {rowid:?} against `{parent}` constraint {foreign_key_id}"
+    )]
+    ForeignKeyViolation {
+        table: String,
+        rowid: Option<i64>,
+        parent: String,
+        foreign_key_id: i64,
+    },
 
     #[error(
         "trade mutation outbox metadata does not match the canonical mutation content: {field}"

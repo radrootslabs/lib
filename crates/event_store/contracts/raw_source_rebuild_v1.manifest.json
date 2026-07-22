@@ -877,8 +877,8 @@
     {
       "role": "nix_contract_test_lane_authority",
       "path": "build/nix/common.nix",
-      "byte_length": 11127,
-      "sha256": "b3340e1b4973e6a1e02899d164ca74842757f22b6b1a03f90461532fcd844df5",
+      "byte_length": 11149,
+      "sha256": "738003cb1703baaf73a97c010c84731a42230782661c79c6a152fbb9e6fa9f6e",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -1193,35 +1193,35 @@
       "role": "raw_source_rebuild_governance",
       "path": "tools/xtask/src/contract/raw_source_rebuild.rs",
       "byte_length": 294540,
-      "sha256": "543c21131346381a833f9e063fd535efd0d0e192419aefa1f60e9b0f68475866",
+      "sha256": "3f0df95aa892eda6139f1251b3522e26bfc4a617af18386fc76c98c696a6d3f7",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 479703,
-      "sha256": "72fbd457b0cfdff1e30f07bf2452a0c71c23cef93bdaefffc114defa616d6342",
+      "byte_length": 480209,
+      "sha256": "b3a7c9486c2c2cc904d3877be7e7e6a48ef1e00445f07b9884b6778dbc55e416",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "xtask_dispatch_and_release_preflight",
       "path": "tools/xtask/src/main.rs",
-      "byte_length": 15018,
-      "sha256": "9aab8db1186b776ba8dcac90cc46c29d96928b610850b084be0e3a25d3e4cb0f",
+      "byte_length": 16291,
+      "sha256": "326c64082e406e278b097ae88131534b7aad283e3135aa6f1302f967d021ed3f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "release_breaking_change_authority",
       "path": "contracts/releases/1.0.0-alpha.1.toml",
-      "byte_length": 19840,
-      "sha256": "946d90dacc9db522825898dbb5d9d424b020a22fe53b80ec15eb67c5f1d8cd2d",
+      "byte_length": 20581,
+      "sha256": "c7765df4fc7e217fbf6b30d5b0dd2902dbe276f14b2cb2dd34c9fb89c04749c8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "release_note_authority",
       "path": "CHANGELOG.md",
-      "byte_length": 28939,
-      "sha256": "61b9d2a9050e4123bc5324aebf6e54393b9b1efdc2145a4a2cf6c009a4345b23",
+      "byte_length": 29929,
+      "sha256": "e6b645684a8ee0f48e4212ec99eb38142b2aeff02d35edbcbf79efb9030ec855",
       "hash_algorithm": "sha256_bytes_v1"
     }
   ],

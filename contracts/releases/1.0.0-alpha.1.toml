@@ -310,6 +310,21 @@ semver_impacts = ["add_enum_variant", "change_exported_algorithm_behavior"]
 summary = "Reject every NIP-16 ephemeral event from all generic durable-outbox entry points, keep transient events inside their owning live transport exchanges, and validate and configure every externally supplied SQLite pool connection before migration or writes."
 
 [[changes]]
+id = "outbox-versioned-migration-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "remove_exported_constant",
+  "remove_exported_function",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace raw outbox migration SQL and unrestricted destruction with a contiguous checksummed registry, exact unledgered-baseline adoption, a tamper-evident ledger and catalog fingerprint, bounded fail-closed open validation, serialized migration, explicit target rollback with a version floor, test-only destruction, and an executable conformance contract while freezing the 0001 migration bytes."
+
+[[changes]]
 id = "shared-read-only-owner-boundaries"
 classification = "feature"
 semver_impacts = ["add_exported_function"]

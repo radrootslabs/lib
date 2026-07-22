@@ -1,0 +1,298 @@
+{
+  "authority_id": "versioned_outbox_migration_authority_v1",
+  "contract_id": "radroots_outbox.migration_authority.v1",
+  "manifest_schema": {
+    "byte_length": 8336,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/outbox/contracts/migration_authority_v1.manifest.schema.json",
+    "sha256": "2af281adfdc9b6d5dc16486db5a56e6e737dbfd9645adb486b28051e79c02f59"
+  },
+  "migrations": [
+    {
+      "catalog": {
+        "indexes": [
+          "outbox_delivery_attempt_target_idx",
+          "outbox_delivery_plan_event_idx",
+          "outbox_delivery_target_ready_idx",
+          "outbox_event_event_id_idx",
+          "outbox_event_ready_idx",
+          "outbox_operation_idempotency_idx",
+          "outbox_operation_status_idx",
+          "outbox_operation_trade_mutation_idx"
+        ],
+        "objects": [
+          "outbox_delivery_attempt",
+          "outbox_delivery_attempt_target_idx",
+          "outbox_delivery_plan",
+          "outbox_delivery_plan_event_idx",
+          "outbox_delivery_target",
+          "outbox_delivery_target_ready_idx",
+          "outbox_event",
+          "outbox_event_event_id_idx",
+          "outbox_event_ready_idx",
+          "outbox_operation_idempotency_idx",
+          "outbox_operation_status_idx",
+          "outbox_operation_trade_mutation_idx",
+          "outbox_operations"
+        ],
+        "tables": [
+          "outbox_delivery_attempt",
+          "outbox_delivery_plan",
+          "outbox_delivery_target",
+          "outbox_event",
+          "outbox_operations"
+        ]
+      },
+      "down": {
+        "byte_length": 159,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/migrations/0001_outbox.down.sql",
+        "sha256": "5d56f978f9172dc5ecbc5043a6c286c75926974d8a2a9e44fffa7c134829af61"
+      },
+      "name": "outbox",
+      "schema_sha256": "e7eeba00de78ec6d990c620e7c056018166e8a00bb703e472ef6f67a00870293",
+      "up": {
+        "byte_length": 5470,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/migrations/0001_outbox.up.sql",
+        "sha256": "a7ee775d32c2b9f845961425362e1b1e558ce0d025f7d22dd58f118ba4dab4fa"
+      },
+      "version": 1
+    }
+  ],
+  "public_api": {
+    "added_symbols": [
+      "RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT",
+      "RADROOTS_OUTBOX_SCHEMA_VERSION_MIN",
+      "RadrootsOutboxSchemaStatus",
+      "inspect_outbox_schema_status"
+    ],
+    "error_enum_non_exhaustive": true,
+    "error_variants": [
+      "EmbeddedMigrationChecksumMismatch",
+      "EmbeddedMigrationLengthMismatch",
+      "ForeignKeyViolation",
+      "GovernedCatalogCapacityExceeded",
+      "IntegrityCheckFailed",
+      "MigrationCatalogDeltaMismatch",
+      "MigrationHistoryChecksumDrift",
+      "MigrationHistoryGap",
+      "MigrationHistoryNameDrift",
+      "MigrationLedgerDrift",
+      "MigrationRegistryDefect",
+      "MigrationTransactionRollbackFailed",
+      "RollbackAhead",
+      "RollbackBelowVersionFloor",
+      "RollbackUnmanaged",
+      "SchemaFingerprintMismatch",
+      "SchemaTooNew",
+      "SqliteForeignKeysNotEnabled",
+      "SqliteMainDatabaseEncodingNotUtf8",
+      "SqliteMainDatabaseUnavailable",
+      "TemporarySchemaCollision",
+      "UnknownMigration",
+      "UnmanagedSchema"
+    ],
+    "methods": [
+      "RadrootsOutbox::migrate_to_current_schema",
+      "RadrootsOutbox::rollback_to_schema_version_and_close",
+      "RadrootsOutbox::schema_status"
+    ],
+    "removed_methods": [
+      "RadrootsOutbox::migrate_down"
+    ],
+    "removed_symbols": [
+      "OUTBOX_MIGRATION_DOWN",
+      "OUTBOX_MIGRATION_UP"
+    ]
+  },
+  "release": {
+    "change_id": "outbox-versioned-migration-authority",
+    "changelog": "CHANGELOG.md",
+    "release_record": "contracts/releases/1.0.0-alpha.1.toml"
+  },
+  "result_vector": {
+    "canonical": {
+      "byte_length": 3483,
+      "hash_algorithm": "sha256_bytes_v1",
+      "path": "contracts/conformance/vectors/outbox/migration_authority.v1.json",
+      "sha256": "90b82ac034784871627f1b662682203ee3d621b652b866a8b4cee3ba9937444e"
+    },
+    "executor": {
+      "byte_length": 9491,
+      "hash_algorithm": "sha256_bytes_v1",
+      "path": "crates/outbox/tests/migration_authority_v1_result_vector.rs",
+      "sha256": "d86570baf8dfb9779eb238e851d4272e7404463de86bd7303cee799ca7eed1f3"
+    },
+    "executor_id": "radroots_outbox.migration_authority_v1.result_vector_executor.v1",
+    "executor_test": "migration_authority_v1_result_vector",
+    "mirror_path": "crates/outbox/tests/fixtures/migration_authority.v1.json"
+  },
+  "runtime": {
+    "adoption_policy": "exact_unledgered_0001_catalog_only_v1",
+    "catalog_fingerprint_algorithm": "sha256_type_nul_name_nul_table_name_nul_sql_nul_sorted_v1",
+    "catalog_rejection_probe_limit": 15,
+    "catalog_row_limit": 14,
+    "current_version": 1,
+    "history_rejection_probe_limit": 2,
+    "history_row_limit": 1,
+    "ledger_ddl_sha256": "a23a4f0325ec5338dd9240573bac42a164c2376bcdce3fb306b554da574f5973",
+    "ledger_name": "radroots_outbox_schema_migrations",
+    "migration_transaction": "begin_immediate_v1",
+    "minimum_version": 1,
+    "open_validations": [
+      "main_database_backing_identity",
+      "utf8_encoding_before_journal_or_schema_mutation",
+      "foreign_keys_enabled",
+      "file_wal_result",
+      "temporary_schema_authority",
+      "bounded_managed_catalog",
+      "tamper_evident_history",
+      "catalog_fingerprint",
+      "integrity_check_one",
+      "outbox_scoped_foreign_key_check"
+    ],
+    "reserved_prefix": "outbox_",
+    "rollback_floor": 1,
+    "rollback_transaction": "begin_exclusive_terminal_close_v1",
+    "test_destruction": "cfg_test_destroy_outbox_schema_for_migration_test"
+  },
+  "schema_version": 1,
+  "source_files": [
+    {
+      "file": {
+        "byte_length": 1408,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/Cargo.toml",
+        "sha256": "3846cb81a0638d2b3e2875073ba5b8262f63d46961dd5868ec4e287061f16d30"
+      },
+      "role": "outbox_package_manifest"
+    },
+    {
+      "file": {
+        "byte_length": 1188,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/lib.rs",
+        "sha256": "4e4ed499158216aed8654ef9fc239a6680636c0711826d657fb43d85e08a633b"
+      },
+      "role": "outbox_public_surface"
+    },
+    {
+      "file": {
+        "byte_length": 8631,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/error.rs",
+        "sha256": "43eb19df2e07b46fa969b8072df7cf901e562fd723714e44b2eedd356879024a"
+      },
+      "role": "outbox_error_surface"
+    },
+    {
+      "file": {
+        "byte_length": 67,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/generated.rs",
+        "sha256": "5a1f4d3257a07c88aef1c1b7b330ff78ada9cba8bcaa48405b4a86f37a7769fb"
+      },
+      "role": "generated_descriptor_registration"
+    },
+    {
+      "file": {
+        "byte_length": 25558,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/migrations.rs",
+        "sha256": "7fa22dfa26ffd8c5b6bc575ef6f193ffca8e883c019866f04a8125992d7e0ced"
+      },
+      "role": "outbox_migration_registry"
+    },
+    {
+      "file": {
+        "byte_length": 59368,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/schema.rs",
+        "sha256": "e6e467ca19e8b09bade67728d7025cb4be0fa87aa3bb88d5682c3182af6d3051"
+      },
+      "role": "outbox_schema_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 332102,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/store.rs",
+        "sha256": "b271545c0bb5ae7121b4d7e2b9d01d07556729059dd1ce3e126f969940bc850f"
+      },
+      "role": "outbox_store_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 2185,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/README",
+        "sha256": "1b55a3ff04c2c44b22dffee494e50711ce90089a56c51364d59ac9eb42beea7f"
+      },
+      "role": "outbox_package_readme"
+    },
+    {
+      "file": {
+        "byte_length": 9491,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/tests/migration_authority_v1_result_vector.rs",
+        "sha256": "d86570baf8dfb9779eb238e851d4272e7404463de86bd7303cee799ca7eed1f3"
+      },
+      "role": "vector_executor"
+    },
+    {
+      "file": {
+        "byte_length": 41824,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "tools/xtask/src/contract/outbox_migration.rs",
+        "sha256": "62e1b2bc02c1a7c4c741c04020e21eb878918570d3ca9b6cb7008700c5f1a883"
+      },
+      "role": "contract_governance"
+    },
+    {
+      "file": {
+        "byte_length": 480209,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "tools/xtask/src/contract.rs",
+        "sha256": "b3a7c9486c2c2cc904d3877be7e7e6a48ef1e00445f07b9884b6778dbc55e416"
+      },
+      "role": "contract_dispatch"
+    },
+    {
+      "file": {
+        "byte_length": 16291,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "tools/xtask/src/main.rs",
+        "sha256": "326c64082e406e278b097ae88131534b7aad283e3135aa6f1302f967d021ed3f"
+      },
+      "role": "xtask_dispatch"
+    },
+    {
+      "file": {
+        "byte_length": 11149,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "build/nix/common.nix",
+        "sha256": "738003cb1703baaf73a97c010c84731a42230782661c79c6a152fbb9e6fa9f6e"
+      },
+      "role": "nix_contract_lane"
+    },
+    {
+      "file": {
+        "byte_length": 20581,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "contracts/releases/1.0.0-alpha.1.toml",
+        "sha256": "c7765df4fc7e217fbf6b30d5b0dd2902dbe276f14b2cb2dd34c9fb89c04749c8"
+      },
+      "role": "release_record"
+    },
+    {
+      "file": {
+        "byte_length": 29929,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "CHANGELOG.md",
+        "sha256": "e6b645684a8ee0f48e4212ec99eb38142b2aeff02d35edbcbf79efb9030ec855"
+      },
+      "role": "release_notes"
+    }
+  ]
+}

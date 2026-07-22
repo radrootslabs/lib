@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsOutboxError;
-use crate::migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 use crate::model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanRecord,
@@ -13,6 +12,12 @@ use crate::model::{
     RadrootsOutboxReticulumEventRecord, RadrootsOutboxSignedOperationInput,
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
+};
+#[cfg(test)]
+use crate::schema::destroy_outbox_schema_for_migration_test;
+use crate::schema::{
+    RadrootsOutboxSchemaStatus, inspect_outbox_schema_status, migrate_outbox_schema,
+    rollback_outbox_schema_offline,
 };
 use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
@@ -34,10 +39,10 @@ use radroots_transport::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult};
 #[cfg(test)]
-use sqlx::{Connection, SqliteConnection};
-use sqlx::{Row, SqlitePool};
+use sqlx::Connection;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult};
+use sqlx::{Row, SqliteConnection, SqlitePool};
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::str::FromStr;
@@ -56,7 +61,7 @@ impl RadrootsOutbox {
             .connect_with(options)
             .await?;
         configure_pool(&pool, false).await?;
-        apply_up(&pool).await?;
+        migrate_outbox_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -69,7 +74,7 @@ impl RadrootsOutbox {
             .connect_with(options)
             .await?;
         configure_pool(&pool, true).await?;
-        apply_up(&pool).await?;
+        migrate_outbox_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -78,16 +83,43 @@ impl RadrootsOutbox {
         file_backed: bool,
     ) -> Result<Self, RadrootsOutboxError> {
         configure_pool(&pool, file_backed).await?;
-        apply_up(&pool).await?;
+        migrate_outbox_schema(&pool).await?;
         Ok(Self { pool })
     }
 
+    /// Returns the fully trusted database-authority escape hatch.
+    ///
+    /// Arbitrary SQL can invalidate the managed outbox schema. Prefer the
+    /// typed outbox methods for ordinary writes.
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
 
-    pub async fn migrate_down(&self) -> Result<(), RadrootsOutboxError> {
-        apply_down(&self.pool).await
+    /// Inspects and authenticates the current managed schema state.
+    pub async fn schema_status(&self) -> Result<RadrootsOutboxSchemaStatus, RadrootsOutboxError> {
+        inspect_outbox_schema_status(&self.pool).await
+    }
+
+    /// Serializes schema adoption or migration to the current supported version.
+    pub async fn migrate_to_current_schema(&self) -> Result<(), RadrootsOutboxError> {
+        migrate_outbox_schema(&self.pool).await
+    }
+
+    /// Closes every clone after attempting an exclusive, target-version rollback.
+    ///
+    /// Independent pools for the same file must be quiesced by the caller.
+    pub async fn rollback_to_schema_version_and_close(
+        self,
+        target: u32,
+    ) -> Result<(), RadrootsOutboxError> {
+        let result = rollback_outbox_schema_offline(&self.pool, target).await;
+        self.pool.close().await;
+        result
+    }
+
+    #[cfg(test)]
+    async fn destroy_schema_for_migration_test(&self) -> Result<(), RadrootsOutboxError> {
+        destroy_outbox_schema_for_migration_test(&self.pool).await
     }
 
     pub async fn pragma_foreign_keys(&self) -> Result<i64, RadrootsOutboxError> {
@@ -1805,55 +1837,124 @@ fn publish_lifecycle_from_plan_evaluation<'a>(
 
 async fn configure_pool(pool: &SqlitePool, file_backed: bool) -> Result<(), RadrootsOutboxError> {
     let max_connections = pool.options().get_max_connections();
-    let existing_options = pool.connect_options();
-    let main_filename: String =
-        sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name = 'main'")
-            .fetch_one(pool)
-            .await?;
-    let database_is_memory = main_filename.is_empty();
-    if file_backed == database_is_memory {
-        return Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
-            file_backed,
-            filename: main_filename,
-        });
-    }
     if !file_backed && max_connections != 1 {
         return Err(RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount {
             actual: max_connections,
         });
     }
 
-    let mut connect_options = existing_options
-        .as_ref()
-        .clone()
-        .foreign_keys(true)
-        .busy_timeout(Duration::from_millis(5_000));
-    if file_backed {
-        connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
-    }
-    pool.set_connect_options(connect_options);
-
     let mut connections = Vec::with_capacity(max_connections as usize);
     for _ in 0..max_connections {
         connections.push(pool.acquire().await?);
     }
     for connection in &mut connections {
+        let main_filename = main_database_filename(connection).await?;
+        let database_is_memory = main_filename.is_empty();
+        if file_backed == database_is_memory {
+            return Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
+                file_backed,
+                filename: main_filename,
+            });
+        }
+        validate_main_database_encoding(connection).await?;
+        crate::schema::validate_outbox_temp_schema(connection).await?;
         sqlx::query("PRAGMA foreign_keys = ON")
             .execute(&mut **connection)
             .await?;
+        let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+            .fetch_one(&mut **connection)
+            .await?;
+        if foreign_keys != 1 {
+            return Err(RadrootsOutboxError::SqliteForeignKeysNotEnabled {
+                actual: foreign_keys,
+            });
+        }
         sqlx::query("PRAGMA busy_timeout = 5000")
             .execute(&mut **connection)
             .await?;
         if file_backed {
-            let actual = sqlx::query_scalar::<_, String>("PRAGMA main.journal_mode = WAL")
-                .fetch_one(&mut **connection)
-                .await?;
-            if actual != "wal" {
-                return Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual });
-            }
+            configure_file_journal_mode(connection).await?;
         }
     }
+    let existing_options = pool.connect_options();
+    let connect_options = existing_options
+        .as_ref()
+        .clone()
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_millis(5_000));
+    let connect_options = if file_backed {
+        connect_options.journal_mode(SqliteJournalMode::Wal)
+    } else {
+        connect_options
+    };
+    pool.set_connect_options(connect_options);
     Ok(())
+}
+
+async fn validate_main_database_encoding(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsOutboxError> {
+    let actual: String = sqlx::query_scalar("PRAGMA main.encoding")
+        .fetch_one(&mut *connection)
+        .await?;
+    if actual == "UTF-8" {
+        return Ok(());
+    }
+    Err(RadrootsOutboxError::SqliteMainDatabaseEncodingNotUtf8 { actual })
+}
+
+async fn configure_file_journal_mode(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsOutboxError> {
+    const RETRY_ATTEMPTS: usize = 100;
+    const RETRY_DELAY: Duration = Duration::from_millis(50);
+
+    for attempt in 0..RETRY_ATTEMPTS {
+        match sqlx::query_scalar::<_, String>("PRAGMA main.journal_mode = WAL")
+            .fetch_one(&mut *connection)
+            .await
+        {
+            Ok(actual) if actual == "wal" => return Ok(()),
+            Ok(actual) => {
+                return Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual });
+            }
+            Err(error) if attempt + 1 < RETRY_ATTEMPTS && is_sqlite_lock_contention(&error) => {
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    unreachable!("bounded journal-mode retry exits from every terminal branch")
+}
+
+fn is_sqlite_lock_contention(error: &sqlx::Error) -> bool {
+    matches!(
+        error,
+        sqlx::Error::Database(database)
+            if database
+                .code()
+                .as_deref()
+                .is_some_and(sqlite_code_is_lock_contention)
+    )
+}
+
+fn sqlite_code_is_lock_contention(code: &str) -> bool {
+    code.parse::<u32>()
+        .is_ok_and(|code| matches!(code & 0xff, 5 | 6))
+}
+
+async fn main_database_filename(
+    connection: &mut SqliteConnection,
+) -> Result<String, RadrootsOutboxError> {
+    let rows = sqlx::query("PRAGMA database_list")
+        .fetch_all(&mut *connection)
+        .await?;
+    for row in rows {
+        if row.try_get::<String, _>("name")? == "main" {
+            return Ok(row.try_get("file")?);
+        }
+    }
+    Err(RadrootsOutboxError::SqliteMainDatabaseUnavailable)
 }
 
 #[cfg(test)]
@@ -1877,18 +1978,6 @@ async fn file_pool_with_immutable_delete_journal(path: &Path) -> SqlitePool {
         .connect_with(SqliteConnectOptions::new().filename(path).immutable(true))
         .await
         .expect("immutable pool")
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn apply_up(pool: &SqlitePool) -> Result<(), RadrootsOutboxError> {
-    sqlx::raw_sql(OUTBOX_MIGRATION_UP).execute(pool).await?;
-    Ok(())
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn apply_down(pool: &SqlitePool) -> Result<(), RadrootsOutboxError> {
-    sqlx::raw_sql(OUTBOX_MIGRATION_DOWN).execute(pool).await?;
-    Ok(())
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -4179,7 +4268,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_applies_delivery_plan_schema_and_migrates_down() {
+    async fn migration_applies_delivery_plan_schema_and_uses_explicit_test_destruction() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
 
         assert_eq!(outbox.pragma_foreign_keys().await.expect("foreign keys"), 1);
@@ -4236,7 +4325,23 @@ mod tests {
             "outcome_kind"
         );
 
-        outbox.migrate_down().await.expect("migrate down");
+        assert_eq!(
+            outbox.schema_status().await.expect("managed schema"),
+            RadrootsOutboxSchemaStatus::Managed {
+                version: crate::RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
+            }
+        );
+        assert!(matches!(
+            rollback_outbox_schema_offline(outbox.pool(), 0).await,
+            Err(RadrootsOutboxError::RollbackBelowVersionFloor {
+                floor: 1,
+                target: 0
+            })
+        ));
+        outbox
+            .destroy_schema_for_migration_test()
+            .await
+            .expect("test destruction");
         let row = sqlx::query(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'outbox_event'",
         )
@@ -4244,6 +4349,12 @@ mod tests {
         .await
         .expect("table query");
         assert!(row.is_none());
+        assert_eq!(
+            inspect_outbox_schema_status(outbox.pool())
+                .await
+                .expect("uninitialized schema"),
+            RadrootsOutboxSchemaStatus::Uninitialized
+        );
     }
 
     #[tokio::test]
@@ -4257,6 +4368,60 @@ mod tests {
             Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual })
                 if actual == "delete"
         ));
+    }
+
+    #[tokio::test]
+    async fn file_wal_configuration_retries_exclusive_lock_contention() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("wal-contention.sqlite");
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true);
+        let mut blocker = SqliteConnection::connect_with(&options)
+            .await
+            .expect("blocker connection");
+        sqlx::query("CREATE TABLE lock_anchor (value TEXT NOT NULL)")
+            .execute(&mut blocker)
+            .await
+            .expect("materialize database");
+        let mut contender = SqliteConnection::connect_with(&options)
+            .await
+            .expect("contender connection");
+        sqlx::query("PRAGMA busy_timeout = 0")
+            .execute(&mut contender)
+            .await
+            .expect("disable SQLite busy wait");
+        sqlx::query("BEGIN EXCLUSIVE")
+            .execute(&mut blocker)
+            .await
+            .expect("exclusive blocker");
+
+        let release = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            sqlx::query("COMMIT")
+                .execute(&mut blocker)
+                .await
+                .expect("release exclusive blocker");
+        });
+        configure_file_journal_mode(&mut contender)
+            .await
+            .expect("retry WAL transition");
+        release.await.expect("blocker task");
+        let actual: String = sqlx::query_scalar("PRAGMA main.journal_mode")
+            .fetch_one(&mut contender)
+            .await
+            .expect("journal mode");
+        assert_eq!(actual, "wal");
+    }
+
+    #[test]
+    fn sqlite_lock_contention_recognizes_primary_and_extended_codes() {
+        for code in ["5", "6", "261", "262", "517", "773"] {
+            assert!(sqlite_code_is_lock_contention(code), "{code}");
+        }
+        for code in ["", "not-a-code", "0", "1", "7", "260"] {
+            assert!(!sqlite_code_is_lock_contention(code), "{code}");
+        }
     }
 
     #[tokio::test]

@@ -1,0 +1,352 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://radroots.org/contracts/outbox/migration_authority_v1.manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "const": "versioned_outbox_migration_authority_v1"
+    },
+    "contract_id": {
+      "const": "radroots_outbox.migration_authority.v1"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "migrations": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog": {
+            "additionalProperties": false,
+            "properties": {
+              "indexes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 8,
+                "minItems": 8,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "objects": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 13,
+                "minItems": 13,
+                "type": "array",
+                "uniqueItems": true
+              },
+              "tables": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 5,
+                "minItems": 5,
+                "type": "array",
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "objects",
+              "tables",
+              "indexes"
+            ],
+            "type": "object"
+          },
+          "down": {
+            "$ref": "#/$defs/file"
+          },
+          "name": {
+            "const": "outbox"
+          },
+          "schema_sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "up": {
+            "$ref": "#/$defs/file"
+          },
+          "version": {
+            "const": 1
+          }
+        },
+        "required": [
+          "version",
+          "name",
+          "up",
+          "down",
+          "schema_sha256",
+          "catalog"
+        ],
+        "type": "object"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array"
+    },
+    "public_api": {
+      "additionalProperties": false,
+      "properties": {
+        "added_symbols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "error_enum_non_exhaustive": {
+          "const": true
+        },
+        "error_variants": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 23,
+          "minItems": 23,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "methods": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "removed_methods": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "removed_symbols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "added_symbols",
+        "methods",
+        "removed_symbols",
+        "removed_methods",
+        "error_variants",
+        "error_enum_non_exhaustive"
+      ],
+      "type": "object"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "change_id": {
+          "const": "outbox-versioned-migration-authority"
+        },
+        "changelog": {
+          "const": "CHANGELOG.md"
+        },
+        "release_record": {
+          "const": "contracts/releases/1.0.0-alpha.1.toml"
+        }
+      },
+      "required": [
+        "change_id",
+        "release_record",
+        "changelog"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "$ref": "#/$defs/file"
+        },
+        "executor": {
+          "$ref": "#/$defs/file"
+        },
+        "executor_id": {
+          "const": "radroots_outbox.migration_authority_v1.result_vector_executor.v1"
+        },
+        "executor_test": {
+          "const": "migration_authority_v1_result_vector"
+        },
+        "mirror_path": {
+          "const": "crates/outbox/tests/fixtures/migration_authority.v1.json"
+        }
+      },
+      "required": [
+        "canonical",
+        "mirror_path",
+        "executor",
+        "executor_id",
+        "executor_test"
+      ],
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "adoption_policy": {
+          "const": "exact_unledgered_0001_catalog_only_v1"
+        },
+        "catalog_fingerprint_algorithm": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "catalog_rejection_probe_limit": {
+          "const": 15
+        },
+        "catalog_row_limit": {
+          "const": 14
+        },
+        "current_version": {
+          "const": 1
+        },
+        "history_rejection_probe_limit": {
+          "const": 2
+        },
+        "history_row_limit": {
+          "const": 1
+        },
+        "ledger_ddl_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "ledger_name": {
+          "const": "radroots_outbox_schema_migrations"
+        },
+        "migration_transaction": {
+          "const": "begin_immediate_v1"
+        },
+        "minimum_version": {
+          "const": 1
+        },
+        "open_validations": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 10,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reserved_prefix": {
+          "const": "outbox_"
+        },
+        "rollback_floor": {
+          "const": 1
+        },
+        "rollback_transaction": {
+          "const": "begin_exclusive_terminal_close_v1"
+        },
+        "test_destruction": {
+          "const": "cfg_test_destroy_outbox_schema_for_migration_test"
+        }
+      },
+      "required": [
+        "minimum_version",
+        "current_version",
+        "reserved_prefix",
+        "ledger_name",
+        "ledger_ddl_sha256",
+        "catalog_fingerprint_algorithm",
+        "migration_transaction",
+        "rollback_transaction",
+        "catalog_row_limit",
+        "catalog_rejection_probe_limit",
+        "history_row_limit",
+        "history_rejection_probe_limit",
+        "open_validations",
+        "adoption_policy",
+        "rollback_floor",
+        "test_destruction"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "$ref": "#/$defs/file"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "file"
+        ],
+        "type": "object"
+      },
+      "maxItems": 15,
+      "minItems": 15,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "runtime",
+    "migrations",
+    "public_api",
+    "source_files",
+    "result_vector",
+    "release"
+  ],
+  "type": "object"
+}

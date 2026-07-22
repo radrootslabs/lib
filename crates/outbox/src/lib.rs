@@ -2,12 +2,14 @@
 #![forbid(unsafe_code)]
 
 mod error;
+mod generated;
 mod migrations;
 mod model;
+mod schema;
 mod store;
 
 pub use error::RadrootsOutboxError;
-pub use migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
+pub use migrations::{RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT, RADROOTS_OUTBOX_SCHEMA_VERSION_MIN};
 pub use model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanRecord,
@@ -20,4 +22,5 @@ pub use model::{
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
 };
+pub use schema::{RadrootsOutboxSchemaStatus, inspect_outbox_schema_status};
 pub use store::RadrootsOutbox;

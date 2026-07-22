@@ -13,3 +13,25 @@ unambiguous for every queued event.
 multi-connection in-memory pools in every supported URL form, and configures
 every file-pool connection with foreign-key enforcement and the required busy
 timeout before migrations or writes.
+
+Schema lifecycle is governed by an ordered, checksummed migration registry.
+The original `0001_outbox` up and down files are immutable contract inputs. An
+existing unledgered database is adopted only when its complete managed catalog
+matches the authenticated five-table, eight-index baseline fingerprint. The
+managed ledger pins migration names, source digests, and catalog fingerprints;
+unknown or drifted `outbox_*` objects, counterfeit ledgers, history gaps, and
+newer schema versions fail before governed schema or history mutation. Catalog
+and history reads are bounded, while unrelated caller tables in a shared SQLite
+database are outside the outbox fingerprint and remain untouched. Registry
+entries add and remove disjoint governed object sets; altering or replacing an
+existing governed object requires an explicit migration-contract revision.
+
+Every open validates UTF-8 before journal or schema mutation, enables and
+verifies foreign keys, verifies WAL for file databases, takes a serialized
+writer transaction for migration/adoption, and runs SQLite integrity plus
+outbox-scoped foreign-key checks before exposing the store. Use
+`schema_status` for inspection and `migrate_to_current_schema` for an explicit
+recheck. `rollback_to_schema_version_and_close` consumes the store, closes all
+pool clones, and requires an explicit target at or above the public schema
+floor. Full schema destruction is intentionally confined to the separately
+named migration-test helper.

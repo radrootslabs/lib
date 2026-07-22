@@ -14,7 +14,7 @@ readme = "README"
 [features]
 default = ["sqlite", "runtime-tokio"]
 sqlite = ["dep:sqlx", "sqlx/sqlite-bundled"]
-runtime-tokio = ["sqlx/runtime-tokio"]
+runtime-tokio = ["dep:tokio", "sqlx/runtime-tokio"]
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false, features = [
@@ -32,6 +32,7 @@ serde_json = { workspace = true, features = ["std"] }
 sha2 = { workspace = true }
 sqlx = { workspace = true, optional = true, features = ["derive"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["time"] }
 
 [dev-dependencies]
 radroots_nostr = { workspace = true, default-features = false, features = [
@@ -39,7 +40,7 @@ radroots_nostr = { workspace = true, default-features = false, features = [
   "events",
 ] }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

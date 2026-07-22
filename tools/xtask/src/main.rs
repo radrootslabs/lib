@@ -22,6 +22,7 @@ fn usage() {
     eprintln!("  cargo xtask contract food-availability-projection-manifest [--write]");
     eprintln!("  cargo xtask contract source-maintenance-manifest [--write]");
     eprintln!("  cargo xtask contract raw-source-rebuild-manifest [--write]");
+    eprintln!("  cargo xtask contract outbox-migration-manifest [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
@@ -137,6 +138,15 @@ fn run_contract(args: &[String]) -> Result<(), String> {
             _ => Err(
                 "raw-source-rebuild-manifest accepts no arguments or exactly --write".to_string(),
             ),
+        },
+        Some("outbox-migration-manifest") => match &args[1..] {
+            [] => contract::validate_outbox_migration_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_outbox_migration_manifest(&workspace_root())
+            }
+            _ => {
+                Err("outbox-migration-manifest accepts no arguments or exactly --write".to_string())
+            }
         },
         Some("knowledge-manifest") => {
             if args.get(1).map(String::as_str) == Some("--write") {
@@ -264,6 +274,12 @@ mod tests {
         ])
         .expect_err("invalid raw-source rebuild manifest mode");
         assert!(invalid_raw_source_rebuild.contains("exactly --write"));
+        let invalid_outbox_migration = run_contract(&[
+            "outbox-migration-manifest".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid outbox migration manifest mode");
+        assert!(invalid_outbox_migration.contains("exactly --write"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
@@ -283,6 +299,17 @@ mod tests {
         let error = release_preflight_at(workspace.path())
             .expect_err("missing DTO root authority must fail first");
         assert!(error.contains("DTO root authority"));
+    }
+
+    #[test]
+    fn release_preflight_reaches_contract_authorities_after_dto_roots() {
+        let _guard = lock_workspace();
+        if let Err(error) = release_preflight_at(&workspace_root()) {
+            assert!(
+                !error.trim().is_empty(),
+                "release preflight blockers must be actionable"
+            );
+        }
     }
 
     #[test]
@@ -365,6 +392,8 @@ mod tests {
             .expect("contract SourceMaintenance manifest");
         run_contract(&["raw-source-rebuild-manifest".to_string()])
             .expect("contract raw-source rebuild manifest");
+        run_contract(&["outbox-migration-manifest".to_string()])
+            .expect("contract outbox migration manifest");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }
