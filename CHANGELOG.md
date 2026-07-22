@@ -199,6 +199,22 @@ publish policy both pass for the same source revision.
   non-events and likewise fail closed. Event-contract registry v7 remains
   byte-identical, and the new gate grants no signing, upload, retrieval, relay,
   or entitlement authority.
+<!-- release-change: blossom-publication-readiness-evidence -->
+- Blossom publication media now advances beyond local byte verification only
+  after typed BUD-02 status and descriptor agreement, an independent BUD-01
+  HEAD, and an exactly bounded complete BUD-01 GET agree with the authored
+  URL, hash, MIME, and length. The public evidence profile admits JPEG, PNG,
+  and still WebP only, rejects animation, fully decodes the exact retrieved
+  bytes with a declared-format decoder, and derives dimensions internally
+  within 16,384 per axis and 20,000,000 pixels. JPEG is limited to 8-bit
+  sequential SOF0/SOF1 and combines exact entropy accounting with pinned
+  strict `zune-jpeg` and `zune-core` RGB decoding; PNG and WebP use a
+  separately pinned two-format `image` build.
+  Decoded output is bounded to 160,000,000 bytes before allocation; callers
+  cannot provide decode claims.
+  Deterministic per-URL evidence remains transport-neutral and contains no
+  HTTP credentials, BUD-11 material, entitlement decision, or private service
+  topology.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

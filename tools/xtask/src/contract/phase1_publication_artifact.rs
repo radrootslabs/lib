@@ -120,6 +120,12 @@ const RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "tools/xtask/src/contract/nip09_reconciliation.rs",
     "tools/xtask/src/contract/raw_source_rebuild.rs",
 ];
+const BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    "Cargo.lock",
+    "Cargo.toml",
+    "build/nix/common.nix",
+    "tools/xtask/src/contract/food_availability_projection.rs",
+];
 
 const PUBLIC_TYPES: &[&str] = &[
     "RadrootsPhase1PublicationEventVariant",
@@ -279,13 +285,21 @@ const PUBLICATION_IMMUTABLE_ARTIFACTS: &[ImmutableArtifactSpec] = &[
 ];
 
 pub(super) const PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    "Cargo.lock",
+    "Cargo.toml",
     CHANGELOG_RELATIVE,
     OPERATIONS_RELATIVE,
     RELEASE_RELATIVE,
+    "crates/blossom/Cargo.toml",
+    "crates/blossom/src/error.rs",
+    "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs",
     "crates/event_codec/README",
     "crates/event_codec/src/wire/publication.rs",
     "tools/xtask/src/contract.rs",
+    "tools/xtask/src/contract/nip09_reconciliation.rs",
     "tools/xtask/src/contract/phase1_publication_artifact.rs",
+    "tools/xtask/src/contract/raw_source_rebuild.rs",
     "tools/xtask/src/main.rs",
 ];
 
@@ -1389,8 +1403,16 @@ fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Resul
     let superseded = RAW_PREDECESSOR_SUPERSEDED_PATHS
         .iter()
         .copied()
+        .chain(
+            BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS
+                .iter()
+                .copied(),
+        )
         .collect::<BTreeSet<_>>();
-    if superseded.len() != RAW_PREDECESSOR_SUPERSEDED_PATHS.len() {
+    if superseded.len()
+        != RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
+            + BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
+    {
         return Err("raw predecessor supersession paths must be unique".to_owned());
     }
     let sources = manifest
@@ -1937,9 +1959,10 @@ mod tests {
     }
 
     #[test]
-    fn publication_compiler_operations_and_vector_authority_are_current() {
+    fn publication_predecessor_operations_and_vector_authority_are_current() {
         let root = workspace_root();
-        validate_compiler_authority(&root).expect("compiler authority");
+        validate_immutable_phase1_publication_artifact_predecessor(&root)
+            .expect("immutable publication predecessor");
         validate_operations_authority(&root).expect("operations authority");
         validate_result_vector(&root).expect("result vector");
     }

@@ -1746,7 +1746,12 @@ fn manifest_schema() -> Value {
                     "excluded_capabilities": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"type": "string", "minLength": 1}}
                 }
             },
-            "predecessor_source_supersessions": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "string", "minLength": 1}},
+            "predecessor_source_supersessions": {
+                "type": "array",
+                "minItems": PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS.len(),
+                "maxItems": PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS.len(),
+                "items": {"type": "string", "minLength": 1}
+            },
             "source_files": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
             "result_vector": {
                 "type": "object", "additionalProperties": false,

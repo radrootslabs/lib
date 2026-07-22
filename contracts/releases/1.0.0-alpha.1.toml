@@ -484,3 +484,15 @@ id = "trade-sp1-remote-proof-fixture"
 classification = "breaking"
 semver_impacts = ["change_exported_constant_value", "fix_packaging_metadata"]
 summary = "Regenerate the remote SP1 Core proof fixture for the validator-set witness identity, exercise real cryptographic verification, and allow the SP1-pinned guest compiler to trail the workspace Rust version during locked guest builds."
+
+[[changes]]
+id = "blossom-publication-readiness-evidence"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+]
+summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification, exact sequential JPEG entropy accounting plus pinned strict zune-jpeg decoding, and internally authoritative full decoding for static JPEG, PNG, and WebP rasters."

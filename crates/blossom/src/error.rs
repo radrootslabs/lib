@@ -40,6 +40,39 @@ pub enum RadrootsBlossomError {
     AuthorizationServerMismatch,
     AuthorizationHashRequired,
     AuthorizationHashMismatch,
+    InvalidBud02UploadStatus { actual: u16 },
+    InvalidBud01HeadStatus { actual: u16 },
+    InvalidBud01GetStatus { actual: u16 },
+    PublicationRasterByteLimitExceeded { declared: u64, maximum: u64 },
+    PublicationGetBodyAllocationFailed,
+    PublicationGetBodyLengthOverflow,
+    PublicationGetBodyMissing,
+    PublicationGetBodyShort { declared: u64, actual: u64 },
+    PublicationGetBodyTrailing { declared: u64, actual: u64 },
+    PublicationAuthoredBytesSizeMismatch { expected: u64, actual: u64 },
+    PublicationAuthoredBytesHashMismatch,
+    PublicationUploadUrlMismatch,
+    PublicationUploadHashMismatch,
+    PublicationUploadSizeMismatch { expected: u64, actual: u64 },
+    PublicationUploadMediaTypeMismatch,
+    PublicationHeadUrlMismatch,
+    PublicationHeadSizeMismatch { expected: u64, actual: u64 },
+    PublicationHeadMediaTypeMismatch,
+    PublicationGetUrlMismatch,
+    PublicationGetDeclaredSizeMismatch { expected: u64, actual: u64 },
+    PublicationRetrievedBytesHashMismatch,
+    PublicationRetrievedBytesMismatch,
+    UnsupportedPublicationRasterMediaType,
+    InvalidPublicationRaster,
+    PublicationJpegProcessForbidden,
+    PublicationRasterAnimationForbidden,
+    PublicationRasterDimensionsOutOfRange { width: u32, height: u32 },
+    PublicationRasterPixelLimitExceeded { pixels: u64 },
+    PublicationRasterDecodedByteLimitExceeded { decoded: u64, maximum: u64 },
+    PublicationRasterDecodeAllocationFailed,
+    PublicationRasterDecodeFailed,
+    PublicationRasterContainerDimensionMismatch,
+    PublicationAuthoredRasterDimensionMismatch,
 }
 
 impl RadrootsBlossomError {
@@ -82,6 +115,63 @@ impl RadrootsBlossomError {
             Self::AuthorizationServerMismatch => "authorization_server_mismatch",
             Self::AuthorizationHashRequired => "authorization_hash_required",
             Self::AuthorizationHashMismatch => "authorization_hash_mismatch",
+            Self::InvalidBud02UploadStatus { .. } => "invalid_bud02_upload_status",
+            Self::InvalidBud01HeadStatus { .. } => "invalid_bud01_head_status",
+            Self::InvalidBud01GetStatus { .. } => "invalid_bud01_get_status",
+            Self::PublicationRasterByteLimitExceeded { .. } => {
+                "publication_raster_byte_limit_exceeded"
+            }
+            Self::PublicationGetBodyAllocationFailed => "publication_get_body_allocation_failed",
+            Self::PublicationGetBodyLengthOverflow => "publication_get_body_length_overflow",
+            Self::PublicationGetBodyMissing => "publication_get_body_missing",
+            Self::PublicationGetBodyShort { .. } => "publication_get_body_short",
+            Self::PublicationGetBodyTrailing { .. } => "publication_get_body_trailing",
+            Self::PublicationAuthoredBytesSizeMismatch { .. } => {
+                "publication_authored_bytes_size_mismatch"
+            }
+            Self::PublicationAuthoredBytesHashMismatch => {
+                "publication_authored_bytes_hash_mismatch"
+            }
+            Self::PublicationUploadUrlMismatch => "publication_upload_url_mismatch",
+            Self::PublicationUploadHashMismatch => "publication_upload_hash_mismatch",
+            Self::PublicationUploadSizeMismatch { .. } => "publication_upload_size_mismatch",
+            Self::PublicationUploadMediaTypeMismatch => "publication_upload_media_type_mismatch",
+            Self::PublicationHeadUrlMismatch => "publication_head_url_mismatch",
+            Self::PublicationHeadSizeMismatch { .. } => "publication_head_size_mismatch",
+            Self::PublicationHeadMediaTypeMismatch => "publication_head_media_type_mismatch",
+            Self::PublicationGetUrlMismatch => "publication_get_url_mismatch",
+            Self::PublicationGetDeclaredSizeMismatch { .. } => {
+                "publication_get_declared_size_mismatch"
+            }
+            Self::PublicationRetrievedBytesHashMismatch => {
+                "publication_retrieved_bytes_hash_mismatch"
+            }
+            Self::PublicationRetrievedBytesMismatch => "publication_retrieved_bytes_mismatch",
+            Self::UnsupportedPublicationRasterMediaType => {
+                "unsupported_publication_raster_media_type"
+            }
+            Self::InvalidPublicationRaster => "invalid_publication_raster",
+            Self::PublicationJpegProcessForbidden => "publication_jpeg_process_forbidden",
+            Self::PublicationRasterAnimationForbidden => "publication_raster_animation_forbidden",
+            Self::PublicationRasterDimensionsOutOfRange { .. } => {
+                "publication_raster_dimensions_out_of_range"
+            }
+            Self::PublicationRasterPixelLimitExceeded { .. } => {
+                "publication_raster_pixel_limit_exceeded"
+            }
+            Self::PublicationRasterDecodedByteLimitExceeded { .. } => {
+                "publication_raster_decoded_byte_limit_exceeded"
+            }
+            Self::PublicationRasterDecodeAllocationFailed => {
+                "publication_raster_decode_allocation_failed"
+            }
+            Self::PublicationRasterDecodeFailed => "publication_raster_decode_failed",
+            Self::PublicationRasterContainerDimensionMismatch => {
+                "publication_raster_container_dimension_mismatch"
+            }
+            Self::PublicationAuthoredRasterDimensionMismatch => {
+                "publication_authored_raster_dimension_mismatch"
+            }
         }
     }
 }
@@ -182,6 +272,113 @@ impl fmt::Display for RadrootsBlossomError {
             Self::AuthorizationHashMismatch => {
                 f.write_str("Blossom authorization does not include the target blob hash")
             }
+            Self::InvalidBud02UploadStatus { actual } => {
+                write!(f, "BUD-02 upload status must be 200 or 201, got {actual}")
+            }
+            Self::InvalidBud01HeadStatus { actual } => {
+                write!(f, "BUD-01 HEAD status must be 200, got {actual}")
+            }
+            Self::InvalidBud01GetStatus { actual } => {
+                write!(f, "BUD-01 GET status must be 200, got {actual}")
+            }
+            Self::PublicationRasterByteLimitExceeded { declared, maximum } => write!(
+                f,
+                "publication raster declares {declared} bytes, exceeding maximum {maximum}"
+            ),
+            Self::PublicationGetBodyAllocationFailed => {
+                f.write_str("publication GET body allocation failed")
+            }
+            Self::PublicationGetBodyLengthOverflow => {
+                f.write_str("publication GET body length overflowed")
+            }
+            Self::PublicationGetBodyMissing => f.write_str("publication GET body is missing"),
+            Self::PublicationGetBodyShort { declared, actual } => write!(
+                f,
+                "publication GET body is short: declared {declared}, got {actual}"
+            ),
+            Self::PublicationGetBodyTrailing { declared, actual } => write!(
+                f,
+                "publication GET body has trailing bytes: declared {declared}, got {actual}"
+            ),
+            Self::PublicationAuthoredBytesSizeMismatch { expected, actual } => write!(
+                f,
+                "authored raster byte size mismatch: expected {expected}, got {actual}"
+            ),
+            Self::PublicationAuthoredBytesHashMismatch => {
+                f.write_str("authored raster bytes do not match the sealed descriptor hash")
+            }
+            Self::PublicationUploadUrlMismatch => {
+                f.write_str("BUD-02 upload descriptor URL does not match the authored URL")
+            }
+            Self::PublicationUploadHashMismatch => {
+                f.write_str("BUD-02 upload descriptor hash does not match the authored hash")
+            }
+            Self::PublicationUploadSizeMismatch { expected, actual } => write!(
+                f,
+                "BUD-02 upload descriptor size mismatch: expected {expected}, got {actual}"
+            ),
+            Self::PublicationUploadMediaTypeMismatch => f.write_str(
+                "BUD-02 upload descriptor media type does not match the authored media type",
+            ),
+            Self::PublicationHeadUrlMismatch => {
+                f.write_str("BUD-01 HEAD URL does not match the authored URL")
+            }
+            Self::PublicationHeadSizeMismatch { expected, actual } => write!(
+                f,
+                "BUD-01 HEAD content length mismatch: expected {expected}, got {actual}"
+            ),
+            Self::PublicationHeadMediaTypeMismatch => {
+                f.write_str("BUD-01 HEAD media type does not match the authored media type")
+            }
+            Self::PublicationGetUrlMismatch => {
+                f.write_str("BUD-01 GET URL does not match the authored URL")
+            }
+            Self::PublicationGetDeclaredSizeMismatch { expected, actual } => write!(
+                f,
+                "BUD-01 GET declared size mismatch: expected {expected}, got {actual}"
+            ),
+            Self::PublicationRetrievedBytesHashMismatch => {
+                f.write_str("BUD-01 GET complete-byte hash does not match the authored hash")
+            }
+            Self::PublicationRetrievedBytesMismatch => {
+                f.write_str("BUD-01 GET bytes differ from the exact authored raster bytes")
+            }
+            Self::UnsupportedPublicationRasterMediaType => f.write_str(
+                "publication raster media type must be image/jpeg, image/png, or image/webp",
+            ),
+            Self::InvalidPublicationRaster => {
+                f.write_str("publication raster container is malformed or incomplete")
+            }
+            Self::PublicationJpegProcessForbidden => {
+                f.write_str("publication JPEG must use an 8-bit sequential SOF0 or SOF1 process")
+            }
+            Self::PublicationRasterAnimationForbidden => {
+                f.write_str("publication raster animation is forbidden")
+            }
+            Self::PublicationRasterDimensionsOutOfRange { width, height } => write!(
+                f,
+                "publication raster dimensions must be within 1..=16384, got {width}x{height}"
+            ),
+            Self::PublicationRasterPixelLimitExceeded { pixels } => write!(
+                f,
+                "publication raster pixel count {pixels} exceeds 20000000"
+            ),
+            Self::PublicationRasterDecodedByteLimitExceeded { decoded, maximum } => write!(
+                f,
+                "publication raster requires {decoded} decoded bytes, exceeding maximum {maximum}"
+            ),
+            Self::PublicationRasterDecodeAllocationFailed => {
+                f.write_str("publication raster decoded-pixel buffer allocation failed")
+            }
+            Self::PublicationRasterDecodeFailed => {
+                f.write_str("publication raster bitstream could not be decoded completely")
+            }
+            Self::PublicationRasterContainerDimensionMismatch => f.write_str(
+                "decoded raster dimensions do not match the dimensions encoded by the container",
+            ),
+            Self::PublicationAuthoredRasterDimensionMismatch => {
+                f.write_str("decoded raster dimensions do not match the authored dimensions")
+            }
         }
     }
 }
@@ -215,6 +412,66 @@ mod tests {
                 actual: 2,
             },
             RadrootsBlossomError::BlobMediaTypeMismatch,
+            RadrootsBlossomError::InvalidBud02UploadStatus { actual: 202 },
+            RadrootsBlossomError::InvalidBud01HeadStatus { actual: 204 },
+            RadrootsBlossomError::InvalidBud01GetStatus { actual: 206 },
+            RadrootsBlossomError::PublicationRasterByteLimitExceeded {
+                declared: 2,
+                maximum: 1,
+            },
+            RadrootsBlossomError::PublicationGetBodyAllocationFailed,
+            RadrootsBlossomError::PublicationGetBodyLengthOverflow,
+            RadrootsBlossomError::PublicationGetBodyMissing,
+            RadrootsBlossomError::PublicationGetBodyShort {
+                declared: 2,
+                actual: 1,
+            },
+            RadrootsBlossomError::PublicationGetBodyTrailing {
+                declared: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationAuthoredBytesSizeMismatch {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationAuthoredBytesHashMismatch,
+            RadrootsBlossomError::PublicationUploadUrlMismatch,
+            RadrootsBlossomError::PublicationUploadHashMismatch,
+            RadrootsBlossomError::PublicationUploadSizeMismatch {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationUploadMediaTypeMismatch,
+            RadrootsBlossomError::PublicationHeadUrlMismatch,
+            RadrootsBlossomError::PublicationHeadSizeMismatch {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationHeadMediaTypeMismatch,
+            RadrootsBlossomError::PublicationGetUrlMismatch,
+            RadrootsBlossomError::PublicationGetDeclaredSizeMismatch {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationRetrievedBytesHashMismatch,
+            RadrootsBlossomError::PublicationRetrievedBytesMismatch,
+            RadrootsBlossomError::UnsupportedPublicationRasterMediaType,
+            RadrootsBlossomError::InvalidPublicationRaster,
+            RadrootsBlossomError::PublicationJpegProcessForbidden,
+            RadrootsBlossomError::PublicationRasterAnimationForbidden,
+            RadrootsBlossomError::PublicationRasterDimensionsOutOfRange {
+                width: 0,
+                height: 1,
+            },
+            RadrootsBlossomError::PublicationRasterPixelLimitExceeded { pixels: 20_000_001 },
+            RadrootsBlossomError::PublicationRasterDecodedByteLimitExceeded {
+                decoded: 2,
+                maximum: 1,
+            },
+            RadrootsBlossomError::PublicationRasterDecodeAllocationFailed,
+            RadrootsBlossomError::PublicationRasterDecodeFailed,
+            RadrootsBlossomError::PublicationRasterContainerDimensionMismatch,
+            RadrootsBlossomError::PublicationAuthoredRasterDimensionMismatch,
             RadrootsBlossomError::InvalidAuthorizationContent,
             RadrootsBlossomError::InvalidAuthorizationAction,
             RadrootsBlossomError::InvalidAuthorizationServerDomain,

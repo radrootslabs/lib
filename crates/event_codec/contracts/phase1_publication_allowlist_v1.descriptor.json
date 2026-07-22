@@ -2,22 +2,22 @@
   "contract_id": "radroots_event_codec.phase1_publication_allowlist_v1",
   "event_contract_registry_v7_sha256": "91595544310f865bdef064ee760c227c870417a95b87b3e27278f8da74fdddea",
   "manifest": {
-    "byte_length": 86551,
+    "byte_length": 87388,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.json",
-    "sha256": "ac76e2302d4eeec99fcc8eb9bc43a693bc75db259111dc0fe9b2b4582d688afb"
+    "sha256": "1f4e33f60e7e96bfce0ceebe6760a141dedeb342e61048cb6db5ce5520bc2adb"
   },
   "manifest_schema": {
-    "byte_length": 8439,
+    "byte_length": 8441,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.schema.json",
-    "sha256": "5bdccda1449ca6837d9922171983b880e81324cb0bdefc32e1d92b387f692a4f"
+    "sha256": "9ffc63e0722948e600061cee2e2992f201a68e670b281e86a9447593ad3105f1"
   },
   "manifest_sidecar": {
     "byte_length": 65,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.sha256",
-    "sha256": "30ba79fd07661aa5fef19ba8a0ebed7e62ae1cc9e5454c54761b72da65da0ce5"
+    "sha256": "b9b2eb4f75d4ba713d0932a0a277f7bdf97cd42e885e2f5790c29f840bb615e4"
   },
   "predecessor_manifest_sha256": "a07aace74f4747ba6e769a99acad7eadaac2d19d26aa0dd1c280ab92454519b5",
   "schema_version": 1

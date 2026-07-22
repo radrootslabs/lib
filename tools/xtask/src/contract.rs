@@ -2,6 +2,7 @@
 
 mod admission_authority;
 mod artifact_bundle;
+mod blossom_publication_readiness;
 mod comment_authority;
 mod deletion_authority;
 mod food_availability_projection;
@@ -68,15 +69,17 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_raw_source_rebuild_manifest(workspace_root)?;
     validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?;
     validate_phase1_publication_allowlist_manifest(workspace_root)?;
+    blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
 
 pub(crate) fn validate_raw_source_rebuild_manifest(workspace_root: &Path) -> Result<(), String> {
-    phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(workspace_root)
+    phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(workspace_root)?;
+    blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)
 }
 
 pub(crate) fn write_raw_source_rebuild_manifest(workspace_root: &Path) -> Result<(), String> {
-    phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(workspace_root)?;
+    validate_raw_source_rebuild_manifest(workspace_root)?;
     Err("raw-source rebuild is an immutable predecessor and cannot be rewritten; write the active publication successor instead".to_owned())
 }
 
@@ -117,7 +120,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 25] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 26] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -125,6 +128,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 25] = [
     (
         "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json",
         "crates/blossom/tests/fixtures/hash_path_and_descriptor.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+        "crates/blossom/tests/fixtures/publication_readiness.v1.json",
     ),
     (
         "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",

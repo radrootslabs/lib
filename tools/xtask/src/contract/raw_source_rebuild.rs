@@ -1,6 +1,4 @@
-use super::artifact_bundle::{
-    GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
-};
+use super::artifact_bundle::{GeneratedArtifact, read_regular_file};
 use super::food_availability_projection::validate_food_availability_projection_predecessor_production_sources_under_lock;
 use super::nip09_reconciliation::{
     governed_regular_file_inventory, validate_current_event_store_successor_authority,
@@ -875,6 +873,11 @@ const EXPECTED_SOURCE_MAINTENANCE_DRIFT_PATHS: &[&str] = &[
 ];
 
 const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    "Cargo.toml",
+    "crates/blossom/Cargo.toml",
+    "crates/blossom/src/error.rs",
+    "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs",
     "crates/event_store/Cargo.toml",
     "crates/event_store/src/error.rs",
     "crates/event_store/src/generated.rs",
@@ -887,6 +890,16 @@ const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "crates/event_store/src/store/food_availability_projection_v1.rs",
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
 ];
+const BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS: &[&str] = &[
+    "Cargo.toml",
+    "crates/blossom/Cargo.toml",
+    "crates/blossom/src/error.rs",
+    "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs",
+];
+#[cfg(test)]
+const BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS: &[&str] =
+    &[CONTRACT_LANE_SOURCE_RELATIVE];
 
 const GENERATED_ARTIFACT_PATHS: &[&str] = &[
     MANIFEST_RELATIVE,
@@ -1090,16 +1103,71 @@ struct VectorCase {
 }
 
 pub(crate) fn write_raw_source_rebuild_manifest(workspace_root: &Path) -> Result<(), String> {
-    with_artifact_bundle_transaction(workspace_root, |transaction| {
-        transaction.write(expected_artifacts(workspace_root)?)?;
-        validate_raw_source_rebuild_manifest_under_lock(workspace_root)
-    })
+    validate_raw_source_rebuild_manifest(workspace_root)
 }
 
 pub(crate) fn validate_raw_source_rebuild_manifest(workspace_root: &Path) -> Result<(), String> {
-    with_artifact_bundle_transaction(workspace_root, |_| {
-        validate_raw_source_rebuild_manifest_under_lock(workspace_root)
-    })
+    // Keep the frozen predecessor validator compiled for its governed mutation suite.
+    let _immutable_predecessor_validator: fn(&Path) -> Result<(), String> =
+        validate_raw_source_rebuild_manifest_under_lock;
+    super::blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)
+}
+
+pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_lock(
+    workspace_root: &Path,
+    raw_superseded_paths: &[&str],
+    transitive_superseded_paths: &[&str],
+) -> Result<(), String> {
+    let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
+    let manifest: RawSourceRebuildManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
+    validate_manifest_shape(&manifest)?;
+
+    let superseded = raw_superseded_paths
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if superseded.len() != raw_superseded_paths.len() {
+        return Err("raw-source rebuild successor supersession paths must be unique".to_owned());
+    }
+    let predecessor_paths = manifest
+        .source_files
+        .iter()
+        .map(|source| source.path.as_str())
+        .collect::<BTreeSet<_>>();
+    if let Some(path) = superseded
+        .iter()
+        .find(|path| !predecessor_paths.contains(**path))
+    {
+        return Err(format!(
+            "raw-source rebuild successor supersession path `{path}` is not predecessor-bound"
+        ));
+    }
+
+    for source in &manifest.source_files {
+        if superseded.contains(source.path.as_str()) {
+            continue;
+        }
+        let current = read_regular_file(workspace_root, &source.path)?;
+        if current.len() as u64 != source.byte_length || sha256_hex(&current) != source.sha256 {
+            return Err(format!(
+                "unchanged raw-source rebuild predecessor source `{}` drifted",
+                source.path
+            ));
+        }
+    }
+
+    let transitive = TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS
+        .iter()
+        .copied()
+        .chain(transitive_superseded_paths.iter().copied())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    validate_food_availability_projection_predecessor_production_sources_under_lock(
+        workspace_root,
+        &transitive,
+    )
 }
 
 fn validate_raw_source_rebuild_manifest_under_lock(workspace_root: &Path) -> Result<(), String> {
@@ -1683,7 +1751,33 @@ fn validate_complete_event_store_source_closure(workspace_root: &Path) -> Result
 }
 
 fn validate_delegated_compiler_source_pins(workspace_root: &Path) -> Result<(), String> {
+    validate_delegated_compiler_source_pins_with_supersessions(workspace_root, &[])
+}
+
+fn validate_delegated_compiler_source_pins_with_supersessions(
+    workspace_root: &Path,
+    superseded_paths: &[&str],
+) -> Result<(), String> {
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    if superseded.len() != superseded_paths.len() {
+        return Err("delegated compiler source supersession paths must be unique".to_owned());
+    }
+    let pinned = DELEGATED_COMPILER_SOURCE_PINS
+        .iter()
+        .map(|(relative, _)| *relative)
+        .collect::<BTreeSet<_>>();
+    if let Some(relative) = superseded
+        .iter()
+        .find(|relative| !pinned.contains(**relative))
+    {
+        return Err(format!(
+            "delegated compiler source supersession path `{relative}` is not predecessor-pinned"
+        ));
+    }
     for (relative, expected_sha256) in DELEGATED_COMPILER_SOURCE_PINS {
+        if superseded.contains(relative) {
+            continue;
+        }
         let actual_sha256 = sha256_hex(&read_regular_file(workspace_root, relative)?);
         if actual_sha256 != *expected_sha256 {
             return Err(format!(
@@ -1944,10 +2038,11 @@ fn validate_predecessor_source_supersession(
                 .to_owned(),
         );
     }
-    if let Some(path) = transitive
-        .iter()
-        .find(|path| !successor_paths.contains(**path) && !predecessor_paths.contains(**path))
-    {
+    if let Some(path) = transitive.iter().find(|path| {
+        !successor_paths.contains(**path)
+            && !predecessor_paths.contains(**path)
+            && !BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS.contains(path)
+    }) {
         return Err(format!(
             "raw-source rebuild transitive supersession path `{path}` is not bound by the current successor or immutable SourceMaintenance predecessor"
         ));
@@ -4464,7 +4559,7 @@ fn validate_command_reachability(workspace_root: &Path) -> Result<(), String> {
     )?);
     for ordered in [
         "validate_source_maintenance_manifest(workspace_root)?",
-        "validate_raw_source_rebuild_manifest(workspace_root)?",
+        "blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?",
         "validate_knowledge_contract_manifest(workspace_root)",
     ] {
         if !aggregate.contains(ordered) {
@@ -4476,15 +4571,17 @@ fn validate_command_reachability(workspace_root: &Path) -> Result<(), String> {
     let source_index = aggregate
         .find("validate_source_maintenance_manifest(workspace_root)?")
         .expect("checked above");
-    let rebuild_index = aggregate
-        .find("validate_raw_source_rebuild_manifest(workspace_root)?")
+    let readiness_index = aggregate
+        .find(
+            "blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?",
+        )
         .expect("checked above");
     let knowledge_index = aggregate
         .find("validate_knowledge_contract_manifest(workspace_root)")
         .expect("checked above");
-    if !(source_index < rebuild_index && rebuild_index < knowledge_index) {
+    if !(source_index < readiness_index && readiness_index < knowledge_index) {
         return Err(
-            "aggregate contract authority must validate the immutable predecessor before raw-source rebuild and knowledge contracts"
+            "aggregate contract authority must validate immutable predecessors before the Blossom readiness successor and knowledge contracts"
                 .to_owned(),
         );
     }
@@ -5091,7 +5188,7 @@ fn validate_delegated_suite_contract_lane_sources(
         || cargo_arg_lines[1]
             != "lib.concatStringsSep \" \" (map (crate: \"-p ${crate}\") coreContractCrates)"
         || cargo_arg_lines[2]
-            != "+ \" --features radroots_event_codec/serde_json,radroots_event_codec/nostr,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events\";"
+            != "+ \" --features radroots_blossom/raster-decode,radroots_event_codec/serde_json,radroots_event_codec/nostr,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events\";"
     {
         return Err(format!(
             "{CONTRACT_LANE_SOURCE_RELATIVE} coreContractCargoArgs must map every literal core contract crate to an unfiltered `-p` package selection"
@@ -6503,7 +6600,11 @@ mod tests {
             .expect("complete event-store Rust source closure");
         validate_successor_compiler_input_authority(&root)
             .expect("complete event-store compiler-input authority");
-        validate_delegated_compiler_source_pins(&root).expect("delegated compiler source pins");
+        validate_delegated_compiler_source_pins_with_supersessions(
+            &root,
+            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+        )
+        .expect("delegated compiler source pins outside the active Blossom successor");
         validate_xtask_manifest_authority(&root).expect("xtask compiler authority");
     }
 
@@ -6517,12 +6618,26 @@ mod tests {
                 .expect("create compiler pin parent");
             fs::copy(root.join(relative), destination).expect("copy compiler pin source");
         }
-        validate_delegated_compiler_source_pins(pinned_workspace.path())
-            .expect("current compiler source pins");
+        validate_delegated_compiler_source_pins_with_supersessions(
+            pinned_workspace.path(),
+            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+        )
+        .expect("current compiler source pins outside the active Blossom successor");
         fs::write(pinned_workspace.path().join(FLAKE_LOCK_RELATIVE), "{}\n")
             .expect("mutate pinned flake lock");
-        validate_delegated_compiler_source_pins(pinned_workspace.path())
-            .expect_err("compiler source mutation must fail closed");
+        validate_delegated_compiler_source_pins_with_supersessions(
+            pinned_workspace.path(),
+            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+        )
+        .expect_err("compiler source mutation must fail closed");
+
+        let unknown = ["build/nix/not-predecessor-pinned.nix"];
+        let error = validate_delegated_compiler_source_pins_with_supersessions(
+            pinned_workspace.path(),
+            &unknown,
+        )
+        .expect_err("unknown compiler source supersession must fail closed");
+        assert!(error.contains("not predecessor-pinned"), "{error}");
 
         let manifest_workspace = tempfile::tempdir().expect("xtask manifest workspace");
         let manifest_path = manifest_workspace.path().join(XTASK_MANIFEST_RELATIVE);
@@ -7279,6 +7394,14 @@ mod tests {
             &root,
         )
         .expect("second immutable predecessor validation");
+
+        let checked_in = read_regular_file(&root, MANIFEST_RELATIVE).expect("immutable manifest");
+        let manifest: RawSourceRebuildManifest =
+            serde_json::from_slice(&checked_in).expect("typed immutable manifest");
+        let first = canonical_json_bytes(&manifest).expect("first immutable render");
+        let second = canonical_json_bytes(&manifest).expect("second immutable render");
+        assert_eq!(first, second);
+        assert_eq!(first, checked_in);
     }
 
     #[test]

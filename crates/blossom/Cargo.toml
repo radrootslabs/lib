@@ -16,13 +16,17 @@ readme = "README"
 default = ["serde"]
 serde = ["dep:serde"]
 std = ["serde?/std", "sha2/std", "url_nostd/std"]
+raster-decode = ["std", "dep:image", "dep:zune-core", "dep:zune-jpeg"]
 
 [dependencies]
+image = { workspace = true, optional = true }
 mediatype = { workspace = true }
 serde = { workspace = true, optional = true }
 sha2 = { workspace = true }
 unicode-general-category = { workspace = true }
 url_nostd = { workspace = true }
+zune-core = { workspace = true, optional = true }
+zune-jpeg = { workspace = true, optional = true }
 
 [dev-dependencies]
 hex = { workspace = true }

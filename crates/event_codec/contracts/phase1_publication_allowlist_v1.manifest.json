@@ -4,8 +4,8 @@
   "authority_id": "phase1_publication_allowlist_v1",
   "manifest_schema": {
     "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.schema.json",
-    "byte_length": 8439,
-    "sha256": "5bdccda1449ca6837d9922171983b880e81324cb0bdefc32e1d92b387f692a4f",
+    "byte_length": 8441,
+    "sha256": "9ffc63e0722948e600061cee2e2992f201a68e670b281e86a9447593ad3105f1",
     "hash_algorithm": "sha256_bytes_v1"
   },
   "predecessor": {
@@ -163,13 +163,21 @@
     ]
   },
   "predecessor_source_supersessions": [
+    "Cargo.lock",
+    "Cargo.toml",
     "CHANGELOG.md",
     "contracts/operations.toml",
     "contracts/releases/1.0.0-alpha.1.toml",
+    "crates/blossom/Cargo.toml",
+    "crates/blossom/src/error.rs",
+    "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs",
     "crates/event_codec/README",
     "crates/event_codec/src/wire/publication.rs",
     "tools/xtask/src/contract.rs",
+    "tools/xtask/src/contract/nip09_reconciliation.rs",
     "tools/xtask/src/contract/phase1_publication_artifact.rs",
+    "tools/xtask/src/contract/raw_source_rebuild.rs",
     "tools/xtask/src/main.rs"
   ],
   "source_files": [
@@ -183,43 +191,43 @@
     {
       "role": "release_notes",
       "path": "CHANGELOG.md",
-      "byte_length": 31455,
-      "sha256": "d772851fea581c5cf1275d0da11b5c8136607dd98b8adcf2f0a853dfd69530b0",
+      "byte_length": 32509,
+      "sha256": "8befc8d955998cb45c262ce122b5d982323ced779f1162d7f5cdd5c55845ecca",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "workspace_lockfile_authority",
       "path": "Cargo.lock",
-      "byte_length": 216944,
-      "sha256": "d827b8c5aceb550b62fcc9b98804f97bbaf6bca95a59b1011a9927ba5aa2e49f",
+      "byte_length": 219265,
+      "sha256": "771a1f71c7e575e7c6e5978ce0128e01c5279a6ef3f3fa872aa559b5880221cd",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "workspace_manifest_authority",
       "path": "Cargo.toml",
-      "byte_length": 10836,
-      "sha256": "285532dbb0894204843a832880f136ceac5ee312a3203ff951fb0551fac63ec4",
+      "byte_length": 11098,
+      "sha256": "469316ae4b3e9e28761ebd58af4fdd208476c3c0420f6a99aa3d7e9bc9aec2fc",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "operations_authority",
       "path": "contracts/operations.toml",
-      "byte_length": 78556,
-      "sha256": "3c96d953e208b1781b391a722414861a859c106101ccf8d7b7789193f197d7eb",
+      "byte_length": 80259,
+      "sha256": "8bb1c542379533eff3a4aaed8cef2bba9234b0fb03739554810ca1019caab6e9",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "release_authority",
       "path": "contracts/releases/1.0.0-alpha.1.toml",
-      "byte_length": 21594,
-      "sha256": "9dbdb89559736eaa76410a594fd03e21d1cb276b1eb8c1308913958ee4af0d2f",
+      "byte_length": 22116,
+      "sha256": "ad565e9589eb106dd1c0473d47cb22740a33b966a8070049a800118391e29684",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "blossom_manifest_authority",
       "path": "crates/blossom/Cargo.toml",
-      "byte_length": 901,
-      "sha256": "9e84a9f1820e84994e5c8f705cae243eadd4676244f98604c53fc0800f0e51b3",
+      "byte_length": 1118,
+      "sha256": "f993430f919e86e6bd97289db0428959960c1f4d01ba2bd77c23d233f69d25d1",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -239,8 +247,8 @@
     {
       "role": "public_production_source",
       "path": "crates/blossom/src/error.rs",
-      "byte_length": 17227,
-      "sha256": "8b0b9557cca68604791c9bb080f3cb0ff81a2397efb7f1ab600b2b4f4f7f8fa7",
+      "byte_length": 30918,
+      "sha256": "bd77810306b3556434d93057ca5ee62db474e9b0af94176ba4aa7a2ef25be7d8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -253,15 +261,29 @@
     {
       "role": "public_production_source",
       "path": "crates/blossom/src/lib.rs",
-      "byte_length": 1335,
-      "sha256": "61ebee86f02887c45507bab052686da082f74ae26f23d18ff4019e02c70097bd",
+      "byte_length": 2172,
+      "sha256": "97cae38f693795445cc17671649f3d88c0c492fc8d71d2c98a4ca02502e5d43a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "public_production_source",
+      "path": "crates/blossom/src/publication_readiness.rs",
+      "byte_length": 69610,
+      "sha256": "77fea26e0d74cc4064ec4e4916a4e61be251df9d4c0d42ac5c98a7e8faeeea3a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "public_production_source",
+      "path": "crates/blossom/src/publication_readiness/sequential_jpeg.rs",
+      "byte_length": 44379,
+      "sha256": "22b8704466887a892f00469db895ace1bb780c48849e3bfe6d7d94682ce366d8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "public_production_source",
       "path": "crates/blossom/src/url.rs",
-      "byte_length": 15364,
-      "sha256": "05325325da6627ba48318851fb4e61a9ad540aad37fc1c27ac9a47f27300891f",
+      "byte_length": 15794,
+      "sha256": "e9673f074ba6328a121aa3008fc11cd4d9d22cae3b09f26602ea6fea3f964c80",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -2206,36 +2228,36 @@
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 481424,
-      "sha256": "e1f5867b5861b5f2a7dd69e22d41c8abc8e484458d0a19b8659c81501897d2cd",
+      "byte_length": 481764,
+      "sha256": "1cc775273bbe8e4ddd7fcf8c4f342eecb92d1564f2448e28efc3ee886f279d32",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "superseded_nip09_contract_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 852432,
-      "sha256": "971d75198770265b17e17df23ba17a6096ad687d1cf2ac0f662a2c190ab39f94",
+      "byte_length": 855035,
+      "sha256": "c631cba79f538058f588c3f071c519c8fdce829d154313126f4f7f7f19305307",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "publication_allowlist_contract_governance",
       "path": "tools/xtask/src/contract/phase1_publication_allowlist.rs",
-      "byte_length": 76855,
-      "sha256": "4f9bcecd5ebb5a3cc0385132e5cc1b12f0eec962be6e0afe1346344707033464",
+      "byte_length": 77019,
+      "sha256": "72d8b350eaf3e18b2bf3e03e6de3adbd855bd70894d0f0a540d446151c674016",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "publication_contract_governance",
       "path": "tools/xtask/src/contract/phase1_publication_artifact.rs",
-      "byte_length": 75139,
-      "sha256": "c97e65c37587affd6ced006c8eb29b3365211f4be7accb8cc44155b0190233f5",
+      "byte_length": 75906,
+      "sha256": "2cfa485178cd61f33184feae10ea3c7ed12d85673e3091a2a135b77c922e58fd",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "superseded_raw_rebuild_contract_governance",
       "path": "tools/xtask/src/contract/raw_source_rebuild.rs",
-      "byte_length": 297547,
-      "sha256": "e8cf84ba8f27432d0ba7aefa01fc61f9e37810d48f407fa2b9c7c969e5c76724",
+      "byte_length": 302449,
+      "sha256": "91179375ebae13daca8e6d22286fd68cc849903f1397909b37ad0e639a961c4e",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
