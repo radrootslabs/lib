@@ -24,6 +24,7 @@ let
         ../../README
         ../../flake.nix
         ../../build/nix/apps.nix
+        ../../build/nix/checks.nix
         ../../build/nix/common.nix
         ../../build/nix/toolchains.nix
         ../../dto_bindgen.toml
@@ -115,7 +116,7 @@ let
   ];
   coreContractCargoArgs =
     lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates)
-    + " --features radroots_event_codec/serde_json,radroots_event_codec/nostr,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events";
+    + " --features radroots_blossom/raster-decode,radroots_event_codec/serde_json,radroots_event_codec/nostr,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events";
   craneLib = (crane.mkLib pkgs).overrideToolchain toolchains.stable;
   commonCraneArgs = {
     inherit version;

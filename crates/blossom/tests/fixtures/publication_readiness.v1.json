@@ -6,31 +6,31 @@
       "id": "valid_created",
       "kind": "blossom.verify_publication_readiness.valid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "none"
       },
       "expected": {
-        "url": "https://cdn.example/0d1c097e006a87476e84014ba5842f04c725ed2fc5a081743ab2b5bf13a538b9.png",
-        "sha256": "0d1c097e006a87476e84014ba5842f04c725ed2fc5a081743ab2b5bf13a538b9",
+        "url": "https://cdn.example/4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd.png",
+        "sha256": "4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd",
         "size": 70,
         "media_type": "image/png",
         "format": "png",
         "width": 1,
         "height": 1,
         "upload_status": 201,
-        "evidence_digest": "c52edeba688fa36c7963a478a35ff78504d7dd79a637c67f93d5acb635110660"
+        "evidence_digest": "44e63303e594ea42d863be995b23ac4297ed77e4378d0707c94f28e77164bd3b"
       }
     },
     {
       "id": "valid_ok_without_authored_dimensions",
       "kind": "blossom.verify_publication_readiness.valid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "upload_status_200"
       },
       "expected": {
-        "url": "https://cdn.example/0d1c097e006a87476e84014ba5842f04c725ed2fc5a081743ab2b5bf13a538b9.png",
-        "sha256": "0d1c097e006a87476e84014ba5842f04c725ed2fc5a081743ab2b5bf13a538b9",
+        "url": "https://cdn.example/4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd.png",
+        "sha256": "4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd",
         "size": 70,
         "media_type": "image/png",
         "format": "png",
@@ -43,7 +43,7 @@
       "id": "invalid_upload_status",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "upload_status_202"
       },
       "expected": {
@@ -54,7 +54,7 @@
       "id": "invalid_head_status",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "head_status_204"
       },
       "expected": {
@@ -65,7 +65,7 @@
       "id": "invalid_get_status",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_status_206"
       },
       "expected": {
@@ -76,7 +76,7 @@
       "id": "declared_size_over_public_max",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_size_over_max"
       },
       "expected": {
@@ -87,7 +87,7 @@
       "id": "missing_get_body",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_body_missing"
       },
       "expected": {
@@ -98,7 +98,7 @@
       "id": "short_get_body",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_body_short"
       },
       "expected": {
@@ -109,7 +109,7 @@
       "id": "trailing_get_body",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_body_trailing"
       },
       "expected": {
@@ -120,7 +120,7 @@
       "id": "authored_bytes_short",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "authored_bytes_short"
       },
       "expected": {
@@ -131,7 +131,7 @@
       "id": "authored_bytes_wrong_hash",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "authored_bytes_wrong_hash"
       },
       "expected": {
@@ -142,7 +142,7 @@
       "id": "upload_url_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "upload_url_mismatch"
       },
       "expected": {
@@ -153,7 +153,7 @@
       "id": "upload_hash_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "upload_hash_mismatch"
       },
       "expected": {
@@ -164,7 +164,7 @@
       "id": "upload_size_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "upload_size_mismatch"
       },
       "expected": {
@@ -175,7 +175,7 @@
       "id": "upload_mime_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "upload_mime_mismatch"
       },
       "expected": {
@@ -186,7 +186,7 @@
       "id": "head_url_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "head_url_mismatch"
       },
       "expected": {
@@ -197,7 +197,7 @@
       "id": "head_size_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "head_size_mismatch"
       },
       "expected": {
@@ -208,7 +208,7 @@
       "id": "head_mime_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "head_mime_mismatch"
       },
       "expected": {
@@ -219,7 +219,7 @@
       "id": "get_url_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_url_mismatch"
       },
       "expected": {
@@ -230,7 +230,7 @@
       "id": "get_declared_size_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_declared_size_mismatch"
       },
       "expected": {
@@ -241,7 +241,7 @@
       "id": "get_complete_hash_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "get_bytes_wrong_hash"
       },
       "expected": {
@@ -252,7 +252,7 @@
       "id": "unsupported_raster_mime",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "unsupported_mime"
       },
       "expected": {
@@ -263,7 +263,7 @@
       "id": "malformed_raster",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "malformed_container"
       },
       "expected": {
@@ -274,62 +274,62 @@
       "id": "animated_png",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "animated_png"
       },
       "expected": {
-        "error": "publication_raster_frame_count_mismatch"
+        "error": "publication_raster_animation_forbidden"
       }
     },
     {
-      "id": "decode_format_mismatch",
+      "id": "declared_format_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_format_mismatch"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "declared_mime_jpeg"
       },
       "expected": {
-        "error": "publication_raster_decode_format_mismatch"
+        "error": "invalid_publication_raster"
       }
     },
     {
-      "id": "decode_length_mismatch",
+      "id": "corrupt_png_crc",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_length_mismatch"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "corrupt_png_crc"
       },
       "expected": {
-        "error": "publication_raster_decode_length_mismatch"
+        "error": "publication_raster_decode_failed"
       }
     },
     {
-      "id": "decode_hash_mismatch",
+      "id": "corrupt_png_deflate",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_hash_mismatch"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "corrupt_png_deflate"
       },
       "expected": {
-        "error": "publication_raster_decode_hash_mismatch"
+        "error": "publication_raster_decode_failed"
       }
     },
     {
-      "id": "decode_container_dimension_mismatch",
+      "id": "invalid_png_color_type",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_container_dimension_mismatch"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "invalid_png_color_type"
       },
       "expected": {
-        "error": "publication_raster_container_dimension_mismatch"
+        "error": "publication_raster_decode_failed"
       }
     },
     {
       "id": "authored_dimension_mismatch",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
         "mutation": "authored_dimension_mismatch"
       },
       "expected": {
@@ -337,47 +337,91 @@
       }
     },
     {
-      "id": "decode_zero_frames",
+      "id": "animated_webp",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_zero_frames"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "animated_webp"
       },
       "expected": {
-        "error": "publication_raster_frame_count_mismatch"
+        "error": "publication_raster_animation_forbidden"
       }
     },
     {
-      "id": "decode_zero_width",
+      "id": "zero_width",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_zero_width"
-      },
-      "expected": {
-        "error": "publication_raster_dimensions_out_of_range"
-      }
-    },
-    {
-      "id": "decode_dimension_over_max",
-      "kind": "blossom.verify_publication_readiness.invalid",
-      "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_dimension_over_max"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "zero_width"
       },
       "expected": {
         "error": "publication_raster_dimensions_out_of_range"
       }
     },
     {
-      "id": "decode_pixel_limit",
+      "id": "dimension_over_max",
       "kind": "blossom.verify_publication_readiness.invalid",
       "input": {
-        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff000000401010018dd8db10000000049454e44ae426082",
-        "mutation": "decode_pixel_limit"
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "dimension_over_max"
+      },
+      "expected": {
+        "error": "publication_raster_dimensions_out_of_range"
+      }
+    },
+    {
+      "id": "pixel_limit",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "pixel_limit"
       },
       "expected": {
         "error": "publication_raster_pixel_limit_exceeded"
+      }
+    },
+    {
+      "id": "progressive_jpeg",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "progressive_jpeg"
+      },
+      "expected": {
+        "error": "publication_jpeg_process_forbidden"
+      }
+    },
+    {
+      "id": "jpeg_entropy_stripped",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "jpeg_entropy_stripped"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "jpeg_entropy_partial",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "jpeg_entropy_partial"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "malformed_jpeg_dqt",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "malformed_jpeg_dqt"
+      },
+      "expected": {
+        "error": "invalid_publication_raster"
       }
     }
   ]

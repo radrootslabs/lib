@@ -9,9 +9,17 @@ use std::path::Path;
 const VECTOR_CANONICAL_RELATIVE: &str =
     "contracts/conformance/vectors/blossom/publication_readiness.v1.json";
 const VECTOR_MIRROR_RELATIVE: &str = "crates/blossom/tests/fixtures/publication_readiness.v1.json";
+const WORKSPACE_MANIFEST_RELATIVE: &str = "Cargo.toml";
+const WORKSPACE_LOCK_RELATIVE: &str = "Cargo.lock";
 const READINESS_SOURCE_RELATIVE: &str = "crates/blossom/src/publication_readiness.rs";
+const SEQUENTIAL_JPEG_SOURCE_RELATIVE: &str =
+    "crates/blossom/src/publication_readiness/sequential_jpeg.rs";
 const BLOSSOM_LIB_RELATIVE: &str = "crates/blossom/src/lib.rs";
+const BLOSSOM_URL_RELATIVE: &str = "crates/blossom/src/url.rs";
 const BLOSSOM_MANIFEST_RELATIVE: &str = "crates/blossom/Cargo.toml";
+const COVERAGE_PROFILES_RELATIVE: &str = "contracts/coverage-profiles.toml";
+const NIX_COMMON_RELATIVE: &str = "build/nix/common.nix";
+const NIX_CHECKS_RELATIVE: &str = "build/nix/checks.nix";
 const OPERATIONS_RELATIVE: &str = "contracts/operations.toml";
 const RELEASE_RELATIVE: &str = "contracts/releases/1.0.0-alpha.1.toml";
 const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
@@ -20,6 +28,9 @@ const RELEASE_CHANGE_ID: &str = "blossom-publication-readiness-evidence";
 const CHANGELOG_MARKER: &str = "<!-- release-change: blossom-publication-readiness-evidence -->";
 
 const RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    WORKSPACE_LOCK_RELATIVE,
+    WORKSPACE_MANIFEST_RELATIVE,
+    NIX_COMMON_RELATIVE,
     CHANGELOG_RELATIVE,
     RELEASE_RELATIVE,
     "tools/xtask/src/contract.rs",
@@ -27,19 +38,31 @@ const RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "tools/xtask/src/contract/nip09_reconciliation.rs",
     RAW_PREDECESSOR_GOVERNANCE_RELATIVE,
 ];
-const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] =
-    &["crates/blossom/src/error.rs", BLOSSOM_LIB_RELATIVE];
+const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    WORKSPACE_MANIFEST_RELATIVE,
+    BLOSSOM_MANIFEST_RELATIVE,
+    "crates/blossom/src/error.rs",
+    BLOSSOM_LIB_RELATIVE,
+    BLOSSOM_URL_RELATIVE,
+];
 
 const SOURCE_INVENTORY: &[&str] = &[
+    WORKSPACE_LOCK_RELATIVE,
+    WORKSPACE_MANIFEST_RELATIVE,
+    NIX_CHECKS_RELATIVE,
+    NIX_COMMON_RELATIVE,
     CHANGELOG_RELATIVE,
     BLOSSOM_MANIFEST_RELATIVE,
     "crates/blossom/README",
     "crates/blossom/src/error.rs",
     BLOSSOM_LIB_RELATIVE,
     READINESS_SOURCE_RELATIVE,
+    SEQUENTIAL_JPEG_SOURCE_RELATIVE,
+    BLOSSOM_URL_RELATIVE,
     "crates/blossom/tests/publication_readiness.rs",
     VECTOR_MIRROR_RELATIVE,
     "contracts/events/blossom-media.md",
+    COVERAGE_PROFILES_RELATIVE,
     VECTOR_CANONICAL_RELATIVE,
     OPERATIONS_RELATIVE,
     RELEASE_RELATIVE,
@@ -86,13 +109,18 @@ const IMMUTABLE_RAW_PREDECESSOR_ARTIFACTS: &[(&str, usize, &str)] = &[
 const CURRENT_BYTE_BOUND_BLOSSOM_SOURCES: &[(&str, usize, &str)] = &[
     (
         BLOSSOM_LIB_RELATIVE,
-        2_088,
-        "ab0431ba43619431f4384a474c1e8b7e3e646a802443d66cf992df467fa9c36b",
+        2_172,
+        "97cae38f693795445cc17671649f3d88c0c492fc8d71d2c98a4ca02502e5d43a",
     ),
     (
         "crates/blossom/src/error.rs",
-        30_667,
-        "2d30f4e21d71b6978cb3cc564d5ab542d238cf56c2eab89801fce8d1421bccf6",
+        30_918,
+        "bd77810306b3556434d93057ca5ee62db474e9b0af94176ba4aa7a2ef25be7d8",
+    ),
+    (
+        BLOSSOM_URL_RELATIVE,
+        15_794,
+        "e9673f074ba6328a121aa3008fc11cd4d9d22cae3b09f26602ea6fea3f964c80",
     ),
 ];
 
@@ -105,7 +133,6 @@ const REQUIRED_PUBLIC_TYPES: &[&str] = &[
     "RadrootsBlossomRasterFormat",
     "RadrootsBlossomRasterDimensions",
     "RadrootsBlossomAuthoredRasterDimensions",
-    "RadrootsBlossomRasterDecodeObservation",
     "RadrootsBlossomPublicationReadinessEvidenceDigest",
     "RadrootsBlossomPublicationReadinessEvidence",
 ];
@@ -253,31 +280,31 @@ const VECTOR_EXPECTATIONS: &[(&str, &str, &str, Option<&str>)] = &[
         "animated_png",
         "blossom.verify_publication_readiness.invalid",
         "animated_png",
-        Some("publication_raster_frame_count_mismatch"),
+        Some("publication_raster_animation_forbidden"),
     ),
     (
-        "decode_format_mismatch",
+        "declared_format_mismatch",
         "blossom.verify_publication_readiness.invalid",
-        "decode_format_mismatch",
-        Some("publication_raster_decode_format_mismatch"),
+        "declared_mime_jpeg",
+        Some("invalid_publication_raster"),
     ),
     (
-        "decode_length_mismatch",
+        "corrupt_png_crc",
         "blossom.verify_publication_readiness.invalid",
-        "decode_length_mismatch",
-        Some("publication_raster_decode_length_mismatch"),
+        "corrupt_png_crc",
+        Some("publication_raster_decode_failed"),
     ),
     (
-        "decode_hash_mismatch",
+        "corrupt_png_deflate",
         "blossom.verify_publication_readiness.invalid",
-        "decode_hash_mismatch",
-        Some("publication_raster_decode_hash_mismatch"),
+        "corrupt_png_deflate",
+        Some("publication_raster_decode_failed"),
     ),
     (
-        "decode_container_dimension_mismatch",
+        "invalid_png_color_type",
         "blossom.verify_publication_readiness.invalid",
-        "decode_container_dimension_mismatch",
-        Some("publication_raster_container_dimension_mismatch"),
+        "invalid_png_color_type",
+        Some("publication_raster_decode_failed"),
     ),
     (
         "authored_dimension_mismatch",
@@ -286,28 +313,52 @@ const VECTOR_EXPECTATIONS: &[(&str, &str, &str, Option<&str>)] = &[
         Some("publication_authored_raster_dimension_mismatch"),
     ),
     (
-        "decode_zero_frames",
+        "animated_webp",
         "blossom.verify_publication_readiness.invalid",
-        "decode_zero_frames",
-        Some("publication_raster_frame_count_mismatch"),
+        "animated_webp",
+        Some("publication_raster_animation_forbidden"),
     ),
     (
-        "decode_zero_width",
+        "zero_width",
         "blossom.verify_publication_readiness.invalid",
-        "decode_zero_width",
+        "zero_width",
         Some("publication_raster_dimensions_out_of_range"),
     ),
     (
-        "decode_dimension_over_max",
+        "dimension_over_max",
         "blossom.verify_publication_readiness.invalid",
-        "decode_dimension_over_max",
+        "dimension_over_max",
         Some("publication_raster_dimensions_out_of_range"),
     ),
     (
-        "decode_pixel_limit",
+        "pixel_limit",
         "blossom.verify_publication_readiness.invalid",
-        "decode_pixel_limit",
+        "pixel_limit",
         Some("publication_raster_pixel_limit_exceeded"),
+    ),
+    (
+        "progressive_jpeg",
+        "blossom.verify_publication_readiness.invalid",
+        "progressive_jpeg",
+        Some("publication_jpeg_process_forbidden"),
+    ),
+    (
+        "jpeg_entropy_stripped",
+        "blossom.verify_publication_readiness.invalid",
+        "jpeg_entropy_stripped",
+        Some("publication_raster_decode_failed"),
+    ),
+    (
+        "jpeg_entropy_partial",
+        "blossom.verify_publication_readiness.invalid",
+        "jpeg_entropy_partial",
+        Some("publication_raster_decode_failed"),
+    ),
+    (
+        "malformed_jpeg_dqt",
+        "blossom.verify_publication_readiness.invalid",
+        "malformed_jpeg_dqt",
+        Some("invalid_publication_raster"),
     ),
 ];
 
@@ -399,11 +450,19 @@ fn validate_source_boundary(workspace_root: &Path) -> Result<(), String> {
         READINESS_SOURCE_RELATIVE,
     )?)
     .map_err(|error| format!("{READINESS_SOURCE_RELATIVE} must be UTF-8: {error}"))?;
-    validate_readiness_source_text(&source)?;
+    let sequential_jpeg_source = String::from_utf8(read_regular_file(
+        workspace_root,
+        SEQUENTIAL_JPEG_SOURCE_RELATIVE,
+    )?)
+    .map_err(|error| format!("{SEQUENTIAL_JPEG_SOURCE_RELATIVE} must be UTF-8: {error}"))?;
+    validate_readiness_source_text(&source, &sequential_jpeg_source)?;
     let lib = String::from_utf8(read_regular_file(workspace_root, BLOSSOM_LIB_RELATIVE)?)
         .map_err(|error| format!("{BLOSSOM_LIB_RELATIVE} must be UTF-8: {error}"))?;
     if lib.matches("pub mod publication_readiness;").count() != 1
-        || !lib.contains("verify_publication_readiness")
+        || !lib.contains(
+            "#[cfg(feature = \"raster-decode\")]\npub use publication_readiness::verify_publication_readiness;",
+        )
+        || !lib.contains("RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES")
         || !lib.contains("RadrootsBlossomPublicationReadinessEvidence")
     {
         return Err(
@@ -421,11 +480,14 @@ fn validate_source_boundary(workspace_root: &Path) -> Result<(), String> {
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
     let expected = [
+        "image",
         "mediatype",
         "serde",
         "sha2",
         "unicode-general-category",
         "url_nostd",
+        "zune-core",
+        "zune-jpeg",
     ]
     .into_iter()
     .collect::<BTreeSet<_>>();
@@ -433,6 +495,198 @@ fn validate_source_boundary(workspace_root: &Path) -> Result<(), String> {
         return Err(format!(
             "{BLOSSOM_MANIFEST_RELATIVE} dependency boundary drifted: expected {expected:?}, found {actual:?}"
         ));
+    }
+    let image_dependency = dependencies
+        .get("image")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{BLOSSOM_MANIFEST_RELATIVE} must declare optional image"))?;
+    if image_dependency
+        .get("workspace")
+        .and_then(toml::Value::as_bool)
+        != Some(true)
+        || image_dependency
+            .get("optional")
+            .and_then(toml::Value::as_bool)
+            != Some(true)
+    {
+        return Err(format!(
+            "{BLOSSOM_MANIFEST_RELATIVE} image dependency must be optional and workspace-governed"
+        ));
+    }
+    let zune_core_dependency = dependencies
+        .get("zune-core")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{BLOSSOM_MANIFEST_RELATIVE} must declare optional zune-core"))?;
+    if zune_core_dependency
+        .get("workspace")
+        .and_then(toml::Value::as_bool)
+        != Some(true)
+        || zune_core_dependency
+            .get("optional")
+            .and_then(toml::Value::as_bool)
+            != Some(true)
+    {
+        return Err(format!(
+            "{BLOSSOM_MANIFEST_RELATIVE} zune-core dependency must be optional and workspace-governed"
+        ));
+    }
+    let zune_jpeg_dependency = dependencies
+        .get("zune-jpeg")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{BLOSSOM_MANIFEST_RELATIVE} must declare optional zune-jpeg"))?;
+    if zune_jpeg_dependency
+        .get("workspace")
+        .and_then(toml::Value::as_bool)
+        != Some(true)
+        || zune_jpeg_dependency
+            .get("optional")
+            .and_then(toml::Value::as_bool)
+            != Some(true)
+    {
+        return Err(format!(
+            "{BLOSSOM_MANIFEST_RELATIVE} zune-jpeg dependency must be optional and workspace-governed"
+        ));
+    }
+    let workspace_manifest = parse_toml(workspace_root, WORKSPACE_MANIFEST_RELATIVE)?;
+    let workspace_image = workspace_manifest
+        .get("workspace")
+        .and_then(|value| value.get("dependencies"))
+        .and_then(|value| value.get("image"))
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{WORKSPACE_MANIFEST_RELATIVE} must govern image"))?;
+    let workspace_image_features = workspace_image
+        .get("features")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if workspace_image.get("version").and_then(toml::Value::as_str) != Some("=0.25.10")
+        || workspace_image
+            .get("default-features")
+            .and_then(toml::Value::as_bool)
+            != Some(false)
+        || workspace_image_features != BTreeSet::from(["png", "webp"])
+    {
+        return Err(format!(
+            "{WORKSPACE_MANIFEST_RELATIVE} image decoder dependency must be exactly pinned to the PNG/WebP set"
+        ));
+    }
+    let workspace_zune_core = workspace_manifest
+        .get("workspace")
+        .and_then(|value| value.get("dependencies"))
+        .and_then(|value| value.get("zune-core"))
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{WORKSPACE_MANIFEST_RELATIVE} must govern zune-core"))?;
+    let workspace_zune_core_features = workspace_zune_core
+        .get("features")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if workspace_zune_core
+        .get("version")
+        .and_then(toml::Value::as_str)
+        != Some("=0.5.1")
+        || workspace_zune_core
+            .get("default-features")
+            .and_then(toml::Value::as_bool)
+            != Some(false)
+        || workspace_zune_core_features != BTreeSet::from(["std"])
+    {
+        return Err(format!(
+            "{WORKSPACE_MANIFEST_RELATIVE} JPEG decoder core must be exactly pinned to zune-core 0.5.1 with std only"
+        ));
+    }
+    let workspace_zune_jpeg = workspace_manifest
+        .get("workspace")
+        .and_then(|value| value.get("dependencies"))
+        .and_then(|value| value.get("zune-jpeg"))
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{WORKSPACE_MANIFEST_RELATIVE} must govern zune-jpeg"))?;
+    let workspace_zune_jpeg_features = workspace_zune_jpeg
+        .get("features")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if workspace_zune_jpeg
+        .get("version")
+        .and_then(toml::Value::as_str)
+        != Some("=0.5.15")
+        || workspace_zune_jpeg
+            .get("default-features")
+            .and_then(toml::Value::as_bool)
+            != Some(false)
+        || workspace_zune_jpeg_features != BTreeSet::from(["std"])
+    {
+        return Err(format!(
+            "{WORKSPACE_MANIFEST_RELATIVE} strict JPEG authority must be exactly pinned to zune-jpeg 0.5.15 with std only"
+        ));
+    }
+    let features = manifest
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| format!("{BLOSSOM_MANIFEST_RELATIVE} must declare features"))?;
+    let raster_decode = features
+        .get("raster-decode")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| format!("{BLOSSOM_MANIFEST_RELATIVE} must declare raster-decode feature"))?
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if raster_decode != BTreeSet::from(["dep:image", "dep:zune-core", "dep:zune-jpeg", "std"]) {
+        return Err(format!(
+            "{BLOSSOM_MANIFEST_RELATIVE} raster-decode feature must select only std, image, zune-core, and zune-jpeg"
+        ));
+    }
+    let coverage = parse_toml(workspace_root, COVERAGE_PROFILES_RELATIVE)?;
+    let blossom_coverage = coverage
+        .get("profiles")
+        .and_then(|value| value.get("crates"))
+        .and_then(|value| value.get("radroots_blossom"))
+        .ok_or_else(|| {
+            format!("{COVERAGE_PROFILES_RELATIVE} must declare radroots_blossom coverage")
+        })?;
+    let coverage_features = blossom_coverage
+        .get("features")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if blossom_coverage
+        .get("no_default_features")
+        .and_then(toml::Value::as_bool)
+        != Some(true)
+        || coverage_features != BTreeSet::from(["raster-decode", "serde"])
+    {
+        return Err(format!(
+            "{COVERAGE_PROFILES_RELATIVE} must measure the explicit Blossom raster-decode surface"
+        ));
+    }
+    let nix_common = String::from_utf8(read_regular_file(workspace_root, NIX_COMMON_RELATIVE)?)
+        .map_err(|error| format!("{NIX_COMMON_RELATIVE} must be UTF-8: {error}"))?;
+    if !nix_common.contains("radroots_blossom/raster-decode") {
+        return Err(format!(
+            "{NIX_COMMON_RELATIVE} core contract lane must enable raster-decode"
+        ));
+    }
+    let nix_checks = String::from_utf8(read_regular_file(workspace_root, NIX_CHECKS_RELATIVE)?)
+        .map_err(|error| format!("{NIX_CHECKS_RELATIVE} must be UTF-8: {error}"))?;
+    let nix_check_commands = nix_checks.lines().map(str::trim).collect::<BTreeSet<_>>();
+    for required in [
+        "cargo check -p radroots_blossom --lib --no-default-features",
+        "cargo check -p radroots_blossom --lib --no-default-features --features raster-decode",
+        "cargo test -p radroots_blossom --no-default-features --features raster-decode,serde",
+    ] {
+        if !nix_check_commands.contains(required) {
+            return Err(format!(
+                "{NIX_CHECKS_RELATIVE} lacks governed Blossom verification `{required}`"
+            ));
+        }
     }
     let raw_predecessor = String::from_utf8(read_regular_file(
         workspace_root,
@@ -448,7 +702,7 @@ fn validate_raw_predecessor_successor_routing(source: &str) -> Result<(), String
     for required in [
         "pub(crate)fnwrite_raw_source_rebuild_manifest(workspace_root:&Path)->Result<(),String>{validate_raw_source_rebuild_manifest(workspace_root)}",
         "super::blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)",
-        "constBLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS:&[&str]=&[\"crates/blossom/src/error.rs\",\"crates/blossom/src/lib.rs\"];",
+        "constBLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS:&[&str]=&[\"Cargo.toml\",\"crates/blossom/Cargo.toml\",\"crates/blossom/src/error.rs\",\"crates/blossom/src/lib.rs\",\"crates/blossom/src/url.rs\",];",
     ] {
         if !compact.contains(required) {
             return Err(format!(
@@ -459,13 +713,33 @@ fn validate_raw_predecessor_successor_routing(source: &str) -> Result<(), String
     Ok(())
 }
 
-fn validate_readiness_source_text(source: &str) -> Result<(), String> {
+fn validate_readiness_source_text(
+    source: &str,
+    sequential_jpeg_source: &str,
+) -> Result<(), String> {
     for required in [
         "RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION: u16 = 1",
         "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES: u64 = 10_485_760",
+        "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES: u64 =",
         "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION: u32 = 16_384",
         "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS: u64 = 20_000_000",
-        "pub fn verify_publication_readiness(",
+        "#[cfg(feature = \"raster-decode\")]\npub fn verify_publication_readiness(",
+        "use zune_core::{bytestream::ZCursor, colorspace::ColorSpace, options::DecoderOptions};",
+        "use zune_jpeg::JpegDecoder as StrictJpegDecoder;",
+        "mod sequential_jpeg;",
+        "sequential_jpeg::validate(bytes, container)?;",
+        "StrictJpegDecoder::new_with_options(ZCursor::new(bytes), strict_jpeg_decoder_options())",
+        ".set_strict_mode(true)",
+        ".set_use_unsafe(false)",
+        ".jpeg_set_out_colorspace(ColorSpace::RGB)",
+        ".decode_headers()",
+        ".output_buffer_size()",
+        ".decode_into(&mut decoded)",
+        "if !matches!(marker, 0xc0 | 0xc1) || data[0] != 8",
+        "PublicationJpegProcessForbidden",
+        "PngDecoder::with_limits(Cursor::new(bytes), raster_decode_limits())",
+        "WebPDecoder::new(Cursor::new(bytes))",
+        ".read_image(&mut decoded)",
         "b\"radroots.blossom.publication-readiness-evidence.v1\\0\"",
     ] {
         if !source.contains(required) {
@@ -474,7 +748,26 @@ fn validate_readiness_source_text(source: &str) -> Result<(), String> {
             ));
         }
     }
-    let lowercase = source.to_ascii_lowercase();
+    for required in [
+        "struct SequentialJpegHuffmanTable",
+        "struct SequentialJpegEntropyReader",
+        "sampling_product_sum > 10",
+        "value_count > 256",
+        "seen_values[value_index]",
+        "unused_codes == 0",
+        "payload[payload.len() - 3..] != [0, 63, 0]",
+        "reader.finish_restart(expected_restart)?",
+        "seen_components[component.frame_index] = true",
+        "checked_mcu_grid_count",
+    ] {
+        if !sequential_jpeg_source.contains(required) {
+            return Err(format!(
+                "{SEQUENTIAL_JPEG_SOURCE_RELATIVE} is missing governed fragment `{required}`"
+            ));
+        }
+    }
+    let combined = format!("{source}\n{sequential_jpeg_source}");
+    let lowercase = combined.to_ascii_lowercase();
     for forbidden in [
         "reqwest",
         "hyper::",
@@ -492,9 +785,27 @@ fn validate_readiness_source_text(source: &str) -> Result<(), String> {
             ));
         }
     }
-    if source.contains("serde::Deserialize") || source.contains("derive(Deserialize") {
+    if combined.contains("serde::Deserialize") || combined.contains("derive(Deserialize") {
         return Err(
             "publication readiness typestates must not gain forgeable Deserialize implementations"
+                .to_owned(),
+        );
+    }
+    if combined.contains("pub struct RadrootsBlossomRasterDecodeObservation")
+        || combined.contains("decode: &RadrootsBlossom")
+        || combined.contains("ImageReader")
+        || combined.contains("load_from_memory")
+        || combined.contains("JpegDecoder::new(Cursor::new(bytes))")
+        || combined.contains("push_backend(")
+        || combined.contains("gamut_core")
+        || combined.contains("gamut_jpeg")
+        || combined.contains("jpeg_decoder::")
+        || combined.contains("use jpeg_decoder")
+        || combined.contains("extern crate jpeg_decoder")
+        || combined.contains("zenjpeg")
+    {
+        return Err(
+            "publication readiness must force declared-format decode authority internally from exact bytes"
                 .to_owned(),
         );
     }
@@ -603,6 +914,47 @@ fn validate_operation(workspace_root: &Path) -> Result<(), String> {
             "operations contract lacks readiness public type `{missing}`"
         ));
     }
+    if shared.contains("RadrootsBlossomRasterDecodeObservation") {
+        return Err(
+            "operations contract must not expose caller-constructible raster decode authority"
+                .to_owned(),
+        );
+    }
+    let inputs = operation
+        .get("inputs")
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    let expected_inputs = BTreeSet::from([
+        "Bytes",
+        "RadrootsBlossomAuthoredRasterDimensions",
+        "RadrootsBlossomBud01GetObservation",
+        "RadrootsBlossomBud01HeadObservation",
+        "RadrootsBlossomBud02UploadObservation",
+        "RadrootsBlossomByteVerifiedDescriptor",
+    ]);
+    if inputs != expected_inputs {
+        return Err(
+            "Blossom publication-readiness inputs must contain transport evidence and exact bytes only"
+                .to_owned(),
+        );
+    }
+    let rust_types = operation
+        .get("implementation")
+        .and_then(|value| value.get("rust_types"))
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if rust_types.contains("radroots_blossom::RadrootsBlossomRasterDecodeObservation") {
+        return Err(
+            "Blossom publication-readiness implementation must derive decode facts internally"
+                .to_owned(),
+        );
+    }
     Ok(())
 }
 
@@ -684,10 +1036,14 @@ mod tests {
             read_regular_file(&workspace_root(), READINESS_SOURCE_RELATIVE).unwrap(),
         )
         .unwrap();
-        validate_readiness_source_text(&source).unwrap();
+        let sequential_jpeg_source = String::from_utf8(
+            read_regular_file(&workspace_root(), SEQUENTIAL_JPEG_SOURCE_RELATIVE).unwrap(),
+        )
+        .unwrap();
+        validate_readiness_source_text(&source, &sequential_jpeg_source).unwrap();
         let injected = format!("{source}\nfn injected() {{ let _ = reqwest::get; }}\n");
         assert!(
-            validate_readiness_source_text(&injected)
+            validate_readiness_source_text(&injected, &sequential_jpeg_source)
                 .unwrap_err()
                 .contains("transport-neutral")
         );
@@ -696,9 +1052,22 @@ mod tests {
             "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS: u64 = 20_000_001",
         );
         assert!(
-            validate_readiness_source_text(&removed)
+            validate_readiness_source_text(&removed, &sequential_jpeg_source)
                 .unwrap_err()
                 .contains("missing governed fragment")
+        );
+        let weakened_jpeg = sequential_jpeg_source
+            .replace("sampling_product_sum > 10", "sampling_product_sum > 16");
+        assert!(
+            validate_readiness_source_text(&source, &weakened_jpeg)
+                .unwrap_err()
+                .contains("missing governed fragment")
+        );
+        let legacy_decoder = format!("{source}\nuse jpeg_decoder::Decoder;\n");
+        assert!(
+            validate_readiness_source_text(&legacy_decoder, &sequential_jpeg_source)
+                .unwrap_err()
+                .contains("decode authority")
         );
 
         for (relative, expected_length, expected_sha256) in CURRENT_BYTE_BOUND_BLOSSOM_SOURCES {

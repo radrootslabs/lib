@@ -867,8 +867,11 @@ const EXPECTED_SOURCE_MAINTENANCE_DRIFT_PATHS: &[&str] = &[
 ];
 
 const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    "Cargo.toml",
+    "crates/blossom/Cargo.toml",
     "crates/blossom/src/error.rs",
     "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs",
     "crates/event_store/Cargo.toml",
     "crates/event_store/src/error.rs",
     "crates/event_store/src/generated.rs",
@@ -881,8 +884,16 @@ const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "crates/event_store/src/store/food_availability_projection_v1.rs",
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
 ];
-const BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS: &[&str] =
-    &["crates/blossom/src/error.rs", "crates/blossom/src/lib.rs"];
+const BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS: &[&str] = &[
+    "Cargo.toml",
+    "crates/blossom/Cargo.toml",
+    "crates/blossom/src/error.rs",
+    "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs",
+];
+#[cfg(test)]
+const BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS: &[&str] =
+    &[CONTRACT_LANE_SOURCE_RELATIVE];
 
 const GENERATED_ARTIFACT_PATHS: &[&str] = &[
     MANIFEST_RELATIVE,
@@ -1734,7 +1745,33 @@ fn validate_complete_event_store_source_closure(workspace_root: &Path) -> Result
 }
 
 fn validate_delegated_compiler_source_pins(workspace_root: &Path) -> Result<(), String> {
+    validate_delegated_compiler_source_pins_with_supersessions(workspace_root, &[])
+}
+
+fn validate_delegated_compiler_source_pins_with_supersessions(
+    workspace_root: &Path,
+    superseded_paths: &[&str],
+) -> Result<(), String> {
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    if superseded.len() != superseded_paths.len() {
+        return Err("delegated compiler source supersession paths must be unique".to_owned());
+    }
+    let pinned = DELEGATED_COMPILER_SOURCE_PINS
+        .iter()
+        .map(|(relative, _)| *relative)
+        .collect::<BTreeSet<_>>();
+    if let Some(relative) = superseded
+        .iter()
+        .find(|relative| !pinned.contains(**relative))
+    {
+        return Err(format!(
+            "delegated compiler source supersession path `{relative}` is not predecessor-pinned"
+        ));
+    }
     for (relative, expected_sha256) in DELEGATED_COMPILER_SOURCE_PINS {
+        if superseded.contains(relative) {
+            continue;
+        }
         let actual_sha256 = sha256_hex(&read_regular_file(workspace_root, relative)?);
         if actual_sha256 != *expected_sha256 {
             return Err(format!(
@@ -5134,7 +5171,7 @@ fn validate_delegated_suite_contract_lane_sources(
         || cargo_arg_lines[1]
             != "lib.concatStringsSep \" \" (map (crate: \"-p ${crate}\") coreContractCrates)"
         || cargo_arg_lines[2]
-            != "+ \" --features radroots_event_codec/serde_json,radroots_event_codec/nostr,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events\";"
+            != "+ \" --features radroots_blossom/raster-decode,radroots_event_codec/serde_json,radroots_event_codec/nostr,radroots_nostr/blossom,radroots_nostr/client,radroots_nostr/codec,radroots_nostr/events\";"
     {
         return Err(format!(
             "{CONTRACT_LANE_SOURCE_RELATIVE} coreContractCargoArgs must map every literal core contract crate to an unfiltered `-p` package selection"
@@ -6546,7 +6583,11 @@ mod tests {
             .expect("complete event-store Rust source closure");
         validate_successor_compiler_input_authority(&root)
             .expect("complete event-store compiler-input authority");
-        validate_delegated_compiler_source_pins(&root).expect("delegated compiler source pins");
+        validate_delegated_compiler_source_pins_with_supersessions(
+            &root,
+            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+        )
+        .expect("delegated compiler source pins outside the active Blossom successor");
         validate_xtask_manifest_authority(&root).expect("xtask compiler authority");
     }
 
@@ -6560,12 +6601,26 @@ mod tests {
                 .expect("create compiler pin parent");
             fs::copy(root.join(relative), destination).expect("copy compiler pin source");
         }
-        validate_delegated_compiler_source_pins(pinned_workspace.path())
-            .expect("current compiler source pins");
+        validate_delegated_compiler_source_pins_with_supersessions(
+            pinned_workspace.path(),
+            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+        )
+        .expect("current compiler source pins outside the active Blossom successor");
         fs::write(pinned_workspace.path().join(FLAKE_LOCK_RELATIVE), "{}\n")
             .expect("mutate pinned flake lock");
-        validate_delegated_compiler_source_pins(pinned_workspace.path())
-            .expect_err("compiler source mutation must fail closed");
+        validate_delegated_compiler_source_pins_with_supersessions(
+            pinned_workspace.path(),
+            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+        )
+        .expect_err("compiler source mutation must fail closed");
+
+        let unknown = ["build/nix/not-predecessor-pinned.nix"];
+        let error = validate_delegated_compiler_source_pins_with_supersessions(
+            pinned_workspace.path(),
+            &unknown,
+        )
+        .expect_err("unknown compiler source supersession must fail closed");
+        assert!(error.contains("not predecessor-pinned"), "{error}");
 
         let manifest_workspace = tempfile::tempdir().expect("xtask manifest workspace");
         let manifest_path = manifest_workspace.path().join(XTASK_MANIFEST_RELATIVE);
@@ -7256,17 +7311,13 @@ mod tests {
     #[test]
     fn generated_bundle_render_is_deterministic() {
         let root = workspace_root();
-        let first = expected_artifacts(&root)
-            .expect("first render")
-            .into_iter()
-            .map(|artifact| (artifact.relative, artifact.contents))
-            .collect::<Vec<_>>();
-        let second = expected_artifacts(&root)
-            .expect("second render")
-            .into_iter()
-            .map(|artifact| (artifact.relative, artifact.contents))
-            .collect::<Vec<_>>();
+        let checked_in = read_regular_file(&root, MANIFEST_RELATIVE).expect("immutable manifest");
+        let manifest: RawSourceRebuildManifest =
+            serde_json::from_slice(&checked_in).expect("typed immutable manifest");
+        let first = canonical_json_bytes(&manifest).expect("first immutable render");
+        let second = canonical_json_bytes(&manifest).expect("second immutable render");
         assert_eq!(first, second);
+        assert_eq!(first, checked_in);
     }
 
     #[test]
@@ -7476,9 +7527,8 @@ mod tests {
     fn schema_rejects_unknown_runtime_fields() {
         let schema = manifest_schema();
         let root = workspace_root();
-        let schema_bytes = canonical_json_bytes(&schema).expect("schema bytes");
-        let mut manifest = serde_json::to_value(
-            describe_manifest(&root, &schema_bytes).expect("current manifest"),
+        let mut manifest: Value = serde_json::from_slice(
+            &read_regular_file(&root, MANIFEST_RELATIVE).expect("immutable manifest"),
         )
         .expect("manifest value");
         manifest

@@ -64,12 +64,13 @@ pub enum RadrootsBlossomError {
     PublicationRetrievedBytesMismatch,
     UnsupportedPublicationRasterMediaType,
     InvalidPublicationRaster,
-    PublicationRasterFrameCountMismatch { actual: u32 },
+    PublicationJpegProcessForbidden,
+    PublicationRasterAnimationForbidden,
     PublicationRasterDimensionsOutOfRange { width: u32, height: u32 },
     PublicationRasterPixelLimitExceeded { pixels: u64 },
-    PublicationRasterDecodeFormatMismatch,
-    PublicationRasterDecodeLengthMismatch { expected: u64, actual: u64 },
-    PublicationRasterDecodeHashMismatch,
+    PublicationRasterDecodedByteLimitExceeded { decoded: u64, maximum: u64 },
+    PublicationRasterDecodeAllocationFailed,
+    PublicationRasterDecodeFailed,
     PublicationRasterContainerDimensionMismatch,
     PublicationAuthoredRasterDimensionMismatch,
 }
@@ -150,22 +151,21 @@ impl RadrootsBlossomError {
                 "unsupported_publication_raster_media_type"
             }
             Self::InvalidPublicationRaster => "invalid_publication_raster",
-            Self::PublicationRasterFrameCountMismatch { .. } => {
-                "publication_raster_frame_count_mismatch"
-            }
+            Self::PublicationJpegProcessForbidden => "publication_jpeg_process_forbidden",
+            Self::PublicationRasterAnimationForbidden => "publication_raster_animation_forbidden",
             Self::PublicationRasterDimensionsOutOfRange { .. } => {
                 "publication_raster_dimensions_out_of_range"
             }
             Self::PublicationRasterPixelLimitExceeded { .. } => {
                 "publication_raster_pixel_limit_exceeded"
             }
-            Self::PublicationRasterDecodeFormatMismatch => {
-                "publication_raster_decode_format_mismatch"
+            Self::PublicationRasterDecodedByteLimitExceeded { .. } => {
+                "publication_raster_decoded_byte_limit_exceeded"
             }
-            Self::PublicationRasterDecodeLengthMismatch { .. } => {
-                "publication_raster_decode_length_mismatch"
+            Self::PublicationRasterDecodeAllocationFailed => {
+                "publication_raster_decode_allocation_failed"
             }
-            Self::PublicationRasterDecodeHashMismatch => "publication_raster_decode_hash_mismatch",
+            Self::PublicationRasterDecodeFailed => "publication_raster_decode_failed",
             Self::PublicationRasterContainerDimensionMismatch => {
                 "publication_raster_container_dimension_mismatch"
             }
@@ -349,10 +349,12 @@ impl fmt::Display for RadrootsBlossomError {
             Self::InvalidPublicationRaster => {
                 f.write_str("publication raster container is malformed or incomplete")
             }
-            Self::PublicationRasterFrameCountMismatch { actual } => write!(
-                f,
-                "publication raster must contain exactly one frame, got {actual}"
-            ),
+            Self::PublicationJpegProcessForbidden => {
+                f.write_str("publication JPEG must use an 8-bit sequential SOF0 or SOF1 process")
+            }
+            Self::PublicationRasterAnimationForbidden => {
+                f.write_str("publication raster animation is forbidden")
+            }
             Self::PublicationRasterDimensionsOutOfRange { width, height } => write!(
                 f,
                 "publication raster dimensions must be within 1..=16384, got {width}x{height}"
@@ -361,15 +363,15 @@ impl fmt::Display for RadrootsBlossomError {
                 f,
                 "publication raster pixel count {pixels} exceeds 20000000"
             ),
-            Self::PublicationRasterDecodeFormatMismatch => {
-                f.write_str("decoded raster format does not match the exact media type")
-            }
-            Self::PublicationRasterDecodeLengthMismatch { expected, actual } => write!(
+            Self::PublicationRasterDecodedByteLimitExceeded { decoded, maximum } => write!(
                 f,
-                "decoded raster byte length mismatch: expected {expected}, got {actual}"
+                "publication raster requires {decoded} decoded bytes, exceeding maximum {maximum}"
             ),
-            Self::PublicationRasterDecodeHashMismatch => {
-                f.write_str("decoded raster complete-byte hash does not match the authored hash")
+            Self::PublicationRasterDecodeAllocationFailed => {
+                f.write_str("publication raster decoded-pixel buffer allocation failed")
+            }
+            Self::PublicationRasterDecodeFailed => {
+                f.write_str("publication raster bitstream could not be decoded completely")
             }
             Self::PublicationRasterContainerDimensionMismatch => f.write_str(
                 "decoded raster dimensions do not match the dimensions encoded by the container",
@@ -455,18 +457,19 @@ mod tests {
             RadrootsBlossomError::PublicationRetrievedBytesMismatch,
             RadrootsBlossomError::UnsupportedPublicationRasterMediaType,
             RadrootsBlossomError::InvalidPublicationRaster,
-            RadrootsBlossomError::PublicationRasterFrameCountMismatch { actual: 2 },
+            RadrootsBlossomError::PublicationJpegProcessForbidden,
+            RadrootsBlossomError::PublicationRasterAnimationForbidden,
             RadrootsBlossomError::PublicationRasterDimensionsOutOfRange {
                 width: 0,
                 height: 1,
             },
             RadrootsBlossomError::PublicationRasterPixelLimitExceeded { pixels: 20_000_001 },
-            RadrootsBlossomError::PublicationRasterDecodeFormatMismatch,
-            RadrootsBlossomError::PublicationRasterDecodeLengthMismatch {
-                expected: 1,
-                actual: 2,
+            RadrootsBlossomError::PublicationRasterDecodedByteLimitExceeded {
+                decoded: 2,
+                maximum: 1,
             },
-            RadrootsBlossomError::PublicationRasterDecodeHashMismatch,
+            RadrootsBlossomError::PublicationRasterDecodeAllocationFailed,
+            RadrootsBlossomError::PublicationRasterDecodeFailed,
             RadrootsBlossomError::PublicationRasterContainerDimensionMismatch,
             RadrootsBlossomError::PublicationAuthoredRasterDimensionMismatch,
             RadrootsBlossomError::InvalidAuthorizationContent,

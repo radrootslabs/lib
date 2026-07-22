@@ -458,4 +458,16 @@ mod tests {
         assert!(RadrootsBlossomBlobUrl::parse(&url(&format!("https://{maximum_host}"))).is_ok());
         assert!(RadrootsBlossomBlobUrl::parse(&url("https://xn--mdia-9oa.example")).is_ok());
     }
+
+    #[test]
+    fn authority_helpers_reject_absent_and_malformed_loopback_hosts() {
+        assert!(!host_is_loopback(Host::Domain(".localhost")));
+        assert!(!host_is_loopback(Host::Domain("media..localhost")));
+
+        let hostless = Url::parse("file:///blob").unwrap();
+        assert_eq!(
+            validate_authority("file:///blob", &hostless),
+            Err(RadrootsBlossomError::InvalidBlobUrl)
+        );
+    }
 }

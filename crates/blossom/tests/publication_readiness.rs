@@ -1,10 +1,12 @@
+#![cfg(feature = "raster-decode")]
+
+use image::{ExtendedColorType, ImageEncoder, codecs::webp::WebPEncoder};
 use radroots_blossom::{
     RadrootsBlossomApprovedBlobUrl, RadrootsBlossomAuthoredRasterDimensions,
     RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomBud01GetObservation,
     RadrootsBlossomBud01HeadObservation, RadrootsBlossomBud02UploadObservation,
-    RadrootsBlossomError, RadrootsBlossomMediaType, RadrootsBlossomRasterDecodeObservation,
-    RadrootsBlossomRasterDimensions, RadrootsBlossomRasterFormat, RadrootsBlossomSha256,
-    verify_publication_readiness,
+    RadrootsBlossomError, RadrootsBlossomMediaType, RadrootsBlossomRasterDimensions,
+    RadrootsBlossomRasterFormat, RadrootsBlossomSha256, verify_publication_readiness,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -29,7 +31,7 @@ fn publication_readiness_vectors_execute_against_public_api() {
     let canonical = canonical_vectors();
     assert_eq!(canonical, PACKAGED_VECTORS, "packaged vector mirror drift");
     let vector_file: VectorFile = serde_json::from_slice(PACKAGED_VECTORS).unwrap();
-    assert_eq!(vector_file.vectors.len(), 33);
+    assert_eq!(vector_file.vectors.len(), 37);
     for vector in &vector_file.vectors {
         match vector.kind.as_str() {
             "blossom.verify_publication_readiness.valid" => execute_valid(vector),
@@ -37,6 +39,260 @@ fn publication_readiness_vectors_execute_against_public_api() {
             kind => panic!("{} has unsupported kind {kind}", vector.id),
         }
     }
+}
+
+#[test]
+fn publication_readiness_accepts_public_jpeg_and_still_webp() {
+    for (bytes, media_type, extension, format) in [
+        (
+            encoded_jpeg(),
+            "image/jpeg",
+            "jpg",
+            RadrootsBlossomRasterFormat::Jpeg,
+        ),
+        (
+            encoded_still_webp(),
+            "image/webp",
+            "webp",
+            RadrootsBlossomRasterFormat::StillWebP,
+        ),
+    ] {
+        let bytes = bytes.as_slice();
+        let evidence = verify_public_raster(
+            bytes,
+            media_type,
+            extension,
+            RadrootsBlossomAuthoredRasterDimensions::Exact(
+                RadrootsBlossomRasterDimensions::new(1, 1).unwrap(),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(evidence.raster_format(), format);
+        assert_eq!(evidence.raster_format().to_string(), format.as_str());
+        assert_eq!(evidence.dimensions().pixels(), 1);
+        assert_eq!(evidence.uploaded(), 1_800_000_001);
+        assert_eq!(
+            evidence.evidence_digest().as_sha256().to_string(),
+            evidence.evidence_digest().to_string()
+        );
+    }
+}
+
+#[test]
+fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters() {
+    let jpeg = encoded_jpeg();
+    let scan = jpeg
+        .windows(2)
+        .position(|window| window == b"\xff\xda")
+        .unwrap();
+    let segment_length = usize::from(u16::from_be_bytes([jpeg[scan + 2], jpeg[scan + 3]]));
+    let entropy_start = scan + 2 + segment_length;
+    let eoi = jpeg.len() - 2;
+    assert!(entropy_start < eoi);
+    let entropy_length = eoi - entropy_start;
+    for keep in [0, 1, entropy_length / 2, entropy_length - 1] {
+        let mut truncated = jpeg[..entropy_start + keep].to_vec();
+        truncated.extend_from_slice(b"\xff\xd9");
+        assert_eq!(
+            verify_public_raster(
+                &truncated,
+                "image/jpeg",
+                "jpg",
+                RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            )
+            .unwrap_err()
+            .code(),
+            "publication_raster_decode_failed"
+        );
+    }
+
+    let mut malformed_dqt = jpeg.clone();
+    let sof = malformed_dqt
+        .windows(2)
+        .position(|window| window == b"\xff\xc0")
+        .unwrap();
+    malformed_dqt.drain(sof - 3..sof);
+    assert_eq!(
+        verify_public_raster(
+            &malformed_dqt,
+            "image/jpeg",
+            "jpg",
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        )
+        .unwrap_err()
+        .code(),
+        "invalid_publication_raster"
+    );
+
+    let mut progressive = jpeg;
+    progressive[sof + 1] = 0xc2;
+    assert_eq!(
+        verify_public_raster(
+            &progressive,
+            "image/jpeg",
+            "jpg",
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        )
+        .unwrap_err()
+        .code(),
+        "publication_jpeg_process_forbidden"
+    );
+
+    assert_eq!(
+        verify_public_raster(
+            &encoded_animated_png(),
+            "image/png",
+            "png",
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        )
+        .unwrap_err()
+        .code(),
+        "publication_raster_animation_forbidden"
+    );
+
+    assert_eq!(
+        verify_public_raster(
+            &encoded_animated_webp(),
+            "image/webp",
+            "webp",
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        )
+        .unwrap_err()
+        .code(),
+        "publication_raster_animation_forbidden"
+    );
+}
+
+fn encoded_jpeg() -> Vec<u8> {
+    hex::decode(
+        "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc00011080001000103012200021101031101ffc4001f0000010501010101010100000000000000000102030405060708090a0bffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a3435363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9faffc4001f0100030101010101010101010000000000000102030405060708090a0bffc400b51100020102040403040705040400010277000102031104052131061241510761711322328108144291a1b1c109233352f0156272d10a162434e125f11718191a262728292a35363738393a434445464748494a535455565758595a636465666768696a737475767778797a82838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae2e3e4e5e6e7e8e9eaf2f3f4f5f6f7f8f9faffda000c03010002110311003f00f9ca8a28afc3cfe6f3ffd9",
+    )
+    .unwrap()
+}
+
+fn encoded_still_webp() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    WebPEncoder::new_lossless(&mut bytes)
+        .write_image(&[0, 128, 0, 255], 1, 1, ExtendedColorType::Rgba8)
+        .unwrap();
+    bytes
+}
+
+fn encoded_animated_png() -> Vec<u8> {
+    let canonical = hex::decode(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+    )
+    .unwrap();
+    let mut output = b"\x89PNG\r\n\x1a\n".to_vec();
+    output.extend_from_slice(&png_chunk(*b"IHDR", &canonical[16..29]));
+    output.extend_from_slice(&png_chunk(*b"acTL", &[0, 0, 0, 2, 0, 0, 0, 0]));
+    output.extend_from_slice(&png_chunk(*b"fcTL", &apng_frame_control(0)));
+    output.extend_from_slice(&png_chunk(*b"IDAT", &canonical[41..54]));
+    output.extend_from_slice(&png_chunk(*b"fcTL", &apng_frame_control(1)));
+
+    let mut frame_data = 2_u32.to_be_bytes().to_vec();
+    frame_data.extend_from_slice(&canonical[41..54]);
+    output.extend_from_slice(&png_chunk(*b"fdAT", &frame_data));
+    output.extend_from_slice(&png_chunk(*b"IEND", &[]));
+    output
+}
+
+fn apng_frame_control(sequence: u32) -> [u8; 26] {
+    let mut control = [0_u8; 26];
+    control[..4].copy_from_slice(&sequence.to_be_bytes());
+    control[4..8].copy_from_slice(&1_u32.to_be_bytes());
+    control[8..12].copy_from_slice(&1_u32.to_be_bytes());
+    control[20..22].copy_from_slice(&1_u16.to_be_bytes());
+    control[22..24].copy_from_slice(&10_u16.to_be_bytes());
+    control
+}
+
+fn encoded_animated_webp() -> Vec<u8> {
+    let still = encoded_still_webp();
+    let mut output = b"RIFF\0\0\0\0WEBP".to_vec();
+    let mut extended_header = [0_u8; 10];
+    extended_header[0] = 0x02;
+    push_webp_chunk(&mut output, *b"VP8X", &extended_header);
+    push_webp_chunk(&mut output, *b"ANIM", &[0; 6]);
+
+    let mut frame = [0_u8; 16].to_vec();
+    frame[12] = 1;
+    frame.extend_from_slice(&still[12..]);
+    push_webp_chunk(&mut output, *b"ANMF", &frame);
+    let riff_size = (output.len() as u32) - 8;
+    output[4..8].copy_from_slice(&riff_size.to_le_bytes());
+    output
+}
+
+fn push_webp_chunk(output: &mut Vec<u8>, kind: [u8; 4], data: &[u8]) {
+    output.extend_from_slice(&kind);
+    output.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    output.extend_from_slice(data);
+    if data.len() & 1 == 1 {
+        output.push(0);
+    }
+}
+
+fn verify_public_raster(
+    bytes: &[u8],
+    media_type: &str,
+    extension: &str,
+    authored_dimensions: RadrootsBlossomAuthoredRasterDimensions,
+) -> Result<radroots_blossom::RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomError> {
+    let hash = RadrootsBlossomSha256::digest(bytes);
+    let url = format!("https://cdn.example/{hash}.{extension}");
+    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
+    let authored_descriptor = RadrootsBlossomBlobDescriptor::new(
+        RadrootsBlossomBlobUrl::parse(&url).unwrap(),
+        hash,
+        bytes.len() as u64,
+        media_type.clone(),
+        1_800_000_000,
+    )
+    .unwrap()
+    .approve_reference()
+    .unwrap()
+    .verify_bytes(bytes, &media_type)
+    .unwrap();
+    let upload = RadrootsBlossomBud02UploadObservation::new(
+        201,
+        RadrootsBlossomBlobDescriptor::new(
+            RadrootsBlossomBlobUrl::parse(&url).unwrap(),
+            hash,
+            bytes.len() as u64,
+            media_type.clone(),
+            1_800_000_001,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let approved_url = RadrootsBlossomBlobUrl::parse(&url)
+        .unwrap()
+        .approve()
+        .unwrap();
+    let head = RadrootsBlossomBud01HeadObservation::new(
+        200,
+        approved_url.clone(),
+        bytes.len() as u64,
+        media_type,
+    )
+    .unwrap();
+    let get = RadrootsBlossomBud01GetObservation::from_complete_body(
+        200,
+        approved_url,
+        bytes.len() as u64,
+        bytes,
+    )
+    .unwrap();
+    verify_publication_readiness(
+        &authored_descriptor,
+        bytes,
+        authored_dimensions,
+        &upload,
+        &head,
+        &get,
+    )
 }
 
 fn canonical_vectors() -> &'static [u8] {
@@ -144,12 +400,6 @@ fn run_mutation(
     let mut head_size_delta = 0_i64;
     let mut head_media_type = "image/png";
     let mut get_declared_size_delta = 0_i64;
-    let mut decode_format = RadrootsBlossomRasterFormat::Png;
-    let mut decode_hash_bytes = canonical.clone();
-    let mut decode_size_delta = 0_i64;
-    let mut frame_count = 1;
-    let mut decoded_width = 1;
-    let mut decoded_height = 1;
     let mut authored_dimensions = Some((1, 1));
 
     match mutation {
@@ -194,35 +444,135 @@ fn run_mutation(
             exact_authored_bytes = sealed_bytes.clone();
             retrieved_bytes = sealed_bytes.clone();
             upload_hash_bytes = sealed_bytes.clone();
-            decode_hash_bytes = sealed_bytes.clone();
         }
         "animated_png" => {
-            let iend = sealed_bytes.len() - 12;
-            sealed_bytes.splice(
-                iend..iend,
-                [
-                    0, 0, 0, 8, b'a', b'c', b'T', b'L', 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
-                ],
-            );
+            sealed_bytes = encoded_animated_png();
             exact_authored_bytes = sealed_bytes.clone();
             retrieved_bytes = sealed_bytes.clone();
             upload_hash_bytes = sealed_bytes.clone();
-            decode_hash_bytes = sealed_bytes.clone();
         }
-        "decode_format_mismatch" => decode_format = RadrootsBlossomRasterFormat::Jpeg,
-        "decode_length_mismatch" => decode_size_delta = 1,
-        "decode_hash_mismatch" => decode_hash_bytes[69] ^= 1,
-        "decode_container_dimension_mismatch" => {
-            decoded_width = 2;
-            authored_dimensions = None;
+        "declared_mime_jpeg" => {
+            media_type = "image/jpeg";
+            upload_media_type = "image/jpeg";
+            head_media_type = "image/jpeg";
+        }
+        "corrupt_png_crc" => {
+            sealed_bytes[57] ^= 1;
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
+        }
+        "corrupt_png_deflate" => {
+            sealed_bytes[41] = 0;
+            let crc = png_crc(*b"IDAT", &sealed_bytes[41..54]);
+            sealed_bytes[54..58].copy_from_slice(&crc.to_be_bytes());
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
+        }
+        "invalid_png_color_type" => {
+            sealed_bytes[25] = 1;
+            let crc = png_crc(*b"IHDR", &sealed_bytes[16..29]);
+            sealed_bytes[29..33].copy_from_slice(&crc.to_be_bytes());
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
         }
         "authored_dimension_mismatch" => authored_dimensions = Some((2, 1)),
-        "decode_zero_frames" => frame_count = 0,
-        "decode_zero_width" => decoded_width = 0,
-        "decode_dimension_over_max" => decoded_width = 16_385,
-        "decode_pixel_limit" => {
-            decoded_width = 5_000;
-            decoded_height = 5_000;
+        "animated_webp" => {
+            sealed_bytes = encoded_animated_webp();
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
+            media_type = "image/webp";
+            upload_media_type = "image/webp";
+            head_media_type = "image/webp";
+            authored_dimensions = None;
+        }
+        "zero_width" => {
+            sealed_bytes[16..20].copy_from_slice(&0_u32.to_be_bytes());
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
+        }
+        "dimension_over_max" => {
+            sealed_bytes[16..20].copy_from_slice(&16_385_u32.to_be_bytes());
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
+        }
+        "pixel_limit" => {
+            sealed_bytes[16..20].copy_from_slice(&5_000_u32.to_be_bytes());
+            sealed_bytes[20..24].copy_from_slice(&5_000_u32.to_be_bytes());
+            exact_authored_bytes = sealed_bytes.clone();
+            retrieved_bytes = sealed_bytes.clone();
+            upload_hash_bytes = sealed_bytes.clone();
+        }
+        "progressive_jpeg" => {
+            let mut jpeg = encoded_jpeg();
+            let sof = jpeg
+                .windows(2)
+                .position(|window| window == b"\xff\xc0")
+                .unwrap();
+            jpeg[sof + 1] = 0xc2;
+            replace_raster_bytes(
+                &mut sealed_bytes,
+                &mut exact_authored_bytes,
+                &mut retrieved_bytes,
+                &mut upload_hash_bytes,
+                jpeg,
+            );
+            media_type = "image/jpeg";
+            upload_media_type = "image/jpeg";
+            head_media_type = "image/jpeg";
+            authored_dimensions = None;
+        }
+        "jpeg_entropy_stripped" | "jpeg_entropy_partial" => {
+            let jpeg = encoded_jpeg();
+            let scan = jpeg
+                .windows(2)
+                .position(|window| window == b"\xff\xda")
+                .unwrap();
+            let segment_length = usize::from(u16::from_be_bytes([jpeg[scan + 2], jpeg[scan + 3]]));
+            let entropy_start = scan + 2 + segment_length;
+            let entropy_length = jpeg.len() - 2 - entropy_start;
+            let keep = if mutation == "jpeg_entropy_stripped" {
+                0
+            } else {
+                entropy_length / 2
+            };
+            let mut truncated = jpeg[..entropy_start + keep].to_vec();
+            truncated.extend_from_slice(b"\xff\xd9");
+            replace_raster_bytes(
+                &mut sealed_bytes,
+                &mut exact_authored_bytes,
+                &mut retrieved_bytes,
+                &mut upload_hash_bytes,
+                truncated,
+            );
+            media_type = "image/jpeg";
+            upload_media_type = "image/jpeg";
+            head_media_type = "image/jpeg";
+            authored_dimensions = None;
+        }
+        "malformed_jpeg_dqt" => {
+            let mut jpeg = encoded_jpeg();
+            let sof = jpeg
+                .windows(2)
+                .position(|window| window == b"\xff\xc0")
+                .unwrap();
+            jpeg.drain(sof - 3..sof);
+            replace_raster_bytes(
+                &mut sealed_bytes,
+                &mut exact_authored_bytes,
+                &mut retrieved_bytes,
+                &mut upload_hash_bytes,
+                jpeg,
+            );
+            media_type = "image/jpeg";
+            upload_media_type = "image/jpeg";
+            head_media_type = "image/jpeg";
+            authored_dimensions = None;
         }
         other => panic!("{} has unknown mutation {other}", vector.id),
     }
@@ -269,14 +619,6 @@ fn run_mutation(
         adjusted_size(sealed_bytes.len(), get_declared_size_delta),
         &retrieved_bytes,
     )?;
-    let decode = RadrootsBlossomRasterDecodeObservation::new(
-        decode_format,
-        RadrootsBlossomSha256::digest(&decode_hash_bytes),
-        adjusted_size(sealed_bytes.len(), decode_size_delta),
-        frame_count,
-        decoded_width,
-        decoded_height,
-    )?;
     let authored_dimensions = match authored_dimensions {
         Some((width, height)) => RadrootsBlossomAuthoredRasterDimensions::Exact(
             RadrootsBlossomRasterDimensions::new(width, height)?,
@@ -290,8 +632,20 @@ fn run_mutation(
         &upload,
         &head,
         &get,
-        &decode,
     )
+}
+
+fn replace_raster_bytes(
+    sealed_bytes: &mut Vec<u8>,
+    exact_authored_bytes: &mut Vec<u8>,
+    retrieved_bytes: &mut Vec<u8>,
+    upload_hash_bytes: &mut Vec<u8>,
+    replacement: Vec<u8>,
+) {
+    *sealed_bytes = replacement;
+    exact_authored_bytes.clone_from(sealed_bytes);
+    retrieved_bytes.clone_from(sealed_bytes);
+    upload_hash_bytes.clone_from(sealed_bytes);
 }
 
 fn unreachable_result()
@@ -326,6 +680,26 @@ fn approved_url(origin: &str, hash_bytes: &[u8]) -> RadrootsBlossomApprovedBlobU
 
 fn adjusted_size(length: usize, delta: i64) -> u64 {
     u64::try_from(i64::try_from(length).unwrap() + delta).unwrap()
+}
+
+fn png_chunk(kind: [u8; 4], data: &[u8]) -> Vec<u8> {
+    let mut chunk = Vec::new();
+    chunk.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    chunk.extend_from_slice(&kind);
+    chunk.extend_from_slice(data);
+    chunk.extend_from_slice(&png_crc(kind, data).to_be_bytes());
+    chunk
+}
+
+fn png_crc(kind: [u8; 4], data: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for byte in kind.iter().chain(data) {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & 0_u32.wrapping_sub(crc & 1));
+        }
+    }
+    !crc
 }
 
 fn input_str<'a>(vector: &'a Vector, field: &str) -> &'a str {

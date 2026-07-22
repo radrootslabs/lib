@@ -18,13 +18,25 @@ feature, and kind `24242` is never a relay-publication event.
 
 Publication readiness is a separate typestate. It accepts only BUD-02 status
 `200`/`201`, successful BUD-01 `HEAD`/`GET` observations, a body bounded by its
-declared size and the public `10,485,760`-byte maximum, and an exact decoder
-observation for one JPEG, PNG, or still-WebP frame within the public dimension
-and pixel limits. The crate checks complete-byte, URL, hash, MIME, length,
-container, frame, and dimension agreement and emits deterministic per-URL
-evidence. It still performs no HTTP or image decoding: an owning runtime must
-supply transport results and an approved decoder observation over the exact
-complete body.
+declared size and the public `10,485,760`-byte maximum, and one fully decodable
+static JPEG, PNG, or WebP raster within the public dimension and pixel limits.
+With the non-default `raster-decode` feature, the crate forces the decoder from
+the exact declared MIME type. JPEG first passes an internal sequential entropy
+validator that accounts for every MCU, Huffman symbol, magnitude bit, pad bit,
+restart marker, and frame component without synthesizing missing input. The
+same bytes are then fully decoded to RGB pixels by exactly pinned `zune-jpeg`
+`0.5.15` and `zune-core` `0.5.1` in strict mode with unsafe intrinsics disabled.
+The profile accepts only 8-bit sequential SOF0/SOF1 JPEG; progressive SOF2 and
+every other process are rejected. `image` `0.25.10` is enabled only for PNG and WebP. The profile
+rejects PNG and WebP animation, bounds decoded output to `160,000,000` bytes
+before allocation, decodes the complete body, and derives dimensions
+internally. It checks complete-byte, URL, hash, MIME, length, container,
+animation, and dimension agreement before emitting deterministic per-URL
+evidence. The crate performs no HTTP: an owning runtime supplies only the
+transport observations and exact complete body. The portable `no_std` core
+remains available without `raster-decode`, but cannot construct readiness
+evidence. Policy v1 has no serialized or caller-supplied decode-observation
+input.
 
 Protocol behavior is pinned to Blossom commit
 `b5bd2801d1763aa635fc8fea7a76597e0eb18990`:

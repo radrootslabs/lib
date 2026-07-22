@@ -141,6 +141,10 @@ fs2 = { version = "0.4" }
 getrandom = { version = "0.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4" }
+image = { version = "=0.25.10", default-features = false, features = [
+  "png",
+  "webp",
+] }
 jiff-tzdb = { version = "=0.1.8", default-features = false }
 jsonschema = { version = "0.48.1", default-features = false }
 js-sys = { version = "0.3" }
@@ -213,5 +217,9 @@ uuid = { version = "1.22.0", features = ["v4", "v7"] }
 x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1" }
+zune-core = { version = "=0.5.1", default-features = false, features = ["std"] }
+zune-jpeg = { version = "=0.5.15", default-features = false, features = [
+  "std",
+] }
 [patch.crates-io]
 libsqlite3-sys = { path = "crates/libsqlite3_sys_3_53_3" }

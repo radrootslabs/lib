@@ -26,16 +26,19 @@ pub use descriptor::{
 };
 pub use error::RadrootsBlossomError;
 pub use hash::{RadrootsBlossomFileExtension, RadrootsBlossomHashPath, RadrootsBlossomSha256};
+#[cfg(feature = "raster-decode")]
+pub use publication_readiness::verify_publication_readiness;
 pub use publication_readiness::{
     RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
+    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES,
     RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION,
     RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS,
     RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION, RadrootsBlossomAuthoredRasterDimensions,
     RadrootsBlossomBud01GetCollector, RadrootsBlossomBud01GetObservation,
     RadrootsBlossomBud01HeadObservation, RadrootsBlossomBud02UploadObservation,
     RadrootsBlossomBud02UploadStatus, RadrootsBlossomPublicationReadinessEvidence,
-    RadrootsBlossomPublicationReadinessEvidenceDigest, RadrootsBlossomRasterDecodeObservation,
-    RadrootsBlossomRasterDimensions, RadrootsBlossomRasterFormat, verify_publication_readiness,
+    RadrootsBlossomPublicationReadinessEvidenceDigest, RadrootsBlossomRasterDimensions,
+    RadrootsBlossomRasterFormat,
 };
 pub use url::{RadrootsBlossomApprovedBlobUrl, RadrootsBlossomBlobUrl};
 

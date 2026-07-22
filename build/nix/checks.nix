@@ -25,6 +25,31 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
+  blossomNoDefaultCheck = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-blossom-no-default-check";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo check -p radroots_blossom --lib --no-default-features
+        cargo check -p radroots_blossom --lib --no-default-features --features raster-decode
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
+  blossomRasterDecodeTest = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-blossom-raster-decode-test";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo test -p radroots_blossom --no-default-features --features raster-decode,serde
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
   mkReplicaSyncLane =
     {
       pname,
@@ -61,6 +86,8 @@ in
   cargo-fmt = cargoFmt;
   cargo-check = cargoCheck;
   cargo-test = cargoTest;
+  blossom-no-default-check = blossomNoDefaultCheck;
+  blossom-raster-decode-test = blossomRasterDecodeTest;
   replica-sync-default-check = replicaSyncDefaultCheck;
   replica-sync-default-test = replicaSyncDefaultTest;
   replica-sync-legacy-ingest-check = replicaSyncLegacyCheck;

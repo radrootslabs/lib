@@ -2375,6 +2375,13 @@ fn nip09_predecessor_production_source_paths(
         .map(|source| source.path.as_str())
         .chain(
             manifest
+                .cargo_feature_profile
+                .packages
+                .iter()
+                .map(|package| package.manifest_path.as_str()),
+        )
+        .chain(
+            manifest
                 .source_route_witnesses
                 .iter()
                 .map(|source| source.path.as_str()),
@@ -17213,9 +17220,12 @@ mod tests {
     use super::*;
     use std::fs;
 
-    const RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS: [&str; 13] = [
+    const RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS: [&str; 16] = [
+        "Cargo.toml",
+        "crates/blossom/Cargo.toml",
         "crates/blossom/src/error.rs",
         "crates/blossom/src/lib.rs",
+        "crates/blossom/src/url.rs",
         "crates/event_store/Cargo.toml",
         "crates/event_store/src/error.rs",
         "crates/event_store/src/generated.rs",
@@ -17325,6 +17335,55 @@ mod tests {
         let predecessor =
             toml::to_string_pretty(&manifest).expect("serialize predecessor Cargo manifest");
         fs::write(manifest_path, predecessor).expect("restore predecessor compiler manifest");
+
+        let blossom_path = workspace_root.join(BLOSSOM_CARGO_MANIFEST_RELATIVE);
+        let blossom_source = fs::read_to_string(&blossom_path).expect("Blossom Cargo manifest");
+        let mut blossom_manifest: toml::Value =
+            toml::from_str(&blossom_source).expect("parse Blossom Cargo manifest");
+        let raster_decode = blossom_manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|features| features.remove("raster-decode"))
+            .expect("successor raster-decode feature must be present in the live fixture");
+        assert_eq!(
+            raster_decode
+                .as_array()
+                .expect("raster-decode feature array")
+                .iter()
+                .map(toml::Value::as_str)
+                .collect::<Vec<_>>(),
+            [
+                Some("std"),
+                Some("dep:image"),
+                Some("dep:zune-core"),
+                Some("dep:zune-jpeg")
+            ],
+            "successor raster-decode feature must retain its exact semantic shape"
+        );
+        let blossom_dependencies = blossom_manifest
+            .get_mut("dependencies")
+            .and_then(toml::Value::as_table_mut)
+            .expect("Blossom dependencies");
+        for dependency in ["image", "zune-core", "zune-jpeg"] {
+            let removed = blossom_dependencies
+                .remove(dependency)
+                .unwrap_or_else(|| panic!("successor dependency {dependency} must be present"));
+            let expected: toml::Value =
+                toml::from_str("dependency = { workspace = true, optional = true }")
+                    .expect("parse expected successor dependency");
+            assert_eq!(
+                removed,
+                expected
+                    .get("dependency")
+                    .expect("expected successor dependency")
+                    .clone(),
+                "successor dependency {dependency} must retain its exact semantic shape"
+            );
+        }
+        let blossom_predecessor = toml::to_string_pretty(&blossom_manifest)
+            .expect("serialize predecessor Blossom Cargo manifest");
+        fs::write(blossom_path, blossom_predecessor)
+            .expect("restore predecessor Blossom compiler manifest");
     }
 
     fn strip_outer_try(statement: &mut syn::Stmt) {

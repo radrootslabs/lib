@@ -37,7 +37,6 @@ public = [
   "RadrootsBlossomRasterFormat",
   "RadrootsBlossomRasterDimensions",
   "RadrootsBlossomAuthoredRasterDimensions",
-  "RadrootsBlossomRasterDecodeObservation",
   "RadrootsBlossomPublicationReadinessEvidenceDigest",
   "RadrootsBlossomPublicationReadinessEvidence",
   "RadrootsBlossomAuthorizationAction",
@@ -373,7 +372,6 @@ inputs = [
   "RadrootsBlossomBud02UploadObservation",
   "RadrootsBlossomBud01HeadObservation",
   "RadrootsBlossomBud01GetObservation",
-  "RadrootsBlossomRasterDecodeObservation",
 ]
 outputs = ["RadrootsBlossomPublicationReadinessEvidence"]
 error_class = "validation_error"
@@ -390,7 +388,6 @@ rust_types = [
   "radroots_blossom::RadrootsBlossomBud01HeadObservation",
   "radroots_blossom::RadrootsBlossomBud02UploadObservation",
   "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
-  "radroots_blossom::RadrootsBlossomRasterDecodeObservation",
 ]
 
 [operations.blossom_verify_publication_readiness.conformance]
