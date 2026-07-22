@@ -1,5 +1,28 @@
 # radroots_event_codec
 
+The optional `serde_json` feature includes the sealed Phase 1 publication
+artifact. It accepts only the strict authored Profile, Update, PhotoUpdate,
+Ask, date/time Event, and FoodAvailability models. The seven serialized leaves
+are `profile`, `update`, `photo_update`, `ask`, `event_date`, `event_time`, and
+`food_availability`; Event remains one semantic role with typed date and time
+subvariants.
+
+Persistence crosses only the explicit `to_canonical_json` and
+`from_canonical_json` operations. Schema version 1 orders the envelope as
+`schema_version`, `semantic_variant`, `authored_operation_id`,
+`event_contract_id`, `expected_author`, `draft`, `expected_event_id`,
+`media_references`, and `artifact_digest`. Compact JSON is capped at 2,097,152
+bytes, the eventual signed-event wire at 262,144 bytes, and media commitments
+at 4,096 complete canonical URLs. Primary byte-verified BUD-02 descriptor URLs
+retain their required hash-path extension; post fallbacks may be extensionless.
+
+The artifact digest is SHA-256 over the ASCII domain
+`radroots.phase1.publication-artifact.v1`, one literal NUL byte, and the exact
+canonical envelope through `media_references`. Reloading rejects alternate
+encodings, noncanonical identifiers or URL casing, profile drift, and digest
+tampering, but does not restore byte verification, upload, signing, or
+authenticity capabilities.
+
 This is the README for `radroots_event_codec`, which provides canonical event
 codecs and tag builders for the `radroots` core libraries.
 

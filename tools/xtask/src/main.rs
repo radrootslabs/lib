@@ -22,6 +22,7 @@ fn usage() {
     eprintln!("  cargo xtask contract food-availability-projection-manifest [--write]");
     eprintln!("  cargo xtask contract source-maintenance-manifest [--write]");
     eprintln!("  cargo xtask contract raw-source-rebuild-manifest [--write]");
+    eprintln!("  cargo xtask contract phase1-publication-artifact-manifest [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
@@ -136,6 +137,16 @@ fn run_contract(args: &[String]) -> Result<(), String> {
             }
             _ => Err(
                 "raw-source-rebuild-manifest accepts no arguments or exactly --write".to_string(),
+            ),
+        },
+        Some("phase1-publication-artifact-manifest") => match &args[1..] {
+            [] => contract::validate_phase1_publication_artifact_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_phase1_publication_artifact_manifest(&workspace_root())
+            }
+            _ => Err(
+                "phase1-publication-artifact-manifest accepts no arguments or exactly --write"
+                    .to_string(),
             ),
         },
         Some("knowledge-manifest") => {
@@ -264,6 +275,12 @@ mod tests {
         ])
         .expect_err("invalid raw-source rebuild manifest mode");
         assert!(invalid_raw_source_rebuild.contains("exactly --write"));
+        let invalid_publication = run_contract(&[
+            "phase1-publication-artifact-manifest".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid Phase 1 publication manifest mode");
+        assert!(invalid_publication.contains("exactly --write"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
@@ -365,6 +382,8 @@ mod tests {
             .expect("contract SourceMaintenance manifest");
         run_contract(&["raw-source-rebuild-manifest".to_string()])
             .expect("contract raw-source rebuild manifest");
+        run_contract(&["phase1-publication-artifact-manifest".to_string()])
+            .expect("contract Phase 1 publication artifact manifest");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }

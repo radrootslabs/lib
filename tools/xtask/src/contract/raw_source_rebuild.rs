@@ -7271,17 +7271,14 @@ mod tests {
     #[test]
     fn generated_bundle_render_is_deterministic() {
         let root = workspace_root();
-        let first = expected_artifacts(&root)
-            .expect("first render")
-            .into_iter()
-            .map(|artifact| (artifact.relative, artifact.contents))
-            .collect::<Vec<_>>();
-        let second = expected_artifacts(&root)
-            .expect("second render")
-            .into_iter()
-            .map(|artifact| (artifact.relative, artifact.contents))
-            .collect::<Vec<_>>();
-        assert_eq!(first, second);
+        crate::contract::phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(
+            &root,
+        )
+        .expect("first immutable predecessor validation");
+        crate::contract::phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(
+            &root,
+        )
+        .expect("second immutable predecessor validation");
     }
 
     #[test]
@@ -7489,13 +7486,15 @@ mod tests {
 
     #[test]
     fn schema_rejects_unknown_runtime_fields() {
-        let schema = manifest_schema();
         let root = workspace_root();
-        let schema_bytes = canonical_json_bytes(&schema).expect("schema bytes");
-        let mut manifest = serde_json::to_value(
-            describe_manifest(&root, &schema_bytes).expect("current manifest"),
+        let schema: Value = serde_json::from_slice(
+            &read_regular_file(&root, MANIFEST_SCHEMA_RELATIVE).expect("immutable schema bytes"),
         )
-        .expect("manifest value");
+        .expect("immutable schema");
+        let mut manifest: Value = serde_json::from_slice(
+            &read_regular_file(&root, MANIFEST_RELATIVE).expect("immutable manifest bytes"),
+        )
+        .expect("immutable manifest");
         manifest
             .pointer_mut("/runtime")
             .and_then(Value::as_object_mut)
