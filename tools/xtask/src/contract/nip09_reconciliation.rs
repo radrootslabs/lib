@@ -17213,7 +17213,9 @@ mod tests {
     use super::*;
     use std::fs;
 
-    const RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS: [&str; 11] = [
+    const RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS: [&str; 13] = [
+        "crates/blossom/src/error.rs",
+        "crates/blossom/src/lib.rs",
         "crates/event_store/Cargo.toml",
         "crates/event_store/src/error.rs",
         "crates/event_store/src/generated.rs",
@@ -21210,7 +21212,6 @@ version = "0.1.0"
         for (relative, first_module) in [
             ("crates/event/src/lib.rs", "pub mod account;"),
             ("crates/event_codec/src/lib.rs", "pub mod d_tag;"),
-            ("crates/blossom/src/lib.rs", "pub mod authorization;"),
         ] {
             let spec = *SOURCE_ROUTE_WITNESS_SPECS
                 .iter()

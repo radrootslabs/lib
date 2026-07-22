@@ -2,6 +2,7 @@
 
 mod admission_authority;
 mod artifact_bundle;
+mod blossom_publication_readiness;
 mod comment_authority;
 mod deletion_authority;
 mod food_availability_projection;
@@ -53,7 +54,7 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_nip09_reconciliation_manifest(workspace_root)?;
     validate_food_availability_projection_manifest(workspace_root)?;
     validate_source_maintenance_manifest(workspace_root)?;
-    validate_raw_source_rebuild_manifest(workspace_root)?;
+    blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
 
@@ -94,7 +95,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 23] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 24] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -102,6 +103,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 23] = [
     (
         "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json",
         "crates/blossom/tests/fixtures/hash_path_and_descriptor.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+        "crates/blossom/tests/fixtures/publication_readiness.v1.json",
     ),
     (
         "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",

@@ -450,3 +450,15 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Represent relay-event verification, contract admission, valid-stream eligibility, and current visibility as independent exhaustive outcomes; enforce hard raw-event, aggregate raw-JSON, and pre-parse per-event fetch bounds; and remove bare-envelope legacy replica ingestion from the default public feature surface."
+
+[[changes]]
+id = "blossom-publication-readiness-evidence"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+]
+summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification and a closed single-frame JPEG, PNG, and still-WebP raster profile."

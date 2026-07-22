@@ -29,6 +29,17 @@ public = [
   "RadrootsBlossomApprovedDescriptor",
   "RadrootsBlossomByteCommitment",
   "RadrootsBlossomByteVerifiedDescriptor",
+  "RadrootsBlossomBud02UploadStatus",
+  "RadrootsBlossomBud02UploadObservation",
+  "RadrootsBlossomBud01HeadObservation",
+  "RadrootsBlossomBud01GetCollector",
+  "RadrootsBlossomBud01GetObservation",
+  "RadrootsBlossomRasterFormat",
+  "RadrootsBlossomRasterDimensions",
+  "RadrootsBlossomAuthoredRasterDimensions",
+  "RadrootsBlossomRasterDecodeObservation",
+  "RadrootsBlossomPublicationReadinessEvidenceDigest",
+  "RadrootsBlossomPublicationReadinessEvidence",
   "RadrootsBlossomAuthorizationAction",
   "RadrootsBlossomAuthorizationContent",
   "RadrootsBlossomServerDomain",
@@ -350,6 +361,44 @@ rust_types = [
 
 [operations.blossom_verify_descriptor_bytes.conformance]
 vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json"
+
+[operations.blossom_verify_publication_readiness]
+domain = "blossom"
+id = "blossom.verify_publication_readiness"
+stability = "beta"
+inputs = [
+  "RadrootsBlossomByteVerifiedDescriptor",
+  "Bytes",
+  "RadrootsBlossomAuthoredRasterDimensions",
+  "RadrootsBlossomBud02UploadObservation",
+  "RadrootsBlossomBud01HeadObservation",
+  "RadrootsBlossomBud01GetObservation",
+  "RadrootsBlossomRasterDecodeObservation",
+]
+outputs = ["RadrootsBlossomPublicationReadinessEvidence"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_verify_publication_readiness.implementation]
+rust_modules = ["crates/blossom/src/publication_readiness.rs"]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomAuthoredRasterDimensions",
+  "radroots_blossom::RadrootsBlossomBud01GetCollector",
+  "radroots_blossom::RadrootsBlossomBud01GetObservation",
+  "radroots_blossom::RadrootsBlossomBud01HeadObservation",
+  "radroots_blossom::RadrootsBlossomBud02UploadObservation",
+  "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+  "radroots_blossom::RadrootsBlossomRasterDecodeObservation",
+]
+
+[operations.blossom_verify_publication_readiness.conformance]
+vector = "contracts/conformance/vectors/blossom/publication_readiness.v1.json"
+case_kinds = [
+  "blossom.verify_publication_readiness.valid",
+  "blossom.verify_publication_readiness.invalid",
+]
 
 [operations.blossom_build_upload_authorization_claim]
 domain = "blossom"

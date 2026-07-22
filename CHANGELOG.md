@@ -171,6 +171,15 @@ publish policy both pass for the same source revision.
   The executable raw-rebuild successor contract freezes the SourceMaintenance
   predecessor and the `0001` through `0004` migration inventory; no schema
   migration is added.
+<!-- release-change: blossom-publication-readiness-evidence -->
+- Blossom publication media now advances beyond local byte verification only
+  after typed BUD-02 status and descriptor agreement, an independent BUD-01
+  HEAD, and an exactly bounded complete BUD-01 GET agree with the authored
+  URL, hash, MIME, and length. The public evidence profile admits JPEG, PNG,
+  and still WebP only, rejects animation, and binds one decoded frame to
+  dimensions within 16,384 per axis and 20,000,000 pixels. Deterministic
+  per-URL evidence remains transport-neutral and contains no HTTP credentials,
+  BUD-11 material, entitlement decision, or private service topology.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

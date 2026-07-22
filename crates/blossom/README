@@ -2,7 +2,8 @@
 
 `radroots_blossom` provides portable, runtime-independent primitives for
 Blossom blob hashes, root hash paths, blob URLs, BUD-02 descriptors,
-Radroots-approved byte verification, and pure BUD-11 authorization claims.
+Radroots-approved byte verification, publication-readiness evidence, and pure
+BUD-11 authorization claims.
 
 The crate is `no_std + alloc`, performs no HTTP requests, and does not depend on
 Nostr event types. Structural Blossom validity is kept separate from the
@@ -14,6 +15,16 @@ BUD-02 upload completion separately. BUD-11 support similarly stops at typed
 claim construction and endpoint validation; signing and canonical
 `Authorization: Nostr` encoding live behind the `radroots_nostr` `blossom`
 feature, and kind `24242` is never a relay-publication event.
+
+Publication readiness is a separate typestate. It accepts only BUD-02 status
+`200`/`201`, successful BUD-01 `HEAD`/`GET` observations, a body bounded by its
+declared size and the public `10,485,760`-byte maximum, and an exact decoder
+observation for one JPEG, PNG, or still-WebP frame within the public dimension
+and pixel limits. The crate checks complete-byte, URL, hash, MIME, length,
+container, frame, and dimension agreement and emits deterministic per-URL
+evidence. It still performs no HTTP or image decoding: an owning runtime must
+supply transport results and an approved decoder observation over the exact
+complete body.
 
 Protocol behavior is pinned to Blossom commit
 `b5bd2801d1763aa635fc8fea7a76597e0eb18990`:

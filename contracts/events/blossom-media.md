@@ -217,6 +217,38 @@ The public typed API exposes these stable semantic identifiers:
 - `blob_hash_mismatch`
 - `blob_size_mismatch`
 - `blob_media_type_mismatch`
+- `invalid_bud02_upload_status`
+- `invalid_bud01_head_status`
+- `invalid_bud01_get_status`
+- `publication_raster_byte_limit_exceeded`
+- `publication_get_body_allocation_failed`
+- `publication_get_body_length_overflow`
+- `publication_get_body_missing`
+- `publication_get_body_short`
+- `publication_get_body_trailing`
+- `publication_authored_bytes_size_mismatch`
+- `publication_authored_bytes_hash_mismatch`
+- `publication_upload_url_mismatch`
+- `publication_upload_hash_mismatch`
+- `publication_upload_size_mismatch`
+- `publication_upload_media_type_mismatch`
+- `publication_head_url_mismatch`
+- `publication_head_size_mismatch`
+- `publication_head_media_type_mismatch`
+- `publication_get_url_mismatch`
+- `publication_get_declared_size_mismatch`
+- `publication_retrieved_bytes_hash_mismatch`
+- `publication_retrieved_bytes_mismatch`
+- `unsupported_publication_raster_media_type`
+- `invalid_publication_raster`
+- `publication_raster_frame_count_mismatch`
+- `publication_raster_dimensions_out_of_range`
+- `publication_raster_pixel_limit_exceeded`
+- `publication_raster_decode_format_mismatch`
+- `publication_raster_decode_length_mismatch`
+- `publication_raster_decode_hash_mismatch`
+- `publication_raster_container_dimension_mismatch`
+- `publication_authored_raster_dimension_mismatch`
 
 Malformed descriptor JSON can fail in serde before a `RadrootsBlossomError` exists. The executable
 descriptor harness uses three additional wire-shape classifications for those cases:
@@ -235,3 +267,47 @@ that the packaged mirror is byte-for-byte current.
 The public error enum is non-exhaustive so later BUD slices can add typed failures without breaking
 consumers. Adding error detail is allowed, but it must not collapse protocol structure, reference
 approval, and byte verification into one indistinguishable state.
+
+## Publication Readiness Evidence
+
+`RadrootsBlossomPublicationReadinessEvidence` is a transport-neutral proof assembled only after
+all of these independently supplied observations agree with the exact byte-verified authored
+descriptor and deterministic raster bytes:
+
+1. a BUD-02 response has status `200` or `201`, an approved canonical hash-path URL, and matching
+   SHA-256, byte length, and exact media type;
+2. a BUD-01 `HEAD` has status `200` and matching approved URL, content length, and media type;
+3. a BUD-01 `GET` has status `200`, is collected through
+   `RadrootsBlossomBud01GetCollector`, and ends at exactly the declared size;
+4. the complete GET body equals the authored byte count and SHA-256 and is no larger than
+   `10,485,760` bytes;
+5. a decoder observation is bound to those same complete bytes and reports the matching closed
+   raster format, exactly one frame, and bounded dimensions.
+
+The closed raster profile is exact bare `image/jpeg`, `image/png`, or `image/webp`. PNG animation
+chunks and WebP animation flags/chunks fail before evidence is created. JPEG, PNG, and WebP
+container structure is checked independently of the decoder observation. Width and height are each
+within `1..=16,384`, and their product is at most `20,000,000` pixels. When an authored product
+already carries dimensions, it supplies `RadrootsBlossomAuthoredRasterDimensions::Exact` and the
+decoded dimensions must match. Products without authored dimensions supply the explicit
+`Unspecified` variant; the evidence then preserves the bounded decoded dimensions for its eventual
+artifact adapter.
+
+The public crate does not choose or execute HTTP, DNS, redirects, credentials, BUD-11 claims,
+entitlement policy, private endpoints, or an image-decoder implementation. The owning runtime must
+construct the decode observation from its approved decoder over the exact complete body. The core
+then verifies the observation's byte hash, length, format, frame count, container dimensions, and
+product dimensions. A decode observation is not independently trustworthy without that runtime
+adapter and does not claim server availability after the observation.
+
+Each evidence value has a domain-separated deterministic digest covering policy version, complete
+canonical URL, hash, length, MIME, raster format, dimensions, BUD-02 status, successful BUD-01
+HEAD/GET statuses, and the BUD-02 `uploaded` value. This per-URL digest is an adapter input, not the
+future artifact readiness-binding digest. The artifact adapter remains responsible for proving the
+exact URL-complete set, rejecting missing/duplicate/extra/reordered evidence, and binding that set
+to its independently computed artifact digest.
+
+`contracts/conformance/vectors/blossom/publication_readiness.v1.json` executes the accepted status
+set, exact evidence output, public limits, bounded body collection, complete-byte comparisons,
+closed raster policy, frame and dimension bounds, and all agreement failures. The packaged mirror
+under `crates/blossom/tests/fixtures/` must remain byte-identical.
