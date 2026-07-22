@@ -250,8 +250,8 @@
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 479173,
-      "sha256": "15b3e754ed6794c8f4c48d7bd316b05ff90578137adb0275e1febdf2891707b4",
+      "byte_length": 476059,
+      "sha256": "ae86cbc1bb629869f1fedec00ef1871ffdcbf329e607f31ad817d65de15fcff8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

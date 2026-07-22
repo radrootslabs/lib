@@ -40,7 +40,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -52,8 +51,6 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_knowledge_contract_manifest(workspace_root)
 }
 
-const ROOT_RELEASE_POLICY_RELATIVE: &str =
-    "foundation/contracts/release_runtime/mounted_rust_crates/publish-policy.toml";
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
 const CONFORMANCE_SCHEMA_RELATIVE: &str = "contracts/conformance/schema/vector.schema.json";
 const NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE: &str =
@@ -80,6 +77,7 @@ const POST_CONFORMANCE_VECTOR_RELATIVE: &str =
 const FOOD_AVAILABILITY_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/food_availability/profile.v1.json";
 const RELEASES_ROOT_RELATIVE: &str = "contracts/releases";
+const RELEASE_POLICY_RELATIVE: &str = "contracts/releases/publish_policy.toml";
 const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
 const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
@@ -191,7 +189,6 @@ const KNOWLEDGE_BETA_CONTRACT_IDS: [&str; 3] = [
     "radroots.knowledge.change_proposal.v1",
     "radroots.knowledge.contribution_attestation.v1",
 ];
-const RELEASE_POLICY_ENV: &str = "RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY";
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 100.0;
 const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "100/100/100/100";
@@ -1626,6 +1623,7 @@ struct ReleaseRecordArtifacts {
     operations: String,
     replica: String,
     conformance: String,
+    publish_policy: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3933,6 +3931,11 @@ fn validate_release_record(
             CONFORMANCE_ROOT_RELATIVE,
             true,
         ),
+        (
+            record.artifacts.publish_policy.as_str(),
+            RELEASE_POLICY_RELATIVE,
+            false,
+        ),
     ];
     for (actual, expected, directory) in expected_artifacts {
         if actual != expected {
@@ -4628,79 +4631,60 @@ fn coverage_root(contract_root: &Path) -> PathBuf {
     contract_root.to_path_buf()
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+fn release_contract_path(workspace_root: &Path, _contract_version: &str) -> PathBuf {
+    workspace_root.join(RELEASE_POLICY_RELATIVE)
+}
+
+#[cfg(test)]
 fn root_release_policy_path(workspace_root: &Path) -> PathBuf {
-    workspace_root.join(ROOT_RELEASE_POLICY_RELATIVE)
+    release_contract_path(workspace_root, "1.0.0")
 }
 
 fn resolve_release_contract_path_with_override(
     workspace_root: &Path,
+    contract_version: &str,
     release_policy_override: Option<PathBuf>,
-) -> Result<Option<PathBuf>, String> {
+) -> Result<PathBuf, String> {
     if let Some(path) = release_policy_override {
         if !path.is_file() {
             return Err(format!(
-                "{RELEASE_POLICY_ENV} points to a missing release policy file: {}",
+                "release policy override points to a missing file: {}",
                 path.display()
             ));
         }
-        return Ok(Some(path));
+        return Ok(path);
     }
 
-    for ancestor in workspace_root.ancestors() {
-        let candidate = ancestor.join(ROOT_RELEASE_POLICY_RELATIVE);
-        if candidate.is_file() {
-            return Ok(Some(candidate));
-        }
+    let path = release_contract_path(workspace_root, contract_version);
+    if !path.is_file() {
+        return Err(format!(
+            "release publish policy not found; expected {}",
+            path.display()
+        ));
     }
 
-    Ok(None)
+    Ok(path)
 }
 
 #[cfg(test)]
 fn load_release_contract(
     workspace_root: &Path,
-    contract_root: &Path,
+    contract_version: &str,
 ) -> Result<ReleaseContractFile, String> {
-    load_release_contract_with_override(
-        workspace_root,
-        contract_root,
-        env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
-    )
+    load_release_contract_with_override(workspace_root, contract_version, None)
 }
 
 fn load_release_contract_with_override(
     workspace_root: &Path,
-    _contract_root: &Path,
+    contract_version: &str,
     release_policy_override: Option<PathBuf>,
 ) -> Result<ReleaseContractFile, String> {
-    match resolve_release_contract_path_with_override(workspace_root, release_policy_override)? {
-        Some(path) => parse_toml::<ReleaseContractFile>(&path),
-        None => load_missing_release_contract(workspace_root),
-    }
-}
-
-fn missing_release_contract_error() -> String {
-    format!(
-        "release publish policy not found; expected {}",
-        ROOT_RELEASE_POLICY_RELATIVE
-    )
-}
-
-#[cfg(not(test))]
-fn load_missing_release_contract(_workspace_root: &Path) -> Result<ReleaseContractFile, String> {
-    Err(missing_release_contract_error())
-}
-
-#[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn load_missing_release_contract(workspace_root: &Path) -> Result<ReleaseContractFile, String> {
-    if should_synthesize_owner_contracts_for_tests(workspace_root) {
-        let raw = synthetic_release_policy_for_workspace(workspace_root)?;
-        return toml::from_str::<ReleaseContractFile>(&raw)
-            .map_err(|e| format!("parse synthetic release policy: {e}"));
-    }
-    Err(missing_release_contract_error())
+    let path = resolve_release_contract_path_with_override(
+        workspace_root,
+        contract_version,
+        release_policy_override,
+    )?;
+    parse_toml::<ReleaseContractFile>(&path)
 }
 
 #[cfg(test)]
@@ -8055,10 +8039,10 @@ fn publish_config_is_non_public(publish: Option<&PackagePublish>) -> bool {
 #[cfg(test)]
 fn validate_release_publish_policy(
     workspace_root: &Path,
-    contract_root: &Path,
+    _contract_root: &Path,
     contract_version: &str,
 ) -> Result<(), String> {
-    let release = load_release_contract(workspace_root, contract_root)?;
+    let release = load_release_contract(workspace_root, contract_version)?;
     if release.release.version.trim().is_empty() {
         return Err("release.version must not be empty".to_string());
     }
@@ -8240,8 +8224,11 @@ fn validate_release_preflight_with_override_and_profile(
         release_policy_override.clone(),
         authority_profile,
     )?;
-    let release =
-        load_release_contract_with_override(workspace_root, &bundle.root, release_policy_override)?;
+    let release = load_release_contract_with_override(
+        workspace_root,
+        bundle.version.contract.version.as_str(),
+        release_policy_override,
+    )?;
     let policy =
         load_coverage_policy(&bundle.root).expect("validated contract includes coverage policy");
     let publish_crates = collect_unique_set(
@@ -8338,29 +8325,24 @@ fn validate_contract_bundle_with_release_policy_override_and_profile(
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
     validate_version_governance(bundle, workspace_root)?;
-    if resolve_release_contract_path_with_override(workspace_root, release_policy_override.clone())
-        .expect("validated release contract path resolution should not fail")
-        .is_some()
-    {
-        validate_release_publish_policy_with_override(
-            workspace_root,
-            &bundle.root,
-            bundle.version.contract.version.as_str(),
-            release_policy_override,
-        )?;
-    }
+    validate_release_publish_policy_with_override(
+        workspace_root,
+        &bundle.root,
+        bundle.version.contract.version.as_str(),
+        release_policy_override,
+    )?;
     Ok(())
 }
 
 fn validate_release_publish_policy_with_override(
     workspace_root: &Path,
-    contract_root: &Path,
+    _contract_root: &Path,
     contract_version: &str,
     release_policy_override: Option<PathBuf>,
 ) -> Result<(), String> {
     let release = load_release_contract_with_override(
         workspace_root,
-        contract_root,
+        contract_version,
         release_policy_override,
     )?;
     if release.release.version.trim().is_empty() {
@@ -8512,88 +8494,6 @@ fn validate_release_publish_policy_with_override(
     Ok(())
 }
 
-#[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
-pub fn synthetic_release_policy_for_workspace(workspace_root: &Path) -> Result<String, String> {
-    let bundle = load_contract_bundle(workspace_root)?;
-    let publish_configs = workspace_package_publish_configs(workspace_root)?;
-    let dependencies = read_workspace_package_dependencies(workspace_root)?;
-
-    let mut public = BTreeSet::new();
-    let mut internal = BTreeSet::new();
-    for (crate_name, publish) in &publish_configs {
-        if publish_config_is_public(publish.as_ref()) {
-            public.insert(crate_name.clone());
-        } else {
-            internal.insert(crate_name.clone());
-        }
-    }
-
-    let mut in_degree = BTreeMap::new();
-    let mut dependents = BTreeMap::<String, BTreeSet<String>>::new();
-    for crate_name in &public {
-        in_degree.insert(crate_name.clone(), 0usize);
-        dependents.insert(crate_name.clone(), BTreeSet::new());
-    }
-    for crate_name in &public {
-        for dep in &dependencies[crate_name] {
-            if !public.contains(dep) {
-                continue;
-            }
-            *in_degree
-                .get_mut(crate_name)
-                .expect("public crate present in indegree map") += 1;
-            dependents
-                .get_mut(dep)
-                .expect("public dependency present in dependents map")
-                .insert(crate_name.clone());
-        }
-    }
-
-    let mut ready = in_degree
-        .iter()
-        .filter(|(_, degree)| **degree == 0)
-        .map(|(crate_name, _)| crate_name.clone())
-        .collect::<BTreeSet<_>>();
-    let mut publish_order = Vec::new();
-    while let Some(crate_name) = ready.pop_first() {
-        publish_order.push(crate_name.clone());
-        for dependent in dependents[&crate_name].clone() {
-            let degree = in_degree
-                .get_mut(&dependent)
-                .expect("dependent crate present in indegree map");
-            *degree -= 1;
-            if *degree == 0 {
-                ready.insert(dependent);
-            }
-        }
-    }
-    if publish_order.len() != public.len() {
-        return Err("public crate dependency graph contains a cycle".to_string());
-    }
-
-    let public = public.into_iter().collect::<Vec<_>>();
-    let internal = internal.into_iter().collect::<Vec<_>>();
-    Ok(format!(
-        "[release]\nversion = \"{}\"\n\n[classification]\npublic = {}\ninternal = {}\ndeferred = []\nretired = []\nyank_only = []\n\n[publish_order]\ncrates = {}\n",
-        bundle.version.contract.version,
-        toml_inline_array(&public),
-        toml_inline_array(&internal),
-        toml_inline_array(&publish_order),
-    ))
-}
-
-#[cfg(test)]
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn toml_inline_array(values: &[String]) -> String {
-    let joined = values
-        .iter()
-        .map(|value| format!("\"{value}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{joined}]")
-}
-
 pub fn load_contract_bundle(workspace_root: &Path) -> Result<ContractBundle, String> {
     reject_legacy_contract_roots(workspace_root)?;
     let root = contract_root(workspace_root);
@@ -8626,10 +8526,7 @@ fn reject_legacy_contract_roots(workspace_root: &Path) -> Result<(), String> {
 }
 
 pub fn validate_contract_bundle(bundle: &ContractBundle) -> Result<(), String> {
-    validate_contract_bundle_with_release_policy_override(
-        bundle,
-        env::var_os(RELEASE_POLICY_ENV).map(PathBuf::from),
-    )
+    validate_contract_bundle_with_release_policy_override(bundle, None)
 }
 
 #[cfg(test)]
@@ -9110,6 +9007,7 @@ manifest = "contracts/manifest.toml"
 operations = "contracts/operations.toml"
 replica = "contracts/replica.toml"
 conformance = "contracts/conformance"
+publish_policy = "contracts/releases/publish_policy.toml"
 
 [[changes]]
 id = "synthetic-major-release"
@@ -9303,7 +9201,7 @@ vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
     }
 
     fn write_root_release_policy(root: &Path, raw: &str) {
-        write_file(&root.join(ROOT_RELEASE_POLICY_RELATIVE), raw);
+        write_file(&root_release_policy_path(root), raw);
     }
 
     fn configure_root_release_policy_workspace(root: &Path) {
@@ -11362,15 +11260,18 @@ readme = { workspace = true }
         let root = create_synthetic_workspace("release_contract_env_override");
         let policy_path = root_release_policy_path(&root);
         let resolved =
-            resolve_release_contract_path_with_override(&root, Some(policy_path.clone()))
+            resolve_release_contract_path_with_override(&root, "1.0.0", Some(policy_path.clone()))
                 .expect("existing override policy should resolve");
-        assert_eq!(resolved, Some(policy_path));
+        assert_eq!(resolved, policy_path);
 
         let missing_policy = root.join("missing-release-policy.toml");
-        let err = resolve_release_contract_path_with_override(&root, Some(missing_policy.clone()))
-            .expect_err("missing env policy should fail");
-        assert!(err.contains(RELEASE_POLICY_ENV));
-        assert!(err.contains("missing release policy file"));
+        let err = resolve_release_contract_path_with_override(
+            &root,
+            "1.0.0",
+            Some(missing_policy.clone()),
+        )
+        .expect_err("missing fixture policy should fail");
+        assert!(err.contains("release policy override points to a missing file"));
         assert!(err.contains(&missing_policy.display().to_string()));
 
         let _ = fs::remove_dir_all(&root);
@@ -12658,7 +12559,7 @@ crates = ["radroots_a"]
         let _ = fs::remove_file(&release_policy_path);
         let release_load_err = validate_release_publish_policy(&root, &contract_root, "1.0.0")
             .expect_err("release contract read error");
-        assert!(release_load_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
+        assert!(release_load_err.contains(RELEASE_POLICY_RELATIVE));
 
         write_file(
             &release_policy_path,
@@ -12746,25 +12647,44 @@ crates = ["radroots_a"]
     #[test]
     fn load_release_contract_with_override_reports_override_and_missing_policy_errors() {
         let root = create_synthetic_workspace("release_contract_loader_errors");
-        let contract_root = root.join("contracts");
 
         let missing_override = root.join("missing-release-policy.toml");
-        let override_err = load_release_contract_with_override(
-            &root,
-            &contract_root,
-            Some(missing_override.clone()),
-        )
-        .expect_err("missing override should fail");
-        assert!(override_err.contains(RELEASE_POLICY_ENV));
-        assert!(override_err.contains("missing release policy file"));
+        let override_err =
+            load_release_contract_with_override(&root, "1.0.0", Some(missing_override.clone()))
+                .expect_err("missing override should fail");
+        assert!(override_err.contains("release policy override points to a missing file"));
 
         let _ = fs::remove_file(root_release_policy_path(&root));
-        let missing_policy_err = load_release_contract_with_override(&root, &contract_root, None)
+        let missing_policy_err = load_release_contract_with_override(&root, "1.0.0", None)
             .expect_err("missing release policy should fail");
         assert!(missing_policy_err.contains("release publish policy not found"));
-        assert!(missing_policy_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
+        assert!(missing_policy_err.contains(RELEASE_POLICY_RELATIVE));
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn release_contract_discovery_does_not_search_parent_directories() {
+        let parent = temp_root("release_contract_parent_isolation");
+        write_file(
+            &release_contract_path(&parent, "1.0.0"),
+            "[release]\nversion = \"1.0.0\"\n\n[publish_order]\ncrates = []\n",
+        );
+        let capsule = parent.join("capsule");
+        fs::create_dir_all(&capsule).expect("create isolated capsule root");
+
+        let err = resolve_release_contract_path_with_override(&capsule, "1.0.0", None)
+            .expect_err("parent release contract must be ignored");
+        assert!(err.contains(&capsule.display().to_string()));
+        assert!(
+            !err.contains(
+                &release_contract_path(&parent, "1.0.0")
+                    .display()
+                    .to_string()
+            )
+        );
+
+        let _ = fs::remove_dir_all(&parent);
     }
 
     #[test]
@@ -12897,7 +12817,7 @@ require_conformance_vectors = true
         let _ = fs::remove_file(root_release_policy_path(&missing_release));
         let missing_release_err =
             validate_generic_release_preflight(&missing_release).expect_err("missing release");
-        assert!(missing_release_err.contains(ROOT_RELEASE_POLICY_RELATIVE));
+        assert!(missing_release_err.contains(RELEASE_POLICY_RELATIVE));
         let _ = fs::remove_dir_all(&missing_release);
 
         let missing_required = create_synthetic_workspace("preflight_missing_required");

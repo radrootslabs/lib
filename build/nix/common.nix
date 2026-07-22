@@ -206,7 +206,7 @@ let
   '';
   releasePreflightCommand = ''
     cargo check -q
-    env -u RADROOTS_MOUNTED_RUST_CRATE_PUBLISH_POLICY cargo test -q -p xtask
+    cargo test -q -p xtask
     cargo run -q -p xtask -- contract validate
 
     required_file="$(mktemp)"

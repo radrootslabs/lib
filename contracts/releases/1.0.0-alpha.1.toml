@@ -12,6 +12,13 @@ manifest = "contracts/manifest.toml"
 operations = "contracts/operations.toml"
 replica = "contracts/replica.toml"
 conformance = "contracts/conformance"
+publish_policy = "contracts/releases/publish_policy.toml"
+
+[[changes]]
+id = "standalone-release-authority"
+classification = "fix"
+semver_impacts = ["fix_packaging_metadata"]
+summary = "Make the versioned capsule release contract authoritative for crate classification and publication order."
 
 [[changes]]
 id = "calendar-nip52-typestate"
