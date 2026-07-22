@@ -303,8 +303,8 @@
     {
       "role": "operations_authority",
       "path": "contracts/operations.toml",
-      "byte_length": 75859,
-      "sha256": "5bd81e76f4adaad23e1ff76576152802e6abd70607f65fcc39a737920da03aeb",
+      "byte_length": 75850,
+      "sha256": "c65893a44ee7ecee0617764f84b08018141e7e249cfdfa9c8144548c7371f510",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -1612,8 +1612,8 @@
     {
       "role": "public_production_source",
       "path": "crates/event_codec/src/lib.rs",
-      "byte_length": 2540,
-      "sha256": "872deae9f6b43b2f3f4c48794fce47f4e635f88dbc6df054bb26306976ea4745",
+      "byte_length": 2556,
+      "sha256": "f844cd20eefad594ede4fff0122b6d72081a68c15afefba7cc926b23820fcdd8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -2298,8 +2298,8 @@
     {
       "role": "superseded_nip09_contract_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 852224,
-      "sha256": "22cf608eb6dae5d25f54ff439f01bf9dad8943998b455e198fff3e53383ba176",
+      "byte_length": 852432,
+      "sha256": "971d75198770265b17e17df23ba17a6096ad687d1cf2ac0f662a2c190ab39f94",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

@@ -5312,7 +5312,12 @@ fn validate_raw_crate_attributes(relative: &str, source: &str) -> Result<(), Str
             "#![cfg_attr(all(not(feature=\"std\"),not(test)),no_std)]",
             "#![forbid(unsafe_code)]",
         ],
-        "crates/event_codec/src/lib.rs" | "crates/blossom/src/lib.rs" => &[
+        "crates/event_codec/src/lib.rs" => &[
+            "#![cfg_attr(all(not(feature=\"std\"),not(test)),no_std)]",
+            "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
+            "#![forbid(unsafe_code)]",
+        ],
+        "crates/blossom/src/lib.rs" => &[
             "#![cfg_attr(not(feature=\"std\"),no_std)]",
             "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
             "#![forbid(unsafe_code)]",

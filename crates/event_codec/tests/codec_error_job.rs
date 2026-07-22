@@ -1,6 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
+#[cfg(feature = "std")]
 use std::error::Error as _;
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
@@ -20,11 +21,13 @@ fn parse_error_display_and_source_cover_variants() {
     let missing = EventParseError::MissingTag("d");
     assert_eq!(missing.to_string(), "missing tag: d");
     assert_eq!(missing.code(), "missing_tag");
+    #[cfg(feature = "std")]
     assert!(missing.source().is_none());
 
     let invalid = EventParseError::InvalidTag("a");
     assert_eq!(invalid.to_string(), "invalid tag structure for 'a'");
     assert_eq!(invalid.code(), "invalid_tag");
+    #[cfg(feature = "std")]
     assert!(invalid.source().is_none());
 
     let invalid_kind = EventParseError::InvalidKind {
@@ -33,6 +36,7 @@ fn parse_error_display_and_source_cover_variants() {
     };
     assert_eq!(invalid_kind.to_string(), "invalid kind 1 (expected 30340)");
     assert_eq!(invalid_kind.code(), "invalid_kind");
+    #[cfg(feature = "std")]
     assert!(invalid_kind.source().is_none());
 
     let parse_int = "x".parse::<u32>().expect_err("parse int error");
@@ -43,11 +47,13 @@ fn parse_error_display_and_source_cover_variants() {
             .contains("invalid number in 'count'")
     );
     assert_eq!(invalid_number.code(), "invalid_number");
+    #[cfg(feature = "std")]
     assert!(invalid_number.source().is_some());
 
     let invalid_json = EventParseError::InvalidJson("content");
     assert_eq!(invalid_json.to_string(), "invalid JSON in 'content'");
     assert_eq!(invalid_json.code(), "invalid_json");
+    #[cfg(feature = "std")]
     assert!(invalid_json.source().is_none());
 }
 
@@ -148,14 +154,17 @@ fn job_encode_error_display_covers_variants() {
 fn job_parse_error_display_and_source_covers_variants() {
     let kind = JobParseError::KindOutOfRange(u32::from(u16::MAX) + 1);
     assert!(kind.to_string().contains("Nostr event kind"));
+    #[cfg(feature = "std")]
     assert!(kind.source().is_none());
 
     let missing = JobParseError::MissingTag("e");
     assert_eq!(missing.to_string(), "missing tag: e");
+    #[cfg(feature = "std")]
     assert!(missing.source().is_none());
 
     let invalid = JobParseError::InvalidTag("status");
     assert_eq!(invalid.to_string(), "invalid tag structure for 'status'");
+    #[cfg(feature = "std")]
     assert!(invalid.source().is_none());
 
     let invalid_number = JobParseError::InvalidNumber("amount", "x".parse::<u32>().unwrap_err());
@@ -164,17 +173,21 @@ fn job_parse_error_display_and_source_covers_variants() {
             .to_string()
             .contains("invalid number in 'amount'")
     );
+    #[cfg(feature = "std")]
     assert!(invalid_number.source().is_some());
 
     let non_whole = JobParseError::NonWholeSats("amount");
     assert!(non_whole.to_string().contains("whole number of sats"));
+    #[cfg(feature = "std")]
     assert!(non_whole.source().is_none());
 
     let overflow = JobParseError::AmountOverflow("amount");
     assert!(overflow.to_string().contains("does not fit u32 sat"));
+    #[cfg(feature = "std")]
     assert!(overflow.source().is_none());
 
     let missing_chain = JobParseError::MissingChainTag("e");
     assert_eq!(missing_chain.to_string(), "missing required chain tag: e");
+    #[cfg(feature = "std")]
     assert!(missing_chain.source().is_none());
 }
