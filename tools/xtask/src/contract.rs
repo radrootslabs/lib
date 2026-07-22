@@ -6,6 +6,10 @@ mod comment_authority;
 mod deletion_authority;
 mod food_availability_projection;
 mod nip09_reconciliation;
+mod phase1_publication_allowlist;
+// The former live generator remains compiled for historical unit tests and
+// immutable predecessor validation, but the allowlist successor owns writes.
+#[allow(dead_code)]
 mod phase1_publication_artifact;
 // The raw-source implementation remains compiled for its historical unit tests, while the
 // publication successor validates its immutable artifacts instead of rebuilding current source.
@@ -20,7 +24,11 @@ pub(crate) use food_availability_projection::{
 pub(crate) use nip09_reconciliation::{
     validate_nip09_reconciliation_manifest, write_nip09_reconciliation_manifest,
 };
+pub(crate) use phase1_publication_allowlist::{
+    validate_phase1_publication_allowlist_manifest, write_phase1_publication_allowlist_manifest,
+};
 pub(crate) use phase1_publication_artifact::{
+    validate_immutable_phase1_publication_artifact_predecessor,
     validate_phase1_publication_artifact_manifest, write_phase1_publication_artifact_manifest,
 };
 pub(crate) use registry_v7::{
@@ -58,7 +66,8 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_food_availability_projection_manifest(workspace_root)?;
     validate_source_maintenance_manifest(workspace_root)?;
     validate_raw_source_rebuild_manifest(workspace_root)?;
-    validate_phase1_publication_artifact_manifest(workspace_root)?;
+    validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?;
+    validate_phase1_publication_allowlist_manifest(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
 
@@ -108,7 +117,7 @@ const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
 const VENDORED_WORKSPACE_MEMBER_RELATIVE: &str = "crates/libsqlite3_sys_3_53_3";
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 24] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 25] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -196,6 +205,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 24] = [
     (
         "contracts/conformance/vectors/publication/phase1_artifact.v1.json",
         "crates/event_codec/tests/fixtures/phase1_publication_artifact.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/publication/phase1_allowlist.v1.json",
+        "crates/event_codec/tests/fixtures/phase1_publication_allowlist.v1.json",
     ),
     (
         "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json",

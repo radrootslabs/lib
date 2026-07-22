@@ -1,0 +1,352 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "leaf": {
+      "additionalProperties": false,
+      "properties": {
+        "authored_operation_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_contract_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "leaf": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "publication_role": {
+          "enum": [
+            "supporting",
+            "root"
+          ]
+        }
+      },
+      "required": [
+        "leaf",
+        "kind",
+        "publication_role",
+        "authored_operation_id",
+        "event_contract_id"
+      ],
+      "type": "object"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://radroots.org/contracts/event-codec/phase1-publication-allowlist-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allowlist": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_leaves": {
+          "items": {
+            "$ref": "#/$defs/leaf"
+          },
+          "maxItems": 7,
+          "minItems": 7,
+          "type": "array"
+        },
+        "canonical_json_operation_id": {
+          "const": "publication_allowlist.allow_canonical_json"
+        },
+        "classified_listing_policy": {
+          "const": "raw_marker_partition_before_focused_food_profile_validation_v1"
+        },
+        "contract_id": {
+          "const": "radroots.phase1.publication_allowlist.v1"
+        },
+        "denied_families": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 19,
+          "minItems": 19,
+          "type": "array"
+        },
+        "event_policy": {
+          "const": "strict_typed_nip52_date_or_time_artifact_only_v1"
+        },
+        "excluded_capabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 7,
+          "minItems": 7,
+          "type": "array"
+        },
+        "granted_capability": {
+          "const": "phase1_durable_publication_lane_entry_only_v1"
+        },
+        "input_type": {
+          "const": "RadrootsPhase1PublicationArtifact"
+        },
+        "kind_one_precedence": {
+          "const": [
+            "ask",
+            "photo_update",
+            "update"
+          ]
+        },
+        "operation_id": {
+          "const": "publication_allowlist.allow_artifact"
+        },
+        "output_type": {
+          "const": "RadrootsPhase1AllowlistedPublicationArtifact"
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "contract_id",
+        "operation_id",
+        "canonical_json_operation_id",
+        "input_type",
+        "output_type",
+        "allowed_leaves",
+        "kind_one_precedence",
+        "event_policy",
+        "classified_listing_policy",
+        "denied_families",
+        "granted_capability",
+        "excluded_capabilities"
+      ],
+      "type": "object"
+    },
+    "authority_id": {
+      "const": "phase1_publication_allowlist_v1"
+    },
+    "contract_id": {
+      "const": "radroots_event_codec.phase1_publication_allowlist_v1"
+    },
+    "event_contract_registry": {
+      "additionalProperties": false,
+      "properties": {
+        "evolution": {
+          "const": "immutable_registry_v7_plus_additive_phase1_publication_allowlist_v1"
+        },
+        "inventory": {
+          "$ref": "#/$defs/file"
+        },
+        "sidecar": {
+          "$ref": "#/$defs/file"
+        },
+        "version": {
+          "const": 7
+        }
+      },
+      "required": [
+        "version",
+        "inventory",
+        "sidecar",
+        "evolution"
+      ],
+      "type": "object"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "predecessor": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "const": "radroots_event_codec.phase1_publication_artifact_v1"
+        },
+        "immutable_artifacts": {
+          "items": {
+            "$ref": "#/$defs/file"
+          },
+          "maxItems": 6,
+          "minItems": 6,
+          "type": "array"
+        }
+      },
+      "required": [
+        "contract_id",
+        "immutable_artifacts"
+      ],
+      "type": "object"
+    },
+    "predecessor_source_supersessions": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 8,
+      "type": "array"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "change_id": {
+          "const": "phase1-publication-allowlist"
+        },
+        "changelog_marker": {
+          "const": "<!-- release-change: phase1-publication-allowlist -->"
+        },
+        "changelog_path": {
+          "const": "CHANGELOG.md"
+        },
+        "record_path": {
+          "const": "contracts/releases/1.0.0-alpha.1.toml"
+        }
+      },
+      "required": [
+        "record_path",
+        "change_id",
+        "changelog_path",
+        "changelog_marker"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "canonical_path": {
+          "const": "contracts/conformance/vectors/publication/phase1_allowlist.v1.json"
+        },
+        "executor_path": {
+          "const": "crates/event_codec/tests/publication_allowlist.rs"
+        },
+        "executor_test": {
+          "const": "publication_allowlist_conformance_vector_executes_every_case"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "invalid_case_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 25,
+          "minItems": 25,
+          "type": "array"
+        },
+        "mirror_path": {
+          "const": "crates/event_codec/tests/fixtures/phase1_publication_allowlist.v1.json"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "valid_case_ids": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 14,
+          "minItems": 14,
+          "type": "array"
+        }
+      },
+      "required": [
+        "canonical_path",
+        "mirror_path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm",
+        "executor_path",
+        "executor_test",
+        "valid_case_ids",
+        "invalid_case_ids"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "predecessor",
+    "event_contract_registry",
+    "allowlist",
+    "predecessor_source_supersessions",
+    "source_files",
+    "result_vector",
+    "release"
+  ],
+  "title": "Radroots Phase 1 Publication Allowlist Contract",
+  "type": "object"
+}

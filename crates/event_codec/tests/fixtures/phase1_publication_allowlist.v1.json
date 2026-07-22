@@ -1,0 +1,549 @@
+{
+  "contract_version": "1.0.0",
+  "suite": "phase1_publication_allowlist",
+  "vectors": [
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 0,
+        "leaf": "profile"
+      },
+      "id": "sealed_profile_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"profile\",\"authored_operation_id\":\"profile.build_authored_draft\",\"event_contract_id\":\"radroots.profile.metadata.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"victoria-farm\\\",\\\"display_name\\\":\\\"Victoria Farm\\\",\\\"about\\\":\\\"Seasonal produce from the Saanich Peninsula\\\",\\\"picture\\\":\\\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\\\",\\\"banner\\\":\\\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\\\",\\\"nip05\\\":\\\"farm@example.com\\\",\\\"bot\\\":false}\"},\"expected_event_id\":\"a7d081b9c142e3a68245bafe1921b0e0dd88f886406e7165a9729f6c57026289\",\"media_references\":[{\"url\":\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\",\"sha256\":\"512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a\",\"size\":15,\"media_type\":\"image/png\"},{\"url\":\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\",\"sha256\":\"fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145\",\"size\":14,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"e296ed63312d58b4e3ee160d4ca3457eb922920d3116329ca498f08e402215b0\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 1,
+        "leaf": "update"
+      },
+      "id": "sealed_update_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"update\",\"authored_operation_id\":\"social.update.build_authored_draft\",\"event_contract_id\":\"radroots.social.update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[],\"content\":\"Carrots harvested today\"},\"expected_event_id\":\"7f2d9dbbd6d2f3db1e83338ea2e669b2458e62ded159de15a3fa98dcf9f164e3\",\"media_references\":[],\"artifact_digest\":\"9ad318496bd4a710fbc7f3e0f6d5a01de808d352db91ca56a12e710904784cc5\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 1,
+        "leaf": "photo_update"
+      },
+      "id": "sealed_photo_update_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"photo_update\",\"authored_operation_id\":\"social.photo_update.build_authored_draft\",\"event_contract_id\":\"radroots.social.photo_update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"Strawberries at the farm stand https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"e592229776cd2a0d0e25a701f4629c0a5dc6e08481a235623d50da6ee8e8f438\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"9ed6b7a6fcec3b07bd0c9179fd5b6ecf74517390051e3c2bd1659be62a26c197\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 1,
+        "leaf": "ask"
+      },
+      "id": "sealed_ask_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"ask\",\"authored_operation_id\":\"social.ask.build_authored_draft\",\"event_contract_id\":\"radroots.social.ask.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"t\",\"radroots-ask\"],[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"When will strawberries be ready? https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"bd45fbbb5bfb8a5aa32df81d240e5f3bd56b0f8cde3a20b3f7d455801373fe48\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"41eddea199bba97adebef4ce433ebfa05d97978ce8464ed3d52762ab717c2a3c\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 31922,
+        "leaf": "event_date"
+      },
+      "id": "sealed_date_event_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_date\",\"authored_operation_id\":\"social.calendar_date_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.date_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31922,\"tags\":[[\"d\",\"farmers-market-2026\"],[\"title\",\"Moss Street Farmers Market\"],[\"start\",\"2026-07-25\"],[\"end\",\"2026-07-26\"],[\"location\",\"Victoria, BC\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"Saturday market in Victoria\"},\"expected_event_id\":\"bea82662b6acf2f1272c8335a24bb0957e35d22c2b29d3e30c094ad7398dc7c7\",\"media_references\":[{\"url\":\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\",\"sha256\":\"0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8\",\"size\":10,\"media_type\":\"image/jpeg\"}],\"artifact_digest\":\"0ec5162ab80988999aac62329d4cfc9c7efce6a82bbda539a723347d73596eb3\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 31923,
+        "leaf": "event_time"
+      },
+      "id": "sealed_time_event_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_time\",\"authored_operation_id\":\"social.calendar_time_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.time_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31923,\"tags\":[[\"d\",\"farm-tour-2026\"],[\"title\",\"Saanich Farm Tour\"],[\"start\",\"1785003600\"],[\"end\",\"1785007200\"],[\"D\",\"20659\"],[\"start_tzid\",\"America/Vancouver\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"A one-hour farm tour\"},\"expected_event_id\":\"2088ed11cd8c1495a82e6f5198ed2ee98e0cbc599f22d7f3380892155dc55894\",\"media_references\":[{\"url\":\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\",\"sha256\":\"0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8\",\"size\":10,\"media_type\":\"image/jpeg\"}],\"artifact_digest\":\"56bfb4bed87559a58922343905a73c0c96dd0a57f94ff0955caecf0589198638\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 30402,
+        "leaf": "food_availability"
+      },
+      "id": "sealed_food_availability_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"food_availability\",\"authored_operation_id\":\"food_availability.build_authored_draft\",\"event_contract_id\":\"radroots.food.availability.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":30402,\"tags\":[[\"d\",\"nantes-carrots\"],[\"title\",\"Nantes Carrots\"],[\"summary\",\"Fresh bunches\"],[\"published_at\",\"1784347140\"],[\"location\",\"Central Saanich, BC\"],[\"price\",\"3\",\"CAD\"],[\"radroots:price_unit\",\"lb\"],[\"radroots:quantity\",\"24\",\"lb\"],[\"status\",\"active\"],[\"image\",\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"1200x800\"]],\"content\":\"Fresh Nantes carrots available this week.\"},\"expected_event_id\":\"76b60f1b178c0dbdc14a87de36151ea6b04a866ce50e34a0ccae2f406f514e81\",\"media_references\":[{\"url\":\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"sha256\":\"8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e\",\"size\":14,\"media_type\":\"image/png\"}],\"artifact_digest\":\"f0989cb993194af4a2f907ad8337e50378d2757c536a09afb4055a681043a7d8\"}",
+        "surface": "sealed_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_artifact.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 0,
+        "leaf": "profile"
+      },
+      "id": "canonical_profile_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"profile\",\"authored_operation_id\":\"profile.build_authored_draft\",\"event_contract_id\":\"radroots.profile.metadata.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"victoria-farm\\\",\\\"display_name\\\":\\\"Victoria Farm\\\",\\\"about\\\":\\\"Seasonal produce from the Saanich Peninsula\\\",\\\"picture\\\":\\\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\\\",\\\"banner\\\":\\\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\\\",\\\"nip05\\\":\\\"farm@example.com\\\",\\\"bot\\\":false}\"},\"expected_event_id\":\"a7d081b9c142e3a68245bafe1921b0e0dd88f886406e7165a9729f6c57026289\",\"media_references\":[{\"url\":\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\",\"sha256\":\"512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a\",\"size\":15,\"media_type\":\"image/png\"},{\"url\":\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\",\"sha256\":\"fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145\",\"size\":14,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"e296ed63312d58b4e3ee160d4ca3457eb922920d3116329ca498f08e402215b0\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 1,
+        "leaf": "update"
+      },
+      "id": "canonical_update_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"update\",\"authored_operation_id\":\"social.update.build_authored_draft\",\"event_contract_id\":\"radroots.social.update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[],\"content\":\"Carrots harvested today\"},\"expected_event_id\":\"7f2d9dbbd6d2f3db1e83338ea2e669b2458e62ded159de15a3fa98dcf9f164e3\",\"media_references\":[],\"artifact_digest\":\"9ad318496bd4a710fbc7f3e0f6d5a01de808d352db91ca56a12e710904784cc5\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 1,
+        "leaf": "photo_update"
+      },
+      "id": "canonical_photo_update_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"photo_update\",\"authored_operation_id\":\"social.photo_update.build_authored_draft\",\"event_contract_id\":\"radroots.social.photo_update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"Strawberries at the farm stand https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"e592229776cd2a0d0e25a701f4629c0a5dc6e08481a235623d50da6ee8e8f438\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"9ed6b7a6fcec3b07bd0c9179fd5b6ecf74517390051e3c2bd1659be62a26c197\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 1,
+        "leaf": "ask"
+      },
+      "id": "canonical_ask_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"ask\",\"authored_operation_id\":\"social.ask.build_authored_draft\",\"event_contract_id\":\"radroots.social.ask.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"t\",\"radroots-ask\"],[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"When will strawberries be ready? https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"bd45fbbb5bfb8a5aa32df81d240e5f3bd56b0f8cde3a20b3f7d455801373fe48\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"41eddea199bba97adebef4ce433ebfa05d97978ce8464ed3d52762ab717c2a3c\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 31922,
+        "leaf": "event_date"
+      },
+      "id": "canonical_date_event_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_date\",\"authored_operation_id\":\"social.calendar_date_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.date_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31922,\"tags\":[[\"d\",\"farmers-market-2026\"],[\"title\",\"Moss Street Farmers Market\"],[\"start\",\"2026-07-25\"],[\"end\",\"2026-07-26\"],[\"location\",\"Victoria, BC\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"Saturday market in Victoria\"},\"expected_event_id\":\"bea82662b6acf2f1272c8335a24bb0957e35d22c2b29d3e30c094ad7398dc7c7\",\"media_references\":[{\"url\":\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\",\"sha256\":\"0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8\",\"size\":10,\"media_type\":\"image/jpeg\"}],\"artifact_digest\":\"0ec5162ab80988999aac62329d4cfc9c7efce6a82bbda539a723347d73596eb3\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 31923,
+        "leaf": "event_time"
+      },
+      "id": "canonical_time_event_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_time\",\"authored_operation_id\":\"social.calendar_time_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.time_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31923,\"tags\":[[\"d\",\"farm-tour-2026\"],[\"title\",\"Saanich Farm Tour\"],[\"start\",\"1785003600\"],[\"end\",\"1785007200\"],[\"D\",\"20659\"],[\"start_tzid\",\"America/Vancouver\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"A one-hour farm tour\"},\"expected_event_id\":\"2088ed11cd8c1495a82e6f5198ed2ee98e0cbc599f22d7f3380892155dc55894\",\"media_references\":[{\"url\":\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\",\"sha256\":\"0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8\",\"size\":10,\"media_type\":\"image/jpeg\"}],\"artifact_digest\":\"56bfb4bed87559a58922343905a73c0c96dd0a57f94ff0955caecf0589198638\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "allow",
+        "event_kind": 30402,
+        "leaf": "food_availability"
+      },
+      "id": "canonical_food_availability_is_allowed",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"food_availability\",\"authored_operation_id\":\"food_availability.build_authored_draft\",\"event_contract_id\":\"radroots.food.availability.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":30402,\"tags\":[[\"d\",\"nantes-carrots\"],[\"title\",\"Nantes Carrots\"],[\"summary\",\"Fresh bunches\"],[\"published_at\",\"1784347140\"],[\"location\",\"Central Saanich, BC\"],[\"price\",\"3\",\"CAD\"],[\"radroots:price_unit\",\"lb\"],[\"radroots:quantity\",\"24\",\"lb\"],[\"status\",\"active\"],[\"image\",\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"1200x800\"]],\"content\":\"Fresh Nantes carrots available this week.\"},\"expected_event_id\":\"76b60f1b178c0dbdc14a87de36151ea6b04a866ce50e34a0ccae2f406f514e81\",\"media_references\":[{\"url\":\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"sha256\":\"8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e\",\"size\":14,\"media_type\":\"image/png\"}],\"artifact_digest\":\"f0989cb993194af4a2f907ad8337e50378d2757c536a09afb4055a681043a7d8\"}",
+        "surface": "canonical_artifact_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.valid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_post_profile_invalid"
+      },
+      "id": "update_claim_with_ask_marker_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"update\",\"authored_operation_id\":\"social.update.build_authored_draft\",\"event_contract_id\":\"radroots.social.update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"t\",\"radroots-ask\"]],\"content\":\"Carrots harvested today\"},\"expected_event_id\":\"bce463fddb9395ba11d4b8500379a39e14afd1472b3cf47e22b6b9f2a438353e\",\"media_references\":[],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_post_profile_invalid"
+      },
+      "id": "photo_claim_with_ask_marker_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"photo_update\",\"authored_operation_id\":\"social.photo_update.build_authored_draft\",\"event_contract_id\":\"radroots.social.photo_update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"t\",\"radroots-ask\"],[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"Strawberries at the farm stand https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"57afde82467e5d72aa07ee8cf1db454945a1615295e4e112d9ffd89e987c10f4\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_post_profile_invalid"
+      },
+      "id": "ask_claim_without_marker_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"ask\",\"authored_operation_id\":\"social.ask.build_authored_draft\",\"event_contract_id\":\"radroots.social.ask.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"When will strawberries be ready? https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"3f67e9ff31c26764bc1c74ef9cafd570a7a7454b3e3768be8f8c1a6175b3d7db\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_post_profile_invalid"
+      },
+      "id": "update_claim_with_photo_profile_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"update\",\"authored_operation_id\":\"social.update.build_authored_draft\",\"event_contract_id\":\"radroots.social.update.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"imeta\",\"url https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"x 51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"m image/webp\",\"dim 1200x900\",\"size 13\",\"alt Fresh strawberries\",\"fallback https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"]],\"content\":\"Strawberries at the farm stand https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\"},\"expected_event_id\":\"e592229776cd2a0d0e25a701f4629c0a5dc6e08481a235623d50da6ee8e8f438\",\"media_references\":[{\"url\":\"https://backup.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"},{\"url\":\"https://media.example/51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0.webp\",\"sha256\":\"51bcf96cda2475475246e3a994aabfee7ff9d7694ba0db9bdc74408632827ad0\",\"size\":13,\"media_type\":\"image/webp\"}],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_calendar_profile_invalid"
+      },
+      "id": "typed_date_event_with_generic_shape_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_date\",\"authored_operation_id\":\"social.calendar_date_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.date_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31922,\"tags\":[[\"d\",\"generic-calendar\"],[\"title\",\"Generic calendar event\"]],\"content\":\"Saturday market in Victoria\"},\"expected_event_id\":\"10e28f8f61a9bb9affa110bb6cce7cc8e371918aead30fbd31d41792db8f3325\",\"media_references\":[],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "family": "generic_calendar",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_calendar_profile_invalid"
+      },
+      "id": "typed_time_event_with_generic_shape_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"event_time\",\"authored_operation_id\":\"social.calendar_time_event.build_authored_draft\",\"event_contract_id\":\"radroots.calendar.time_event.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":31923,\"tags\":[[\"d\",\"generic-calendar\"],[\"title\",\"Generic calendar event\"]],\"content\":\"A one-hour farm tour\"},\"expected_event_id\":\"c3da57e519122044ee663cece433d56f0b5d967f8e78a1a1a80260ae7653d6bd\",\"media_references\":[],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "family": "generic_calendar",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_food_profile_invalid"
+      },
+      "id": "operational_listing_profile_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"food_availability\",\"authored_operation_id\":\"food_availability.build_authored_draft\",\"event_contract_id\":\"radroots.food.availability.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":30402,\"tags\":[[\"d\",\"nantes-carrots\"],[\"title\",\"Nantes Carrots\"],[\"summary\",\"Fresh bunches\"],[\"published_at\",\"1784347140\"],[\"location\",\"Central Saanich, BC\"],[\"price\",\"3\",\"CAD\"],[\"status\",\"active\"],[\"image\",\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"1200x800\"],[\"radroots:price\",\"3\",\"CAD\"]],\"content\":\"Fresh Nantes carrots available this week.\"},\"expected_event_id\":\"d752583639bf9edaa5ab25e491be5b565b91af5fb01167377d36fdb319dd61d7\",\"media_references\":[{\"url\":\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"sha256\":\"8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e\",\"size\":14,\"media_type\":\"image/png\"}],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "family": "operational_listing",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_food_profile_invalid"
+      },
+      "id": "generic_nip99_profile_is_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"food_availability\",\"authored_operation_id\":\"food_availability.build_authored_draft\",\"event_contract_id\":\"radroots.food.availability.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":30402,\"tags\":[[\"d\",\"nantes-carrots\"],[\"title\",\"Nantes Carrots\"],[\"summary\",\"Fresh bunches\"],[\"published_at\",\"1784347140\"],[\"location\",\"Central Saanich, BC\"],[\"price\",\"3\",\"CAD\"],[\"status\",\"active\"],[\"image\",\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"1200x800\"]],\"content\":\"Fresh Nantes carrots available this week.\"},\"expected_event_id\":\"6ae040461fe7e6967bb48b2861bc1dbeac075f0331027e2d04b9618e2d752a2d\",\"media_references\":[{\"url\":\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"sha256\":\"8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e\",\"size\":14,\"media_type\":\"image/png\"}],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "family": "generic_nip99",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_food_profile_invalid"
+      },
+      "id": "mixed_food_and_operational_markers_are_rejected",
+      "input": {
+        "canonical_json": "{\"schema_version\":1,\"semantic_variant\":\"food_availability\",\"authored_operation_id\":\"food_availability.build_authored_draft\",\"event_contract_id\":\"radroots.food.availability.v1\",\"expected_author\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"draft\":{\"created_at\":1784347200,\"kind\":30402,\"tags\":[[\"d\",\"nantes-carrots\"],[\"title\",\"Nantes Carrots\"],[\"summary\",\"Fresh bunches\"],[\"published_at\",\"1784347140\"],[\"location\",\"Central Saanich, BC\"],[\"price\",\"3\",\"CAD\"],[\"radroots:price_unit\",\"lb\"],[\"radroots:quantity\",\"24\",\"lb\"],[\"status\",\"active\"],[\"image\",\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"1200x800\"],[\"radroots:price\",\"3\",\"CAD\"]],\"content\":\"Fresh Nantes carrots available this week.\"},\"expected_event_id\":\"5302117c4c89252c40b57601fe8b115b779bd9256235f449ad86c50ca97c8219\",\"media_references\":[{\"url\":\"https://food.example/8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e.png\",\"sha256\":\"8a66441b557b29193781023160b0216c5518e9b84749f29ecf118a728f451a5e\",\"size\":14,\"media_type\":\"image/png\"}],\"artifact_digest\":\"0000000000000000000000000000000000000000000000000000000000000000\"}",
+        "family": "mixed_classified_listing",
+        "surface": "artifact_candidate_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "unsealed_profile_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"victoria-farm\\\",\\\"display_name\\\":\\\"Victoria Farm\\\",\\\"about\\\":\\\"Seasonal produce from the Saanich Peninsula\\\",\\\"picture\\\":\\\"https://media.example/512f6a371c77694502e7d08f0b1f1080c7103ca90925bfe2fa23106aac11003a.png\\\",\\\"banner\\\":\\\"https://media.example/fbf3819415a76ea0d3ba71817578bb89c4903aa958e38f76f86578dfa8a35145.webp\\\",\\\"nip05\\\":\\\"farm@example.com\\\",\\\"bot\\\":false}\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 0,
+        "family": "unsealed_profile",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "generic_root_note_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":1,\"tags\":[],\"content\":\"Generic root note\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 1,
+        "family": "generic_root_note",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "reply_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":1,\"tags\":[[\"e\",\"1111111111111111111111111111111111111111111111111111111111111111\",\"\",\"reply\"]],\"content\":\"Reply\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 1,
+        "family": "reply",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "comment_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":1111,\"tags\":[[\"E\",\"1111111111111111111111111111111111111111111111111111111111111111\"]],\"content\":\"Comment\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 1111,
+        "family": "comment",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "deletion_request_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":5,\"tags\":[[\"e\",\"1111111111111111111111111111111111111111111111111111111111111111\"]],\"content\":\"Removed\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 5,
+        "family": "deletion_request",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "raw_date_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":31922,\"tags\":[[\"d\",\"farmers-market-2026\"],[\"title\",\"Moss Street Farmers Market\"],[\"start\",\"2026-07-25\"],[\"end\",\"2026-07-26\"],[\"location\",\"Victoria, BC\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"Saturday market in Victoria\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 31922,
+        "family": "unsealed_calendar_event",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "raw_time_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":31923,\"tags\":[[\"d\",\"farm-tour-2026\"],[\"title\",\"Saanich Farm Tour\"],[\"start\",\"1785003600\"],[\"end\",\"1785007200\"],[\"D\",\"20659\"],[\"start_tzid\",\"America/Vancouver\"],[\"image\",\"https://events.example/0a422cbf828d421341c40c678f4cfbd6451841760db126e5f5ac3d2e06fd80b8.jpeg\"]],\"content\":\"A one-hour farm tour\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 31923,
+        "family": "unsealed_calendar_event",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "calendar_collection_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":31924,\"tags\":[[\"d\",\"victoria-calendar\"]],\"content\":\"\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 31924,
+        "family": "calendar_collection",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "calendar_rsvp_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":31925,\"tags\":[[\"a\",\"31922:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:market\"]],\"content\":\"accepted\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 31925,
+        "family": "calendar_rsvp",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "bud11_authorization_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":24242,\"tags\":[[\"t\",\"upload\"]],\"content\":\"\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 24242,
+        "family": "bud11_authorization",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "ephemeral_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":20001,\"tags\":[],\"content\":\"Ephemeral\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 20001,
+        "family": "ephemeral_event",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "trade_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":3470,\"tags\":[[\"d\",\"trade-proposal\"]],\"content\":\"\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 3470,
+        "family": "trade",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "order_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":3422,\"tags\":[[\"d\",\"order-request\"]],\"content\":\"\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 3422,
+        "family": "commerce_order",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "route_delivery_family_is_rejected",
+      "input": {
+        "canonical_json": "{\"product_surface\":\"route_delivery\"}",
+        "family": "route_delivery",
+        "surface": "non_event_product_surface"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "group_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":9007,\"tags\":[[\"h\",\"victoria-growers\"]],\"content\":\"\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 9007,
+        "family": "group",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    },
+    {
+      "expected": {
+        "decision": "reject",
+        "error": "publication_allowlist_artifact_invalid",
+        "source_error": "publication_artifact_invalid_json"
+      },
+      "id": "operations_event_is_rejected",
+      "input": {
+        "canonical_json": "{\"id\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"pubkey\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"created_at\":1784347200,\"kind\":78,\"tags\":[[\"d\",\"internal-operation\"]],\"content\":\"\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}",
+        "event_kind": 78,
+        "family": "operations",
+        "surface": "raw_nip01_event_json"
+      },
+      "kind": "publication_allowlist.allow_canonical_json.invalid"
+    }
+  ]
+}

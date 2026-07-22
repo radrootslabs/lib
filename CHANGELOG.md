@@ -184,6 +184,21 @@ publish policy both pass for the same source revision.
   encodings, cross-profile promotion, stale identifiers, media drift, and
   digest tampering without claiming restored byte verification, upload
   completion, signature authenticity, or signer authority.
+<!-- release-change: phase1-publication-allowlist -->
+- The event-codec publication surface now exposes an additive allowlist over
+  the sealed Phase 1 artifact. Its opaque output admits exactly supporting
+  Profile plus root Update, PhotoUpdate, Ask, typed date/time Event, and focused
+  FoodAvailability leaves. Registry-v7 reprojection enforces
+  Ask-before-PhotoUpdate-before-Update precedence and marker-partitions
+  kind-`30402` before profile validation. A canonical-JSON adapter composes
+  strict artifact reload with the same allowlist for durable consumers. Raw
+  and generic events, including raw date/time events, replies, comments,
+  deletion requests, calendar collections and RSVPs, BUD-11 authorizations,
+  ephemeral events, trade, commerce, group, and operations families cannot
+  produce its sealed input; deferred route/delivery product surfaces are
+  non-events and likewise fail closed. Event-contract registry v7 remains
+  byte-identical, and the new gate grants no signing, upload, retrieval, relay,
+  or entitlement authority.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

@@ -106,6 +106,9 @@ public = [
   "RadrootsPhase1PublicationArtifactDigest",
   "RadrootsPhase1PublicationArtifact",
   "RadrootsPhase1PublicationArtifactError",
+  "RadrootsPhase1PublicationLeaf",
+  "RadrootsPhase1AllowlistedPublicationArtifact",
+  "RadrootsPhase1PublicationAllowlistError",
   "RadrootsFarm",
   "RadrootsOperationalListing",
   "RadrootsPost",
@@ -904,6 +907,69 @@ vector = "contracts/conformance/vectors/publication/phase1_artifact.v1.json"
 case_kinds = [
   "publication_artifact.from_canonical_json.valid",
   "publication_artifact.from_canonical_json.invalid",
+]
+
+[operations.phase1_publication_allowlist_allow_artifact]
+domain = "publication"
+id = "publication_allowlist.allow_artifact"
+stability = "beta"
+inputs = ["RadrootsPhase1PublicationArtifact"]
+outputs = ["RadrootsPhase1AllowlistedPublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_allowlist_allow_artifact.implementation]
+rust_modules = [
+  "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+  "crates/event_codec/src/post/inbound/registry_v7.rs",
+  "crates/event_codec/src/wire/publication.rs",
+  "crates/event_codec/src/wire/publication/allowlist.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::allowlist::RadrootsPhase1AllowlistedPublicationArtifact",
+  "radroots_event_codec::wire::publication::allowlist::RadrootsPhase1PublicationAllowlistError",
+  "radroots_event_codec::wire::publication::allowlist::RadrootsPhase1PublicationLeaf",
+]
+
+[operations.phase1_publication_allowlist_allow_artifact.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_allowlist.v1.json"
+case_kinds = [
+  "publication_allowlist.allow_artifact.valid",
+]
+
+[operations.phase1_publication_allowlist_allow_canonical_json]
+domain = "publication"
+id = "publication_allowlist.allow_canonical_json"
+stability = "beta"
+inputs = ["Bytes"]
+outputs = ["RadrootsPhase1AllowlistedPublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_allowlist_allow_canonical_json.implementation]
+rust_modules = [
+  "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+  "crates/event_codec/src/post/inbound/registry_v7.rs",
+  "crates/event_codec/src/wire/publication.rs",
+  "crates/event_codec/src/wire/publication/allowlist.rs",
+]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationArtifact",
+  "radroots_event_codec::wire::publication::allowlist::RadrootsPhase1AllowlistedPublicationArtifact",
+  "radroots_event_codec::wire::publication::allowlist::RadrootsPhase1PublicationAllowlistError",
+  "radroots_event_codec::wire::publication::allowlist::RadrootsPhase1PublicationLeaf",
+]
+
+[operations.phase1_publication_allowlist_allow_canonical_json.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_allowlist.v1.json"
+case_kinds = [
+  "publication_allowlist.allow_canonical_json.valid",
+  "publication_allowlist.allow_canonical_json.invalid",
 ]
 
 [operations.profile_build_authored_draft]

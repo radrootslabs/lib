@@ -245,6 +245,50 @@ const RAW_IMMUTABLE_ARTIFACTS: &[ImmutableArtifactSpec] = &[
     ),
 ];
 
+const PUBLICATION_IMMUTABLE_ARTIFACTS: &[ImmutableArtifactSpec] = &[
+    ImmutableArtifactSpec::new(
+        MANIFEST_RELATIVE,
+        89_464,
+        "0776e1d84c9366954047e75cdf12d9acc9a7108260157c3534f22067075a385a",
+    ),
+    ImmutableArtifactSpec::new(
+        MANIFEST_SCHEMA_RELATIVE,
+        11_972,
+        "1d72cee2754e7ac45105d79b1ecf7d44251991be7a18ba106166e962000e8320",
+    ),
+    ImmutableArtifactSpec::new(
+        MANIFEST_SHA256_RELATIVE,
+        65,
+        "586c0985b502f22241b4d90f2ecb475d43953fc3ddd66d6fbfa3b3eb9cf34444",
+    ),
+    ImmutableArtifactSpec::new(
+        VECTOR_RELATIVE,
+        23_113,
+        "ec18c687d5b0710a48624ddb620d89157e6b645dbea8bb91c62e3a111d20c622",
+    ),
+    ImmutableArtifactSpec::new(
+        VECTOR_MIRROR_RELATIVE,
+        23_113,
+        "ec18c687d5b0710a48624ddb620d89157e6b645dbea8bb91c62e3a111d20c622",
+    ),
+    ImmutableArtifactSpec::new(
+        VECTOR_EXECUTOR_RELATIVE,
+        34_582,
+        "7a31169eac4217a38cb3ef25eb9213f2f89e11fb17e76ceaf7449b34225e98af",
+    ),
+];
+
+pub(super) const PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    CHANGELOG_RELATIVE,
+    OPERATIONS_RELATIVE,
+    RELEASE_RELATIVE,
+    "crates/event_codec/README",
+    "crates/event_codec/src/wire/publication.rs",
+    "tools/xtask/src/contract.rs",
+    "tools/xtask/src/contract/phase1_publication_artifact.rs",
+    "tools/xtask/src/main.rs",
+];
+
 const GOVERNED_COMPILER_TABLES: &[(&str, &str, &str)] = &[
     (
         "crates/core/Cargo.toml",
@@ -542,17 +586,24 @@ struct ValidatedResultVector {
 pub(crate) fn write_phase1_publication_artifact_manifest(
     workspace_root: &Path,
 ) -> Result<(), String> {
-    with_artifact_bundle_transaction(workspace_root, |transaction| {
-        transaction.write(expected_artifacts(workspace_root)?)?;
-        validate_manifest_under_lock(workspace_root)
-    })
+    validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?;
+    Err(
+        "Phase 1 publication artifact v1 is an immutable predecessor and cannot be rewritten; write the active Phase 1 publication allowlist successor instead"
+            .to_owned(),
+    )
 }
 
 pub(crate) fn validate_phase1_publication_artifact_manifest(
     workspace_root: &Path,
 ) -> Result<(), String> {
+    validate_immutable_phase1_publication_artifact_predecessor(workspace_root)
+}
+
+pub(crate) fn validate_immutable_phase1_publication_artifact_predecessor(
+    workspace_root: &Path,
+) -> Result<(), String> {
     with_artifact_bundle_transaction(workspace_root, |_| {
-        validate_manifest_under_lock(workspace_root)
+        validate_immutable_phase1_publication_artifact_predecessor_under_lock(workspace_root)
     })
 }
 
@@ -595,6 +646,93 @@ fn validate_manifest_under_lock(workspace_root: &Path) -> Result<(), String> {
         return Err(format!(
             "{MANIFEST_SHA256_RELATIVE} must authenticate the exact manifest bytes"
         ));
+    }
+    Ok(())
+}
+
+pub(super) fn validate_immutable_phase1_publication_artifact_predecessor_under_lock(
+    workspace_root: &Path,
+) -> Result<(), String> {
+    for spec in PUBLICATION_IMMUTABLE_ARTIFACTS {
+        let bytes = read_regular_file(workspace_root, spec.relative)?;
+        if bytes.len() != spec.byte_length || sha256_hex(&bytes) != spec.sha256 {
+            return Err(format!(
+                "immutable Phase 1 publication artifact predecessor {} drifted",
+                spec.relative
+            ));
+        }
+    }
+
+    let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
+    let manifest: Value = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
+    if manifest.get("schema_version").and_then(Value::as_u64) != Some(1)
+        || manifest.get("contract_id").and_then(Value::as_str)
+            != Some("radroots_event_codec.phase1_publication_artifact_v1")
+        || manifest.get("authority_id").and_then(Value::as_str)
+            != Some("phase1_publication_artifact_v1")
+    {
+        return Err(format!("{MANIFEST_RELATIVE} identity drifted"));
+    }
+    let sidecar = read_regular_file(workspace_root, MANIFEST_SHA256_RELATIVE)?;
+    if sidecar != format!("{}\n", sha256_hex(&manifest_bytes)).as_bytes() {
+        return Err(format!(
+            "{MANIFEST_SHA256_RELATIVE} does not authenticate its immutable manifest"
+        ));
+    }
+
+    let superseded = PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if superseded.len() != PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS.len() {
+        return Err("publication predecessor supersession paths must be unique".to_owned());
+    }
+    let sources = manifest
+        .get("source_files")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{MANIFEST_RELATIVE} has no source_files array"))?;
+    let mut seen = BTreeSet::new();
+    for source in sources {
+        let path = descriptor_path(source, "publication predecessor source")?;
+        if !seen.insert(path) {
+            return Err(format!("{MANIFEST_RELATIVE} duplicates source {path}"));
+        }
+        if !superseded.contains(path) {
+            validate_value_descriptor(workspace_root, source, "publication predecessor source")?;
+        }
+    }
+    for path in superseded {
+        if !seen.contains(path) {
+            return Err(format!(
+                "publication predecessor supersession path {path} is not predecessor-bound"
+            ));
+        }
+    }
+
+    validate_value_descriptor(
+        workspace_root,
+        manifest
+            .get("manifest_schema")
+            .ok_or_else(|| format!("{MANIFEST_RELATIVE} has no manifest_schema"))?,
+        "publication predecessor schema",
+    )?;
+    for pointer in [
+        "/event_contract_registry/inventory",
+        "/event_contract_registry/sidecar",
+    ] {
+        validate_value_descriptor(
+            workspace_root,
+            manifest
+                .pointer(pointer)
+                .ok_or_else(|| format!("{MANIFEST_RELATIVE} has no {pointer}"))?,
+            "publication predecessor registry",
+        )?;
+    }
+    if read_regular_file(workspace_root, VECTOR_RELATIVE)?
+        != read_regular_file(workspace_root, VECTOR_MIRROR_RELATIVE)?
+    {
+        return Err("immutable Phase 1 publication artifact vector mirror drifted".to_owned());
     }
     Ok(())
 }
@@ -1345,7 +1483,7 @@ fn descriptor_path<'a>(descriptor: &'a Value, label: &str) -> Result<&'a str, St
         .ok_or_else(|| format!("{label} has no path"))
 }
 
-fn source_specs(workspace_root: &Path) -> Result<Vec<(String, String)>, String> {
+pub(super) fn source_specs(workspace_root: &Path) -> Result<Vec<(String, String)>, String> {
     let mut specs = Vec::new();
     for root in PUBLIC_SOURCE_ROOTS {
         for path in regular_file_inventory(workspace_root, root)? {

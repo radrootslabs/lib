@@ -288,6 +288,17 @@ semver_impacts = [
 summary = "Add the authored-only Phase 1 publication artifact with seven typed leaves, exact top-level NIP-01 id placement, explicit canonical-byte encode/decode operations, bounded signed-event and artifact wires, complete Blossom URL commitments, and a single-NUL domain-separated digest."
 
 [[changes]]
+id = "phase1-publication-allowlist"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_conformance_vector",
+]
+summary = "Add an opaque publication-lane allowlist and canonical-JSON durable-reload adapter over sealed Phase 1 artifacts with one supporting Profile leaf and six root leaves, strict same-kind reprojection, typed-only date/time Event handling, focused FoodAvailability marker partitioning, and fail-closed exclusion of every other generic, ephemeral, or deferred product family."
+
+[[changes]]
 id = "event-store-validity-visibility-split"
 classification = "breaking"
 semver_impacts = [
