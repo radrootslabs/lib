@@ -24,6 +24,7 @@ fn usage() {
     eprintln!("  cargo xtask contract raw-source-rebuild-manifest [--write]");
     eprintln!("  cargo xtask contract phase1-publication-artifact-manifest [--write]");
     eprintln!("  cargo xtask contract phase1-publication-allowlist-manifest [--write]");
+    eprintln!("  cargo xtask contract blossom-publication-readiness-manifest [--write]");
     eprintln!("  cargo xtask contract release-provenance-schema [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
@@ -191,6 +192,16 @@ fn run_contract(args: &[String]) -> Result<(), String> {
             }
             _ => Err(
                 "phase1-publication-allowlist-manifest accepts no arguments or exactly --write"
+                    .to_string(),
+            ),
+        },
+        Some("blossom-publication-readiness-manifest") => match &args[1..] {
+            [] => contract::validate_blossom_publication_readiness_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_blossom_publication_readiness_manifest(&workspace_root())
+            }
+            _ => Err(
+                "blossom-publication-readiness-manifest accepts no arguments or exactly --write"
                     .to_string(),
             ),
         },

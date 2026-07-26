@@ -225,7 +225,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         BLOSSOM_CARGO_MANIFEST_RELATIVE,
-        "fecd2c6bd1d4920715b54e7b542d4ca85ff5b869b9697b4b7fe589955145e60e",
+        "03bd2a20057d4be04f2d0ec613ec65536b42eb6be4f8cd396fdf8b05e5b856fa",
     ),
     (
         EVENT_STORE_CARGO_MANIFEST_RELATIVE,

@@ -14,7 +14,7 @@ readme = "README"
 
 [features]
 default = ["serde"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_json"]
 std = ["serde?/std", "sha2/std", "url_nostd/std"]
 raster-decode = ["std", "dep:image", "dep:zune-core", "dep:zune-jpeg"]
 
@@ -22,6 +22,9 @@ raster-decode = ["std", "dep:image", "dep:zune-core", "dep:zune-jpeg"]
 image = { workspace = true, optional = true }
 mediatype = { workspace = true }
 serde = { workspace = true, optional = true }
+serde_json = { workspace = true, default-features = false, features = [
+  "alloc",
+], optional = true }
 sha2 = { workspace = true }
 unicode-general-category = { workspace = true }
 url_nostd = { workspace = true }

@@ -20,6 +20,9 @@ mod registry_v7;
 mod release_provenance;
 mod source_maintenance;
 
+pub(crate) use blossom_publication_readiness::{
+    validate_blossom_publication_readiness_manifest, write_blossom_publication_readiness_manifest,
+};
 pub(crate) use food_availability_projection::{
     validate_food_availability_projection_manifest, write_food_availability_projection_manifest,
 };
@@ -123,7 +126,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 26] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 27] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -135,6 +138,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 26] = [
     (
         "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
         "crates/blossom/tests/fixtures/publication_readiness.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json",
+        "crates/blossom/tests/fixtures/publication_readiness_persistence.v1.json",
     ),
     (
         "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",

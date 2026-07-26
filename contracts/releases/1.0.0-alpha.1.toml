@@ -509,4 +509,4 @@ semver_impacts = [
   "add_enum_variant",
   "add_conformance_vector",
 ]
-summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification, exact sequential JPEG entropy accounting plus pinned strict zune-jpeg decoding, and internally authoritative full decoding for static JPEG, PNG, and WebP rasters."
+summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification, canonical persisted reload, exact sequential JPEG entropy accounting plus pinned strict zune-jpeg decoding, and internally authoritative full decoding for static JPEG, PNG, and WebP rasters."

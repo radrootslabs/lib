@@ -409,6 +409,47 @@ case_kinds = [
   "blossom.verify_publication_readiness.invalid",
 ]
 
+[operations.blossom_publication_readiness_evidence_to_canonical_json]
+domain = "blossom"
+id = "blossom.publication_readiness_evidence.to_canonical_json"
+stability = "beta"
+inputs = ["RadrootsBlossomPublicationReadinessEvidence"]
+outputs = ["CanonicalJsonBytes"]
+error_class = "encode_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_publication_readiness_evidence_to_canonical_json.implementation]
+rust_modules = ["crates/blossom/src/publication_readiness.rs"]
+rust_types = ["radroots_blossom::RadrootsBlossomPublicationReadinessEvidence"]
+
+[operations.blossom_publication_readiness_evidence_to_canonical_json.conformance]
+vector = "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json"
+case_kinds = ["blossom.publication_readiness_evidence.to_canonical_json.valid"]
+
+[operations.blossom_publication_readiness_evidence_from_canonical_json]
+domain = "blossom"
+id = "blossom.publication_readiness_evidence.from_canonical_json"
+stability = "beta"
+inputs = ["CanonicalJsonBytes"]
+outputs = ["RadrootsBlossomPublicationReadinessEvidence"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.blossom_publication_readiness_evidence_from_canonical_json.implementation]
+rust_modules = ["crates/blossom/src/publication_readiness.rs"]
+rust_types = ["radroots_blossom::RadrootsBlossomPublicationReadinessEvidence"]
+
+[operations.blossom_publication_readiness_evidence_from_canonical_json.conformance]
+vector = "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json"
+case_kinds = [
+  "blossom.publication_readiness_evidence.from_canonical_json.valid",
+  "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+]
+
 [operations.blossom_build_upload_authorization_claim]
 domain = "blossom"
 id = "blossom.build_upload_authorization_claim"
@@ -982,9 +1023,7 @@ rust_types = [
 
 [operations.phase1_publication_allowlist_allow_artifact.conformance]
 vector = "contracts/conformance/vectors/publication/phase1_allowlist.v1.json"
-case_kinds = [
-  "publication_allowlist.allow_artifact.valid",
-]
+case_kinds = ["publication_allowlist.allow_artifact.valid"]
 
 [operations.phase1_publication_allowlist_allow_canonical_json]
 domain = "publication"

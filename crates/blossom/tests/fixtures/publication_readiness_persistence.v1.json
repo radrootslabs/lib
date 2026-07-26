@@ -1,0 +1,319 @@
+{
+  "suite": "blossom_publication_readiness_persistence",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "canonical_evidence_reloads",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.valid",
+      "input": {
+        "mutation": "none"
+      },
+      "expected": {
+        "policy_version": 1,
+        "schema_version": 1
+      }
+    },
+    {
+      "id": "canonical_evidence_serializes",
+      "kind": "blossom.publication_readiness_evidence.to_canonical_json.valid",
+      "input": {
+        "mutation": "none"
+      },
+      "expected": {
+        "policy_version": 1,
+        "schema_version": 1
+      }
+    },
+    {
+      "id": "leading_whitespace_is_noncanonical",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "leading_whitespace"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_json_non_canonical"
+      }
+    },
+    {
+      "id": "noncanonical_string_escaping_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "noncanonical_escaping"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_json_non_canonical"
+      }
+    },
+    {
+      "id": "field_reordering_is_noncanonical",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "reordered_fields"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_json_non_canonical"
+      }
+    },
+    {
+      "id": "unknown_field_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "unknown_field"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_invalid_json"
+      }
+    },
+    {
+      "id": "private_bud11_field_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "bud11_authorization"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_invalid_json"
+      }
+    },
+    {
+      "id": "missing_field_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "missing_uploaded"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_invalid_json"
+      }
+    },
+    {
+      "id": "duplicate_field_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "duplicate_schema_version"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_invalid_json"
+      }
+    },
+    {
+      "id": "wrong_field_type_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "size_wrong_type"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_invalid_json"
+      }
+    },
+    {
+      "id": "schema_version_is_strict",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "schema_version"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_schema_version_unsupported"
+      }
+    },
+    {
+      "id": "policy_version_is_strict",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "policy_version"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_policy_version_unsupported"
+      }
+    },
+    {
+      "id": "url_must_be_canonical",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "url_invalid"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "url_exact_maximum_is_valid",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.valid",
+      "input": {
+        "mutation": "url_exact_max"
+      },
+      "expected": {
+        "policy_version": 1,
+        "schema_version": 1
+      }
+    },
+    {
+      "id": "url_one_over_maximum_is_rejected",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "url_over_max"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "url_hash_must_match_sha256",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "url_hash_mismatch"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "sha256_must_be_lower_hex",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "sha256_invalid"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "size_must_be_nonzero",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "size_zero"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "size_must_be_bounded",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "size_over_max"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "mime_must_be_supported",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "mime_unsupported"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "format_must_match_mime",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "format_mismatch"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "dimensions_must_be_nonzero",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "width_zero"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "dimensions_must_respect_axis_limit",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "height_over_max"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "dimensions_must_respect_pixel_limit",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "pixels_over_max"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "bud02_status_is_strict",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "bud02_status"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "bud01_head_status_is_strict",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "bud01_head_status"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "bud01_get_status_is_strict",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "bud01_get_status"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "uploaded_mutation_breaks_digest",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "uploaded"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_digest_mismatch"
+      }
+    },
+    {
+      "id": "digest_must_be_lower_hex",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "digest_invalid"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_field_invalid"
+      }
+    },
+    {
+      "id": "digest_must_match_all_facts",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "digest_mismatch"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_digest_mismatch"
+      }
+    },
+    {
+      "id": "input_is_bounded_before_parse",
+      "kind": "blossom.publication_readiness_evidence.from_canonical_json.invalid",
+      "input": {
+        "mutation": "oversized_input"
+      },
+      "expected": {
+        "error": "publication_readiness_evidence_too_large"
+      }
+    }
+  ]
+}

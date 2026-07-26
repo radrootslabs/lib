@@ -2,10 +2,14 @@
 
 use image::{ExtendedColorType, ImageEncoder, codecs::webp::WebPEncoder};
 use radroots_blossom::{
-    RadrootsBlossomApprovedBlobUrl, RadrootsBlossomAuthoredRasterDimensions,
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomBud01GetObservation,
-    RadrootsBlossomBud01HeadObservation, RadrootsBlossomBud02UploadObservation,
-    RadrootsBlossomError, RadrootsBlossomMediaType, RadrootsBlossomRasterDimensions,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES, RadrootsBlossomApprovedBlobUrl,
+    RadrootsBlossomAuthoredRasterDimensions, RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl,
+    RadrootsBlossomBud01GetObservation, RadrootsBlossomBud01HeadObservation,
+    RadrootsBlossomBud02UploadObservation, RadrootsBlossomError, RadrootsBlossomMediaType,
+    RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomRasterDimensions,
     RadrootsBlossomRasterFormat, RadrootsBlossomSha256, verify_publication_readiness,
 };
 use serde::Deserialize;
@@ -77,6 +81,240 @@ fn publication_readiness_accepts_public_jpeg_and_still_webp() {
             evidence.evidence_digest().to_string()
         );
     }
+}
+
+#[test]
+fn publication_readiness_evidence_round_trips_only_through_strict_canonical_json() {
+    let bytes = canonical_png();
+    let evidence = verify_public_raster(
+        &bytes,
+        "image/png",
+        "png",
+        RadrootsBlossomAuthoredRasterDimensions::Exact(
+            RadrootsBlossomRasterDimensions::new(1, 1).unwrap(),
+        ),
+    )
+    .unwrap();
+    let canonical = evidence.to_canonical_json().unwrap();
+    assert!(canonical.len() <= RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES);
+
+    let reloaded = RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&canonical)
+        .expect("canonical evidence must reload");
+    assert_eq!(reloaded, evidence);
+    assert_eq!(
+        reloaded.schema_version(),
+        RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION
+    );
+    assert_eq!(
+        reloaded.policy_version(),
+        RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION
+    );
+    assert_eq!(reloaded.to_canonical_json().unwrap(), canonical);
+
+    let pretty = serde_json::to_vec_pretty(
+        &serde_json::from_slice::<Value>(&canonical).expect("canonical evidence JSON"),
+    )
+    .unwrap();
+    assert_eq!(
+        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&pretty)
+            .unwrap_err()
+            .code(),
+        "publication_readiness_evidence_json_non_canonical"
+    );
+
+    let mut unknown = canonical.clone();
+    unknown.pop();
+    unknown.extend_from_slice(br#","authorization":"Nostr token"}"#);
+    assert_eq!(
+        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&unknown)
+            .unwrap_err()
+            .code(),
+        "publication_readiness_evidence_invalid_json"
+    );
+
+    let oversized = vec![b' '; RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES + 1];
+    assert_eq!(
+        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&oversized)
+            .unwrap_err()
+            .code(),
+        "publication_readiness_evidence_too_large"
+    );
+}
+
+#[test]
+fn publication_readiness_evidence_revalidates_every_persisted_fact() {
+    let evidence = verify_public_raster(
+        &canonical_png(),
+        "image/png",
+        "png",
+        RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+    )
+    .unwrap();
+    let canonical = evidence.to_canonical_json().unwrap();
+
+    let cases = [
+        (
+            "schema_version",
+            serde_json::json!(2),
+            "publication_readiness_evidence_schema_version_unsupported",
+        ),
+        (
+            "policy_version",
+            serde_json::json!(2),
+            "publication_readiness_evidence_policy_version_unsupported",
+        ),
+        (
+            "size",
+            serde_json::json!(0),
+            "publication_readiness_evidence_field_invalid",
+        ),
+        (
+            "media_type",
+            serde_json::json!("image/jpeg"),
+            "publication_readiness_evidence_field_invalid",
+        ),
+        (
+            "raster_format",
+            serde_json::json!("jpeg"),
+            "publication_readiness_evidence_field_invalid",
+        ),
+        (
+            "bud02_status",
+            serde_json::json!(202),
+            "publication_readiness_evidence_field_invalid",
+        ),
+        (
+            "bud01_head_status",
+            serde_json::json!(204),
+            "publication_readiness_evidence_field_invalid",
+        ),
+        (
+            "bud01_get_status",
+            serde_json::json!(206),
+            "publication_readiness_evidence_field_invalid",
+        ),
+        (
+            "uploaded",
+            serde_json::json!(1_800_000_002_u64),
+            "publication_readiness_evidence_digest_mismatch",
+        ),
+        (
+            "evidence_digest",
+            serde_json::json!("00".repeat(32)),
+            "publication_readiness_evidence_digest_mismatch",
+        ),
+    ];
+    for (field, value, expected) in cases {
+        let mut wire: Value = serde_json::from_slice(&canonical).unwrap();
+        wire[field] = value;
+        let mutated = serde_json::to_vec(&wire).unwrap();
+        assert_eq!(
+            RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&mutated)
+                .unwrap_err()
+                .code(),
+            expected,
+            "{field}"
+        );
+    }
+
+    let mut dimensions: Value = serde_json::from_slice(&canonical).unwrap();
+    dimensions["dimensions"]["width"] = serde_json::json!(0);
+    assert_eq!(
+        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(
+            &serde_json::to_vec(&dimensions).unwrap(),
+        )
+        .unwrap_err()
+        .code(),
+        "publication_readiness_evidence_field_invalid"
+    );
+}
+
+#[test]
+fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
+    let empty_hash = RadrootsBlossomSha256::digest(&[]);
+    let empty_url = format!("https://cdn.example/{empty_hash}.png");
+    let empty_media_type = RadrootsBlossomMediaType::parse("image/png").unwrap();
+    let empty_descriptor = RadrootsBlossomBlobDescriptor::new(
+        RadrootsBlossomBlobUrl::parse(&empty_url).unwrap(),
+        empty_hash,
+        0,
+        empty_media_type.clone(),
+        1_800_000_000,
+    )
+    .unwrap()
+    .approve_reference()
+    .unwrap()
+    .verify_bytes(&[], &empty_media_type)
+    .unwrap();
+    let empty_upload = RadrootsBlossomBud02UploadObservation::new(
+        201,
+        RadrootsBlossomBlobDescriptor::new(
+            RadrootsBlossomBlobUrl::parse(&empty_url).unwrap(),
+            empty_hash,
+            0,
+            empty_media_type.clone(),
+            1_800_000_001,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let empty_approved_url = RadrootsBlossomBlobUrl::parse(&empty_url)
+        .unwrap()
+        .approve()
+        .unwrap();
+    let empty_head = RadrootsBlossomBud01HeadObservation::new(
+        200,
+        empty_approved_url.clone(),
+        0,
+        empty_media_type,
+    )
+    .unwrap();
+    let nonempty_get =
+        RadrootsBlossomBud01GetObservation::from_complete_body(200, empty_approved_url, 1, &[0])
+            .unwrap();
+    assert_eq!(
+        verify_publication_readiness(
+            &empty_descriptor,
+            &[],
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            &empty_upload,
+            &empty_head,
+            &nonempty_get,
+        )
+        .unwrap_err()
+        .code(),
+        "publication_raster_empty"
+    );
+
+    let bytes = canonical_png();
+    let hash = RadrootsBlossomSha256::digest(&bytes);
+    let prefix = format!("https://cdn.example/{hash}.");
+    let exact_extension =
+        "p".repeat(RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES - prefix.len());
+    let evidence = verify_public_raster(
+        &bytes,
+        "image/png",
+        &exact_extension,
+        RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+    )
+    .unwrap();
+    assert_eq!(
+        evidence.url().as_str().len(),
+        RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES
+    );
+
+    let over_extension = format!("{exact_extension}p");
+    assert_eq!(
+        verify_public_raster(
+            &bytes,
+            "image/png",
+            &over_extension,
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        )
+        .unwrap_err()
+        .code(),
+        "publication_readiness_url_too_large"
+    );
 }
 
 #[test]
@@ -167,6 +405,13 @@ fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters
 fn encoded_jpeg() -> Vec<u8> {
     hex::decode(
         "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc00011080001000103012200021101031101ffc4001f0000010501010101010100000000000000000102030405060708090a0bffc400b5100002010303020403050504040000017d01020300041105122131410613516107227114328191a1082342b1c11552d1f02433627282090a161718191a25262728292a3435363738393a434445464748494a535455565758595a636465666768696a737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9faffc4001f0100030101010101010101010000000000000102030405060708090a0bffc400b51100020102040403040705040400010277000102031104052131061241510761711322328108144291a1b1c109233352f0156272d10a162434e125f11718191a262728292a35363738393a434445464748494a535455565758595a636465666768696a737475767778797a82838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aab2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae2e3e4e5e6e7e8e9eaf2f3f4f5f6f7f8f9faffda000c03010002110311003f00f9ca8a28afc3cfe6f3ffd9",
+    )
+    .unwrap()
+}
+
+fn canonical_png() -> Vec<u8> {
+    hex::decode(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
     )
     .unwrap()
 }

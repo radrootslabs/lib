@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_blossom.publication_readiness_v1",
+  "authority_id": "blossom_publication_readiness_v1",
+  "manifest_schema": {
+    "path": "crates/blossom/contracts/publication_readiness_v1.manifest.schema.json",
+    "byte_length": 11884,
+    "sha256": "e62ecf4b43bd03831f7e36e9cb4c98e2ed7e3a12d02cbca48a49e402b3feaa7d",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "predecessor": {
+    "contract_id": "radroots_event_store.raw_source_rebuild_v1",
+    "immutable_artifacts": [
+      {
+        "path": "crates/event_store/contracts/raw_source_rebuild_v1.manifest.json",
+        "byte_length": 45449,
+        "sha256": "03253ce31dc31d465880a895d2685f5deb1274948e0a4eabe81a2f08f238c483",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      {
+        "path": "crates/event_store/contracts/raw_source_rebuild_v1.manifest.schema.json",
+        "byte_length": 17896,
+        "sha256": "f9d210967e54b66f39c8bb965d97b2001a0ebc0927e7c2c14edb8e474bfda695",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      {
+        "path": "crates/event_store/contracts/raw_source_rebuild_v1.manifest.sha256",
+        "byte_length": 65,
+        "sha256": "2b8bc07cd479be2281781660efd26fd7a8f480e5f3f62053aeccd2b5e6b2070c",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      {
+        "path": "crates/event_store/src/generated/raw_source_rebuild_manifest.rs",
+        "byte_length": 50735,
+        "sha256": "3763fbee3ee45621afca990002b9298c791bf0396ebf7bccde0ae1bc9aecb7f2",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      {
+        "path": "contracts/conformance/vectors/event_store/raw_source_rebuild.v1.json",
+        "byte_length": 26833,
+        "sha256": "c37a2bf3714f53ab04fae8c5c9dbe2ad4b3f5310efa51f46bd8b116660f1fe15",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      {
+        "path": "crates/event_store/tests/fixtures/raw_source_rebuild.v1.json",
+        "byte_length": 26833,
+        "sha256": "c37a2bf3714f53ab04fae8c5c9dbe2ad4b3f5310efa51f46bd8b116660f1fe15",
+        "hash_algorithm": "sha256_bytes_v1"
+      }
+    ]
+  },
+  "protocol_sources": [
+    {
+      "id": "blossom",
+      "repository": "https://github.com/hzrd149/blossom",
+      "revision": "b5bd2801d1763aa635fc8fea7a76597e0eb18990"
+    }
+  ],
+  "public_api": {
+    "constants": [
+      "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES",
+      "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES",
+      "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION",
+      "RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS",
+      "RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES",
+      "RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION",
+      "RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION",
+      "RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES"
+    ],
+    "types": [
+      "RadrootsBlossomAuthoredRasterDimensions",
+      "RadrootsBlossomBud01GetCollector",
+      "RadrootsBlossomBud01GetObservation",
+      "RadrootsBlossomBud01HeadObservation",
+      "RadrootsBlossomBud02UploadObservation",
+      "RadrootsBlossomBud02UploadStatus",
+      "RadrootsBlossomPublicationReadinessEvidence",
+      "RadrootsBlossomPublicationReadinessEvidenceDigest",
+      "RadrootsBlossomRasterDimensions",
+      "RadrootsBlossomRasterFormat"
+    ],
+    "functions": [
+      "verify_publication_readiness"
+    ],
+    "methods": [
+      "RadrootsBlossomBud01GetCollector::finish",
+      "RadrootsBlossomBud01GetCollector::new",
+      "RadrootsBlossomBud01GetCollector::push_chunk",
+      "RadrootsBlossomBud01GetObservation::bytes",
+      "RadrootsBlossomBud01GetObservation::declared_size",
+      "RadrootsBlossomBud01GetObservation::from_complete_body",
+      "RadrootsBlossomBud01GetObservation::url",
+      "RadrootsBlossomBud01HeadObservation::content_length",
+      "RadrootsBlossomBud01HeadObservation::media_type",
+      "RadrootsBlossomBud01HeadObservation::new",
+      "RadrootsBlossomBud01HeadObservation::url",
+      "RadrootsBlossomBud02UploadObservation::descriptor",
+      "RadrootsBlossomBud02UploadObservation::new",
+      "RadrootsBlossomBud02UploadObservation::status",
+      "RadrootsBlossomBud02UploadStatus::as_u16",
+      "RadrootsBlossomPublicationReadinessEvidence::bud02_status",
+      "RadrootsBlossomPublicationReadinessEvidence::dimensions",
+      "RadrootsBlossomPublicationReadinessEvidence::evidence_digest",
+      "RadrootsBlossomPublicationReadinessEvidence::from_canonical_json",
+      "RadrootsBlossomPublicationReadinessEvidence::media_type",
+      "RadrootsBlossomPublicationReadinessEvidence::policy_version",
+      "RadrootsBlossomPublicationReadinessEvidence::raster_format",
+      "RadrootsBlossomPublicationReadinessEvidence::schema_version",
+      "RadrootsBlossomPublicationReadinessEvidence::sha256",
+      "RadrootsBlossomPublicationReadinessEvidence::size",
+      "RadrootsBlossomPublicationReadinessEvidence::to_canonical_json",
+      "RadrootsBlossomPublicationReadinessEvidence::uploaded",
+      "RadrootsBlossomPublicationReadinessEvidence::url",
+      "RadrootsBlossomPublicationReadinessEvidenceDigest::as_sha256",
+      "RadrootsBlossomRasterDimensions::height",
+      "RadrootsBlossomRasterDimensions::new",
+      "RadrootsBlossomRasterDimensions::pixels",
+      "RadrootsBlossomRasterDimensions::width",
+      "RadrootsBlossomRasterFormat::as_str",
+      "RadrootsBlossomRasterFormat::from_media_type"
+    ]
+  },
+  "readiness": {
+    "verify_operation_id": "blossom.verify_publication_readiness",
+    "input_types": [
+      "RadrootsBlossomByteVerifiedDescriptor",
+      "Bytes",
+      "RadrootsBlossomAuthoredRasterDimensions",
+      "RadrootsBlossomBud02UploadObservation",
+      "RadrootsBlossomBud01HeadObservation",
+      "RadrootsBlossomBud01GetObservation"
+    ],
+    "output_type": "RadrootsBlossomPublicationReadinessEvidence",
+    "evidence": {
+      "schema_version": 1,
+      "policy_version": 1,
+      "schema": {
+        "path": "crates/blossom/contracts/publication_readiness_evidence_v1.schema.json",
+        "byte_length": 1890,
+        "sha256": "c8f5f3488dd91a660f8eaa018d9aba63d03c882dc3ff22b47ac192b7189b0ce2",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      "max_canonical_json_bytes": 8192,
+      "max_url_utf8_bytes": 4096,
+      "max_raster_bytes": 10485760,
+      "max_decoded_bytes": 160000000,
+      "max_dimension": 16384,
+      "max_pixels": 20000000,
+      "wire_field_order": [
+        "schema_version",
+        "policy_version",
+        "url",
+        "sha256",
+        "size",
+        "media_type",
+        "raster_format",
+        "dimensions",
+        "bud02_status",
+        "bud01_head_status",
+        "bud01_get_status",
+        "uploaded",
+        "evidence_digest"
+      ],
+      "digest_domain": "radroots.blossom.publication-readiness-evidence.v1\u0000",
+      "digest_framing": "domain_bytes_then_u16be_policy_then_u64be_length_prefixed_url_then_raw_sha256_then_u64be_size_then_u64be_length_prefixed_mime_then_u8_format_then_u32be_width_then_u32be_height_then_u16be_bud02_then_u16be_head_then_u16be_get_then_u64be_uploaded_v1",
+      "serialize_operation_id": "blossom.publication_readiness_evidence.to_canonical_json",
+      "reload_operation_id": "blossom.publication_readiness_evidence.from_canonical_json",
+      "invariants": [
+        "bounded_input_before_json_parse_v1",
+        "fixed_compact_json_field_order_v1",
+        "canonical_json_round_trip_required_v1",
+        "sealed_evidence_without_deserialize_v1",
+        "private_deny_unknown_fields_wire_models_v1",
+        "canonical_hash_path_url_max_4096_utf8_bytes_v1",
+        "closed_jpeg_png_still_webp_mime_and_format_v1",
+        "nonzero_size_max_10485760_bytes_v1",
+        "nonzero_dimensions_axis_max_16384_pixels_max_20000000_v1",
+        "bud02_status_200_or_201_and_bud01_status_200_v1",
+        "descriptor_head_get_complete_byte_agreement_v1",
+        "private_domain_separated_digest_derivation_v1",
+        "no_bud11_credentials_entitlement_or_topology_persistence_v1"
+      ],
+      "decode_error_codes": [
+        "publication_readiness_evidence_too_large",
+        "publication_readiness_evidence_invalid_json",
+        "publication_readiness_evidence_schema_version_unsupported",
+        "publication_readiness_evidence_policy_version_unsupported",
+        "publication_readiness_evidence_field_invalid",
+        "publication_readiness_evidence_json_non_canonical",
+        "publication_readiness_evidence_digest_mismatch"
+      ]
+    },
+    "behavior_vector": {
+      "canonical_path": "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+      "mirror_path": "crates/blossom/tests/fixtures/publication_readiness.v1.json",
+      "byte_length": 16423,
+      "sha256": "6408e3b5bc4a376c7411e304833431af918a4072f196e8a8da55c3f0ef8610c9",
+      "hash_algorithm": "sha256_bytes_v1",
+      "executor": {
+        "path": "crates/blossom/tests/publication_readiness.rs",
+        "byte_length": 33431,
+        "sha256": "17abd5491bcfe0c717f7f67202c8c2d85912a042167d027727c07d9f07306641",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      "executor_test": "publication_readiness_conformance_vector_executes_every_case",
+      "case_ids": [
+        "valid_created",
+        "valid_ok_without_authored_dimensions",
+        "invalid_upload_status",
+        "invalid_head_status",
+        "invalid_get_status",
+        "declared_size_over_public_max",
+        "missing_get_body",
+        "short_get_body",
+        "trailing_get_body",
+        "authored_bytes_short",
+        "authored_bytes_wrong_hash",
+        "upload_url_mismatch",
+        "upload_hash_mismatch",
+        "upload_size_mismatch",
+        "upload_mime_mismatch",
+        "head_url_mismatch",
+        "head_size_mismatch",
+        "head_mime_mismatch",
+        "get_url_mismatch",
+        "get_declared_size_mismatch",
+        "get_complete_hash_mismatch",
+        "unsupported_raster_mime",
+        "malformed_raster",
+        "animated_png",
+        "declared_format_mismatch",
+        "corrupt_png_crc",
+        "corrupt_png_deflate",
+        "invalid_png_color_type",
+        "authored_dimension_mismatch",
+        "animated_webp",
+        "zero_width",
+        "dimension_over_max",
+        "pixel_limit",
+        "progressive_jpeg",
+        "jpeg_entropy_stripped",
+        "jpeg_entropy_partial",
+        "malformed_jpeg_dqt"
+      ]
+    },
+    "persistence_vector": {
+      "canonical_path": "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json",
+      "mirror_path": "crates/blossom/tests/fixtures/publication_readiness_persistence.v1.json",
+      "byte_length": 9264,
+      "sha256": "e892ff6353afe8997a151a9aff4db2fd82c96d94db7bff31bc2269333adc2512",
+      "hash_algorithm": "sha256_bytes_v1",
+      "executor": {
+        "path": "crates/blossom/tests/publication_readiness_persistence.rs",
+        "byte_length": 11567,
+        "sha256": "aa14d20ee5747fcc979907b4b59a67687a3a02852850e33aede65e2ab0e0ca8d",
+        "hash_algorithm": "sha256_bytes_v1"
+      },
+      "executor_test": "publication_readiness_persistence_vector_executes_every_case",
+      "case_ids": [
+        "canonical_evidence_reloads",
+        "canonical_evidence_serializes",
+        "leading_whitespace_is_noncanonical",
+        "noncanonical_string_escaping_is_rejected",
+        "field_reordering_is_noncanonical",
+        "unknown_field_is_rejected",
+        "private_bud11_field_is_rejected",
+        "missing_field_is_rejected",
+        "duplicate_field_is_rejected",
+        "wrong_field_type_is_rejected",
+        "schema_version_is_strict",
+        "policy_version_is_strict",
+        "url_must_be_canonical",
+        "url_exact_maximum_is_valid",
+        "url_one_over_maximum_is_rejected",
+        "url_hash_must_match_sha256",
+        "sha256_must_be_lower_hex",
+        "size_must_be_nonzero",
+        "size_must_be_bounded",
+        "mime_must_be_supported",
+        "format_must_match_mime",
+        "dimensions_must_be_nonzero",
+        "dimensions_must_respect_axis_limit",
+        "dimensions_must_respect_pixel_limit",
+        "bud02_status_is_strict",
+        "bud01_head_status_is_strict",
+        "bud01_get_status_is_strict",
+        "uploaded_mutation_breaks_digest",
+        "digest_must_be_lower_hex",
+        "digest_must_match_all_facts",
+        "input_is_bounded_before_parse"
+      ]
+    }
+  },
+  "predecessor_source_supersessions": [
+    "Cargo.lock",
+    "Cargo.toml",
+    "build/nix/common.nix",
+    "CHANGELOG.md",
+    "contracts/releases/1.0.0-alpha.1.toml",
+    "tools/xtask/src/contract.rs",
+    "tools/xtask/src/contract/food_availability_projection.rs",
+    "tools/xtask/src/contract/nip09_reconciliation.rs",
+    "tools/xtask/src/contract/raw_source_rebuild.rs",
+    "tools/xtask/src/contract/source_maintenance.rs",
+    "tools/xtask/src/main.rs"
+  ],
+  "transitive_predecessor_source_supersessions": [
+    "Cargo.toml",
+    "crates/blossom/Cargo.toml",
+    "crates/blossom/src/error.rs",
+    "crates/blossom/src/lib.rs",
+    "crates/blossom/src/url.rs"
+  ]
+}

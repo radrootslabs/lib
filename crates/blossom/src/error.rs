@@ -43,6 +43,8 @@ pub enum RadrootsBlossomError {
     InvalidBud02UploadStatus { actual: u16 },
     InvalidBud01HeadStatus { actual: u16 },
     InvalidBud01GetStatus { actual: u16 },
+    PublicationReadinessUrlTooLarge { max: usize, actual: usize },
+    PublicationRasterEmpty,
     PublicationRasterByteLimitExceeded { declared: u64, maximum: u64 },
     PublicationGetBodyAllocationFailed,
     PublicationGetBodyLengthOverflow,
@@ -73,6 +75,14 @@ pub enum RadrootsBlossomError {
     PublicationRasterDecodeFailed,
     PublicationRasterContainerDimensionMismatch,
     PublicationAuthoredRasterDimensionMismatch,
+    PublicationReadinessEvidenceTooLarge { max: usize, actual: usize },
+    PublicationReadinessEvidenceInvalidJson,
+    PublicationReadinessEvidenceUnsupportedSchemaVersion { expected: u32, actual: u32 },
+    PublicationReadinessEvidenceUnsupportedPolicyVersion { expected: u16, actual: u16 },
+    PublicationReadinessEvidenceInvalidField { field: &'static str },
+    PublicationReadinessEvidenceDigestMismatch,
+    PublicationReadinessEvidenceNonCanonicalJson,
+    PublicationReadinessEvidenceSerialization,
 }
 
 impl RadrootsBlossomError {
@@ -118,6 +128,8 @@ impl RadrootsBlossomError {
             Self::InvalidBud02UploadStatus { .. } => "invalid_bud02_upload_status",
             Self::InvalidBud01HeadStatus { .. } => "invalid_bud01_head_status",
             Self::InvalidBud01GetStatus { .. } => "invalid_bud01_get_status",
+            Self::PublicationReadinessUrlTooLarge { .. } => "publication_readiness_url_too_large",
+            Self::PublicationRasterEmpty => "publication_raster_empty",
             Self::PublicationRasterByteLimitExceeded { .. } => {
                 "publication_raster_byte_limit_exceeded"
             }
@@ -171,6 +183,30 @@ impl RadrootsBlossomError {
             }
             Self::PublicationAuthoredRasterDimensionMismatch => {
                 "publication_authored_raster_dimension_mismatch"
+            }
+            Self::PublicationReadinessEvidenceTooLarge { .. } => {
+                "publication_readiness_evidence_too_large"
+            }
+            Self::PublicationReadinessEvidenceInvalidJson => {
+                "publication_readiness_evidence_invalid_json"
+            }
+            Self::PublicationReadinessEvidenceUnsupportedSchemaVersion { .. } => {
+                "publication_readiness_evidence_schema_version_unsupported"
+            }
+            Self::PublicationReadinessEvidenceUnsupportedPolicyVersion { .. } => {
+                "publication_readiness_evidence_policy_version_unsupported"
+            }
+            Self::PublicationReadinessEvidenceInvalidField { .. } => {
+                "publication_readiness_evidence_field_invalid"
+            }
+            Self::PublicationReadinessEvidenceDigestMismatch => {
+                "publication_readiness_evidence_digest_mismatch"
+            }
+            Self::PublicationReadinessEvidenceNonCanonicalJson => {
+                "publication_readiness_evidence_json_non_canonical"
+            }
+            Self::PublicationReadinessEvidenceSerialization => {
+                "publication_readiness_evidence_serialization_failed"
             }
         }
     }
@@ -281,6 +317,13 @@ impl fmt::Display for RadrootsBlossomError {
             Self::InvalidBud01GetStatus { actual } => {
                 write!(f, "BUD-01 GET status must be 200, got {actual}")
             }
+            Self::PublicationReadinessUrlTooLarge { max, actual } => write!(
+                f,
+                "publication-readiness URL contains {actual} bytes, exceeding maximum {max}"
+            ),
+            Self::PublicationRasterEmpty => {
+                f.write_str("publication raster must contain at least one byte")
+            }
             Self::PublicationRasterByteLimitExceeded { declared, maximum } => write!(
                 f,
                 "publication raster declares {declared} bytes, exceeding maximum {maximum}"
@@ -379,6 +422,40 @@ impl fmt::Display for RadrootsBlossomError {
             Self::PublicationAuthoredRasterDimensionMismatch => {
                 f.write_str("decoded raster dimensions do not match the authored dimensions")
             }
+            Self::PublicationReadinessEvidenceTooLarge { max, actual } => write!(
+                f,
+                "publication-readiness evidence is {actual} bytes, exceeding maximum {max}"
+            ),
+            Self::PublicationReadinessEvidenceInvalidJson => {
+                f.write_str("publication-readiness evidence is not valid strict JSON")
+            }
+            Self::PublicationReadinessEvidenceUnsupportedSchemaVersion { expected, actual } => {
+                write!(
+                    f,
+                    "publication-readiness evidence schema version mismatch: expected {expected}, got {actual}"
+                )
+            }
+            Self::PublicationReadinessEvidenceUnsupportedPolicyVersion { expected, actual } => {
+                write!(
+                    f,
+                    "publication-readiness evidence policy version mismatch: expected {expected}, got {actual}"
+                )
+            }
+            Self::PublicationReadinessEvidenceInvalidField { field } => {
+                write!(
+                    f,
+                    "publication-readiness evidence field `{field}` is invalid"
+                )
+            }
+            Self::PublicationReadinessEvidenceDigestMismatch => {
+                f.write_str("publication-readiness evidence digest does not match its facts")
+            }
+            Self::PublicationReadinessEvidenceNonCanonicalJson => {
+                f.write_str("publication-readiness evidence JSON is not canonical")
+            }
+            Self::PublicationReadinessEvidenceSerialization => {
+                f.write_str("publication-readiness evidence serialization failed")
+            }
         }
     }
 }
@@ -415,6 +492,8 @@ mod tests {
             RadrootsBlossomError::InvalidBud02UploadStatus { actual: 202 },
             RadrootsBlossomError::InvalidBud01HeadStatus { actual: 204 },
             RadrootsBlossomError::InvalidBud01GetStatus { actual: 206 },
+            RadrootsBlossomError::PublicationReadinessUrlTooLarge { max: 1, actual: 2 },
+            RadrootsBlossomError::PublicationRasterEmpty,
             RadrootsBlossomError::PublicationRasterByteLimitExceeded {
                 declared: 2,
                 maximum: 1,
@@ -472,6 +551,20 @@ mod tests {
             RadrootsBlossomError::PublicationRasterDecodeFailed,
             RadrootsBlossomError::PublicationRasterContainerDimensionMismatch,
             RadrootsBlossomError::PublicationAuthoredRasterDimensionMismatch,
+            RadrootsBlossomError::PublicationReadinessEvidenceTooLarge { max: 1, actual: 2 },
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidJson,
+            RadrootsBlossomError::PublicationReadinessEvidenceUnsupportedSchemaVersion {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationReadinessEvidenceUnsupportedPolicyVersion {
+                expected: 1,
+                actual: 2,
+            },
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "url" },
+            RadrootsBlossomError::PublicationReadinessEvidenceDigestMismatch,
+            RadrootsBlossomError::PublicationReadinessEvidenceNonCanonicalJson,
+            RadrootsBlossomError::PublicationReadinessEvidenceSerialization,
             RadrootsBlossomError::InvalidAuthorizationContent,
             RadrootsBlossomError::InvalidAuthorizationAction,
             RadrootsBlossomError::InvalidAuthorizationServerDomain,

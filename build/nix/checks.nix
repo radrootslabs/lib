@@ -19,6 +19,7 @@ let
       inherit (common) cargoArtifacts;
       pname = "radroots-cargo-test";
       doCheck = false;
+      nativeBuildInputs = common.commonCraneArgs.nativeBuildInputs ++ [ pkgs.gitMinimal ];
       buildPhaseCargoCommand = ''
         cargo test ${common.coreContractCargoArgs}
       '';
@@ -33,6 +34,7 @@ let
       doCheck = false;
       buildPhaseCargoCommand = ''
         cargo check -p radroots_blossom --lib --no-default-features
+        cargo check -p radroots_blossom --lib --no-default-features --features serde
         cargo check -p radroots_blossom --lib --no-default-features --features raster-decode
       '';
       installPhaseCommand = "mkdir -p $out";
@@ -45,6 +47,8 @@ let
       pname = "radroots-blossom-raster-decode-test";
       doCheck = false;
       buildPhaseCargoCommand = ''
+        cargo test -p radroots_blossom --no-default-features --features serde \
+          --test publication_readiness_persistence
         cargo test -p radroots_blossom --no-default-features --features raster-decode,serde
       '';
       installPhaseCommand = "mkdir -p $out";

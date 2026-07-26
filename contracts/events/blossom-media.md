@@ -330,6 +330,27 @@ future artifact readiness-binding digest. The artifact adapter remains responsib
 exact URL-complete set, rejecting missing/duplicate/extra/reordered evidence, and binding that set
 to its independently computed artifact digest.
 
+Evidence persistence schema v1 is the canonical compact JSON object defined by
+`crates/blossom/contracts/publication_readiness_evidence_v1.schema.json`. Its
+field order is fixed as schema version, policy version, URL, SHA-256, size,
+MIME, raster format, decoded dimensions, BUD-02 status, BUD-01 HEAD/GET
+statuses, upload timestamp, and evidence digest. Both input and output are
+bounded to `8,192` bytes. Reload uses private `deny_unknown_fields` wire models,
+then reconstructs every governed type, checks the URL/hash/MIME/format/size and
+dimension relationships, recomputes the frozen digest preimage, and requires
+byte-for-byte canonical reserialization. The sealed evidence and digest types
+do not implement general-purpose `Deserialize`.
+
+`contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json`
+executes canonical reload plus unknown, missing, duplicate, wrong-type,
+ordering, escaping, schema, policy, URL, hash, size, MIME, format, dimension,
+status, timestamp, digest, and exact-limit mutations. Its packaged mirror and
+behavior executor are authenticated by the generated semantic successor
+`radroots_blossom.publication_readiness_v1`. That successor preserves the
+immutable predecessor artifacts while binding protocol pins, schemas,
+operations, public API inventories, invariants, and executable vector bytes;
+mutable source formatting and release files are not protocol identity.
+
 `contracts/conformance/vectors/blossom/publication_readiness.v1.json` executes the accepted status
 set, exact evidence output, public limits, bounded body collection, complete-byte comparisons,
 closed raster policy, frame and dimension bounds, and all agreement failures. The packaged mirror

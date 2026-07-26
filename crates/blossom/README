@@ -38,6 +38,16 @@ remains available without `raster-decode`, but cannot construct readiness
 evidence. Policy v1 has no serialized or caller-supplied decode-observation
 input.
 
+With the `serde` feature, sealed readiness evidence can be stored as canonical
+compact JSON and reloaded through an explicit bounded validator. The v1 wire is
+limited to `8,192` bytes, fixes field order, rejects unknown, missing,
+duplicate, reordered, or noncanonical fields, and revalidates the canonical
+hash-path URL, closed raster profile, dimensions, observation statuses, and
+domain-separated evidence digest. The sealed evidence type itself does not
+implement `Deserialize`; ordinary JSON decoding cannot manufacture readiness
+authority. This persistence surface remains available in the portable
+`no_std + alloc` serde lane without enabling raster decoding.
+
 Protocol behavior is pinned to Blossom commit
 `b5bd2801d1763aa635fc8fea7a76597e0eb18990`:
 

@@ -1,3 +1,5 @@
+#[cfg(feature = "serde")]
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(feature = "raster-decode")]
@@ -5,7 +7,7 @@ use image::{
     ImageDecoder, Limits,
     codecs::{png::PngDecoder, webp::WebPDecoder},
 };
-#[cfg(feature = "raster-decode")]
+#[cfg(any(feature = "raster-decode", feature = "serde"))]
 use sha2::{Digest, Sha256};
 #[cfg(feature = "raster-decode")]
 use std::io::Cursor;
@@ -17,6 +19,8 @@ use zune_jpeg::JpegDecoder as StrictJpegDecoder;
 #[cfg(feature = "raster-decode")]
 mod sequential_jpeg;
 
+#[cfg(feature = "serde")]
+use crate::RadrootsBlossomBlobUrl;
 #[cfg(feature = "raster-decode")]
 use crate::RadrootsBlossomByteVerifiedDescriptor;
 use crate::{
@@ -27,13 +31,16 @@ use crate::{
 const _: () = assert!(usize::BITS <= u64::BITS);
 
 pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION: u16 = 1;
+pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION: u32 = 1;
+pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES: usize = 8 * 1024;
+pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES: usize = 4 * 1024;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES: u64 = 10_485_760;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES: u64 =
     RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS * 8;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION: u32 = 16_384;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS: u64 = 20_000_000;
 
-#[cfg(feature = "raster-decode")]
+#[cfg(any(feature = "raster-decode", feature = "serde"))]
 const READINESS_EVIDENCE_DIGEST_DOMAIN: &[u8] =
     b"radroots.blossom.publication-readiness-evidence.v1\0";
 
@@ -87,7 +94,7 @@ impl RadrootsBlossomRasterFormat {
         }
     }
 
-    #[cfg(feature = "raster-decode")]
+    #[cfg(any(feature = "raster-decode", feature = "serde"))]
     const fn digest_code(self) -> u8 {
         match self {
             Self::Jpeg => 1,
@@ -364,6 +371,14 @@ pub struct RadrootsBlossomPublicationReadinessEvidence {
 }
 
 impl RadrootsBlossomPublicationReadinessEvidence {
+    pub const fn schema_version(&self) -> u32 {
+        RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION
+    }
+
+    pub const fn policy_version(&self) -> u16 {
+        RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION
+    }
+
     pub fn url(&self) -> &RadrootsBlossomApprovedBlobUrl {
         &self.url
     }
@@ -399,6 +414,28 @@ impl RadrootsBlossomPublicationReadinessEvidence {
     pub const fn evidence_digest(&self) -> RadrootsBlossomPublicationReadinessEvidenceDigest {
         self.evidence_digest
     }
+
+    #[cfg(feature = "serde")]
+    pub fn to_canonical_json(&self) -> Result<Vec<u8>, RadrootsBlossomError> {
+        serialize_readiness_evidence(self)
+    }
+
+    #[cfg(feature = "serde")]
+    pub fn from_canonical_json(bytes: &[u8]) -> Result<Self, RadrootsBlossomError> {
+        if bytes.len() > RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES {
+            return Err(RadrootsBlossomError::PublicationReadinessEvidenceTooLarge {
+                max: RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
+                actual: bytes.len(),
+            });
+        }
+        let wire: PublicationReadinessEvidenceWire = serde_json::from_slice(bytes)
+            .map_err(|_| RadrootsBlossomError::PublicationReadinessEvidenceInvalidJson)?;
+        let evidence = readiness_evidence_from_wire(wire)?;
+        if serialize_readiness_evidence(&evidence)? != bytes {
+            return Err(RadrootsBlossomError::PublicationReadinessEvidenceNonCanonicalJson);
+        }
+        Ok(evidence)
+    }
 }
 
 #[cfg(feature = "raster-decode")]
@@ -415,6 +452,15 @@ pub fn verify_publication_readiness(
     let expected_size = authored_descriptor.size();
     let expected_media_type = authored_descriptor.media_type();
 
+    if expected_url.as_str().len() > RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES {
+        return Err(RadrootsBlossomError::PublicationReadinessUrlTooLarge {
+            max: RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES,
+            actual: expected_url.as_str().len(),
+        });
+    }
+    if expected_size == 0 {
+        return Err(RadrootsBlossomError::PublicationRasterEmpty);
+    }
     if expected_size > RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES {
         return Err(RadrootsBlossomError::PublicationRasterByteLimitExceeded {
             declared: expected_size,
@@ -487,12 +533,16 @@ pub fn verify_publication_readiness(
         return Err(RadrootsBlossomError::PublicationAuthoredRasterDimensionMismatch);
     }
 
-    let evidence_digest = evidence_digest(
-        authored_descriptor,
-        expected_format,
-        decoded_dimensions,
-        upload,
-    );
+    let evidence_digest = evidence_digest_from_facts(&ReadinessEvidenceDigestFacts {
+        url: expected_url,
+        sha256: expected_hash,
+        size: expected_size,
+        media_type: expected_media_type,
+        format: expected_format,
+        dimensions: decoded_dimensions,
+        bud02_status: upload.status(),
+        uploaded: upload_descriptor.uploaded(),
+    });
     Ok(RadrootsBlossomPublicationReadinessEvidence {
         url: expected_url.clone(),
         sha256: expected_hash,
@@ -682,37 +732,252 @@ fn validate_retrieved_body(
     Ok(())
 }
 
-#[cfg(feature = "raster-decode")]
-fn evidence_digest(
-    descriptor: &RadrootsBlossomByteVerifiedDescriptor,
+#[cfg(any(feature = "raster-decode", feature = "serde"))]
+struct ReadinessEvidenceDigestFacts<'a> {
+    url: &'a RadrootsBlossomApprovedBlobUrl,
+    sha256: RadrootsBlossomSha256,
+    size: u64,
+    media_type: &'a RadrootsBlossomMediaType,
     format: RadrootsBlossomRasterFormat,
     dimensions: RadrootsBlossomRasterDimensions,
-    upload: &RadrootsBlossomBud02UploadObservation,
+    bud02_status: RadrootsBlossomBud02UploadStatus,
+    uploaded: u64,
+}
+
+#[cfg(any(feature = "raster-decode", feature = "serde"))]
+fn evidence_digest_from_facts(
+    facts: &ReadinessEvidenceDigestFacts<'_>,
 ) -> RadrootsBlossomPublicationReadinessEvidenceDigest {
     let mut hasher = Sha256::new();
     hasher.update(READINESS_EVIDENCE_DIGEST_DOMAIN);
     hasher.update(RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION.to_be_bytes());
-    update_length_prefixed(&mut hasher, descriptor.url().as_str().as_bytes());
-    hasher.update(descriptor.sha256().as_bytes());
-    hasher.update(descriptor.size().to_be_bytes());
-    update_length_prefixed(&mut hasher, descriptor.media_type().as_str().as_bytes());
-    hasher.update([format.digest_code()]);
-    hasher.update(dimensions.width().to_be_bytes());
-    hasher.update(dimensions.height().to_be_bytes());
-    hasher.update(upload.status().as_u16().to_be_bytes());
+    update_length_prefixed(&mut hasher, facts.url.as_str().as_bytes());
+    hasher.update(facts.sha256.as_bytes());
+    hasher.update(facts.size.to_be_bytes());
+    update_length_prefixed(&mut hasher, facts.media_type.as_str().as_bytes());
+    hasher.update([facts.format.digest_code()]);
+    hasher.update(facts.dimensions.width().to_be_bytes());
+    hasher.update(facts.dimensions.height().to_be_bytes());
+    hasher.update(facts.bud02_status.as_u16().to_be_bytes());
     hasher.update(200_u16.to_be_bytes());
     hasher.update(200_u16.to_be_bytes());
-    hasher.update(upload.descriptor().descriptor().uploaded().to_be_bytes());
+    hasher.update(facts.uploaded.to_be_bytes());
     let digest = hasher.finalize();
     let mut bytes = [0_u8; 32];
     bytes.copy_from_slice(&digest);
     RadrootsBlossomPublicationReadinessEvidenceDigest(RadrootsBlossomSha256::from_bytes(bytes))
 }
 
-#[cfg(feature = "raster-decode")]
+#[cfg(any(feature = "raster-decode", feature = "serde"))]
 fn update_length_prefixed(hasher: &mut Sha256, bytes: &[u8]) {
     hasher.update((bytes.len() as u64).to_be_bytes());
     hasher.update(bytes);
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublicationReadinessDimensionsWire {
+    width: u32,
+    height: u32,
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublicationReadinessEvidenceWire {
+    schema_version: u32,
+    policy_version: u16,
+    url: String,
+    sha256: String,
+    size: u64,
+    media_type: String,
+    raster_format: String,
+    dimensions: PublicationReadinessDimensionsWire,
+    bud02_status: u16,
+    bud01_head_status: u16,
+    bud01_get_status: u16,
+    uploaded: u64,
+    evidence_digest: String,
+}
+
+#[cfg(feature = "serde")]
+fn serialize_readiness_evidence(
+    evidence: &RadrootsBlossomPublicationReadinessEvidence,
+) -> Result<Vec<u8>, RadrootsBlossomError> {
+    let wire = PublicationReadinessEvidenceWire {
+        schema_version: RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION,
+        policy_version: RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION,
+        url: evidence.url.as_str().to_string(),
+        sha256: evidence.sha256.to_string(),
+        size: evidence.size,
+        media_type: evidence.media_type.as_str().to_string(),
+        raster_format: evidence.raster_format.as_str().to_string(),
+        dimensions: PublicationReadinessDimensionsWire {
+            width: evidence.dimensions.width(),
+            height: evidence.dimensions.height(),
+        },
+        bud02_status: evidence.bud02_status.as_u16(),
+        bud01_head_status: 200,
+        bud01_get_status: 200,
+        uploaded: evidence.uploaded,
+        evidence_digest: evidence.evidence_digest.to_string(),
+    };
+    let bytes = serde_json::to_vec(&wire)
+        .map_err(|_| RadrootsBlossomError::PublicationReadinessEvidenceSerialization)?;
+    if bytes.len() > RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES {
+        return Err(RadrootsBlossomError::PublicationReadinessEvidenceTooLarge {
+            max: RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
+            actual: bytes.len(),
+        });
+    }
+    Ok(bytes)
+}
+
+#[cfg(feature = "serde")]
+fn readiness_evidence_from_wire(
+    wire: PublicationReadinessEvidenceWire,
+) -> Result<RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomError> {
+    if wire.schema_version != RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceUnsupportedSchemaVersion {
+                expected: RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION,
+                actual: wire.schema_version,
+            },
+        );
+    }
+    if wire.policy_version != RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceUnsupportedPolicyVersion {
+                expected: RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION,
+                actual: wire.policy_version,
+            },
+        );
+    }
+    if wire.url.len() > RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "url" },
+        );
+    }
+    if wire.size == 0 || wire.size > RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "size" },
+        );
+    }
+    let sha256 = RadrootsBlossomSha256::from_hex(&wire.sha256).map_err(|_| {
+        RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "sha256" }
+    })?;
+    let media_type = RadrootsBlossomMediaType::parse(&wire.media_type).map_err(|_| {
+        RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+            field: "media_type",
+        }
+    })?;
+    if media_type.as_str() != wire.media_type {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                field: "media_type",
+            },
+        );
+    }
+    let raster_format = match wire.raster_format.as_str() {
+        "jpeg" => RadrootsBlossomRasterFormat::Jpeg,
+        "png" => RadrootsBlossomRasterFormat::Png,
+        "still_webp" => RadrootsBlossomRasterFormat::StillWebP,
+        _ => {
+            return Err(
+                RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                    field: "raster_format",
+                },
+            );
+        }
+    };
+    if RadrootsBlossomRasterFormat::from_media_type(&media_type).map_err(|_| {
+        RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+            field: "media_type",
+        }
+    })? != raster_format
+    {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                field: "raster_format",
+            },
+        );
+    }
+    let dimensions =
+        RadrootsBlossomRasterDimensions::new(wire.dimensions.width, wire.dimensions.height)
+            .map_err(
+                |_| RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                    field: "dimensions",
+                },
+            )?;
+    let bud02_status =
+        RadrootsBlossomBud02UploadStatus::parse(wire.bud02_status).map_err(|_| {
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                field: "bud02_status",
+            }
+        })?;
+    if wire.bud01_head_status != 200 {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                field: "bud01_head_status",
+            },
+        );
+    }
+    if wire.bud01_get_status != 200 {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                field: "bud01_get_status",
+            },
+        );
+    }
+    let blob_url = RadrootsBlossomBlobUrl::parse(&wire.url).map_err(|_| {
+        RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "url" }
+    })?;
+    if blob_url.as_str() != wire.url {
+        return Err(
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "url" },
+        );
+    }
+    let approved = RadrootsBlossomBlobDescriptor::new(
+        blob_url,
+        sha256,
+        wire.size,
+        media_type.clone(),
+        wire.uploaded,
+    )
+    .and_then(RadrootsBlossomBlobDescriptor::approve_reference)
+    .map_err(|_| RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "url" })?;
+    let evidence_digest = RadrootsBlossomPublicationReadinessEvidenceDigest(
+        RadrootsBlossomSha256::from_hex(&wire.evidence_digest).map_err(|_| {
+            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField {
+                field: "evidence_digest",
+            }
+        })?,
+    );
+    let expected_digest = evidence_digest_from_facts(&ReadinessEvidenceDigestFacts {
+        url: approved.url(),
+        sha256,
+        size: wire.size,
+        media_type: &media_type,
+        format: raster_format,
+        dimensions,
+        bud02_status,
+        uploaded: wire.uploaded,
+    });
+    if evidence_digest != expected_digest {
+        return Err(RadrootsBlossomError::PublicationReadinessEvidenceDigestMismatch);
+    }
+    Ok(RadrootsBlossomPublicationReadinessEvidence {
+        url: approved.url().clone(),
+        sha256,
+        size: wire.size,
+        media_type,
+        raster_format,
+        dimensions,
+        bud02_status,
+        uploaded: wire.uploaded,
+        evidence_digest,
+    })
 }
 
 #[cfg(any(feature = "raster-decode", test))]

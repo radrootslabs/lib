@@ -1,0 +1,31 @@
+{
+  "behavior_vector_sha256": "6408e3b5bc4a376c7411e304833431af918a4072f196e8a8da55c3f0ef8610c9",
+  "contract_id": "radroots_blossom.publication_readiness_v1",
+  "evidence_schema": {
+    "byte_length": 1890,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/publication_readiness_evidence_v1.schema.json",
+    "sha256": "c8f5f3488dd91a660f8eaa018d9aba63d03c882dc3ff22b47ac192b7189b0ce2"
+  },
+  "manifest": {
+    "byte_length": 13038,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/publication_readiness_v1.manifest.json",
+    "sha256": "9359c5531548778b4a03e1a603a4048f17ba498b16dad50f7c62cca0ddb6240b"
+  },
+  "manifest_schema": {
+    "byte_length": 11884,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/publication_readiness_v1.manifest.schema.json",
+    "sha256": "e62ecf4b43bd03831f7e36e9cb4c98e2ed7e3a12d02cbca48a49e402b3feaa7d"
+  },
+  "manifest_sidecar": {
+    "byte_length": 65,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/publication_readiness_v1.manifest.sha256",
+    "sha256": "e8c2be84eef68e965ac0e119016d6840cb9503e58d5d9c40e13a6512e1ec74b7"
+  },
+  "persistence_vector_sha256": "e892ff6353afe8997a151a9aff4db2fd82c96d94db7bff31bc2269333adc2512",
+  "predecessor_manifest_sha256": "03253ce31dc31d465880a895d2685f5deb1274948e0a4eabe81a2f08f238c483",
+  "schema_version": 1
+}

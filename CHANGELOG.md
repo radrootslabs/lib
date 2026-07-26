@@ -215,6 +215,11 @@ publish policy both pass for the same source revision.
   Deterministic per-URL evidence remains transport-neutral and contains no
   HTTP credentials, BUD-11 material, entitlement decision, or private service
   topology.
+  The `serde` surface persists this sealed evidence as bounded canonical
+  compact JSON and reloads it only after strict schema/policy, field,
+  URL/hash/MIME/size/dimension/status, digest, and canonical-byte validation.
+  General-purpose deserialization cannot construct the sealed evidence state,
+  and the portable serde-only lane does not require the raster decoder.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced

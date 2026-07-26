@@ -1,0 +1,98 @@
+{
+  "$id": "https://radroots.org/contracts/blossom/publication-readiness-evidence-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bud01_get_status": {
+      "const": 200
+    },
+    "bud01_head_status": {
+      "const": 200
+    },
+    "bud02_status": {
+      "enum": [
+        200,
+        201
+      ]
+    },
+    "dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "width": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "evidence_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "media_type": {
+      "enum": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ]
+    },
+    "policy_version": {
+      "const": 1
+    },
+    "raster_format": {
+      "enum": [
+        "jpeg",
+        "png",
+        "still_webp"
+      ]
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "size": {
+      "maximum": 10485760,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "uploaded": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "url": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "policy_version",
+    "url",
+    "sha256",
+    "size",
+    "media_type",
+    "raster_format",
+    "dimensions",
+    "bud02_status",
+    "bud01_head_status",
+    "bud01_get_status",
+    "uploaded",
+    "evidence_digest"
+  ],
+  "title": "Radroots Blossom Publication Readiness Evidence v1",
+  "type": "object"
+}
