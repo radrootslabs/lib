@@ -2,10 +2,20 @@
 
 mod admission_authority;
 mod artifact_bundle;
+mod blossom_publication_readiness;
 mod comment_authority;
 mod deletion_authority;
 mod food_availability_projection;
 mod nip09_reconciliation;
+mod phase1_publication_allowlist;
+// The former live generator remains compiled for historical unit tests and
+// immutable predecessor validation, but the allowlist successor owns writes.
+#[allow(dead_code)]
+mod phase1_publication_artifact;
+// The raw-source implementation remains compiled for its historical unit tests, while the
+// publication successor validates its immutable artifacts instead of rebuilding current source.
+#[allow(dead_code)]
+mod raw_source_rebuild;
 mod registry_v7;
 mod source_maintenance;
 
@@ -14,6 +24,13 @@ pub(crate) use food_availability_projection::{
 };
 pub(crate) use nip09_reconciliation::{
     validate_nip09_reconciliation_manifest, write_nip09_reconciliation_manifest,
+};
+pub(crate) use phase1_publication_allowlist::{
+    validate_phase1_publication_allowlist_manifest, write_phase1_publication_allowlist_manifest,
+};
+pub(crate) use phase1_publication_artifact::{
+    validate_immutable_phase1_publication_artifact_predecessor,
+    validate_phase1_publication_artifact_manifest, write_phase1_publication_artifact_manifest,
 };
 pub(crate) use registry_v7::{
     validate_event_contract_registry_v7_inventory, write_event_contract_registry_v7_inventory,
@@ -48,7 +65,21 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_nip09_reconciliation_manifest(workspace_root)?;
     validate_food_availability_projection_manifest(workspace_root)?;
     validate_source_maintenance_manifest(workspace_root)?;
+    validate_raw_source_rebuild_manifest(workspace_root)?;
+    validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?;
+    validate_phase1_publication_allowlist_manifest(workspace_root)?;
+    blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
+}
+
+pub(crate) fn validate_raw_source_rebuild_manifest(workspace_root: &Path) -> Result<(), String> {
+    phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(workspace_root)?;
+    blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)
+}
+
+pub(crate) fn write_raw_source_rebuild_manifest(workspace_root: &Path) -> Result<(), String> {
+    validate_raw_source_rebuild_manifest(workspace_root)?;
+    Err("raw-source rebuild is an immutable predecessor and cannot be rewritten; write the active publication successor instead".to_owned())
 }
 
 const CONFORMANCE_ROOT_RELATIVE: &str = "contracts/conformance";
@@ -59,10 +90,13 @@ const FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/event_store/food_availability_projection.v1.json";
 const SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/event_store/source_maintenance.v1.json";
-const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 3] = [
+const RAW_SOURCE_REBUILD_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/event_store/raw_source_rebuild.v1.json";
+const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 4] = [
     NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
     FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
     SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE,
+    RAW_SOURCE_REBUILD_CONFORMANCE_VECTOR_RELATIVE,
 ];
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
@@ -84,7 +118,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 22] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 26] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -92,6 +126,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 22] = [
     (
         "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json",
         "crates/blossom/tests/fixtures/hash_path_and_descriptor.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+        "crates/blossom/tests/fixtures/publication_readiness.v1.json",
     ),
     (
         "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",
@@ -134,6 +172,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 22] = [
         "crates/event_store/tests/fixtures/source_maintenance.v1.json",
     ),
     (
+        RAW_SOURCE_REBUILD_CONFORMANCE_VECTOR_RELATIVE,
+        "crates/event_store/tests/fixtures/raw_source_rebuild.v1.json",
+    ),
+    (
         "contracts/conformance/vectors/events/operational_listing_tags_full.v1.json",
         "crates/event_codec/tests/fixtures/operational_listing_tags_full.v1.json",
     ),
@@ -164,6 +206,14 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 22] = [
     (
         "contracts/conformance/vectors/post/verified_profiles.v1.json",
         "crates/event_codec/tests/fixtures/post_verified_profiles.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/publication/phase1_artifact.v1.json",
+        "crates/event_codec/tests/fixtures/phase1_publication_artifact.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/publication/phase1_allowlist.v1.json",
+        "crates/event_codec/tests/fixtures/phase1_publication_allowlist.v1.json",
     ),
     (
         "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json",

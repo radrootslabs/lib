@@ -291,6 +291,28 @@ semver_impacts = [
 summary = "Add one signature-verified event admission operation that preserves typed product admissions, applies complete registry validation to generic contracts, and distinguishes unsupported matching, invalid shapes, Post-to-Reply routing, and kind-30402 profile exclusions."
 
 [[changes]]
+id = "phase1-publication-artifact"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_conformance_vector",
+]
+summary = "Add the authored-only Phase 1 publication artifact with seven typed leaves, exact top-level NIP-01 id placement, explicit canonical-byte encode/decode operations, bounded signed-event and artifact wires, complete Blossom URL commitments, and a single-NUL domain-separated digest."
+
+[[changes]]
+id = "phase1-publication-allowlist"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_conformance_vector",
+]
+summary = "Add an opaque publication-lane allowlist and canonical-JSON durable-reload adapter over sealed Phase 1 artifacts with one supporting Profile leaf and six root leaves, strict same-kind reprojection, typed-only date/time Event handling, focused FoodAvailability marker partitioning, and fail-closed exclusion of every other generic, ephemeral, or deferred product family."
+
+[[changes]]
 id = "event-store-validity-visibility-split"
 classification = "breaking"
 semver_impacts = [
@@ -434,6 +456,21 @@ semver_impacts = [
 summary = "Advance the event store to schema version 4 with prospective retained-source capacity enforcement across independent file pools, UTF-8 preflight before schema or journal mutation, bounded reopen recounts, rollback-protected finite generation history, coherent NIP-09 and FoodAvailability rebuild seals, typed capacity and recovery failures, and an authenticated executable SourceMaintenance successor contract that replaces exactly radroots_event_store_food_availability_image_delete_guard, radroots_event_store_food_availability_projection_delete_guard, and radroots_event_store_source_rebuild_marker_insert_guard; rejects drifted v3 upgrades atomically; restores the exact predecessor trigger SQL on rollback; and reserves future derived-state repair for an exact managed-v4 catalog, ledger, migration history, immutable raw/source lineage, and capacity without requiring derived hook health as a precondition."
 
 [[changes]]
+id = "event-store-raw-source-rebuild-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_exported_field",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_enum_variant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Add an authenticated managed-v4 raw-source rebuild and file-only cold-repair authority with stable typed drift categories, serialized generation rotation, independent immutable-raw visibility audit, typed generation-normalized product-state digests, bounded generic projection cursors, a bounded caller-schema dependency preflight over every directly or indirectly mutated parent including the full Food FTS5 table family and sqlite_sequence, target-first transition sequence normalization, separately scoped integrity checks, exact rollback failpoints, a canonical-path SQLite lock-domain probe, deterministic crate-owned connection policy, and an executable successor contract while freezing the SourceMaintenance predecessor and migration inventory."
+
+[[changes]]
 id = "transport-event-outcomes-and-replica-quarantine"
 classification = "breaking"
 semver_impacts = [
@@ -449,3 +486,27 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Represent relay-event verification, contract admission, valid-stream eligibility, and current visibility as independent exhaustive outcomes; enforce hard raw-event, aggregate raw-JSON, and pre-parse per-event fetch bounds; and remove bare-envelope legacy replica ingestion from the default public feature surface."
+
+[[changes]]
+id = "trade-validation-receipt-no-std"
+classification = "fix"
+semver_impacts = ["fix_packaging_metadata"]
+summary = "Restore the supported radroots_trade no-std serde_json feature lane by removing the std-bound error derive and importing alloc macros explicitly."
+
+[[changes]]
+id = "trade-sp1-remote-proof-fixture"
+classification = "breaking"
+semver_impacts = ["change_exported_constant_value", "fix_packaging_metadata"]
+summary = "Regenerate the remote SP1 Core proof fixture for the validator-set witness identity, exercise real cryptographic verification, and allow the SP1-pinned guest compiler to trail the workspace Rust version during locked guest builds."
+
+[[changes]]
+id = "blossom-publication-readiness-evidence"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+]
+summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification, exact sequential JPEG entropy accounting plus pinned strict zune-jpeg decoding, and internally authoritative full decoding for static JPEG, PNG, and WebP rasters."

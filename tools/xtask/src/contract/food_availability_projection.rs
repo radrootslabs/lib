@@ -3992,8 +3992,13 @@ mod tests {
 
     #[test]
     fn downstream_nip09_only_supersession_is_transitively_validated() {
-        const SOURCE_MAINTENANCE_SUPERSEDED_PATHS: &[&str] = &[
+        const CURRENT_SUCCESSOR_SUPERSEDED_PATHS: &[&str] = &[
             "Cargo.toml",
+            "crates/blossom/Cargo.toml",
+            "crates/blossom/src/error.rs",
+            "crates/blossom/src/lib.rs",
+            "crates/blossom/src/url.rs",
+            "crates/event_store/Cargo.toml",
             "crates/event_store/src/error.rs",
             "crates/event_store/src/generated.rs",
             "crates/event_store/src/lib.rs",
@@ -4002,6 +4007,7 @@ mod tests {
             "crates/event_store/src/nip09/reconciliation_v1.rs",
             "crates/event_store/src/schema.rs",
             "crates/event_store/src/store.rs",
+            "crates/event_store/src/store/food_availability_projection_v1.rs",
             "crates/event_store/src/store/protocol_reconciliation_v1.rs",
         ];
 
@@ -4024,11 +4030,11 @@ mod tests {
         );
         validate_food_availability_projection_predecessor_production_sources_under_lock(
             &root,
-            SOURCE_MAINTENANCE_SUPERSEDED_PATHS,
+            CURRENT_SUCCESSOR_SUPERSEDED_PATHS,
         )
         .expect("Food and transitive NIP-09 successor source coverage");
 
-        let mut duplicate = SOURCE_MAINTENANCE_SUPERSEDED_PATHS.to_vec();
+        let mut duplicate = CURRENT_SUCCESSOR_SUPERSEDED_PATHS.to_vec();
         duplicate.push("crates/event_store/src/store/protocol_reconciliation_v1.rs");
         let error =
             validate_food_availability_projection_predecessor_production_sources_under_lock(
@@ -4037,7 +4043,7 @@ mod tests {
             .expect_err("duplicate transitive supersession must fail");
         assert!(error.contains("must be unique"), "{error}");
 
-        let mut unknown = SOURCE_MAINTENANCE_SUPERSEDED_PATHS.to_vec();
+        let mut unknown = CURRENT_SUCCESSOR_SUPERSEDED_PATHS.to_vec();
         unknown.push("crates/event_store/src/store/not_predecessor_bound.rs");
         let error =
             validate_food_availability_projection_predecessor_production_sources_under_lock(

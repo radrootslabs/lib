@@ -1,0 +1,428 @@
+{
+  "suite": "blossom_publication_readiness",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "valid_created",
+      "kind": "blossom.verify_publication_readiness.valid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "url": "https://cdn.example/4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd.png",
+        "sha256": "4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd",
+        "size": 70,
+        "media_type": "image/png",
+        "format": "png",
+        "width": 1,
+        "height": 1,
+        "upload_status": 201,
+        "evidence_digest": "44e63303e594ea42d863be995b23ac4297ed77e4378d0707c94f28e77164bd3b"
+      }
+    },
+    {
+      "id": "valid_ok_without_authored_dimensions",
+      "kind": "blossom.verify_publication_readiness.valid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "upload_status_200"
+      },
+      "expected": {
+        "url": "https://cdn.example/4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd.png",
+        "sha256": "4490130851783ff662845f5e72f1948618cc87f951f00f6c2ffb3dc01f3f40fd",
+        "size": 70,
+        "media_type": "image/png",
+        "format": "png",
+        "width": 1,
+        "height": 1,
+        "upload_status": 200
+      }
+    },
+    {
+      "id": "invalid_upload_status",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "upload_status_202"
+      },
+      "expected": {
+        "error": "invalid_bud02_upload_status"
+      }
+    },
+    {
+      "id": "invalid_head_status",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "head_status_204"
+      },
+      "expected": {
+        "error": "invalid_bud01_head_status"
+      }
+    },
+    {
+      "id": "invalid_get_status",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_status_206"
+      },
+      "expected": {
+        "error": "invalid_bud01_get_status"
+      }
+    },
+    {
+      "id": "declared_size_over_public_max",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_size_over_max"
+      },
+      "expected": {
+        "error": "publication_raster_byte_limit_exceeded"
+      }
+    },
+    {
+      "id": "missing_get_body",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_body_missing"
+      },
+      "expected": {
+        "error": "publication_get_body_missing"
+      }
+    },
+    {
+      "id": "short_get_body",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_body_short"
+      },
+      "expected": {
+        "error": "publication_get_body_short"
+      }
+    },
+    {
+      "id": "trailing_get_body",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_body_trailing"
+      },
+      "expected": {
+        "error": "publication_get_body_trailing"
+      }
+    },
+    {
+      "id": "authored_bytes_short",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "authored_bytes_short"
+      },
+      "expected": {
+        "error": "publication_authored_bytes_size_mismatch"
+      }
+    },
+    {
+      "id": "authored_bytes_wrong_hash",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "authored_bytes_wrong_hash"
+      },
+      "expected": {
+        "error": "publication_authored_bytes_hash_mismatch"
+      }
+    },
+    {
+      "id": "upload_url_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "upload_url_mismatch"
+      },
+      "expected": {
+        "error": "publication_upload_url_mismatch"
+      }
+    },
+    {
+      "id": "upload_hash_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "upload_hash_mismatch"
+      },
+      "expected": {
+        "error": "publication_upload_hash_mismatch"
+      }
+    },
+    {
+      "id": "upload_size_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "upload_size_mismatch"
+      },
+      "expected": {
+        "error": "publication_upload_size_mismatch"
+      }
+    },
+    {
+      "id": "upload_mime_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "upload_mime_mismatch"
+      },
+      "expected": {
+        "error": "publication_upload_media_type_mismatch"
+      }
+    },
+    {
+      "id": "head_url_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "head_url_mismatch"
+      },
+      "expected": {
+        "error": "publication_head_url_mismatch"
+      }
+    },
+    {
+      "id": "head_size_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "head_size_mismatch"
+      },
+      "expected": {
+        "error": "publication_head_size_mismatch"
+      }
+    },
+    {
+      "id": "head_mime_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "head_mime_mismatch"
+      },
+      "expected": {
+        "error": "publication_head_media_type_mismatch"
+      }
+    },
+    {
+      "id": "get_url_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_url_mismatch"
+      },
+      "expected": {
+        "error": "publication_get_url_mismatch"
+      }
+    },
+    {
+      "id": "get_declared_size_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_declared_size_mismatch"
+      },
+      "expected": {
+        "error": "publication_get_declared_size_mismatch"
+      }
+    },
+    {
+      "id": "get_complete_hash_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "get_bytes_wrong_hash"
+      },
+      "expected": {
+        "error": "publication_retrieved_bytes_hash_mismatch"
+      }
+    },
+    {
+      "id": "unsupported_raster_mime",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "unsupported_mime"
+      },
+      "expected": {
+        "error": "unsupported_publication_raster_media_type"
+      }
+    },
+    {
+      "id": "malformed_raster",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "malformed_container"
+      },
+      "expected": {
+        "error": "invalid_publication_raster"
+      }
+    },
+    {
+      "id": "animated_png",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "animated_png"
+      },
+      "expected": {
+        "error": "publication_raster_animation_forbidden"
+      }
+    },
+    {
+      "id": "declared_format_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "declared_mime_jpeg"
+      },
+      "expected": {
+        "error": "invalid_publication_raster"
+      }
+    },
+    {
+      "id": "corrupt_png_crc",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "corrupt_png_crc"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "corrupt_png_deflate",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "corrupt_png_deflate"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "invalid_png_color_type",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "invalid_png_color_type"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "authored_dimension_mismatch",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "authored_dimension_mismatch"
+      },
+      "expected": {
+        "error": "publication_authored_raster_dimension_mismatch"
+      }
+    },
+    {
+      "id": "animated_webp",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "animated_webp"
+      },
+      "expected": {
+        "error": "publication_raster_animation_forbidden"
+      }
+    },
+    {
+      "id": "zero_width",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "zero_width"
+      },
+      "expected": {
+        "error": "publication_raster_dimensions_out_of_range"
+      }
+    },
+    {
+      "id": "dimension_over_max",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "dimension_over_max"
+      },
+      "expected": {
+        "error": "publication_raster_dimensions_out_of_range"
+      }
+    },
+    {
+      "id": "pixel_limit",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "pixel_limit"
+      },
+      "expected": {
+        "error": "publication_raster_pixel_limit_exceeded"
+      }
+    },
+    {
+      "id": "progressive_jpeg",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "progressive_jpeg"
+      },
+      "expected": {
+        "error": "publication_jpeg_process_forbidden"
+      }
+    },
+    {
+      "id": "jpeg_entropy_stripped",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "jpeg_entropy_stripped"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "jpeg_entropy_partial",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "jpeg_entropy_partial"
+      },
+      "expected": {
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "malformed_jpeg_dqt",
+      "kind": "blossom.verify_publication_readiness.invalid",
+      "input": {
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "malformed_jpeg_dqt"
+      },
+      "expected": {
+        "error": "invalid_publication_raster"
+      }
+    }
+  ]
+}

@@ -1,0 +1,655 @@
+{
+  "$id": "https://radroots.org/contracts/event-store/raw-source-rebuild-v1-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "const": "raw_source_rebuild_v1"
+    },
+    "contract_id": {
+      "const": "radroots_event_store.raw_source_rebuild_v1"
+    },
+    "entry_points": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rust_path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "rust_path"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "manifest_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "migration_inventory": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_length": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "hash_algorithm": {
+            "const": "sha256_bytes_v1"
+          },
+          "path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "byte_length",
+          "sha256",
+          "hash_algorithm"
+        ],
+        "type": "object"
+      },
+      "maxItems": 8,
+      "minItems": 8,
+      "type": "array"
+    },
+    "predecessor": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "const": "radroots_event_store.source_maintenance_v1"
+        },
+        "manifest": {
+          "additionalProperties": false,
+          "properties": {
+            "byte_length": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "hash_algorithm": {
+              "const": "sha256_bytes_v1"
+            },
+            "path": {
+              "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "byte_length",
+            "sha256",
+            "hash_algorithm"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "contract_id",
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "public_api": {
+      "additionalProperties": false,
+      "properties": {
+        "added_symbols": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "drift_kinds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "type": "string"
+              },
+              "variant": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "variant",
+              "code"
+            ],
+            "type": "object"
+          },
+          "maxItems": 6,
+          "minItems": 6,
+          "type": "array"
+        },
+        "error_variants": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "methods": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "added_symbols",
+        "methods",
+        "error_variants",
+        "drift_kinds"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "canonical_path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "executor_byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "executor_hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "executor_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "executor_path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "executor_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "executor_test": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "mirror_path": {
+          "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "canonical_path",
+        "mirror_path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm",
+        "executor_id",
+        "executor_path",
+        "executor_test",
+        "executor_byte_length",
+        "executor_sha256",
+        "executor_hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "active_product_state_digest": {
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "const": "sha256_domain_nul_typed_fields_v1"
+            },
+            "component_queries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "fields": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "framing": {
+                          "enum": [
+                            "i64",
+                            "boolean",
+                            "optional_i64",
+                            "text",
+                            "optional_text",
+                            "blob"
+                          ]
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "framing"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "section": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sql": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "sql",
+                  "fields"
+                ],
+                "type": "object"
+              },
+              "maxItems": 13,
+              "minItems": 13,
+              "type": "array"
+            },
+            "components": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "domain_terminator": {
+              "const": "nul_byte"
+            },
+            "domain_utf8": {
+              "const": "radroots:event-store:active-product-state-digest:v1"
+            },
+            "exclusions": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "framing": {
+              "additionalProperties": false,
+              "properties": {
+                "blob": {
+                  "const": "X_then_u64be_length_then_bytes"
+                },
+                "boolean": {
+                  "const": "B_then_u8_0_or_1"
+                },
+                "optional": {
+                  "const": "O_then_presence_u8_then_nested_value_when_present"
+                },
+                "row": {
+                  "const": "R"
+                },
+                "section": {
+                  "const": "S_then_N_then_u64be_length_then_utf8_name"
+                },
+                "signed_i64": {
+                  "const": "I_then_i64be"
+                },
+                "text": {
+                  "const": "T_then_u64be_length_then_utf8_bytes"
+                }
+              },
+              "required": [
+                "section",
+                "row",
+                "signed_i64",
+                "boolean",
+                "optional",
+                "text",
+                "blob"
+              ],
+              "type": "object"
+            },
+            "output_bytes": {
+              "const": 32
+            }
+          },
+          "required": [
+            "algorithm",
+            "domain_utf8",
+            "domain_terminator",
+            "framing",
+            "output_bytes",
+            "components",
+            "exclusions",
+            "component_queries"
+          ],
+          "type": "object"
+        },
+        "caller_foreign_key_row_count_limit": {
+          "const": 4096
+        },
+        "caller_inbound_foreign_key_parent_tables": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "caller_inbound_foreign_key_policy": {
+          "const": "reject_all_rebuild_mutated_parent_dependencies_before_entropy_v1"
+        },
+        "caller_main_table_count_limit": {
+          "const": 4096
+        },
+        "cold_repair_mode": {
+          "const": "canonical_file_only_single_connection_lock_domain_probe_v1"
+        },
+        "event_contract_registry_version": {
+          "const": 7
+        },
+        "event_store_schema_version": {
+          "const": 4
+        },
+        "failpoints": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "immutable_raw_digest": {
+          "additionalProperties": false,
+          "properties": {
+            "algorithm": {
+              "const": "sha256_domain_nul_typed_fields_v1"
+            },
+            "domain_terminator": {
+              "const": "nul_byte"
+            },
+            "domain_utf8": {
+              "const": "radroots:event-store:immutable-raw-digest:v1"
+            },
+            "framing": {
+              "additionalProperties": false,
+              "properties": {
+                "blob": {
+                  "const": "X_then_u64be_length_then_bytes"
+                },
+                "boolean": {
+                  "const": "B_then_u8_0_or_1"
+                },
+                "optional": {
+                  "const": "O_then_presence_u8_then_nested_value_when_present"
+                },
+                "row": {
+                  "const": "R"
+                },
+                "section": {
+                  "const": "S_then_N_then_u64be_length_then_utf8_name"
+                },
+                "signed_i64": {
+                  "const": "I_then_i64be"
+                },
+                "text": {
+                  "const": "T_then_u64be_length_then_utf8_bytes"
+                }
+              },
+              "required": [
+                "section",
+                "row",
+                "signed_i64",
+                "boolean",
+                "optional",
+                "text",
+                "blob"
+              ],
+              "type": "object"
+            },
+            "output_bytes": {
+              "const": 32
+            },
+            "source_queries": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "fields": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "framing": {
+                          "enum": [
+                            "i64",
+                            "boolean",
+                            "optional_i64",
+                            "text",
+                            "optional_text",
+                            "blob"
+                          ]
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "framing"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "section": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sql": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "sql",
+                  "fields"
+                ],
+                "type": "object"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            }
+          },
+          "required": [
+            "algorithm",
+            "domain_utf8",
+            "domain_terminator",
+            "framing",
+            "output_bytes",
+            "source_queries"
+          ],
+          "type": "object"
+        },
+        "preserved_authorities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "projection_cursor_count_limit": {
+          "const": 4096
+        },
+        "projection_cursor_rejection_probe_limit": {
+          "const": 4097
+        },
+        "scoped_integrity_mode": {
+          "const": "event_store_owned_tables_and_indices_v1"
+        },
+        "scoped_integrity_tables": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "sqlite_sequence_scope": {
+          "const": "target_first_after_single_shared_sequence_scan_v1"
+        },
+        "stages": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "transaction_mode": {
+          "const": "begin_immediate_v1"
+        },
+        "visibility_oracle": {
+          "const": "pure_verified_raw_snapshot_direct_indexed_evidence_v1"
+        }
+      },
+      "required": [
+        "event_store_schema_version",
+        "event_contract_registry_version",
+        "transaction_mode",
+        "projection_cursor_count_limit",
+        "projection_cursor_rejection_probe_limit",
+        "caller_main_table_count_limit",
+        "caller_foreign_key_row_count_limit",
+        "caller_inbound_foreign_key_policy",
+        "caller_inbound_foreign_key_parent_tables",
+        "cold_repair_mode",
+        "immutable_raw_digest",
+        "active_product_state_digest",
+        "visibility_oracle",
+        "scoped_integrity_mode",
+        "scoped_integrity_tables",
+        "sqlite_sequence_scope",
+        "stages",
+        "failpoints",
+        "preserved_authorities"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "byte_length": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "hash_algorithm": {
+            "const": "sha256_bytes_v1"
+          },
+          "path": {
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "byte_length",
+          "sha256",
+          "hash_algorithm"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "predecessor",
+    "migration_inventory",
+    "runtime",
+    "entry_points",
+    "source_files",
+    "public_api",
+    "result_vector"
+  ],
+  "title": "Radroots event-store raw-source rebuild v1 manifest",
+  "type": "object"
+}

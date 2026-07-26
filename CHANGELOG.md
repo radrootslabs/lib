@@ -137,6 +137,84 @@ publish policy both pass for the same source revision.
   `RadrootsEventStoreReconciliationResource` type and
   `ReconciliationCapacityExceeded` error variant are replaced by the
   versioned source-capacity resource and typed capacity/history errors.
+<!-- release-change: event-store-raw-source-rebuild-authority -->
+- Event-store schema v4 now exposes a versioned raw-source rebuild operation
+  that repairs governed derived NIP-09, current-visibility, and focused
+  FoodAvailability state from reverified immutable raw envelopes in one
+  `BEGIN IMMEDIATE` transaction. The typed report returns prior and new source
+  generations, the rebound capacity/high-water seal, a domain-separated
+  immutable-raw digest, and a generation-normalized active-product digest.
+  Rebuild drift exposes six stable typed authority categories while retaining
+  non-contractual diagnostic detail for operators.
+  The file-only repair entry point requires an existing exact managed-v4 WAL
+  database and returns a store only after repaired state commits. It creates a
+  deterministic single-connection pool and proves a fresh canonical-path
+  connection shares the validated SQLite writer-lock domain. Callers must
+  quiesce every alias, independent pool, direct SQL user, and filesystem path,
+  symlink, or file-replacement operation for the repair duration. The public
+  event-store error enum is now non-exhaustive so future typed recovery errors
+  do not repeatedly break downstream matches.
+  Rebuild preserves unrelated caller-owned tables with no schema dependency on
+  any rebuild-mutated parent, generic projection cursors, and unrelated SQLite
+  sequence row triples. Transition replay performs one shared
+  target-alias cleanup, places the governed target first, and validates that
+  exact row after replay; generic cursor inventory is instead
+  prospectively bounded at 4,096 identities and invalidates lazily after a
+  generation change.
+  Before entropy or mutation, rebuild also bounds caller-owned main tables and
+  cumulative foreign-key rows at 4,096 each and refuses every caller-owned
+  inbound foreign key to every directly or indirectly mutated parent,
+  regardless of its SQLite action, so derived replacement cannot cascade into
+  caller rows or triggers. The sealed parent inventory includes the Food FTS5
+  virtual table and all five shadows plus the governed `sqlite_sequence` row;
+  it remains separate from the narrower scoped-integrity inventory.
+  The executable raw-rebuild successor contract freezes the SourceMaintenance
+  predecessor and the `0001` through `0004` migration inventory; no schema
+  migration is added.
+<!-- release-change: phase1-publication-artifact -->
+- The `serde_json` event-codec surface now exposes a sealed Phase 1 publication
+  artifact constructed only from strict authored Profile, Update, PhotoUpdate,
+  Ask, date/time Event, and FoodAvailability models. The exact version-1
+  envelope places the expected NIP-01 id at top level after the frozen draft,
+  exposes only explicit canonical-byte encode/decode operations, and binds all
+  fields except the digest under an ASCII-domain, single-NUL SHA-256 preimage.
+  Construction and reload enforce the 2 MiB artifact, 256 KiB signed-event,
+  and 4,096-reference bounds plus complete case-preserving Blossom URL
+  commitments. Strict reload rejects unknown or duplicate fields, alternate
+  encodings, cross-profile promotion, stale identifiers, media drift, and
+  digest tampering without claiming restored byte verification, upload
+  completion, signature authenticity, or signer authority.
+<!-- release-change: phase1-publication-allowlist -->
+- The event-codec publication surface now exposes an additive allowlist over
+  the sealed Phase 1 artifact. Its opaque output admits exactly supporting
+  Profile plus root Update, PhotoUpdate, Ask, typed date/time Event, and focused
+  FoodAvailability leaves. Registry-v7 reprojection enforces
+  Ask-before-PhotoUpdate-before-Update precedence and marker-partitions
+  kind-`30402` before profile validation. A canonical-JSON adapter composes
+  strict artifact reload with the same allowlist for durable consumers. Raw
+  and generic events, including raw date/time events, replies, comments,
+  deletion requests, calendar collections and RSVPs, BUD-11 authorizations,
+  ephemeral events, trade, commerce, group, and operations families cannot
+  produce its sealed input; deferred route/delivery product surfaces are
+  non-events and likewise fail closed. Event-contract registry v7 remains
+  byte-identical, and the new gate grants no signing, upload, retrieval, relay,
+  or entitlement authority.
+<!-- release-change: blossom-publication-readiness-evidence -->
+- Blossom publication media now advances beyond local byte verification only
+  after typed BUD-02 status and descriptor agreement, an independent BUD-01
+  HEAD, and an exactly bounded complete BUD-01 GET agree with the authored
+  URL, hash, MIME, and length. The public evidence profile admits JPEG, PNG,
+  and still WebP only, rejects animation, fully decodes the exact retrieved
+  bytes with a declared-format decoder, and derives dimensions internally
+  within 16,384 per axis and 20,000,000 pixels. JPEG is limited to 8-bit
+  sequential SOF0/SOF1 and combines exact entropy accounting with pinned
+  strict `zune-jpeg` and `zune-core` RGB decoding; PNG and WebP use a
+  separately pinned two-format `image` build.
+  Decoded output is bounded to 160,000,000 bytes before allocation; callers
+  cannot provide decode claims.
+  Deterministic per-URL evidence remains transport-neutral and contains no
+  HTTP credentials, BUD-11 material, entitlement decision, or private service
+  topology.
 - Bare-envelope replica ingestion is quarantined behind the explicit,
   non-default `legacy-ingest` feature. Default replica APIs expose emit and sync
   surfaces only; a future product ingest boundary must consume a store-produced
@@ -318,6 +396,14 @@ publish policy both pass for the same source revision.
   `begin_write_transaction` before reading and ingesting in one transaction.
   Borrowed-transaction ingests use nested savepoints so a failed call cannot
   leave partial event-store writes available for the caller to commit.
+
+- The `radroots_trade` validation-receipt feature now preserves its documented
+  no-std plus `serde_json` build. Its error contract uses `core::fmt`, and alloc
+  macros are imported explicitly instead of relying on the std prelude.
+- The checked-in remote SP1 Core proof fixture now covers the validator-set
+  witness identity and cryptographically verifies against the current guest.
+  Guest builds explicitly allow the SP1-pinned compiler to trail the workspace
+  Rust version while retaining locked dependencies.
 
 ### Removed
 

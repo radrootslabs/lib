@@ -184,8 +184,9 @@ const CORE_CARGO_MANIFEST_RELATIVE: &str = "crates/core/Cargo.toml";
 const BLOSSOM_CARGO_MANIFEST_RELATIVE: &str = "crates/blossom/Cargo.toml";
 const TRANSPORT_CARGO_MANIFEST_RELATIVE: &str = "crates/transport/Cargo.toml";
 const CARGO_CONFIG_RELATIVE: &str = ".cargo/config.toml";
-const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 23] = [
+const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 24] = [
     "dto_bindgen",
+    "futures",
     "getrandom",
     "hex",
     "jiff-tzdb",
@@ -236,7 +237,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "0aa0aeb7988745aad1101c820a340c8ac04a5833c2ec7f7c997b5d9dfac010a3",
+        "edb48180d3cc3d00fead18984159487bb07afedeb646249a84c1d64ec0529e24",
     ),
 ];
 
@@ -391,6 +392,17 @@ const SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS: [&str; 8] = [
 ];
 const SUCCESSOR_08D_SOURCE_PATHS: [&str; 1] = ["crates/event_store/src/source_maintenance_v1.rs"];
 const SUCCESSOR_08D_LIB_MODULES: [&str; 1] = ["source_maintenance_v1"];
+const RAW_SOURCE_REBUILD_SOURCE_RELATIVE: &str =
+    "crates/event_store/src/nip09/reconciliation_v1/raw_source_rebuild.rs";
+const RAW_SOURCE_REBUILD_TEST_SOURCE_RELATIVE: &str =
+    "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs";
+const SUCCESSOR_08D1_EXCLUSIVE_SOURCE_PATHS: [&str; 5] = [
+    "crates/event_store/src/generated/raw_source_rebuild_manifest.rs",
+    "crates/event_store/src/model/raw_source_rebuild_v1.rs",
+    RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+    "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs",
+    RAW_SOURCE_REBUILD_TEST_SOURCE_RELATIVE,
+];
 const EVENT_STORE_FIXED_PUBLIC_REEXPORTS: [&str; 40] = [
     "error::RadrootsEventStoreError",
     "error::RadrootsEventStoreReconciliationResource",
@@ -477,6 +489,14 @@ const SUCCESSOR_08D_PUBLIC_REEXPORTS: [&str; 7] = [
     "error::RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1",
     "error::RadrootsEventStoreSourceCapacityResourceV1",
     "source_maintenance_v1::RadrootsEventStoreSourceCapacityV1",
+];
+const SUCCESSOR_08D1_PUBLIC_REEXPORTS: [&str; 6] = [
+    "error::RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1",
+    "error::RadrootsEventStoreCallerInboundForeignKeyV1",
+    "error::RadrootsEventStoreRawSourceRebuildDriftV1",
+    "model::RadrootsEventStoreActiveProductStateDigestV1",
+    "model::RadrootsEventStoreImmutableRawDigestV1",
+    "model::RadrootsEventStoreRawSourceRebuildReportV1",
 ];
 const POST_CORE_STORAGE_METHODS: [&str; 4] = [
     "new",
@@ -2351,6 +2371,13 @@ fn nip09_predecessor_production_source_paths(
         .map(|source| source.path.as_str())
         .chain(
             manifest
+                .cargo_feature_profile
+                .packages
+                .iter()
+                .map(|package| package.manifest_path.as_str()),
+        )
+        .chain(
+            manifest
                 .source_route_witnesses
                 .iter()
                 .map(|source| source.path.as_str()),
@@ -2464,35 +2491,7 @@ pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
         |witness| witness.path.as_str(),
     )?;
 
-    let predecessor_impl_paths = manifest
-        .impl_resolution_witness
-        .impls
-        .iter()
-        .map(|item| item.path.as_str())
-        .collect::<BTreeSet<_>>();
-    let expected_impls = manifest
-        .impl_resolution_witness
-        .impls
-        .iter()
-        .filter(|item| !superseded.contains(item.path.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    if !expected_impls.is_empty() {
-        let current_impls = describe_impl_resolution_witness(workspace_root)?
-            .impls
-            .into_iter()
-            .filter(|item| {
-                predecessor_impl_paths.contains(item.path.as_str())
-                    && !superseded.contains(item.path.as_str())
-            })
-            .collect::<Vec<_>>();
-        if current_impls != expected_impls {
-            return Err(
-                "unchanged predecessor impl-resolution authority drifted from the immutable manifest"
-                    .to_owned(),
-            );
-        }
-    }
+    validate_predecessor_impl_resolution_authority(workspace_root, &manifest, superseded_paths)?;
 
     let post_core_paths = [
         POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
@@ -2523,6 +2522,74 @@ pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
     // it was issued. Current SQLite provenance is governed by the release
     // contract and must not require that historical tree to remain vendored.
     Ok(())
+}
+
+fn validate_predecessor_impl_resolution_authority(
+    workspace_root: &Path,
+    manifest: &Nip09ReconciliationManifest,
+    superseded_paths: &[&str],
+) -> Result<(), String> {
+    let superseded = superseded_paths.iter().copied().collect::<BTreeSet<_>>();
+    let predecessor_impl_paths = manifest
+        .impl_resolution_witness
+        .impls
+        .iter()
+        .map(|item| item.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let expected_impls = manifest
+        .impl_resolution_witness
+        .impls
+        .iter()
+        .filter(|item| !superseded.contains(item.path.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if expected_impls.is_empty() {
+        return Ok(());
+    }
+
+    let excluded_paths = superseded_paths
+        .iter()
+        .copied()
+        .chain(SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS)
+        .chain(SUCCESSOR_08D_SOURCE_PATHS)
+        .chain(SUCCESSOR_08D1_EXCLUSIVE_SOURCE_PATHS)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let predecessor_protected_members = manifest
+        .impl_resolution_witness
+        .impls
+        .iter()
+        .filter_map(|item| item.member.as_ref())
+        .filter(|member| member.as_str() != "<macro>")
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let current_impls = describe_impl_resolution_witness_excluding_paths(
+        workspace_root,
+        &excluded_paths,
+        &manifest.impl_resolution_witness.protected_self_types,
+        &predecessor_protected_members,
+    )?
+    .impls
+    .into_iter()
+    .filter(|item| {
+        predecessor_impl_paths.contains(item.path.as_str())
+            && !superseded.contains(item.path.as_str())
+    })
+    .collect::<Vec<_>>();
+    if current_impls == expected_impls {
+        return Ok(());
+    }
+
+    let current = current_impls.iter().collect::<BTreeSet<_>>();
+    let expected = expected_impls.iter().collect::<BTreeSet<_>>();
+    let missing = expected.difference(&current).copied().collect::<Vec<_>>();
+    let unexpected = current.difference(&expected).copied().collect::<Vec<_>>();
+    Err(format!(
+        "unchanged predecessor impl-resolution authority drifted from the immutable manifest: expected {} entries, found {}; missing {missing:?}; unexpected {unexpected:?}",
+        expected_impls.len(),
+        current_impls.len(),
+    ))
 }
 
 fn require_predecessor_frozen_source_match(
@@ -4732,6 +4799,15 @@ fn describe_source_route_witness(
 fn describe_impl_resolution_witness(
     workspace_root: &Path,
 ) -> Result<ImplResolutionWitnessDescriptor, String> {
+    describe_impl_resolution_witness_excluding_paths(workspace_root, &[], &[], &BTreeSet::new())
+}
+
+fn describe_impl_resolution_witness_excluding_paths(
+    workspace_root: &Path,
+    excluded_paths: &[&str],
+    frozen_protected_self_types: &[String],
+    frozen_protected_members: &BTreeSet<String>,
+) -> Result<ImplResolutionWitnessDescriptor, String> {
     use syn::visit::Visit;
 
     fn impl_member_name(item: &syn::ImplItem) -> Option<String> {
@@ -4936,6 +5012,7 @@ fn describe_impl_resolution_witness(
         }
     }
 
+    let excluded_paths = excluded_paths.iter().copied().collect::<BTreeSet<_>>();
     let mut protected_paths = FROZEN_SOURCE_SPECS
         .iter()
         .map(|spec| spec.path)
@@ -4953,6 +5030,7 @@ fn describe_impl_resolution_witness(
             POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
             POST_CORE_DISPATCHER_SOURCE_RELATIVE,
         ])
+        .filter(|relative| !excluded_paths.contains(relative))
         .collect::<Vec<_>>();
     protected_paths.sort_unstable();
     protected_paths.dedup();
@@ -4965,6 +5043,9 @@ fn describe_impl_resolution_witness(
         let file = parse_canonical_production_rust(relative, &bytes)?;
         declaration_audit.visit_file(&file);
     }
+    declaration_audit
+        .names
+        .extend(frozen_protected_self_types.iter().cloned());
     if declaration_audit.names.is_empty() {
         return Err("protected v1 impl-resolution type inventory must not be empty".to_owned());
     }
@@ -4977,6 +5058,9 @@ fn describe_impl_resolution_witness(
     };
     for root in IMPL_RESOLUTION_SOURCE_ROOTS {
         for relative in governed_regular_file_inventory(workspace_root, root)? {
+            if excluded_paths.contains(relative.as_str()) {
+                continue;
+            }
             if !relative.ends_with(".rs") {
                 return Err(format!(
                     "{root} impl-resolution source inventory may contain only Rust files; found {relative}"
@@ -5029,6 +5113,7 @@ fn describe_impl_resolution_witness(
             POST_CORE_EXTENSION_SOURCE_RELATIVE,
             POST_CORE_STORAGE_SOURCE_RELATIVE,
         ])
+        .filter(|relative| !excluded_paths.contains(relative))
         .collect::<Vec<_>>();
     protected_member_paths.sort_unstable();
     protected_member_paths.dedup();
@@ -5037,62 +5122,67 @@ fn describe_impl_resolution_witness(
         let file = parse_canonical_production_rust(relative, &bytes)?;
         protected_member_audit.visit_file(&file);
     }
+    protected_member_audit
+        .names
+        .extend(frozen_protected_members.iter().cloned());
 
-    let store_bytes = read_regular_file(workspace_root, EVENT_STORE_STORE_SOURCE_RELATIVE)?;
-    let store_file =
-        parse_canonical_production_rust(EVENT_STORE_STORE_SOURCE_RELATIVE, &store_bytes)?;
-    let store_free_functions = store_file
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            syn::Item::Fn(function) => Some((function.sig.ident.to_string(), function)),
-            _ => None,
-        })
-        .collect::<BTreeMap<_, _>>();
-    let mut local_resolution_queue = VecDeque::new();
-    for spec in RUST_ITEM_WITNESS_ROOT_SPECS {
-        match spec.callable {
-            RustWitnessCallable::Associated { owner, name } => {
-                let function = exact_associated_function(
-                    EVENT_STORE_STORE_SOURCE_RELATIVE,
-                    &store_file,
-                    owner,
-                    name,
-                )?;
-                protected_member_audit.visit_impl_item_fn(function);
-                local_resolution_queue.extend(
-                    WitnessedFunction::Associated(function)
-                        .collect_call_routes()
-                        .into_iter()
-                        .filter_map(|route| route.strip_prefix("fn:").map(str::to_owned))
-                        .filter(|route| !route.contains("::"))
-                        .filter(|route| store_free_functions.contains_key(route)),
-                );
-            }
-            RustWitnessCallable::Free { name } => {
-                local_resolution_queue.push_back(name.to_owned());
+    if !excluded_paths.contains(EVENT_STORE_STORE_SOURCE_RELATIVE) {
+        let store_bytes = read_regular_file(workspace_root, EVENT_STORE_STORE_SOURCE_RELATIVE)?;
+        let store_file =
+            parse_canonical_production_rust(EVENT_STORE_STORE_SOURCE_RELATIVE, &store_bytes)?;
+        let store_free_functions = store_file
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                syn::Item::Fn(function) => Some((function.sig.ident.to_string(), function)),
+                _ => None,
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut local_resolution_queue = VecDeque::new();
+        for spec in RUST_ITEM_WITNESS_ROOT_SPECS {
+            match spec.callable {
+                RustWitnessCallable::Associated { owner, name } => {
+                    let function = exact_associated_function(
+                        EVENT_STORE_STORE_SOURCE_RELATIVE,
+                        &store_file,
+                        owner,
+                        name,
+                    )?;
+                    protected_member_audit.visit_impl_item_fn(function);
+                    local_resolution_queue.extend(
+                        WitnessedFunction::Associated(function)
+                            .collect_call_routes()
+                            .into_iter()
+                            .filter_map(|route| route.strip_prefix("fn:").map(str::to_owned))
+                            .filter(|route| !route.contains("::"))
+                            .filter(|route| store_free_functions.contains_key(route)),
+                    );
+                }
+                RustWitnessCallable::Free { name } => {
+                    local_resolution_queue.push_back(name.to_owned());
+                }
             }
         }
-    }
-    let mut visited_local_resolution_functions = BTreeSet::new();
-    while let Some(name) = local_resolution_queue.pop_front() {
-        if !visited_local_resolution_functions.insert(name.clone()) {
-            continue;
+        let mut visited_local_resolution_functions = BTreeSet::new();
+        while let Some(name) = local_resolution_queue.pop_front() {
+            if !visited_local_resolution_functions.insert(name.clone()) {
+                continue;
+            }
+            let function = store_free_functions.get(&name).ok_or_else(|| {
+                format!(
+                    "{EVENT_STORE_STORE_SOURCE_RELATIVE} v1 resolution closure references missing local function `{name}`"
+                )
+            })?;
+            protected_member_audit.visit_item_fn(function);
+            local_resolution_queue.extend(
+                WitnessedFunction::Free(function)
+                    .collect_call_routes()
+                    .into_iter()
+                    .filter_map(|route| route.strip_prefix("fn:").map(str::to_owned))
+                    .filter(|route| !route.contains("::"))
+                    .filter(|route| store_free_functions.contains_key(route)),
+            );
         }
-        let function = store_free_functions.get(&name).ok_or_else(|| {
-            format!(
-                "{EVENT_STORE_STORE_SOURCE_RELATIVE} v1 resolution closure references missing local function `{name}`"
-            )
-        })?;
-        protected_member_audit.visit_item_fn(function);
-        local_resolution_queue.extend(
-            WitnessedFunction::Free(function)
-                .collect_call_routes()
-                .into_iter()
-                .filter_map(|route| route.strip_prefix("fn:").map(str::to_owned))
-                .filter(|route| !route.contains("::"))
-                .filter(|route| store_free_functions.contains_key(route)),
-        );
     }
     for spec in ENTRY_POINT_SPECS {
         if let CallableSpec::Associated { name, .. } = spec.callable {
@@ -5227,7 +5317,12 @@ fn validate_raw_crate_attributes(relative: &str, source: &str) -> Result<(), Str
             "#![cfg_attr(all(not(feature=\"std\"),not(test)),no_std)]",
             "#![forbid(unsafe_code)]",
         ],
-        "crates/event_codec/src/lib.rs" | "crates/blossom/src/lib.rs" => &[
+        "crates/event_codec/src/lib.rs" => &[
+            "#![cfg_attr(all(not(feature=\"std\"),not(test)),no_std)]",
+            "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
+            "#![forbid(unsafe_code)]",
+        ],
+        "crates/blossom/src/lib.rs" => &[
             "#![cfg_attr(not(feature=\"std\"),no_std)]",
             "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
             "#![forbid(unsafe_code)]",
@@ -5887,7 +5982,6 @@ fn validate_event_store_schema_import_authority(
         relative,
         file,
         &[
-            "use crate::RadrootsEventStoreError;",
             r#"use crate::migrations::{
                 EVENT_STORE_LEDGER_CREATE_DDL, EVENT_STORE_LEDGER_DDL, EVENT_STORE_LEDGER_NAME,
                 EVENT_STORE_MIGRATIONS, EventStoreMigration, EventStoreMigrationHook,
@@ -5896,6 +5990,7 @@ fn validate_event_store_schema_import_authority(
                 migration_for_version, sqlite_identifier_starts_with,
                 validate_embedded_migration_registry, validate_migration_registry,
             };"#,
+            "use crate::{RadrootsEventStoreError, RadrootsEventStoreRawSourceRebuildDriftV1};",
             "use sha2::{Digest, Sha256};",
             "use sqlx::{Row, Sqlite, SqliteConnection, SqlitePool, Transaction};",
             "use std::collections::{BTreeMap, BTreeSet};",
@@ -5992,6 +6087,7 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
     let expected_module_sources = PRIVILEGED_STORE_MODULE_SOURCES
         .into_iter()
         .chain(SUCCESSOR_08C_STORE_MODULE_SOURCES)
+        .chain([RAW_SOURCE_REBUILD_TEST_SOURCE_RELATIVE])
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     let actual_module_sources = actual_module_sources.into_iter().collect::<BTreeSet<_>>();
@@ -6141,6 +6237,16 @@ fn validate_privileged_store_authority(workspace_root: &Path) -> Result<(), Stri
         ),
         (
             EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "free:prepare_raw_source_repair_connection_v1",
+            "validate_main_database_encoding",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "free:validate_raw_source_repair_canonical_lock_domain_v1",
+            "validate_main_database_encoding",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:ingest_event_in_transaction",
             "crate::schema::validate_event_store_temp_schema",
         ),
@@ -6245,6 +6351,12 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
                 ]
                 .map(str::to_owned)
                 .to_vec(),
+                RAW_SOURCE_REBUILD_TEST_SOURCE_RELATIVE => [
+                    "include_bytes!(\"../../tests/fixtures/food_availability_projection.v1.json\")",
+                    "include_bytes!(\"../../tests/fixtures/nip09_reconciliation.v1.json\")",
+                ]
+                .map(str::to_owned)
+                .to_vec(),
                 _ => Vec::new(),
             };
             validate_compiler_macro_inputs(&relative, &file, &expected_macro_inputs)?;
@@ -6329,6 +6441,22 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::preflight_source_generation_append_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_full_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "super::validate_active_hook_state_fast",
         ),
     ]
     .into_iter()
@@ -6471,6 +6599,16 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
             EVENT_STORE_STORE_SOURCE_RELATIVE,
             "free:inspect_event_store_status",
             "crate::schema::validate_event_store_temp_schema",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "free:prepare_raw_source_repair_connection_v1",
+            "validate_main_database_encoding",
+        ),
+        (
+            EVENT_STORE_STORE_SOURCE_RELATIVE,
+            "free:validate_raw_source_repair_canonical_lock_domain_v1",
+            "validate_main_database_encoding",
         ),
         (
             POST_CORE_CAPABILITIES_SOURCE_RELATIVE,
@@ -6622,6 +6760,36 @@ fn validate_event_store_privileged_terminal_authority(workspace_root: &Path) -> 
             "free:read_protocol_post_extension_authority_seal",
             "validate_source_capacity_authority_fast_v1",
         ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "free:rebuild_from_raw_v1_in_transaction_inner",
+            "crate::source_maintenance_v1::bind_source_capacity_to_generation_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "free:rebuild_from_raw_v1_in_transaction_inner",
+            "preflight_source_generation_append_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "free:rebuild_from_raw_v1_in_transaction_inner",
+            "validate_active_hook_state_fast",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "free:rebuild_from_raw_v1_in_transaction_inner",
+            "validate_source_capacity_authority_fast_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "free:rebuild_from_raw_v1_in_transaction_inner",
+            "validate_source_capacity_authority_full_v1",
+        ),
+        (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "free:validate_source_lineage_for_rebuild_v1",
+            "validate_source_capacity_authority_fast_v1",
+        ),
     ]
     .into_iter()
     .map(|(relative, function, route)| PrivilegedStoreCallSite {
@@ -6677,6 +6845,16 @@ fn validate_event_store_module_source_graph(
         modules: Vec::new(),
     };
     audit.visit_file(file);
+    if relative == "crates/event_store/src/nip09/reconciliation_v1.rs" {
+        let expected = ["modraw_source_rebuild;", "modvisibility_oracle_v1;"];
+        if audit.modules == expected {
+            return Ok(());
+        }
+        return Err(format!(
+            "{relative} raw-source rebuild module graph drifted: expected {expected:?}, found {:?}",
+            audit.modules
+        ));
+    }
     if !audit.modules.is_empty() {
         return Err(format!(
             "{relative} event-store production module source graph is closed outside governed facade roots; found {:?}",
@@ -6739,17 +6917,29 @@ fn validate_event_store_trait_impl_authority(
                 "core::fmt::Display",
                 "RadrootsEventStoreSourceCapacityResourceV1",
             ),
+            (
+                "core::fmt::Display",
+                "RadrootsEventStoreRawSourceRebuildDriftV1",
+            ),
+            (
+                "core::fmt::Display",
+                "RadrootsEventStoreCallerInboundForeignKeyV1",
+            ),
             ("From<RadrootsTransportError>", "RadrootsEventStoreError"),
         ],
-        "crates/event_store/src/nip09/reconciliation_v1.rs" => &[
-            ("SourceGenerationProvider", "OsSourceGenerationProvider"),
-            ("Iterator", "MergedRequestIndices<'_>"),
-        ],
+        "crates/event_store/src/nip09/reconciliation_v1.rs" => {
+            &[("SourceGenerationProvider", "OsSourceGenerationProvider")]
+        }
         "crates/event_store/src/model.rs" => &[
             ("AsRef<str>", "RadrootsTransportObservationMessage"),
             ("core::ops::Deref", "RadrootsTransportObservationMessage"),
         ],
         RESULT_VECTOR_EXECUTOR_RELATIVE => &[("SourceGenerationProvider", "FixedGeneration")],
+        RAW_SOURCE_REBUILD_TEST_SOURCE_RELATIVE => &[
+            ("SourceGenerationProvider", "FixedGeneration"),
+            ("SourceGenerationProvider", "PanickingGeneration"),
+            ("SourceGenerationProvider", "FailingGeneration"),
+        ],
         _ => &[],
     };
     let actual_trait_impls = audit
@@ -6763,7 +6953,10 @@ fn validate_event_store_trait_impl_authority(
         ));
     }
     let expected_inherent_self_types: &[&str] = match relative {
-        "crates/event_store/src/error.rs" => &["RadrootsEventStoreSourceCapacityResourceV1"],
+        "crates/event_store/src/error.rs" => &[
+            "RadrootsEventStoreSourceCapacityResourceV1",
+            "RadrootsEventStoreRawSourceRebuildDriftV1",
+        ],
         EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE => &["EventStoreMigrationHook"],
         "crates/event_store/src/model.rs" => &[
             "RadrootsTransportObservationMessage",
@@ -6784,14 +6977,22 @@ fn validate_event_store_trait_impl_authority(
             "RadrootsRawHeadDecision",
             "RadrootsEventStoreSourceGeneration",
         ],
+        "crates/event_store/src/model/raw_source_rebuild_v1.rs" => &[
+            "RadrootsEventStoreImmutableRawDigestV1",
+            "RadrootsEventStoreActiveProductStateDigestV1",
+            "RadrootsEventStoreRawSourceRebuildReportV1",
+        ],
         "crates/event_store/src/nip09/reconciliation_v1.rs" => &[
             "ReconciliationCapacityLimits",
             "ReconciliationCapacity",
             "EventAdmission",
-            "RequestIndex<'a>",
-            "MergedRequestIndices<'a>",
+            "RequestIndex",
             "TransitionOrigin",
         ],
+        RAW_SOURCE_REBUILD_SOURCE_RELATIVE => &["RawSourceRebuildCallerSchemaLimitsV1"],
+        "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs" => {
+            &["OracleRequestIndexV1<'a>"]
+        }
         EVENT_STORE_STORE_SOURCE_RELATIVE => &["RadrootsEventStore"],
         "crates/event_store/src/source_maintenance_v1.rs" => {
             &["RadrootsEventStoreSourceCapacityV1"]
@@ -7344,6 +7545,18 @@ fn is_approved_privileged_terminal_import(relative: &str, route: &str) -> bool {
         ) | (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1"
+        ) | (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::preflight_source_generation_append_v1"
+        ) | (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_fast_v1"
+        ) | (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "crate::source_maintenance_v1::validate_source_capacity_authority_full_v1"
+        ) | (
+            RAW_SOURCE_REBUILD_SOURCE_RELATIVE,
+            "super::validate_active_hook_state_fast"
         )
     )
 }
@@ -7478,6 +7691,7 @@ fn validate_event_store_lib_resolution_authority(
             if !inherited_current
                 && !SUCCESSOR_08C_PUBLIC_REEXPORTS.contains(&route.as_str())
                 && !SUCCESSOR_08D_PUBLIC_REEXPORTS.contains(&route.as_str())
+                && !SUCCESSOR_08D1_PUBLIC_REEXPORTS.contains(&route.as_str())
             {
                 return Err(format!(
                     "{relative} public export inventory is closed for this contract version; found unsupported reexport `{route}`"
@@ -7491,6 +7705,7 @@ fn validate_event_store_lib_resolution_authority(
         .filter(|route| !SUCCESSOR_08D_RETIRED_PUBLIC_REEXPORTS.contains(route))
         .chain(SUCCESSOR_08C_PUBLIC_REEXPORTS)
         .chain(SUCCESSOR_08D_PUBLIC_REEXPORTS)
+        .chain(SUCCESSOR_08D1_PUBLIC_REEXPORTS)
         .map(str::to_owned)
         .collect::<BTreeSet<_>>();
     let actual_use_set = actual_uses.iter().cloned().collect::<BTreeSet<_>>();
@@ -7844,6 +8059,22 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedStoreReferenceAudit<'_> {
     }
 
     fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
+        if self.relative == EVENT_STORE_STORE_SOURCE_RELATIVE
+            && item.ident == "PoolTempSchemaPolicy"
+        {
+            let expected = syn::parse_str::<syn::ItemEnum>(
+                r#"#[derive(Clone, Copy)]
+                enum PoolTempSchemaPolicy {
+                    Standard,
+                    RawSourceRepairV1,
+                }"#,
+            )
+            .expect("parse governed pool TEMP-schema policy");
+            if compact_tokens(item) != compact_tokens(&expected) {
+                self.fail("raw-source rebuild pool TEMP-schema policy drifted");
+            }
+            return;
+        }
         if is_privileged_store_value_binding(&item.ident.to_string()) {
             self.fail(format!(
                 "shadows privileged authority with enum `{}`",
@@ -12493,7 +12724,6 @@ fn validate_sqlite_encoding_preflight_authority(
             file_backed: bool,
         ) -> Result<(), RadrootsEventStoreError> {
             let max_connections = pool.options().get_max_connections();
-            let existing_options = pool.connect_options();
             if !file_backed && max_connections != 1 {
                 return Err(RadrootsEventStoreError::UnsafeInMemoryPoolConnectionCount {
                     actual: max_connections,
@@ -12515,19 +12745,6 @@ fn validate_sqlite_encoding_preflight_authority(
                 }
                 validate_main_database_encoding(connection).await?;
                 crate::schema::validate_event_store_temp_schema(connection).await?;
-            }
-
-            let mut connect_options = existing_options
-                .as_ref()
-                .clone()
-                .foreign_keys(true)
-                .busy_timeout(Duration::from_millis(5_000));
-            if file_backed {
-                connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
-            }
-            pool.set_connect_options(connect_options);
-
-            for connection in &mut connections {
                 sqlx::query("PRAGMA foreign_keys = ON")
                     .execute(&mut **connection)
                     .await?;
@@ -12538,12 +12755,24 @@ fn validate_sqlite_encoding_preflight_authority(
                     configure_file_journal_mode(connection).await?;
                 }
             }
+            let existing_options = pool.connect_options();
+            let connect_options = existing_options
+                .as_ref()
+                .clone()
+                .foreign_keys(true)
+                .busy_timeout(Duration::from_millis(5_000));
+            let connect_options = if file_backed {
+                connect_options.journal_mode(SqliteJournalMode::Wal)
+            } else {
+                connect_options
+            };
+            pool.set_connect_options(connect_options);
             Ok(())
         }
     "#;
     if compact_tokens(configure_pool) != compact_source_tokens(expected_configure_pool) {
         return Err(format!(
-            "{relative} `configure_pool` must validate every main database as UTF-8 after backing classification and before TEMP-schema, connection-option, PRAGMA, or journal mutation"
+            "{relative} `configure_pool` must validate every main database as UTF-8 after backing classification and before TEMP-schema, PRAGMA, journal, or connection-option mutation"
         ));
     }
 
@@ -12754,7 +12983,7 @@ fn validate_source_maintenance_runtime_token_authority(
         (
             "crates/event_store/src/nip09/reconciliation_v1.rs",
             "apply_reconciliation_hook",
-            "41a0bc1f4e529528f9bc13be28b4a31305156124282c1c7e955ed2e4a56e86d2",
+            "c73869559afe06b51c7df019f620509508bb574eaf51f2224493b3be28048682",
         ),
         (
             EVENT_STORE_STORE_SOURCE_RELATIVE,
@@ -14116,7 +14345,7 @@ fn describe_local_sqlite_source(
     })
 }
 
-fn governed_regular_file_inventory(
+pub(super) fn governed_regular_file_inventory(
     workspace_root: &Path,
     relative_root: &str,
 ) -> Result<Vec<String>, String> {
@@ -14324,6 +14553,23 @@ fn validate_support_source_graph_authority(relative: &str, file: &syn::File) -> 
 }
 
 fn validate_governed_compiler_inputs(workspace_root: &Path) -> Result<(), String> {
+    validate_governed_compiler_inputs_with_event_store_successor(workspace_root, None)
+}
+
+pub(super) fn validate_raw_source_rebuild_successor_compiler_inputs(
+    workspace_root: &Path,
+    event_store_compiler_tables_sha256: &str,
+) -> Result<(), String> {
+    validate_governed_compiler_inputs_with_event_store_successor(
+        workspace_root,
+        Some(event_store_compiler_tables_sha256),
+    )
+}
+
+fn validate_governed_compiler_inputs_with_event_store_successor(
+    workspace_root: &Path,
+    event_store_successor_sha256: Option<&str>,
+) -> Result<(), String> {
     let toolchain = parse_cargo_manifest(workspace_root, RUST_TOOLCHAIN_RELATIVE)?;
     let expected_toolchain: toml::Value = toml::from_str(
         r#"
@@ -14591,7 +14837,14 @@ xtask = "run -q -p xtask --"
 
     let expected_identities = GOVERNED_DEPENDENCY_TABLE_SHA256
         .iter()
-        .map(|(relative, sha256)| ((*relative).to_owned(), (*sha256).to_owned()))
+        .map(|(relative, sha256)| {
+            let sha256 = if *relative == EVENT_STORE_CARGO_MANIFEST_RELATIVE {
+                event_store_successor_sha256.unwrap_or(sha256)
+            } else {
+                sha256
+            };
+            ((*relative).to_owned(), sha256.to_owned())
+        })
         .collect::<Vec<_>>();
     if actual_identities != expected_identities {
         return Err(format!(
@@ -16968,6 +17221,25 @@ mod tests {
     use super::*;
     use std::fs;
 
+    const RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS: [&str; 16] = [
+        "Cargo.toml",
+        "crates/blossom/Cargo.toml",
+        "crates/blossom/src/error.rs",
+        "crates/blossom/src/lib.rs",
+        "crates/blossom/src/url.rs",
+        "crates/event_store/Cargo.toml",
+        "crates/event_store/src/error.rs",
+        "crates/event_store/src/generated.rs",
+        "crates/event_store/src/lib.rs",
+        "crates/event_store/src/migrations.rs",
+        "crates/event_store/src/model.rs",
+        "crates/event_store/src/nip09/reconciliation_v1.rs",
+        "crates/event_store/src/schema.rs",
+        "crates/event_store/src/store.rs",
+        "crates/event_store/src/store/food_availability_projection_v1.rs",
+        "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+    ];
+
     fn repository_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -16993,6 +17265,20 @@ mod tests {
             .get_mut("dependencies")
             .and_then(toml::Value::as_table_mut)
             .expect("event-store dependencies");
+        let futures = dependencies
+            .remove("futures")
+            .expect("RawSourceRebuild futures compiler edge must be present in the live fixture");
+        let expected_futures: toml::Value =
+            toml::from_str("dependency = { workspace = true, optional = true }")
+                .expect("parse expected futures dependency");
+        assert_eq!(
+            futures,
+            expected_futures
+                .get("dependency")
+                .expect("expected futures dependency")
+                .clone(),
+            "RawSourceRebuild futures compiler edge must retain its exact semantic shape"
+        );
         let blossom = dependencies
             .remove("radroots_blossom")
             .expect("successor Blossom compiler edge must be present in the live fixture");
@@ -17008,6 +17294,17 @@ mod tests {
                 .clone(),
             "successor Blossom compiler edge must retain its exact semantic shape"
         );
+        let sqlite_features = manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|features| features.get_mut("sqlite"))
+            .and_then(toml::Value::as_array_mut)
+            .expect("event-store sqlite features");
+        let futures_index = sqlite_features
+            .iter()
+            .position(|feature| feature.as_str() == Some("dep:futures"))
+            .expect("RawSourceRebuild futures feature edge must be present in the live fixture");
+        sqlite_features.remove(futures_index);
         let tokio_features = manifest
             .get_mut("dev-dependencies")
             .and_then(toml::Value::as_table_mut)
@@ -17039,6 +17336,86 @@ mod tests {
         let predecessor =
             toml::to_string_pretty(&manifest).expect("serialize predecessor Cargo manifest");
         fs::write(manifest_path, predecessor).expect("restore predecessor compiler manifest");
+
+        let codec_manifest_path = workspace_root.join(EVENT_CODEC_CARGO_MANIFEST_RELATIVE);
+        let codec_source =
+            fs::read_to_string(&codec_manifest_path).expect("event-codec Cargo manifest");
+        let mut codec_manifest: toml::Value =
+            toml::from_str(&codec_source).expect("parse event-codec Cargo manifest");
+        let serde_json_features = codec_manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|features| features.get_mut("serde_json"))
+            .and_then(toml::Value::as_array_mut)
+            .expect("event-codec serde_json feature");
+        assert_eq!(
+            serde_json_features
+                .iter()
+                .map(toml::Value::as_str)
+                .collect::<Vec<_>>(),
+            [
+                Some("serde"),
+                Some("dep:hex"),
+                Some("dep:serde_json"),
+                Some("dep:sha2"),
+            ],
+            "publication successor feature edges must retain their exact semantic shape"
+        );
+        serde_json_features
+            .retain(|feature| !matches!(feature.as_str(), Some("dep:hex" | "dep:sha2")));
+        let codec_predecessor = toml::to_string_pretty(&codec_manifest)
+            .expect("serialize predecessor event-codec Cargo manifest");
+        fs::write(codec_manifest_path, codec_predecessor)
+            .expect("restore predecessor event-codec compiler manifest");
+
+        let blossom_path = workspace_root.join(BLOSSOM_CARGO_MANIFEST_RELATIVE);
+        let blossom_source = fs::read_to_string(&blossom_path).expect("Blossom Cargo manifest");
+        let mut blossom_manifest: toml::Value =
+            toml::from_str(&blossom_source).expect("parse Blossom Cargo manifest");
+        let raster_decode = blossom_manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .and_then(|features| features.remove("raster-decode"))
+            .expect("successor raster-decode feature must be present in the live fixture");
+        assert_eq!(
+            raster_decode
+                .as_array()
+                .expect("raster-decode feature array")
+                .iter()
+                .map(toml::Value::as_str)
+                .collect::<Vec<_>>(),
+            [
+                Some("std"),
+                Some("dep:image"),
+                Some("dep:zune-core"),
+                Some("dep:zune-jpeg")
+            ],
+            "successor raster-decode feature must retain its exact semantic shape"
+        );
+        let blossom_dependencies = blossom_manifest
+            .get_mut("dependencies")
+            .and_then(toml::Value::as_table_mut)
+            .expect("Blossom dependencies");
+        for dependency in ["image", "zune-core", "zune-jpeg"] {
+            let removed = blossom_dependencies
+                .remove(dependency)
+                .unwrap_or_else(|| panic!("successor dependency {dependency} must be present"));
+            let expected: toml::Value =
+                toml::from_str("dependency = { workspace = true, optional = true }")
+                    .expect("parse expected successor dependency");
+            assert_eq!(
+                removed,
+                expected
+                    .get("dependency")
+                    .expect("expected successor dependency")
+                    .clone(),
+                "successor dependency {dependency} must retain its exact semantic shape"
+            );
+        }
+        let blossom_predecessor = toml::to_string_pretty(&blossom_manifest)
+            .expect("serialize predecessor Blossom Cargo manifest");
+        fs::write(blossom_path, blossom_predecessor)
+            .expect("restore predecessor Blossom compiler manifest");
     }
 
     fn strip_outer_try(statement: &mut syn::Stmt) {
@@ -17110,6 +17487,7 @@ mod tests {
         paths.extend(SOURCE_ROUTE_WITNESS_SPECS.iter().map(|source| source.path));
         paths.extend(SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS);
         paths.extend(SUCCESSOR_08D_SOURCE_PATHS);
+        paths.extend(SUCCESSOR_08D1_EXCLUSIVE_SOURCE_PATHS);
         paths.extend(super::super::source_maintenance::source_contract_fixture_source_paths());
         paths.sort_unstable();
         paths.dedup();
@@ -17798,8 +18176,8 @@ route!(r#hex);
                 1,
             ),
             lib_original.replacen(
-                "RadrootsEventStoreStatusSummary,\n    RadrootsEventVisibility,",
-                "RadrootsEventVisibility,",
+                "RadrootsEventStoreSourceGeneration, RadrootsEventStoreStatusSummary, RadrootsEventVisibility,",
+                "RadrootsEventStoreSourceGeneration, RadrootsEventVisibility,",
                 1,
             ),
         ];
@@ -18402,18 +18780,53 @@ route!(r#hex);
                     _ => None,
                 })
                 .expect("configure_pool");
-            let syn::Stmt::Expr(syn::Expr::ForLoop(preflight), _) =
-                &mut configure_pool.block.stmts[5]
-            else {
-                panic!("encoding preflight loop");
-            };
+            let preflight = configure_pool
+                .block
+                .stmts
+                .iter_mut()
+                .find_map(|statement| match statement {
+                    syn::Stmt::Expr(syn::Expr::ForLoop(preflight), _)
+                        if compact_tokens(&preflight.body)
+                            .contains("validate_main_database_encoding(connection).await?") =>
+                    {
+                        Some(preflight)
+                    }
+                    _ => None,
+                })
+                .expect("encoding preflight loop");
+            let encoding_index = preflight
+                .body
+                .stmts
+                .iter()
+                .position(|statement| {
+                    compact_tokens(statement)
+                        == "validate_main_database_encoding(connection).await?;"
+                })
+                .expect("encoding preflight statement");
+            let backing_index = preflight
+                .body
+                .stmts
+                .iter()
+                .position(|statement| {
+                    compact_tokens(statement).starts_with("iffile_backed==database_is_memory")
+                })
+                .expect("backing classification statement");
+            let temp_index = preflight
+                .body
+                .stmts
+                .iter()
+                .position(|statement| {
+                    compact_tokens(statement)
+                        .starts_with("crate::schema::validate_event_store_temp_schema")
+                })
+                .expect("TEMP-schema validation statement");
             match mutation {
                 "remove" => {
-                    preflight.body.stmts.remove(3);
+                    preflight.body.stmts.remove(encoding_index);
                 }
-                "discard" => strip_outer_try(&mut preflight.body.stmts[3]),
-                "after_temp" => preflight.body.stmts.swap(3, 4),
-                "before_backing" => preflight.body.stmts.swap(2, 3),
+                "discard" => strip_outer_try(&mut preflight.body.stmts[encoding_index]),
+                "after_temp" => preflight.body.stmts.swap(encoding_index, temp_index),
+                "before_backing" => preflight.body.stmts.swap(backing_index, encoding_index),
                 _ => unreachable!(),
             }
             assert!(
@@ -20362,6 +20775,69 @@ pub(crate) fn migration_for_version"#,
     }
 
     #[test]
+    fn predecessor_impl_resolution_projection_is_fail_closed() {
+        let workspace = synthetic_workspace();
+        let manifest = immutable_manifest();
+        validate_predecessor_impl_resolution_authority(
+            workspace.path(),
+            &manifest,
+            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+        )
+        .expect("current successor must preserve predecessor impl authority");
+        let unchanged_relative = "crates/event_codec/src/deletion/reconciliation_v1.rs";
+        let unchanged_path = workspace.path().join(unchanged_relative);
+        let unchanged = fs::read_to_string(&unchanged_path).expect("unchanged predecessor source");
+
+        fs::write(
+            &unchanged_path,
+            format!(
+                "{unchanged}\ntrait UnexpectedPredecessorResolution {{}}\nimpl UnexpectedPredecessorResolution for RadrootsNip09SuppressionDecision {{}}\n"
+            ),
+        )
+        .expect("add unexpected predecessor impl authority");
+        let error = validate_predecessor_impl_resolution_authority(
+            workspace.path(),
+            &manifest,
+            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+        )
+        .expect_err("new predecessor-bound impl authority must fail closed");
+        assert!(error.contains("unexpected ["), "{error}");
+        assert!(error.contains("UnexpectedPredecessorResolution"), "{error}");
+
+        let changed = unchanged.replacen("self.address_reference.as_ref()", "None", 1);
+        assert_ne!(changed, unchanged, "expected impl fixture must mutate");
+        fs::write(&unchanged_path, changed).expect("change expected predecessor impl authority");
+        let error = validate_predecessor_impl_resolution_authority(
+            workspace.path(),
+            &manifest,
+            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+        )
+        .expect_err("changed predecessor-bound impl authority must fail closed");
+        assert!(error.contains("missing ["), "{error}");
+        assert!(error.contains("unexpected ["), "{error}");
+        assert!(error.matches("address_reference").count() >= 2, "{error}");
+        fs::write(&unchanged_path, unchanged).expect("restore unchanged predecessor source");
+
+        let successor_relative =
+            "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs";
+        let successor_path = workspace.path().join(successor_relative);
+        let successor = fs::read_to_string(&successor_path).expect("successor-only source");
+        fs::write(
+            successor_path,
+            format!(
+                "{successor}\ntrait SuccessorOnlyResolution {{}}\nimpl SuccessorOnlyResolution for RadrootsNip09SuppressionDecision {{}}\n"
+            ),
+        )
+        .expect("change successor-only impl authority");
+        validate_predecessor_impl_resolution_authority(
+            workspace.path(),
+            &manifest,
+            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+        )
+        .expect("successor-only authority must not rotate predecessor projection");
+    }
+
+    #[test]
     fn nip09_v1_manifest_is_independent_of_post_core_transport_evolution() {
         let workspace = synthetic_workspace();
         let before = immutable_manifest();
@@ -20823,7 +21299,6 @@ version = "0.1.0"
         for (relative, first_module) in [
             ("crates/event/src/lib.rs", "pub mod account;"),
             ("crates/event_codec/src/lib.rs", "pub mod d_tag;"),
-            ("crates/blossom/src/lib.rs", "pub mod authorization;"),
         ] {
             let spec = *SOURCE_ROUTE_WITNESS_SPECS
                 .iter()

@@ -1,4 +1,3 @@
-use crate::RadrootsEventStoreError;
 use crate::migrations::{
     EVENT_STORE_LEDGER_CREATE_DDL, EVENT_STORE_LEDGER_DDL, EVENT_STORE_LEDGER_NAME,
     EVENT_STORE_MIGRATIONS, EventStoreMigration, EventStoreMigrationHook,
@@ -7,6 +6,7 @@ use crate::migrations::{
     sqlite_identifier_starts_with, validate_embedded_migration_registry,
     validate_migration_registry,
 };
+use crate::{RadrootsEventStoreError, RadrootsEventStoreRawSourceRebuildDriftV1};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, SqliteConnection, SqlitePool, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,6 +23,8 @@ use crate::store::food_availability_projection_v1::{
     apply_food_availability_projection_hook_v1,
     validate_food_availability_projection_hook_state_fast_v1,
 };
+
+const RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1: u32 = 4;
 
 #[cfg(test)]
 const EMPTY_SCHEMA_SHA256: &str =
@@ -86,6 +88,54 @@ pub(crate) async fn migrate_event_store_schema(
     pool: &SqlitePool,
 ) -> Result<(), RadrootsEventStoreError> {
     migrate_event_store_schema_with_generation_provider(pool, &OsSourceGenerationProvider).await
+}
+
+/// Validates the exact current managed catalog and ledger without consulting
+/// derived hook state. Raw-source repair uses this before it starts replacing
+/// derived authority; ordinary open continues through the stricter hook path.
+pub(crate) async fn validate_exact_managed_v4_for_raw_source_rebuild_v1(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsEventStoreError> {
+    validate_embedded_migration_registry()?;
+    validate_repair_temp_schema_bounded_v1(connection, EVENT_STORE_MIGRATIONS).await?;
+    let catalog = read_repair_catalog_bounded_v1(connection, EVENT_STORE_MIGRATIONS).await?;
+    if !validate_ledger_catalog(&catalog)? {
+        return Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::ManagedSchemaAuthority,
+            detail: "maintenance repair requires an exact managed-v4 migration ledger".to_owned(),
+        });
+    }
+    let history =
+        read_repair_history_bounded_v1(connection, RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1).await?;
+    let current = validate_history_against_registry(
+        &history,
+        EVENT_STORE_MIGRATIONS,
+        RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1,
+    )?;
+    if current != RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1 {
+        return Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::ManagedSchemaAuthority,
+            detail: format!(
+                "maintenance repair requires managed schema version {}, found {current}",
+                RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1
+            ),
+        });
+    }
+    let migration =
+        migration_for_version(EVENT_STORE_MIGRATIONS, RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1).ok_or(
+            RadrootsEventStoreError::UnknownMigration {
+                version: RAW_SOURCE_REBUILD_SCHEMA_VERSION_V1,
+            },
+        )?;
+    let actual = catalog_fingerprint(&governed_catalog(&catalog, EVENT_STORE_MIGRATIONS));
+    if actual != migration.schema_sha256 {
+        return Err(RadrootsEventStoreError::SchemaFingerprintMismatch {
+            version: migration.version,
+            expected: migration.schema_sha256,
+            actual,
+        });
+    }
+    Ok(())
 }
 
 pub(crate) async fn migrate_event_store_schema_with_generation_provider(
@@ -697,6 +747,106 @@ pub(crate) async fn validate_event_store_temp_schema(
     validate_event_store_temp_schema_with_registry(connection, EVENT_STORE_MIGRATIONS).await
 }
 
+fn repair_governed_catalog_authority_v1(
+    registry: &[EventStoreMigration],
+) -> Result<(String, i64), RadrootsEventStoreError> {
+    let mut names = registry
+        .iter()
+        .flat_map(|migration| migration.owned_object_names.iter().copied())
+        .collect::<BTreeSet<_>>();
+    names.insert(EVENT_STORE_LEDGER_NAME);
+    let canonical_row_count = i64::try_from(names.len()).map_err(|_| {
+        RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::ManagedSchemaAuthority,
+            detail: "managed catalog authority exceeds the SQLite row-count range".to_owned(),
+        }
+    })?;
+    let row_limit = canonical_row_count.checked_add(1).ok_or_else(|| {
+        RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::ManagedSchemaAuthority,
+            detail: "managed catalog authority cannot reserve a collision row".to_owned(),
+        }
+    })?;
+    Ok((serde_json::to_string(&names)?, row_limit))
+}
+
+async fn read_repair_catalog_bounded_v1(
+    connection: &mut SqliteConnection,
+    registry: &[EventStoreMigration],
+) -> Result<Vec<CatalogRow>, RadrootsEventStoreError> {
+    let (governed_names_json, row_limit) = repair_governed_catalog_authority_v1(registry)?;
+    let rows = sqlx::query(
+        "WITH governed(name) AS (
+           SELECT CAST(value AS TEXT) COLLATE NOCASE FROM json_each(?)
+         )
+         SELECT type, name, tbl_name, sql
+         FROM main.sqlite_schema
+         WHERE lower(substr(name, 1, 7)) != 'sqlite_'
+           AND (
+             name COLLATE NOCASE IN (SELECT name FROM governed)
+             OR tbl_name COLLATE NOCASE IN (SELECT name FROM governed)
+             OR lower(substr(name, 1, length(?))) = lower(?)
+             OR lower(substr(tbl_name, 1, length(?))) = lower(?)
+           )
+         ORDER BY type, name, tbl_name
+         LIMIT ?",
+    )
+    .bind(&governed_names_json)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(row_limit)
+    .fetch_all(&mut *connection)
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(CatalogRow {
+                object_type: row.try_get("type")?,
+                name: row.try_get("name")?,
+                table_name: row.try_get("tbl_name")?,
+                sql: row.try_get("sql")?,
+            })
+        })
+        .collect()
+}
+
+pub(crate) async fn validate_repair_temp_schema_bounded_v1(
+    connection: &mut SqliteConnection,
+    registry: &[EventStoreMigration],
+) -> Result<(), RadrootsEventStoreError> {
+    let (governed_names_json, _) = repair_governed_catalog_authority_v1(registry)?;
+    let collision = sqlx::query(
+        "WITH governed(name) AS (
+           SELECT CAST(value AS TEXT) COLLATE NOCASE FROM json_each(?)
+         )
+         SELECT type, name, tbl_name
+         FROM temp.sqlite_schema
+         WHERE type IN ('trigger', 'view')
+            OR name COLLATE NOCASE IN (SELECT name FROM governed)
+            OR tbl_name COLLATE NOCASE IN (SELECT name FROM governed)
+            OR lower(substr(name, 1, length(?))) = lower(?)
+            OR lower(substr(tbl_name, 1, length(?))) = lower(?)
+         ORDER BY type, name, tbl_name
+         LIMIT 1",
+    )
+    .bind(&governed_names_json)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .bind(crate::migrations::EVENT_STORE_RESERVED_PREFIX)
+    .fetch_optional(&mut *connection)
+    .await?;
+    if let Some(row) = collision {
+        return Err(RadrootsEventStoreError::TemporarySchemaCollision {
+            object_type: row.try_get("type")?,
+            name: row.try_get("name")?,
+            table_name: row.try_get("tbl_name")?,
+        });
+    }
+    Ok(())
+}
+
 async fn validate_event_store_temp_schema_with_registry(
     connection: &mut SqliteConnection,
     registry: &[EventStoreMigration],
@@ -881,6 +1031,38 @@ async fn read_history(
     let rows = sqlx::query(
         "SELECT version, name, up_sha256, down_sha256, schema_sha256 FROM main.radroots_event_store_schema_migrations ORDER BY version",
     )
+    .fetch_all(&mut *connection)
+    .await?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(AppliedMigration {
+                version: row.try_get("version")?,
+                name: row.try_get("name")?,
+                up_sha256: row.try_get("up_sha256")?,
+                down_sha256: row.try_get("down_sha256")?,
+                schema_sha256: row.try_get("schema_sha256")?,
+            })
+        })
+        .collect()
+}
+
+async fn read_repair_history_bounded_v1(
+    connection: &mut SqliteConnection,
+    supported_current: u32,
+) -> Result<Vec<AppliedMigration>, RadrootsEventStoreError> {
+    let row_limit = i64::from(supported_current).checked_add(1).ok_or_else(|| {
+        RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::ManagedSchemaAuthority,
+            detail: "managed migration-history authority cannot reserve a drift row".to_owned(),
+        }
+    })?;
+    let rows = sqlx::query(
+        "SELECT version, name, up_sha256, down_sha256, schema_sha256
+         FROM main.radroots_event_store_schema_migrations
+         ORDER BY version
+         LIMIT ?",
+    )
+    .bind(row_limit)
     .fetch_all(&mut *connection)
     .await?;
     rows.into_iter()

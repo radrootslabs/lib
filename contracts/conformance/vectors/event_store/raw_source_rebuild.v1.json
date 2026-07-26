@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_event_store.raw_source_rebuild_v1",
+  "delegated_suite": {
+    "id": "radroots_event_store.raw_source_rebuild_v1.delegated_rust_test_suite.v1",
+    "lane": "nix run .#contract",
+    "package": "radroots_event_store",
+    "authorities": [
+      {
+        "authority": "raw_source_rebuild_incremental_reopen_and_repeat_parity_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "projection_cursor_capacity_accepts_exact_and_rejects_one_over_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_invalidates_generic_cursors_without_enumerating_or_mutating_them_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_normalizes_only_transition_sqlite_sequence_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_rejects_unrelated_minimum_transition_sequence_rowid_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_reuses_target_alias_at_minimum_sequence_rowid_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_repairs_active_transition_high_water_metadata_drift_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_repairs_empty_transition_high_water_metadata_drift_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_repairs_derived_drift_and_refuses_raw_drift_atomically_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_refuses_transition_history_gap_atomically_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_refuses_historical_generation_lineage_corruption_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_rollback_failure_preserves_primary_and_rollback_errors_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_wal_readers_observe_only_committed_generation_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_rejects_caller_inbound_foreign_keys_atomically_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_caller_schema_inventory_limits_are_typed_and_atomic_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_scoped_integrity_preserves_caller_state_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_generation_exhaustion_precedes_entropy_and_mutation_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_entropy_failure_is_atomic_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_empty_source_without_transitions_is_deterministic_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_rebuild_cold_file_repair_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_repair_preflights_reject_bounded_authority_drift_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_repair_rejects_delete_mode_exact_v4_without_mutation_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_repair_rejects_canonical_path_lock_domain_mismatch_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_source_repair_post_preflight_failures_preserve_wal_and_state_v1",
+        "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs"
+      },
+      {
+        "authority": "raw_snapshot_visibility_oracle_covers_regular_replaceable_addressable_and_deletion_v1",
+        "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
+      },
+      {
+        "authority": "raw_snapshot_visibility_oracle_matches_wide_event_and_address_requests_v1",
+        "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
+      },
+      {
+        "authority": "raw_snapshot_visibility_oracle_matches_all_protocol_decision_branches_v1",
+        "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
+      },
+      {
+        "authority": "raw_snapshot_visibility_oracle_is_order_and_repeat_invariant_v1",
+        "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "empty_source_repeat_digest_parity",
+      "execution": "direct_executor",
+      "authority": "raw_source_rebuild_v1_result_vector",
+      "authority_path": "crates/event_store/tests/raw_source_rebuild_v1_result_vector.rs",
+      "expected_outcome": "two committed rebuilds rotate generations while preserving zero capacity, raw high-water, immutable-raw digest, and normalized product digest",
+      "expected_immutable_raw_digest": "73e66ea95452e902176d701311e6e82b3cd7895ae77f3d73fd1cbb67bcf9d321",
+      "expected_active_product_state_digest": "bf20fc2ba0e7c64bb0958829e118d87a86efe17e2848bb098d3d9ab2a78c2245"
+    },
+    {
+      "id": "signed_food_fixture_typed_digest_parity",
+      "execution": "direct_executor",
+      "authority": "raw_source_rebuild_v1_result_vector",
+      "authority_path": "crates/event_store/tests/raw_source_rebuild_v1_result_vector.rs",
+      "expected_outcome": "one signed admitted FoodAvailability fixture freezes exact immutable-raw and generation-normalized product digests across text, i64, boolean, optional, and blob framing and preserves them across repeated rebuild",
+      "expected_immutable_raw_digest": "336a6a6cf1d84b0fcb185c4a7550cf5a8d8047c5a3f89df40e0d8f1ead543c68",
+      "expected_active_product_state_digest": "1ed8a22036091f0a492f3848027b313be4ef1202a9cdfa6c3ff35e12ab10f15c"
+    },
+    {
+      "id": "incremental_reopen_repeat_product_parity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_incremental_reopen_and_repeat_parity_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "incremental, file reopen, first rebuild, and repeated rebuild expose identical generation-normalized current visibility, Food image, and logical FTS product witnesses",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "projection_cursor_capacity_exact_and_one_over",
+      "execution": "delegated_rust_test",
+      "authority": "projection_cursor_capacity_accepts_exact_and_rejects_one_over_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "4,096 unique generic cursors are accepted, the next unique insert and a 4,097-row migration/reconciliation inventory probe fail typed, and an existing identity at capacity remains updateable",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "generic_cursor_lazy_generation_invalidation",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_invalidates_generic_cursors_without_enumerating_or_mutating_them_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "generic cursor rows remain byte-identical and become invalid only through active-generation mismatch",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "target_first_transition_sequence_normalization",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_normalizes_only_transition_sqlite_sequence_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "missing, low, high, duplicate, and case-aliased target rows normalize once to a canonical target-first row at the retained transition maximum while every unrelated sqlite_sequence row triple remains unchanged",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "unrelated_minimum_transition_sequence_rowid_refusal",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_rejects_unrelated_minimum_transition_sequence_rowid_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "an unrelated sqlite_sequence row at the minimum SQLite rowid exhausts target-first placement and rejects atomically",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "minimum_target_alias_sequence_reuse",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_reuses_target_alias_at_minimum_sequence_rowid_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "a case-aliased target already at the minimum SQLite rowid is reused, canonicalized, and advanced to the replay high-water",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "active_transition_high_water_metadata_repair",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_repairs_active_transition_high_water_metadata_drift_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "low and high active transition high-water metadata drift repairs to the exact retained transition maximum while preserving immutable-raw, normalized product, and logical product parity across repeat rebuild",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "empty_transition_high_water_metadata_repair",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_repairs_empty_transition_high_water_metadata_drift_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "nonzero active transition high-water metadata on an empty source repairs to zero while preserving immutable-raw, normalized product, and logical product parity across reopen validation and repeat rebuild",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "derived_repair_and_raw_refusal_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_repairs_derived_drift_and_refuses_raw_drift_atomically_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "managed-v4 derived corruption is repaired, while immutable raw, capacity, governed catalog, or migration-ledger drift is refused before mutation",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "transition_history_gap_refusal_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_refuses_transition_history_gap_atomically_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "a retained transition-history gap is refused as addressable-transition authority drift before any rebuild-owned state mutates",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "historical_generation_lineage_corruption_refusal",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_refuses_historical_generation_lineage_corruption_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "historical generation baselines and generation-bound transition lineage are authenticated before mutation, and any mismatch is refused atomically",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_marker_open",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_marker_open restores the exact prior committed database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_generation_rotation",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_generation_rotation restores the exact prior committed database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_core_replay",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_core_replay restores the exact prior committed database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_visibility_audit",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_visibility_audit restores the exact prior committed database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_food_reset_replay",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_food_reset_replay restores the exact prior committed database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_food_audit",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_food_audit restores the exact prior committed database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_after_marker_close",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_failpoints_roll_back_every_stage_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "failure after_marker_close restores the exact prior committed database and leaves no marker residue",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "rollback_failure_preserves_both_errors",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_rollback_failure_preserves_primary_and_rollback_errors_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "the typed rollback error preserves both the primary rebuild failure and the SQL rollback failure",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "wal_reader_commit_visibility",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_wal_readers_observe_only_committed_generation_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "concurrent WAL readers observe only the prior committed generation until rebuild commit",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "caller_inbound_foreign_key_refusal_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_rejects_caller_inbound_foreign_keys_atomically_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "caller-owned inbound foreign keys to directly or indirectly mutated parents are rejected before entropy or mutation; representative managed-parent cases cover CASCADE, SET NULL, SET DEFAULT, RESTRICT, and NO ACTION, while explicit parent-inventory cases cover the Food FTS5 virtual table, all five shadows, and sqlite_sequence, preserving caller rows, schema, triggers, side effects, and rebuild authority",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "caller_schema_inventory_capacity_exact_and_one_over",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_caller_schema_inventory_limits_are_typed_and_atomic_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "bounded caller main-table and cumulative foreign-key-row inventories accept their exact limits and return typed atomic refusal one row over before entropy or mutation",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "scoped_integrity_preserves_caller_state",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_scoped_integrity_preserves_caller_state_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "unrelated caller rows, indices, foreign-key violations, and AUTOINCREMENT counters with no dependency on rebuild-owned tables remain outside rebuild authority and byte-identical",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "generation_exhaustion_preflight",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_generation_exhaustion_precedes_entropy_and_mutation_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "the ninth retained generation fails before entropy, marker, sequence, raw, or derived mutation",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "generation_entropy_failure_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_entropy_failure_is_atomic_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "source-generation entropy failure returns the typed error before marker, sequence, raw, or derived mutation",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "empty_source_without_transitions",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_empty_source_without_transitions_is_deterministic_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "an empty source and absent target transition sequence rebuild deterministically without creating unrelated sequence state",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "cold_file_repair",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_rebuild_cold_file_repair_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "maintenance-only file repair restores exact managed-v4 derived corruption through a fresh governed connection while refusing nonexistent, unmanaged, and non-v4 databases without weakening ordinary constructors",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "cold_bounded_preflight_authority_drift_refusal",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_repair_preflights_reject_bounded_authority_drift_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "bounded catalog, migration-history, temporary-schema, and encoding preflights refuse authority drift without creating rebuild state or changing persistent database authority",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "cold_non_wal_file_refusal_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_repair_rejects_delete_mode_exact_v4_without_mutation_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "cold repair requires an existing WAL database and rejects an exact managed-v4 DELETE-mode file without changing journal mode or governed state",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "cold_canonical_path_lock_domain_refusal_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_repair_rejects_canonical_path_lock_domain_mismatch_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "cold repair proves the caller path shares the validated SQLite writer-lock domain and rejects a mismatched canonical path without mutating either database",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "cold_post_preflight_failure_wal_state_atomicity",
+      "execution": "delegated_rust_test",
+      "authority": "raw_source_repair_post_preflight_failures_preserve_wal_and_state_v1",
+      "authority_path": "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs",
+      "expected_outcome": "raw reconciliation and source-capacity failures after cold preflight preserve the exact prior rebuild-owned state and WAL journal mode",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "pure_raw_snapshot_visibility_oracle",
+      "execution": "delegated_rust_test",
+      "authority": "raw_snapshot_visibility_oracle_covers_regular_replaceable_addressable_and_deletion_v1",
+      "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs",
+      "expected_outcome": "the independent pure oracle covers regular, replaceable, addressable, empty-identifier replaceable address targets, and kind-5 visibility without consulting derived SQL views",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "direct_indexed_visibility_oracle_wide_targets",
+      "execution": "delegated_rust_test",
+      "authority": "raw_snapshot_visibility_oracle_matches_wide_event_and_address_requests_v1",
+      "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs",
+      "expected_outcome": "one wide deletion request is reduced once into direct indexed event and address evidence whose per-target decisions exactly match the frozen NIP-09 evaluator without projection rescans",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "direct_indexed_visibility_oracle_protocol_matrix",
+      "execution": "delegated_rust_test",
+      "authority": "raw_snapshot_visibility_oracle_matches_all_protocol_decision_branches_v1",
+      "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs",
+      "expected_outcome": "the direct indexed reducer exactly matches all seven frozen NIP-09 outcomes, preserves stale and winning evidence, and applies authorized-evidence precedence over mismatches",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    },
+    {
+      "id": "direct_indexed_visibility_oracle_order_repeat_invariance",
+      "execution": "delegated_rust_test",
+      "authority": "raw_snapshot_visibility_oracle_is_order_and_repeat_invariant_v1",
+      "authority_path": "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs",
+      "expected_outcome": "canonical exact-event and address evidence is invariant under reversed request order and repeated admitted requests, including cutoff ties",
+      "expected_immutable_raw_digest": null,
+      "expected_active_product_state_digest": null
+    }
+  ]
+}

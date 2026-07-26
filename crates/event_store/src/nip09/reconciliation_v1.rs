@@ -12,6 +12,7 @@ use crate::model::reconciliation_v1::{
     RadrootsRawHeadDecision, StoredEventClass, tag_semantic_name, tag_value_type_name,
 };
 use crate::{
+    RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1,
     RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
     RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
     RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1, RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
@@ -31,8 +32,10 @@ use radroots_event_codec::admission::registry_v7::{
 use radroots_event_codec::deletion::reconciliation_v1::admission::{
     RadrootsAdmittedNip09DeletionRequestEventV1, admit_verified_nip09_deletion_request_event_v1,
 };
+#[cfg(test)]
+use radroots_event_codec::deletion::reconciliation_v1::evaluator::evaluate_nip09_suppression_from_borrowed_requests_v1;
 use radroots_event_codec::deletion::reconciliation_v1::evaluator::{
-    RadrootsNip09SuppressionOutcome, evaluate_nip09_suppression_from_borrowed_requests_v1,
+    RadrootsNip09SuppressionOutcome, RadrootsNip09SuppressionReason,
 };
 use radroots_event_codec::verification::v1::RadrootsSignatureVerifiedEvent;
 #[cfg(test)]
@@ -40,8 +43,20 @@ use sqlx::SqlitePool;
 use sqlx::{Row, SqliteConnection};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod raw_source_rebuild;
 #[cfg(test)]
 mod result_vector_executor;
+mod visibility_oracle_v1;
+
+#[cfg(test)]
+pub(crate) use raw_source_rebuild::{
+    RawSourceRebuildFailpointV1, preserve_raw_source_rebuild_primary_failure_for_test,
+    rebuild_from_raw_v1_in_transaction_for_test, rebuild_from_raw_v1_on_pool_for_test,
+    rebuild_from_raw_v1_on_pool_with_caller_schema_limits_for_test,
+};
+pub(crate) use raw_source_rebuild::{
+    rebuild_from_raw_v1_in_existing_transaction, rebuild_from_raw_v1_on_pool,
+};
 
 const RECONCILIATION_SNAPSHOT_BATCH_SIZE: i64 = 512;
 const RECONCILIATION_SNAPSHOT_BATCH_LEN: usize = 512;
@@ -318,17 +333,25 @@ struct SourceRebuildPlan {
     prior: Option<SourceState>,
 }
 
-struct RequestIndex<'a> {
-    requests: &'a [RadrootsAdmittedNip09DeletionRequestEventV1],
-    event_targets: BTreeMap<String, Vec<usize>>,
-    address_targets: BTreeMap<(i64, String, String), Vec<usize>>,
+struct SourceRebuildMarkerTokenV1 {
+    generation: RadrootsEventStoreSourceGeneration,
 }
 
-struct MergedRequestIndices<'a> {
-    event_indices: &'a [usize],
-    address_indices: &'a [usize],
-    event_position: usize,
-    address_position: usize,
+struct RequestIndex {
+    event_targets: BTreeMap<String, BTreeMap<String, String>>,
+    address_targets: BTreeMap<(i64, String, String), AddressRequestEvidence>,
+}
+
+#[derive(Clone)]
+struct IndexedRequestEvidence {
+    request_id: String,
+    created_at: u64,
+}
+
+#[derive(Default)]
+struct AddressRequestEvidence {
+    authorized: Option<IndexedRequestEvidence>,
+    unauthorized: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -389,6 +412,7 @@ struct EventCoordinateFact {
     nip09_d_tag: Option<String>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 struct StoredSuppressionDecision {
     outcome: RadrootsNip09SuppressionOutcome,
     reason: &'static str,
@@ -397,95 +421,125 @@ struct StoredSuppressionDecision {
     address_reference_cutoff: Option<i64>,
 }
 
-impl<'a> RequestIndex<'a> {
-    fn new(requests: &'a [RadrootsAdmittedNip09DeletionRequestEventV1]) -> Self {
-        let mut event_targets = BTreeMap::<String, Vec<usize>>::new();
-        let mut address_targets = BTreeMap::<(i64, String, String), Vec<usize>>::new();
-        for (index, request) in requests.iter().enumerate() {
-            for target in request.projection().event_targets() {
-                event_targets
-                    .entry(target.event_id().as_str().to_owned())
-                    .or_default()
-                    .push(index);
-            }
-            for target in request.projection().address_targets() {
-                address_targets
-                    .entry((
-                        i64::from(target.coordinate().kind()),
-                        target.coordinate().pubkey().as_str().to_owned(),
-                        target.coordinate().identifier().to_owned(),
-                    ))
-                    .or_default()
-                    .push(index);
-            }
+impl RequestIndex {
+    fn new(requests: &[RadrootsAdmittedNip09DeletionRequestEventV1]) -> Self {
+        let mut index = Self {
+            event_targets: BTreeMap::new(),
+            address_targets: BTreeMap::new(),
+        };
+        for request in requests {
+            index.insert(request);
         }
-        Self {
-            requests,
-            event_targets,
-            address_targets,
+        index
+    }
+
+    fn insert(&mut self, request: &RadrootsAdmittedNip09DeletionRequestEventV1) {
+        let request_event = request.event();
+        let request_author = request_event.author_str();
+        let request_id = request_event.id_str();
+        for target in request.projection().event_targets() {
+            self.event_targets
+                .entry(target.event_id().as_str().to_owned())
+                .or_default()
+                .entry(request_author.to_owned())
+                .and_modify(|current| {
+                    if request_id < current.as_str() {
+                        *current = request_id.to_owned();
+                    }
+                })
+                .or_insert_with(|| request_id.to_owned());
+        }
+        for target in request.projection().address_targets() {
+            let coordinate = (
+                i64::from(target.coordinate().kind()),
+                target.coordinate().pubkey().as_str().to_owned(),
+                target.coordinate().identifier().to_owned(),
+            );
+            let evidence = self.address_targets.entry(coordinate.clone()).or_default();
+            if request_author == coordinate.1 {
+                let replace = evidence.authorized.as_ref().is_none_or(|current| {
+                    request_event.created_at_u64() > current.created_at
+                        || (request_event.created_at_u64() == current.created_at
+                            && request_id < current.request_id.as_str())
+                });
+                if replace {
+                    evidence.authorized = Some(IndexedRequestEvidence {
+                        request_id: request_id.to_owned(),
+                        created_at: request_event.created_at_u64(),
+                    });
+                }
+            } else {
+                evidence.unauthorized = true;
+            }
         }
     }
 
-    fn matching<'index>(
-        &'index self,
+    fn decision(
+        &self,
         event: &RadrootsEventEnvelope,
-    ) -> impl Iterator<Item = &'index RadrootsAdmittedNip09DeletionRequestEventV1> + 'index {
-        let event_indices = self
+    ) -> Result<StoredSuppressionDecision, RadrootsEventStoreError> {
+        if event.kind_u32() == 5 {
+            return Ok(StoredSuppressionDecision {
+                outcome: RadrootsNip09SuppressionOutcome::Visible,
+                reason: RadrootsNip09SuppressionReason::DeletionRequestImmune.code(),
+                event_reference_request_id: None,
+                address_reference_request_id: None,
+                address_reference_cutoff: None,
+            });
+        }
+
+        let (event_reference_request_id, unauthorized_event_reference) = self
             .event_targets
             .get(event.id_str())
-            .map(Vec::as_slice)
-            .unwrap_or_default();
-        let address_indices = nip01_coordinate_key(event)
+            .map_or((None, false), |by_author| {
+                let authorized = by_author.get(event.author_str()).cloned();
+                let unauthorized = by_author.len() > usize::from(authorized.is_some());
+                (authorized, unauthorized)
+            });
+        let address_evidence = nip01_coordinate_key(event)
             .as_ref()
-            .and_then(|coordinate| self.address_targets.get(coordinate))
-            .map(Vec::as_slice)
-            .unwrap_or_default();
-        MergedRequestIndices::new(event_indices, address_indices).map(|index| &self.requests[index])
-    }
-}
-
-impl<'a> MergedRequestIndices<'a> {
-    const fn new(event_indices: &'a [usize], address_indices: &'a [usize]) -> Self {
-        Self {
-            event_indices,
-            address_indices,
-            event_position: 0,
-            address_position: 0,
-        }
-    }
-}
-
-impl Iterator for MergedRequestIndices<'_> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match (
-            self.event_indices.get(self.event_position).copied(),
-            self.address_indices.get(self.address_position).copied(),
-        ) {
-            (Some(event_index), Some(address_index)) if event_index < address_index => {
-                self.event_position += 1;
-                Some(event_index)
-            }
-            (Some(event_index), Some(address_index)) if address_index < event_index => {
-                self.address_position += 1;
-                Some(address_index)
-            }
-            (Some(index), Some(_)) => {
-                self.event_position += 1;
-                self.address_position += 1;
-                Some(index)
-            }
-            (Some(index), None) => {
-                self.event_position += 1;
-                Some(index)
-            }
-            (None, Some(index)) => {
-                self.address_position += 1;
-                Some(index)
-            }
-            (None, None) => None,
-        }
+            .and_then(|coordinate| self.address_targets.get(coordinate));
+        let address_reference = address_evidence.and_then(|evidence| evidence.authorized.as_ref());
+        let has_unauthorized_reference = unauthorized_event_reference
+            || address_evidence.is_some_and(|evidence| evidence.unauthorized);
+        let address_applies =
+            address_reference.is_some_and(|evidence| event.created_at_u64() <= evidence.created_at);
+        let (outcome, reason) = match (event_reference_request_id.is_some(), address_applies) {
+            (true, true) => (
+                RadrootsNip09SuppressionOutcome::Suppressed,
+                RadrootsNip09SuppressionReason::EventIdAndAddressReference,
+            ),
+            (true, false) => (
+                RadrootsNip09SuppressionOutcome::Suppressed,
+                RadrootsNip09SuppressionReason::EventIdReference,
+            ),
+            (false, true) => (
+                RadrootsNip09SuppressionOutcome::Suppressed,
+                RadrootsNip09SuppressionReason::AddressReferenceAtOrBeforeCutoff,
+            ),
+            (false, false) if address_reference.is_some() => (
+                RadrootsNip09SuppressionOutcome::Visible,
+                RadrootsNip09SuppressionReason::AddressCutoffPrecedesTarget,
+            ),
+            (false, false) if has_unauthorized_reference => (
+                RadrootsNip09SuppressionOutcome::Visible,
+                RadrootsNip09SuppressionReason::RequestAuthorMismatch,
+            ),
+            (false, false) => (
+                RadrootsNip09SuppressionOutcome::Visible,
+                RadrootsNip09SuppressionReason::NoAuthorizedReference,
+            ),
+        };
+        Ok(StoredSuppressionDecision {
+            outcome,
+            reason: reason.code(),
+            event_reference_request_id,
+            address_reference_request_id: address_reference
+                .map(|evidence| evidence.request_id.clone()),
+            address_reference_cutoff: address_reference
+                .map(|evidence| i64_from_u64("address_reference_cutoff", evidence.created_at))
+                .transpose()?,
+        })
     }
 }
 
@@ -595,7 +649,7 @@ pub(crate) async fn apply_reconciliation_hook(
         prior,
     };
 
-    open_source_rebuild_marker(connection, &plan).await?;
+    let marker = open_source_rebuild_marker(connection, &plan).await?;
     append_source_generation(connection, &plan).await?;
     rotate_source_state(connection, &plan).await?;
     reconcile_raw_events(connection, &events).await?;
@@ -631,7 +685,7 @@ pub(crate) async fn apply_reconciliation_hook(
         )
         .await?;
     }
-    close_source_rebuild_marker(connection, plan.generation).await?;
+    close_source_rebuild_marker(connection, marker).await?;
     validate_sqlite_integrity_after_rebuild(connection).await?;
     validate_active_hook_state_fast(connection).await
 }
@@ -639,7 +693,7 @@ pub(crate) async fn apply_reconciliation_hook(
 async fn open_source_rebuild_marker(
     connection: &mut SqliteConnection,
     plan: &SourceRebuildPlan,
-) -> Result<(), RadrootsEventStoreError> {
+) -> Result<SourceRebuildMarkerTokenV1, RadrootsEventStoreError> {
     let prior_generation = plan
         .prior
         .as_ref()
@@ -667,7 +721,10 @@ async fn open_source_rebuild_marker(
     .bind(plan.prior.as_ref().map(|state| state.last_transition_seq))
     .execute(&mut *connection)
     .await?;
-    require_expected_insert(inserted.rows_affected(), "source rebuild marker")
+    require_expected_insert(inserted.rows_affected(), "source rebuild marker")?;
+    Ok(SourceRebuildMarkerTokenV1 {
+        generation: plan.generation,
+    })
 }
 
 async fn append_source_generation(
@@ -732,12 +789,12 @@ async fn rotate_source_state(
 
 async fn close_source_rebuild_marker(
     connection: &mut SqliteConnection,
-    generation: RadrootsEventStoreSourceGeneration,
+    marker: SourceRebuildMarkerTokenV1,
 ) -> Result<(), RadrootsEventStoreError> {
     let deleted = sqlx::query(
         "DELETE FROM radroots_event_store_source_rebuild_marker WHERE singleton = 1 AND target_generation = ?",
     )
-    .bind(generation.as_bytes().as_slice())
+    .bind(marker.generation.as_bytes().as_slice())
     .execute(&mut *connection)
     .await?;
     if deleted.rows_affected() != 1 {
@@ -808,6 +865,29 @@ async fn validate_rebuild_hook_state_with_events(
     validate_hook_state_with_events(connection, &state, events).await
 }
 
+async fn validate_raw_source_rebuild_core_with_events_v1(
+    connection: &mut SqliteConnection,
+    generation: RadrootsEventStoreSourceGeneration,
+    events: &[ReconciledEvent],
+) -> Result<(), RadrootsEventStoreError> {
+    validate_active_rebuild_marker(connection, generation).await?;
+    let state = read_source_state(connection).await?;
+    if state.generation != generation {
+        return hook_drift(
+            "open rebuild marker target does not match active source generation".to_owned(),
+        );
+    }
+    validate_source_raw_authority_with_state(connection, &state).await?;
+    validate_transition_interval_full(connection, &state).await?;
+    validate_derived_event_storage(connection, events).await?;
+    validate_raw_heads(connection, events).await?;
+    validate_event_coordinate_facts(connection, state.generation, events).await?;
+    let requests = validate_nip09_fact_graph(connection, state.generation, events).await?;
+    validate_addressable_state(connection, state.generation, events, &requests).await?;
+    validate_transition_history(connection, &state, events).await?;
+    validate_latest_transitions_match_state(connection, state.generation).await
+}
+
 async fn validate_hook_state_with_events(
     connection: &mut SqliteConnection,
     state: &SourceState,
@@ -828,8 +908,8 @@ pub(crate) async fn validate_active_hook_state_fast(
     connection: &mut SqliteConnection,
 ) -> Result<(), RadrootsEventStoreError> {
     // Supported writes are guarded transactionally. Reopen validates only
-    // constant-cost authority bounds; full history/state and cursor inventory
-    // comparisons remain part of migration and rebuild audits.
+    // constant-cost authority bounds; full history/state checks remain part of
+    // migration and rebuild audits, while cursor inventory is migration-only.
     validate_rebuild_marker_absent(connection).await?;
     validate_structural_source_state_fast(connection)
         .await
@@ -976,12 +1056,25 @@ async fn validate_active_rebuild_marker(
 async fn validate_projection_cursor_authority(
     connection: &mut SqliteConnection,
 ) -> Result<(), RadrootsEventStoreError> {
+    let probe_limit = i64::from(RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1) + 1;
+    let cursor_probe = sqlx::query("SELECT 1 FROM projection_cursor LIMIT ?")
+        .bind(probe_limit)
+        .fetch_all(&mut *connection)
+        .await?;
+    validate_projection_cursor_cardinality_v1(cursor_probe.len())?;
+    let identity_probe =
+        sqlx::query("SELECT 1 FROM radroots_event_store_projection_cursor_source LIMIT ?")
+            .bind(probe_limit)
+            .fetch_all(&mut *connection)
+            .await?;
+    validate_projection_cursor_cardinality_v1(identity_probe.len())?;
+
     let raw_high_water: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(seq), 0) FROM event_envelopes")
             .fetch_one(&mut *connection)
             .await?;
-    let invalid_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)
+    let invalid: Option<i64> = sqlx::query_scalar(
+        "SELECT 1
          FROM projection_cursor AS cursor
          LEFT JOIN radroots_event_store_projection_cursor_source AS source
            ON source.projection_id = cursor.projection_id
@@ -1004,29 +1097,61 @@ async fn validate_projection_cursor_authority(
                 typeof(source.source_generation) != 'blob'
                 OR length(source.source_generation) != 32
               )
-            )",
+            )
+         LIMIT 1",
     )
     .bind(raw_high_water)
-    .fetch_one(&mut *connection)
+    .fetch_optional(&mut *connection)
     .await?;
-    if invalid_count != 0 {
-        return hook_drift(format!(
-            "{invalid_count} projection cursor identities are invalid or ahead of raw source authority"
-        ));
+    if invalid.is_some() {
+        return hook_drift(
+            "a projection cursor identity is invalid or ahead of raw source authority".to_owned(),
+        );
     }
-    let orphan_identity_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)
+    let orphan_identity: Option<i64> = sqlx::query_scalar(
+        "SELECT 1
          FROM radroots_event_store_projection_cursor_source AS source
          LEFT JOIN projection_cursor AS cursor
            ON cursor.projection_id = source.projection_id
-         WHERE cursor.projection_id IS NULL",
+         WHERE cursor.projection_id IS NULL
+         LIMIT 1",
     )
-    .fetch_one(&mut *connection)
+    .fetch_optional(&mut *connection)
     .await?;
-    if orphan_identity_count != 0 {
-        return hook_drift(format!(
-            "{orphan_identity_count} projection cursor source identities have no cursor"
-        ));
+    if orphan_identity.is_some() {
+        return hook_drift("a projection cursor source identity has no cursor".to_owned());
+    }
+    Ok(())
+}
+
+pub(crate) async fn preflight_projection_cursor_insert_v1(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsEventStoreError> {
+    let rows = sqlx::query("SELECT 1 FROM projection_cursor LIMIT ?")
+        .bind(i64::from(
+            RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1,
+        ))
+        .fetch_all(&mut *connection)
+        .await?;
+    if rows.len()
+        >= usize::try_from(RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1)
+            .unwrap_or(usize::MAX)
+    {
+        return Err(RadrootsEventStoreError::ProjectionCursorCapacityExceeded {
+            current: RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1,
+            limit: RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1,
+        });
+    }
+    Ok(())
+}
+
+fn validate_projection_cursor_cardinality_v1(
+    observed: usize,
+) -> Result<(), RadrootsEventStoreError> {
+    let limit = RADROOTS_EVENT_STORE_PROJECTION_CURSOR_COUNT_LIMIT_V1;
+    let current = u32::try_from(observed).unwrap_or(u32::MAX);
+    if current > limit {
+        return Err(RadrootsEventStoreError::ProjectionCursorCapacityExceeded { current, limit });
     }
     Ok(())
 }
@@ -2609,7 +2734,7 @@ fn desired_addressable_states(
             d_tag.as_str(),
             winner.event_seq,
             event,
-            request_index.matching(event.verified_event.event()),
+            &request_index,
         )?;
         desired.insert((i64::from(kind), pubkey.to_string(), d_tag), state);
     }
@@ -2803,7 +2928,8 @@ fn expected_transition_history(
         .iter()
         .map(|event| (event.verified_event.event().id_str(), event))
         .collect::<BTreeMap<_, _>>();
-    let mut requests = admitted_nip09_requests(&baseline_events)?;
+    let requests = admitted_nip09_requests(&baseline_events)?;
+    let mut request_index = RequestIndex::new(&requests);
     let mut winners = select_raw_head_winners(&baseline_events);
     let mut states = desired_addressable_states(&baseline_events, &requests)?;
     let mut transitions = Vec::new();
@@ -2828,34 +2954,12 @@ fn expected_transition_history(
             && event.verified_event.event().kind_u32() == 5
         {
             let request = admitted_nip09_request(event)?;
-            for (coordinate, winner) in &winners {
-                let RadrootsEventHeadCoordinate::Addressable {
-                    kind,
-                    pubkey,
-                    d_tag,
-                } = coordinate
-                else {
-                    continue;
-                };
-                let target = event_by_id
-                    .get(winner.candidate.event_id.as_str())
-                    .ok_or_else(|| RadrootsEventStoreError::MigrationHookStateDrift {
-                        hook_id: NIP09_HOOK_ID,
-                        reason: format!(
-                            "raw head `{}` has no reconciled event",
-                            winner.candidate.event_id
-                        ),
-                    })?;
-                if request_references_event(&request, target.verified_event.event()) {
-                    affected_coordinates.insert((
-                        i64::from(*kind),
-                        pubkey.to_string(),
-                        d_tag.clone(),
-                    ));
-                }
-            }
-            requests.push(request);
-            requests.sort_by(|left, right| left.event().id().cmp(right.event().id()));
+            affected_coordinates.extend(request_affected_addressable_coordinates(
+                &request,
+                &winners,
+                &event_by_id,
+            ));
+            request_index.insert(&request);
         } else if matches!(raw_head_decision, RadrootsRawHeadDecision::Applied)
             && let RadrootsEventHeadCandidateResult::Candidate(candidate) =
                 event_head_candidate_for_nip01_event_v1(event.verified_event.event())
@@ -2868,7 +2972,6 @@ fn expected_transition_history(
             affected_coordinates.insert((i64::from(kind), pubkey.to_string(), d_tag));
         }
 
-        let request_index = RequestIndex::new(&requests);
         for (kind, pubkey, d_tag) in affected_coordinates {
             let key = (kind, pubkey.clone(), d_tag.clone());
             let coordinate = RadrootsEventHeadCoordinate::Addressable {
@@ -2896,14 +2999,13 @@ fn expected_transition_history(
                         winner.candidate.event_id
                     ),
                 })?;
-            let matching = request_index.matching(target.verified_event.event());
             let desired = addressable_state_for_event(
                 kind,
                 &pubkey,
                 &d_tag,
                 winner.event_seq,
                 target,
-                matching,
+                &request_index,
             )?;
             let prior = states.get(&key);
             if prior == Some(&desired) {
@@ -2962,22 +3064,56 @@ fn admitted_nip09_request(
     })
 }
 
-fn request_references_event(
+fn request_affected_addressable_coordinates<'a>(
     request: &RadrootsAdmittedNip09DeletionRequestEventV1,
-    event: &RadrootsEventEnvelope,
-) -> bool {
-    request
-        .projection()
-        .event_targets()
-        .iter()
-        .any(|target| target.event_id() == event.id())
-        || nip01_coordinate_key(event).is_some_and(|(kind, pubkey, d_tag)| {
-            request.projection().address_targets().iter().any(|target| {
-                i64::from(target.coordinate().kind()) == kind
-                    && target.coordinate().pubkey().as_str() == pubkey
-                    && target.coordinate().identifier() == d_tag
-            })
-        })
+    winners: &BTreeMap<RadrootsEventHeadCoordinate, RawHeadWinner>,
+    event_by_id: &BTreeMap<&'a str, &'a ReconciledEvent>,
+) -> BTreeSet<(i64, String, String)> {
+    let mut affected = BTreeSet::new();
+    for target in request.projection().event_targets() {
+        let Some(event) = event_by_id.get(target.event_id().as_str()) else {
+            continue;
+        };
+        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+            event_head_candidate_for_nip01_event_v1(event.verified_event.event())
+        else {
+            continue;
+        };
+        let coordinate = &candidate.coordinate;
+        let RadrootsEventHeadCoordinate::Addressable {
+            kind,
+            pubkey,
+            d_tag,
+        } = coordinate
+        else {
+            continue;
+        };
+        if winners
+            .get(coordinate)
+            .is_some_and(|winner| winner.candidate.event_id == candidate.event_id)
+        {
+            affected.insert((i64::from(*kind), pubkey.to_string(), d_tag.clone()));
+        }
+    }
+    for target in request.projection().address_targets() {
+        let kind = target.coordinate().kind();
+        if !(30_000..=39_999).contains(&kind) {
+            continue;
+        }
+        let coordinate = RadrootsEventHeadCoordinate::Addressable {
+            kind,
+            pubkey: target.coordinate().pubkey().clone(),
+            d_tag: target.coordinate().identifier().to_owned(),
+        };
+        if winners.contains_key(&coordinate) {
+            affected.insert((
+                i64::from(kind),
+                target.coordinate().pubkey().as_str().to_owned(),
+                target.coordinate().identifier().to_owned(),
+            ));
+        }
+    }
+    affected
 }
 
 fn addressable_transition_fact(
@@ -3018,34 +3154,26 @@ fn addressable_transition_fact(
     }
 }
 
-fn addressable_state_for_event<'a>(
+fn addressable_state_for_event(
     kind: i64,
     pubkey: &str,
     d_tag: &str,
     event_seq: i64,
     event: &ReconciledEvent,
-    requests: impl IntoIterator<Item = &'a RadrootsAdmittedNip09DeletionRequestEventV1>,
+    request_index: &RequestIndex,
 ) -> Result<AddressableHeadState, RadrootsEventStoreError> {
     let mut state = addressable_state_base(kind, pubkey, d_tag, event_seq, event)?;
     if event.admission.status != RadrootsEventAdmissionStatus::Admitted {
         return Ok(state);
     }
 
-    let decision =
-        evaluate_nip09_suppression_from_borrowed_requests_v1(&event.verified_event, requests);
-    state.nip09_outcome = Some(decision.outcome().code().to_owned());
-    state.nip09_reason = Some(decision.reason().code().to_owned());
-    state.event_reference_request_id = decision
-        .event_reference()
-        .map(|evidence| evidence.request_id().as_str().to_owned());
-    if let Some(evidence) = decision.address_reference() {
-        state.address_reference_request_id = Some(evidence.request_id().as_str().to_owned());
-        state.address_reference_cutoff = Some(i64_from_u64(
-            "address_reference_cutoff",
-            evidence.inclusive_cutoff(),
-        )?);
-    }
-    state.visibility = match decision.outcome() {
+    let decision = request_index.decision(event.verified_event.event())?;
+    state.nip09_outcome = Some(decision.outcome.code().to_owned());
+    state.nip09_reason = Some(decision.reason.to_owned());
+    state.event_reference_request_id = decision.event_reference_request_id;
+    state.address_reference_request_id = decision.address_reference_request_id;
+    state.address_reference_cutoff = decision.address_reference_cutoff;
+    state.visibility = match decision.outcome {
         RadrootsNip09SuppressionOutcome::Visible => "visible",
         RadrootsNip09SuppressionOutcome::Suppressed => "suppressed",
     }
@@ -4003,9 +4131,9 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
     }
 
     #[test]
-    fn request_index_borrows_one_maximum_shape_request_across_all_target_heads() {
+    fn request_index_reduces_maximum_shape_requests_once_and_decides_by_lookup() {
         let author = fixture_author();
-        let request_tags = (0..RADROOTS_NIP09_DELETION_TAG_MAX_COUNT)
+        let address_tags = (0..RADROOTS_NIP09_DELETION_TAG_MAX_COUNT)
             .map(|index| {
                 vec![
                     "a".to_owned(),
@@ -4013,39 +4141,59 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
                 ]
             })
             .collect::<Vec<_>>();
-        let request = admitted_request(REQUEST_CREATED_AT, request_tags, "maximum fanout");
+        let address_request =
+            admitted_request(REQUEST_CREATED_AT, address_tags, "maximum address fanout");
+        let event_tags = (0..RADROOTS_NIP09_DELETION_TAG_MAX_COUNT)
+            .map(|index| vec!["e".to_owned(), format!("{:064x}", index + 1)])
+            .collect::<Vec<_>>();
+        let event_request =
+            admitted_request(REQUEST_CREATED_AT + 1, event_tags, "maximum event fanout");
         assert_eq!(
-            request.event().tag_slices().len(),
+            address_request.event().tag_slices().len(),
             RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
         );
         assert_eq!(
-            request.projection().address_targets().len(),
+            address_request.projection().address_targets().len(),
             RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
         );
-        let request_id = request.event().id_str().to_owned();
-        let requests = vec![request];
+        assert_eq!(
+            event_request.projection().event_targets().len(),
+            RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
+        );
+        let request_id = address_request.event().id_str().to_owned();
+        let requests = vec![address_request, event_request];
         let request_index = RequestIndex::new(&requests);
 
-        assert!(request_index.event_targets.is_empty());
+        assert_eq!(
+            request_index.event_targets.len(),
+            RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
+        );
         assert_eq!(
             request_index.address_targets.len(),
             RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
         );
-        assert_eq!(
+        assert!(
             request_index
                 .address_targets
                 .values()
-                .map(Vec::len)
-                .sum::<usize>(),
-            RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
+                .all(|evidence| { evidence.authorized.is_some() && !evidence.unauthorized })
         );
 
         for index in 0..RADROOTS_NIP09_DELETION_TAG_MAX_COUNT {
             let target = unsigned_addressable_target(author.as_str(), index);
-            let mut matching = request_index.matching(&target);
-            let matched = matching.next().expect("indexed request");
-            assert!(core::ptr::eq(matched, &requests[0]));
-            assert!(matching.next().is_none());
+            let decision = request_index.decision(&target).expect("indexed decision");
+            assert_eq!(
+                decision.outcome,
+                RadrootsNip09SuppressionOutcome::Suppressed
+            );
+            assert_eq!(
+                decision.reason,
+                RadrootsNip09SuppressionReason::AddressReferenceAtOrBeforeCutoff.code()
+            );
+            assert_eq!(
+                decision.address_reference_request_id.as_deref(),
+                Some(request_id.as_str())
+            );
         }
 
         let identifier = fanout_identifier(0);
@@ -4072,7 +4220,7 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
             identifier.as_str(),
             event.seq,
             &event,
-            request_index.matching(event.verified_event.event()),
+            &request_index,
         )
         .expect("suppressed addressable state");
 
@@ -4092,22 +4240,28 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
     }
 
     #[test]
-    fn request_index_merges_event_and_address_indices_once_in_canonical_order() {
+    fn request_index_reduces_event_and_address_evidence_canonically() {
         let author = fixture_author();
-        let target = unsigned_addressable_target(author.as_str(), 0);
+        let target = verify_nip01_event_v1(signed_event(
+            TARGET_CREATED_AT,
+            KIND_LIST_SET_RELAY,
+            vec![vec!["d".to_owned(), fanout_identifier(0)]],
+            "{}",
+        ))
+        .expect("verified target");
         let target_coordinate = coordinate(author.as_str(), fanout_identifier(0).as_str());
         let mut requests = vec![
             admitted_request(
                 REQUEST_CREATED_AT,
                 vec![
-                    vec!["e".to_owned(), target.id_str().to_owned()],
+                    vec!["e".to_owned(), target.event().id_str().to_owned()],
                     vec!["a".to_owned(), target_coordinate.clone()],
                 ],
                 "both",
             ),
             admitted_request(
                 REQUEST_CREATED_AT + 1,
-                vec![vec!["e".to_owned(), target.id_str().to_owned()]],
+                vec![vec!["e".to_owned(), target.event().id_str().to_owned()]],
                 "event",
             ),
             admitted_request(
@@ -4118,29 +4272,83 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
         ];
         requests.sort_by(|left, right| left.event().id().cmp(right.event().id()));
         let request_index = RequestIndex::new(&requests);
-        let coordinate_key = nip01_coordinate_key(&target).expect("target coordinate");
+        let coordinate_key = nip01_coordinate_key(target.event()).expect("target coordinate");
 
         assert_eq!(
             request_index
                 .event_targets
-                .get(target.id_str())
+                .get(target.event().id_str())
                 .expect("event indices")
                 .len(),
-            2
+            1
+        );
+        let address_evidence = request_index
+            .address_targets
+            .get(&coordinate_key)
+            .expect("address evidence");
+        assert!(address_evidence.authorized.is_some());
+        assert!(!address_evidence.unauthorized);
+        let expected_event_request_id = requests
+            .iter()
+            .filter(|request| {
+                request
+                    .projection()
+                    .event_targets()
+                    .iter()
+                    .any(|event_target| event_target.event_id().as_str() == target.event().id_str())
+            })
+            .map(|request| request.event().id_str())
+            .min()
+            .expect("event evidence");
+        let expected_address_request_id = requests
+            .iter()
+            .filter(|request| {
+                request
+                    .projection()
+                    .address_targets()
+                    .iter()
+                    .any(|address_target| {
+                        i64::from(address_target.coordinate().kind()) == coordinate_key.0
+                            && address_target.coordinate().pubkey().as_str()
+                                == coordinate_key.1.as_str()
+                            && address_target.coordinate().identifier() == coordinate_key.2.as_str()
+                    })
+            })
+            .max_by(|left, right| {
+                left.event()
+                    .created_at_u64()
+                    .cmp(&right.event().created_at_u64())
+                    .then_with(|| right.event().id().cmp(left.event().id()))
+            })
+            .map(|request| request.event().id_str())
+            .expect("address evidence");
+        let decision = request_index
+            .decision(target.event())
+            .expect("indexed decision");
+        assert_eq!(
+            decision.reason,
+            RadrootsNip09SuppressionReason::EventIdAndAddressReference.code()
         );
         assert_eq!(
-            request_index
-                .address_targets
-                .get(&coordinate_key)
-                .expect("address indices")
-                .len(),
-            2
+            decision.event_reference_request_id.as_deref(),
+            Some(expected_event_request_id)
         );
-        let matching = request_index.matching(&target).collect::<Vec<_>>();
-        assert_eq!(matching.len(), 3);
-        for (expected, actual) in requests.iter().zip(matching) {
-            assert!(core::ptr::eq(expected, actual));
-        }
+        assert_eq!(
+            decision.address_reference_request_id.as_deref(),
+            Some(expected_address_request_id)
+        );
+
+        let mut reversed = requests.clone();
+        reversed.reverse();
+        reversed.push(requests[0].clone());
+        assert_eq!(
+            RequestIndex::new(&reversed)
+                .decision(target.event())
+                .expect("reversed repeated decision"),
+            decision
+        );
+        assert_request_index_matches_protocol(&target, &requests, &request_index);
+        assert_request_index_matches_protocol(&target, &reversed, &RequestIndex::new(&reversed));
     }
 
     type RawEventRows = Vec<(
@@ -4506,6 +4714,35 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         ))
         .expect("verified request");
         admit_verified_nip09_deletion_request_event_v1(verified).expect("admitted request")
+    }
+
+    fn assert_request_index_matches_protocol(
+        target: &RadrootsSignatureVerifiedEvent,
+        requests: &[RadrootsAdmittedNip09DeletionRequestEventV1],
+        index: &RequestIndex,
+    ) {
+        let expected = evaluate_nip09_suppression_from_borrowed_requests_v1(target, requests);
+        let actual = index.decision(target.event()).expect("indexed decision");
+        assert_eq!(actual.outcome, expected.outcome());
+        assert_eq!(actual.reason, expected.reason().code());
+        assert_eq!(
+            actual.event_reference_request_id.as_deref(),
+            expected
+                .event_reference()
+                .map(|evidence| evidence.request_id().as_str())
+        );
+        assert_eq!(
+            actual.address_reference_request_id.as_deref(),
+            expected
+                .address_reference()
+                .map(|evidence| evidence.request_id().as_str())
+        );
+        assert_eq!(
+            actual.address_reference_cutoff,
+            expected
+                .address_reference()
+                .map(|evidence| i64::try_from(evidence.inclusive_cutoff()).expect("cutoff range"))
+        );
     }
 
     fn unsigned_addressable_target(author: &str, index: usize) -> RadrootsEventEnvelope {

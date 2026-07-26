@@ -1,16 +1,13 @@
+// Frozen predecessor mutation fixtures intentionally retain non-runtime helpers.
 #![allow(dead_code)]
 
-use super::artifact_bundle::{
-    GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
-};
-use super::food_availability_projection::{
-    validate_food_availability_projection_manifest_under_lock,
-    validate_food_availability_projection_predecessor_production_sources_under_lock,
-};
+use super::artifact_bundle::{read_regular_file, with_artifact_bundle_transaction};
 use super::nip09_reconciliation::validate_current_event_store_successor_authority;
 use quote::ToTokens;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(test)]
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -37,8 +34,6 @@ const RAW_TAG_REJECTION_SCAN_BOUND: u64 = RAW_TAG_COUNT_LIMIT + 1;
 const RETAINED_GENERATION_REJECTION_SCAN_BOUND: u32 = RETAINED_SOURCE_GENERATION_LIMIT + 1;
 const SCHEMA_SHA256: &str = "d526d96ea02be12b4b0aed99e97cfdde17c4474ace67111506a7b900ee78b186";
 const HASH_ALGORITHM: &str = "sha256_bytes_v1";
-const WRITE_COMMAND: &str = "cargo xtask contract source-maintenance-manifest --write";
-
 const PREDECESSOR_HOOK_ID: &str = "food_availability_projection_v1";
 const PREDECESSOR_MANIFEST_RELATIVE: &str =
     "crates/event_store/contracts/food_availability_projection_v1.manifest.json";
@@ -73,10 +68,60 @@ const RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
 const RESULT_VECTOR_EXECUTOR_ID: &str =
     "radroots_event_store.source_maintenance_v1.result_vector_executor.v1";
 const RESULT_VECTOR_EXECUTOR_TEST: &str = "source_maintenance_v1_result_vector";
-const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
-const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
-const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "b48c71c7f40f45c89bd7c83935d48eac3a1a367c8f73f62262e8ee14404616b4";
+#[derive(Clone, Copy)]
+struct ImmutableArtifactSpec {
+    relative: &'static str,
+    byte_length: usize,
+    sha256: &'static str,
+}
+
+const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 9] = [
+    ImmutableArtifactSpec {
+        relative: MANIFEST_RELATIVE,
+        byte_length: 14_216,
+        sha256: "e8911e6e5710278969cbd15557a5b856b1575dfd11a655711403598370b41221",
+    },
+    ImmutableArtifactSpec {
+        relative: MANIFEST_SCHEMA_RELATIVE,
+        byte_length: 12_315,
+        sha256: "ad4a6c8ae9488fc8033792bc6952af04687f312901c1847d8c668a62913bb642",
+    },
+    ImmutableArtifactSpec {
+        relative: MANIFEST_SHA256_RELATIVE,
+        byte_length: 65,
+        sha256: "b6a6040932c092574f25caf0fa008a892ba9258f2848444edebbdbc3e441c633",
+    },
+    ImmutableArtifactSpec {
+        relative: GENERATED_DESCRIPTOR_RELATIVE,
+        byte_length: 18_723,
+        sha256: "5f988f800425cf36d4327c828b30943c2f79c1fa577ce80730dc13383a1466b1",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_CANONICAL_RELATIVE,
+        byte_length: 16_253,
+        sha256: "997aba2604a2b9d199fb87dc9d07942ca50d91863aeadcf3eeacf16d191dd71f",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_MIRROR_RELATIVE,
+        byte_length: 16_253,
+        sha256: "997aba2604a2b9d199fb87dc9d07942ca50d91863aeadcf3eeacf16d191dd71f",
+    },
+    ImmutableArtifactSpec {
+        relative: RESULT_VECTOR_EXECUTOR_RELATIVE,
+        byte_length: 23_510,
+        sha256: "a7487afdfe19fc5fc794811d0f0e6035203e1aabcf0a33a1d398f6b3555d38f3",
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_UP_RELATIVE,
+        byte_length: 19_841,
+        sha256: "425dc799f392b87f265a6fb81f89c4a1c7a5db8391ab0380970708cb9c66704d",
+    },
+    ImmutableArtifactSpec {
+        relative: MIGRATION_DOWN_RELATIVE,
+        byte_length: 5_172,
+        sha256: "fe44fd53c51545c08ea479b385e6781079dab70fc63da2a3c205d727a00ce860",
+    },
+];
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",
@@ -243,10 +288,6 @@ struct SourceSpec {
 
 const SOURCE_SPECS: &[SourceSpec] = &[
     SourceSpec {
-        role: "workspace_dependency_authority",
-        path: "Cargo.toml",
-    },
-    SourceSpec {
         role: "event_store_error_and_limits",
         path: "crates/event_store/src/error.rs",
     },
@@ -316,19 +357,6 @@ const SOURCE_SPECS: &[SourceSpec] = &[
 pub(super) fn source_contract_fixture_source_paths() -> Vec<&'static str> {
     SOURCE_SPECS.iter().map(|source| source.path).collect()
 }
-
-const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
-    "Cargo.toml",
-    "crates/event_store/src/error.rs",
-    "crates/event_store/src/generated.rs",
-    "crates/event_store/src/lib.rs",
-    "crates/event_store/src/migrations.rs",
-    "crates/event_store/src/model.rs",
-    "crates/event_store/src/nip09/reconciliation_v1.rs",
-    "crates/event_store/src/schema.rs",
-    "crates/event_store/src/store.rs",
-    "crates/event_store/src/store/protocol_reconciliation_v1.rs",
-];
 
 const GENERATED_ARTIFACT_PATHS: &[&str] = &[
     MANIFEST_RELATIVE,
@@ -520,9 +548,7 @@ struct VectorCase {
 }
 
 pub(crate) fn write_source_maintenance_manifest(workspace_root: &Path) -> Result<(), String> {
-    with_artifact_bundle_transaction(workspace_root, |transaction| {
-        let artifacts = expected_artifacts(workspace_root)?;
-        transaction.write(artifacts)?;
+    with_artifact_bundle_transaction(workspace_root, |_| {
         validate_source_maintenance_manifest_under_lock(workspace_root)
     })
 }
@@ -536,14 +562,6 @@ pub(crate) fn validate_source_maintenance_manifest(workspace_root: &Path) -> Res
 pub(super) fn validate_source_maintenance_manifest_under_lock(
     workspace_root: &Path,
 ) -> Result<(), String> {
-    let expected = expected_artifacts(workspace_root)?;
-    for artifact in expected {
-        let actual = read_regular_file(workspace_root, artifact.relative)?;
-        if actual != artifact.contents {
-            return Err(stale_error(artifact.relative));
-        }
-    }
-
     let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
     let manifest_value: Value = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
@@ -576,161 +594,28 @@ pub(super) fn validate_source_maintenance_manifest_under_lock(
     let vector: SourceMaintenanceVector = serde_json::from_slice(&vector_bytes)
         .map_err(|error| format!("parse {RESULT_VECTOR_CANONICAL_RELATIVE}: {error}"))?;
     validate_canonical_json(RESULT_VECTOR_CANONICAL_RELATIVE, &vector_bytes, &vector)?;
-    validate_result_vector(workspace_root, &vector)?;
-    Ok(())
-}
+    validate_immutable_result_vector(&vector)?;
 
-fn expected_artifacts(workspace_root: &Path) -> Result<Vec<GeneratedArtifact>, String> {
-    let schema = manifest_schema();
-    let schema_bytes = canonical_json_bytes(&schema)?;
-    let manifest = describe_manifest(workspace_root, &schema_bytes)?;
-    let manifest_bytes = canonical_json_bytes(&manifest)?;
-    let manifest_sha256 = sha256_hex(&manifest_bytes);
-    let descriptor = generated_descriptor(&manifest, &manifest_bytes, &manifest_sha256);
-    let vector_bytes = read_regular_file(workspace_root, RESULT_VECTOR_CANONICAL_RELATIVE)?;
-
-    Ok(vec![
-        GeneratedArtifact {
-            relative: MANIFEST_RELATIVE,
-            contents: manifest_bytes,
-        },
-        GeneratedArtifact {
-            relative: MANIFEST_SCHEMA_RELATIVE,
-            contents: schema_bytes,
-        },
-        GeneratedArtifact {
-            relative: MANIFEST_SHA256_RELATIVE,
-            contents: format!("{manifest_sha256}\n").into_bytes(),
-        },
-        GeneratedArtifact {
-            relative: GENERATED_DESCRIPTOR_RELATIVE,
-            contents: descriptor.into_bytes(),
-        },
-        GeneratedArtifact {
-            relative: RESULT_VECTOR_MIRROR_RELATIVE,
-            contents: vector_bytes,
-        },
-    ])
-}
-
-fn describe_manifest(
-    workspace_root: &Path,
-    schema_bytes: &[u8],
-) -> Result<SourceMaintenanceManifest, String> {
-    validate_food_availability_projection_manifest_under_lock(workspace_root)?;
-    validate_source_contract(workspace_root)?;
-    validate_predecessor_production_source_coverage(workspace_root)?;
-
-    let predecessor_bytes = read_regular_file(workspace_root, PREDECESSOR_MANIFEST_RELATIVE)?;
-    if predecessor_bytes.len() != PREDECESSOR_MANIFEST_BYTE_LENGTH
-        || sha256_hex(&predecessor_bytes) != PREDECESSOR_MANIFEST_SHA256
+    if manifest.migration.up.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[7].sha256
+        || manifest.migration.down.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[8].sha256
+        || manifest.result_vector.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[4].sha256
+        || manifest.result_vector.executor_sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[6].sha256
     {
         return Err(format!(
-            "{PREDECESSOR_MANIFEST_RELATIVE} does not match the immutable predecessor identity"
+            "{MANIFEST_RELATIVE} does not describe the immutable SourceMaintenance predecessor identity"
         ));
     }
-    validate_predecessor_public_api(&predecessor_bytes)?;
 
-    let vector_bytes = read_regular_file(workspace_root, RESULT_VECTOR_CANONICAL_RELATIVE)?;
-    let vector: SourceMaintenanceVector = serde_json::from_slice(&vector_bytes)
-        .map_err(|error| format!("parse {RESULT_VECTOR_CANONICAL_RELATIVE}: {error}"))?;
-    validate_canonical_json(RESULT_VECTOR_CANONICAL_RELATIVE, &vector_bytes, &vector)?;
-    validate_result_vector(workspace_root, &vector)?;
-
-    let migration_source = read_regular_file(workspace_root, MIGRATIONS_SOURCE_RELATIVE)?;
-    let catalog = catalog_from_migration_source(&migration_source)?;
-    validate_catalog(&catalog)?;
-    let executor = descriptor_for_file(workspace_root, RESULT_VECTOR_EXECUTOR_RELATIVE)?;
-    let migration_up = descriptor_for_file(workspace_root, MIGRATION_UP_RELATIVE)?;
-    let migration_down = descriptor_for_file(workspace_root, MIGRATION_DOWN_RELATIVE)?;
-    validate_migration_identity(&migration_up, &migration_down)?;
-
-    let source_files = SOURCE_SPECS
-        .iter()
-        .map(|spec| {
-            let bytes = if spec.path == MIGRATIONS_SOURCE_RELATIVE {
-                migration_source.clone()
-            } else {
-                read_regular_file(workspace_root, spec.path)?
-            };
-            Ok(SourceFileDescriptor {
-                role: spec.role.to_owned(),
-                path: spec.path.to_owned(),
-                byte_length: byte_length(spec.path, &bytes)?,
-                sha256: sha256_hex(&bytes),
-                hash_algorithm: HASH_ALGORITHM.to_owned(),
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-
-    Ok(SourceMaintenanceManifest {
-        schema_version: SCHEMA_VERSION,
-        contract_id: CONTRACT_ID.to_owned(),
-        hook_id: HOOK_ID.to_owned(),
-        manifest_schema: descriptor_for_bytes(MANIFEST_SCHEMA_RELATIVE, schema_bytes)?,
-        predecessor: PredecessorDescriptor {
-            hook_id: PREDECESSOR_HOOK_ID.to_owned(),
-            manifest: descriptor_for_bytes(PREDECESSOR_MANIFEST_RELATIVE, &predecessor_bytes)?,
-        },
-        migration: MigrationDescriptor {
-            version: MIGRATION_VERSION,
-            name: MIGRATION_NAME.to_owned(),
-            up: migration_up,
-            down: migration_down,
-            schema_sha256: SCHEMA_SHA256.to_owned(),
-            catalog,
-        },
-        source_maintenance: SourceMaintenanceDescriptor {
-            version: CAPACITY_VERSION,
-            event_contract_registry_version: EVENT_CONTRACT_REGISTRY_VERSION,
-            capacity_authority_id: CAPACITY_AUTHORITY_ID.to_owned(),
-            accounting: AccountingDescriptor {
-                algorithm: ACCOUNTING_ALGORITHM.to_owned(),
-                raw_event_columns: owned(RAW_EVENT_COLUMNS),
-                raw_tag_columns: owned(RAW_TAG_COLUMNS),
-                nullable_raw_tag_columns: owned(NULLABLE_RAW_TAG_COLUMNS),
-            },
-            limits: expected_limits(),
-            reopen_validation: ReopenValidationDescriptor {
-                mode: REOPEN_VALIDATION_MODE.to_owned(),
-                raw_event_rejection_scan_bound: RAW_EVENT_REJECTION_SCAN_BOUND,
-                raw_tag_rejection_scan_bound: RAW_TAG_REJECTION_SCAN_BOUND,
-                generation_history_validation: GENERATION_HISTORY_VALIDATION.to_owned(),
-                retained_generation_rejection_scan_bound: RETAINED_GENERATION_REJECTION_SCAN_BOUND,
-            },
-            rebuild_seal: RebuildSealDescriptor {
-                nip09_hook_id: NIP09_HOOK_ID.to_owned(),
-                nip09_manifest_sha256: NIP09_MANIFEST_SHA256.to_owned(),
-                food_hook_id: PREDECESSOR_HOOK_ID.to_owned(),
-                food_manifest_sha256: PREDECESSOR_MANIFEST_SHA256.to_owned(),
-                food_scope_fingerprint_sha256: FOOD_SCOPE_FINGERPRINT_SHA256.to_owned(),
-                active_generation_authority: ACTIVE_GENERATION_AUTHORITY.to_owned(),
-                marker_close_authority: MARKER_CLOSE_AUTHORITY.to_owned(),
-            },
-        },
-        entry_points: ENTRY_POINTS
-            .iter()
-            .map(|(role, rust_path)| EntryPointDescriptor {
-                role: (*role).to_owned(),
-                rust_path: (*rust_path).to_owned(),
-            })
-            .collect(),
-        source_files,
-        public_api: expected_public_api(),
-        result_vector: ResultVectorDescriptor {
-            canonical_path: RESULT_VECTOR_CANONICAL_RELATIVE.to_owned(),
-            mirror_path: RESULT_VECTOR_MIRROR_RELATIVE.to_owned(),
-            byte_length: byte_length(RESULT_VECTOR_CANONICAL_RELATIVE, &vector_bytes)?,
-            sha256: sha256_hex(&vector_bytes),
-            hash_algorithm: HASH_ALGORITHM.to_owned(),
-            executor_id: RESULT_VECTOR_EXECUTOR_ID.to_owned(),
-            executor_path: RESULT_VECTOR_EXECUTOR_RELATIVE.to_owned(),
-            executor_test: RESULT_VECTOR_EXECUTOR_TEST.to_owned(),
-            executor_byte_length: executor.byte_length,
-            executor_sha256: executor.sha256,
-            executor_hash_algorithm: HASH_ALGORITHM.to_owned(),
-        },
-    })
+    for artifact in IMMUTABLE_PREDECESSOR_ARTIFACTS {
+        let actual = read_regular_file(workspace_root, artifact.relative)?;
+        if actual.len() != artifact.byte_length || sha256_hex(&actual) != artifact.sha256 {
+            return Err(format!(
+                "immutable SourceMaintenance predecessor artifact {} does not match its authenticated byte identity",
+                artifact.relative
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn expected_limits() -> LimitDescriptor {
@@ -762,62 +647,6 @@ fn expected_public_api() -> PublicApiDescriptor {
 
 fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
-}
-
-fn validate_predecessor_production_source_coverage(workspace_root: &Path) -> Result<(), String> {
-    let source_paths = SOURCE_SPECS
-        .iter()
-        .map(|source| source.path)
-        .collect::<Vec<_>>();
-    let unique_source_paths = source_paths.iter().copied().collect::<BTreeSet<_>>();
-    if unique_source_paths.len() != source_paths.len() {
-        return Err("SourceMaintenance SOURCE_SPECS paths must be unique".to_owned());
-    }
-    for path in PREDECESSOR_SUPERSEDED_SOURCE_PATHS {
-        let count = source_paths
-            .iter()
-            .filter(|candidate| **candidate == *path)
-            .count();
-        if count != 1 {
-            return Err(format!(
-                "SourceMaintenance successor must current-byte-bind superseded predecessor path `{path}` exactly once; found {count}"
-            ));
-        }
-    }
-    let superseded = PREDECESSOR_SUPERSEDED_SOURCE_PATHS
-        .iter()
-        .copied()
-        .collect::<BTreeSet<_>>();
-    if superseded.len() != PREDECESSOR_SUPERSEDED_SOURCE_PATHS.len() {
-        return Err("SourceMaintenance predecessor supersession paths must be unique".to_owned());
-    }
-    validate_food_availability_projection_predecessor_production_sources_under_lock(
-        workspace_root,
-        PREDECESSOR_SUPERSEDED_SOURCE_PATHS,
-    )
-}
-
-fn validate_predecessor_public_api(predecessor_bytes: &[u8]) -> Result<(), String> {
-    let predecessor: Value = serde_json::from_slice(predecessor_bytes)
-        .map_err(|error| format!("parse {PREDECESSOR_MANIFEST_RELATIVE}: {error}"))?;
-    let actual = predecessor
-        .pointer("/public_api")
-        .and_then(Value::as_array)
-        .ok_or_else(|| format!("{PREDECESSOR_MANIFEST_RELATIVE} has no public_api array"))?
-        .iter()
-        .map(|value| {
-            value.as_str().map(str::to_owned).ok_or_else(|| {
-                format!("{PREDECESSOR_MANIFEST_RELATIVE} public_api values must be strings")
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    if actual != owned(INHERITED_PUBLIC_API) {
-        return Err(
-            "SourceMaintenance inherited public API must exactly equal the immutable FoodAvailability public API"
-                .to_owned(),
-        );
-    }
-    Ok(())
 }
 
 fn descriptor_for_file(workspace_root: &Path, relative: &str) -> Result<FileDescriptor, String> {
@@ -964,82 +793,7 @@ pub(super) fn validate_source_contract(workspace_root: &Path) -> Result<(), Stri
     validate_schema_capacity_authority(workspace_root)?;
     validate_generation_rebuild_authority(workspace_root)?;
     validate_sql_capacity_authority(workspace_root)?;
-    validate_contract_command_reachability_authority(workspace_root)?;
     validate_current_event_store_successor_authority(workspace_root)
-}
-
-fn validate_contract_command_reachability_authority(workspace_root: &Path) -> Result<(), String> {
-    let contract = rust_source(workspace_root, CONTRACT_COMMAND_SOURCE_RELATIVE)?;
-    let main = rust_source(workspace_root, XTASK_MAIN_SOURCE_RELATIVE)?;
-    validate_contract_command_reachability_sources(&contract, &main)
-}
-
-fn validate_contract_command_reachability_sources(
-    contract_source: &str,
-    main_source: &str,
-) -> Result<(), String> {
-    let contract = syn::parse_file(contract_source)
-        .map_err(|error| format!("parse {CONTRACT_COMMAND_SOURCE_RELATIVE}: {error}"))?;
-    let main = syn::parse_file(main_source)
-        .map_err(|error| format!("parse {XTASK_MAIN_SOURCE_RELATIVE}: {error}"))?;
-    let main_ast_sha256 = sha256_hex(compact_tokens(&main).as_bytes());
-    if main_ast_sha256 != XTASK_MAIN_FULL_AST_SHA256 {
-        return Err(format!(
-            "{XTASK_MAIN_SOURCE_RELATIVE} full dispatch AST authority drifted: expected {XTASK_MAIN_FULL_AST_SHA256}, found {main_ast_sha256}"
-        ));
-    }
-    for (relative, file, name, expected) in [
-        (
-            CONTRACT_COMMAND_SOURCE_RELATIVE,
-            &contract,
-            "validate_artifact_contracts",
-            r#"pub(crate) fn validate_artifact_contracts(
-                workspace_root: &Path
-            ) -> Result<(), String> {
-                validate_event_contract_registry_v7_inventory(workspace_root)?;
-                validate_nip09_reconciliation_manifest(workspace_root)?;
-                validate_food_availability_projection_manifest(workspace_root)?;
-                validate_source_maintenance_manifest(workspace_root)?;
-                validate_knowledge_contract_manifest(workspace_root)
-            }"#,
-        ),
-        (
-            XTASK_MAIN_SOURCE_RELATIVE,
-            &main,
-            "validate_contract",
-            r#"fn validate_contract() -> Result<(), String> {
-                radroots_protocol_contract_v1::validate_protocol_contract_v1()
-                    .map_err(|error| error.to_string())?;
-                let root = workspace_root();
-                dto_roots::check(&root)?;
-                contract::load_contract_bundle(&root)
-                    .and_then(|bundle| contract::validate_contract_bundle(&bundle))
-                    .and_then(|_| contract::validate_canonical_event_boundary(&root))
-                    .and_then(|_| contract::validate_artifact_contracts(&root))
-            }"#,
-        ),
-        (
-            XTASK_MAIN_SOURCE_RELATIVE,
-            &main,
-            "release_preflight_at",
-            r#"fn release_preflight_at(root: &Path) -> Result<(), String> {
-                dto_roots::check(root)?;
-                contract::validate_artifact_contracts(root)?;
-                contract::validate_release_preflight(root)
-            }"#,
-        ),
-    ] {
-        let actual = compact_tokens(exact_top_level_function(file, name)?);
-        let expected_file = syn::parse_file(expected)
-            .map_err(|error| format!("parse authoritative `{name}` function: {error}"))?;
-        let expected = compact_tokens(exact_top_level_function(&expected_file, name)?);
-        if actual != expected {
-            return Err(format!(
-                "{relative} `{name}` SourceMaintenance validation call-path authority drifted: expected `{expected}`, found `{actual}`"
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn validate_source_inventory() -> Result<(), String> {
@@ -2094,27 +1848,6 @@ fn exact_free_function_tokens(file: &syn::File, name: &str) -> Result<String, St
     Ok(compact_tokens(exact_free_function(file, name)?))
 }
 
-fn exact_top_level_function<'a>(
-    file: &'a syn::File,
-    name: &str,
-) -> Result<&'a syn::ItemFn, String> {
-    let matches = file
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Fn(function) if function.sig.ident == name => Some(function),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let [function] = matches.as_slice() else {
-        return Err(format!(
-            "governed Rust source must define top-level function `{name}` exactly once; found {}",
-            matches.len()
-        ));
-    };
-    Ok(function)
-}
-
 fn rust_source(workspace_root: &Path, relative: &str) -> Result<String, String> {
     let bytes = read_regular_file(workspace_root, relative)?;
     std::str::from_utf8(&bytes)
@@ -2301,78 +2034,7 @@ fn validate_manifest_shape(manifest: &SourceMaintenanceManifest) -> Result<(), S
     Ok(())
 }
 
-fn generated_descriptor(
-    manifest: &SourceMaintenanceManifest,
-    manifest_bytes: &[u8],
-    manifest_sha256: &str,
-) -> String {
-    let manifest_json = std::str::from_utf8(manifest_bytes).expect("canonical manifest is UTF-8");
-    let manifest_literal = format!("{manifest_json:?}");
-    format!(
-        "// @generated by `cargo xtask contract source-maintenance-manifest --write`; do not edit.\n\
-pub(crate) const SOURCE_MAINTENANCE_MANIFEST_JSON: &str = {manifest_literal};\n\
-pub(crate) const SOURCE_MAINTENANCE_MANIFEST_BYTE_LENGTH: usize = {};\n\
-pub(crate) const SOURCE_MAINTENANCE_MANIFEST_SHA256: &str =\n    \"{manifest_sha256}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION: u32 = {SCHEMA_VERSION};\n\
-pub(crate) const SOURCE_MAINTENANCE_CONTRACT_ID: &str =\n    \"{CONTRACT_ID}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_HOOK_ID: &str = \"{HOOK_ID}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_MIGRATION_VERSION: u32 = {MIGRATION_VERSION};\n\
-pub(crate) const SOURCE_MAINTENANCE_MIGRATION_NAME: &str = \"{MIGRATION_NAME}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_MIGRATION_UP_BYTE_LENGTH: usize = {};\n\
-pub(crate) const SOURCE_MAINTENANCE_MIGRATION_UP_SHA256: &str =\n    \"{}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_MIGRATION_DOWN_BYTE_LENGTH: usize = {};\n\
-pub(crate) const SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256: &str =\n    \"{}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_SCHEMA_SHA256: &str =\n    \"{SCHEMA_SHA256}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION: u32 = {EVENT_CONTRACT_REGISTRY_VERSION};\n\
-pub(crate) const SOURCE_MAINTENANCE_CAPACITY_VERSION: u32 = {CAPACITY_VERSION};\n\
-pub(crate) const SOURCE_MAINTENANCE_CAPACITY_AUTHORITY_ID: &str =\n    \"{CAPACITY_AUTHORITY_ID}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_ACCOUNTING_ALGORITHM: &str = \"{ACCOUNTING_ALGORITHM}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_RAW_EVENT_COLUMNS: &[&str] = &{};\n\
-pub(crate) const SOURCE_MAINTENANCE_RAW_TAG_COLUMNS: &[&str] =\n    &{};\n\
-pub(crate) const SOURCE_MAINTENANCE_NULLABLE_RAW_TAG_COLUMNS: &[&str] = &{};\n\
-pub(crate) const SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES: &[&str] = &{};\n\
-pub(crate) const SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT: u64 = {RAW_EVENT_COUNT_LIMIT};\n\
-pub(crate) const SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT: u64 = {RAW_TAG_COUNT_LIMIT};\n\
-pub(crate) const SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT: u64 = {RAW_EVENT_TEXT_BYTES_LIMIT};\n\
-pub(crate) const SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT: u64 = {RAW_TAG_TEXT_BYTES_LIMIT};\n\
-pub(crate) const SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT: u32 = {RETAINED_SOURCE_GENERATION_LIMIT};\n\
-pub(crate) const SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID: &str = \"{PREDECESSOR_HOOK_ID}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256: &str =\n    \"{PREDECESSOR_MANIFEST_SHA256}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_RESULT_VECTOR_SHA256: &str =\n    \"{}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_ID: &str =\n    \"{RESULT_VECTOR_EXECUTOR_ID}\";\n\
-pub(crate) const SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_SHA256: &str =\n    \"{}\";\n",
-        manifest_bytes.len(),
-        usize::try_from(manifest.migration.up.byte_length).expect("up length fits usize"),
-        manifest.migration.up.sha256,
-        usize::try_from(manifest.migration.down.byte_length).expect("down length fits usize"),
-        manifest.migration.down.sha256,
-        rust_multiline_string_slice(RAW_EVENT_COLUMNS),
-        rust_string_slice(RAW_TAG_COLUMNS),
-        rust_string_slice(NULLABLE_RAW_TAG_COLUMNS),
-        rust_multiline_string_slice(EXPECTED_REPLACED_CATALOG_OBJECTS),
-        manifest.result_vector.sha256,
-        manifest.result_vector.executor_sha256,
-    )
-}
-
-fn rust_string_slice(values: &[&str]) -> String {
-    let values = values
-        .iter()
-        .map(|value| format!("{value:?}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("[{values}]")
-}
-
-fn rust_multiline_string_slice(values: &[&str]) -> String {
-    let values = values
-        .iter()
-        .map(|value| format!("    {value:?},"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!("[\n{values}\n]")
-}
-
+#[cfg(test)]
 fn manifest_schema() -> Value {
     let path_pattern = "^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$";
     let file = json!({
@@ -2680,10 +2342,6 @@ fn validate_sha256(label: &str, value: &str) -> Result<(), String> {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
-}
-
-fn stale_error(relative: &str) -> String {
-    format!("{relative} is stale; run `{WRITE_COMMAND}`")
 }
 
 #[derive(Clone, Copy)]
@@ -3084,10 +2742,7 @@ const EXPECTED_VECTOR_CASES: &[ExpectedVectorCase] = &[
     },
 ];
 
-fn validate_result_vector(
-    workspace_root: &Path,
-    vector: &SourceMaintenanceVector,
-) -> Result<(), String> {
+fn validate_immutable_result_vector(vector: &SourceMaintenanceVector) -> Result<(), String> {
     if vector.schema_version != SCHEMA_VERSION
         || vector.contract_id != CONTRACT_ID
         || vector.capacity_version != CAPACITY_VERSION
@@ -3145,632 +2800,13 @@ fn validate_result_vector(
             }
         }
     }
-    validate_delegated_test_authorities(workspace_root, vector)
-}
-
-#[derive(Clone, Copy)]
-struct DelegatedAuthoritySpec {
-    path: &'static str,
-    test: &'static str,
-    ordered_markers: &'static [&'static str],
-}
-
-const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
-    "19c405fc91468997aa53f08ebbaed82c526bf4810b2175ad9034d95dc95b8597";
-const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "ba44c729ebba14e658ec7b48f7ba395fd4e8fb3d597d306df5cfa7010a4f9bac";
-
-#[derive(Clone, Debug, Serialize)]
-struct ExecutableAuthorityIdentity {
-    path: String,
-    test: String,
-    tokens: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct BoundAuthoritySourceIdentity {
-    path: String,
-    tokens: String,
-}
-
-const DELEGATED_AUTHORITIES: &[DelegatedAuthoritySpec] = &[
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "exact_capacity_boundary_allows_duplicate_observation_and_ephemeral_noop",
-        ordered_markers: &[
-            "RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1",
-            "validate_source_capacity_authority_fast_v1",
-            "duplicate.persistence.is_duplicate()",
-            "SourceCapacityExceeded",
-            "RadrootsEventPersistence::NotPersisted",
-            "assert_eq!(ephemeral_observation_count,0)",
-            "transaction.rollback().await",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "borrowed_ingest_savepoint_rolls_back_post_core_authority_forge",
-        ordered_markers: &[
-            "priorcallerwork",
-            "capacity_after_prior",
-            "expect_err(\"post-corerawauthoritymutationmustfail\")",
-            "MigrationHookStateDrift",
-            "capacity_after_rollback,capacity_after_prior",
-            "callermaycommitpriorworkafterfailedingest",
-            "raw_event(prior_event.id_str())",
-            "raw_event(trigger_event.id_str())",
-            "raw_event(forged_event.id_str())",
-            "trade_mutation_count,0",
-            "transition_count,0",
-            "capacity_after_prior",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "every_prospective_capacity_dimension_accepts_exact_and_rejects_one_over",
-        ordered_markers: &[
-            "RadrootsEventStoreSourceCapacityResourceV1::RawEvents",
-            "RadrootsEventStoreSourceCapacityResourceV1::RawTags",
-            "RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes",
-            "RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes",
-            "capacity_with(resource,limit-1)",
-            "delta_with(resource,1)",
-            "capacity_with(resource,limit)",
-            "SourceCapacityExceeded",
-            "requested:1",
-            "capacity_with(resource,limit+1)",
-            "requested:0",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "v3_to_v4_under_limit_backfills_exact_capacity_and_preserves_source",
-        ordered_markers: &[
-            "&EVENT_STORE_MIGRATIONS[..3]",
-            "event_envelopes",
-            "active_generation",
-            "RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT",
-            "Managed{version:4}",
-            "radroots_event_store_source_capacity_v1",
-            "assert_eq!(capacity,(generation_before,1,0,event_bytes,0,1,8))",
-            "preserved",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "v3_to_v4_rejects_prior_transition_drift_atomically",
-        ordered_markers: &[
-            "&EVENT_STORE_MIGRATIONS[..3]",
-            "predecessor_trigger_sql",
-            "corruption.commit().await",
-            "expect_err(\"v4upgrademustnotrepaircorruptmanaged-v3hookstate\")",
-            "MigrationHookStateDrift{hook_id:\"nip09_reconciliation_v1\"",
-            "ledger_after,ledger_before",
-            "v4_objects,0",
-            "v4_ledger_rows,0",
-            "schema_object_sql(&pool,name).await,*sql",
-            "Managed{version:3}",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "source_capacity_is_rechecked_for_every_rebuild_bound_migration",
-        ordered_markers: &[
-            "raw_events:0",
-            "UnledgeredBaseline",
-            "&EVENT_STORE_MIGRATIONS[..3]",
-            "expect_err(\"v4capacityexcessmustfail\")",
-            "SourceCapacityExceeded",
-            "Managed{version:3}",
-            "radroots_event_store_source_capacity_v1",
-            "assert_eq!(v4_object_count,0)",
-            "assert_eq!(v4_ledger_count,0)",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "v4_rejects_persisted_legacy_ephemeral_rows_atomically",
-        ordered_markers: &[
-            "&EVENT_STORE_MIGRATIONS[..3]",
-            "kind,tags_json,content",
-            "20000",
-            "begin_with(\"BEGINIMMEDIATE\")",
-            "expect_err(\"persistedephemeralsourcemustrejectv4\")",
-            "PersistedEphemeralRawEvent",
-            "Managed{version:3}",
-            "radroots_event_store_source_capacity_v1",
-            "assert_eq!(v4_object_count,0)",
-            "assert_eq!(v4_ledger_count,0)",
-            "assert_eq!(raw_count,1)",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "reopen_full_measure_detects_every_persisted_capacity_dimension",
-        ordered_markers: &[
-            "raw_event_count=1",
-            "raw_tag_count=1",
-            "raw_event_bytes=1",
-            "raw_tag_bytes=1",
-            "RadrootsEventStore::open_file(&path).await",
-            "SourceCapacityStateDrift",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "reopen_stops_at_the_first_raw_event_one_over_before_ephemeral_probe",
-        ordered_markers: &[
-            "value<25001",
-            "CASEWHENvalue=25001THEN20000ELSE1END",
-            "RadrootsEventStore::open_file(&path).await",
-            "SourceCapacityExceeded",
-            "current:25_000",
-            "requested:1",
-            "limit:25_000",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "ninth_current_v4_rebuild_is_typed_and_preflight_atomic",
-        ordered_markers: &[
-            "forordinalin2_u8..=8",
-            "assert_eq!(capacity_before.retained_generation_count(),8)",
-            "PanickingGeneration",
-            "expect_err(\"ninthrebuildmustfailbeforeentropyormutation\")",
-            "SourceGenerationHistoryLimitReached{current:8,limit:8,}",
-            "assert_eq!(source_authority_snapshot(&store).await,source_before)",
-            "assert_eq!(raw_authority_digest(&store).await,raw_before)",
-            "assert_eq!(normalized_nip09_snapshot(&store).await,nip09_before)",
-            "assert_eq!(food_after,food_before)",
-            "assert_eq!(derived_after,(derived_before.0,derived_before.1,derived_before.2,0))",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "generation_sql_backstop_allows_exact_append_and_is_conflict_safe_one_over",
-        ordered_markers: &[
-            "retained_generation_count=retained_generation_limit-1",
-            "exactgenerationboundarymustappend",
-            "assert_eq!(retained_count,8)",
-            "sourcegenerationalreadyexists",
-            "uniquegenerationappendmusthittheSQLcapacitybackstop",
-            "sqlx::Error::Database",
-            "retainedsourcegenerationlimitreached",
-            "transaction.rollback().await",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "current_v4_rebuild_rotates_capacity_and_food_authority_end_to_end",
-        ordered_markers: &[
-            "apply_reconciliation_hook",
-            "after.retained_generation_count()",
-            "before.retained_generation_count()+1",
-            "assert_eq!(marker_count,0)",
-            "audit_food_availability_projection_v1",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "marker_close_sql_backstop_rejects_each_required_seal_drift",
-        ordered_markers: &[
-            "rebuildmarkercannotclosebeforecapacity,NIP-09,andFoodAvailabilitysealsagree",
-            "fordriftin[\"capacity\",\"nip09\",\"food\",\"fts\"]",
-            "radroots_event_store_source_capacity_update_guard",
-            "raw_event_bytes=raw_event_bytes+1",
-            "radroots_event_store_addressable_feed_integrity_v1",
-            "last_transition_seq=last_transition_seq+1",
-            "radroots_event_store_food_availability_cursor_update_guard",
-            "projected_row_count=projected_row_count+1",
-            "radroots_event_store_food_availability_search_fts",
-            "DELETEFROMradroots_event_store_source_rebuild_marker",
-            "sqlx::Error::Database",
-            "database.message()==MARKER_CLOSE_ERROR",
-            "transaction.rollback().await",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "v4_marker_open_allows_repairing_prior_transition_high_water_drift",
-        ordered_markers: &[
-            "last_transition_seq=7",
-            "validate_schema_fingerprint",
-            "wrong_prior",
-            "wrong_floor",
-            "expect(\"derivedtransitiondriftisrepairableunderv4\")",
-            "repaired.0.as_slice(),target_generation.as_slice()",
-            "repaired.1,repaired.2",
-            "repaired.1,0",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "v4_food_reset_requires_marker_rotation_and_preserves_target_rows",
-        ordered_markers: &[
-            "expect_err(\"marker-freeFoodresetmustfail\")",
-            "expect_err(\"markeralonemustnotauthorizeFoodreset\")",
-            "expect(\"rotatesourcestate\")",
-            "expect(\"post-rotationhistoricalFoodreset\")",
-            "expect_err(\"activetarget-generationFoodrowsmustremainguarded\")",
-            "remaining,(1,1)",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "v4_down_restores_exact_predecessor_trigger_sql_and_fingerprint",
-        ordered_markers: &[
-            "&EVENT_STORE_MIGRATIONS[..3]",
-            "predecessor_sql",
-            "assert_ne!(schema_object_sql(&pool,name).await,predecessor_sql[*name])",
-            "rollback_event_store_schema_with_registry",
-            "assert_eq!(schema_object_sql(&pool,name).await,predecessor_sql[*name])",
-            "Managed{version:3}",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "open_file_rejects_utf16_main_database_before_schema_or_journal_mutation",
-        ordered_markers: &[
-            "initialize_utf16le_database(&path).await",
-            "RadrootsEventStore::open_file(&path).await",
-            "SqliteMainDatabaseEncodingNotUtf8{actual}",
-            "actual==\"UTF-16le\"",
-            "assert_utf16le_database_was_not_mutated(&path).await",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "open_pool_rejects_utf16_main_database_before_schema_or_journal_mutation",
-        ordered_markers: &[
-            "initialize_utf16le_database(&path).await",
-            "max_connections(2)",
-            "RadrootsEventStore::open_pool(pool,true).await",
-            "SqliteMainDatabaseEncodingNotUtf8{actual}",
-            "actual==\"UTF-16le\"",
-            "assert_utf16le_database_was_not_mutated(&path).await",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "utf8_file_reopen_preserves_non_ascii_and_nul_capacity_accounting",
-        ordered_markers: &[
-            "letexpected_tag_count=",
-            "raw_source_text_bytes(&event)",
-            "expect(\"non-ASCIIandNULingest\")",
-            "before_reopen.raw_event_count(),1",
-            "before_reopen.raw_tag_count(),expected_tag_count",
-            "before_reopen.raw_event_text_bytes(),expected_event_bytes",
-            "before_reopen.raw_tag_text_bytes(),expected_tag_bytes",
-            "store.pool().close().await",
-            "RadrootsEventStore::open_file(&path).await",
-            "source_capacity_v1()",
-            "before_reopen",
-            "raw_event(&event_id)",
-            "tags_for_event(&event_id)",
-            "assert_eq!(tags.len(),2)",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "rollback_rejects_below_floor_ahead_unmanaged_and_generation_destructive_targets",
-        ordered_markers: &[
-            "lethistory_before:Vec<(Vec<u8>,i64)>=",
-            "rollback_event_store_schema_offline(&managed,1).await",
-            "RollbackWouldDiscardSourceGenerationHistory{current:RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,target:1,floor:2,}",
-            "inspect_event_store_schema_status(&managed).await",
-            "Managed{version:RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,}",
-            "source-generationhistoryafterrejectedrollback",
-            "history_before",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/schema.rs",
-        test: "rollback_cannot_bypass_generation_history_guard_through_version_three",
-        ordered_markers: &[
-            "rollback_event_store_schema_offline(&managed,3).await",
-            "lethistory_before:Vec<(Vec<u8>,i64)>=",
-            "rollback_event_store_schema_offline(&managed,1).await",
-            "RollbackWouldDiscardSourceGenerationHistory{current:3,target:1,floor:2,}",
-            "inspect_event_store_schema_status(&managed).await",
-            "Managed{version:3}",
-            "v3source-generationhistoryafterrejectedbypass",
-            "history_before",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/store.rs",
-        test: "independent_file_pools_serialize_the_last_raw_event_byte_capacity_slot",
-        ordered_markers: &[
-            "RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1",
-            "before_race.raw_event_text_bytes(),filler_target",
-            "Barrier::new(3)",
-            "tokio::spawn",
-            "tokio::spawn",
-            "tokio::join!",
-            "(Ok(accepted),Err(rejected))|(Err(rejected),Ok(accepted))",
-            "accepted.persistence.is_inserted()",
-            "SourceCapacityExceeded{resource:crate::RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes",
-            "requested==contender_bytes",
-            "cleanfullreopenafterlast-slotrace",
-            "after_race.raw_event_count(),filler_count+1",
-            "after_race.raw_event_text_bytes(),crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1",
-            "assert_eq!(retained_contenders,1)",
-        ],
-    },
-];
-
-const MANDATORY_BOUND_AUTHORITIES: &[DelegatedAuthoritySpec] = &[
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/nip09/reconciliation_v1.rs",
-        test: "bounded_capacity_page_len_caps_gross_source_probe_at_one_over",
-        ordered_markers: &[
-            "forlimitin[25_000_u64,250_000_u64]",
-            "bounded_capacity_page_len(current,limit)",
-            "(1..=RECONCILIATION_SNAPSHOT_BATCH_LEN).contains(&fetched_len)",
-            "assert_eq!(fetched,limit+1)",
-            "bounded_capacity_page_len(24_576,25_000),(425,425)",
-            "bounded_capacity_page_len(249_856,250_000),(145,145)",
-            "bounded_capacity_page_len(25_000,25_000),(1,1)",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "generation_append_limit_returns_the_typed_current_and_limit",
-        ordered_markers: &[
-            "validate_source_generation_append_available_v1(7,8)",
-            "validate_source_generation_append_available_v1(8,8)",
-            "SourceGenerationHistoryLimitReached{current:8,limit:8,}",
-        ],
-    },
-    DelegatedAuthoritySpec {
-        path: "crates/event_store/src/source_maintenance_v1.rs",
-        test: "retained_generation_nip09_logical_rows_have_an_audited_upper_bound",
-        ordered_markers: &[
-            "RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1",
-            "RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1",
-            "letper_generation=",
-            "4*events+2*tags+2",
-            "RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1",
-            "4_800_016",
-            "EVENT_STORE_MIGRATIONS",
-        ],
-    },
-];
-
-const MANDATORY_BOUND_HELPER_AUTHORITIES: &[DelegatedAuthoritySpec] = &[DelegatedAuthoritySpec {
-    path: "crates/event_store/src/store.rs",
-    test: "assert_utf16le_database_was_not_mutated",
-    ordered_markers: &[
-        "PRAGMAmain.encoding",
-        "PRAGMAmain.journal_mode",
-        "SELECTCOUNT(*)FROMmain.sqlite_schemaWHEREname='radroots_event_store_schema_migrations'ORname='event_envelopes'ORnameLIKE'radroots_event_store_%'",
-        "assert_eq!(encoding,\"UTF-16le\")",
-        "assert_eq!(journal_mode,\"delete\")",
-        "assert_eq!(event_store_objects,0)",
-    ],
-}];
-
-fn validate_delegated_test_authorities(
-    workspace_root: &Path,
-    vector: &SourceMaintenanceVector,
-) -> Result<(), String> {
-    let delegated = vector
-        .cases
-        .iter()
-        .filter(|case| case.execution != DIRECT_EXECUTOR)
-        .map(|case| (case.authority_path.as_str(), case.authority.as_str()))
-        .collect::<BTreeSet<_>>();
-    let expected = DELEGATED_AUTHORITIES
-        .iter()
-        .map(|spec| (spec.path, spec.test))
-        .collect::<BTreeSet<_>>();
-    if delegated != expected {
-        return Err(format!(
-            "SourceMaintenance delegated-test inventory differs: expected {expected:?}, found {delegated:?}"
-        ));
-    }
-    let mut executable_identities = Vec::new();
-    for spec in DELEGATED_AUTHORITIES
-        .iter()
-        .chain(MANDATORY_BOUND_AUTHORITIES)
-    {
-        executable_identities.push(ExecutableAuthorityIdentity {
-            path: spec.path.to_owned(),
-            test: spec.test.to_owned(),
-            tokens: validate_delegated_authority(workspace_root, *spec)?,
-        });
-    }
-    for spec in MANDATORY_BOUND_HELPER_AUTHORITIES {
-        executable_identities.push(ExecutableAuthorityIdentity {
-            path: spec.path.to_owned(),
-            test: spec.test.to_owned(),
-            tokens: validate_bound_function_authority(workspace_root, *spec)?,
-        });
-    }
-
-    let executor_source = rust_source(workspace_root, RESULT_VECTOR_EXECUTOR_RELATIVE)?;
-    let executor = syn::parse_file(&executor_source)
-        .map_err(|error| format!("parse {RESULT_VECTOR_EXECUTOR_RELATIVE}: {error}"))?;
-    let executor = exact_free_function(&executor, RESULT_VECTOR_EXECUTOR_TEST)?;
-    validate_executable_test_authority(
-        RESULT_VECTOR_EXECUTOR_RELATIVE,
-        RESULT_VECTOR_EXECUTOR_TEST,
-        executor,
-    )?;
-    let executor = compact_tokens(executor);
-    for case in vector
-        .cases
-        .iter()
-        .filter(|case| case.execution == DIRECT_EXECUTOR)
-    {
-        require_marker(
-            "SourceMaintenance direct result-vector executor",
-            &executor,
-            case.id.as_str(),
-        )?;
-    }
-    require_marker(
-        "SourceMaintenance direct result-vector executor",
-        &executor,
-        "assert_direct_cases_executed",
-    )?;
-    executable_identities.push(ExecutableAuthorityIdentity {
-        path: RESULT_VECTOR_EXECUTOR_RELATIVE.to_owned(),
-        test: RESULT_VECTOR_EXECUTOR_TEST.to_owned(),
-        tokens: executor,
-    });
-    validate_executable_authority_identities(&executable_identities)?;
-    let source_identities = bound_authority_source_identities(workspace_root)?;
-    validate_bound_authority_source_identities(&source_identities)?;
     Ok(())
-}
-
-fn validate_delegated_authority(
-    workspace_root: &Path,
-    spec: DelegatedAuthoritySpec,
-) -> Result<String, String> {
-    let source = rust_source(workspace_root, spec.path)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|error| format!("parse delegated authority {}: {error}", spec.path))?;
-    let function = exact_free_function(&syntax, spec.test)?;
-    validate_executable_test_authority(spec.path, spec.test, function)?;
-    let function = compact_tokens(function);
-    require_ordered_markers(
-        &format!("delegated authority {}::{}", spec.path, spec.test),
-        &function,
-        spec.ordered_markers,
-    )?;
-    Ok(function)
-}
-
-fn validate_executable_authority_identities(
-    identities: &[ExecutableAuthorityIdentity],
-) -> Result<(), String> {
-    let bytes = canonical_json_bytes(&identities)?;
-    let actual = sha256_hex(&bytes);
-    if actual != EXECUTABLE_AUTHORITY_AST_SHA256 {
-        return Err(format!(
-            "SourceMaintenance executable direct/delegated authority AST identity drifted: expected {EXECUTABLE_AUTHORITY_AST_SHA256}, found {actual}"
-        ));
-    }
-    Ok(())
-}
-
-fn bound_authority_source_identities(
-    workspace_root: &Path,
-) -> Result<Vec<BoundAuthoritySourceIdentity>, String> {
-    let paths = DELEGATED_AUTHORITIES
-        .iter()
-        .chain(MANDATORY_BOUND_AUTHORITIES)
-        .chain(MANDATORY_BOUND_HELPER_AUTHORITIES)
-        .map(|spec| spec.path)
-        .chain([RESULT_VECTOR_EXECUTOR_RELATIVE])
-        .collect::<BTreeSet<_>>();
-    paths
-        .into_iter()
-        .map(|path| {
-            let source = rust_source(workspace_root, path)?;
-            let file = syn::parse_file(&source)
-                .map_err(|error| format!("parse bound authority source {path}: {error}"))?;
-            Ok(BoundAuthoritySourceIdentity {
-                path: path.to_owned(),
-                tokens: compact_tokens(&file),
-            })
-        })
-        .collect()
-}
-
-fn validate_bound_authority_source_identities(
-    identities: &[BoundAuthoritySourceIdentity],
-) -> Result<(), String> {
-    let bytes = canonical_json_bytes(&identities)?;
-    let actual = sha256_hex(&bytes);
-    if actual != BOUND_AUTHORITY_SOURCE_AST_SHA256 {
-        return Err(format!(
-            "SourceMaintenance bound executor/test-module/helper source AST identity drifted: expected {BOUND_AUTHORITY_SOURCE_AST_SHA256}, found {actual}"
-        ));
-    }
-    Ok(())
-}
-
-#[derive(Default)]
-struct EarlyReturnAudit {
-    count: usize,
-}
-
-impl<'ast> syn::visit::Visit<'ast> for EarlyReturnAudit {
-    fn visit_expr_return(&mut self, expression: &'ast syn::ExprReturn) {
-        self.count += 1;
-        syn::visit::visit_expr_return(self, expression);
-    }
-}
-
-fn validate_executable_test_authority(
-    relative: &str,
-    name: &str,
-    function: &syn::ItemFn,
-) -> Result<(), String> {
-    let expected_attribute = if function.sig.asyncness.is_some() {
-        "#[tokio::test]"
-    } else {
-        "#[test]"
-    };
-    let attributes = function
-        .attrs
-        .iter()
-        .map(compact_tokens)
-        .collect::<Vec<_>>();
-    if attributes != [expected_attribute] {
-        return Err(format!(
-            "executable test authority {relative}::{name} must have exactly `{expected_attribute}` and no disabling or conditional attributes; found {attributes:?}"
-        ));
-    }
-    if !matches!(function.vis, syn::Visibility::Inherited)
-        || function.sig.constness.is_some()
-        || function.sig.unsafety.is_some()
-        || function.sig.abi.is_some()
-        || !function.sig.inputs.is_empty()
-        || !function.sig.generics.params.is_empty()
-        || function.sig.generics.where_clause.is_some()
-        || !matches!(function.sig.output, syn::ReturnType::Default)
-        || function.sig.variadic.is_some()
-    {
-        return Err(format!(
-            "executable test authority {relative}::{name} must remain a private zero-argument test with no generic, ABI, unsafe, variadic, or return-type escape"
-        ));
-    }
-
-    use syn::visit::Visit;
-    let mut returns = EarlyReturnAudit::default();
-    returns.visit_block(&function.block);
-    if returns.count != 0 {
-        return Err(format!(
-            "executable test authority {relative}::{name} must not contain early return control flow; found {} return expression(s)",
-            returns.count
-        ));
-    }
-    Ok(())
-}
-
-fn validate_bound_function_authority(
-    workspace_root: &Path,
-    spec: DelegatedAuthoritySpec,
-) -> Result<String, String> {
-    let source = rust_source(workspace_root, spec.path)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|error| format!("parse bound authority {}: {error}", spec.path))?;
-    let function = exact_free_function_tokens(&syntax, spec.test)?;
-    require_ordered_markers(
-        &format!("bound authority {}::{}", spec.path, spec.test),
-        &function,
-        spec.ordered_markers,
-    )?;
-    Ok(function)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
 
     fn workspace_root() -> PathBuf {
@@ -3793,11 +2829,8 @@ mod tests {
     }
 
     #[test]
-    fn source_inventory_excludes_outputs_and_exactly_supersedes_predecessors() {
-        let root = workspace_root();
+    fn source_inventory_excludes_generated_outputs() {
         validate_source_inventory().expect("source inventory");
-        validate_predecessor_production_source_coverage(&root)
-            .expect("exact predecessor supersession");
 
         let source_paths = SOURCE_SPECS
             .iter()
@@ -3806,14 +2839,6 @@ mod tests {
         for generated in GENERATED_ARTIFACT_PATHS {
             assert!(!source_paths.contains(generated));
         }
-        assert_eq!(
-            PREDECESSOR_SUPERSEDED_SOURCE_PATHS
-                .iter()
-                .copied()
-                .collect::<BTreeSet<_>>()
-                .len(),
-            PREDECESSOR_SUPERSEDED_SOURCE_PATHS.len()
-        );
     }
 
     #[test]
@@ -3871,308 +2896,45 @@ mod tests {
     }
 
     #[test]
-    fn generated_bundle_render_is_rerunnable_without_byte_drift() {
+    fn immutable_bundle_write_path_is_validation_only() {
         let root = workspace_root();
-        let before = expected_artifacts(&root)
-            .expect("first in-memory generated bundle render")
-            .into_iter()
-            .map(|artifact| (artifact.relative, artifact.contents))
-            .collect::<Vec<_>>();
-        let after = expected_artifacts(&root)
-            .expect("second in-memory generated bundle render")
-            .into_iter()
-            .map(|artifact| (artifact.relative, artifact.contents))
-            .collect::<Vec<_>>();
-        assert_eq!(before, after);
-    }
-
-    fn current_executable_authority_identities(root: &Path) -> Vec<ExecutableAuthorityIdentity> {
-        let mut identities = DELEGATED_AUTHORITIES
+        let before = IMMUTABLE_PREDECESSOR_ARTIFACTS
             .iter()
-            .chain(MANDATORY_BOUND_AUTHORITIES)
-            .map(|spec| ExecutableAuthorityIdentity {
-                path: spec.path.to_owned(),
-                test: spec.test.to_owned(),
-                tokens: validate_delegated_authority(root, *spec)
-                    .expect("current delegated executable authority"),
+            .map(|artifact| {
+                (
+                    artifact.relative,
+                    fs::read(root.join(artifact.relative)).expect("immutable artifact"),
+                )
             })
             .collect::<Vec<_>>();
-        identities.extend(MANDATORY_BOUND_HELPER_AUTHORITIES.iter().map(|spec| {
-            ExecutableAuthorityIdentity {
-                path: spec.path.to_owned(),
-                test: spec.test.to_owned(),
-                tokens: validate_bound_function_authority(root, *spec)
-                    .expect("current bound helper authority"),
-            }
-        }));
-        let source = rust_source(root, RESULT_VECTOR_EXECUTOR_RELATIVE)
-            .expect("direct result-vector executor source");
-        let file = syn::parse_file(&source).expect("direct result-vector executor AST");
-        let function = exact_free_function(&file, RESULT_VECTOR_EXECUTOR_TEST)
-            .expect("direct result-vector executor function");
-        validate_executable_test_authority(
-            RESULT_VECTOR_EXECUTOR_RELATIVE,
-            RESULT_VECTOR_EXECUTOR_TEST,
-            function,
-        )
-        .expect("current direct executable authority");
-        identities.push(ExecutableAuthorityIdentity {
-            path: RESULT_VECTOR_EXECUTOR_RELATIVE.to_owned(),
-            test: RESULT_VECTOR_EXECUTOR_TEST.to_owned(),
-            tokens: compact_tokens(function),
-        });
-        identities
-    }
-
-    fn assert_bound_source_mutation_rejected(
-        baseline: &[BoundAuthoritySourceIdentity],
-        path: &str,
-        source: &str,
-        label: &str,
-    ) {
-        let mut identities = baseline.to_vec();
-        let identity = identities
-            .iter_mut()
-            .find(|identity| identity.path == path)
-            .unwrap_or_else(|| panic!("missing bound source identity for {path}"));
-        let file = syn::parse_file(source)
-            .unwrap_or_else(|error| panic!("parse {label} mutation for {path}: {error}"));
-        let tokens = compact_tokens(&file);
-        assert_ne!(tokens, identity.tokens, "{label} fixture must mutate");
-        identity.tokens = tokens;
-        let error = validate_bound_authority_source_identities(&identities)
-            .expect_err("bound authority source-context drift must fail closed");
-        assert!(
-            error.contains("bound executor/test-module/helper source AST identity drifted"),
-            "unexpected {label} error: {error}"
-        );
-    }
-
-    #[test]
-    fn bound_executor_and_test_module_sources_are_exact_ast_authority() {
-        let root = workspace_root();
-        let baseline =
-            bound_authority_source_identities(&root).expect("current bound source identities");
-        validate_bound_authority_source_identities(&baseline)
-            .expect("current bound source aggregate identity");
-
-        let executor = rust_source(&root, RESULT_VECTOR_EXECUTOR_RELATIVE)
-            .expect("direct result-vector executor source");
-        let crate_disabled = executor.replacen(
-            "#![forbid(unsafe_code)]",
-            "#![forbid(unsafe_code)]\n#![cfg(any())]",
-            1,
-        );
-        assert_bound_source_mutation_rejected(
-            &baseline,
-            RESULT_VECTOR_EXECUTOR_RELATIVE,
-            &crate_disabled,
-            "crate-disabled direct executor",
-        );
-
-        let delegated_path = "crates/event_store/src/source_maintenance_v1.rs";
-        let delegated =
-            rust_source(&root, delegated_path).expect("delegated authority module source");
-        let module_disabled = delegated.replacen(
-            "#[cfg(test)]\nmod tests {",
-            "#[cfg(all(test, any()))]\nmod tests {",
-            1,
-        );
-        assert_bound_source_mutation_rejected(
-            &baseline,
-            delegated_path,
-            &module_disabled,
-            "disabled delegated test module",
-        );
-
-        let macro_shadowed = executor.replacen(
-            "#![forbid(unsafe_code)]",
-            "#![forbid(unsafe_code)]\nmacro_rules! assert_eq { ($($tokens:tt)*) => {}; }",
-            1,
-        );
-        assert_bound_source_mutation_rejected(
-            &baseline,
-            RESULT_VECTOR_EXECUTOR_RELATIVE,
-            &macro_shadowed,
-            "shadowing direct-executor assertion macro",
-        );
-    }
-
-    #[test]
-    fn executable_authority_rejects_disabled_missing_and_unreachable_tests() {
-        let root = workspace_root();
-        let source = rust_source(&root, RESULT_VECTOR_EXECUTOR_RELATIVE)
-            .expect("direct result-vector executor source");
-        for (label, mutation) in [
-            (
-                "ignored direct executor",
-                source.replacen("#[tokio::test]", "#[ignore]\n#[tokio::test]", 1),
-            ),
-            (
-                "missing direct executor attribute",
-                source.replacen("#[tokio::test]\n", "", 1),
-            ),
-            (
-                "early-returning direct executor",
-                source.replacen(
-                    "async fn source_maintenance_v1_result_vector() {",
-                    "async fn source_maintenance_v1_result_vector() {\n    return;",
-                    1,
-                ),
-            ),
-        ] {
-            assert_ne!(mutation, source, "{label} fixture must mutate");
-            let file = syn::parse_file(&mutation).expect("mutated direct executor AST");
-            let function = exact_free_function(&file, RESULT_VECTOR_EXECUTOR_TEST)
-                .expect("mutated direct executor function");
-            let error = validate_executable_test_authority(
-                RESULT_VECTOR_EXECUTOR_RELATIVE,
-                RESULT_VECTOR_EXECUTOR_TEST,
-                function,
-            )
-            .expect_err("disabled or early-returning direct executor must fail closed");
-            assert!(
-                error.contains("executable test authority"),
-                "unexpected {label} error: {error}"
+        write_source_maintenance_manifest(&root)
+            .expect("valid frozen predecessor remains accepted");
+        for (relative, bytes) in &before {
+            assert_eq!(
+                fs::read(root.join(relative)).expect("immutable artifact after validation"),
+                *bytes,
+                "validation-only write path mutated {relative}"
             );
         }
 
-        let mut identities = current_executable_authority_identities(&root);
-        validate_executable_authority_identities(&identities)
-            .expect("current aggregate executable identity");
-        let direct = identities
-            .last_mut()
-            .expect("direct executable identity is terminal");
-        let file = syn::parse_file(&source).expect("direct executor AST");
-        let function = exact_free_function(&file, RESULT_VECTOR_EXECUTOR_TEST)
-            .expect("direct executor function");
-        let mut function = function.clone();
-        let body = function.block.clone();
-        *function.block = syn::parse_quote!({ if false #body; });
-        direct.tokens = compact_tokens(&function);
-        let error = validate_executable_authority_identities(&identities)
-            .expect_err("non-returning unreachable test body must fail exact AST authority");
-        assert!(error.contains("executable direct/delegated authority AST identity drifted"));
-
-        let mut identities = current_executable_authority_identities(&root);
-        let helper_spec = MANDATORY_BOUND_HELPER_AUTHORITIES[0];
-        let helper_source = rust_source(&root, helper_spec.path).expect("bound helper source");
-        let helper_file = syn::parse_file(&helper_source).expect("bound helper AST");
-        let helper = exact_free_function(&helper_file, helper_spec.test).expect("bound helper");
-        let mut bypass = helper.clone();
-        let body = bypass.block.clone();
-        *bypass.block = syn::parse_quote!({ if false #body; });
-        let identity = identities
-            .iter_mut()
-            .find(|identity| identity.path == helper_spec.path && identity.test == helper_spec.test)
-            .expect("bound helper identity");
-        identity.tokens = compact_tokens(&bypass);
-        validate_executable_authority_identities(&identities)
-            .expect_err("unreachable bound helper body must fail exact AST authority");
-    }
-
-    #[test]
-    fn command_and_release_validation_reachability_is_exact() {
-        let root = workspace_root();
-        let contract =
-            rust_source(&root, CONTRACT_COMMAND_SOURCE_RELATIVE).expect("contract command source");
-        let main = rust_source(&root, XTASK_MAIN_SOURCE_RELATIVE).expect("xtask main source");
-        validate_contract_command_reachability_sources(&contract, &main)
-            .expect("current aggregate and release validation reachability");
-
-        let mutations = [
-            (
-                "aggregate removal",
-                contract.replacen(
-                    "    validate_source_maintenance_manifest(workspace_root)?;\n",
-                    "",
-                    1,
-                ),
-                main.clone(),
-            ),
-            (
-                "aggregate discarded result",
-                contract.replacen(
-                    "    validate_source_maintenance_manifest(workspace_root)?;",
-                    "    let _ = validate_source_maintenance_manifest(workspace_root);",
-                    1,
-                ),
-                main.clone(),
-            ),
-            (
-                "aggregate reordering",
-                contract.replacen(
-                    "    validate_food_availability_projection_manifest(workspace_root)?;\n    validate_source_maintenance_manifest(workspace_root)?;",
-                    "    validate_source_maintenance_manifest(workspace_root)?;\n    validate_food_availability_projection_manifest(workspace_root)?;",
-                    1,
-                ),
-                main.clone(),
-            ),
-            (
-                "contract validation removal",
-                contract.clone(),
-                main.replacen(
-                    "        .and_then(|_| contract::validate_artifact_contracts(&root))",
-                    "        .map(|_| ())",
-                    1,
-                ),
-            ),
-            (
-                "contract validate dispatch bypass",
-                contract.clone(),
-                main.replacen(
-                    "        Some(\"validate\") => validate_contract(),",
-                    "        Some(\"validate\") => Ok(()),",
-                    1,
-                ),
-            ),
-            (
-                "release preflight dispatch bypass",
-                contract.clone(),
-                main.replacen(
-                    "        Some(\"preflight\") => release_preflight(),",
-                    "        Some(\"preflight\") => Ok(()),",
-                    1,
-                ),
-            ),
-            (
-                "release validation removal",
-                contract.clone(),
-                main.replacen("    contract::validate_artifact_contracts(root)?;\n", "", 1),
-            ),
-            (
-                "release validation discarded result",
-                contract.clone(),
-                main.replacen(
-                    "    contract::validate_artifact_contracts(root)?;",
-                    "    let _ = contract::validate_artifact_contracts(root);",
-                    1,
-                ),
-            ),
-            (
-                "release validation reordering",
-                contract.clone(),
-                main.replacen(
-                    "    dto_roots::check(root)?;\n    contract::validate_artifact_contracts(root)?;",
-                    "    contract::validate_artifact_contracts(root)?;\n    dto_roots::check(root)?;",
-                    1,
-                ),
-            ),
-        ];
-        for (label, contract_mutation, main_mutation) in mutations {
-            assert!(
-                contract_mutation != contract || main_mutation != main,
-                "{label} fixture must mutate"
-            );
-            let error =
-                validate_contract_command_reachability_sources(&contract_mutation, &main_mutation)
-                    .expect_err("validation reachability drift must fail closed");
-            assert!(
-                error.contains("validation call-path authority drifted")
-                    || error.contains("full dispatch AST authority drifted"),
-                "unexpected {label} error: {error}"
-            );
+        let tampered = tempfile::tempdir().expect("tampered workspace");
+        for (relative, bytes) in &before {
+            let path = tampered.path().join(relative);
+            fs::create_dir_all(path.parent().expect("artifact parent"))
+                .expect("create artifact parent");
+            fs::write(path, bytes).expect("copy immutable artifact");
         }
+        let manifest = tampered.path().join(MANIFEST_RELATIVE);
+        let mut tampered_manifest = fs::read(&manifest).expect("tampered manifest source");
+        tampered_manifest.push(b'\n');
+        fs::write(&manifest, &tampered_manifest).expect("tamper manifest");
+        write_source_maintenance_manifest(tampered.path())
+            .expect_err("tampered frozen predecessor must be rejected");
+        assert_eq!(
+            fs::read(manifest).expect("tampered manifest after validation"),
+            tampered_manifest,
+            "rejected validation-only write path must not rewrite a tampered bundle"
+        );
     }
 
     #[test]
