@@ -1,0 +1,32 @@
+{
+  "binding_schema": {
+    "byte_length": 855,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/event_codec/contracts/phase1_publication_media_readiness_binding_v1.schema.json",
+    "sha256": "1ae4de83b579d55954e79a7839092633170534cadd1a34518fd2ef0a7ad3e456"
+  },
+  "contract_id": "radroots_event_codec.phase1_publication_media_readiness_v1",
+  "manifest": {
+    "byte_length": 14193,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.json",
+    "sha256": "97bcb8b03defd0e6058bddf1b9714347e3917e1188e6fdd1513f236cc11e95d9"
+  },
+  "manifest_schema": {
+    "byte_length": 2628,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.schema.json",
+    "sha256": "7c0a9ec9aa36959dbf705dbf4273e254351a0e286d1bbadf0980f4fd883e2f7d"
+  },
+  "manifest_sidecar": {
+    "byte_length": 65,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.sha256",
+    "sha256": "78980b567981907d6bd4be58584cd60e53010badc2c9868be2a70300e335114c"
+  },
+  "predecessor_contract_ids": [
+    "radroots_event_codec.phase1_publication_allowlist_v1",
+    "radroots_blossom.publication_readiness_v1"
+  ],
+  "schema_version": 1
+}

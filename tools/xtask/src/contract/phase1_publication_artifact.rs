@@ -1962,7 +1962,7 @@ mod tests {
     #[test]
     fn publication_predecessor_operations_and_vector_authority_are_current() {
         let root = workspace_root();
-        validate_immutable_phase1_publication_artifact_predecessor(&root)
+        crate::contract::phase1_publication_media_readiness::validate_immutable_phase1_publication_artifact_predecessor(&root)
             .expect("immutable publication predecessor");
         validate_operations_authority(&root).expect("operations authority");
         validate_result_vector(&root).expect("result vector");

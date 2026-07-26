@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_event_codec.phase1_publication_media_readiness_v1",
+  "authority_id": "phase1_publication_media_readiness_v1",
+  "manifest_schema": {
+    "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.schema.json",
+    "byte_length": 2628,
+    "sha256": "7c0a9ec9aa36959dbf705dbf4273e254351a0e286d1bbadf0980f4fd883e2f7d",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "predecessors": [
+    {
+      "contract_id": "radroots_event_codec.phase1_publication_allowlist_v1",
+      "immutable_artifacts": [
+        {
+          "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.json",
+          "byte_length": 10601,
+          "sha256": "8629b5c547e8f9daad473ab9d570b206d00db134cc22b4d8e81be10d0f3d10ec",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.schema.json",
+          "byte_length": 9016,
+          "sha256": "638601348dece886ed9666251b5cf68d0a7f96c26dce115b65ed859a2db03d93",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.manifest.sha256",
+          "byte_length": 65,
+          "sha256": "4dd9bf6f230f02d8c2ca3c323e83fe9b77eb9f0895f708eb0949b7153b2fd6bd",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/event_codec/contracts/phase1_publication_allowlist_v1.descriptor.json",
+          "byte_length": 1104,
+          "sha256": "d7286a1206f822382226f28e2e601dc4f12cb743f9135238467092a31bde7bee",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "contracts/conformance/vectors/publication/phase1_allowlist.v1.json",
+          "byte_length": 49975,
+          "sha256": "2867ee401db8cfad3a77869847c57567e869623f55d3d6c9e98a7fa0a643c3d6",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/event_codec/tests/fixtures/phase1_publication_allowlist.v1.json",
+          "byte_length": 49975,
+          "sha256": "2867ee401db8cfad3a77869847c57567e869623f55d3d6c9e98a7fa0a643c3d6",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/event_codec/tests/publication_allowlist.rs",
+          "byte_length": 7562,
+          "sha256": "342d3d3d1100cb5d31aca94b0540b1e03761b034de23475bdb5142baabeed8fd",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      ],
+      "source_supersessions": [
+        "CHANGELOG.md",
+        "contracts/operations.toml",
+        "contracts/releases/1.0.0-alpha.1.toml",
+        "crates/event_codec/Cargo.toml",
+        "crates/event_codec/src/wire/publication.rs",
+        "tools/xtask/src/contract.rs",
+        "tools/xtask/src/contract/nip09_reconciliation.rs",
+        "tools/xtask/src/contract/phase1_publication_artifact.rs",
+        "tools/xtask/src/contract/raw_source_rebuild.rs",
+        "tools/xtask/src/main.rs"
+      ]
+    },
+    {
+      "contract_id": "radroots_blossom.publication_readiness_v1",
+      "immutable_artifacts": [
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.manifest.json",
+          "byte_length": 13038,
+          "sha256": "9359c5531548778b4a03e1a603a4048f17ba498b16dad50f7c62cca0ddb6240b",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.manifest.schema.json",
+          "byte_length": 11884,
+          "sha256": "e62ecf4b43bd03831f7e36e9cb4c98e2ed7e3a12d02cbca48a49e402b3feaa7d",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.manifest.sha256",
+          "byte_length": 65,
+          "sha256": "e8c2be84eef68e965ac0e119016d6840cb9503e58d5d9c40e13a6512e1ec74b7",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.descriptor.json",
+          "byte_length": 1410,
+          "sha256": "4a3b33eb2b04b5a56a99b7b5bed45988a0697cb28736bfd899e012f37fc02d93",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_evidence_v1.schema.json",
+          "byte_length": 1890,
+          "sha256": "c8f5f3488dd91a660f8eaa018d9aba63d03c882dc3ff22b47ac192b7189b0ce2",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+          "byte_length": 16423,
+          "sha256": "6408e3b5bc4a376c7411e304833431af918a4072f196e8a8da55c3f0ef8610c9",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/fixtures/publication_readiness.v1.json",
+          "byte_length": 16423,
+          "sha256": "6408e3b5bc4a376c7411e304833431af918a4072f196e8a8da55c3f0ef8610c9",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/publication_readiness.rs",
+          "byte_length": 33431,
+          "sha256": "17abd5491bcfe0c717f7f67202c8c2d85912a042167d027727c07d9f07306641",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json",
+          "byte_length": 9264,
+          "sha256": "e892ff6353afe8997a151a9aff4db2fd82c96d94db7bff31bc2269333adc2512",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/fixtures/publication_readiness_persistence.v1.json",
+          "byte_length": 9264,
+          "sha256": "e892ff6353afe8997a151a9aff4db2fd82c96d94db7bff31bc2269333adc2512",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/publication_readiness_persistence.rs",
+          "byte_length": 11567,
+          "sha256": "aa14d20ee5747fcc979907b4b59a67687a3a02852850e33aede65e2ab0e0ca8d",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      ],
+      "source_supersessions": [
+        "CHANGELOG.md",
+        "contracts/operations.toml",
+        "contracts/releases/1.0.0-alpha.1.toml",
+        "tools/xtask/src/contract.rs",
+        "tools/xtask/src/contract/nip09_reconciliation.rs",
+        "tools/xtask/src/contract/phase1_publication_artifact.rs",
+        "tools/xtask/src/contract/raw_source_rebuild.rs",
+        "tools/xtask/src/main.rs"
+      ]
+    }
+  ],
+  "protocol_sources": [
+    {
+      "id": "nostr_nips",
+      "repository": "https://github.com/nostr-protocol/nips",
+      "revision": "bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91"
+    },
+    {
+      "id": "blossom",
+      "repository": "https://github.com/hzrd149/blossom",
+      "revision": "b5bd2801d1763aa635fc8fea7a76597e0eb18990"
+    }
+  ],
+  "public_api": {
+    "constants": [
+      "RADROOTS_PHASE1_PUBLICATION_MEDIA_READINESS_BINDING_MAX_BYTES",
+      "RADROOTS_PHASE1_PUBLICATION_MEDIA_READINESS_BINDING_SCHEMA_VERSION"
+    ],
+    "types": [
+      "RadrootsPhase1MediaReadyPublicationArtifact",
+      "RadrootsPhase1PublicationMediaReadinessBindingDigest",
+      "RadrootsPhase1PublicationMediaReadinessError"
+    ],
+    "functions": [
+      "bind_phase1_publication_media_readiness",
+      "validate_phase1_publication_media_readiness"
+    ],
+    "methods": [
+      "RadrootsPhase1MediaReadyPublicationArtifact::allowlisted_artifact",
+      "RadrootsPhase1MediaReadyPublicationArtifact::artifact",
+      "RadrootsPhase1MediaReadyPublicationArtifact::binding_digest",
+      "RadrootsPhase1MediaReadyPublicationArtifact::canonical_json",
+      "RadrootsPhase1MediaReadyPublicationArtifact::evidence",
+      "RadrootsPhase1MediaReadyPublicationArtifact::from_canonical_json",
+      "RadrootsPhase1MediaReadyPublicationArtifact::into_allowlisted_artifact",
+      "RadrootsPhase1MediaReadyPublicationArtifact::to_canonical_json",
+      "RadrootsPhase1PublicationMediaReadinessBindingDigest::as_bytes",
+      "RadrootsPhase1PublicationMediaReadinessBindingDigest::to_hex",
+      "RadrootsPhase1PublicationMediaReadinessError::code"
+    ],
+    "sealed_types": [
+      "RadrootsPhase1MediaReadyPublicationArtifact",
+      "RadrootsPhase1PublicationMediaReadinessBindingDigest"
+    ]
+  },
+  "media_envelope": {
+    "max_url_utf8_bytes": 4096,
+    "min_raster_bytes": 1,
+    "max_raster_bytes": 10485760,
+    "media_types": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ],
+    "exact_dimension_variants": [
+      "photo_update",
+      "ask",
+      "food_availability"
+    ],
+    "decoded_only_dimension_variants": [
+      "profile",
+      "event_date",
+      "event_time"
+    ]
+  },
+  "binding": {
+    "schema_version": 1,
+    "readiness_policy_version": 1,
+    "schema": {
+      "path": "crates/event_codec/contracts/phase1_publication_media_readiness_binding_v1.schema.json",
+      "byte_length": 855,
+      "sha256": "1ae4de83b579d55954e79a7839092633170534cadd1a34518fd2ef0a7ad3e456",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "max_canonical_json_bytes": 4194304,
+    "max_evidence_count": 4096,
+    "max_evidence_json_bytes": 8192,
+    "wire_field_order": [
+      "schema_version",
+      "readiness_policy_version",
+      "artifact_digest",
+      "evidence",
+      "binding_digest"
+    ],
+    "digest_domain": "radroots.phase1.publication-media-readiness.v1\u0000",
+    "digest_framing": "domain_bytes_then_u32be_schema_then_u16be_policy_then_raw_artifact_digest_then_u32be_evidence_count_then_repeated_u64be_url_length_url_bytes_raw_evidence_digest_v1",
+    "bind_operation_id": "publication_media_readiness.bind",
+    "serialize_operation_id": "publication_media_readiness.to_canonical_json",
+    "reload_operation_id": "publication_media_readiness.from_canonical_json",
+    "validate_operation_id": "publication_media_readiness.validate",
+    "invariants": [
+      "allowlisted_artifact_required_v1",
+      "one_evidence_per_distinct_artifact_ordered_canonical_url_v1",
+      "media_free_artifact_requires_empty_evidence_v1",
+      "artifact_and_binding_bytes_persisted_separately_v1",
+      "closed_jpeg_png_still_webp_media_envelope_v1",
+      "canonical_url_max_4096_utf8_bytes_v1",
+      "nonzero_media_size_max_10485760_bytes_v1",
+      "post_ask_food_authored_dimensions_equal_decoded_dimensions_v1",
+      "profile_event_decoded_dimensions_persisted_without_authored_claim_v1",
+      "binding_input_bounded_before_parse_v1",
+      "evidence_count_max_4096_v1",
+      "canonical_json_round_trip_required_v1",
+      "sealed_binding_without_deserialize_v1",
+      "private_bounded_deny_unknown_fields_wire_v1",
+      "private_domain_separated_digest_derivation_v1",
+      "no_bud11_credentials_entitlement_or_topology_persistence_v1"
+    ],
+    "error_codes": [
+      "publication_media_readiness_binding_too_large",
+      "publication_media_readiness_evidence_count_exceeded",
+      "publication_media_readiness_evidence_count_mismatch",
+      "publication_media_readiness_invalid_json",
+      "publication_media_readiness_non_canonical_json",
+      "publication_media_readiness_schema_version_unsupported",
+      "publication_media_readiness_policy_version_unsupported",
+      "publication_media_readiness_artifact_digest_mismatch",
+      "publication_media_readiness_artifact_profile_invalid",
+      "publication_media_readiness_evidence_invalid",
+      "publication_media_readiness_evidence_order_mismatch",
+      "publication_media_readiness_evidence_fact_mismatch",
+      "publication_media_readiness_evidence_dimension_mismatch",
+      "publication_media_readiness_digest_invalid",
+      "publication_media_readiness_digest_mismatch",
+      "publication_media_readiness_state_mismatch",
+      "publication_media_readiness_allocation_failed",
+      "publication_media_readiness_serialization"
+    ]
+  },
+  "result_vector": {
+    "canonical_path": "contracts/conformance/vectors/publication/phase1_media_readiness.v1.json",
+    "mirror_path": "crates/event_codec/tests/fixtures/phase1_publication_media_readiness.v1.json",
+    "byte_length": 11687,
+    "sha256": "b102090a2cc5fa3062533edc6032af06863038f66efe93db9a3e5d68c4688048",
+    "hash_algorithm": "sha256_bytes_v1",
+    "executor": {
+      "path": "crates/event_codec/tests/publication_media_readiness.rs",
+      "byte_length": 22995,
+      "sha256": "3de03a5aa1d8b37083efabac44c423659b263ebf8597831b056fdd257f333b85",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "executor_test": "phase1_publication_media_readiness_vector_executes_every_case",
+    "case_ids": [
+      "artifact_oversized_media_rejected",
+      "artifact_unbindable_dimensions_rejected",
+      "artifact_unsupported_mime_rejected",
+      "artifact_url_exact_max_reaches_profile_validation",
+      "artifact_url_over_max_rejected",
+      "artifact_zero_size_rejected",
+      "ask_primary_and_fallback",
+      "binding_digest_mismatch_rejected",
+      "canonical_binding_reloads",
+      "canonical_binding_serializes",
+      "cross_artifact_binding_rejected",
+      "date_event_media_ready",
+      "duplicate_evidence_rejected",
+      "exact_binding_byte_limit_reaches_parser",
+      "exact_count_reaches_parity_check",
+      "extra_evidence_rejected",
+      "fact_mismatch_rejected",
+      "field_reordering_is_noncanonical",
+      "food_availability_media_ready",
+      "food_dimension_mismatch_rejected",
+      "leading_whitespace_is_noncanonical",
+      "malformed_binding_digest_rejected",
+      "missing_evidence_rejected",
+      "nested_private_field_rejected",
+      "one_over_count_rejected_early",
+      "oversized_binding_rejected",
+      "photo_update_primary_and_fallback",
+      "policy_version_is_strict",
+      "post_dimension_mismatch_rejected",
+      "private_bud11_field_rejected",
+      "profile_media_ready",
+      "reordered_evidence_rejected",
+      "schema_version_is_strict",
+      "sealed_binding_validates",
+      "time_event_media_ready",
+      "unknown_field_rejected",
+      "update_media_free",
+      "wire_exact_count_reaches_evidence_reload",
+      "wire_one_over_count_rejected_by_bounded_visitor"
+    ]
+  }
+}

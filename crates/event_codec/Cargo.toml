@@ -16,7 +16,13 @@ readme = "README"
 default = ["std"]
 std = ["radroots_blossom/std", "radroots_core/std", "radroots_event/std"]
 serde = ["dep:serde", "radroots_core/serde", "radroots_event/serde"]
-serde_json = ["serde", "dep:hex", "dep:serde_json", "dep:sha2"]
+serde_json = [
+  "serde",
+  "dep:hex",
+  "dep:serde_json",
+  "dep:sha2",
+  "radroots_blossom/serde",
+]
 nostr = ["dep:nostr", "std"]
 knowledge = ["serde_json", "radroots_event/knowledge"]
 knowledge-nip54 = ["knowledge", "radroots_event/knowledge-nip54"]
@@ -31,6 +37,7 @@ serde = { workspace = true, default-features = false, features = [
 ], optional = true }
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
+  "raw_value",
 ], optional = true }
 nostr = { workspace = true, optional = true }
 hex = { version = "0.4", default-features = false, features = [

@@ -1,0 +1,435 @@
+{
+  "suite": "phase1_publication_media_readiness",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "profile_media_ready",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "profile",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "update_media_free",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "update",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "photo_update_primary_and_fallback",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "photo_update",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "ask_primary_and_fallback",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "date_event_media_ready",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "event_date",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "time_event_media_ready",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "event_time",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "food_availability_media_ready",
+      "kind": "publication_media_readiness.bind.valid",
+      "input": {
+        "fixture": "food_availability",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "canonical_binding_serializes",
+      "kind": "publication_media_readiness.to_canonical_json.valid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "canonical_binding_reloads",
+      "kind": "publication_media_readiness.from_canonical_json.valid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "sealed_binding_validates",
+      "kind": "publication_media_readiness.validate.valid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "none"
+      },
+      "expected": {
+        "decision": "allow"
+      }
+    },
+    {
+      "id": "missing_evidence_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "missing"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_count_mismatch"
+      }
+    },
+    {
+      "id": "extra_evidence_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "extra"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_count_mismatch"
+      }
+    },
+    {
+      "id": "duplicate_evidence_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "duplicate"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_order_mismatch"
+      }
+    },
+    {
+      "id": "reordered_evidence_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "reordered"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_order_mismatch"
+      }
+    },
+    {
+      "id": "fact_mismatch_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "size_mismatch"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_fact_mismatch"
+      }
+    },
+    {
+      "id": "post_dimension_mismatch_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "dimension_mismatch"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_dimension_mismatch"
+      }
+    },
+    {
+      "id": "food_dimension_mismatch_rejected",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "food_availability",
+        "mutation": "dimension_mismatch"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_dimension_mismatch"
+      }
+    },
+    {
+      "id": "cross_artifact_binding_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "cross_artifact"
+      },
+      "expected": {
+        "error": "publication_media_readiness_artifact_digest_mismatch"
+      }
+    },
+    {
+      "id": "schema_version_is_strict",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "schema_version"
+      },
+      "expected": {
+        "error": "publication_media_readiness_schema_version_unsupported"
+      }
+    },
+    {
+      "id": "policy_version_is_strict",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "policy_version"
+      },
+      "expected": {
+        "error": "publication_media_readiness_policy_version_unsupported"
+      }
+    },
+    {
+      "id": "binding_digest_mismatch_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "digest_mismatch"
+      },
+      "expected": {
+        "error": "publication_media_readiness_digest_mismatch"
+      }
+    },
+    {
+      "id": "malformed_binding_digest_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "digest_invalid"
+      },
+      "expected": {
+        "error": "publication_media_readiness_digest_invalid"
+      }
+    },
+    {
+      "id": "leading_whitespace_is_noncanonical",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "leading_whitespace"
+      },
+      "expected": {
+        "error": "publication_media_readiness_non_canonical_json"
+      }
+    },
+    {
+      "id": "field_reordering_is_noncanonical",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "reordered_fields"
+      },
+      "expected": {
+        "error": "publication_media_readiness_non_canonical_json"
+      }
+    },
+    {
+      "id": "unknown_field_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "unknown_field"
+      },
+      "expected": {
+        "error": "publication_media_readiness_invalid_json"
+      }
+    },
+    {
+      "id": "private_bud11_field_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "bud11_field"
+      },
+      "expected": {
+        "error": "publication_media_readiness_invalid_json"
+      }
+    },
+    {
+      "id": "nested_private_field_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "nested_bud11_field"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_invalid"
+      }
+    },
+    {
+      "id": "exact_binding_byte_limit_reaches_parser",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "binding_exact_max"
+      },
+      "expected": {
+        "error": "publication_media_readiness_invalid_json"
+      }
+    },
+    {
+      "id": "oversized_binding_rejected",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "binding_over_max"
+      },
+      "expected": {
+        "error": "publication_media_readiness_binding_too_large"
+      }
+    },
+    {
+      "id": "exact_count_reaches_parity_check",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "update",
+        "mutation": "evidence_count_exact_max"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_count_mismatch"
+      }
+    },
+    {
+      "id": "one_over_count_rejected_early",
+      "kind": "publication_media_readiness.bind.invalid",
+      "input": {
+        "fixture": "update",
+        "mutation": "evidence_count_over_max"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_count_exceeded"
+      }
+    },
+    {
+      "id": "wire_exact_count_reaches_evidence_reload",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "update",
+        "mutation": "wire_evidence_count_exact_max"
+      },
+      "expected": {
+        "error": "publication_media_readiness_evidence_invalid"
+      }
+    },
+    {
+      "id": "wire_one_over_count_rejected_by_bounded_visitor",
+      "kind": "publication_media_readiness.from_canonical_json.invalid",
+      "input": {
+        "fixture": "update",
+        "mutation": "wire_evidence_count_over_max"
+      },
+      "expected": {
+        "error": "publication_media_readiness_invalid_json"
+      }
+    },
+    {
+      "id": "artifact_url_exact_max_reaches_profile_validation",
+      "kind": "publication_media_readiness.bind.artifact_invalid",
+      "input": {
+        "fixture": "event_date",
+        "mutation": "url_exact_max"
+      },
+      "expected": {
+        "error": "publication_media_inventory_mismatch"
+      }
+    },
+    {
+      "id": "artifact_url_over_max_rejected",
+      "kind": "publication_media_readiness.bind.artifact_invalid",
+      "input": {
+        "fixture": "event_date",
+        "mutation": "url_over_max"
+      },
+      "expected": {
+        "error": "publication_media_reference_invalid"
+      }
+    },
+    {
+      "id": "artifact_zero_size_rejected",
+      "kind": "publication_media_readiness.bind.artifact_invalid",
+      "input": {
+        "fixture": "event_date",
+        "mutation": "size_zero"
+      },
+      "expected": {
+        "error": "publication_media_reference_invalid"
+      }
+    },
+    {
+      "id": "artifact_oversized_media_rejected",
+      "kind": "publication_media_readiness.bind.artifact_invalid",
+      "input": {
+        "fixture": "event_date",
+        "mutation": "size_over_max"
+      },
+      "expected": {
+        "error": "publication_media_reference_invalid"
+      }
+    },
+    {
+      "id": "artifact_unsupported_mime_rejected",
+      "kind": "publication_media_readiness.bind.artifact_invalid",
+      "input": {
+        "fixture": "event_date",
+        "mutation": "mime_unsupported"
+      },
+      "expected": {
+        "error": "publication_media_reference_invalid"
+      }
+    },
+    {
+      "id": "artifact_unbindable_dimensions_rejected",
+      "kind": "publication_media_readiness.bind.artifact_invalid",
+      "input": {
+        "fixture": "ask",
+        "mutation": "dimensions_over_max"
+      },
+      "expected": {
+        "error": "publication_post_profile_invalid"
+      }
+    }
+  ]
+}

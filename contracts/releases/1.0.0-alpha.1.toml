@@ -313,6 +313,17 @@ semver_impacts = [
 summary = "Add an opaque publication-lane allowlist and canonical-JSON durable-reload adapter over sealed Phase 1 artifacts with one supporting Profile leaf and six root leaves, strict same-kind reprojection, typed-only date/time Event handling, focused FoodAvailability marker partitioning, and fail-closed exclusion of every other generic, ephemeral, or deferred product family."
 
 [[changes]]
+id = "phase1-publication-media-readiness"
+classification = "feature"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_conformance_vector",
+]
+summary = "Bind one sealed Blossom readiness observation to every canonical media URL in an allowlisted Phase 1 artifact, persist the bounded URL-complete binding independently from artifact bytes, enforce exact authored dimensions where declared, and reject incomplete, reordered, stale, cross-artifact, or mutated evidence before signing."
+
+[[changes]]
 id = "event-store-validity-visibility-split"
 classification = "breaking"
 semver_impacts = [

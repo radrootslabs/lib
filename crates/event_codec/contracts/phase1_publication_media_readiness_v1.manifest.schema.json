@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://radroots.org/schemas/event-codec/phase1-publication-media-readiness-manifest-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "const": "phase1_publication_media_readiness_v1"
+    },
+    "binding": {
+      "type": "object"
+    },
+    "contract_id": {
+      "const": "radroots_event_codec.phase1_publication_media_readiness_v1"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "media_envelope": {
+      "type": "object"
+    },
+    "predecessors": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "immutable_artifacts": {
+            "items": {
+              "$ref": "#/$defs/file"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "source_supersessions": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "contract_id",
+          "immutable_artifacts",
+          "source_supersessions"
+        ],
+        "type": "object"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "protocol_sources": {
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "public_api": {
+      "type": "object"
+    },
+    "result_vector": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "predecessors",
+    "protocol_sources",
+    "public_api",
+    "media_envelope",
+    "binding",
+    "result_vector"
+  ],
+  "title": "Radroots Phase 1 publication media-readiness semantic contract",
+  "type": "object"
+}

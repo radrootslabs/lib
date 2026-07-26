@@ -4557,34 +4557,20 @@ fn validate_command_reachability(workspace_root: &Path) -> Result<(), String> {
             .map_err(|error| format!("parse {CONTRACT_COMMAND_SOURCE_RELATIVE}: {error}"))?,
         "validate_artifact_contracts",
     )?);
-    for ordered in [
+    let ordered = [
         "validate_source_maintenance_manifest(workspace_root)?",
-        "blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?",
+        "phase1_publication_artifact::validate_immutable_raw_source_rebuild_predecessor(workspace_root)?",
+        "validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?",
+        "validate_release_provenance_schema(workspace_root)?",
+        "validate_phase1_publication_media_readiness_manifest(workspace_root)?",
         "validate_knowledge_contract_manifest(workspace_root)",
-    ] {
-        if !aggregate.contains(ordered) {
-            return Err(format!(
-                "aggregate contract authority does not reach raw-source rebuild validation through `{ordered}`"
-            ));
-        }
-    }
-    let source_index = aggregate
-        .find("validate_source_maintenance_manifest(workspace_root)?")
-        .expect("checked above");
-    let readiness_index = aggregate
-        .find(
-            "blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?",
-        )
-        .expect("checked above");
-    let knowledge_index = aggregate
-        .find("validate_knowledge_contract_manifest(workspace_root)")
-        .expect("checked above");
-    if !(source_index < readiness_index && readiness_index < knowledge_index) {
-        return Err(
-            "aggregate contract authority must validate immutable predecessors before the Blossom readiness successor and knowledge contracts"
-                .to_owned(),
-        );
-    }
+    ];
+    require_ordered_markers(
+        CONTRACT_COMMAND_SOURCE_RELATIVE,
+        "aggregate contract authority",
+        &aggregate,
+        &ordered,
+    )?;
 
     for (function_name, expected_call) in [
         (

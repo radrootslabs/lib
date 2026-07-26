@@ -199,6 +199,17 @@ publish policy both pass for the same source revision.
   non-events and likewise fail closed. Event-contract registry v7 remains
   byte-identical, and the new gate grants no signing, upload, retrieval, relay,
   or entitlement authority.
+<!-- release-change: phase1-publication-media-readiness -->
+- The event-codec publication surface now binds each allowlisted artifact to
+  one canonical sealed Blossom readiness observation per distinct media URL.
+  The independent version-1 binding persists ordered evidence and the artifact
+  digest without duplicating artifact bytes, enforces exact hash, size, MIME,
+  URL, format, and authored dimensions where present, and requires canonical
+  empty evidence for media-free artifacts. Its bounded reload rejects missing,
+  duplicate, extra, reordered, stale-policy, cross-artifact, private BUD-11,
+  noncanonical, or digest-mutated state before signing. The artifact boundary
+  now admits only nonempty, at-most-10-MiB JPEG, PNG, or still-WebP references
+  whose canonical URLs are at most 4,096 bytes.
 <!-- release-change: blossom-publication-readiness-evidence -->
 - Blossom publication media now advances beyond local byte verification only
   after typed BUD-02 status and descriptor agreement, an independent BUD-01

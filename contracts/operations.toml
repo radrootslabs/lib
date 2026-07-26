@@ -119,6 +119,9 @@ public = [
   "RadrootsPhase1PublicationLeaf",
   "RadrootsPhase1AllowlistedPublicationArtifact",
   "RadrootsPhase1PublicationAllowlistError",
+  "RadrootsPhase1PublicationMediaReadinessBindingDigest",
+  "RadrootsPhase1MediaReadyPublicationArtifact",
+  "RadrootsPhase1PublicationMediaReadinessError",
   "RadrootsFarm",
   "RadrootsOperationalListing",
   "RadrootsPost",
@@ -1056,6 +1059,113 @@ case_kinds = [
   "publication_allowlist.allow_canonical_json.valid",
   "publication_allowlist.allow_canonical_json.invalid",
 ]
+
+[operations.phase1_publication_media_readiness_bind]
+domain = "publication"
+id = "publication_media_readiness.bind"
+stability = "beta"
+inputs = [
+  "RadrootsPhase1AllowlistedPublicationArtifact",
+  "RadrootsBlossomPublicationReadinessEvidence",
+]
+outputs = ["RadrootsPhase1MediaReadyPublicationArtifact"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_media_readiness_bind.implementation]
+rust_modules = [
+  "crates/event_codec/src/wire/publication.rs",
+  "crates/event_codec/src/wire/publication/allowlist.rs",
+  "crates/event_codec/src/wire/publication/media_readiness.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+  "radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationMediaReadinessError",
+]
+
+[operations.phase1_publication_media_readiness_bind.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_media_readiness.v1.json"
+case_kinds = [
+  "publication_media_readiness.bind.valid",
+  "publication_media_readiness.bind.invalid",
+  "publication_media_readiness.bind.artifact_invalid",
+]
+
+[operations.phase1_publication_media_readiness_to_canonical_json]
+domain = "publication"
+id = "publication_media_readiness.to_canonical_json"
+stability = "beta"
+inputs = ["RadrootsPhase1MediaReadyPublicationArtifact"]
+outputs = ["Bytes"]
+error_class = "none"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_media_readiness_to_canonical_json.implementation]
+rust_modules = ["crates/event_codec/src/wire/publication/media_readiness.rs"]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact",
+]
+
+[operations.phase1_publication_media_readiness_to_canonical_json.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_media_readiness.v1.json"
+case_kinds = ["publication_media_readiness.to_canonical_json.valid"]
+
+[operations.phase1_publication_media_readiness_from_canonical_json]
+domain = "publication"
+id = "publication_media_readiness.from_canonical_json"
+stability = "beta"
+inputs = ["RadrootsPhase1AllowlistedPublicationArtifact", "Bytes"]
+outputs = ["RadrootsPhase1MediaReadyPublicationArtifact"]
+error_class = "parse_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_media_readiness_from_canonical_json.implementation]
+rust_modules = [
+  "crates/event_codec/src/wire/publication.rs",
+  "crates/event_codec/src/wire/publication/allowlist.rs",
+  "crates/event_codec/src/wire/publication/media_readiness.rs",
+]
+rust_types = [
+  "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+  "radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationMediaReadinessError",
+]
+
+[operations.phase1_publication_media_readiness_from_canonical_json.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_media_readiness.v1.json"
+case_kinds = [
+  "publication_media_readiness.from_canonical_json.valid",
+  "publication_media_readiness.from_canonical_json.invalid",
+]
+
+[operations.phase1_publication_media_readiness_validate]
+domain = "publication"
+id = "publication_media_readiness.validate"
+stability = "beta"
+inputs = ["RadrootsPhase1MediaReadyPublicationArtifact"]
+outputs = ["Unit"]
+error_class = "validation_error"
+deterministic = true
+signing = "none"
+transport = "none"
+
+[operations.phase1_publication_media_readiness_validate.implementation]
+rust_modules = ["crates/event_codec/src/wire/publication/media_readiness.rs"]
+rust_types = [
+  "radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact",
+  "radroots_event_codec::wire::publication::RadrootsPhase1PublicationMediaReadinessError",
+]
+
+[operations.phase1_publication_media_readiness_validate.conformance]
+vector = "contracts/conformance/vectors/publication/phase1_media_readiness.v1.json"
+case_kinds = ["publication_media_readiness.validate.valid"]
 
 [operations.profile_build_authored_draft]
 domain = "profile"

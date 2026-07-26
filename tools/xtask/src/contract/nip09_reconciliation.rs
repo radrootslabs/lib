@@ -221,7 +221,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
-        "e135922812764cff3d3552bee4f953fa827b9a593d00fda081e93f6dc04c860d",
+        "b4ae0cfe31e089ad5ee69d398e69be36e7f24d0c101ec3d0a00a34aa109e9f06",
     ),
     (
         BLOSSOM_CARGO_MANIFEST_RELATIVE,
@@ -17358,6 +17358,7 @@ mod tests {
                 Some("dep:hex"),
                 Some("dep:serde_json"),
                 Some("dep:sha2"),
+                Some("radroots_blossom/serde"),
             ],
             "publication successor feature edges must retain their exact semantic shape"
         );

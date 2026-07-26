@@ -1,0 +1,37 @@
+{
+  "$id": "https://radroots.org/schemas/event-codec/phase1-publication-media-readiness-binding-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "binding_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 4096,
+      "type": "array"
+    },
+    "readiness_policy_version": {
+      "const": 1
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "readiness_policy_version",
+    "artifact_digest",
+    "evidence",
+    "binding_digest"
+  ],
+  "title": "Radroots Phase 1 publication media-readiness binding v1",
+  "type": "object"
+}

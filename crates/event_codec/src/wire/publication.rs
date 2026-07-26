@@ -12,6 +12,16 @@
 //! remain the cryptographic authenticity boundary.
 
 pub mod allowlist;
+mod media_readiness;
+
+pub use media_readiness::{
+    RADROOTS_PHASE1_PUBLICATION_MEDIA_READINESS_BINDING_MAX_BYTES,
+    RADROOTS_PHASE1_PUBLICATION_MEDIA_READINESS_BINDING_SCHEMA_VERSION,
+    RadrootsPhase1MediaReadyPublicationArtifact,
+    RadrootsPhase1PublicationMediaReadinessBindingDigest,
+    RadrootsPhase1PublicationMediaReadinessError, bind_phase1_publication_media_readiness,
+    validate_phase1_publication_media_readiness,
+};
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -23,8 +33,11 @@ use alloc::{
 use core::fmt;
 
 use radroots_blossom::{
-    RadrootsBlossomApprovedBlobUrl, RadrootsBlossomByteVerifiedDescriptor,
-    RadrootsBlossomMediaType, RadrootsBlossomSha256, url::RadrootsBlossomBlobUrl,
+    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES, RadrootsBlossomApprovedBlobUrl,
+    RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomMediaType,
+    RadrootsBlossomRasterDimensions, RadrootsBlossomRasterFormat, RadrootsBlossomSha256,
+    url::RadrootsBlossomBlobUrl,
 };
 use radroots_event::{
     RadrootsEventTags,
@@ -281,6 +294,10 @@ impl RadrootsPhase1PublicationMediaReference {
             sha256,
             size: wire.size,
             media_type,
+        })
+        .and_then(|reference| {
+            validate_media_reference_envelope(&reference)?;
+            Ok(reference)
         })
     }
 
@@ -639,6 +656,9 @@ impl RadrootsPhase1PublicationArtifact {
                     actual: media_references.len(),
                 },
             );
+        }
+        for reference in &media_references {
+            validate_media_reference_envelope(reference)?;
         }
         canonicalize_media_references(&mut media_references)?;
         let expected_event_id = compute_canonical_nip01_event_id(
@@ -1083,6 +1103,8 @@ fn validate_post(
         ) else {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidPostProfile);
         };
+        RadrootsBlossomRasterDimensions::new(dimensions.width(), dimensions.height())
+            .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidPostProfile)?;
         let mut tag = vec![
             "imeta".to_string(),
             format!("url {url}"),
@@ -1302,6 +1324,8 @@ fn validate_food_availability(
         let (Some(url), Some(dimensions)) = (image.url(), image.dimensions()) else {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidFoodAvailabilityProfile);
         };
+        RadrootsBlossomRasterDimensions::new(dimensions.width(), dimensions.height())
+            .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidFoodAvailabilityProfile)?;
         canonical.push(vec![
             "image".to_string(),
             url.to_string(),
@@ -1355,6 +1379,19 @@ fn validate_primary_media_reference(
         .hash_path()
         .extension()
         .is_none()
+    {
+        return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
+    }
+    Ok(())
+}
+
+fn validate_media_reference_envelope(
+    reference: &RadrootsPhase1PublicationMediaReference,
+) -> Result<(), RadrootsPhase1PublicationArtifactError> {
+    if reference.url.as_str().len() > RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES
+        || reference.size == 0
+        || reference.size > RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES
+        || RadrootsBlossomRasterFormat::from_media_type(&reference.media_type).is_err()
     {
         return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
     }
