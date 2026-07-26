@@ -61,38 +61,6 @@
         "event_contract_id"
       ],
       "type": "object"
-    },
-    "source": {
-      "additionalProperties": false,
-      "properties": {
-        "byte_length": {
-          "minimum": 1,
-          "type": "integer"
-        },
-        "hash_algorithm": {
-          "const": "sha256_bytes_v1"
-        },
-        "path": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "role": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "type": "string"
-        }
-      },
-      "required": [
-        "role",
-        "path",
-        "byte_length",
-        "sha256",
-        "hash_algorithm"
-      ],
-      "type": "object"
     }
   },
   "$id": "https://radroots.org/contracts/event-codec/phase1-publication-allowlist-v1.schema.json",
@@ -146,6 +114,16 @@
         "input_type": {
           "const": "RadrootsPhase1PublicationArtifact"
         },
+        "invariants": {
+          "const": [
+            "sealed_artifact_revalidation_v1",
+            "closed_seven_leaf_inventory_v1",
+            "kind1_ask_then_photo_update_then_update_precedence_v1",
+            "strict_typed_nip52_date_or_time_v1",
+            "classified_listing_partition_before_food_validation_v1",
+            "excluded_product_families_fail_closed_v1"
+          ]
+        },
         "kind_one_precedence": {
           "const": [
             "ask",
@@ -174,6 +152,7 @@
         "kind_one_precedence",
         "event_policy",
         "classified_listing_policy",
+        "invariants",
         "denied_families",
         "granted_capability",
         "excluded_capabilities"
@@ -243,29 +222,48 @@
       "minItems": 16,
       "type": "array"
     },
-    "release": {
-      "additionalProperties": false,
-      "properties": {
-        "change_id": {
-          "const": "phase1-publication-allowlist"
+    "protocol_sources": {
+      "const": [
+        {
+          "id": "nostr_nips",
+          "repository": "https://github.com/nostr-protocol/nips",
+          "revision": "bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91"
         },
-        "changelog_marker": {
-          "const": "<!-- release-change: phase1-publication-allowlist -->"
-        },
-        "changelog_path": {
-          "const": "CHANGELOG.md"
-        },
-        "record_path": {
-          "const": "contracts/releases/1.0.0-alpha.1.toml"
+        {
+          "id": "blossom",
+          "repository": "https://github.com/hzrd149/blossom",
+          "revision": "b5bd2801d1763aa635fc8fea7a76597e0eb18990"
         }
-      },
-      "required": [
-        "record_path",
-        "change_id",
-        "changelog_path",
-        "changelog_marker"
-      ],
-      "type": "object"
+      ]
+    },
+    "public_api": {
+      "const": {
+        "constants": [
+          "RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_VERSION",
+          "RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_CONTRACT_ID",
+          "RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_REGISTRY_VERSION"
+        ],
+        "functions": [
+          "allow_phase1_publication_artifact",
+          "allow_phase1_publication_canonical_json"
+        ],
+        "methods": [
+          "RadrootsPhase1AllowlistedPublicationArtifact::artifact",
+          "RadrootsPhase1AllowlistedPublicationArtifact::into_artifact",
+          "RadrootsPhase1AllowlistedPublicationArtifact::leaf",
+          "RadrootsPhase1PublicationAllowlistError::code",
+          "RadrootsPhase1PublicationAllowlistError::source_code",
+          "RadrootsPhase1PublicationLeaf::as_str",
+          "RadrootsPhase1PublicationLeaf::authored_operation_id",
+          "RadrootsPhase1PublicationLeaf::event_contract_id",
+          "RadrootsPhase1PublicationLeaf::kind"
+        ],
+        "types": [
+          "RadrootsPhase1PublicationLeaf",
+          "RadrootsPhase1AllowlistedPublicationArtifact",
+          "RadrootsPhase1PublicationAllowlistError"
+        ]
+      }
     },
     "result_vector": {
       "additionalProperties": false,
@@ -277,8 +275,8 @@
         "canonical_path": {
           "const": "contracts/conformance/vectors/publication/phase1_allowlist.v1.json"
         },
-        "executor_path": {
-          "const": "crates/event_codec/tests/publication_allowlist.rs"
+        "executor": {
+          "$ref": "#/$defs/file"
         },
         "executor_test": {
           "const": "publication_allowlist_conformance_vector_executes_every_case"
@@ -316,7 +314,7 @@
         "byte_length",
         "sha256",
         "hash_algorithm",
-        "executor_path",
+        "executor",
         "executor_test",
         "valid_case_ids",
         "invalid_case_ids"
@@ -325,13 +323,6 @@
     },
     "schema_version": {
       "const": 1
-    },
-    "source_files": {
-      "items": {
-        "$ref": "#/$defs/source"
-      },
-      "minItems": 1,
-      "type": "array"
     }
   },
   "required": [
@@ -341,11 +332,11 @@
     "manifest_schema",
     "predecessor",
     "event_contract_registry",
+    "protocol_sources",
+    "public_api",
     "allowlist",
     "predecessor_source_supersessions",
-    "source_files",
-    "result_vector",
-    "release"
+    "result_vector"
   ],
   "title": "Radroots Phase 1 Publication Allowlist Contract",
   "type": "object"

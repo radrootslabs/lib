@@ -1,7 +1,7 @@
 use super::{
     artifact_bundle::{GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction},
     phase1_publication_artifact::{
-        PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS, source_specs,
+        PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS,
         validate_immutable_phase1_publication_artifact_predecessor_under_lock,
     },
 };
@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, path::Path};
+use syn::{ImplItem, Item, Visibility};
 
 const SCHEMA_VERSION: u32 = 1;
 const CONTRACT_ID: &str = "radroots_event_codec.phase1_publication_allowlist_v1";
@@ -37,10 +38,7 @@ const VECTOR_MIRROR_RELATIVE: &str =
 const VECTOR_EXECUTOR_RELATIVE: &str = "crates/event_codec/tests/publication_allowlist.rs";
 const VECTOR_EXECUTOR_TEST: &str = "publication_allowlist_conformance_vector_executes_every_case";
 const OPERATIONS_RELATIVE: &str = "contracts/operations.toml";
-const RELEASE_RELATIVE: &str = "contracts/releases/1.0.0-alpha.1.toml";
-const CHANGELOG_RELATIVE: &str = "CHANGELOG.md";
-const RELEASE_CHANGE_ID: &str = "phase1-publication-allowlist";
-const CHANGELOG_MARKER: &str = "<!-- release-change: phase1-publication-allowlist -->";
+const ALLOWLIST_SOURCE_RELATIVE: &str = "crates/event_codec/src/wire/publication/allowlist.rs";
 const REGISTRY_RELATIVE: &str = "contracts/event_store/event_contract_registry_v7.inventory.json";
 const REGISTRY_SIDECAR_RELATIVE: &str =
     "contracts/event_store/event_contract_registry_v7.inventory.sha256";
@@ -98,18 +96,50 @@ const PREDECESSOR_ARTIFACTS: &[ImmutableArtifactSpec] = &[
     ),
 ];
 
-const GENERATED_ARTIFACT_PATHS: &[&str] = &[
-    MANIFEST_RELATIVE,
-    MANIFEST_SCHEMA_RELATIVE,
-    MANIFEST_SHA256_RELATIVE,
-    GENERATED_DESCRIPTOR_RELATIVE,
-    VECTOR_MIRROR_RELATIVE,
-];
-
 const PUBLIC_TYPES: &[&str] = &[
     "RadrootsPhase1PublicationLeaf",
     "RadrootsPhase1AllowlistedPublicationArtifact",
     "RadrootsPhase1PublicationAllowlistError",
+];
+const PUBLIC_CONSTANTS: &[&str] = &[
+    "RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_VERSION",
+    "RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_CONTRACT_ID",
+    "RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_REGISTRY_VERSION",
+];
+const PUBLIC_FUNCTIONS: &[&str] = &[
+    "allow_phase1_publication_artifact",
+    "allow_phase1_publication_canonical_json",
+];
+const PUBLIC_METHODS: &[&str] = &[
+    "RadrootsPhase1AllowlistedPublicationArtifact::artifact",
+    "RadrootsPhase1AllowlistedPublicationArtifact::into_artifact",
+    "RadrootsPhase1AllowlistedPublicationArtifact::leaf",
+    "RadrootsPhase1PublicationAllowlistError::code",
+    "RadrootsPhase1PublicationAllowlistError::source_code",
+    "RadrootsPhase1PublicationLeaf::as_str",
+    "RadrootsPhase1PublicationLeaf::authored_operation_id",
+    "RadrootsPhase1PublicationLeaf::event_contract_id",
+    "RadrootsPhase1PublicationLeaf::kind",
+];
+const PROTOCOL_SOURCE_PINS: &[(&str, &str, &str)] = &[
+    (
+        "nostr_nips",
+        "https://github.com/nostr-protocol/nips",
+        "bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91",
+    ),
+    (
+        "blossom",
+        "https://github.com/hzrd149/blossom",
+        "b5bd2801d1763aa635fc8fea7a76597e0eb18990",
+    ),
+];
+const SEMANTIC_INVARIANTS: &[&str] = &[
+    "sealed_artifact_revalidation_v1",
+    "closed_seven_leaf_inventory_v1",
+    "kind1_ask_then_photo_update_then_update_precedence_v1",
+    "strict_typed_nip52_date_or_time_v1",
+    "classified_listing_partition_before_food_validation_v1",
+    "excluded_product_families_fail_closed_v1",
 ];
 
 const LEAVES: &[LeafSpec] = &[
@@ -528,16 +558,6 @@ struct FileDescriptor {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-struct SourceFileDescriptor {
-    role: String,
-    path: String,
-    byte_length: u64,
-    sha256: String,
-    hash_algorithm: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 struct PredecessorDescriptor {
     contract_id: String,
     immutable_artifacts: Vec<FileDescriptor>,
@@ -550,6 +570,23 @@ struct RegistryDescriptor {
     inventory: FileDescriptor,
     sidecar: FileDescriptor,
     evolution: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ProtocolSourcePin {
+    id: String,
+    repository: String,
+    revision: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PublicApiDescriptor {
+    constants: Vec<String>,
+    types: Vec<String>,
+    functions: Vec<String>,
+    methods: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -575,6 +612,7 @@ struct AllowlistDescriptor {
     kind_one_precedence: Vec<String>,
     event_policy: String,
     classified_listing_policy: String,
+    invariants: Vec<String>,
     denied_families: Vec<String>,
     granted_capability: String,
     excluded_capabilities: Vec<String>,
@@ -588,19 +626,10 @@ struct ResultVectorDescriptor {
     byte_length: u64,
     sha256: String,
     hash_algorithm: String,
-    executor_path: String,
+    executor: FileDescriptor,
     executor_test: String,
     valid_case_ids: Vec<String>,
     invalid_case_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ReleaseDescriptor {
-    record_path: String,
-    change_id: String,
-    changelog_path: String,
-    changelog_marker: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -612,11 +641,11 @@ struct AllowlistManifest {
     manifest_schema: FileDescriptor,
     predecessor: PredecessorDescriptor,
     event_contract_registry: RegistryDescriptor,
+    protocol_sources: Vec<ProtocolSourcePin>,
+    public_api: PublicApiDescriptor,
     allowlist: AllowlistDescriptor,
     predecessor_source_supersessions: Vec<String>,
-    source_files: Vec<SourceFileDescriptor>,
     result_vector: ResultVectorDescriptor,
-    release: ReleaseDescriptor,
 }
 
 #[derive(Debug, Deserialize)]
@@ -739,10 +768,6 @@ fn describe_manifest(
     workspace_root: &Path,
     schema_bytes: &[u8],
 ) -> Result<AllowlistManifest, String> {
-    let source_files = successor_source_specs(workspace_root)?
-        .into_iter()
-        .map(|(role, path)| source_descriptor(workspace_root, &role, &path))
-        .collect::<Result<Vec<_>, _>>()?;
     let vector = validate_vector(workspace_root)?;
     Ok(AllowlistManifest {
         schema_version: SCHEMA_VERSION,
@@ -768,30 +793,45 @@ fn describe_manifest(
             evolution: "immutable_registry_v7_plus_additive_phase1_publication_allowlist_v1"
                 .to_owned(),
         },
+        protocol_sources: expected_protocol_sources(),
+        public_api: expected_public_api_descriptor(),
         allowlist: expected_allowlist_descriptor(),
         predecessor_source_supersessions: PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS
             .iter()
             .map(|path| (*path).to_owned())
             .collect(),
-        source_files,
         result_vector: ResultVectorDescriptor {
             canonical_path: VECTOR_RELATIVE.to_owned(),
             mirror_path: VECTOR_MIRROR_RELATIVE.to_owned(),
             byte_length: vector.bytes.len() as u64,
             sha256: sha256_hex(&vector.bytes),
             hash_algorithm: HASH_ALGORITHM.to_owned(),
-            executor_path: VECTOR_EXECUTOR_RELATIVE.to_owned(),
+            executor: descriptor_for_file(workspace_root, VECTOR_EXECUTOR_RELATIVE)?,
             executor_test: VECTOR_EXECUTOR_TEST.to_owned(),
             valid_case_ids: vector.valid_case_ids,
             invalid_case_ids: vector.invalid_case_ids,
         },
-        release: ReleaseDescriptor {
-            record_path: RELEASE_RELATIVE.to_owned(),
-            change_id: RELEASE_CHANGE_ID.to_owned(),
-            changelog_path: CHANGELOG_RELATIVE.to_owned(),
-            changelog_marker: CHANGELOG_MARKER.to_owned(),
-        },
     })
+}
+
+fn expected_protocol_sources() -> Vec<ProtocolSourcePin> {
+    PROTOCOL_SOURCE_PINS
+        .iter()
+        .map(|(id, repository, revision)| ProtocolSourcePin {
+            id: (*id).to_owned(),
+            repository: (*repository).to_owned(),
+            revision: (*revision).to_owned(),
+        })
+        .collect()
+}
+
+fn expected_public_api_descriptor() -> PublicApiDescriptor {
+    PublicApiDescriptor {
+        constants: owned(PUBLIC_CONSTANTS),
+        types: owned(PUBLIC_TYPES),
+        functions: owned(PUBLIC_FUNCTIONS),
+        methods: owned(PUBLIC_METHODS),
+    }
 }
 
 fn expected_allowlist_descriptor() -> AllowlistDescriptor {
@@ -819,6 +859,7 @@ fn expected_allowlist_descriptor() -> AllowlistDescriptor {
         event_policy: "strict_typed_nip52_date_or_time_artifact_only_v1".to_owned(),
         classified_listing_policy: "raw_marker_partition_before_focused_food_profile_validation_v1"
             .to_owned(),
+        invariants: owned(SEMANTIC_INVARIANTS),
         denied_families: DENIED_FAMILIES
             .iter()
             .map(|family| (*family).to_owned())
@@ -839,31 +880,93 @@ fn expected_allowlist_descriptor() -> AllowlistDescriptor {
     }
 }
 
+fn owned(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
 fn validate_source_contract(workspace_root: &Path) -> Result<(), String> {
     validate_registry_identity(workspace_root)?;
     validate_operations_authority(workspace_root)?;
-    validate_release_authority(workspace_root)?;
+    validate_public_api_authority(workspace_root)?;
     validate_vector(workspace_root)?;
 
-    let paths = successor_source_specs(workspace_root)?
-        .into_iter()
-        .map(|(_, path)| path)
+    let superseded = PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS
+        .iter()
+        .copied()
         .collect::<BTreeSet<_>>();
-    for path in PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS {
-        if !paths.contains(*path) {
-            return Err(format!(
-                "allowlist successor does not bind superseded predecessor source {path}"
-            ));
+    if superseded.len() != PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS.len() {
+        return Err("allowlist predecessor supersession paths must be unique".to_owned());
+    }
+    Ok(())
+}
+
+fn validate_public_api_authority(workspace_root: &Path) -> Result<(), String> {
+    let bytes = read_regular_file(workspace_root, ALLOWLIST_SOURCE_RELATIVE)?;
+    let source = std::str::from_utf8(&bytes)
+        .map_err(|error| format!("{ALLOWLIST_SOURCE_RELATIVE} must be UTF-8: {error}"))?;
+    validate_public_api_source(source)
+}
+
+fn validate_public_api_source(source: &str) -> Result<(), String> {
+    let file = syn::parse_file(source)
+        .map_err(|error| format!("parse {ALLOWLIST_SOURCE_RELATIVE}: {error}"))?;
+    let mut constants = BTreeSet::new();
+    let mut types = BTreeSet::new();
+    let mut functions = BTreeSet::new();
+    let mut methods = BTreeSet::new();
+    for item in &file.items {
+        match item {
+            Item::Const(item) if is_public(&item.vis) => {
+                constants.insert(item.ident.to_string());
+            }
+            Item::Enum(item) if is_public(&item.vis) => {
+                types.insert(item.ident.to_string());
+            }
+            Item::Struct(item) if is_public(&item.vis) => {
+                types.insert(item.ident.to_string());
+            }
+            Item::Fn(item) if is_public(&item.vis) => {
+                functions.insert(item.sig.ident.to_string());
+            }
+            Item::Impl(item) if item.trait_.is_none() => {
+                let syn::Type::Path(self_type) = item.self_ty.as_ref() else {
+                    continue;
+                };
+                let Some(type_name) = self_type.path.segments.last() else {
+                    continue;
+                };
+                for method in &item.items {
+                    if let ImplItem::Fn(method) = method
+                        && is_public(&method.vis)
+                    {
+                        methods.insert(format!("{}::{}", type_name.ident, method.sig.ident));
+                    }
+                }
+            }
+            _ => {}
         }
     }
-    for path in GENERATED_ARTIFACT_PATHS {
-        if paths.contains(*path) {
+    for (label, actual, expected) in [
+        ("constants", constants, expected_set(PUBLIC_CONSTANTS)),
+        ("types", types, expected_set(PUBLIC_TYPES)),
+        ("functions", functions, expected_set(PUBLIC_FUNCTIONS)),
+        ("methods", methods, expected_set(PUBLIC_METHODS)),
+    ] {
+        if actual != expected {
             return Err(format!(
-                "allowlist source inventory recursively includes generated artifact {path}"
+                "{ALLOWLIST_SOURCE_RELATIVE} public {label} drifted: expected {expected:?}, found {actual:?}"
             ));
         }
     }
     Ok(())
+}
+
+fn is_public(visibility: &Visibility) -> bool {
+    matches!(visibility, Visibility::Public(_))
+}
+
+fn expected_set(values: &[&str]) -> BTreeSet<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
 }
 
 fn validate_registry_identity(workspace_root: &Path) -> Result<(), String> {
@@ -1016,47 +1119,6 @@ fn validate_allowlist_operation(
                 .collect::<Vec<_>>()
     {
         return Err("publication allowlist conformance authority drifted".to_owned());
-    }
-    Ok(())
-}
-
-fn validate_release_authority(workspace_root: &Path) -> Result<(), String> {
-    let release = parse_toml(workspace_root, RELEASE_RELATIVE)?;
-    let changes = release
-        .get("changes")
-        .and_then(toml::Value::as_array)
-        .ok_or_else(|| format!("{RELEASE_RELATIVE} has no changes"))?;
-    let matches = changes
-        .iter()
-        .filter(|change| change.get("id").and_then(toml::Value::as_str) == Some(RELEASE_CHANGE_ID))
-        .collect::<Vec<_>>();
-    if matches.len() != 1
-        || matches[0]
-            .get("classification")
-            .and_then(toml::Value::as_str)
-            != Some("feature")
-    {
-        return Err(format!(
-            "{RELEASE_RELATIVE} must contain one feature change {RELEASE_CHANGE_ID}"
-        ));
-    }
-    let impacts = toml_string_array("allowlist semver impacts", matches[0].get("semver_impacts"))?;
-    for required in [
-        "add_exported_type",
-        "add_exported_function",
-        "add_exported_constant",
-        "add_conformance_vector",
-    ] {
-        if !impacts.iter().any(|impact| impact == required) {
-            return Err(format!("allowlist release change is missing {required}"));
-        }
-    }
-    let changelog = String::from_utf8(read_regular_file(workspace_root, CHANGELOG_RELATIVE)?)
-        .map_err(|error| format!("{CHANGELOG_RELATIVE} must be UTF-8: {error}"))?;
-    if changelog.matches(CHANGELOG_MARKER).count() != 1 {
-        return Err(format!(
-            "{CHANGELOG_RELATIVE} must contain {CHANGELOG_MARKER} exactly once"
-        ));
     }
     Ok(())
 }
@@ -1614,35 +1676,13 @@ fn forbid_tag_name(case_id: &str, tags: &[Value], forbidden: &str) -> Result<(),
     }
 }
 
-fn successor_source_specs(workspace_root: &Path) -> Result<Vec<(String, String)>, String> {
-    let mut specs = source_specs(workspace_root)?;
-    specs.extend([
-        (
-            "publication_allowlist_vector_executor".to_owned(),
-            VECTOR_EXECUTOR_RELATIVE.to_owned(),
-        ),
-        (
-            "publication_allowlist_contract_governance".to_owned(),
-            "tools/xtask/src/contract/phase1_publication_allowlist.rs".to_owned(),
-        ),
-    ]);
-    specs.sort_by(|left, right| left.1.cmp(&right.1));
-    let mut seen = BTreeSet::new();
-    for (_, path) in &specs {
-        if !seen.insert(path.as_str()) {
-            return Err(format!(
-                "publication allowlist source inventory duplicates {path}"
-            ));
-        }
-    }
-    Ok(specs)
-}
-
 fn validate_manifest_shape(manifest: &AllowlistManifest) -> Result<(), String> {
     if manifest.schema_version != SCHEMA_VERSION
         || manifest.contract_id != CONTRACT_ID
         || manifest.authority_id != AUTHORITY_ID
         || manifest.predecessor.contract_id != PREDECESSOR_CONTRACT_ID
+        || manifest.protocol_sources != expected_protocol_sources()
+        || manifest.public_api != expected_public_api_descriptor()
         || manifest.allowlist != expected_allowlist_descriptor()
         || manifest.predecessor_source_supersessions
             != PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS
@@ -1651,7 +1691,8 @@ fn validate_manifest_shape(manifest: &AllowlistManifest) -> Result<(), String> {
                 .collect::<Vec<_>>()
         || manifest.result_vector.canonical_path != VECTOR_RELATIVE
         || manifest.result_vector.mirror_path != VECTOR_MIRROR_RELATIVE
-        || manifest.release.change_id != RELEASE_CHANGE_ID
+        || manifest.result_vector.executor.path != VECTOR_EXECUTOR_RELATIVE
+        || manifest.result_vector.executor_test != VECTOR_EXECUTOR_TEST
     {
         return Err(format!("{MANIFEST_RELATIVE} shape drifted"));
     }
@@ -1683,11 +1724,10 @@ fn validate_manifest_shape(manifest: &AllowlistManifest) -> Result<(), String> {
             "{MANIFEST_RELATIVE} predecessor or registry identity drifted"
         ));
     }
-    let mut paths = BTreeSet::new();
-    for source in &manifest.source_files {
-        if source.hash_algorithm != HASH_ALGORITHM || !paths.insert(source.path.as_str()) {
-            return Err(format!("{MANIFEST_RELATIVE} source inventory is invalid"));
-        }
+    if manifest.result_vector.executor.hash_algorithm != HASH_ALGORITHM {
+        return Err(format!(
+            "{MANIFEST_RELATIVE} behavior executor hash algorithm drifted"
+        ));
     }
     Ok(())
 }
@@ -1701,8 +1741,8 @@ fn manifest_schema() -> Value {
         "additionalProperties": false,
         "required": [
             "schema_version", "contract_id", "authority_id", "manifest_schema", "predecessor",
-            "event_contract_registry", "allowlist", "predecessor_source_supersessions",
-            "source_files", "result_vector", "release"
+            "event_contract_registry", "protocol_sources", "public_api", "allowlist",
+            "predecessor_source_supersessions", "result_vector"
         ],
         "properties": {
             "schema_version": {"const": SCHEMA_VERSION},
@@ -1727,9 +1767,11 @@ fn manifest_schema() -> Value {
                     "evolution": {"const": "immutable_registry_v7_plus_additive_phase1_publication_allowlist_v1"}
                 }
             },
+            "protocol_sources": {"const": expected_protocol_sources()},
+            "public_api": {"const": expected_public_api_descriptor()},
             "allowlist": {
                 "type": "object", "additionalProperties": false,
-                "required": ["version", "contract_id", "operation_id", "canonical_json_operation_id", "input_type", "output_type", "allowed_leaves", "kind_one_precedence", "event_policy", "classified_listing_policy", "denied_families", "granted_capability", "excluded_capabilities"],
+                "required": ["version", "contract_id", "operation_id", "canonical_json_operation_id", "input_type", "output_type", "allowed_leaves", "kind_one_precedence", "event_policy", "classified_listing_policy", "invariants", "denied_families", "granted_capability", "excluded_capabilities"],
                 "properties": {
                     "version": {"const": 1},
                     "contract_id": {"const": RADROOTS_PHASE1_PUBLICATION_ALLOWLIST_CONTRACT_ID},
@@ -1741,6 +1783,7 @@ fn manifest_schema() -> Value {
                     "kind_one_precedence": {"const": ["ask", "photo_update", "update"]},
                     "event_policy": {"const": "strict_typed_nip52_date_or_time_artifact_only_v1"},
                     "classified_listing_policy": {"const": "raw_marker_partition_before_focused_food_profile_validation_v1"},
+                    "invariants": {"const": owned(SEMANTIC_INVARIANTS)},
                     "denied_families": {"type": "array", "minItems": 19, "maxItems": 19, "items": {"type": "string", "minLength": 1}},
                     "granted_capability": {"const": "phase1_durable_publication_lane_entry_only_v1"},
                     "excluded_capabilities": {"type": "array", "minItems": 7, "maxItems": 7, "items": {"type": "string", "minLength": 1}}
@@ -1752,30 +1795,19 @@ fn manifest_schema() -> Value {
                 "maxItems": PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS.len(),
                 "items": {"type": "string", "minLength": 1}
             },
-            "source_files": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/source"}},
             "result_vector": {
                 "type": "object", "additionalProperties": false,
-                "required": ["canonical_path", "mirror_path", "byte_length", "sha256", "hash_algorithm", "executor_path", "executor_test", "valid_case_ids", "invalid_case_ids"],
+                "required": ["canonical_path", "mirror_path", "byte_length", "sha256", "hash_algorithm", "executor", "executor_test", "valid_case_ids", "invalid_case_ids"],
                 "properties": {
                     "canonical_path": {"const": VECTOR_RELATIVE},
                     "mirror_path": {"const": VECTOR_MIRROR_RELATIVE},
                     "byte_length": {"type": "integer", "minimum": 1},
                     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
                     "hash_algorithm": {"const": HASH_ALGORITHM},
-                    "executor_path": {"const": VECTOR_EXECUTOR_RELATIVE},
+                    "executor": {"$ref": "#/$defs/file"},
                     "executor_test": {"const": VECTOR_EXECUTOR_TEST},
                     "valid_case_ids": {"type": "array", "minItems": 14, "maxItems": 14, "items": {"type": "string"}},
                     "invalid_case_ids": {"type": "array", "minItems": 25, "maxItems": 25, "items": {"type": "string"}}
-                }
-            },
-            "release": {
-                "type": "object", "additionalProperties": false,
-                "required": ["record_path", "change_id", "changelog_path", "changelog_marker"],
-                "properties": {
-                    "record_path": {"const": RELEASE_RELATIVE},
-                    "change_id": {"const": RELEASE_CHANGE_ID},
-                    "changelog_path": {"const": CHANGELOG_RELATIVE},
-                    "changelog_marker": {"const": CHANGELOG_MARKER}
                 }
             }
         },
@@ -1784,17 +1816,6 @@ fn manifest_schema() -> Value {
                 "type": "object", "additionalProperties": false,
                 "required": ["path", "byte_length", "sha256", "hash_algorithm"],
                 "properties": {
-                    "path": {"type": "string", "minLength": 1},
-                    "byte_length": {"type": "integer", "minimum": 1},
-                    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-                    "hash_algorithm": {"const": HASH_ALGORITHM}
-                }
-            },
-            "source": {
-                "type": "object", "additionalProperties": false,
-                "required": ["role", "path", "byte_length", "sha256", "hash_algorithm"],
-                "properties": {
-                    "role": {"type": "string", "minLength": 1},
                     "path": {"type": "string", "minLength": 1},
                     "byte_length": {"type": "integer", "minimum": 1},
                     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -1813,21 +1834,6 @@ fn manifest_schema() -> Value {
                 }
             }
         }
-    })
-}
-
-fn source_descriptor(
-    workspace_root: &Path,
-    role: &str,
-    path: &str,
-) -> Result<SourceFileDescriptor, String> {
-    let bytes = read_regular_file(workspace_root, path)?;
-    Ok(SourceFileDescriptor {
-        role: role.to_owned(),
-        path: path.to_owned(),
-        byte_length: bytes.len() as u64,
-        sha256: sha256_hex(&bytes),
-        hash_algorithm: HASH_ALGORITHM.to_owned(),
     })
 }
 
@@ -1907,6 +1913,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
 
     fn workspace_root() -> PathBuf {
@@ -1918,19 +1925,21 @@ mod tests {
     }
 
     #[test]
-    fn allowlist_source_inventory_is_closed_and_unique() {
-        let specs = successor_source_specs(&workspace_root()).expect("allowlist sources");
-        let paths = specs
-            .iter()
-            .map(|(_, path)| path.as_str())
-            .collect::<BTreeSet<_>>();
-        assert_eq!(paths.len(), specs.len());
-        assert!(paths.contains("crates/event_codec/src/wire/publication/allowlist.rs"));
-        assert!(paths.contains(VECTOR_EXECUTOR_RELATIVE));
-        assert!(paths.contains("tools/xtask/src/contract/phase1_publication_allowlist.rs"));
-        for generated in GENERATED_ARTIFACT_PATHS {
-            assert!(!paths.contains(generated));
-        }
+    fn allowlist_public_api_is_validated_from_the_rust_ast() {
+        let root = workspace_root();
+        let source = fs::read_to_string(root.join(ALLOWLIST_SOURCE_RELATIVE)).unwrap();
+        validate_public_api_source(&source).expect("current public API AST");
+        validate_public_api_source(&format!("// unrelated comment\n{source}"))
+            .expect("comments do not change public API identity");
+
+        let private_function = source.replacen(
+            "pub fn allow_phase1_publication_artifact(",
+            "fn allow_phase1_publication_artifact(",
+            1,
+        );
+        let error = validate_public_api_source(&private_function)
+            .expect_err("removing an operation from the public API must fail");
+        assert!(error.contains("public functions drifted"), "{error}");
     }
 
     #[test]
@@ -1938,8 +1947,95 @@ mod tests {
         let root = workspace_root();
         validate_registry_identity(&root).expect("registry identity");
         validate_operations_authority(&root).expect("operation authority");
-        validate_release_authority(&root).expect("release authority");
+        validate_public_api_authority(&root).expect("public API authority");
         validate_vector(&root).expect("allowlist vector");
+    }
+
+    #[test]
+    fn semantic_contract_ignores_unrelated_source_and_release_bytes() {
+        let root = workspace_root();
+        let temp = tempfile::tempdir().expect("semantic authority workspace");
+        copy_semantic_authorities(&root, temp.path());
+        let schema_bytes = canonical_json_bytes(&manifest_schema()).expect("schema bytes");
+        let before = canonical_json_bytes(
+            &describe_manifest(temp.path(), &schema_bytes).expect("baseline semantic manifest"),
+        )
+        .expect("baseline bytes");
+
+        write_temp_file(temp.path(), "Cargo.lock", b"unrelated lockfile mutation\n");
+        write_temp_file(
+            temp.path(),
+            "CHANGELOG.md",
+            b"unrelated release note mutation\n",
+        );
+        write_temp_file(
+            temp.path(),
+            "crates/event_codec/src/unrelated.rs",
+            b"pub fn unrelated() {}\n",
+        );
+        let after = canonical_json_bytes(
+            &describe_manifest(temp.path(), &schema_bytes).expect("stable semantic manifest"),
+        )
+        .expect("stable bytes");
+        assert_eq!(before, after);
+
+        let value: Value = serde_json::from_slice(&after).expect("semantic manifest JSON");
+        assert!(value.get("source_files").is_none());
+        assert!(value.get("release").is_none());
+    }
+
+    #[test]
+    fn semantic_contract_changes_for_schema_and_behavior_executor_bytes() {
+        let root = workspace_root();
+        let temp = tempfile::tempdir().expect("semantic authority workspace");
+        copy_semantic_authorities(&root, temp.path());
+        let schema = manifest_schema();
+        let schema_bytes = canonical_json_bytes(&schema).expect("schema bytes");
+        let baseline = canonical_json_bytes(
+            &describe_manifest(temp.path(), &schema_bytes).expect("baseline semantic manifest"),
+        )
+        .expect("baseline bytes");
+
+        let mut changed_schema = schema;
+        changed_schema["title"] = Value::String("Changed governed schema".to_owned());
+        let changed_schema_bytes = canonical_json_bytes(&changed_schema).expect("changed schema");
+        let changed_schema_manifest = canonical_json_bytes(
+            &describe_manifest(temp.path(), &changed_schema_bytes)
+                .expect("schema-sensitive semantic manifest"),
+        )
+        .expect("changed schema manifest");
+        assert_ne!(baseline, changed_schema_manifest);
+
+        let executor = temp.path().join(VECTOR_EXECUTOR_RELATIVE);
+        let mut bytes = fs::read(&executor).expect("behavior executor");
+        bytes.extend_from_slice(b"\n// governed behavior executor mutation\n");
+        fs::write(&executor, bytes).expect("mutate behavior executor");
+        let changed_executor_manifest = canonical_json_bytes(
+            &describe_manifest(temp.path(), &schema_bytes)
+                .expect("executor-sensitive semantic manifest"),
+        )
+        .expect("changed executor manifest");
+        assert_ne!(baseline, changed_executor_manifest);
+    }
+
+    #[test]
+    fn semantic_contract_rejects_governed_vector_mutation() {
+        let root = workspace_root();
+        let temp = tempfile::tempdir().expect("semantic authority workspace");
+        copy_semantic_authorities(&root, temp.path());
+        let vector_path = temp.path().join(VECTOR_RELATIVE);
+        let mut vector: Value =
+            serde_json::from_slice(&fs::read(&vector_path).expect("vector bytes")).unwrap();
+        vector["vectors"][0]["id"] = Value::String("governed_vector_mutation".to_owned());
+        fs::write(
+            &vector_path,
+            canonical_json_bytes(&vector).expect("mutated vector bytes"),
+        )
+        .expect("mutate governed vector");
+        let schema_bytes = canonical_json_bytes(&manifest_schema()).expect("schema bytes");
+        let error = describe_manifest(temp.path(), &schema_bytes)
+            .expect_err("governed vector mutation must fail closed");
+        assert!(error.contains("case inventory or order drifted"), "{error}");
     }
 
     #[test]
@@ -1987,5 +2083,24 @@ mod tests {
         validate_json_schema(&schema, &value).expect("valid manifest");
         value["unexpected"] = Value::Bool(true);
         validate_json_schema(&schema, &value).expect_err("unknown field must fail");
+    }
+
+    fn copy_semantic_authorities(source_root: &Path, destination_root: &Path) {
+        for relative in [
+            REGISTRY_RELATIVE,
+            REGISTRY_SIDECAR_RELATIVE,
+            VECTOR_RELATIVE,
+            VECTOR_EXECUTOR_RELATIVE,
+        ] {
+            let bytes = fs::read(source_root.join(relative)).expect("semantic authority source");
+            write_temp_file(destination_root, relative, &bytes);
+        }
+    }
+
+    fn write_temp_file(root: &Path, relative: &str, bytes: &[u8]) {
+        let path = root.join(relative);
+        fs::create_dir_all(path.parent().expect("temporary file parent"))
+            .expect("create temporary parent");
+        fs::write(path, bytes).expect("write temporary semantic authority");
     }
 }

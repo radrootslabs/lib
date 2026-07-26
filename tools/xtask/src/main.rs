@@ -24,9 +24,11 @@ fn usage() {
     eprintln!("  cargo xtask contract raw-source-rebuild-manifest [--write]");
     eprintln!("  cargo xtask contract phase1-publication-artifact-manifest [--write]");
     eprintln!("  cargo xtask contract phase1-publication-allowlist-manifest [--write]");
+    eprintln!("  cargo xtask contract release-provenance-schema [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
     eprintln!("  cargo xtask release preflight");
+    eprintln!("  cargo xtask release provenance --package-dir <dir> --out <outside-worktree-file>");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask coverage required-crates");
     eprintln!("  cargo xtask coverage workspace-crates");
@@ -86,8 +88,40 @@ fn release_preflight_at(root: &Path) -> Result<(), String> {
 fn run_release(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("preflight") => release_preflight(),
+        Some("provenance") => run_release_provenance(&args[1..]),
         _ => Err("unknown release subcommand".to_string()),
     }
+}
+
+fn run_release_provenance(args: &[String]) -> Result<(), String> {
+    let mut package_directory = None;
+    let mut output = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--package-dir" if package_directory.is_none() => {
+                index += 1;
+                package_directory = args.get(index).map(PathBuf::from);
+            }
+            "--out" if output.is_none() => {
+                index += 1;
+                output = args.get(index).map(PathBuf::from);
+            }
+            unknown => {
+                return Err(format!(
+                    "release provenance received unknown or duplicate argument {unknown}"
+                ));
+            }
+        }
+        index += 1;
+    }
+    let package_directory = package_directory.ok_or_else(|| {
+        "release provenance requires exactly --package-dir <dir> and --out <file>".to_owned()
+    })?;
+    let output = output.ok_or_else(|| {
+        "release provenance requires exactly --package-dir <dir> and --out <file>".to_owned()
+    })?;
+    contract::write_release_provenance(&workspace_root(), &package_directory, &output)
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -159,6 +193,15 @@ fn run_contract(args: &[String]) -> Result<(), String> {
                 "phase1-publication-allowlist-manifest accepts no arguments or exactly --write"
                     .to_string(),
             ),
+        },
+        Some("release-provenance-schema") => match &args[1..] {
+            [] => contract::validate_release_provenance_schema(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_release_provenance_schema(&workspace_root())
+            }
+            _ => {
+                Err("release-provenance-schema accepts no arguments or exactly --write".to_string())
+            }
         },
         Some("knowledge-manifest") => {
             if args.get(1).map(String::as_str) == Some("--write") {
@@ -298,6 +341,20 @@ mod tests {
         ])
         .expect_err("invalid Phase 1 publication allowlist manifest mode");
         assert!(invalid_publication_allowlist.contains("exactly --write"));
+        let invalid_release_provenance_schema = run_contract(&[
+            "release-provenance-schema".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid release provenance schema mode");
+        assert!(invalid_release_provenance_schema.contains("exactly --write"));
+
+        let missing_release_provenance_args =
+            run_release(&["provenance".to_string()]).expect_err("missing provenance arguments");
+        assert!(missing_release_provenance_args.contains("requires exactly"));
+        let unknown_release_provenance_arg =
+            run_release(&["provenance".to_string(), "--unknown".to_string()])
+                .expect_err("unknown provenance argument");
+        assert!(unknown_release_provenance_arg.contains("unknown or duplicate"));
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
@@ -403,6 +460,8 @@ mod tests {
             .expect("contract Phase 1 publication artifact manifest");
         run_contract(&["phase1-publication-allowlist-manifest".to_string()])
             .expect("contract Phase 1 publication allowlist manifest");
+        run_contract(&["release-provenance-schema".to_string()])
+            .expect("contract release provenance schema");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");
     }
 }

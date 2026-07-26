@@ -17,6 +17,7 @@ mod phase1_publication_artifact;
 #[allow(dead_code)]
 mod raw_source_rebuild;
 mod registry_v7;
+mod release_provenance;
 mod source_maintenance;
 
 pub(crate) use food_availability_projection::{
@@ -34,6 +35,9 @@ pub(crate) use phase1_publication_artifact::{
 };
 pub(crate) use registry_v7::{
     validate_event_contract_registry_v7_inventory, write_event_contract_registry_v7_inventory,
+};
+pub(crate) use release_provenance::{
+    validate_release_provenance_schema, write_release_provenance, write_release_provenance_schema,
 };
 pub(crate) use source_maintenance::{
     validate_source_maintenance_manifest, write_source_maintenance_manifest,
@@ -68,6 +72,7 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_raw_source_rebuild_manifest(workspace_root)?;
     validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?;
     validate_phase1_publication_allowlist_manifest(workspace_root)?;
+    validate_release_provenance_schema(workspace_root)?;
     blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }

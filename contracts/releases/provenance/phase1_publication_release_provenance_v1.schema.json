@@ -1,0 +1,340 @@
+{
+  "$defs": {
+    "archive": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "filename": {
+          "pattern": "^[A-Za-z0-9_.-]+\\.crate$",
+          "type": "string"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "package": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "package",
+        "version",
+        "filename",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "purpose": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "required_result": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "purpose",
+        "command",
+        "required_result"
+      ],
+      "type": "object"
+    },
+    "feature_profile": {
+      "additionalProperties": false,
+      "properties": {
+        "features": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "no_default_features": {
+          "type": "boolean"
+        },
+        "package": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "test_threads": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "package",
+        "no_default_features",
+        "features",
+        "test_threads"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "git_oid": {
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    },
+    "nonempty_unique_strings": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://radroots.org/contracts/releases/phase1-publication-release-provenance-v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority": {
+      "const": "candidate_release_evidence_not_protocol_authority_v1"
+    },
+    "candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "clean_worktree": {
+          "const": true
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/git_oid"
+        },
+        "object_format": {
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "tree_oid": {
+          "$ref": "#/$defs/git_oid"
+        }
+      },
+      "required": [
+        "commit_oid",
+        "tree_oid",
+        "object_format",
+        "clean_worktree"
+      ],
+      "type": "object"
+    },
+    "commands": {
+      "items": {
+        "$ref": "#/$defs/command"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "contract_id": {
+      "const": "radroots.release.phase1_publication_provenance.v1"
+    },
+    "dependency_graph": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "cargo metadata --locked --format-version 1"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "node_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "normalization": {
+          "const": "cargo_metadata_semantic_graph_v1"
+        },
+        "normalized_byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "normalized_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "package_count": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "normalization",
+        "package_count",
+        "node_count",
+        "normalized_byte_length",
+        "normalized_sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "feature_profiles": {
+      "additionalProperties": false,
+      "properties": {
+        "contract": {
+          "$ref": "#/$defs/file"
+        },
+        "selected": {
+          "items": {
+            "$ref": "#/$defs/feature_profile"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "contract",
+        "selected"
+      ],
+      "type": "object"
+    },
+    "lockfile": {
+      "$ref": "#/$defs/file"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "packages": {
+      "additionalProperties": false,
+      "properties": {
+        "archives": {
+          "items": {
+            "$ref": "#/$defs/archive"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "publish_policy": {
+          "$ref": "#/$defs/file"
+        },
+        "release_version": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "release_version",
+        "publish_policy",
+        "archives"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "semantic_contract": {
+      "$ref": "#/$defs/file"
+    },
+    "source_digest": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "git_tree_sha1_v1",
+            "git_tree_sha256_v1"
+          ]
+        },
+        "oid": {
+          "$ref": "#/$defs/git_oid"
+        }
+      },
+      "required": [
+        "algorithm",
+        "oid"
+      ],
+      "type": "object"
+    },
+    "toolchain": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "components": {
+          "$ref": "#/$defs/nonempty_unique_strings"
+        },
+        "contract": {
+          "$ref": "#/$defs/file"
+        },
+        "targets": {
+          "$ref": "#/$defs/nonempty_unique_strings"
+        }
+      },
+      "required": [
+        "channel",
+        "components",
+        "targets",
+        "contract"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority",
+    "manifest_schema",
+    "semantic_contract",
+    "candidate",
+    "source_digest",
+    "toolchain",
+    "lockfile",
+    "dependency_graph",
+    "feature_profiles",
+    "packages",
+    "commands"
+  ],
+  "title": "Radroots Phase 1 Publication Release Provenance",
+  "type": "object"
+}
