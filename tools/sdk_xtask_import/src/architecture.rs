@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Component, Path},
 };
@@ -9,6 +9,9 @@ use serde::Deserialize;
 const DEVIATIONS_RELATIVE: &str = "docs/implementation/deviations.toml";
 const ARCHITECTURE_RELATIVE: &str = "docs/specs/radroots_crates_release_v1.toml";
 const ARCHITECTURE_ID: &str = "radroots.crates.release.v1";
+const PUBLIC_HOMEPAGE: &str = "https://radroots.org";
+const PUBLIC_README: &str = "README.md";
+const PUBLIC_AUTHORS: &[&str] = &["Tyson Lupul <tyson@radroots.org>"];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -40,8 +43,25 @@ struct DeviationRecord {
 #[derive(Debug, Deserialize)]
 struct ArchitectureIdentity {
     spec_id: String,
+    initial_version: String,
+    edition: String,
     resolver: String,
     rust_version: String,
+    license: String,
+    canonical_repositories: Vec<String>,
+    repositories: BTreeMap<String, ArchitectureRepository>,
+    package: Vec<ArchitecturePackage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchitectureRepository {
+    url: String,
+    packages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchitecturePackage {
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,16 +70,52 @@ struct WorkspaceManifest {
 }
 
 #[derive(Debug, Deserialize)]
+struct WorkspaceMembershipManifest {
+    workspace: WorkspaceMembership,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceMembership {
+    members: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct WorkspaceMembers {
     members: Vec<String>,
     resolver: String,
     package: WorkspacePackage,
+    metadata: WorkspaceMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceMetadata {
+    radroots: RadrootsWorkspaceMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+struct RadrootsWorkspaceMetadata {
+    #[serde(rename = "public-package")]
+    public_package: PublicPackageMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicPackageMetadata {
+    version: String,
+    authors: Vec<String>,
+    readme: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct WorkspacePackage {
+    version: String,
+    edition: String,
     #[serde(rename = "rust-version")]
     rust_version: String,
+    license: String,
+    repository: String,
+    homepage: String,
+    readme: String,
+    authors: Vec<String>,
 }
 
 pub fn validate(workspace_root: &Path) -> Result<(), String> {
@@ -71,6 +127,7 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
         .map_err(|error| format!("parse {}: {error}", architecture_path.display()))?;
 
     validate_workspace_toolchain(workspace_root, &architecture)?;
+    validate_public_package_metadata(workspace_root, &architecture)?;
 
     let ledger_path = workspace_root.join(DEVIATIONS_RELATIVE);
     let ledger_raw = fs::read_to_string(&ledger_path)
@@ -101,6 +158,65 @@ fn validate_workspace_toolchain(
             manifest.workspace.package.rust_version, architecture.rust_version
         ));
     }
+    let workspace_package = &manifest.workspace.package;
+    let public_metadata = &manifest.workspace.metadata.radroots.public_package;
+    if public_metadata.version != architecture.initial_version
+        || architecture.initial_version != "0.1.0"
+    {
+        return Err(format!(
+            "public package version source {} must match architecture initial_version {}",
+            public_metadata.version, architecture.initial_version
+        ));
+    }
+    if public_metadata.authors != PUBLIC_AUTHORS {
+        return Err("public package authors source must match the workspace convention".to_owned());
+    }
+    if public_metadata.readme != PUBLIC_README {
+        return Err(format!(
+            "public package readme source must be {PUBLIC_README}"
+        ));
+    }
+    if workspace_package.edition != architecture.edition || architecture.edition != "2024" {
+        return Err(format!(
+            "workspace edition {} must match architecture edition {}",
+            workspace_package.edition, architecture.edition
+        ));
+    }
+    if workspace_package.license != architecture.license {
+        return Err(format!(
+            "workspace license {} must match architecture license {}",
+            workspace_package.license, architecture.license
+        ));
+    }
+    if !architecture
+        .canonical_repositories
+        .contains(&workspace_package.repository)
+    {
+        return Err(format!(
+            "workspace repository {} is not canonical",
+            workspace_package.repository
+        ));
+    }
+    if workspace_package.homepage != PUBLIC_HOMEPAGE {
+        return Err(format!(
+            "workspace homepage {} must be {PUBLIC_HOMEPAGE}",
+            workspace_package.homepage
+        ));
+    }
+    if workspace_package.authors != PUBLIC_AUTHORS {
+        return Err("workspace authors must match the public package convention".to_owned());
+    }
+    if !workspace_root.join(&workspace_package.readme).is_file() {
+        return Err(format!(
+            "workspace readme {} does not exist",
+            workspace_package.readme
+        ));
+    }
+    for license in ["LICENSE-MIT", "LICENSE-APACHE"] {
+        if !workspace_root.join(license).is_file() {
+            return Err(format!("workspace is missing {license}"));
+        }
+    }
     let toolchain_path = workspace_root.join("rust-toolchain.toml");
     let toolchain_raw = fs::read_to_string(&toolchain_path)
         .map_err(|error| format!("read {}: {error}", toolchain_path.display()))?;
@@ -120,11 +236,168 @@ fn validate_workspace_toolchain(
     Ok(())
 }
 
+fn validate_public_package_metadata(
+    workspace_root: &Path,
+    architecture: &ArchitectureIdentity,
+) -> Result<(), String> {
+    let workspace_raw = fs::read_to_string(workspace_root.join("Cargo.toml"))
+        .map_err(|error| format!("read workspace Cargo.toml: {error}"))?;
+    let workspace = toml::from_str::<WorkspaceManifest>(&workspace_raw)
+        .map_err(|error| format!("parse workspace Cargo.toml: {error}"))?;
+    let repository = architecture
+        .repositories
+        .values()
+        .find(|repository| repository.url == workspace.workspace.package.repository)
+        .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
+    let local_packages = repository.packages.iter().collect::<BTreeSet<_>>();
+    let all_packages = architecture
+        .package
+        .iter()
+        .map(|package| package.name.as_str())
+        .collect::<BTreeSet<_>>();
+
+    for member in &workspace.workspace.members {
+        let manifest_path = workspace_root.join(member).join("Cargo.toml");
+        let raw = fs::read_to_string(&manifest_path)
+            .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
+        let manifest = raw
+            .parse::<toml::Value>()
+            .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| format!("{} is missing [package]", manifest_path.display()))?;
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("{} is missing package.name", manifest_path.display()))?;
+        if !all_packages.contains(name) {
+            continue;
+        }
+        if !local_packages.contains(&name.to_owned()) {
+            return Err(format!(
+                "public package {name} belongs to a different canonical repository"
+            ));
+        }
+        validate_public_manifest_field(
+            package,
+            "version",
+            &workspace.workspace.package.version,
+            &architecture.initial_version,
+            name,
+        )?;
+        validate_public_manifest_field(
+            package,
+            "edition",
+            &workspace.workspace.package.edition,
+            &architecture.edition,
+            name,
+        )?;
+        validate_public_manifest_field(
+            package,
+            "rust-version",
+            &workspace.workspace.package.rust_version,
+            &architecture.rust_version,
+            name,
+        )?;
+        validate_public_manifest_field(
+            package,
+            "license",
+            &workspace.workspace.package.license,
+            &architecture.license,
+            name,
+        )?;
+        validate_public_manifest_field(
+            package,
+            "repository",
+            &workspace.workspace.package.repository,
+            &repository.url,
+            name,
+        )?;
+        validate_public_manifest_field(
+            package,
+            "homepage",
+            &workspace.workspace.package.homepage,
+            PUBLIC_HOMEPAGE,
+            name,
+        )?;
+        let authors = resolve_public_authors(package, &workspace.workspace.package.authors)
+            .ok_or_else(|| format!("public package {name} must declare authors"))?;
+        if authors != PUBLIC_AUTHORS {
+            return Err(format!(
+                "public package {name} authors must match the workspace convention"
+            ));
+        }
+        let readme = package.get("readme").and_then(toml::Value::as_str);
+        if readme != Some(PUBLIC_README)
+            || !workspace_root.join(member).join(PUBLIC_README).is_file()
+        {
+            return Err(format!(
+                "public package {name} must use an existing crate-local {PUBLIC_README}"
+            ));
+        }
+        if package.get("publish").and_then(toml::Value::as_bool) != Some(false) {
+            return Err(format!(
+                "public package {name} must remain publish = false during migration"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_public_manifest_field(
+    package: &toml::value::Table,
+    key: &str,
+    workspace_value: &str,
+    expected: &str,
+    package_name: &str,
+) -> Result<(), String> {
+    let value = resolve_public_string(package, key, workspace_value)
+        .ok_or_else(|| format!("public package {package_name} must declare {key}"))?;
+    if value != expected {
+        return Err(format!(
+            "public package {package_name} {key} {value} must be {expected}"
+        ));
+    }
+    Ok(())
+}
+
+fn resolve_public_string<'a>(
+    package: &'a toml::value::Table,
+    key: &str,
+    workspace_value: &'a str,
+) -> Option<&'a str> {
+    match package.get(key)? {
+        toml::Value::String(value) => Some(value),
+        toml::Value::Table(value)
+            if value.get("workspace").and_then(toml::Value::as_bool) == Some(true) =>
+        {
+            Some(workspace_value)
+        }
+        _ => None,
+    }
+}
+
+fn resolve_public_authors<'a>(
+    package: &'a toml::value::Table,
+    workspace_authors: &'a [String],
+) -> Option<Vec<&'a str>> {
+    match package.get("authors")? {
+        toml::Value::Array(values) => values.iter().map(toml::Value::as_str).collect(),
+        toml::Value::Table(value)
+            if value.get("workspace").and_then(toml::Value::as_bool) == Some(true) =>
+        {
+            Some(workspace_authors.iter().map(String::as_str).collect())
+        }
+        _ => None,
+    }
+}
+
 fn validate_workspace_members(workspace_root: &Path) -> Result<(), String> {
     let manifest_path = workspace_root.join("Cargo.toml");
     let manifest_raw = fs::read_to_string(&manifest_path)
         .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
-    let manifest = toml::from_str::<WorkspaceManifest>(&manifest_raw)
+    let manifest = toml::from_str::<WorkspaceMembershipManifest>(&manifest_raw)
         .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
     let declared = manifest
         .workspace
@@ -316,14 +589,15 @@ fn is_iso_date(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeMap,
         fs,
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     };
 
     use super::{
-        ArchitectureIdentity, validate_ledger, validate_workspace_members,
-        validate_workspace_toolchain,
+        ArchitectureIdentity, ArchitecturePackage, ArchitectureRepository, validate_ledger,
+        validate_public_package_metadata, validate_workspace_members, validate_workspace_toolchain,
     };
 
     fn test_root(label: &str) -> PathBuf {
@@ -359,6 +633,34 @@ unresolved_risk = "Remote publication remains separately authorized."
 normative_architecture_change = false
 adr_required = false
 "#
+    }
+
+    fn architecture() -> ArchitectureIdentity {
+        ArchitectureIdentity {
+            spec_id: "radroots.crates.release.v1".to_string(),
+            initial_version: "0.1.0".to_string(),
+            edition: "2024".to_string(),
+            resolver: "3".to_string(),
+            rust_version: "1.97.1".to_string(),
+            license: "MIT OR Apache-2.0".to_string(),
+            canonical_repositories: vec!["https://github.com/radrootslabs/sdk".to_string()],
+            repositories: BTreeMap::from([(
+                "sdk".to_string(),
+                ArchitectureRepository {
+                    url: "https://github.com/radrootslabs/sdk".to_string(),
+                    packages: vec!["radroots".to_string()],
+                },
+            )]),
+            package: vec![ArchitecturePackage {
+                name: "radroots".to_string(),
+            }],
+        }
+    }
+
+    fn complete_workspace_manifest(members: &str) -> String {
+        format!(
+            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n"
+        )
     }
 
     #[test]
@@ -413,21 +715,17 @@ adr_required = false
     #[test]
     fn workspace_toolchain_requires_exact_resolver_and_rust_version() {
         let root = test_root("workspace_toolchain");
-        fs::write(
-            root.join("Cargo.toml"),
-            "[workspace]\nmembers = []\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.97.1\"\n",
-        )
-        .expect("write workspace manifest");
+        fs::write(root.join("Cargo.toml"), complete_workspace_manifest(""))
+            .expect("write workspace manifest");
+        for path in ["README", "LICENSE-MIT", "LICENSE-APACHE"] {
+            fs::write(root.join(path), "fixture\n").expect("write workspace metadata file");
+        }
         fs::write(
             root.join("rust-toolchain.toml"),
             "[toolchain]\nchannel = \"1.97.1\"\n",
         )
         .expect("write toolchain");
-        let architecture = ArchitectureIdentity {
-            spec_id: "radroots.crates.release.v1".to_string(),
-            resolver: "3".to_string(),
-            rust_version: "1.97.1".to_string(),
-        };
+        let architecture = architecture();
         validate_workspace_toolchain(&root, &architecture).expect("exact toolchain policy");
 
         fs::write(
@@ -438,6 +736,33 @@ adr_required = false
         let error = validate_workspace_toolchain(&root, &architecture)
             .expect_err("mismatched toolchain must fail");
         assert!(error.contains("channel must match"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn public_package_metadata_requires_canonical_inheritance() {
+        let root = test_root("public_package_metadata");
+        fs::create_dir_all(root.join("crates/radroots")).expect("create public package");
+        fs::write(
+            root.join("Cargo.toml"),
+            complete_workspace_manifest("\"crates/radroots\""),
+        )
+        .expect("write workspace manifest");
+        let manifest = "[package]\nname = \"radroots\"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\nrepository.workspace = true\nhomepage.workspace = true\nauthors.workspace = true\nreadme = \"README.md\"\npublish = false\n";
+        fs::write(root.join("crates/radroots/Cargo.toml"), manifest)
+            .expect("write public manifest");
+        fs::write(root.join("crates/radroots/README.md"), "fixture\n")
+            .expect("write public readme");
+        validate_public_package_metadata(&root, &architecture()).expect("canonical metadata");
+
+        fs::write(
+            root.join("crates/radroots/Cargo.toml"),
+            manifest.replace("authors.workspace = true\n", ""),
+        )
+        .expect("write incomplete public manifest");
+        let error = validate_public_package_metadata(&root, &architecture())
+            .expect_err("missing authors must fail");
+        assert!(error.contains("must declare authors"));
         let _ = fs::remove_dir_all(root);
     }
 }
