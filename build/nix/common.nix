@@ -26,12 +26,16 @@ let
         ../../build/nix/apps.nix
         ../../build/nix/checks.nix
         ../../build/nix/common.nix
+        ../../build/nix/devshells.nix
         ../../build/nix/toolchains.nix
         ../../dto_bindgen.toml
         ../../rust-toolchain.toml
         ../../rust-toolchain-ios.toml
+        ../../rust-toolchain-fuzz.toml
         ../../contracts
         ../../crates
+        ../../docs/blossom-raster-decoder-security.md
+        ../../fuzz
         ../../tools
       ]
     );
