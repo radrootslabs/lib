@@ -16,9 +16,8 @@ readme = "README.md"
 name = "radroots_identity"
 
 [features]
-default = ["std", "serde", "json-file", "nip49"]
+default = ["std", "serde", "json-file"]
 std = [
-  "dep:nostr",
   "dep:radroots_protected_store",
   "dep:radroots_runtime_paths",
   "dep:radroots_secret_vault",
@@ -28,9 +27,6 @@ std = [
 ]
 serde = ["dep:serde"]
 json-file = ["std", "serde", "dep:radroots_runtime"]
-nip49 = ["std", "serde", "nostr/nip49"]
-secrecy = ["std", "serde", "dep:secrecy"]
-zeroize = ["std", "serde", "dep:zeroize"]
 
 [dependencies]
 k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
@@ -42,13 +38,10 @@ radroots_runtime_paths = { workspace = true, optional = true }
 radroots_secret_vault = { workspace = true, optional = true, features = [
   "std",
 ] }
-nostr = { workspace = true, optional = true }
-secrecy = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { version = "2", default-features = false }
 tracing = { workspace = true, optional = true }
-zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }

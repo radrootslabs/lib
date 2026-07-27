@@ -98,47 +98,6 @@ allowed_public_paths = []
 name = "radroots"
 allowed_public_paths = []
 [[exception]]
-id = "RCRV1-API-001"
-package = "radroots-identity"
-source = "src/error.rs"
-forbidden_path = "nostr"
-items = ["error::IdentityError"]
-observed_paths = ["nostr::key::Error"]
-adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
-removal_step = 42
-rationale = "The legacy identity error still exposes a Nostr key error until the identity package conformance refactor."
-
-[[exception]]
-id = "RCRV1-API-002"
-package = "radroots-identity"
-source = "src/identity.rs"
-forbidden_path = "nostr"
-items = [
-  "identity::RadrootsIdentity::from",
-  "identity::RadrootsIdentity::into_keys",
-  "identity::RadrootsIdentity::keys",
-  "identity::RadrootsIdentity::new",
-  "identity::RadrootsIdentity::public_key",
-  "identity::RadrootsIdentity::secret_key_bytes",
-  "identity::RadrootsIdentity::secret_key_bytes_zeroizing",
-  "identity::RadrootsIdentity::with_profile",
-  "identity::RadrootsIdentityFile",
-  "identity::RadrootsIdentityId::from",
-  "identity::RadrootsIdentityId::from_public_key",
-  "identity::RadrootsIdentityProfile",
-  "identity::RadrootsIdentityPublic::new",
-]
-observed_paths = [
-  "nostr::Event",
-  "nostr::Keys",
-  "nostr::PublicKey",
-  "nostr::SecretKey::LEN",
-]
-adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
-removal_step = 42
-rationale = "Legacy identity values retain exact Nostr and secret-key signatures only until the public-only identity refactor and conformance gate."
-
-[[exception]]
 id = "RCRV1-API-003"
 package = "radroots-nostr"
 source = "src/client.rs"

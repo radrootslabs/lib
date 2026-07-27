@@ -4558,18 +4558,15 @@ name = "radroots-identity"
 version = "0.1.0"
 dependencies = [
  "k256",
- "nostr",
  "radroots_protected_store",
  "radroots_runtime",
  "radroots_runtime_paths",
  "radroots_secret_vault",
- "secrecy",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
- "zeroize",
 ]
 
 [[package]]

@@ -39,6 +39,24 @@ impl Profile {
 }
 
 /// A public identity with an invariant-matched identifier and public key.
+///
+/// Secret-bearing identity containers are intentionally absent:
+///
+/// ```compile_fail
+/// use radroots_identity::RadrootsIdentity;
+/// ```
+///
+/// Public identities expose no secret-key access:
+///
+/// ```compile_fail
+/// use radroots_identity::{PublicIdentity, PublicKey};
+///
+/// let key = PublicKey::from_hex(
+///     "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+/// ).unwrap();
+/// let identity = PublicIdentity::new(key);
+/// let _ = identity.secret_key_bytes();
+/// ```
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
