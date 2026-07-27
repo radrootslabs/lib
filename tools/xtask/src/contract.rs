@@ -28,6 +28,7 @@ mod registry_v7;
 mod release_package;
 mod release_provenance;
 mod source_maintenance;
+mod validator_inventory;
 
 pub(crate) use blossom_raster_decoder_security::{
     validate_blossom_raster_decoder_security_manifest,
@@ -77,6 +78,7 @@ use deletion_authority::{
     DELETION_SUPPRESSION_CONFORMANCE_VECTOR_RELATIVE, DELETION_SUPPRESSION_VALID_IDS,
     REQUIRED_DELETION_PUBLIC_TYPES,
 };
+use quote::ToTokens;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -88,6 +90,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), String> {
+    validator_inventory::validate_semantic_validator_inventory(workspace_root)?;
     feature_support::validate_feature_support(workspace_root)?;
     validate_event_contract_registry_v7_inventory(workspace_root)?;
     validate_nip09_reconciliation_manifest(workspace_root)?;
@@ -2093,7 +2096,7 @@ const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/client.rs",
-        required_fragments: &["pub async fn send_nip22_comment_event_builder"],
+        required_fragments: &["pub async method fn send_nip22_comment_event_builder"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2120,7 +2123,7 @@ const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event_codec/src/deletion/reconciliation_v1.rs",
         required_fragments: &[
-            "pub struct RadrootsAdmittedNip09DeletionRequestEvent",
+            "pub type RadrootsAdmittedNip09DeletionRequestEvent",
             "pub fn verify_and_admit_nip09_deletion_request_event",
         ],
     },
@@ -2144,7 +2147,7 @@ const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/client.rs",
-        required_fragments: &["pub async fn send_nip09_deletion_request_event_builder"],
+        required_fragments: &["pub async method fn send_nip09_deletion_request_event_builder"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -3521,17 +3524,303 @@ fn validate_event_boundary_source_witness(
         Ok(source) => source,
         Err(e) => return Err(format!("read {}: {e}", path.display())),
     };
-    for fragment in witness.required_fragments {
-        if !source.contains(fragment) {
-            return Err(format!(
-                "canonical event row {} is missing required implementation fragment {} in {}",
-                domain,
-                fragment,
+    let syntax = syn::parse_file(&source)
+        .map_err(|error| format!("parse canonical event witness {}: {error}", path.display()))?;
+    for required in witness.required_fragments {
+        validate_rust_ast_witness(&syntax, required).map_err(|error| {
+            format!(
+                "canonical event row {domain} has invalid Rust AST witness `{required}` in {}: {error}",
                 path.display()
-            ));
-        }
+            )
+        })?;
     }
     Ok(())
+}
+
+#[derive(Default)]
+struct RustAstWitnessInventory {
+    public_structs: BTreeSet<String>,
+    public_enums: BTreeSet<String>,
+    public_types: BTreeSet<String>,
+    public_functions: BTreeSet<String>,
+    public_methods: BTreeSet<String>,
+    public_consts: BTreeMap<String, (String, String)>,
+    public_exports: BTreeSet<String>,
+    match_arms: Vec<(String, String)>,
+    paths: BTreeSet<String>,
+    string_literals: BTreeSet<String>,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for RustAstWitnessInventory {
+    fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            self.public_structs.insert(item.ident.to_string());
+        }
+        syn::visit::visit_item_struct(self, item);
+    }
+
+    fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            self.public_enums.insert(item.ident.to_string());
+        }
+        syn::visit::visit_item_enum(self, item);
+    }
+
+    fn visit_item_type(&mut self, item: &'ast syn::ItemType) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            self.public_types.insert(item.ident.to_string());
+        }
+        syn::visit::visit_item_type(self, item);
+    }
+
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            self.public_functions.insert(item.sig.ident.to_string());
+        }
+        syn::visit::visit_item_fn(self, item);
+    }
+
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            self.public_methods.insert(item.sig.ident.to_string());
+        }
+        syn::visit::visit_impl_item_fn(self, item);
+    }
+
+    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            self.public_consts.insert(
+                item.ident.to_string(),
+                (
+                    compact_ast_tokens(item.ty.as_ref()),
+                    compact_ast_tokens(item.expr.as_ref()),
+                ),
+            );
+        }
+        syn::visit::visit_item_const(self, item);
+    }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        if matches!(item.vis, syn::Visibility::Public(_)) {
+            collect_use_tree_exports(&item.tree, &mut self.public_exports);
+        }
+        syn::visit::visit_item_use(self, item);
+    }
+
+    fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
+        self.match_arms.extend(expression.arms.iter().map(|arm| {
+            (
+                compact_ast_tokens(&arm.pat),
+                compact_ast_tokens(arm.body.as_ref()),
+            )
+        }));
+        syn::visit::visit_expr_match(self, expression);
+    }
+
+    fn visit_expr_path(&mut self, expression: &'ast syn::ExprPath) {
+        self.paths.insert(compact_ast_tokens(&expression.path));
+        syn::visit::visit_expr_path(self, expression);
+    }
+
+    fn visit_lit_str(&mut self, literal: &'ast syn::LitStr) {
+        self.string_literals.insert(literal.value());
+        syn::visit::visit_lit_str(self, literal);
+    }
+
+    fn visit_macro(&mut self, item: &'ast syn::Macro) {
+        collect_macro_string_literals(item.tokens.clone(), &mut self.string_literals);
+        syn::visit::visit_macro(self, item);
+    }
+}
+
+fn collect_macro_string_literals(
+    tokens: proc_macro2::TokenStream,
+    literals: &mut BTreeSet<String>,
+) {
+    for token in tokens {
+        match token {
+            proc_macro2::TokenTree::Group(group) => {
+                collect_macro_string_literals(group.stream(), literals);
+            }
+            proc_macro2::TokenTree::Literal(literal) => {
+                if let Ok(syn::Lit::Str(value)) = syn::parse_str::<syn::Lit>(&literal.to_string()) {
+                    literals.insert(value.value());
+                }
+            }
+            proc_macro2::TokenTree::Ident(_) | proc_macro2::TokenTree::Punct(_) => {}
+        }
+    }
+}
+
+fn collect_use_tree_exports(tree: &syn::UseTree, exports: &mut BTreeSet<String>) {
+    match tree {
+        syn::UseTree::Name(name) => {
+            exports.insert(name.ident.to_string());
+        }
+        syn::UseTree::Rename(rename) => {
+            exports.insert(rename.rename.to_string());
+        }
+        syn::UseTree::Path(path) => collect_use_tree_exports(path.tree.as_ref(), exports),
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                collect_use_tree_exports(item, exports);
+            }
+        }
+        syn::UseTree::Glob(_) => {}
+    }
+}
+
+fn compact_ast_tokens(tokens: &impl ToTokens) -> String {
+    tokens.to_token_stream().to_string().replace(' ', "")
+}
+
+fn validate_rust_ast_witness(file: &syn::File, required: &str) -> Result<(), String> {
+    use syn::visit::Visit;
+
+    let mut inventory = RustAstWitnessInventory::default();
+    inventory.visit_file(file);
+    let required = required.trim();
+
+    if let Some(rest) = required.strip_prefix("pub struct ") {
+        let name = rest
+            .split(|character: char| {
+                character.is_whitespace() || character == '{' || character == '<'
+            })
+            .next()
+            .unwrap_or_default();
+        return inventory
+            .public_structs
+            .contains(name)
+            .then_some(())
+            .ok_or_else(|| format!("missing public struct {name}"));
+    }
+    if let Some(rest) = required.strip_prefix("pub enum ") {
+        let name = rest
+            .split(|character: char| {
+                character.is_whitespace() || character == '{' || character == '<'
+            })
+            .next()
+            .unwrap_or_default();
+        return inventory
+            .public_enums
+            .contains(name)
+            .then_some(())
+            .ok_or_else(|| format!("missing public enum {name}"));
+    }
+    if let Some(rest) = required.strip_prefix("pub type ") {
+        let name = rest
+            .split(|character: char| {
+                character.is_whitespace() || character == '=' || character == '<'
+            })
+            .next()
+            .unwrap_or_default();
+        return inventory
+            .public_types
+            .contains(name)
+            .then_some(())
+            .ok_or_else(|| format!("missing public type alias {name}"));
+    }
+    if required.starts_with("pub method fn ") || required.starts_with("pub async method fn ") {
+        let rest = required
+            .strip_prefix("pub async method fn ")
+            .or_else(|| required.strip_prefix("pub method fn "))
+            .expect("public method prefix checked");
+        let name = rest
+            .split(|character: char| {
+                character == '(' || character == '<' || character.is_whitespace()
+            })
+            .next()
+            .unwrap_or_default();
+        return inventory
+            .public_methods
+            .contains(name)
+            .then_some(())
+            .ok_or_else(|| format!("missing public method {name}"));
+    }
+    if required.starts_with("pub fn ") || required.starts_with("pub async fn ") {
+        let rest = required
+            .strip_prefix("pub async fn ")
+            .or_else(|| required.strip_prefix("pub fn "))
+            .expect("public function prefix checked");
+        let name = rest
+            .split(|character: char| {
+                character == '(' || character == '<' || character.is_whitespace()
+            })
+            .next()
+            .unwrap_or_default();
+        return inventory
+            .public_functions
+            .contains(name)
+            .then_some(())
+            .ok_or_else(|| format!("missing public function {name}"));
+    }
+    if required.starts_with("pub const ") {
+        let declaration = required.trim_end_matches(';');
+        let rest = declaration
+            .strip_prefix("pub const ")
+            .expect("public const prefix checked");
+        let name = rest.split(':').next().unwrap_or_default().trim();
+        let actual = inventory
+            .public_consts
+            .get(name)
+            .ok_or_else(|| format!("missing public const {name}"))?;
+        let expected_type = rest
+            .split_once(':')
+            .map(|(_, suffix)| suffix.split('=').next().unwrap_or(suffix).trim())
+            .filter(|expected| !expected.is_empty())
+            .ok_or_else(|| format!("public const witness {name} has no type"))?;
+        let expected_type = syn::parse_str::<syn::Type>(expected_type)
+            .map_err(|error| format!("parse expected const {name} type: {error}"))?;
+        if actual.0 != compact_ast_tokens(&expected_type) {
+            return Err(format!("public const {name} type differs"));
+        }
+        if let Some((_, expected_expression)) = declaration.split_once('=') {
+            let expected = syn::parse_str::<syn::Expr>(expected_expression.trim())
+                .map_err(|error| format!("parse expected const {name} expression: {error}"))?;
+            if actual.1 != compact_ast_tokens(&expected) {
+                return Err(format!("public const {name} expression differs"));
+            }
+        }
+        return Ok(());
+    }
+    if let Some((pattern, expression)) = required.split_once("=>") {
+        let pattern = pattern.split_whitespace().collect::<String>();
+        let expression = expression.trim().trim_end_matches(',');
+        let matches = inventory
+            .match_arms
+            .iter()
+            .any(|(actual_pattern, actual_expression)| {
+                actual_pattern == &pattern
+                    && (expression.is_empty()
+                        || actual_expression == &expression.split_whitespace().collect::<String>())
+            });
+        return matches
+            .then_some(())
+            .ok_or_else(|| format!("missing match arm {required}"));
+    }
+    if required.starts_with('"') {
+        let literal = syn::parse_str::<syn::LitStr>(required)
+            .map_err(|error| format!("parse expected string literal: {error}"))?;
+        return inventory
+            .string_literals
+            .contains(&literal.value())
+            .then_some(())
+            .ok_or_else(|| format!("missing string literal {}", literal.value()));
+    }
+    if required.contains("::") {
+        let path = required.split_whitespace().collect::<String>();
+        return inventory
+            .paths
+            .contains(&path)
+            .then_some(())
+            .ok_or_else(|| format!("missing Rust path {path}"));
+    }
+
+    inventory
+        .public_exports
+        .contains(required)
+        .then_some(())
+        .ok_or_else(|| format!("missing public export {required}"))
 }
 
 fn validate_canonical_event_boundary_with_override(
@@ -5655,20 +5944,65 @@ fn validate_replica_policy_source_witnesses(sync_root: &Path) -> Result<(), Stri
     let types_path = sync_root.join("src/types.rs");
     let types_source = fs::read_to_string(&types_path)
         .map_err(|error| format!("read {}: {error}", types_path.display()))?;
+    let types = syn::parse_file(&types_source).map_err(|error| {
+        format!(
+            "parse replica request source {}: {error}",
+            types_path.display()
+        )
+    })?;
     for type_name in [
         "RadrootsReplicaFarmSelector",
         "RadrootsReplicaSyncOptions",
         "RadrootsReplicaSyncRequest",
     ] {
-        let witness = format!("#[serde(deny_unknown_fields)]\npub struct {type_name}");
-        if !types_source.contains(&witness) {
+        let structs = types
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                syn::Item::Struct(item) if item.ident == type_name => Some(item),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let [request] = structs.as_slice() else {
+            return Err(format!(
+                "replica request source {} must define exactly one {type_name}",
+                types_path.display()
+            ));
+        };
+        let deny_unknown_fields = request.attrs.iter().any(|attribute| {
+            if !attribute.path().is_ident("serde") {
+                return false;
+            }
+            let mut found = false;
+            let _ = attribute.parse_nested_meta(|meta| {
+                if meta.path.is_ident("deny_unknown_fields") {
+                    found = true;
+                }
+                Ok(())
+            });
+            found
+        });
+        if !matches!(request.vis, syn::Visibility::Public(_)) || !deny_unknown_fields {
             return Err(format!(
                 "replica request type {type_name} must place #[serde(deny_unknown_fields)] immediately before its public struct declaration in {}",
                 types_path.display()
             ));
         }
     }
-    if types_source.contains("include_profiles") {
+
+    #[derive(Default)]
+    struct IdentifierInventory {
+        names: BTreeSet<String>,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for IdentifierInventory {
+        fn visit_ident(&mut self, identifier: &'ast syn::Ident) {
+            self.names.insert(identifier.to_string());
+        }
+    }
+    use syn::visit::Visit;
+    let mut identifiers = IdentifierInventory::default();
+    identifiers.visit_file(&types);
+    if identifiers.names.contains("include_profiles") {
         return Err(format!(
             "retired replica request identifier include_profiles is forbidden in {}",
             types_path.display()
@@ -11174,6 +11508,53 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     fn validate_current_canonical_event_boundary() {
         let root = workspace_root();
         validate_canonical_event_boundary(&root).expect("validate canonical event boundary");
+    }
+
+    #[test]
+    fn rust_ast_witnesses_ignore_formatting_and_reject_lexical_prefixes() {
+        let syntax = syn::parse_file(
+            r#"
+                pub struct ExactWitness<T> { value: T }
+                impl<T> ExactWitness<T> {
+                    pub fn method_only() {}
+                }
+                pub type ExactAlias = ExactWitness<u8>;
+                pub const EXACT_KIND : u32 = 7;
+                pub use nested::{exported_symbol};
+                fn mapping(value: Mapping) -> u32 {
+                    match value { Mapping::Exact => EXACT_KIND }
+                }
+                macro_rules! identity { () => { "radroots.exact.v1" }; }
+            "#,
+        )
+        .expect("structured Rust fixture");
+
+        for required in [
+            "pub struct ExactWitness",
+            "pub method fn method_only",
+            "pub type ExactAlias",
+            "pub const EXACT_KIND: u32 = 7;",
+            "Mapping::Exact => EXACT_KIND",
+            "exported_symbol",
+            "\"radroots.exact.v1\"",
+        ] {
+            validate_rust_ast_witness(&syntax, required).expect(required);
+        }
+        assert!(
+            validate_rust_ast_witness(&syntax, "pub struct Exact")
+                .expect_err("prefix-only struct name must fail")
+                .contains("missing public struct Exact")
+        );
+        assert!(
+            validate_rust_ast_witness(&syntax, "pub const EXACT_KIND: u32 = 8;")
+                .expect_err("different const expression must fail")
+                .contains("expression differs")
+        );
+        assert!(
+            validate_rust_ast_witness(&syntax, "pub fn method_only")
+                .expect_err("public method must not satisfy a free-function witness")
+                .contains("missing public function method_only")
+        );
     }
 
     #[test]

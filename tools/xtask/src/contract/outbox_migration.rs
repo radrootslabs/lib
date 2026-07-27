@@ -9,6 +9,7 @@ use std::fs;
 use std::path::Path;
 #[cfg(test)]
 use std::path::PathBuf;
+use syn::{ItemFn, visit::Visit};
 
 const CONTRACT_ID: &str = "radroots_outbox.migration_authority.v1";
 const AUTHORITY_ID: &str = "versioned_outbox_migration_authority_v1";
@@ -691,9 +692,30 @@ fn validate_vector(workspace_root: &Path) -> Result<(), String> {
         let source = read_regular_file(workspace_root, &authority.authority_path)?;
         let source = std::str::from_utf8(&source)
             .map_err(|error| format!("decode {}: {error}", authority.authority_path))?;
-        if !source.contains(&authority.authority) {
+        let syntax = syn::parse_file(source)
+            .map_err(|error| format!("parse {}: {error}", authority.authority_path))?;
+        #[derive(Default)]
+        struct TestFunctions(BTreeSet<String>);
+        impl<'ast> Visit<'ast> for TestFunctions {
+            fn visit_item_fn(&mut self, function: &'ast ItemFn) {
+                let is_test = function.attrs.iter().any(|attribute| {
+                    attribute
+                        .path()
+                        .segments
+                        .last()
+                        .is_some_and(|segment| segment.ident == "test")
+                });
+                if is_test {
+                    self.0.insert(function.sig.ident.to_string());
+                }
+                syn::visit::visit_item_fn(self, function);
+            }
+        }
+        let mut tests = TestFunctions::default();
+        tests.visit_file(&syntax);
+        if !tests.0.contains(&authority.authority) {
             return Err(format!(
-                "outbox migration delegated authority `{}` is not present in {}",
+                "outbox migration delegated test authority `{}` is not present in the Rust AST for {}",
                 authority.authority, authority.authority_path
             ));
         }

@@ -1,6 +1,6 @@
 use super::{
     ConformanceVectorEntry, OperationsContractManifest, collect_non_empty_set,
-    validate_conformance_vector_file, validate_operation_case_kinds,
+    validate_conformance_vector_file, validate_operation_case_kinds, validate_rust_ast_witness,
 };
 use serde_json::{Map, Value};
 use std::{
@@ -264,12 +264,12 @@ fn validate_source_witnesses(workspace_root: &Path) -> Result<(), String> {
         let source = fs::read_to_string(workspace_root.join(relative)).map_err(|error| {
             format!("failed to read verified admission witness {relative}: {error}")
         })?;
-        for fragment in fragments {
-            if !source.contains(fragment) {
-                return Err(format!(
-                    "verified admission witness {relative} is missing `{fragment}`"
-                ));
-            }
+        let syntax = syn::parse_file(&source)
+            .map_err(|error| format!("parse verified admission witness {relative}: {error}"))?;
+        for required in fragments {
+            validate_rust_ast_witness(&syntax, required).map_err(|error| {
+                format!("verified admission Rust AST witness {relative} `{required}`: {error}")
+            })?;
         }
     }
     Ok(())

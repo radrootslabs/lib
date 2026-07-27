@@ -1,0 +1,137 @@
+schema_version = 1
+
+[[validators]]
+id = "artifact_transactions"
+semantic = true
+parsers = ["governed_bytes", "json"]
+implementation_paths = ["tools/xtask/src/contract/artifact_bundle.rs"]
+governed_inputs = ["contracts", "crates"]
+byte_hash_scopes = ["generated_contract_artifacts"]
+
+[[validators]]
+id = "event_store_successors"
+semantic = true
+parsers = ["executable_vector", "governed_bytes", "json", "json_schema", "rust_ast", "sqlite_catalog", "toml"]
+implementation_paths = [
+  "tools/xtask/src/contract/food_availability_projection.rs",
+  "tools/xtask/src/contract/nip09_reconciliation.rs",
+]
+governed_inputs = [
+  "contracts/conformance/vectors/event_store",
+  "crates/event_store/Cargo.toml",
+  "crates/event_store/contracts",
+  "crates/event_store/migrations",
+  "crates/event_store/src",
+]
+byte_hash_scopes = ["canonical_vectors_and_mirrors", "generated_contract_artifacts", "sql_migrations"]
+
+[[validators]]
+id = "feature_support"
+semantic = true
+parsers = ["rust_ast", "toml"]
+implementation_paths = ["tools/xtask/src/contract/feature_support.rs"]
+governed_inputs = ["Cargo.toml", "crates/nostr/Cargo.toml", "crates/nostr/src/lib.rs"]
+
+[[validators]]
+id = "immutable_predecessors"
+semantic = false
+parsers = ["governed_bytes", "json", "json_schema"]
+implementation_paths = [
+  "tools/xtask/src/contract/blossom_publication_readiness.rs",
+  "tools/xtask/src/contract/phase1_publication_allowlist.rs",
+  "tools/xtask/src/contract/phase1_publication_artifact.rs",
+  "tools/xtask/src/contract/raw_source_rebuild.rs",
+  "tools/xtask/src/contract/source_maintenance.rs",
+]
+governed_inputs = [
+  "crates/blossom/contracts",
+  "crates/event_codec/contracts",
+  "crates/event_store/contracts",
+]
+byte_hash_scopes = ["immutable_predecessor_artifacts"]
+
+[[validators]]
+id = "operations_and_boundaries"
+semantic = true
+parsers = ["executable_vector", "governed_bytes", "json", "markdown_table", "rust_ast", "toml"]
+implementation_paths = [
+  "tools/xtask/src/contract.rs",
+  "tools/xtask/src/contract/admission_authority.rs",
+  "tools/xtask/src/contract/comment_authority.rs",
+  "tools/xtask/src/contract/deletion_authority.rs",
+]
+governed_inputs = [
+  "contracts/conformance",
+  "contracts/event_boundary_matrix.md",
+  "contracts/manifest.toml",
+  "contracts/operations.toml",
+  "contracts/replica.toml",
+  "crates/event/src",
+  "crates/event_codec/src",
+  "crates/replica_sync/src",
+]
+byte_hash_scopes = ["canonical_vectors_and_mirrors"]
+
+[[validators]]
+id = "outbox_successors"
+semantic = true
+parsers = ["executable_vector", "governed_bytes", "json", "json_schema", "rust_ast", "sqlite_catalog", "toml"]
+implementation_paths = [
+  "tools/xtask/src/contract/outbox_migration.rs",
+  "tools/xtask/src/contract/outbox_phase1_publication.rs",
+]
+governed_inputs = [
+  "contracts/conformance/vectors/outbox",
+  "contracts/outbox_feature_matrix.toml",
+  "crates/outbox/Cargo.toml",
+  "crates/outbox/contracts",
+  "crates/outbox/migrations",
+  "crates/outbox/src",
+]
+byte_hash_scopes = ["canonical_vectors_and_mirrors", "generated_contract_artifacts", "sql_migrations"]
+
+[[validators]]
+id = "phase1_media_successors"
+semantic = true
+parsers = ["executable_vector", "governed_bytes", "json", "json_schema", "rust_ast", "toml"]
+implementation_paths = [
+  "tools/xtask/src/contract/blossom_raster_decoder_security.rs",
+  "tools/xtask/src/contract/phase1_publication_media_readiness.rs",
+]
+governed_inputs = [
+  "contracts/conformance/vectors/blossom",
+  "contracts/conformance/vectors/publication",
+  "crates/blossom/contracts",
+  "crates/blossom/src",
+  "crates/event_codec/contracts",
+  "crates/event_codec/src",
+  "fuzz/corpus",
+  "fuzz/fuzz_targets",
+]
+byte_hash_scopes = ["canonical_vectors_and_mirrors", "generated_contract_artifacts", "raw_fuzz_seeds"]
+
+[[validators]]
+id = "registry_v7"
+semantic = true
+parsers = ["governed_bytes", "json", "json_schema"]
+implementation_paths = ["tools/xtask/src/contract/registry_v7.rs"]
+governed_inputs = ["contracts/event_store", "crates/event/src/contract/registry_v7.rs"]
+byte_hash_scopes = ["generated_contract_artifacts"]
+
+[[validators]]
+id = "release_closure"
+semantic = true
+parsers = ["cargo_metadata", "git_object", "governed_bytes", "json", "json_schema", "tar_archive", "toml"]
+implementation_paths = [
+  "tools/xtask/src/contract/release_package.rs",
+  "tools/xtask/src/contract/release_provenance.rs",
+]
+governed_inputs = ["Cargo.lock", "Cargo.toml", "contracts/releases", "crates"]
+byte_hash_scopes = ["package_archives", "release_provenance_artifacts"]
+
+[[validators]]
+id = "validator_inventory"
+semantic = true
+parsers = ["rust_ast", "toml"]
+implementation_paths = ["tools/xtask/src/contract/validator_inventory.rs"]
+governed_inputs = ["contracts/semantic_validator_inventory.toml", "tools/xtask/src/contract"]

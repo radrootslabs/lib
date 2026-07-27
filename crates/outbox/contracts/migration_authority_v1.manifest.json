@@ -296,19 +296,19 @@
     },
     {
       "file": {
-        "byte_length": 46807,
+        "byte_length": 47759,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/contract/outbox_migration.rs",
-        "sha256": "feecba3ecb9ac05891877ef1de1b1e17f85fd349dbcc5b0f4cd7a09d2d6e0dda"
+        "sha256": "914361e2e65f544722a305c7e18076ebcf602f8b72bde39a8a16e7714efb237f"
       },
       "role": "contract_governance"
     },
     {
       "file": {
-        "byte_length": 492083,
+        "byte_length": 506380,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "a71ba50241e9569642060cc555f370e4ef8c0a525ee98235ec079372b2848469"
+        "sha256": "a0bfb6155613050b7e19fa6b2f8af72528b5dc12f446cd9fec05319d3ce924a1"
       },
       "role": "contract_dispatch"
     },

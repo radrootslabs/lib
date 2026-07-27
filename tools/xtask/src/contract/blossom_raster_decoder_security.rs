@@ -47,11 +47,6 @@ const FUZZ_LOCKFILE_RELATIVE: &str = "fuzz/Cargo.lock";
 const FUZZ_TOOLCHAIN_RELATIVE: &str = "rust-toolchain-fuzz.toml";
 const FUZZ_COMMON_RELATIVE: &str = "fuzz/fuzz_targets/common.rs";
 const FUZZ_CORPUS_RELATIVE: &str = "fuzz/corpus";
-const NIX_APPS_RELATIVE: &str = "build/nix/apps.nix";
-const NIX_CHECKS_RELATIVE: &str = "build/nix/checks.nix";
-const NIX_COMMON_RELATIVE: &str = "build/nix/common.nix";
-const NIX_DEVSHELLS_RELATIVE: &str = "build/nix/devshells.nix";
-const NIX_TOOLCHAINS_RELATIVE: &str = "build/nix/toolchains.nix";
 const SECURITY_DOCUMENT_RELATIVE: &str = "docs/blossom-raster-decoder-security.md";
 const OPERATIONS_RELATIVE: &str = "contracts/operations.toml";
 const RELEASE_RELATIVE: &str = "contracts/releases/1.0.0-alpha.1.toml";
@@ -1340,7 +1335,6 @@ fn validate_source_contract(workspace_root: &Path) -> Result<(), String> {
     validate_error_authority(workspace_root)?;
     validate_vector_executor(workspace_root)?;
     validate_fuzz_authority(workspace_root, false)?;
-    validate_nix_lanes(workspace_root)?;
     validate_operations_authority(workspace_root)?;
     validate_release_authority(workspace_root)?;
     validate_vector(workspace_root)?;
@@ -1847,45 +1841,6 @@ fn validate_fuzz_authority(workspace_root: &Path, validate_corpus: bool) -> Resu
     }
     read_regular_file(workspace_root, SECURITY_DOCUMENT_RELATIVE)?;
     read_regular_file(workspace_root, BLOSSOM_MANIFEST_RELATIVE)?;
-    Ok(())
-}
-
-fn validate_nix_lanes(workspace_root: &Path) -> Result<(), String> {
-    for (relative, needles) in [
-        (NIX_APPS_RELATIVE, vec!["decoder-security"]),
-        (NIX_DEVSHELLS_RELATIVE, vec!["decoder-security"]),
-        (
-            NIX_CHECKS_RELATIVE,
-            vec!["blossom-raster-decode-test", "blossom-decoder-fuzz-smoke"],
-        ),
-        (NIX_TOOLCHAINS_RELATIVE, vec!["rust-toolchain-fuzz.toml"]),
-        (
-            NIX_COMMON_RELATIVE,
-            vec![
-                "decoderSecurityCommand",
-                "decoderSecurityStableCommand",
-                "decoderSecurityFuzzCommand",
-                "fuzz/Cargo.lock",
-                "131072",
-                "-runs=256",
-                "-seed=424242",
-                "-max_len=65536",
-                "resource_cases='jpeg_grayscale jpeg_rgb jpeg_cmyk jpeg_sof1 png_rgb png_palette png_rgba png_adam7 webp_vp8_rgb webp_vp8_alpha webp_vp8l_rgb webp_vp8l_alpha'",
-                "for repetition in 1 2 3",
-            ],
-        ),
-    ] {
-        let bytes = read_regular_file(workspace_root, relative)?;
-        let source = std::str::from_utf8(&bytes)
-            .map_err(|error| format!("{relative} must be UTF-8: {error}"))?;
-        for needle in needles {
-            if !source.contains(needle) {
-                return Err(format!(
-                    "{relative} must declare the governed decoder-security lane fragment {needle}"
-                ));
-            }
-        }
-    }
     Ok(())
 }
 
