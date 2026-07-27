@@ -61,14 +61,6 @@ impl RadrootsAddressableTransitionScopeV1 {
         if kinds.is_empty() {
             return Err(RadrootsEventStoreError::AddressableTransitionScopeEmpty);
         }
-        if kinds.len() > RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1 {
-            return Err(
-                RadrootsEventStoreError::AddressableTransitionScopeTooLarge {
-                    max: RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1,
-                    actual: kinds.len(),
-                },
-            );
-        }
         if let Some(kind) = kinds
             .iter()
             .copied()
@@ -209,11 +201,9 @@ fn decode_cursor_hex(
     {
         return Err(RadrootsEventStoreError::AddressableTransitionCursorEncoding { field });
     }
-    let decoded = hex::decode(value)
-        .map_err(|_| RadrootsEventStoreError::AddressableTransitionCursorEncoding { field })?;
-    decoded
-        .try_into()
-        .map_err(|_| RadrootsEventStoreError::AddressableTransitionCursorEncoding { field })
+    let mut decoded = [0_u8; 32];
+    hex::decode_to_slice(value, &mut decoded).expect("validated lowercase 32-byte hex");
+    Ok(decoded)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -627,6 +617,20 @@ mod tests {
             )
         ));
 
+        value["source_generation"] = serde_json::json!("a".repeat(63));
+        assert!(matches!(
+            RadrootsAddressableTransitionCursorV1::from_json(
+                serde_json::to_string(&value)
+                    .expect("short encoding JSON")
+                    .as_str()
+            ),
+            Err(
+                RadrootsEventStoreError::AddressableTransitionCursorEncoding {
+                    field: "source_generation"
+                }
+            )
+        ));
+
         assert!(matches!(
             RadrootsAddressableTransitionCursorV1::new(
                 cursor.source_generation(),
@@ -643,5 +647,48 @@ mod tests {
                 actual
             }) if actual == RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1 + 1
         ));
+    }
+
+    #[test]
+    fn transition_storage_enums_round_trip_and_reject_unknown_values() {
+        for origin in [
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            RadrootsAddressableTransitionOriginV1::Incremental,
+        ] {
+            assert_eq!(
+                RadrootsAddressableTransitionOriginV1::parse(origin.as_str()).expect("origin"),
+                origin
+            );
+        }
+        assert!(RadrootsAddressableTransitionOriginV1::parse("unknown").is_err());
+
+        for decision in [
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied,
+            RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected,
+            RadrootsAddressableTransitionRawHeadDecisionV1::SkippedOlder,
+            RadrootsAddressableTransitionRawHeadDecisionV1::SkippedSameTimestampHigherEventId,
+            RadrootsAddressableTransitionRawHeadDecisionV1::MalformedCoordinate,
+        ] {
+            assert_eq!(
+                RadrootsAddressableTransitionRawHeadDecisionV1::parse(decision.as_str())
+                    .expect("raw-head decision"),
+                decision
+            );
+        }
+        assert!(RadrootsAddressableTransitionRawHeadDecisionV1::parse("unknown").is_err());
+
+        for visibility in [
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            RadrootsAddressableTransitionVisibilityV1::NotAdmitted,
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+        ] {
+            assert_eq!(
+                RadrootsAddressableTransitionVisibilityV1::parse(visibility.as_str())
+                    .expect("visibility"),
+                visibility
+            );
+        }
+        assert!(RadrootsAddressableTransitionVisibilityV1::parse("unknown").is_err());
     }
 }
