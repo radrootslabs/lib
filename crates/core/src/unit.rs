@@ -109,13 +109,13 @@ impl fmt::Display for Unit {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCoreUnitParseError {
+pub enum ParseError {
     UnknownUnit,
     NotAMassUnit,
     NotAVolumeUnit,
 }
 
-impl fmt::Display for RadrootsCoreUnitParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownUnit => write!(f, "unknown unit string"),
@@ -126,39 +126,43 @@ impl fmt::Display for RadrootsCoreUnitParseError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCoreUnitParseError {}
+impl std::error::Error for ParseError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCoreUnitConvertError {
+pub enum ConvertError {
     NotMassUnit { from: Unit, to: Unit },
     NotVolumeUnit { from: Unit, to: Unit },
     NotConvertibleUnits { from: Unit, to: Unit },
+    ArithmeticOverflow { from: Unit, to: Unit },
 }
 
-impl fmt::Display for RadrootsCoreUnitConvertError {
+impl fmt::Display for ConvertError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RadrootsCoreUnitConvertError::NotMassUnit { from, to } => {
+            ConvertError::NotMassUnit { from, to } => {
                 write!(f, "unit conversion requires mass units: {from} -> {to}")
             }
-            RadrootsCoreUnitConvertError::NotVolumeUnit { from, to } => {
+            ConvertError::NotVolumeUnit { from, to } => {
                 write!(f, "unit conversion requires volume units: {from} -> {to}")
             }
-            RadrootsCoreUnitConvertError::NotConvertibleUnits { from, to } => {
+            ConvertError::NotConvertibleUnits { from, to } => {
                 write!(
                     f,
                     "unit conversion requires matching dimensions: {from} -> {to}"
                 )
+            }
+            ConvertError::ArithmeticOverflow { from, to } => {
+                write!(f, "unit conversion arithmetic overflow: {from} -> {to}")
             }
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCoreUnitConvertError {}
+impl std::error::Error for ConvertError {}
 
 impl FromStr for Unit {
-    type Err = RadrootsCoreUnitParseError;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim().to_ascii_lowercase();
@@ -172,7 +176,7 @@ impl FromStr for Unit {
             "ml" | "milliliter" | "millilitre" | "milliliters" | "millilitres" => {
                 Ok(Unit::VolumeMl)
             }
-            _ => Err(RadrootsCoreUnitParseError::UnknownUnit),
+            _ => Err(ParseError::UnknownUnit),
         }
     }
 }
@@ -198,39 +202,57 @@ pub use self::UnitDimension as RadrootsCoreUnitDimension;
 #[deprecated(since = "0.1.0", note = "renamed to `Unit`")]
 pub use self::Unit as RadrootsCoreUnit;
 
+#[deprecated(since = "0.1.0", note = "renamed to `unit::ParseError`")]
+pub use self::ParseError as RadrootsCoreUnitParseError;
+
+#[deprecated(since = "0.1.0", note = "renamed to `unit::ConvertError`")]
+pub use self::ConvertError as RadrootsCoreUnitConvertError;
+
 #[inline]
-pub fn parse_mass_unit(s: &str) -> Result<Unit, RadrootsCoreUnitParseError> {
+pub fn parse_mass_unit(s: &str) -> Result<Unit, ParseError> {
     let u: Unit = Unit::from_str(s)?;
     if u.is_mass() {
         Ok(u)
     } else {
-        Err(RadrootsCoreUnitParseError::NotAMassUnit)
+        Err(ParseError::NotAMassUnit)
     }
 }
 
 #[inline]
-pub fn parse_volume_unit(s: &str) -> Result<Unit, RadrootsCoreUnitParseError> {
+pub fn parse_volume_unit(s: &str) -> Result<Unit, ParseError> {
     let u: Unit = Unit::from_str(s)?;
     if u.is_volume() {
         Ok(u)
     } else {
-        Err(RadrootsCoreUnitParseError::NotAVolumeUnit)
+        Err(ParseError::NotAVolumeUnit)
     }
 }
 
 #[inline]
+/// Converts mass using exact decimal factors expressed in grams.
+///
+/// The pound and ounce factors are exact definitions. Arithmetic is checked;
+/// division uses the decimal backend's deterministic precision and performs no
+/// additional application-level rounding.
 pub fn convert_mass_decimal(
     amount: Decimal,
     from: Unit,
     to: Unit,
-) -> Result<Decimal, RadrootsCoreUnitConvertError> {
+) -> Result<Decimal, ConvertError> {
+    let arithmetic_error = || ConvertError::ArithmeticOverflow { from, to };
     let amount_g = match from {
         Unit::MassG => amount,
-        Unit::MassKg => amount * Decimal::from(1000u32),
-        Unit::MassOz => amount * Decimal(dec!(28.349523125)),
-        Unit::MassLb => amount * Decimal(dec!(453.59237)),
+        Unit::MassKg => amount
+            .checked_mul(Decimal::from(1000u32))
+            .map_err(|_| arithmetic_error())?,
+        Unit::MassOz => amount
+            .checked_mul(Decimal(dec!(28.349523125)))
+            .map_err(|_| arithmetic_error())?,
+        Unit::MassLb => amount
+            .checked_mul(Decimal(dec!(453.59237)))
+            .map_err(|_| arithmetic_error())?,
         _ => {
-            return Err(RadrootsCoreUnitConvertError::NotMassUnit { from, to });
+            return Err(ConvertError::NotMassUnit { from, to });
         }
     };
 
@@ -240,24 +262,32 @@ pub fn convert_mass_decimal(
         Unit::MassOz => Decimal(dec!(28.349523125)),
         Unit::MassLb => Decimal(dec!(453.59237)),
         _ => {
-            return Err(RadrootsCoreUnitConvertError::NotMassUnit { from, to });
+            return Err(ConvertError::NotMassUnit { from, to });
         }
     };
 
-    Ok(amount_g / to_factor)
+    amount_g
+        .checked_div(to_factor)
+        .map_err(|_| arithmetic_error())
 }
 
 #[inline]
+/// Converts volume using the exact relation `1 L = 1000 mL`.
+///
+/// Arithmetic is checked and no application-level rounding is applied.
 pub fn convert_volume_decimal(
     amount: Decimal,
     from: Unit,
     to: Unit,
-) -> Result<Decimal, RadrootsCoreUnitConvertError> {
+) -> Result<Decimal, ConvertError> {
+    let arithmetic_error = || ConvertError::ArithmeticOverflow { from, to };
     let amount_ml = match from {
         Unit::VolumeMl => amount,
-        Unit::VolumeL => amount * Decimal::from(1000u32),
+        Unit::VolumeL => amount
+            .checked_mul(Decimal::from(1000u32))
+            .map_err(|_| arithmetic_error())?,
         _ => {
-            return Err(RadrootsCoreUnitConvertError::NotVolumeUnit { from, to });
+            return Err(ConvertError::NotVolumeUnit { from, to });
         }
     };
 
@@ -265,11 +295,13 @@ pub fn convert_volume_decimal(
         Unit::VolumeMl => Decimal::ONE,
         Unit::VolumeL => Decimal::from(1000u32),
         _ => {
-            return Err(RadrootsCoreUnitConvertError::NotVolumeUnit { from, to });
+            return Err(ConvertError::NotVolumeUnit { from, to });
         }
     };
 
-    Ok(amount_ml / to_factor)
+    amount_ml
+        .checked_div(to_factor)
+        .map_err(|_| arithmetic_error())
 }
 
 #[inline]
@@ -277,9 +309,9 @@ pub fn convert_unit_decimal(
     amount: Decimal,
     from: Unit,
     to: Unit,
-) -> Result<Decimal, RadrootsCoreUnitConvertError> {
+) -> Result<Decimal, ConvertError> {
     if !Unit::same_dimension(from, to) {
-        return Err(RadrootsCoreUnitConvertError::NotConvertibleUnits { from, to });
+        return Err(ConvertError::NotConvertibleUnits { from, to });
     }
     match from.dimension() {
         UnitDimension::Count => Ok(amount),
@@ -296,14 +328,14 @@ mod tests {
     fn convert_paths_cover_unit_branches() {
         assert_eq!(
             convert_mass_decimal(Decimal::ONE, Unit::Each, Unit::MassG),
-            Err(RadrootsCoreUnitConvertError::NotMassUnit {
+            Err(ConvertError::NotMassUnit {
                 from: Unit::Each,
                 to: Unit::MassG
             })
         );
         assert_eq!(
             convert_volume_decimal(Decimal::ONE, Unit::Each, Unit::VolumeMl),
-            Err(RadrootsCoreUnitConvertError::NotVolumeUnit {
+            Err(ConvertError::NotVolumeUnit {
                 from: Unit::Each,
                 to: Unit::VolumeMl
             })

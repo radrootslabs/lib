@@ -15,6 +15,11 @@ pub struct Percent {
 }
 
 impl Percent {
+    /// Creates a percentage value.
+    ///
+    /// `Percent` is intentionally signed and unbounded because it is also
+    /// used for deltas. Domain-specific non-negative rules belong to values
+    /// such as [`crate::pricing::Discount`].
     #[inline]
     pub fn new(value: Decimal) -> Self {
         Self { value }
@@ -28,8 +33,20 @@ impl Percent {
     }
 
     #[inline]
+    pub fn try_from_ratio(ratio_0_to_1: Decimal) -> Result<Self, crate::decimal::Error> {
+        Ok(Self {
+            value: ratio_0_to_1.checked_mul(Decimal::from(100u32))?,
+        })
+    }
+
+    #[inline]
     pub fn to_ratio(&self) -> Decimal {
         self.value / Decimal::from(100u32)
+    }
+
+    #[inline]
+    pub fn try_to_ratio(&self) -> Result<Decimal, crate::decimal::Error> {
+        self.value.checked_div(Decimal::from(100u32))
     }
 
     #[inline]
@@ -41,6 +58,16 @@ impl Percent {
     pub fn of_money_quantized(&self, base: &Money) -> Money {
         base.mul_decimal(self.to_ratio()).quantize_to_currency()
     }
+
+    #[inline]
+    pub fn try_of_money(&self, base: &Money) -> Result<Money, crate::money::Error> {
+        base.checked_mul_decimal(self.try_to_ratio().map_err(crate::money::Error::from)?)
+    }
+
+    #[inline]
+    pub fn try_of_money_quantized(&self, base: &Money) -> Result<Money, crate::money::Error> {
+        Ok(self.try_of_money(base)?.quantize_to_currency())
+    }
 }
 
 impl fmt::Display for Percent {
@@ -50,34 +77,37 @@ impl fmt::Display for Percent {
 }
 
 impl FromStr for Percent {
-    type Err = RadrootsCorePercentParseError;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let trimmed = s.trim_end();
         let no_pct = trimmed.strip_suffix('%').unwrap_or(trimmed).trim();
         let dec = no_pct
             .parse::<Decimal>()
-            .map_err(|_| RadrootsCorePercentParseError::InvalidNumber)?;
+            .map_err(|_| ParseError::InvalidNumber)?;
         Ok(Percent::new(dec))
     }
 }
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCorePercentParseError {
+pub enum ParseError {
     InvalidNumber,
 }
 
-impl fmt::Display for RadrootsCorePercentParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RadrootsCorePercentParseError::InvalidNumber => write!(f, "invalid percent string"),
+            ParseError::InvalidNumber => write!(f, "invalid percent string"),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCorePercentParseError {}
+impl std::error::Error for ParseError {}
 
 #[deprecated(since = "0.1.0", note = "renamed to `Percent`")]
 pub use self::Percent as RadrootsCorePercent;
+
+#[deprecated(since = "0.1.0", note = "renamed to `percent::ParseError`")]
+pub use self::ParseError as RadrootsCorePercentParseError;

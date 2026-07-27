@@ -3,11 +3,10 @@
 
 pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescriptor> {
     ::std::vec![
-        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::RadrootsCoreDiscount>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::RadrootsCoreDiscountScope>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::RadrootsCoreDiscountThreshold>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::RadrootsCoreDiscountValue>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::Discount>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::DiscountScope>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::DiscountThreshold>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::discount::DiscountValue>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::money::Money>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::percent::Percent>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::quantity::Quantity>(),

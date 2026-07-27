@@ -5,34 +5,45 @@ extern crate alloc;
 
 pub mod currency;
 pub mod decimal;
-pub mod discount;
+mod discount;
 #[cfg(feature = "dto-bindgen")]
 pub mod dto;
+mod error;
 pub mod money;
 pub mod percent;
 pub mod pricing;
 pub mod quantity;
-pub mod quantity_price;
+mod quantity_price;
 #[cfg(feature = "serde")]
 pub mod serde_ext;
 pub mod unit;
 
-pub use currency::{Currency, RadrootsCoreCurrencyParseError};
+pub use currency::Currency;
 pub use decimal::Decimal;
+pub use error::Error;
+pub use money::Money;
+pub use percent::Percent;
+pub use pricing::QuantityPrice;
+pub use quantity::Quantity;
+pub use unit::Unit;
+
+#[allow(deprecated)]
+pub use currency::RadrootsCoreCurrencyParseError;
+#[allow(deprecated)]
 pub use discount::{
     RadrootsCoreDiscount, RadrootsCoreDiscountScope, RadrootsCoreDiscountThreshold,
     RadrootsCoreDiscountValue,
 };
-pub use money::{Money, RadrootsCoreMoneyInvariantError};
-pub use percent::{Percent, RadrootsCorePercentParseError};
-pub use quantity::{Quantity, RadrootsCoreQuantityInvariantError};
-pub use quantity_price::{
-    QuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreQuantityPriceOps,
-};
-pub use unit::{
-    RadrootsCoreUnitConvertError, RadrootsCoreUnitParseError, Unit, convert_mass_decimal,
-    convert_unit_decimal, convert_volume_decimal, parse_mass_unit, parse_volume_unit,
-};
+#[allow(deprecated)]
+pub use money::RadrootsCoreMoneyInvariantError;
+#[allow(deprecated)]
+pub use percent::RadrootsCorePercentParseError;
+#[allow(deprecated)]
+pub use quantity::RadrootsCoreQuantityInvariantError;
+#[allow(deprecated)]
+pub use quantity_price::{RadrootsCoreQuantityPriceError, RadrootsCoreQuantityPriceOps};
+#[allow(deprecated)]
+pub use unit::{RadrootsCoreUnitConvertError, RadrootsCoreUnitParseError};
 
 #[allow(deprecated)]
 pub use currency::RadrootsCoreCurrency;

@@ -1,7 +1,8 @@
 mod common;
 
 use radroots_core::{
-    QuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreQuantityPriceOps, Unit,
+    Currency, Decimal, Money, Quantity, QuantityPrice, Unit,
+    pricing::{Error, QuantityPriceOps},
 };
 
 #[test]
@@ -36,14 +37,60 @@ fn try_cost_for_validates_quantity_and_units() {
 
     assert_eq!(
         zero_price.try_cost_for(&common::qty("1", Unit::Each)),
-        Err(RadrootsCoreQuantityPriceError::PerQuantityZero)
+        Err(Error::PerQuantityZero)
     );
     assert_eq!(
         price.try_cost_for(&common::qty("1", Unit::MassKg)),
-        Err(RadrootsCoreQuantityPriceError::UnitMismatch {
+        Err(Error::UnitMismatch {
             have: Unit::MassKg,
             want: Unit::Each
         })
+    );
+}
+
+#[test]
+fn checked_constructor_rejects_invalid_price_shapes() {
+    assert_eq!(
+        QuantityPrice::try_new(common::money("-1", "USD"), common::qty("1", Unit::Each),),
+        Err(Error::NegativePrice)
+    );
+    assert_eq!(
+        QuantityPrice::try_new(common::money("1", "USD"), common::qty("0", Unit::Each),),
+        Err(Error::PerQuantityZero)
+    );
+    assert_eq!(
+        QuantityPrice::try_new(common::money("1", "USD"), common::qty("-1", Unit::Each),),
+        Err(Error::PerQuantityNegative)
+    );
+}
+
+#[test]
+fn checked_cost_paths_never_silently_convert_errors_to_zero() {
+    let price =
+        QuantityPrice::try_new(common::money("10", "USD"), common::qty("1", Unit::Each)).unwrap();
+    assert_eq!(
+        price.try_cost_for(&common::qty("1", Unit::MassKg)),
+        Err(Error::UnitMismatch {
+            have: Unit::MassKg,
+            want: Unit::Each,
+        })
+    );
+    assert_eq!(
+        price.try_cost_for(&common::qty("-1", Unit::Each)),
+        Err(Error::NegativeRequestedQuantity)
+    );
+}
+
+#[test]
+fn checked_cost_paths_report_arithmetic_overflow() {
+    let price = QuantityPrice::try_new(
+        Money::try_new(Decimal::MAX, Currency::USD).unwrap(),
+        Quantity::try_new(Decimal::ONE, Unit::Each).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        price.try_cost_for(&Quantity::try_new(Decimal::from(2u32), Unit::Each).unwrap()),
+        Err(Error::ArithmeticOverflow)
     );
 }
 
@@ -52,7 +99,7 @@ fn try_cost_for_rounded_error_path_is_exercised() {
     let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::Each));
     assert_eq!(
         price.try_cost_for_rounded(&common::qty("1", Unit::MassKg)),
-        Err(RadrootsCoreQuantityPriceError::UnitMismatch {
+        Err(Error::UnitMismatch {
             have: Unit::MassKg,
             want: Unit::Each
         })
@@ -82,7 +129,7 @@ fn try_cost_for_amount_in_rejects_non_convertible_units() {
     let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::MassKg));
     assert_eq!(
         price.try_cost_for_amount_in(common::dec("1"), Unit::Each),
-        Err(RadrootsCoreQuantityPriceError::NonConvertibleUnits {
+        Err(Error::NonConvertibleUnits {
             from: Unit::Each,
             to: Unit::MassKg
         })
@@ -111,7 +158,7 @@ fn try_to_unit_price_error_and_same_unit_paths_are_exercised() {
     let zero = QuantityPrice::new(common::money("10", "USD"), common::qty("0", Unit::MassKg));
     assert_eq!(
         zero.try_to_unit_price(Unit::MassG),
-        Err(RadrootsCoreQuantityPriceError::PerQuantityZero)
+        Err(Error::PerQuantityZero)
     );
 
     let base = QuantityPrice::new(common::money("5", "USD"), common::qty("2", Unit::MassKg));
@@ -123,7 +170,7 @@ fn try_to_unit_price_error_and_same_unit_paths_are_exercised() {
     let err = base.try_to_unit_price(Unit::VolumeMl).unwrap_err();
     assert_eq!(
         err,
-        RadrootsCoreQuantityPriceError::NonConvertibleUnits {
+        Error::NonConvertibleUnits {
             from: Unit::MassKg,
             to: Unit::VolumeMl
         }
@@ -166,7 +213,7 @@ fn try_to_unit_price_detects_underflow_to_zero_normalized_amount() {
         common::qty("0.0000000000000000000000000001", Unit::VolumeMl),
     );
     let err = tiny.try_to_unit_price(Unit::VolumeL).unwrap_err();
-    assert_eq!(err, RadrootsCoreQuantityPriceError::PerQuantityZero);
+    assert_eq!(err, Error::PerQuantityZero);
 }
 
 #[test]
@@ -186,4 +233,28 @@ fn is_price_per_canonical_unit_detects_canonical() {
 
     let price = QuantityPrice::new(common::money("1.00", "USD"), common::qty("1", Unit::MassKg));
     assert!(!price.is_price_per_canonical_unit());
+}
+
+#[test]
+fn pricing_error_display_is_stable() {
+    assert_eq!(
+        Error::PerQuantityZero.to_string(),
+        "price quantity must be greater than zero"
+    );
+    assert_eq!(
+        Error::PerQuantityNegative.to_string(),
+        "price quantity must not be negative"
+    );
+    assert_eq!(
+        Error::NegativePrice.to_string(),
+        "price amount must not be negative"
+    );
+    assert_eq!(
+        Error::NegativeRequestedQuantity.to_string(),
+        "requested quantity must not be negative"
+    );
+    assert_eq!(
+        Error::ArithmeticOverflow.to_string(),
+        "price arithmetic overflow"
+    );
 }

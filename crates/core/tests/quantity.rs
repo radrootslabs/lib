@@ -1,6 +1,6 @@
 mod common;
 
-use radroots_core::{RadrootsCoreQuantityInvariantError, Unit};
+use radroots_core::{Decimal, Quantity, Unit, quantity::Error};
 
 #[test]
 fn zero_helpers_and_scale_paths_are_exercised() {
@@ -31,16 +31,27 @@ fn label_helpers_set_and_clear() {
 #[test]
 fn ensure_non_negative_rejects_negative_amount() {
     let q = common::qty("-1", Unit::Each);
-    assert_eq!(
-        q.ensure_non_negative(),
-        Err(RadrootsCoreQuantityInvariantError::NegativeAmount)
-    );
+    assert_eq!(q.ensure_non_negative(), Err(Error::NegativeAmount));
 }
 
 #[test]
 fn ensure_non_negative_accepts_non_negative_amount() {
     let q = common::qty("0", Unit::Each);
     assert_eq!(q.ensure_non_negative(), Ok(()));
+}
+
+#[test]
+fn checked_constructor_rejects_negative_and_exposes_fields() {
+    assert_eq!(
+        Quantity::try_new(common::dec("-1"), Unit::Each),
+        Err(Error::NegativeAmount)
+    );
+    let quantity = Quantity::try_new(common::dec("2"), Unit::Each)
+        .unwrap()
+        .with_label("bundle");
+    assert_eq!(quantity.amount(), common::dec("2"));
+    assert_eq!(quantity.unit(), Unit::Each);
+    assert_eq!(quantity.label(), Some("bundle"));
 }
 
 #[test]
@@ -53,14 +64,8 @@ fn try_add_and_try_sub_require_matching_units() {
     assert_eq!(sum.amount, common::dec("3"));
     assert_eq!(sum.label.as_deref(), Some("lhs"));
 
-    assert_eq!(
-        a.try_add(&c),
-        Err(RadrootsCoreQuantityInvariantError::UnitMismatch)
-    );
-    assert_eq!(
-        b.try_sub(&c),
-        Err(RadrootsCoreQuantityInvariantError::UnitMismatch)
-    );
+    assert_eq!(a.try_add(&c), Err(Error::UnitMismatch));
+    assert_eq!(b.try_sub(&c), Err(Error::UnitMismatch));
 }
 
 #[test]
@@ -91,6 +96,24 @@ fn checked_add_and_sub_return_some_on_matching_units() {
     let subbed = a.checked_sub(&b).expect("subbed quantity");
     assert_eq!(subbed.amount, common::dec("3"));
     assert_eq!(subbed.label.as_deref(), Some("lhs"));
+}
+
+#[test]
+fn checked_arithmetic_reports_negative_overflow_and_zero_division() {
+    let one = Quantity::try_new(Decimal::ONE, Unit::Each).unwrap();
+    let two = Quantity::try_new(Decimal::from(2u32), Unit::Each).unwrap();
+    assert_eq!(one.try_sub(&two), Err(Error::NegativeAmount));
+
+    let max = Quantity::try_new(Decimal::MAX, Unit::Each).unwrap();
+    assert_eq!(max.try_add(&one), Err(Error::ArithmeticOverflow));
+    assert_eq!(
+        one.checked_div_decimal(Decimal::ZERO),
+        Err(Error::DivisionByZero)
+    );
+    assert_eq!(
+        one.checked_mul_decimal(common::dec("-1")),
+        Err(Error::NegativeAmount)
+    );
 }
 
 #[test]
@@ -131,12 +154,17 @@ fn display_without_label_and_error_display_are_exercised() {
     assert_eq!(q.to_string(), "1.5 each");
 
     assert_eq!(
-        RadrootsCoreQuantityInvariantError::NegativeAmount.to_string(),
+        Error::NegativeAmount.to_string(),
         "quantity amount must be ≥ 0"
     );
+    assert_eq!(Error::UnitMismatch.to_string(), "quantity unit mismatch");
     assert_eq!(
-        RadrootsCoreQuantityInvariantError::UnitMismatch.to_string(),
-        "quantity unit mismatch"
+        Error::ArithmeticOverflow.to_string(),
+        "quantity arithmetic overflow"
+    );
+    assert_eq!(
+        Error::DivisionByZero.to_string(),
+        "quantity division by zero"
     );
 }
 
@@ -202,7 +230,7 @@ fn try_convert_to_rejects_mismatched_dimensions() {
     let err = q.try_convert_to(Unit::MassG).unwrap_err();
     assert_eq!(
         err,
-        radroots_core::RadrootsCoreUnitConvertError::NotConvertibleUnits {
+        radroots_core::unit::ConvertError::NotConvertibleUnits {
             from: Unit::Each,
             to: Unit::MassG
         }

@@ -16,15 +16,16 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeErr
 pub struct Currency([u8; 3]);
 
 impl Currency {
+    /// Builds a currency from its canonical three-byte ASCII code.
     #[inline]
-    pub const fn from_const(bytes: [u8; 3]) -> Result<Self, RadrootsCoreCurrencyParseError> {
+    pub const fn from_const(bytes: [u8; 3]) -> Result<Self, ParseError> {
         if Self::is_ascii_upper(bytes[0])
             && Self::is_ascii_upper(bytes[1])
             && Self::is_ascii_upper(bytes[2])
         {
             Ok(Self(bytes))
         } else {
-            Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+            Err(ParseError::InvalidFormat)
         }
     }
 
@@ -33,10 +34,10 @@ impl Currency {
     }
 
     #[inline]
-    pub fn from_str_upper(s: &str) -> Result<Self, RadrootsCoreCurrencyParseError> {
+    pub fn from_str_upper(s: &str) -> Result<Self, ParseError> {
         let b = s.as_bytes();
         if b.len() != 3 || b.iter().any(|c| !c.is_ascii_uppercase()) {
-            return Err(RadrootsCoreCurrencyParseError::InvalidFormat);
+            return Err(ParseError::InvalidFormat);
         }
         Ok(Self([b[0], b[1], b[2]]))
     }
@@ -44,6 +45,11 @@ impl Currency {
     #[inline]
     pub fn as_str(&self) -> &str {
         core::str::from_utf8(&self.0).unwrap_or("???")
+    }
+
+    #[inline]
+    pub const fn as_bytes(&self) -> &[u8; 3] {
+        &self.0
     }
 
     pub const USD: Currency = Currency(*b"USD");
@@ -82,19 +88,21 @@ impl fmt::Display for Currency {
 }
 
 impl TryFrom<&str> for Currency {
-    type Error = RadrootsCoreCurrencyParseError;
+    type Error = ParseError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()
     }
 }
 
 impl FromStr for Currency {
-    type Err = RadrootsCoreCurrencyParseError;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Currency input is canonicalized to uppercase ASCII. Serialization
+        // and Display always emit that canonical representation.
         let s = s.trim();
         if s.len() != 3 || !s.chars().all(|c| c.is_ascii_alphabetic()) {
-            return Err(RadrootsCoreCurrencyParseError::InvalidFormat);
+            return Err(ParseError::InvalidFormat);
         }
         let upper = s.to_ascii_uppercase();
         Self::from_str_upper(&upper)
@@ -103,14 +111,14 @@ impl FromStr for Currency {
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCoreCurrencyParseError {
+pub enum ParseError {
     InvalidFormat,
 }
 
-impl fmt::Display for RadrootsCoreCurrencyParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RadrootsCoreCurrencyParseError::InvalidFormat => {
+            ParseError::InvalidFormat => {
                 write!(f, "currency must be a 3-letter code")
             }
         }
@@ -118,7 +126,7 @@ impl fmt::Display for RadrootsCoreCurrencyParseError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCoreCurrencyParseError {}
+impl std::error::Error for ParseError {}
 
 #[cfg(feature = "serde")]
 impl Serialize for Currency {
@@ -137,3 +145,6 @@ impl<'de> Deserialize<'de> for Currency {
 
 #[deprecated(since = "0.1.0", note = "renamed to `Currency`")]
 pub use self::Currency as RadrootsCoreCurrency;
+
+#[deprecated(since = "0.1.0", note = "renamed to `currency::ParseError`")]
+pub use self::ParseError as RadrootsCoreCurrencyParseError;

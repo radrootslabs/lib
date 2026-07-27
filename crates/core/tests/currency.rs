@@ -1,6 +1,6 @@
 use core::str::FromStr;
 
-use radroots_core::{Currency, RadrootsCoreCurrencyParseError};
+use radroots_core::{Currency, currency::ParseError};
 
 #[test]
 fn from_str_upper_accepts_valid() {
@@ -12,11 +12,11 @@ fn from_str_upper_accepts_valid() {
 fn from_str_upper_rejects_invalid() {
     assert_eq!(
         Currency::from_str_upper("Usd"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        Err(ParseError::InvalidFormat)
     );
     assert_eq!(
         Currency::from_str_upper("US"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        Err(ParseError::InvalidFormat)
     );
 }
 
@@ -28,14 +28,8 @@ fn from_str_trims_and_uppercases() {
 
 #[test]
 fn from_str_rejects_non_alpha() {
-    assert_eq!(
-        Currency::from_str("US1"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
-    );
-    assert_eq!(
-        Currency::from_str("US"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
-    );
+    assert_eq!(Currency::from_str("US1"), Err(ParseError::InvalidFormat));
+    assert_eq!(Currency::from_str("US"), Err(ParseError::InvalidFormat));
 }
 
 #[test]
@@ -43,19 +37,19 @@ fn from_const_validates_bytes() {
     assert!(Currency::from_const(*b"USD").is_ok());
     assert_eq!(
         Currency::from_const(*b"1SD"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        Err(ParseError::InvalidFormat)
     );
     assert_eq!(
         Currency::from_const(*b"Usd"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        Err(ParseError::InvalidFormat)
     );
     assert_eq!(
         Currency::from_const(*b"USd"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        Err(ParseError::InvalidFormat)
     );
     assert_eq!(
         Currency::from_const(*b"usd"),
-        Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+        Err(ParseError::InvalidFormat)
     );
 }
 
@@ -78,7 +72,7 @@ fn display_debug_tryfrom_and_error_display_paths_are_exercised() {
     let via_try_from = Currency::try_from("usd").unwrap();
     assert_eq!(via_try_from, usd);
     assert_eq!(
-        RadrootsCoreCurrencyParseError::InvalidFormat.to_string(),
+        ParseError::InvalidFormat.to_string(),
         "currency must be a 3-letter code"
     );
 }

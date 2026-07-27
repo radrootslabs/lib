@@ -1,3 +1,6 @@
 //! Deterministic pricing value objects and operations.
 
-const _: () = ();
+pub use crate::discount::{
+    Discount, DiscountScope, DiscountThreshold, DiscountValue, Error as DiscountError,
+};
+pub use crate::quantity_price::{Error, QuantityPrice, QuantityPriceOps};

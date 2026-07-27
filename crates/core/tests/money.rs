@@ -1,6 +1,6 @@
 mod common;
 
-use radroots_core::{Currency, Money, RadrootsCoreMoneyInvariantError};
+use radroots_core::{Currency, Decimal, Money, money::Error};
 use rust_decimal::RoundingStrategy;
 
 #[test]
@@ -14,10 +14,7 @@ fn zero_and_is_zero() {
 #[test]
 fn ensure_non_negative_rejects_negative_amount() {
     let money = Money::new(common::dec("-1"), Currency::USD);
-    assert_eq!(
-        money.ensure_non_negative(),
-        Err(RadrootsCoreMoneyInvariantError::NegativeAmount)
-    );
+    assert_eq!(money.ensure_non_negative(), Err(Error::NegativeAmount));
 }
 
 #[test]
@@ -26,6 +23,17 @@ fn ensure_non_negative_accepts_zero_and_positive() {
     let pos = Money::new(common::dec("1"), Currency::USD);
     assert_eq!(zero.ensure_non_negative(), Ok(()));
     assert_eq!(pos.ensure_non_negative(), Ok(()));
+}
+
+#[test]
+fn checked_constructor_rejects_negative_and_canonicalizes_zero() {
+    assert_eq!(
+        Money::try_new(common::dec("-0.01"), Currency::USD),
+        Err(Error::NegativeAmount)
+    );
+    let zero = Money::try_new(common::dec("-0.00"), Currency::USD).unwrap();
+    assert_eq!(zero.amount(), Decimal::ZERO);
+    assert_eq!(zero.currency(), Currency::USD);
 }
 
 #[test]
@@ -60,10 +68,7 @@ fn checked_add_and_sub_require_currency_match() {
     let c = Money::new(common::dec("3.00"), eur);
 
     assert_eq!(a.checked_add(&b).unwrap().amount, common::dec("3.00"));
-    assert_eq!(
-        a.checked_add(&c),
-        Err(RadrootsCoreMoneyInvariantError::CurrencyMismatch)
-    );
+    assert_eq!(a.checked_add(&c), Err(Error::CurrencyMismatch));
     assert_eq!(b.checked_sub(&a).unwrap().amount, common::dec("1.00"));
 }
 
@@ -73,9 +78,25 @@ fn checked_sub_mismatch_returns_currency_error() {
     let eur = Currency::EUR;
     let a = Money::new(common::dec("1.00"), usd);
     let b = Money::new(common::dec("2.00"), eur);
+    assert_eq!(a.checked_sub(&b), Err(Error::CurrencyMismatch));
+}
+
+#[test]
+fn checked_arithmetic_rejects_invalid_results() {
+    let usd = Currency::USD;
+    let one = Money::try_new(Decimal::ONE, usd).unwrap();
+    let two = Money::try_new(Decimal::from(2u32), usd).unwrap();
+    assert_eq!(one.checked_sub(&two), Err(Error::NegativeAmount));
+
+    let max = Money::try_new(Decimal::MAX, usd).unwrap();
+    assert_eq!(max.checked_add(&one), Err(Error::ArithmeticOverflow));
     assert_eq!(
-        a.checked_sub(&b),
-        Err(RadrootsCoreMoneyInvariantError::CurrencyMismatch)
+        one.checked_div_decimal(Decimal::ZERO),
+        Err(Error::DivisionByZero)
+    );
+    assert_eq!(
+        one.checked_mul_decimal(common::dec("-1")),
+        Err(Error::NegativeAmount)
     );
 }
 
@@ -89,7 +110,7 @@ fn minor_units_exact_and_rounded() {
     assert_eq!(exact.to_minor_units_u64_exact().unwrap(), 123);
     assert_eq!(
         frac.to_minor_units_u64_exact(),
-        Err(RadrootsCoreMoneyInvariantError::NotWholeMinorUnits)
+        Err(Error::NotWholeMinorUnits)
     );
     assert_eq!(
         rounded
@@ -119,7 +140,7 @@ fn minor_units_u32_overflow_is_detected() {
     let too_large = Money::from_minor_units_u64(u64::from(u32::MAX) + 1, usd);
     assert_eq!(
         too_large.to_minor_units_u32_exact(),
-        Err(RadrootsCoreMoneyInvariantError::AmountOverflow)
+        Err(Error::AmountOverflow)
     );
 }
 
@@ -131,7 +152,7 @@ fn minor_units_u32_exact_success_path_is_exercised() {
     let fractional = Money::new(common::dec("1.001"), usd);
     assert_eq!(
         fractional.to_minor_units_u32_exact(),
-        Err(RadrootsCoreMoneyInvariantError::NotWholeMinorUnits)
+        Err(Error::NotWholeMinorUnits)
     );
 }
 
@@ -154,12 +175,12 @@ fn minor_units_u32_rounded_overflow_is_detected() {
     let too_large = Money::from_minor_units_u64(u64::from(u32::MAX) + 1, usd);
     assert_eq!(
         too_large.to_minor_units_u32_rounded(RoundingStrategy::MidpointAwayFromZero),
-        Err(RadrootsCoreMoneyInvariantError::AmountOverflow)
+        Err(Error::AmountOverflow)
     );
     let negative = Money::new(common::dec("-1.00"), usd);
     assert_eq!(
         negative.to_minor_units_u32_rounded(RoundingStrategy::MidpointAwayFromZero),
-        Err(RadrootsCoreMoneyInvariantError::AmountOverflow)
+        Err(Error::NegativeAmount)
     );
 }
 
@@ -178,6 +199,28 @@ fn from_minor_units_roundtrips() {
 }
 
 #[test]
+fn minor_units_roundtrip_across_supported_exponents() {
+    for currency in [Currency::JPY, Currency::USD, common::currency("KWD")] {
+        for minor in [0, 1, 99, 12_345, u32::MAX as u64] {
+            let money = Money::from_minor_units_u64(minor, currency);
+            assert_eq!(money.to_minor_units_u64_exact().unwrap(), minor);
+        }
+    }
+}
+
+#[test]
+fn exact_scale_change_never_rounds() {
+    let money = Money::try_new(common::dec("1.2300"), Currency::USD).unwrap();
+    assert_eq!(money.try_with_scale_exact(2).unwrap().amount().scale(), 2);
+    assert_eq!(
+        Money::try_new(common::dec("1.235"), Currency::USD)
+            .unwrap()
+            .try_with_scale_exact(2),
+        Err(Error::PrecisionLoss)
+    );
+}
+
+#[test]
 fn display_and_operator_impl_paths_are_exercised() {
     let usd = Currency::USD;
     let m = Money::new(common::dec("10"), usd);
@@ -192,19 +235,32 @@ fn display_and_operator_impl_paths_are_exercised() {
 #[test]
 fn invariant_error_display_variants_are_exercised() {
     assert_eq!(
-        RadrootsCoreMoneyInvariantError::NegativeAmount.to_string(),
+        Error::NegativeAmount.to_string(),
         "money amount must be ≥ 0"
     );
     assert_eq!(
-        RadrootsCoreMoneyInvariantError::NotWholeMinorUnits.to_string(),
+        Error::NotWholeMinorUnits.to_string(),
         "money not a whole number of minor units"
     );
     assert_eq!(
-        RadrootsCoreMoneyInvariantError::AmountOverflow.to_string(),
+        Error::AmountOverflow.to_string(),
         "money minor-unit conversion overflow"
     );
     assert_eq!(
-        RadrootsCoreMoneyInvariantError::CurrencyMismatch.to_string(),
+        Error::CurrencyMismatch.to_string(),
         "money currency mismatch"
+    );
+    assert_eq!(
+        Error::ArithmeticOverflow.to_string(),
+        "money arithmetic overflow"
+    );
+    assert_eq!(Error::DivisionByZero.to_string(), "money division by zero");
+    assert_eq!(
+        Error::ScaleOutOfRange.to_string(),
+        "money scale is outside the supported range"
+    );
+    assert_eq!(
+        Error::PrecisionLoss.to_string(),
+        "money operation would lose precision"
     );
 }

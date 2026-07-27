@@ -3,8 +3,11 @@ mod common;
 use core::str::FromStr;
 
 use radroots_core::{
-    RadrootsCoreUnitConvertError, RadrootsCoreUnitParseError, Unit, convert_mass_decimal,
-    convert_unit_decimal, convert_volume_decimal, parse_mass_unit, parse_volume_unit,
+    Decimal, Unit,
+    unit::{
+        ConvertError, ParseError, convert_mass_decimal, convert_unit_decimal,
+        convert_volume_decimal, parse_mass_unit, parse_volume_unit,
+    },
 };
 
 #[test]
@@ -34,10 +37,7 @@ fn parses_units_and_synonyms() {
 
 #[test]
 fn rejects_unknown_units() {
-    assert_eq!(
-        Unit::from_str("unknown"),
-        Err(RadrootsCoreUnitParseError::UnknownUnit)
-    );
+    assert_eq!(Unit::from_str("unknown"), Err(ParseError::UnknownUnit));
 }
 
 #[test]
@@ -81,27 +81,15 @@ fn code_and_predicate_helpers_cover_all_variants() {
 #[test]
 fn parse_mass_unit_enforces_mass_only() {
     assert_eq!(parse_mass_unit("kg"), Ok(Unit::MassKg));
-    assert_eq!(
-        parse_mass_unit("each"),
-        Err(RadrootsCoreUnitParseError::NotAMassUnit)
-    );
-    assert_eq!(
-        parse_mass_unit("bogus"),
-        Err(RadrootsCoreUnitParseError::UnknownUnit)
-    );
+    assert_eq!(parse_mass_unit("each"), Err(ParseError::NotAMassUnit));
+    assert_eq!(parse_mass_unit("bogus"), Err(ParseError::UnknownUnit));
 }
 
 #[test]
 fn parse_volume_unit_enforces_volume_only() {
     assert_eq!(parse_volume_unit("l"), Ok(Unit::VolumeL));
-    assert_eq!(
-        parse_volume_unit("kg"),
-        Err(RadrootsCoreUnitParseError::NotAVolumeUnit)
-    );
-    assert_eq!(
-        parse_volume_unit("bogus"),
-        Err(RadrootsCoreUnitParseError::UnknownUnit)
-    );
+    assert_eq!(parse_volume_unit("kg"), Err(ParseError::NotAVolumeUnit));
+    assert_eq!(parse_volume_unit("bogus"), Err(ParseError::UnknownUnit));
 }
 
 #[test]
@@ -127,7 +115,7 @@ fn convert_mass_decimal_rejects_non_mass_units() {
     let err = convert_mass_decimal(common::dec("1"), Unit::Each, Unit::MassG).unwrap_err();
     assert_eq!(
         err,
-        RadrootsCoreUnitConvertError::NotMassUnit {
+        ConvertError::NotMassUnit {
             from: Unit::Each,
             to: Unit::MassG
         }
@@ -136,7 +124,7 @@ fn convert_mass_decimal_rejects_non_mass_units() {
     let err = convert_mass_decimal(common::dec("1"), Unit::MassKg, Unit::Each).unwrap_err();
     assert_eq!(
         err,
-        RadrootsCoreUnitConvertError::NotMassUnit {
+        ConvertError::NotMassUnit {
             from: Unit::MassKg,
             to: Unit::Each
         }
@@ -157,7 +145,7 @@ fn convert_volume_decimal_rejects_non_volume_units() {
     let err = convert_volume_decimal(common::dec("1"), Unit::Each, Unit::VolumeMl).unwrap_err();
     assert_eq!(
         err,
-        RadrootsCoreUnitConvertError::NotVolumeUnit {
+        ConvertError::NotVolumeUnit {
             from: Unit::Each,
             to: Unit::VolumeMl
         }
@@ -166,7 +154,7 @@ fn convert_volume_decimal_rejects_non_volume_units() {
     let err = convert_volume_decimal(common::dec("1"), Unit::VolumeMl, Unit::Each).unwrap_err();
     assert_eq!(
         err,
-        RadrootsCoreUnitConvertError::NotVolumeUnit {
+        ConvertError::NotVolumeUnit {
             from: Unit::VolumeMl,
             to: Unit::Each
         }
@@ -185,22 +173,52 @@ fn convert_unit_decimal_converts_matching_dimensions() {
 }
 
 #[test]
-fn display_paths_for_unit_and_errors_are_exercised() {
-    assert_eq!(Unit::MassOz.to_string(), "oz");
+fn conversions_report_overflow_without_panicking() {
     assert_eq!(
-        RadrootsCoreUnitParseError::UnknownUnit.to_string(),
-        "unknown unit string"
+        convert_mass_decimal(Decimal::MAX, Unit::MassKg, Unit::MassG),
+        Err(ConvertError::ArithmeticOverflow {
+            from: Unit::MassKg,
+            to: Unit::MassG,
+        })
     );
     assert_eq!(
-        RadrootsCoreUnitParseError::NotAMassUnit.to_string(),
+        convert_volume_decimal(Decimal::MAX, Unit::VolumeL, Unit::VolumeMl),
+        Err(ConvertError::ArithmeticOverflow {
+            from: Unit::VolumeL,
+            to: Unit::VolumeMl,
+        })
+    );
+}
+
+#[test]
+fn exact_conversion_pairs_roundtrip() {
+    let cases = [
+        (common::dec("12.5"), Unit::MassKg, Unit::MassG),
+        (common::dec("3"), Unit::MassLb, Unit::MassG),
+        (common::dec("7"), Unit::MassOz, Unit::MassG),
+        (common::dec("1.25"), Unit::VolumeL, Unit::VolumeMl),
+    ];
+    for (amount, from, to) in cases {
+        let converted = convert_unit_decimal(amount, from, to).unwrap();
+        let roundtrip = convert_unit_decimal(converted, to, from).unwrap();
+        assert_eq!(roundtrip, amount, "roundtrip for {from} -> {to}");
+    }
+}
+
+#[test]
+fn display_paths_for_unit_and_errors_are_exercised() {
+    assert_eq!(Unit::MassOz.to_string(), "oz");
+    assert_eq!(ParseError::UnknownUnit.to_string(), "unknown unit string");
+    assert_eq!(
+        ParseError::NotAMassUnit.to_string(),
         "unit is not a mass unit"
     );
     assert_eq!(
-        RadrootsCoreUnitParseError::NotAVolumeUnit.to_string(),
+        ParseError::NotAVolumeUnit.to_string(),
         "unit is not a volume unit"
     );
     assert_eq!(
-        RadrootsCoreUnitConvertError::NotMassUnit {
+        ConvertError::NotMassUnit {
             from: Unit::Each,
             to: Unit::MassG
         }
@@ -208,7 +226,7 @@ fn display_paths_for_unit_and_errors_are_exercised() {
         "unit conversion requires mass units: each -> g"
     );
     assert_eq!(
-        RadrootsCoreUnitConvertError::NotVolumeUnit {
+        ConvertError::NotVolumeUnit {
             from: Unit::Each,
             to: Unit::VolumeL
         }
@@ -216,12 +234,20 @@ fn display_paths_for_unit_and_errors_are_exercised() {
         "unit conversion requires volume units: each -> l"
     );
     assert_eq!(
-        RadrootsCoreUnitConvertError::NotConvertibleUnits {
+        ConvertError::NotConvertibleUnits {
             from: Unit::Each,
             to: Unit::MassG
         }
         .to_string(),
         "unit conversion requires matching dimensions: each -> g"
+    );
+    assert_eq!(
+        ConvertError::ArithmeticOverflow {
+            from: Unit::MassKg,
+            to: Unit::MassG,
+        }
+        .to_string(),
+        "unit conversion arithmetic overflow: kg -> g"
     );
 }
 
@@ -230,7 +256,7 @@ fn convert_unit_decimal_rejects_mismatched_dimensions() {
     let err = convert_unit_decimal(common::dec("1"), Unit::Each, Unit::MassG).unwrap_err();
     assert_eq!(
         err,
-        RadrootsCoreUnitConvertError::NotConvertibleUnits {
+        ConvertError::NotConvertibleUnits {
             from: Unit::Each,
             to: Unit::MassG
         }
