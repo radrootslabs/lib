@@ -21,6 +21,25 @@ pub enum Error {
     #[error("public identity identifier does not match its public key")]
     IdentityIdMismatch,
 
+    #[error("account identifier does not match its public identity")]
+    AccountIdMismatch,
+
+    #[error(
+        "account updated timestamp {updated_at_unix} precedes created timestamp {created_at_unix}"
+    )]
+    AccountUpdatedBeforeCreated {
+        created_at_unix: u64,
+        updated_at_unix: u64,
+    },
+
+    #[error(
+        "account update timestamp {proposed_updated_at_unix} precedes current timestamp {current_updated_at_unix}"
+    )]
+    AccountUpdateRegressed {
+        current_updated_at_unix: u64,
+        proposed_updated_at_unix: u64,
+    },
+
     #[error("username length must be between {min} and {max} ASCII bytes, but was {actual}")]
     InvalidUsernameLength {
         min: usize,

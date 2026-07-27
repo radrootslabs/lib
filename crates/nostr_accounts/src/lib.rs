@@ -18,10 +18,7 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use crate::manager::RadrootsNostrAccountsManager;
     #[cfg(feature = "std")]
-    pub use crate::model::{
-        RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION, RadrootsNostrAccountRecord,
-        RadrootsNostrAccountStatus, RadrootsNostrAccountStoreState,
-    };
+    pub use crate::model::{RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION, RadrootsNostrAccountStoreState};
     #[cfg(feature = "nostrdb-bridge")]
     pub use crate::nostrdb_bridge::radroots_nostr_accounts_register_default_secret_with_nostrdb;
     #[cfg(feature = "std")]
