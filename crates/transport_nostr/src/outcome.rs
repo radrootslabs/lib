@@ -17,6 +17,7 @@ pub enum RadrootsRelayOutcomeKind {
     PowRequired,
     Restricted,
     AuthRequired,
+    ChallengeRequired,
     Muted,
     Unsupported,
     PaymentRequired,
@@ -39,6 +40,7 @@ impl RadrootsRelayOutcomeKind {
             Self::PowRequired => "pow_required",
             Self::Restricted => "restricted",
             Self::AuthRequired => "auth_required",
+            Self::ChallengeRequired => "challenge_required",
             Self::Muted => "muted",
             Self::Unsupported => "unsupported",
             Self::PaymentRequired => "payment_required",
@@ -64,6 +66,7 @@ impl RadrootsRelayOutcomeKind {
             Self::RateLimited
                 | Self::PowRequired
                 | Self::AuthRequired
+                | Self::ChallengeRequired
                 | Self::Error
                 | Self::Timeout
                 | Self::ConnectionFailed
@@ -94,9 +97,10 @@ impl RadrootsRelayOutcomeKind {
                 RadrootsTransportOutcomeKind::Rejected
             }
             Self::RelayUrlRejected => RadrootsTransportOutcomeKind::RouteUnavailable,
-            Self::PaymentRequired | Self::PowRequired | Self::AuthRequired => {
-                RadrootsTransportOutcomeKind::PolicyDenied
+            Self::PowRequired | Self::AuthRequired | Self::ChallengeRequired => {
+                RadrootsTransportOutcomeKind::ChallengeRequired
             }
+            Self::PaymentRequired => RadrootsTransportOutcomeKind::PolicyDenied,
             Self::RateLimited | Self::Error | Self::Unknown => {
                 RadrootsTransportOutcomeKind::TransportUnavailable
             }
@@ -234,8 +238,7 @@ impl RadrootsRelayOutcome {
     }
 
     pub fn to_transport_outcome(&self) -> Result<RadrootsTransportOutcome, RadrootsTransportError> {
-        let mut outcome = RadrootsTransportOutcome::new(self.kind.transport_outcome_kind())
-            .try_with_code(self.kind.as_str())?;
+        let mut outcome = RadrootsTransportOutcome::new(self.kind.transport_outcome_kind());
         if let Some(message) = &self.message {
             outcome = outcome.try_with_message(message.clone())?;
         }

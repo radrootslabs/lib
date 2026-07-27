@@ -309,7 +309,7 @@ fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
     );
     assert_eq!(
         receipt.target_receipts()[0].status(),
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
     assert_eq!(
         receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
@@ -380,7 +380,7 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
     .expect("delivery receipt");
     assert_eq!(
         delivery.target_receipts()[0].status(),
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
 
     let fetch = futures::executor::block_on(RadrootsTransport::fetch(
@@ -391,7 +391,7 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
     assert_eq!(fetch.fetched_count(), 0);
     assert_eq!(
         fetch.target_receipts()[0].status(),
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
 }
 
@@ -413,12 +413,9 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
         );
         assert_eq!(
             target_receipt.status(),
-            RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+            RadrootsTransportDeliveryTargetStatus::FailedRetryable
         );
-        assert_eq!(
-            target_receipt.outcome().code(),
-            Some("transport_unavailable")
-        );
+        assert_eq!(target_receipt.outcome().code(), "transport_unavailable");
         assert_eq!(
             target_receipt.outcome().message(),
             Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
@@ -465,7 +462,7 @@ fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
     );
     assert_eq!(
         receipt.target_receipts()[0].outcome().code(),
-        Some("deferred_until_implemented")
+        "deferred_until_implemented"
     );
     assert!(
         !RadrootsTransportSatisfactionPolicy::any_accepted()
@@ -497,7 +494,7 @@ fn reticulum_target_constructor_always_supplies_typed_scope() {
 }
 
 #[test]
-fn fetch_reports_deferred_until_implemented_without_observed_events() {
+fn fetch_reports_authoritative_unavailable_or_deferred_outcomes() {
     let transport = RadrootsReticulumTransport::default();
     assert_eq!(
         transport.profile().profile_id(),
@@ -522,7 +519,7 @@ fn fetch_reports_deferred_until_implemented_without_observed_events() {
     assert_eq!(receipt.agent_endpoint(), None);
     assert_eq!(
         receipt.outcome().status(),
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
     assert_eq!(
         RadrootsReticulumFetchRequest::new("fetch-0", 0).expect_err("zero limit"),
@@ -590,7 +587,7 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
         .expect("delivery receipt");
     assert_eq!(
         receipt.target_receipts()[0].status(),
-        RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
+        RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
     let fetch = transport
         .fetch(RadrootsReticulumFetchRequest::new("fetch-agent", 1).expect("fetch"))

@@ -1128,6 +1128,10 @@ fn outcome_prefix_classification_covers_required_kinds() {
         (RadrootsRelayOutcomeKind::PowRequired, "pow_required"),
         (RadrootsRelayOutcomeKind::Restricted, "restricted"),
         (RadrootsRelayOutcomeKind::AuthRequired, "auth_required"),
+        (
+            RadrootsRelayOutcomeKind::ChallengeRequired,
+            "challenge_required",
+        ),
         (RadrootsRelayOutcomeKind::Muted, "muted"),
         (RadrootsRelayOutcomeKind::Unsupported, "unsupported"),
         (
@@ -1248,6 +1252,92 @@ fn outcome_prefix_classification_covers_required_kinds() {
             .as_str(),
         "relay_url_rejected"
     );
+}
+
+#[test]
+fn outcome_coherence_checked_in_matrix_drives_nostr_retry_mapping() {
+    let vectors =
+        include_str!("../../../contracts/conformance/vectors/transport/outcome_matrix.v1.json");
+    let document: serde_json::Value =
+        serde_json::from_str(vectors).expect("transport outcome matrix json");
+    let entries = document
+        .get("vectors")
+        .and_then(serde_json::Value::as_array)
+        .expect("transport outcome vectors");
+    let relay_entries = entries
+        .iter()
+        .filter(|entry| {
+            entry.get("kind").and_then(serde_json::Value::as_str)
+                == Some("transport.outcome_matrix.nostr_relay")
+        })
+        .collect::<Vec<_>>();
+    let expected_inventory = [
+        RadrootsRelayOutcomeKind::Accepted,
+        RadrootsRelayOutcomeKind::DuplicateAccepted,
+        RadrootsRelayOutcomeKind::Blocked,
+        RadrootsRelayOutcomeKind::RateLimited,
+        RadrootsRelayOutcomeKind::Invalid,
+        RadrootsRelayOutcomeKind::PowRequired,
+        RadrootsRelayOutcomeKind::Restricted,
+        RadrootsRelayOutcomeKind::AuthRequired,
+        RadrootsRelayOutcomeKind::ChallengeRequired,
+        RadrootsRelayOutcomeKind::Muted,
+        RadrootsRelayOutcomeKind::Unsupported,
+        RadrootsRelayOutcomeKind::PaymentRequired,
+        RadrootsRelayOutcomeKind::Error,
+        RadrootsRelayOutcomeKind::Timeout,
+        RadrootsRelayOutcomeKind::ConnectionFailed,
+        RadrootsRelayOutcomeKind::RelayUrlRejected,
+        RadrootsRelayOutcomeKind::SkippedAlreadyAccepted,
+        RadrootsRelayOutcomeKind::Unknown,
+    ];
+    assert_eq!(relay_entries.len(), expected_inventory.len());
+
+    for (entry, expected_kind) in relay_entries.into_iter().zip(expected_inventory) {
+        let input = entry.get("input").expect("relay matrix input");
+        let expected = entry.get("expected").expect("relay matrix expectation");
+        let relay_kind: RadrootsRelayOutcomeKind =
+            serde_json::from_value(input.get("relay_kind").expect("relay kind").clone())
+                .expect("known relay outcome kind");
+        let transport_kind: RadrootsTransportOutcomeKind = serde_json::from_value(
+            expected
+                .get("transport_kind")
+                .expect("transport kind")
+                .clone(),
+        )
+        .expect("known transport outcome kind");
+        let code = expected
+            .get("code")
+            .and_then(serde_json::Value::as_str)
+            .expect("relay outcome code");
+        let retryable = expected
+            .get("retryable")
+            .and_then(serde_json::Value::as_bool)
+            .expect("retryable flag");
+        let terminal = expected
+            .get("terminal")
+            .and_then(serde_json::Value::as_bool)
+            .expect("terminal flag");
+        let counts_toward_quorum = expected
+            .get("counts_toward_quorum")
+            .and_then(serde_json::Value::as_bool)
+            .expect("quorum flag");
+
+        assert_eq!(relay_kind, expected_kind);
+        assert_eq!(relay_kind.as_str(), code);
+        assert_eq!(relay_kind.transport_outcome_kind(), transport_kind);
+        assert_eq!(relay_kind.is_retryable(), retryable);
+        assert_eq!(relay_kind.is_terminal_failure(), terminal);
+        assert_eq!(relay_kind.counts_toward_quorum(), counts_toward_quorum);
+
+        let relay_outcome =
+            RadrootsRelayOutcome::try_new(relay_kind, None).expect("matrix relay outcome");
+        let transport_outcome = relay_outcome
+            .to_transport_outcome()
+            .expect("matrix transport outcome");
+        assert_eq!(transport_outcome.kind(), transport_kind);
+        assert_eq!(transport_outcome.is_retryable(), retryable);
+    }
 }
 
 #[test]
@@ -4240,7 +4330,7 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let draft = generic_draft("transport outcome matrix");
-    let relays = (0..14)
+    let relays = (0..15)
         .map(|index| format!("wss://relay-{index}.example.com"))
         .collect::<Vec<_>>();
     let receipt = outbox
@@ -4270,6 +4360,7 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
         RadrootsTransportOutcomeKind::RouteUnavailable,
         RadrootsTransportOutcomeKind::PayloadTooLarge,
         RadrootsTransportOutcomeKind::PolicyDenied,
+        RadrootsTransportOutcomeKind::ChallengeRequired,
         RadrootsTransportOutcomeKind::Timeout,
         RadrootsTransportOutcomeKind::ConnectionFailed,
         RadrootsTransportOutcomeKind::TransportUnavailable,
@@ -4291,13 +4382,13 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
     .expect("transport publish");
 
     assert_eq!(published.event_id(), signed.id_str());
-    assert_eq!(published.attempted_count(), 14);
+    assert_eq!(published.attempted_count(), 15);
     assert_eq!(published.accepted_count(), 6);
-    assert_eq!(published.retryable_count(), 3);
+    assert_eq!(published.retryable_count(), 4);
     assert_eq!(published.terminal_count(), 5);
     assert!(!published.quorum_met());
-    assert_eq!(published.target_receipts().len(), 14);
-    assert_eq!(published.relay_receipts().len(), 14);
+    assert_eq!(published.target_receipts().len(), 15);
+    assert_eq!(published.relay_receipts().len(), 15);
     let targets = outbox
         .delivery_targets(receipt.outbox_event_id)
         .await
@@ -4314,6 +4405,7 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
         RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
         RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
         RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied,
+        RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
         RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
         RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
         RadrootsOutboxDeliveryTargetStatus::FailedRetryable,
@@ -4340,7 +4432,8 @@ fn transport_outcome_wire_rejects_pending_accepted_status() {
     let error = serde_json::from_value::<RadrootsTransportOutcome>(serde_json::json!({
         "kind": "Accepted",
         "status": "Pending",
-        "code": null,
+        "code": "accepted",
+        "retry_class": "None",
         "message": null,
     }))
     .expect_err("pending accepted outcome rejected before transport execution");

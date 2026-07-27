@@ -1,0 +1,210 @@
+{
+  "suite": "transport_outcome_matrix",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "transport_outcome_accepted_001",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "Accepted" },
+      "expected": { "code": "accepted", "target_status": "Accepted", "retry_class": "None" }
+    },
+    {
+      "id": "transport_outcome_duplicate_accepted_002",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "DuplicateAccepted" },
+      "expected": { "code": "duplicate_accepted", "target_status": "Accepted", "retry_class": "None" }
+    },
+    {
+      "id": "transport_outcome_delivered_003",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "Delivered" },
+      "expected": { "code": "delivered", "target_status": "Delivered", "retry_class": "None" }
+    },
+    {
+      "id": "transport_outcome_forwarded_004",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "Forwarded" },
+      "expected": { "code": "forwarded", "target_status": "Forwarded", "retry_class": "None" }
+    },
+    {
+      "id": "transport_outcome_stored_by_gateway_005",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "StoredByGateway" },
+      "expected": { "code": "stored_by_gateway", "target_status": "StoredByGateway", "retry_class": "None" }
+    },
+    {
+      "id": "transport_outcome_seen_006",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "Seen" },
+      "expected": { "code": "seen", "target_status": "Seen", "retry_class": "None" }
+    },
+    {
+      "id": "transport_outcome_deferred_007",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "DeferredUntilImplemented" },
+      "expected": { "code": "deferred_until_implemented", "target_status": "DeferredUntilImplemented", "retry_class": "DeferredUntilImplemented" }
+    },
+    {
+      "id": "transport_outcome_rejected_008",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "Rejected" },
+      "expected": { "code": "rejected", "target_status": "FailedTerminal", "retry_class": "Terminal" }
+    },
+    {
+      "id": "transport_outcome_route_unavailable_009",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "RouteUnavailable" },
+      "expected": { "code": "route_unavailable", "target_status": "FailedTerminal", "retry_class": "Terminal" }
+    },
+    {
+      "id": "transport_outcome_payload_too_large_010",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "PayloadTooLarge" },
+      "expected": { "code": "payload_too_large", "target_status": "FailedTerminal", "retry_class": "Terminal" }
+    },
+    {
+      "id": "transport_outcome_policy_denied_011",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "PolicyDenied" },
+      "expected": { "code": "policy_denied", "target_status": "SkippedPolicyDenied", "retry_class": "Terminal" }
+    },
+    {
+      "id": "transport_outcome_challenge_required_012",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "ChallengeRequired" },
+      "expected": { "code": "challenge_required", "target_status": "FailedRetryable", "retry_class": "Retryable" }
+    },
+    {
+      "id": "transport_outcome_timeout_013",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "Timeout" },
+      "expected": { "code": "timeout", "target_status": "FailedRetryable", "retry_class": "Retryable" }
+    },
+    {
+      "id": "transport_outcome_connection_failed_014",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "ConnectionFailed" },
+      "expected": { "code": "connection_failed", "target_status": "FailedRetryable", "retry_class": "Retryable" }
+    },
+    {
+      "id": "transport_outcome_transport_unavailable_015",
+      "kind": "transport.outcome_matrix.core",
+      "input": { "outcome_kind": "TransportUnavailable" },
+      "expected": { "code": "transport_unavailable", "target_status": "FailedRetryable", "retry_class": "Retryable" }
+    },
+    {
+      "id": "nostr_outcome_accepted_016",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Accepted" },
+      "expected": { "code": "accepted", "transport_kind": "Accepted", "retryable": false, "terminal": false, "counts_toward_quorum": true }
+    },
+    {
+      "id": "nostr_outcome_duplicate_accepted_017",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "DuplicateAccepted" },
+      "expected": { "code": "duplicate_accepted", "transport_kind": "DuplicateAccepted", "retryable": false, "terminal": false, "counts_toward_quorum": true }
+    },
+    {
+      "id": "nostr_outcome_blocked_018",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Blocked" },
+      "expected": { "code": "blocked", "transport_kind": "Rejected", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_rate_limited_019",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "RateLimited" },
+      "expected": { "code": "rate_limited", "transport_kind": "TransportUnavailable", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_invalid_020",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Invalid" },
+      "expected": { "code": "invalid", "transport_kind": "Rejected", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_pow_required_021",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "PowRequired" },
+      "expected": { "code": "pow_required", "transport_kind": "ChallengeRequired", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_restricted_022",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Restricted" },
+      "expected": { "code": "restricted", "transport_kind": "Rejected", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_auth_required_023",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "AuthRequired" },
+      "expected": { "code": "auth_required", "transport_kind": "ChallengeRequired", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_challenge_required_024",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "ChallengeRequired" },
+      "expected": { "code": "challenge_required", "transport_kind": "ChallengeRequired", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_muted_025",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Muted" },
+      "expected": { "code": "muted", "transport_kind": "Rejected", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_unsupported_026",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Unsupported" },
+      "expected": { "code": "unsupported", "transport_kind": "Rejected", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_payment_required_027",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "PaymentRequired" },
+      "expected": { "code": "payment_required", "transport_kind": "PolicyDenied", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_error_028",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Error" },
+      "expected": { "code": "error", "transport_kind": "TransportUnavailable", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_timeout_029",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Timeout" },
+      "expected": { "code": "timeout", "transport_kind": "Timeout", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_connection_failed_030",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "ConnectionFailed" },
+      "expected": { "code": "connection_failed", "transport_kind": "ConnectionFailed", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_relay_url_rejected_031",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "RelayUrlRejected" },
+      "expected": { "code": "relay_url_rejected", "transport_kind": "RouteUnavailable", "retryable": false, "terminal": true, "counts_toward_quorum": false }
+    },
+    {
+      "id": "nostr_outcome_skipped_already_accepted_032",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "SkippedAlreadyAccepted" },
+      "expected": { "code": "skipped_already_accepted", "transport_kind": "DuplicateAccepted", "retryable": false, "terminal": false, "counts_toward_quorum": true }
+    },
+    {
+      "id": "nostr_outcome_unknown_033",
+      "kind": "transport.outcome_matrix.nostr_relay",
+      "input": { "relay_kind": "Unknown" },
+      "expected": { "code": "unknown", "transport_kind": "TransportUnavailable", "retryable": true, "terminal": false, "counts_toward_quorum": false }
+    },
+    {
+      "id": "transport_outcome_extension_code_policy_034",
+      "kind": "transport.outcome_matrix.extension_code_policy",
+      "input": { "outcome_kind": "Accepted", "code": "vendor_retryable" },
+      "expected": { "result": "reject_before_transport_execution" }
+    }
+  ]
+}

@@ -86,6 +86,7 @@ pub enum RadrootsTransportOutcomeKind {
     RouteUnavailable,
     PayloadTooLarge,
     PolicyDenied,
+    ChallengeRequired,
     Timeout,
     ConnectionFailed,
     TransportUnavailable,
@@ -105,6 +106,7 @@ impl RadrootsTransportOutcomeKind {
             Self::RouteUnavailable => "route_unavailable",
             Self::PayloadTooLarge => "payload_too_large",
             Self::PolicyDenied => "policy_denied",
+            Self::ChallengeRequired => "challenge_required",
             Self::Timeout => "timeout",
             Self::ConnectionFailed => "connection_failed",
             Self::TransportUnavailable => "transport_unavailable",
@@ -124,9 +126,10 @@ impl RadrootsTransportOutcomeKind {
                 RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
             }
             Self::PolicyDenied => RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied,
-            Self::Timeout | Self::ConnectionFailed | Self::TransportUnavailable => {
-                RadrootsTransportDeliveryTargetStatus::FailedRetryable
-            }
+            Self::ChallengeRequired
+            | Self::Timeout
+            | Self::ConnectionFailed
+            | Self::TransportUnavailable => RadrootsTransportDeliveryTargetStatus::FailedRetryable,
             Self::Rejected | Self::RouteUnavailable | Self::PayloadTooLarge => {
                 RadrootsTransportDeliveryTargetStatus::FailedTerminal
             }
@@ -139,6 +142,46 @@ impl RadrootsTransportOutcomeKind {
     ) -> bool {
         self.target_status().counts_as_satisfied(satisfaction_class)
     }
+
+    pub fn retry_class(self) -> RadrootsTransportRetryClass {
+        match self {
+            Self::Accepted
+            | Self::DuplicateAccepted
+            | Self::Delivered
+            | Self::Forwarded
+            | Self::StoredByGateway
+            | Self::Seen => RadrootsTransportRetryClass::None,
+            Self::DeferredUntilImplemented => RadrootsTransportRetryClass::DeferredUntilImplemented,
+            Self::ChallengeRequired
+            | Self::Timeout
+            | Self::ConnectionFailed
+            | Self::TransportUnavailable => RadrootsTransportRetryClass::Retryable,
+            Self::Rejected
+            | Self::RouteUnavailable
+            | Self::PayloadTooLarge
+            | Self::PolicyDenied => RadrootsTransportRetryClass::Terminal,
+        }
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsTransportRetryClass {
+    None,
+    Retryable,
+    Terminal,
+    DeferredUntilImplemented,
+}
+
+impl RadrootsTransportRetryClass {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Retryable => "retryable",
+            Self::Terminal => "terminal",
+            Self::DeferredUntilImplemented => "deferred_until_implemented",
+        }
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -146,7 +189,8 @@ impl RadrootsTransportOutcomeKind {
 pub struct RadrootsTransportOutcome {
     kind: RadrootsTransportOutcomeKind,
     status: RadrootsTransportDeliveryTargetStatus,
-    code: Option<String>,
+    code: String,
+    retry_class: RadrootsTransportRetryClass,
     message: Option<String>,
 }
 
@@ -155,7 +199,8 @@ impl RadrootsTransportOutcome {
         Self {
             kind,
             status: kind.target_status(),
-            code: None,
+            code: String::from(kind.as_str()),
+            retry_class: kind.retry_class(),
             message: None,
         }
     }
@@ -174,20 +219,6 @@ impl RadrootsTransportOutcome {
         Ok(self)
     }
 
-    pub fn try_with_code(
-        mut self,
-        code: impl Into<String>,
-    ) -> Result<Self, crate::RadrootsTransportError> {
-        let code = code.into();
-        crate::limits::ensure_resource_limit(
-            "transport_outcome_code",
-            code.len(),
-            RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
-        )?;
-        self.code = Some(code);
-        Ok(self)
-    }
-
     pub fn kind(&self) -> RadrootsTransportOutcomeKind {
         self.kind
     }
@@ -196,8 +227,16 @@ impl RadrootsTransportOutcome {
         self.status
     }
 
-    pub fn code(&self) -> Option<&str> {
-        self.code.as_deref()
+    pub fn code(&self) -> &str {
+        self.code.as_str()
+    }
+
+    pub const fn retry_class(&self) -> RadrootsTransportRetryClass {
+        self.retry_class
+    }
+
+    pub const fn is_retryable(&self) -> bool {
+        matches!(self.retry_class, RadrootsTransportRetryClass::Retryable)
     }
 
     pub fn message(&self) -> Option<&str> {
@@ -208,12 +247,16 @@ impl RadrootsTransportOutcome {
         if self.status != self.kind.target_status() {
             return Err(crate::RadrootsTransportError::TransportOutcomeStatusMismatch);
         }
-        if let Some(code) = &self.code {
-            crate::limits::ensure_resource_limit(
-                "transport_outcome_code",
-                code.len(),
-                RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
-            )?;
+        crate::limits::ensure_resource_limit(
+            "transport_outcome_code",
+            self.code.len(),
+            RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
+        )?;
+        if self.code != self.kind.as_str() {
+            return Err(crate::RadrootsTransportError::TransportOutcomeCodeMismatch);
+        }
+        if self.retry_class != self.kind.retry_class() {
+            return Err(crate::RadrootsTransportError::TransportOutcomeRetryClassMismatch);
         }
         if let Some(message) = &self.message {
             crate::limits::ensure_resource_limit(
@@ -233,17 +276,18 @@ struct RadrootsTransportOutcomeWire {
     kind: RadrootsTransportOutcomeKind,
     status: RadrootsTransportDeliveryTargetStatus,
     #[serde(deserialize_with = "deserialize_outcome_code")]
-    code: Option<String>,
+    code: String,
+    retry_class: RadrootsTransportRetryClass,
     #[serde(deserialize_with = "deserialize_outcome_message")]
     message: Option<String>,
 }
 
 #[cfg(feature = "serde")]
-fn deserialize_outcome_code<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+fn deserialize_outcome_code<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    crate::serde_bounds::deserialize_option_string(
+    crate::serde_bounds::deserialize_string(
         deserializer,
         "transport_outcome_code",
         RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
@@ -273,6 +317,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportOutcome {
             kind: wire.kind,
             status: wire.status,
             code: wire.code,
+            retry_class: wire.retry_class,
             message: wire.message,
         };
         outcome.validate().map_err(serde::de::Error::custom)?;

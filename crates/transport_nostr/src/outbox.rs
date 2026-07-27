@@ -785,34 +785,8 @@ fn relay_receipts_from_transport_receipts(
 fn relay_outcome_from_transport_outcome(
     outcome: &RadrootsTransportOutcome,
 ) -> Result<RadrootsRelayOutcome, RadrootsRelayTransportError> {
-    let kind = outcome
-        .code()
-        .and_then(relay_outcome_kind_from_code)
-        .unwrap_or_else(|| relay_outcome_kind_from_transport_outcome(outcome.kind()));
+    let kind = relay_outcome_kind_from_transport_outcome(outcome.kind());
     RadrootsRelayOutcome::try_new(kind, outcome.message().map(str::to_owned))
-}
-
-fn relay_outcome_kind_from_code(code: &str) -> Option<crate::RadrootsRelayOutcomeKind> {
-    Some(match code {
-        "accepted" => crate::RadrootsRelayOutcomeKind::Accepted,
-        "duplicate_accepted" => crate::RadrootsRelayOutcomeKind::DuplicateAccepted,
-        "blocked" => crate::RadrootsRelayOutcomeKind::Blocked,
-        "rate_limited" => crate::RadrootsRelayOutcomeKind::RateLimited,
-        "invalid" => crate::RadrootsRelayOutcomeKind::Invalid,
-        "pow_required" => crate::RadrootsRelayOutcomeKind::PowRequired,
-        "restricted" => crate::RadrootsRelayOutcomeKind::Restricted,
-        "auth_required" => crate::RadrootsRelayOutcomeKind::AuthRequired,
-        "muted" => crate::RadrootsRelayOutcomeKind::Muted,
-        "unsupported" => crate::RadrootsRelayOutcomeKind::Unsupported,
-        "payment_required" => crate::RadrootsRelayOutcomeKind::PaymentRequired,
-        "error" => crate::RadrootsRelayOutcomeKind::Error,
-        "timeout" => crate::RadrootsRelayOutcomeKind::Timeout,
-        "connection_failed" => crate::RadrootsRelayOutcomeKind::ConnectionFailed,
-        "relay_url_rejected" => crate::RadrootsRelayOutcomeKind::RelayUrlRejected,
-        "skipped_already_accepted" => crate::RadrootsRelayOutcomeKind::SkippedAlreadyAccepted,
-        "unknown" => crate::RadrootsRelayOutcomeKind::Unknown,
-        _ => return None,
-    })
 }
 
 fn relay_outcome_kind_from_transport_outcome(
@@ -828,6 +802,9 @@ fn relay_outcome_kind_from_transport_outcome(
             crate::RadrootsRelayOutcomeKind::RelayUrlRejected
         }
         RadrootsTransportOutcomeKind::PolicyDenied => crate::RadrootsRelayOutcomeKind::Restricted,
+        RadrootsTransportOutcomeKind::ChallengeRequired => {
+            crate::RadrootsRelayOutcomeKind::ChallengeRequired
+        }
         RadrootsTransportOutcomeKind::Timeout => crate::RadrootsRelayOutcomeKind::Timeout,
         RadrootsTransportOutcomeKind::ConnectionFailed => {
             crate::RadrootsRelayOutcomeKind::ConnectionFailed
@@ -917,6 +894,8 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
         | RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
         | RadrootsTransportError::TransportOutcomeStatusMismatch
+        | RadrootsTransportError::TransportOutcomeCodeMismatch
+        | RadrootsTransportError::TransportOutcomeRetryClassMismatch
         | RadrootsTransportError::DeliveryReceiptRequestIdMismatch
         | RadrootsTransportError::DeliveryReceiptTargetSetMismatch
         | RadrootsTransportError::UnexpectedFetchTargetReceipt
@@ -1171,11 +1150,10 @@ mod tests {
         PublishableRelay, PublishableRelays, RadrootsOutboxDeliveryTargetStatus,
         adapter_transport_failure_receipt, counts_as_accepted_for_plan,
         is_publishable_delivery_status, publishable_transport_targets,
-        relay_outcome_from_transport_outcome, relay_outcome_kind_from_code,
-        relay_outcome_kind_from_transport_outcome, relay_receipts_from_transport_receipts,
-        satisfaction_policy_for_remaining_count, target_receipts_from_relay_receipts,
-        target_receipts_from_transport_receipts, transport_error_to_relay_error,
-        transport_satisfaction_policy_for_publishable,
+        relay_outcome_from_transport_outcome, relay_outcome_kind_from_transport_outcome,
+        relay_receipts_from_transport_receipts, satisfaction_policy_for_remaining_count,
+        target_receipts_from_relay_receipts, target_receipts_from_transport_receipts,
+        transport_error_to_relay_error, transport_satisfaction_policy_for_publishable,
     };
     use crate::{
         RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishRelayReceipt,
@@ -1426,6 +1404,10 @@ mod tests {
                 RadrootsRelayOutcomeKind::Restricted,
             ),
             (
+                RadrootsTransportOutcomeKind::ChallengeRequired,
+                RadrootsRelayOutcomeKind::ChallengeRequired,
+            ),
+            (
                 RadrootsTransportOutcomeKind::Timeout,
                 RadrootsRelayOutcomeKind::Timeout,
             ),
@@ -1451,65 +1433,6 @@ mod tests {
             assert_eq!(relay_outcome.kind(), relay_kind);
             assert_eq!(relay_outcome.message(), outcome.message());
         }
-
-        let code_cases = [
-            ("accepted", RadrootsRelayOutcomeKind::Accepted),
-            (
-                "duplicate_accepted",
-                RadrootsRelayOutcomeKind::DuplicateAccepted,
-            ),
-            ("blocked", RadrootsRelayOutcomeKind::Blocked),
-            ("rate_limited", RadrootsRelayOutcomeKind::RateLimited),
-            ("invalid", RadrootsRelayOutcomeKind::Invalid),
-            ("pow_required", RadrootsRelayOutcomeKind::PowRequired),
-            ("restricted", RadrootsRelayOutcomeKind::Restricted),
-            ("auth_required", RadrootsRelayOutcomeKind::AuthRequired),
-            ("muted", RadrootsRelayOutcomeKind::Muted),
-            ("unsupported", RadrootsRelayOutcomeKind::Unsupported),
-            (
-                "payment_required",
-                RadrootsRelayOutcomeKind::PaymentRequired,
-            ),
-            ("error", RadrootsRelayOutcomeKind::Error),
-            ("timeout", RadrootsRelayOutcomeKind::Timeout),
-            (
-                "connection_failed",
-                RadrootsRelayOutcomeKind::ConnectionFailed,
-            ),
-            (
-                "relay_url_rejected",
-                RadrootsRelayOutcomeKind::RelayUrlRejected,
-            ),
-            (
-                "skipped_already_accepted",
-                RadrootsRelayOutcomeKind::SkippedAlreadyAccepted,
-            ),
-            ("unknown", RadrootsRelayOutcomeKind::Unknown),
-        ];
-        for (code, relay_kind) in code_cases {
-            assert_eq!(relay_outcome_kind_from_code(code), Some(relay_kind));
-            assert_eq!(
-                relay_outcome_from_transport_outcome(
-                    &RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Rejected)
-                        .try_with_code(code)
-                        .expect("bounded test outcome code")
-                )
-                .expect("bounded relay outcome")
-                .kind(),
-                relay_kind
-            );
-        }
-        assert_eq!(relay_outcome_kind_from_code("unrecognized"), None);
-        assert_eq!(
-            relay_outcome_from_transport_outcome(
-                &RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen)
-                    .try_with_code("unrecognized")
-                    .expect("bounded test outcome code")
-            )
-            .expect("bounded relay outcome")
-            .kind(),
-            RadrootsRelayOutcomeKind::Accepted
-        );
 
         for kind in [
             RadrootsRelayOutcomeKind::RateLimited,

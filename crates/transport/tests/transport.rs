@@ -18,7 +18,7 @@ use radroots_transport::{
     RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
     RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
     RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RadrootsTransportPayload, RadrootsTransportRetryClass, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportSatisfactionPolicyKind,
     RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
@@ -1347,6 +1347,12 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
             &[],
         ),
         (
+            RadrootsTransportOutcomeKind::ChallengeRequired,
+            "challenge_required",
+            RadrootsTransportDeliveryTargetStatus::FailedRetryable,
+            &[],
+        ),
+        (
             RadrootsTransportOutcomeKind::Timeout,
             "timeout",
             RadrootsTransportDeliveryTargetStatus::FailedRetryable,
@@ -1373,6 +1379,9 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
         assert_eq!(kind.as_str(), label);
         assert_eq!(outcome.kind(), kind);
         assert_eq!(outcome.status(), status);
+        assert_eq!(outcome.code(), label);
+        assert_eq!(outcome.retry_class(), kind.retry_class());
+        assert_eq!(outcome.is_retryable(), status.is_retryable_failure());
         for class in classes {
             assert_eq!(
                 kind.counts_as_satisfied(class),
@@ -1392,6 +1401,99 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
     deferred_until_implemented
         .validate()
         .expect("canonical outcome");
+}
+
+#[test]
+fn outcome_coherence_checked_in_matrix_drives_core_wire_semantics() {
+    let vectors =
+        include_str!("../../../contracts/conformance/vectors/transport/outcome_matrix.v1.json");
+    let document: Value = serde_json::from_str(vectors).expect("transport outcome matrix json");
+    let entries = document
+        .get("vectors")
+        .and_then(Value::as_array)
+        .expect("transport outcome vectors");
+    let extension_policy = entries
+        .iter()
+        .find(|entry| {
+            entry.get("kind").and_then(Value::as_str)
+                == Some("transport.outcome_matrix.extension_code_policy")
+        })
+        .expect("extension code policy vector");
+    assert_eq!(
+        extension_policy
+            .get("expected")
+            .and_then(|expected| expected.get("result"))
+            .and_then(Value::as_str),
+        Some("reject_before_transport_execution")
+    );
+    let core_entries = entries
+        .iter()
+        .filter(|entry| {
+            entry.get("kind").and_then(Value::as_str) == Some("transport.outcome_matrix.core")
+        })
+        .collect::<Vec<_>>();
+    let expected_inventory = [
+        RadrootsTransportOutcomeKind::Accepted,
+        RadrootsTransportOutcomeKind::DuplicateAccepted,
+        RadrootsTransportOutcomeKind::Delivered,
+        RadrootsTransportOutcomeKind::Forwarded,
+        RadrootsTransportOutcomeKind::StoredByGateway,
+        RadrootsTransportOutcomeKind::Seen,
+        RadrootsTransportOutcomeKind::DeferredUntilImplemented,
+        RadrootsTransportOutcomeKind::Rejected,
+        RadrootsTransportOutcomeKind::RouteUnavailable,
+        RadrootsTransportOutcomeKind::PayloadTooLarge,
+        RadrootsTransportOutcomeKind::PolicyDenied,
+        RadrootsTransportOutcomeKind::ChallengeRequired,
+        RadrootsTransportOutcomeKind::Timeout,
+        RadrootsTransportOutcomeKind::ConnectionFailed,
+        RadrootsTransportOutcomeKind::TransportUnavailable,
+    ];
+    assert_eq!(core_entries.len(), expected_inventory.len());
+
+    for (entry, expected_kind) in core_entries.into_iter().zip(expected_inventory) {
+        let input = entry.get("input").expect("outcome matrix input");
+        let expected = entry.get("expected").expect("outcome matrix expectation");
+        let kind: RadrootsTransportOutcomeKind =
+            serde_json::from_value(input.get("outcome_kind").expect("outcome kind").clone())
+                .expect("known outcome kind");
+        let status: RadrootsTransportDeliveryTargetStatus = serde_json::from_value(
+            expected
+                .get("target_status")
+                .expect("target status")
+                .clone(),
+        )
+        .expect("known target status");
+        let retry_class: RadrootsTransportRetryClass =
+            serde_json::from_value(expected.get("retry_class").expect("retry class").clone())
+                .expect("known retry class");
+        let code = expected
+            .get("code")
+            .and_then(Value::as_str)
+            .expect("outcome code");
+        let outcome = RadrootsTransportOutcome::new(kind);
+
+        assert_eq!(kind, expected_kind);
+        assert_eq!(kind.as_str(), code);
+        assert_eq!(kind.target_status(), status);
+        assert_eq!(kind.retry_class(), retry_class);
+        assert_eq!(outcome.code(), code);
+        assert_eq!(outcome.status(), status);
+        assert_eq!(outcome.retry_class(), retry_class);
+        assert_eq!(
+            outcome.is_retryable(),
+            retry_class == RadrootsTransportRetryClass::Retryable
+        );
+        outcome.validate().expect("matrix outcome is coherent");
+
+        let wire = serde_json::to_value(&outcome).expect("outcome wire");
+        assert_eq!(wire.get("code").and_then(Value::as_str), Some(code));
+        assert_eq!(
+            serde_json::from_value::<RadrootsTransportOutcome>(wire)
+                .expect("coherent outcome wire"),
+            outcome
+        );
+    }
 }
 
 #[test]
@@ -1903,33 +2005,47 @@ fn delivery_request_and_receipt_deserialization_revalidates_invariants() {
     let exact_outcome_wire = serde_json::json!({
         "kind": "Accepted",
         "status": "Accepted",
-        "code": "c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES),
+        "code": "accepted",
+        "retry_class": "None",
         "message": "m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES),
     });
     let exact_outcome_json =
         serde_json::to_string(&exact_outcome_wire).expect("exact outcome JSON");
     serde_json::from_str::<RadrootsTransportOutcome>(&exact_outcome_json)
         .expect("decode exact outcome wire");
-    for (field, value, expected_limit) in [
-        (
-            "code",
-            "c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1),
-            "transport_outcome_code",
-        ),
-        (
-            "message",
-            "m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES + 1),
-            "transport_outcome_message",
-        ),
+    let mut one_over_message = exact_outcome_wire.clone();
+    one_over_message["message"] =
+        Value::String("m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES + 1));
+    let encoded = serde_json::to_string(&one_over_message).expect("one-over outcome JSON");
+    assert!(
+        serde_json::from_str::<RadrootsTransportOutcome>(&encoded)
+            .expect_err("reject one-over outcome message")
+            .to_string()
+            .contains("transport_outcome_message")
+    );
+    let mut one_over_code = exact_outcome_wire.clone();
+    one_over_code["code"] =
+        Value::String("c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1));
+    let encoded = serde_json::to_string(&one_over_code).expect("one-over outcome JSON");
+    assert!(
+        serde_json::from_str::<RadrootsTransportOutcome>(&encoded)
+            .expect_err("reject one-over outcome code")
+            .to_string()
+            .contains("transport_outcome_code")
+    );
+    for (field, value, expected_error) in [
+        ("status", "FailedTerminal", "status"),
+        ("code", "rejected", "code"),
+        ("code", "vendor_retryable", "code"),
+        ("retry_class", "Terminal", "retry class"),
     ] {
-        let mut one_over = exact_outcome_wire.clone();
-        one_over[field] = Value::String(value);
-        let encoded = serde_json::to_string(&one_over).expect("one-over outcome JSON");
+        let mut incoherent = exact_outcome_wire.clone();
+        incoherent[field] = Value::String(value.to_owned());
         assert!(
-            serde_json::from_str::<RadrootsTransportOutcome>(&encoded)
-                .expect_err("reject one-over outcome wire")
+            serde_json::from_value::<RadrootsTransportOutcome>(incoherent)
+                .expect_err("reject incoherent outcome wire")
                 .to_string()
-                .contains(expected_limit)
+                .contains(expected_error)
         );
     }
     let mut unknown_outcome = exact_outcome_wire;
@@ -2140,12 +2256,10 @@ fn payload_contract_covers_all_validation_boundaries() {
 fn status_contract_covers_builders_and_availability_defaults() {
     assert_eq!(
         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
-            .try_with_code("accepted")
-            .expect("bounded code")
             .try_with_message("accepted by transport")
             .expect("bounded message")
             .code(),
-        Some("accepted")
+        "accepted"
     );
 
     assert!(!RadrootsTransportCapabilities::none().can_deliver());
@@ -2699,30 +2813,14 @@ fn transport_bounds_targets_enforce_exact_and_one_over_before_set_work() {
 
 #[test]
 fn transport_bounds_outcomes_and_receipts_enforce_exact_and_one_over() {
-    let exact_code = "c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES);
     let exact_message = "m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES);
     let exact_outcome = RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
-        .try_with_code(exact_code)
-        .expect("exact outcome code")
         .try_with_message(exact_message)
         .expect("exact outcome message");
-    assert_eq!(
-        exact_outcome.code().map(str::len),
-        Some(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES)
-    );
+    assert_eq!(exact_outcome.code(), "accepted");
     assert_eq!(
         exact_outcome.message().map(str::len),
         Some(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES)
-    );
-    assert_eq!(
-        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
-            .try_with_code("c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1))
-            .expect_err("one-over outcome code"),
-        RadrootsTransportError::ResourceLimitExceeded {
-            field: "transport_outcome_code",
-            max: RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
-            actual: RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1,
-        }
     );
     assert_eq!(
         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
@@ -3270,6 +3368,8 @@ fn every_transport_error_has_a_stable_display_message() {
         RadrootsTransportError::DeliveryTargetReceiptStatusMismatch,
         RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch,
         RadrootsTransportError::TransportOutcomeStatusMismatch,
+        RadrootsTransportError::TransportOutcomeCodeMismatch,
+        RadrootsTransportError::TransportOutcomeRetryClassMismatch,
         RadrootsTransportError::DeliveryReceiptRequestIdMismatch,
         RadrootsTransportError::DeliveryReceiptTargetSetMismatch,
         RadrootsTransportError::EmptyFetchRequestId,

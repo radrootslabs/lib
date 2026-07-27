@@ -52,7 +52,7 @@ pub use reticulum::{
 };
 pub use status::{
     RadrootsTransportCapabilities, RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportStatus,
+    RadrootsTransportOutcomeKind, RadrootsTransportRetryClass, RadrootsTransportStatus,
 };
 pub use target::{
     RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES, RadrootsTransportMeshScopeId,

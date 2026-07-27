@@ -27,6 +27,8 @@ pub enum RadrootsTransportError {
     DeliveryTargetReceiptStatusMismatch,
     DeliveryTargetReceiptAttemptMismatch,
     TransportOutcomeStatusMismatch,
+    TransportOutcomeCodeMismatch,
+    TransportOutcomeRetryClassMismatch,
     DeliveryReceiptRequestIdMismatch,
     DeliveryReceiptTargetSetMismatch,
     EmptyFetchRequestId,
@@ -105,6 +107,12 @@ impl fmt::Display for RadrootsTransportError {
             }
             Self::TransportOutcomeStatusMismatch => {
                 f.write_str("transport outcome status does not match its outcome kind")
+            }
+            Self::TransportOutcomeCodeMismatch => {
+                f.write_str("transport outcome code does not match its outcome kind")
+            }
+            Self::TransportOutcomeRetryClassMismatch => {
+                f.write_str("transport outcome retry class does not match its outcome kind")
             }
             Self::DeliveryReceiptRequestIdMismatch => {
                 f.write_str("transport delivery receipt request id does not match its request")

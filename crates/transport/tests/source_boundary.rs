@@ -103,6 +103,10 @@ const FORBIDDEN_TRANSPORT_CONCEPTS: &[ForbiddenConcept] = &[
 
 const FORBIDDEN_CORE_STATUS_CONCEPTS: &[ForbiddenConcept] = &[
     ForbiddenConcept {
+        pattern: "try_with_code",
+        reason: "transport outcome codes must derive from their authoritative outcome kind",
+    },
+    ForbiddenConcept {
         pattern: "implementation_state",
         reason: "public transport status must use implementation",
     },

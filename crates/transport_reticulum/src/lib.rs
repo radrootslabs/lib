@@ -24,8 +24,6 @@ use radroots_transport::{
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.default";
 const RETICULUM_AGENT_ENDPOINT_PREFIX: &str = "reticulum-agent:";
-const UNAVAILABLE_CODE: &str = "transport_unavailable";
-const DEFERRED_CODE: &str = "deferred_until_implemented";
 const DEFERRED_MESSAGE: &str = "Reticulum delivery is deferred until implementation";
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -753,18 +751,13 @@ fn ensure_reticulum_targets(
 fn reticulum_outcome(behavior: RadrootsReticulumBehavior) -> RadrootsTransportOutcome {
     let outcome = match behavior {
         RadrootsReticulumBehavior::RejectDeliveryAttempts => {
-            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::TransportUnavailable)
         }
         RadrootsReticulumBehavior::DeferDeliveryPlans => {
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
         }
     };
     outcome
-        .try_with_code(match behavior {
-            RadrootsReticulumBehavior::RejectDeliveryAttempts => UNAVAILABLE_CODE,
-            RadrootsReticulumBehavior::DeferDeliveryPlans => DEFERRED_CODE,
-        })
-        .expect("static Reticulum outcome code is bounded")
         .try_with_message(match behavior {
             RadrootsReticulumBehavior::RejectDeliveryAttempts => {
                 RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
@@ -1045,7 +1038,7 @@ mod tests {
             RadrootsReticulumBehavior::DeferDeliveryPlans,
         ] {
             let outcome = reticulum_outcome(behavior);
-            assert!(outcome.code().is_some());
+            assert!(!outcome.code().is_empty());
             assert!(outcome.message().is_some());
         }
     }
