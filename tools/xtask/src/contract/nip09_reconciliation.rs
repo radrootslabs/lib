@@ -14778,9 +14778,18 @@ xtask = "run -q -p xtask --"
             ));
         }
     }
-    if workspace.contains_key("exclude") || workspace.contains_key("default-members") {
+    let excluded = match workspace.get("exclude") {
+        None => Vec::new(),
+        value => toml_string_array(
+            WORKSPACE_CARGO_MANIFEST_RELATIVE,
+            value,
+            "workspace.exclude",
+        )?,
+    };
+    validate_unique_owned("workspace exclusions", &excluded)?;
+    if excluded != ["fuzz".to_owned()] || workspace.contains_key("default-members") {
         return Err(format!(
-            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must not exclude or narrow the default governed workspace member graph"
+            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must not exclude or narrow the default governed workspace member graph beyond the governed fuzz exclusion"
         ));
     }
     if workspace.get("resolver").and_then(toml::Value::as_str) != Some("2")
@@ -21729,8 +21738,8 @@ async fn nip09_reconciliation_v1_result_vector() {
             (
                 "workspace exclusion",
                 workspace_manifest.replacen(
-                    "[workspace]\n",
-                    "[workspace]\nexclude = [\"crates/event_store\"]\n",
+                    "exclude = [\"fuzz\"]\n",
+                    "exclude = [\"crates/event_store\"]\n",
                     1,
                 ),
                 "must not exclude or narrow",

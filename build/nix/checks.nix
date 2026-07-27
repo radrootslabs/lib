@@ -98,6 +98,15 @@ in
   cargo-test = cargoTest;
   blossom-no-default-check = blossomNoDefaultCheck;
   blossom-raster-decode-test = blossomRasterDecodeTest;
+  blossom-decoder-fuzz-smoke = common.mkRepoCheck {
+    name = "radroots-blossom-decoder-fuzz-smoke";
+    runtimeInputs = common.runtimeInputs.decoderSecurityFuzz;
+    cargoDeps = common.fuzzCargoDeps;
+    command = ''
+      export CARGO_NET_OFFLINE=true
+      ${common.decoderSecurityFuzzCommand}
+    '';
+  };
   replica-sync-default-check = replicaSyncDefaultCheck;
   replica-sync-default-test = replicaSyncDefaultTest;
   replica-sync-legacy-ingest-check = replicaSyncLegacyCheck;

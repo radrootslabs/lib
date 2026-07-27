@@ -4,6 +4,8 @@ mod admission_authority;
 mod artifact_bundle;
 #[allow(dead_code)]
 mod blossom_publication_readiness;
+#[allow(dead_code)]
+mod blossom_raster_decoder_security;
 mod comment_authority;
 mod deletion_authority;
 mod food_availability_projection;

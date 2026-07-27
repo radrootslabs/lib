@@ -8,8 +8,11 @@ use radroots_blossom::{
     RadrootsBlossomError, RadrootsBlossomMediaType, RadrootsBlossomSha256,
     verify_publication_readiness,
 };
-use std::{env, fs, path::PathBuf};
+use serde::Deserialize;
+use std::{env, fs, io::Write, path::PathBuf, process::Command};
+use tempfile::Builder;
 
+const FIXTURE: &str = include_str!("fixtures/raster_decoder_security.v1.json");
 const RESOURCE_CASE_ENV: &str = "RADROOTS_DECODER_RESOURCE_CASE";
 const RESOURCE_FIXTURE_ROOT_ENV: &str = "RADROOTS_DECODER_RESOURCE_FIXTURE_ROOT";
 const RESOURCE_AXIS_CASE_ENV: &str = "RADROOTS_DECODER_RESOURCE_AXIS_CASE";
@@ -161,6 +164,44 @@ impl AxisProbeCase {
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Suite {
+    suite: String,
+    contract_version: String,
+    vectors: Vec<Vector>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Vector {
+    id: String,
+    kind: String,
+    input: VectorInput,
+    expected: VectorExpected,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VectorInput {
+    format: String,
+    bytes_hex: String,
+    mutation: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VectorExpected {
+    accepted: bool,
+    width: Option<u32>,
+    height: Option<u32>,
+    error: Option<String>,
+}
+
+fn suite() -> Suite {
+    serde_json::from_str(FIXTURE).expect("decoder-security fixture must parse")
+}
+
 fn media(format: &str) -> (&'static str, &'static str) {
     match format {
         "jpeg" => ("image/jpeg", "jpg"),
@@ -223,6 +264,105 @@ fn verify(bytes: &[u8], format: &str) -> Result<(u32, u32), RadrootsBlossomError
         evidence.dimensions().width(),
         evidence.dimensions().height(),
     ))
+}
+
+#[test]
+fn decoder_regression_corpus_executes_every_case() {
+    let suite = suite();
+    assert_eq!(suite.suite, "blossom_raster_decoder_security");
+    assert_eq!(suite.contract_version, "1.0.0");
+    assert_eq!(suite.vectors.len(), 30);
+    for vector in suite.vectors {
+        assert!(!vector.input.mutation.is_empty());
+        let bytes = hex::decode(&vector.input.bytes_hex).unwrap();
+        let result = verify(&bytes, &vector.input.format);
+        if vector.expected.accepted {
+            let (width, height) = result.unwrap_or_else(|error| {
+                panic!("{} unexpectedly failed with {}", vector.id, error.code())
+            });
+            assert_eq!(
+                vector.kind,
+                "blossom.verify_publication_readiness.decoder_security.accepted"
+            );
+            assert_eq!(Some(width), vector.expected.width, "{} width", vector.id);
+            assert_eq!(Some(height), vector.expected.height, "{} height", vector.id);
+            assert!(vector.expected.error.is_none(), "{} error", vector.id);
+        } else {
+            let error = result.expect_err(&format!("{} unexpectedly passed", vector.id));
+            assert_eq!(
+                vector.kind,
+                "blossom.verify_publication_readiness.decoder_security.rejected"
+            );
+            assert_eq!(
+                Some(error.code()),
+                vector.expected.error.as_deref(),
+                "{} error",
+                vector.id
+            );
+            assert!(vector.expected.width.is_none(), "{} width", vector.id);
+            assert!(vector.expected.height.is_none(), "{} height", vector.id);
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires the Nix-pinned independent ImageMagick decoder"]
+fn decoder_differential_matches_independent_backend() {
+    let executable = env::var("RADROOTS_INDEPENDENT_RASTER_DECODER")
+        .expect("RADROOTS_INDEPENDENT_RASTER_DECODER must name the pinned magick executable");
+    for vector in suite().vectors {
+        if !vector.expected.accepted {
+            continue;
+        }
+        let bytes = hex::decode(&vector.input.bytes_hex).unwrap();
+        let (width, height) = verify(&bytes, &vector.input.format).unwrap();
+        let (_, extension) = media(&vector.input.format);
+        let mut file = Builder::new()
+            .suffix(&format!(".{extension}"))
+            .tempfile()
+            .unwrap();
+        file.write_all(&bytes).unwrap();
+        file.flush().unwrap();
+
+        let identify = Command::new(&executable)
+            .args([
+                "identify",
+                "-format",
+                "%m %w %h %n\\n",
+                file.path().to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert!(identify.status.success(), "{} identify failed", vector.id);
+        let output = String::from_utf8(identify.stdout).unwrap();
+        let lines = output.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 1, "{} frame count", vector.id);
+        let fields = lines[0].split_ascii_whitespace().collect::<Vec<_>>();
+        assert_eq!(fields.len(), 4, "{} identify fields", vector.id);
+        assert_eq!(fields[0].to_ascii_lowercase(), vector.input.format);
+        assert_eq!(fields[1].parse::<u32>().unwrap(), width);
+        assert_eq!(fields[2].parse::<u32>().unwrap(), height);
+        assert_eq!(fields[3], "1");
+
+        let decoded = Command::new(&executable)
+            .args([
+                file.path().to_str().unwrap(),
+                "-alpha",
+                "on",
+                "-depth",
+                "8",
+                "rgba:-",
+            ])
+            .output()
+            .unwrap();
+        assert!(decoded.status.success(), "{} decode failed", vector.id);
+        assert_eq!(
+            decoded.stdout.len(),
+            usize::try_from(u64::from(width) * u64::from(height) * 4).unwrap(),
+            "{} decoded byte count",
+            vector.id
+        );
+    }
 }
 
 #[test]
@@ -291,15 +431,24 @@ fn resource_probe_inventory_is_closed() {
 
 #[test]
 fn encoded_byte_boundary_executes_the_public_operation() {
+    let base = suite()
+        .vectors
+        .into_iter()
+        .find(|vector| vector.id == "png_rgb_8bit")
+        .expect("PNG RGB vector must exist");
+    assert_eq!(base.input.mutation, "none");
     let exact = padded_png(
-        &hex::decode("89504e470d0a1a0a0000000d49484452000000020000000108020000007b40e8dd0000000f4944415408d763f8cfc0c0c0f01f00070001ff76d5a7600000000049454e44ae426082").unwrap(),
+        &hex::decode(base.input.bytes_hex).unwrap(),
         RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES as usize,
     );
     assert_eq!(
         exact.len() as u64,
         RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES
     );
-    assert_eq!(verify(&exact, "png").unwrap(), (2, 1));
+    assert_eq!(
+        verify(&exact, "png").unwrap(),
+        (base.expected.width.unwrap(), base.expected.height.unwrap())
+    );
 
     let mut one_over = exact;
     one_over.push(0);

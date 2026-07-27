@@ -12,6 +12,10 @@ let
     ${common.exportCoverageEnv}
     export PATH=${toolchains.stable}/bin:${toolchains.coverage}/bin:$PATH
   '';
+  decoderSecurityHook = ''
+    ${common.exportSharedEnv}
+    export PATH=${toolchains.fuzz}/bin:${toolchains.stable}/bin:$PATH
+  '';
 in
 {
   default = pkgs.mkShell {
@@ -24,6 +28,11 @@ in
   coverage = pkgs.mkShell {
     packages = common.runtimeInputs.release;
     shellHook = coverageHook;
+  };
+
+  decoder-security = pkgs.mkShell {
+    packages = common.runtimeInputs.decoderSecurity;
+    shellHook = decoderSecurityHook;
   };
 
   release = pkgs.mkShell {

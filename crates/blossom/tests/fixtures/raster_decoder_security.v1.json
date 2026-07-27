@@ -1,0 +1,410 @@
+{
+  "suite": "blossom_raster_decoder_security",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "jpeg_baseline_gray_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffc0000b080001000201011100ffc40014000100000000000000000000000000000006ffc40014100100000000000000000000000000000000ffda0008010100003f0066ffd9",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "jpeg_baseline_rgb_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc00011080001000203011100021101031101ffc40014000100000000000000000000000000000006ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000506ffc40014110100000000000000000000000000000000ffda000c03010002110311003f00569a1effd9",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "jpeg_baseline_cmyk_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffee000e41646f626500640000000002ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc00014080001000204011100021101031101041100ffc4001500010100000000000000000000000000000709ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000507ffc40014110100000000000000000000000000000000ffda000e040100021103110400003f009a4a01821bffd9",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "jpeg_extended_sequential_sof1",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc10011080001000203011100021101031101ffc40014000100000000000000000000000000000006ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000506ffc40014110100000000000000000000000000000000ffda000c03010002110311003f00569a1effd9",
+        "mutation": "jpeg_sof1"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "png_gray_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d4948445200000002000000010800000000d14920560000000b4944415408d76360f80f0001020100dac612cc0000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "png_rgb_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000020000000108020000007b40e8dd0000000f4944415408d763f8cfc0c0c0f01f00070001ff76d5a7600000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "png_indexed_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d4948445200000002000000010803000000c3fc8fb800000006504c5445ff00000000ff6ca1fd8e0000000b4944415408d7636060040000040002270291ee0000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "png_gray_alpha_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000020000000108040000005e2bb7010000000d4944415408d7636468f8cf000003880181aebdb1c70000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "png_rgba_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a000000114944415408d763fccfc0d0c0c8f09f01000c8c0281d7581d390000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "png_adam7_rgba_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d4948445200000008000000080806000001b3088e1d000000494944415418d3958dc9090020100367c1526cc6626cc662b4188b890f513c40705e61d84d1008812c920460821ea6c904b1609eba8bf1337085c053dc1d15bf8993abe2fbc040cf89065fac1a04c2d2db980000000049454e44ae426082",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 8,
+        "height": 8
+      }
+    },
+    {
+      "id": "webp_lossless_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "524946461e000000574542505650384c110000002f0100000007d0cc22f6aeff8188e87f0000",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "webp_lossy_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "524946462e0000005745425056503820220000005001009d012a0200010001402625004e80280000fee246baf5a5b9b84c4619d60000",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "webp_lossless_alpha_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "524946461e000000574542505650384c110000002f010000100750a08214ac808188e87f0000",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "webp_lossy_alpha_8bit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.accepted",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "524946465000000057454250565038580a00000010000000010000000000414c5048030000000080800056503820260000009001009d012a0200010002003425880274ba00039800fef5275fb6b86decd3e6fb1ecc700000",
+        "mutation": "none"
+      },
+      "expected": {
+        "accepted": true,
+        "width": 2,
+        "height": 1
+      }
+    },
+    {
+      "id": "jpeg_progressive_forbidden",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc20011080001000203011100021101031101ffc40014000100000000000000000000000000000006ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000506ffc40014110100000000000000000000000000000000ffda000c03010002110311003f00569a1effd9",
+        "mutation": "jpeg_progressive"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_jpeg_process_forbidden"
+      }
+    },
+    {
+      "id": "jpeg_twelve_bit_forbidden",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc000110c0001000203011100021101031101ffc40014000100000000000000000000000000000006ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000506ffc40014110100000000000000000000000000000000ffda000c03010002110311003f00569a1effd9",
+        "mutation": "jpeg_precision_12"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_jpeg_process_forbidden"
+      }
+    },
+    {
+      "id": "jpeg_entropy_truncated",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc00011080001000203011100021101031101ffc40014000100000000000000000000000000000006ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000506ffc40014110100000000000000000000000000000000ffda000c03010002110311003f0056ffd9",
+        "mutation": "jpeg_entropy_truncated"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "jpeg_huffman_overfull",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c0f171816141812141514ffdb00430103040405040509050509140d0b0d1414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414ffc00011080001000203011100021101031101ffc40014000300000000000000000000000000000006ffc40014100100000000000000000000000000000000ffc4001501010100000000000000000000000000000506ffc40014110100000000000000000000000000000000ffda000c03010002110311003f00569a1effd9",
+        "mutation": "jpeg_huffman_overfull"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "jpeg_wrong_restart_marker",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffc0000b080001000901011100ffc40026000100000000000000000000000000000000100100000000000000000000000000000000ffdd00040001ffda0008010100003f003fffd13fffd9",
+        "mutation": "jpeg_wrong_restart"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "png_sixteen_bit_forbidden",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000110060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "png_16_bit"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_process_forbidden"
+      }
+    },
+    {
+      "id": "png_animation_forbidden",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489000000086163544c0000000200000000f38d93700000001a6663544c00000000000000010000000100000000000000000001000a00005a7f30d00000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "png_animation"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_animation_forbidden"
+      }
+    },
+    {
+      "id": "png_corrupt_crc",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4880000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "png_corrupt_crc"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "png_corrupt_deflate",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154879c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "png_corrupt_deflate"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_decode_failed"
+      }
+    },
+    {
+      "id": "png_dimension_over_limit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000040010000000108060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "png_dimension_over"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_dimensions_out_of_range"
+      }
+    },
+    {
+      "id": "png_pixel_limit",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000013880000138808060000001f15c4890000000d49444154789c6360f8cff0000003e201e03810ac1e0000000049454e44ae426082",
+        "mutation": "png_pixel_over"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_pixel_limit_exceeded"
+      }
+    },
+    {
+      "id": "png_truncated",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "png",
+        "bytes_hex": "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000",
+        "mutation": "truncate_half"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "invalid_publication_raster"
+      }
+    },
+    {
+      "id": "webp_animation_forbidden",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "524946465600000057454250565038580a00000002000000000000000000414e494d06000000000000000000414e4d462a000000000000000000000000000000010000005650384c110000002f0100000007d0cc22f6aeff8188e87f0000",
+        "mutation": "webp_animation"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "publication_raster_animation_forbidden"
+      }
+    },
+    {
+      "id": "webp_duplicate_primary",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "5249464638000000574542505650384c110000002f0100000007d0cc22f6aeff8188e87f00005650384c110000002f0100000007d0cc22f6aeff8188e87f0000",
+        "mutation": "webp_duplicate_primary"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "invalid_publication_raster"
+      }
+    },
+    {
+      "id": "webp_truncated",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "webp",
+        "bytes_hex": "524946461e000000574542505650384c110000",
+        "mutation": "truncate_half"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "invalid_publication_raster"
+      }
+    },
+    {
+      "id": "jpeg_truncated",
+      "kind": "blossom.verify_publication_readiness.decoder_security.rejected",
+      "input": {
+        "format": "jpeg",
+        "bytes_hex": "ffd8ffe000104a46494600010100000100010000ffdb0043000302020302020303030304030304050805050404050a070706080c0a0c0c0b0a0b0b0d0e12100d0e110e0b0b1016101113141515150c",
+        "mutation": "truncate_half"
+      },
+      "expected": {
+        "accepted": false,
+        "error": "invalid_publication_raster"
+      }
+    }
+  ]
+}

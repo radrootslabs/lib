@@ -1,0 +1,36 @@
+[package]
+name = "radroots-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+radroots_blossom = { path = "../crates/blossom", default-features = false, features = [
+  "raster-decode",
+  "serde",
+] }
+
+[[bin]]
+name = "publication_jpeg"
+path = "fuzz_targets/publication_jpeg.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "publication_png"
+path = "fuzz_targets/publication_png.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "publication_webp"
+path = "fuzz_targets/publication_webp.rs"
+test = false
+doc = false
+bench = false

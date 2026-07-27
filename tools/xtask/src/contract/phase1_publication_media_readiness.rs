@@ -205,7 +205,7 @@ const ALLOWLIST_PREDECESSOR_ARTIFACTS: &[ImmutableArtifactSpec] = &[
         "342d3d3d1100cb5d31aca94b0540b1e03761b034de23475bdb5142baabeed8fd",
     ),
 ];
-const BLOSSOM_PREDECESSOR_ARTIFACTS: &[ImmutableArtifactSpec] = &[
+pub(super) const BLOSSOM_PREDECESSOR_ARTIFACTS: &[ImmutableArtifactSpec] = &[
     ImmutableArtifactSpec::new(
         "crates/blossom/contracts/publication_readiness_v1.manifest.json",
         13_038,
@@ -286,7 +286,7 @@ const BLOSSOM_PREDECESSOR_SOURCE_SUPERSESSIONS: &[&str] = &[
 ];
 
 #[derive(Clone, Copy)]
-struct ImmutableArtifactSpec {
+pub(super) struct ImmutableArtifactSpec {
     relative: &'static str,
     byte_length: usize,
     sha256: &'static str,
@@ -304,7 +304,7 @@ impl ImmutableArtifactSpec {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-struct FileDescriptor {
+pub(super) struct FileDescriptor {
     path: String,
     byte_length: u64,
     sha256: String,
@@ -313,7 +313,7 @@ struct FileDescriptor {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PredecessorDescriptor {
+pub(super) struct PredecessorDescriptor {
     contract_id: String,
     immutable_artifacts: Vec<FileDescriptor>,
     source_supersessions: Vec<String>,
@@ -321,10 +321,10 @@ struct PredecessorDescriptor {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ProtocolSourcePin {
-    id: String,
-    repository: String,
-    revision: String,
+pub(super) struct ProtocolSourcePin {
+    pub(super) id: String,
+    pub(super) repository: String,
+    pub(super) revision: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -509,7 +509,10 @@ fn validate_predecessors(workspace_root: &Path) -> Result<(), String> {
     )
 }
 
-fn validate_source_supersessions(workspace_root: &Path, paths: &[&str]) -> Result<(), String> {
+pub(super) fn validate_source_supersessions(
+    workspace_root: &Path,
+    paths: &[&str],
+) -> Result<(), String> {
     if paths.windows(2).any(|pair| pair[0] >= pair[1]) {
         return Err("predecessor source supersessions must be sorted and unique".to_owned());
     }
@@ -523,7 +526,7 @@ fn validate_source_supersessions(workspace_root: &Path, paths: &[&str]) -> Resul
     Ok(())
 }
 
-fn validate_immutable_predecessor(
+pub(super) fn validate_immutable_predecessor(
     workspace_root: &Path,
     label: &str,
     artifacts: &[ImmutableArtifactSpec],
@@ -716,7 +719,7 @@ fn describe_manifest(
     })
 }
 
-fn predecessor_descriptor(
+pub(super) fn predecessor_descriptor(
     contract_id: &str,
     artifacts: &[ImmutableArtifactSpec],
     source_supersessions: &[&str],
@@ -1462,14 +1465,17 @@ fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
 
-fn descriptor_for_file(workspace_root: &Path, path: &str) -> Result<FileDescriptor, String> {
+pub(super) fn descriptor_for_file(
+    workspace_root: &Path,
+    path: &str,
+) -> Result<FileDescriptor, String> {
     Ok(descriptor_for_bytes(
         path,
         &read_regular_file(workspace_root, path)?,
     ))
 }
 
-fn descriptor_for_bytes(path: &str, bytes: &[u8]) -> FileDescriptor {
+pub(super) fn descriptor_for_bytes(path: &str, bytes: &[u8]) -> FileDescriptor {
     FileDescriptor {
         path: path.to_owned(),
         byte_length: bytes.len() as u64,

@@ -68,6 +68,13 @@ in
     command = common.contractCommand;
   };
 
+  decoder-security = mkRepoApp {
+    name = "decoder-security";
+    description = "Run Blossom decoder corpus, differential, RSS, and fuzz gates";
+    runtimeInputs = common.runtimeInputs.decoderSecurity;
+    command = common.decoderSecurityCommand;
+  };
+
   coverage-report = mkRepoApp {
     name = "coverage-report";
     description = "Generate coverage reports and blocking gate artifacts";

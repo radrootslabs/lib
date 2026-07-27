@@ -98,9 +98,22 @@ let
     pkgs.imagemagick
     pkgs.time
   ];
+  decoderSecurityFuzzRuntimeInputs = stableRuntimeInputs ++ [
+    toolchains.fuzz
+    pkgs.cargo-fuzz
+  ];
   decoderSecurityIosRuntimeInputs = stableRuntimeInputs ++ [
     toolchains.ios
   ];
+  decoderSecurityRuntimeInputs = stableRuntimeInputs ++ [
+    toolchains.fuzz
+    pkgs.cargo-fuzz
+    pkgs.imagemagick
+    pkgs.time
+  ];
+  fuzzCargoDeps = pkgs.rustPlatform.importCargoLock {
+    lockFile = ../../fuzz/Cargo.lock;
+  };
   releaseRuntimeInputs = coverageRuntimeInputs;
   coreContractCrates = [
     "xtask"
@@ -165,26 +178,39 @@ let
       env ? sharedEnv,
       initGit ? false,
       linuxOnly ? false,
+      cargoDeps ? null,
     }:
     if linuxOnly && !pkgs.stdenv.isLinux then
       null
     else
-      pkgs.runCommand name { nativeBuildInputs = runtimeInputs; } ''
-        export HOME="$TMPDIR/home"
-        mkdir -p "$HOME"
+      pkgs.runCommand name
+        (
+          {
+            nativeBuildInputs =
+              runtimeInputs
+              ++ lib.optionals (cargoDeps != null) [
+                pkgs.rustPlatform.cargoSetupHook
+              ];
+          }
+          // lib.optionalAttrs (cargoDeps != null) { inherit cargoDeps; }
+        )
+        ''
+            export HOME="$TMPDIR/home"
+            mkdir -p "$HOME"
 
-        cp -R ${repoSource} "$TMPDIR/repo"
-        chmod -R u+w "$TMPDIR/repo"
-        cd "$TMPDIR/repo"
-        export RADROOTS_WORKSPACE_ROOT="$PWD"
+            cp -R ${repoSource} "$TMPDIR/repo"
+            chmod -R u+w "$TMPDIR/repo"
+          cd "$TMPDIR/repo"
+          export RADROOTS_WORKSPACE_ROOT="$PWD"
 
-        ${exportEnv env}
-        ${lib.optionalString initGit initGitRepo}
+          ${exportEnv env}
+          ${lib.optionalString (cargoDeps != null) "cargoSetupPostUnpackHook"}
+          ${lib.optionalString initGit initGitRepo}
 
-        ${command}
+            ${command}
 
-        touch "$out"
-      '';
+            touch "$out"
+        '';
   ensureRepoRoot = ''
     if [ ! -f Cargo.toml ] || [ ! -f flake.nix ]; then
       echo "run this command from the radroots workspace checkout" >&2
@@ -204,6 +230,20 @@ let
   decoderSecurityStableCommand = ''
     stable_cargo=${toolchains.stable}/bin/cargo
     magick=${pkgs.imagemagick}/bin/magick
+
+    "$stable_cargo" test -p radroots_blossom \
+      --no-default-features \
+      --features raster-decode,serde \
+      --test decoder_security \
+      decoder_regression_corpus_executes_every_case
+
+    RADROOTS_INDEPENDENT_RASTER_DECODER=${pkgs.imagemagick}/bin/magick \
+      "$stable_cargo" test -p radroots_blossom \
+        --no-default-features \
+        --features raster-decode,serde \
+        --test decoder_security \
+        decoder_differential_matches_independent_backend \
+        -- --ignored --exact
 
     test_executable="$($stable_cargo test -p radroots_blossom \
       --no-default-features \
@@ -350,6 +390,31 @@ let
     printf '%s\n' "$archive_members" | grep -F -- '-vp8l_dec.o' >/dev/null
     echo "aarch64-apple-ios static link verified: $ios_archive"
   '';
+  decoderSecurityFuzzCommand = ''
+    fuzz_cargo=${toolchains.fuzz}/bin/cargo
+    fuzz_runner=${pkgs.cargo-fuzz}/bin/cargo-fuzz
+
+    cargo_target_root="''${CARGO_TARGET_DIR:-$TMPDIR/cargo-target}"
+    mkdir -p "$cargo_target_root"
+    smoke_root="$(mktemp -d "$cargo_target_root/decoder-security-fuzz-smoke.XXXXXX")"
+    mkdir -p "$smoke_root/corpus" "$smoke_root/artifacts"
+    cp -R fuzz/corpus/. "$smoke_root/corpus/"
+
+    export PATH=${toolchains.fuzz}/bin:${pkgs.cargo-fuzz}/bin:$PATH
+    export CARGO="$fuzz_cargo"
+    export CARGO_TARGET_DIR="$cargo_target_root"
+    for target in publication_jpeg publication_png publication_webp; do
+      mkdir -p "$smoke_root/artifacts/$target"
+      "$fuzz_runner" run --fuzz-dir fuzz "$target" "$smoke_root/corpus/$target" -- \
+        -runs=256 \
+        -seed=424242 \
+        -max_len=65536 \
+        -timeout=5 \
+        -rss_limit_mb=2048 \
+        -artifact_prefix="$smoke_root/artifacts/$target/"
+    done
+  '';
+  decoderSecurityCommand = decoderSecurityStableCommand + decoderSecurityFuzzCommand;
   releasePreflightCommand = ''
     cargo check -q
     cargo test -q -p xtask
@@ -501,8 +566,11 @@ in
     coverageReportCommand
     craneLib
     ensureRepoRoot
+    decoderSecurityFuzzCommand
     decoderSecurityIosCommand
+    decoderSecurityCommand
     decoderSecurityStableCommand
+    fuzzCargoDeps
     mkRepoCheck
     releasePreflightCommand
     coreContractCargoArgs
@@ -517,6 +585,8 @@ in
   runtimeInputs = {
     stable = stableRuntimeInputs;
     coverage = coverageRuntimeInputs;
+    decoderSecurity = decoderSecurityRuntimeInputs;
+    decoderSecurityFuzz = decoderSecurityFuzzRuntimeInputs;
     decoderSecurityIos = decoderSecurityIosRuntimeInputs;
     decoderSecurityStable = decoderSecurityStableRuntimeInputs;
     release = releaseRuntimeInputs;
