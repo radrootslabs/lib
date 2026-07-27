@@ -1458,11 +1458,7 @@ fn delivery_requests_and_receipts_reject_forged_identity_and_cardinality() {
         .expect_err("empty request id"),
         RadrootsTransportError::EmptyDeliveryRequestId
     );
-    for request_id in [
-        " request".to_owned(),
-        "request\n".to_owned(),
-        "x".repeat(RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES + 1),
-    ] {
+    for request_id in [" request".to_owned(), "request\n".to_owned()] {
         assert_eq!(
             RadrootsTransportDeliveryRequest::new(
                 request_id,
@@ -1489,22 +1485,6 @@ fn delivery_requests_and_receipts_reject_forged_identity_and_cardinality() {
         )
         .expect_err("unrequested required target"),
         RadrootsTransportError::RequiredTargetNotRequested
-    );
-
-    let forged_payload = RadrootsTransportPayload::OpaqueBytes {
-        label: "opaque".to_owned(),
-        bytes: vec![1],
-        digest: "0".repeat(64),
-    };
-    assert_eq!(
-        RadrootsTransportDeliveryRequest::new(
-            "request",
-            forged_payload,
-            targets.clone(),
-            RadrootsTransportSatisfactionPolicy::all_accepted(),
-        )
-        .expect_err("forged payload"),
-        RadrootsTransportError::PayloadDigestMismatch
     );
 
     let request = RadrootsTransportDeliveryRequest::new(
@@ -2296,6 +2276,100 @@ fn transport_bounds_payloads_enforce_exact_and_one_over_before_copying() {
             actual: RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES + 1,
         }
     );
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn transport_bounds_payload_wire_is_strict_and_bounded_for_every_variant() {
+    let exact_signed_json = format!(
+        "{{{}}}",
+        "a".repeat(RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES - 2)
+    );
+    let exact_signed =
+        RadrootsTransportPayload::unchecked_signed_event_json("a".repeat(64), &exact_signed_json)
+            .expect("exact signed payload");
+    assert_eq!(
+        serde_json::from_value::<RadrootsTransportPayload>(
+            serde_json::to_value(&exact_signed).expect("serialize signed payload")
+        )
+        .expect("decode exact signed payload"),
+        exact_signed
+    );
+
+    let one_over_signed_json = format!(
+        "{{{}}}",
+        "a".repeat(RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES - 1)
+    );
+    let one_over_signed_wire = serde_json::json!({
+        "SignedEventJson": {
+            "event_id": "a".repeat(64),
+            "raw_json": one_over_signed_json,
+            "digest": "0".repeat(64),
+        }
+    });
+    assert!(
+        serde_json::from_value::<RadrootsTransportPayload>(one_over_signed_wire)
+            .expect_err("reject one-over signed wire")
+            .to_string()
+            .contains("signed_event_json_bytes")
+    );
+
+    for exact in [
+        RadrootsTransportPayload::mesh_frame_cbor(
+            "mesh",
+            vec![0; RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES],
+        )
+        .expect("exact mesh payload"),
+        RadrootsTransportPayload::opaque_bytes(
+            "opaque",
+            vec![0; RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES],
+        )
+        .expect("exact opaque payload"),
+    ] {
+        assert_eq!(
+            serde_json::from_value::<RadrootsTransportPayload>(
+                serde_json::to_value(&exact).expect("serialize byte payload")
+            )
+            .expect("decode exact byte payload"),
+            exact
+        );
+    }
+
+    for (variant, field) in [
+        ("MeshFrameCbor", "mesh_frame_cbor_bytes"),
+        ("OpaqueBytes", "opaque_payload_bytes"),
+    ] {
+        let id_field = if variant == "MeshFrameCbor" {
+            "message_id"
+        } else {
+            "label"
+        };
+        let mut body = serde_json::Map::new();
+        body.insert(id_field.to_owned(), Value::String("bounded".to_owned()));
+        body.insert(
+            "bytes".to_owned(),
+            Value::Array(
+                core::iter::repeat_n(
+                    Value::from(0),
+                    RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES + 1,
+                )
+                .collect(),
+            ),
+        );
+        body.insert("digest".to_owned(), Value::String("0".repeat(64)));
+        let mut wire = serde_json::Map::new();
+        wire.insert(variant.to_owned(), Value::Object(body));
+        assert!(
+            serde_json::from_value::<RadrootsTransportPayload>(Value::Object(wire))
+                .expect_err("reject one-over byte wire")
+                .to_string()
+                .contains(field)
+        );
+    }
+
+    let mut unknown = serde_json::to_value(opaque_payload()).expect("payload wire");
+    unknown["OpaqueBytes"]["unknown"] = Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsTransportPayload>(unknown).is_err());
 }
 
 #[test]

@@ -245,9 +245,9 @@ async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_iden
 }
 
 fn assert_payload_exact(payload: &RadrootsTransportPayload, expected_raw: &str) {
-    let RadrootsTransportPayload::SignedEventJson { raw_json, .. } = payload else {
-        panic!("Phase 1 Nostr dispatch must carry signed event JSON");
-    };
+    let (_, raw_json) = payload
+        .signed_event_json_parts()
+        .expect("Phase 1 Nostr dispatch must carry signed event JSON");
     assert_eq!(raw_json.as_bytes(), expected_raw.as_bytes());
 }
 

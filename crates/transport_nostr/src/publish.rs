@@ -570,18 +570,15 @@ mod contract_tests {
 fn signed_event_from_transport_payload(
     payload: &RadrootsTransportPayload,
 ) -> Result<RadrootsVerifiedSignedEvent, RadrootsTransportError> {
-    let RadrootsTransportPayload::SignedEventJson {
-        event_id, raw_json, ..
-    } = payload
-    else {
+    let Some((event_id, raw_json)) = payload.signed_event_json_parts() else {
         return Err(RadrootsTransportError::InvalidPayloadBytes);
     };
     let wire = RadrootsNip01EventWire::parse_json(raw_json)
         .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
-    if wire.id != *event_id {
+    if wire.id != event_id {
         return Err(RadrootsTransportError::InvalidPayloadId);
     }
-    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json.clone())
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json.to_owned())
         .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?
         .verify_signature()
         .map_err(|_| RadrootsTransportError::InvalidPayloadSignature)

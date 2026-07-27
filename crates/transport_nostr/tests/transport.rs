@@ -1218,18 +1218,13 @@ fn verified_signed_event_payload_preserves_transport_payload_identity() {
     let signed = signed_post("verified payload");
     let payload = verified_signed_event_payload(&verified_signed_event(signed.clone()))
         .expect("verified payload");
-    let RadrootsTransportPayload::SignedEventJson {
-        event_id,
-        raw_json,
-        digest,
-    } = payload
-    else {
-        panic!("signed event payload expected");
-    };
+    let (event_id, raw_json) = payload
+        .signed_event_json_parts()
+        .expect("signed event payload");
 
     assert_eq!(event_id, signed.id_str());
-    assert_eq!(raw_json, signed.raw_json().to_owned());
-    assert_eq!(digest.len(), 64);
+    assert_eq!(raw_json, signed.raw_json());
+    assert_eq!(payload.digest().len(), 64);
 }
 
 #[tokio::test]

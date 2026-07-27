@@ -7,9 +7,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use sha2::{Digest, Sha256};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTransportPayload {
+    body: RadrootsTransportPayloadBody,
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTransportPayload {
+enum RadrootsTransportPayloadBody {
     SignedEventJson {
         event_id: String,
         raw_json: String,
@@ -39,10 +44,12 @@ impl RadrootsTransportPayload {
         let event_id = validate_hex_id(event_id)?;
         let raw_json = validate_raw_json(raw_json)?;
         let digest = sha256_hex(raw_json.as_bytes());
-        Ok(Self::SignedEventJson {
-            event_id,
-            raw_json,
-            digest,
+        Ok(Self {
+            body: RadrootsTransportPayloadBody::SignedEventJson {
+                event_id,
+                raw_json,
+                digest,
+            },
         })
     }
 
@@ -82,10 +89,12 @@ impl RadrootsTransportPayload {
             RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
         )?;
         let digest = sha256_hex(bytes.as_slice());
-        Ok(Self::MeshFrameCbor {
-            message_id,
-            bytes,
-            digest,
+        Ok(Self {
+            body: RadrootsTransportPayloadBody::MeshFrameCbor {
+                message_id,
+                bytes,
+                digest,
+            },
         })
     }
 
@@ -126,10 +135,12 @@ impl RadrootsTransportPayload {
             RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
         )?;
         let digest = sha256_hex(bytes.as_slice());
-        Ok(Self::OpaqueBytes {
-            label,
-            bytes,
-            digest,
+        Ok(Self {
+            body: RadrootsTransportPayloadBody::OpaqueBytes {
+                label,
+                bytes,
+                digest,
+            },
         })
     }
 
@@ -152,34 +163,62 @@ impl RadrootsTransportPayload {
     }
 
     pub fn digest(&self) -> &str {
-        match self {
-            Self::SignedEventJson { digest, .. }
-            | Self::MeshFrameCbor { digest, .. }
-            | Self::OpaqueBytes { digest, .. } => digest.as_str(),
+        match &self.body {
+            RadrootsTransportPayloadBody::SignedEventJson { digest, .. }
+            | RadrootsTransportPayloadBody::MeshFrameCbor { digest, .. }
+            | RadrootsTransportPayloadBody::OpaqueBytes { digest, .. } => digest.as_str(),
         }
     }
 
     pub fn payload_kind(&self) -> &'static str {
-        match self {
-            Self::SignedEventJson { .. } => "signed_event_json",
-            Self::MeshFrameCbor { .. } => "mesh_frame_cbor",
-            Self::OpaqueBytes { .. } => "opaque_bytes",
+        match &self.body {
+            RadrootsTransportPayloadBody::SignedEventJson { .. } => "signed_event_json",
+            RadrootsTransportPayloadBody::MeshFrameCbor { .. } => "mesh_frame_cbor",
+            RadrootsTransportPayloadBody::OpaqueBytes { .. } => "opaque_bytes",
+        }
+    }
+
+    pub fn signed_event_json_parts(&self) -> Option<(&str, &str)> {
+        match &self.body {
+            RadrootsTransportPayloadBody::SignedEventJson {
+                event_id, raw_json, ..
+            } => Some((event_id, raw_json)),
+            RadrootsTransportPayloadBody::MeshFrameCbor { .. }
+            | RadrootsTransportPayloadBody::OpaqueBytes { .. } => None,
+        }
+    }
+
+    pub fn mesh_frame_cbor_parts(&self) -> Option<(&str, &[u8])> {
+        match &self.body {
+            RadrootsTransportPayloadBody::MeshFrameCbor {
+                message_id, bytes, ..
+            } => Some((message_id, bytes)),
+            RadrootsTransportPayloadBody::SignedEventJson { .. }
+            | RadrootsTransportPayloadBody::OpaqueBytes { .. } => None,
+        }
+    }
+
+    pub fn opaque_bytes_parts(&self) -> Option<(&str, &[u8])> {
+        match &self.body {
+            RadrootsTransportPayloadBody::OpaqueBytes { label, bytes, .. } => Some((label, bytes)),
+            RadrootsTransportPayloadBody::SignedEventJson { .. }
+            | RadrootsTransportPayloadBody::MeshFrameCbor { .. } => None,
         }
     }
 
     pub fn validate(&self) -> Result<(), RadrootsTransportError> {
-        let canonical = match self {
-            Self::SignedEventJson {
+        let canonical = match &self.body {
+            RadrootsTransportPayloadBody::SignedEventJson {
                 event_id,
                 raw_json,
                 digest,
             } => Self::signed_event_json_with_digest(event_id, raw_json, digest)?,
-            Self::MeshFrameCbor {
+            RadrootsTransportPayloadBody::MeshFrameCbor {
                 message_id,
                 bytes,
                 digest,
             } => Self::validated_mesh_frame_cbor_with_digest(message_id, bytes, digest)?,
-            Self::OpaqueBytes {
+            RadrootsTransportPayloadBody::OpaqueBytes {
                 label,
                 bytes,
                 digest,
@@ -193,21 +232,41 @@ impl RadrootsTransportPayload {
 }
 
 #[cfg(feature = "serde")]
+impl serde::Serialize for RadrootsTransportPayload {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.body.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 enum RadrootsTransportPayloadWire {
     SignedEventJson {
+        #[serde(deserialize_with = "deserialize_payload_event_id")]
         event_id: String,
+        #[serde(deserialize_with = "deserialize_signed_event_json")]
         raw_json: String,
+        #[serde(deserialize_with = "deserialize_payload_digest")]
         digest: String,
     },
     MeshFrameCbor {
+        #[serde(deserialize_with = "deserialize_payload_identifier")]
         message_id: String,
+        #[serde(deserialize_with = "deserialize_reticulum_payload_bytes")]
         bytes: Vec<u8>,
+        #[serde(deserialize_with = "deserialize_payload_digest")]
         digest: String,
     },
     OpaqueBytes {
+        #[serde(deserialize_with = "deserialize_payload_identifier")]
         label: String,
+        #[serde(deserialize_with = "deserialize_opaque_payload_bytes")]
         bytes: Vec<u8>,
+        #[serde(deserialize_with = "deserialize_payload_digest")]
         digest: String,
     },
 }
@@ -219,38 +278,89 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportPayload {
         D: serde::Deserializer<'de>,
     {
         let wire = RadrootsTransportPayloadWire::deserialize(deserializer)?;
-        let payload = match wire {
+        match wire {
             RadrootsTransportPayloadWire::SignedEventJson {
                 event_id,
                 raw_json,
                 digest,
-            } => Self::SignedEventJson {
-                event_id,
-                raw_json,
-                digest,
-            },
+            } => Self::signed_event_json_with_digest(&event_id, &raw_json, &digest),
             RadrootsTransportPayloadWire::MeshFrameCbor {
                 message_id,
                 bytes,
                 digest,
-            } => Self::MeshFrameCbor {
-                message_id,
-                bytes,
-                digest,
-            },
+            } => Self::validated_mesh_frame_cbor_with_digest(&message_id, &bytes, &digest),
             RadrootsTransportPayloadWire::OpaqueBytes {
                 label,
                 bytes,
                 digest,
-            } => Self::OpaqueBytes {
-                label,
-                bytes,
-                digest,
-            },
-        };
-        payload.validate().map_err(serde::de::Error::custom)?;
-        Ok(payload)
+            } => Self::validated_opaque_bytes_with_digest(&label, &bytes, &digest),
+        }
+        .map_err(serde::de::Error::custom)
     }
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_payload_event_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(deserializer, "payload_id", 64)
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_payload_identifier<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(
+        deserializer,
+        "payload_id",
+        RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_signed_event_json<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(
+        deserializer,
+        "signed_event_json_bytes",
+        RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_payload_digest<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(deserializer, "digest", 64)
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_reticulum_payload_bytes<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_vec(
+        deserializer,
+        "mesh_frame_cbor_bytes",
+        RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_opaque_payload_bytes<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_vec(
+        deserializer,
+        "opaque_payload_bytes",
+        RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
+    )
 }
 
 fn validate_hex_id(raw: &str) -> Result<String, RadrootsTransportError> {

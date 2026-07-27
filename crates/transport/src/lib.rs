@@ -11,6 +11,8 @@ mod limits;
 mod message;
 mod payload;
 mod reticulum;
+#[cfg(feature = "serde")]
+mod serde_bounds;
 mod status;
 mod target;
 mod transport;

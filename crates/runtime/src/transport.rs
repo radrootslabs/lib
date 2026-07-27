@@ -686,10 +686,9 @@ mod tests {
         RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
         RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
         RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
-        RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
-        RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
-        RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
-        RadrootsTransportTargetSet,
+        RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
+        RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
+        RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
     };
     #[cfg(feature = "transport-workers")]
     use std::sync::{Arc, Mutex};
@@ -912,12 +911,9 @@ mod tests {
         let via_variant = RadrootsRuntimeTransportPayload::signed_event(event.clone())
             .transport_payload()
             .expect("transport payload");
-        let RadrootsTransportPayload::SignedEventJson {
-            event_id, raw_json, ..
-        } = payload.clone()
-        else {
-            panic!("signed event payload expected");
-        };
+        let (event_id, raw_json) = payload
+            .signed_event_json_parts()
+            .expect("signed event payload");
 
         assert_eq!(payload, via_variant);
         assert_eq!(event_id, event.signed_event().id_str());
