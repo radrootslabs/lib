@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn smoke_consumer_manifest_uses_exact_direct_dependency_pin() {
         let manifest =
-            render_consumer_manifest(Path::new("/tmp/radroots-sdk"), "=0.44.2").expect("manifest");
+            render_consumer_manifest(Path::new("/tmp/radroots_sdk"), "=0.44.2").expect("manifest");
 
         assert!(manifest.contains("nostr = \"=0.44.2\""));
         assert!(!manifest.contains("nostr = \"0.44.2\""));

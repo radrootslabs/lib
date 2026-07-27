@@ -1364,7 +1364,7 @@ mod tests {
 
     #[test]
     fn generic_sqlx_public_field_is_forbidden() {
-        let findings = scan_fixture("radroots-storage", GENERIC_SQLX);
+        let findings = scan_fixture("radroots_storage", GENERIC_SQLX);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].item, "StorageHandle");
         assert_eq!(findings[0].forbidden_path, "sqlx");
@@ -1373,7 +1373,7 @@ mod tests {
 
     #[test]
     fn renamed_tokio_return_type_is_resolved() {
-        let findings = scan_fixture("radroots-sync", GENERIC_RENAMED_TOKIO);
+        let findings = scan_fixture("radroots_sync", GENERIC_RENAMED_TOKIO);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].item, "executor");
         assert_eq!(findings[0].forbidden_path, "tokio");
@@ -1382,13 +1382,13 @@ mod tests {
 
     #[test]
     fn specified_nostr_adapter_may_expose_protocol_types() {
-        let findings = scan_fixture("radroots-nostr", ALLOWED_ADAPTER);
+        let findings = scan_fixture("radroots_nostr", ALLOWED_ADAPTER);
         assert!(findings.is_empty());
     }
 
     #[test]
     fn private_implementation_types_are_not_public_api() {
-        let findings = scan_fixture("radroots-sdk", PRIVATE_IMPLEMENTATION);
+        let findings = scan_fixture("radroots_sdk", PRIVATE_IMPLEMENTATION);
         assert!(findings.is_empty());
     }
 
@@ -1405,7 +1405,7 @@ mod tests {
         let mut policy = policy();
         policy.exception.push(ApiException {
             id: "RCRV1-API-999".to_owned(),
-            package: "radroots-sdk".to_owned(),
+            package: "radroots_sdk".to_owned(),
             source: "src/lib.rs".to_owned(),
             forbidden_path: "reqwest".to_owned(),
             items: vec!["temporary_client".to_owned()],
@@ -1418,7 +1418,7 @@ mod tests {
         let finding = scan_workspace(
             root.path(),
             &policy,
-            &fixture_metadata(root.path(), "radroots-sdk", ADR_EXCEPTION),
+            &fixture_metadata(root.path(), "radroots_sdk", ADR_EXCEPTION),
         )
         .expect("scan exception fixture")
         .pop()

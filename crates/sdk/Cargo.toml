@@ -1,5 +1,5 @@
 [package]
-name = "radroots-sdk"
+name = "radroots_sdk"
 publish = false
 version.workspace = true
 edition.workspace = true

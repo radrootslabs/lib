@@ -623,8 +623,8 @@ mod tests {
         let policy = policy();
         let error = validate_metadata(&policy, &placements(&policy), &metadata(DOMAIN_TO_STORAGE))
             .expect_err("domain must not depend on storage");
-        assert!(error.contains("radroots-event (tier=domain rank=1)"));
-        assert!(error.contains("radroots-storage (tier=spi rank=2)"));
+        assert!(error.contains("radroots_event (tier=domain rank=1)"));
+        assert!(error.contains("radroots_storage (tier=spi rank=2)"));
         assert!(error.contains("alias=storage_alias"));
         assert!(error.contains("kind=normal"));
         assert!(error.contains("target=cfg(unix)"));
@@ -636,8 +636,8 @@ mod tests {
         let policy = policy();
         let error = validate_metadata(&policy, &placements(&policy), &metadata(SPI_TO_ADAPTER))
             .expect_err("SPI must not depend on adapter");
-        assert!(error.contains("radroots-transport (tier=spi rank=2)"));
-        assert!(error.contains("radroots-nostr (tier=adapter rank=3)"));
+        assert!(error.contains("radroots_transport (tier=spi rank=2)"));
+        assert!(error.contains("radroots_nostr (tier=adapter rank=3)"));
         assert!(error.contains("alias=protocol_adapter"));
         assert!(error.contains("kind=build"));
         assert!(error.contains("target=cfg(target_arch = \"wasm32\")"));
@@ -649,8 +649,8 @@ mod tests {
         let policy = policy();
         let error = validate_metadata(&policy, &placements(&policy), &metadata(SERVICE_TO_SDK))
             .expect_err("service orchestration must not depend on SDK");
-        assert!(error.contains("radroots-sync (tier=orchestration rank=4)"));
-        assert!(error.contains("radroots-sdk (tier=sdk rank=5)"));
+        assert!(error.contains("radroots_sync (tier=orchestration rank=4)"));
+        assert!(error.contains("radroots_sdk (tier=sdk rank=5)"));
         assert!(error.contains("alias=client_engine"));
     }
 
@@ -666,12 +666,12 @@ mod tests {
         let policy = policy();
         let owner = super::CargoPackage {
             id: "owner".to_owned(),
-            name: "radroots-trade".to_owned(),
+            name: "radroots_trade".to_owned(),
             dependencies: Vec::new(),
         };
         let dependency = super::CargoPackage {
             id: "dependency".to_owned(),
-            name: "radroots-nostr".to_owned(),
+            name: "radroots_nostr".to_owned(),
             dependencies: Vec::new(),
         };
         let kind = super::CargoDependencyKind {
@@ -679,7 +679,7 @@ mod tests {
             target: None,
         };
         let exact = super::CargoDependency {
-            name: "radroots-nostr".to_owned(),
+            name: "radroots_nostr".to_owned(),
             kind: Some("dev".to_owned()),
             features: vec!["std".to_owned(), "events".to_owned()],
             target: None,

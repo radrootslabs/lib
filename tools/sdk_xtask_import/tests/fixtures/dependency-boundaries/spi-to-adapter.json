@@ -1,11 +1,11 @@
 {
   "packages": [
     {
-      "id": "fixture#radroots-transport@0.1.0",
-      "name": "radroots-transport",
+      "id": "fixture#radroots_transport@0.1.0",
+      "name": "radroots_transport",
       "dependencies": [
         {
-          "name": "radroots-nostr",
+          "name": "radroots_nostr",
           "rename": "protocol_adapter",
           "kind": "build",
           "features": ["events"],
@@ -15,19 +15,19 @@
       ]
     },
     {
-      "id": "fixture#radroots-nostr@0.1.0",
-      "name": "radroots-nostr",
+      "id": "fixture#radroots_nostr@0.1.0",
+      "name": "radroots_nostr",
       "dependencies": []
     }
   ],
   "resolve": {
     "nodes": [
       {
-        "id": "fixture#radroots-transport@0.1.0",
+        "id": "fixture#radroots_transport@0.1.0",
         "deps": [
           {
             "name": "protocol_adapter",
-            "pkg": "fixture#radroots-nostr@0.1.0",
+            "pkg": "fixture#radroots_nostr@0.1.0",
             "dep_kinds": [
               {
                 "kind": "build",
@@ -38,7 +38,7 @@
         ]
       },
       {
-        "id": "fixture#radroots-nostr@0.1.0",
+        "id": "fixture#radroots_nostr@0.1.0",
         "deps": []
       }
     ]

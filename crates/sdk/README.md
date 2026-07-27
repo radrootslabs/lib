@@ -1,4 +1,4 @@
-# radroots-sdk
+# radroots_sdk
 
 Curated Radroots Rust SDK for local-first Radroots product workflows.
 
@@ -78,10 +78,10 @@ not expose a public workflow-bypass namespace for product callers.
 Compile the SDK v1 product examples with:
 
 ```bash
-cargo check -p radroots-sdk --example sdk_v1_listing_prepare --features runtime
-cargo check -p radroots-sdk --example sdk_v1_knowledge_prepare --features knowledge
-cargo check -p radroots-sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,signer-adapters
-cargo check -p radroots-sdk --example sdk_v1_myc_nip46_signer_setup --features runtime,signer-adapters
+cargo check -p radroots_sdk --example sdk_v1_listing_prepare --features runtime
+cargo check -p radroots_sdk --example sdk_v1_knowledge_prepare --features knowledge
+cargo check -p radroots_sdk --example sdk_v1_local_enqueue_and_mock_sync --features runtime,signer-adapters
+cargo check -p radroots_sdk --example sdk_v1_myc_nip46_signer_setup --features runtime,signer-adapters
 ```
 
 `sdk_v1_listing_prepare` shows `RadrootsClient::builder()`,

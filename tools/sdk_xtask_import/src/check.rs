@@ -2144,24 +2144,24 @@ mod tests {
     };
 
     const APPROVED_CRATES: [&str; 19] = [
-        "radroots-core",
-        "radroots-identity",
-        "radroots-blossom",
-        "radroots-protocol",
-        "radroots-event",
-        "radroots-event-codec",
-        "radroots-trade",
-        "radroots-signing",
-        "radroots-transport",
-        "radroots-nostr",
-        "radroots-nostr-connect",
-        "radroots-secrets",
-        "radroots-storage",
-        "radroots-storage-sqlite",
-        "radroots-transport-nostr",
-        "radroots-sync",
-        "radroots-geonames",
-        "radroots-sdk",
+        "radroots_core",
+        "radroots_identity",
+        "radroots_blossom",
+        "radroots_protocol",
+        "radroots_event",
+        "radroots_event_codec",
+        "radroots_trade",
+        "radroots_signing",
+        "radroots_transport",
+        "radroots_nostr",
+        "radroots_nostr_connect",
+        "radroots_secrets",
+        "radroots_storage",
+        "radroots_storage_sqlite",
+        "radroots_transport_nostr",
+        "radroots_sync",
+        "radroots_geonames",
+        "radroots_sdk",
         "radroots",
     ];
 
@@ -2203,7 +2203,7 @@ registry = "crates-io"
 final_enablement_step = 305
 spec_id = "radroots.crates.release.v1"
 approved_packages = [{}]
-local_packages = ["radroots-sdk", "radroots"]
+local_packages = ["radroots_sdk", "radroots"]
 external_packages = [{}]
 
 [workspace_classification]
@@ -2320,7 +2320,7 @@ retired = []
         .expect("write policy");
         fs::write(
             root.join("crates/sdk/Cargo.toml"),
-            "[package]\nname = \"radroots-sdk\"\nversion = \"0.1.0\"\npublish = [\"crates-io\"]\n",
+            "[package]\nname = \"radroots_sdk\"\nversion = \"0.1.0\"\npublish = [\"crates-io\"]\n",
         )
         .expect("write SDK manifest");
         fs::write(

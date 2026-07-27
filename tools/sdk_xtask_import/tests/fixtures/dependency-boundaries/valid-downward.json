@@ -1,11 +1,11 @@
 {
   "packages": [
     {
-      "id": "fixture#radroots-transport-nostr@0.1.0",
-      "name": "radroots-transport-nostr",
+      "id": "fixture#radroots_transport_nostr@0.1.0",
+      "name": "radroots_transport_nostr",
       "dependencies": [
         {
-          "name": "radroots-transport",
+          "name": "radroots_transport",
           "rename": "transport_spi",
           "kind": "dev",
           "features": [],
@@ -15,19 +15,19 @@
       ]
     },
     {
-      "id": "fixture#radroots-transport@0.1.0",
-      "name": "radroots-transport",
+      "id": "fixture#radroots_transport@0.1.0",
+      "name": "radroots_transport",
       "dependencies": []
     }
   ],
   "resolve": {
     "nodes": [
       {
-        "id": "fixture#radroots-transport-nostr@0.1.0",
+        "id": "fixture#radroots_transport_nostr@0.1.0",
         "deps": [
           {
             "name": "transport_spi",
-            "pkg": "fixture#radroots-transport@0.1.0",
+            "pkg": "fixture#radroots_transport@0.1.0",
             "dep_kinds": [
               {
                 "kind": "dev",
@@ -38,7 +38,7 @@
         ]
       },
       {
-        "id": "fixture#radroots-transport@0.1.0",
+        "id": "fixture#radroots_transport@0.1.0",
         "deps": []
       }
     ]
