@@ -3,10 +3,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(feature = "raster-decode")]
-use image::{
-    ImageDecoder, Limits,
-    codecs::{png::PngDecoder, webp::WebPDecoder},
-};
+use image::{ImageDecoder, Limits, codecs::png::PngDecoder};
+#[cfg(feature = "raster-decode")]
+use libwebp::{WebPDecodeRGBAInto, WebPGetInfo};
 #[cfg(any(feature = "raster-decode", feature = "serde"))]
 use sha2::{Digest, Sha256};
 #[cfg(feature = "raster-decode")]
@@ -35,10 +34,12 @@ pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION: u32 = 
 pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES: usize = 8 * 1024;
 pub const RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES: usize = 4 * 1024;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES: u64 = 10_485_760;
-pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES: u64 =
-    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS * 8;
+pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES: u64 = 80_000_000;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION: u32 = 16_384;
 pub const RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS: u64 = 20_000_000;
+
+#[cfg(any(feature = "raster-decode", test))]
+const PUBLICATION_RASTER_MAX_CONTAINER_RECORDS: usize = 65_536;
 
 #[cfg(any(feature = "raster-decode", feature = "serde"))]
 const READINESS_EVIDENCE_DIGEST_DOMAIN: &[u8] =
@@ -578,12 +579,34 @@ fn decode_raster(
         }
         RadrootsBlossomRasterFormat::StillWebP => {
             let container = inspect_webp_container(bytes)?;
-            let decoder = WebPDecoder::new(Cursor::new(bytes))
-                .map_err(|_| RadrootsBlossomError::PublicationRasterDecodeFailed)?;
-            reject_animation(container.animated, decoder.has_animation())?;
-            decode_complete_raster(decoder, container.dimensions)
+            reject_animation(container.animated, false)?;
+            decode_complete_webp(bytes, container.dimensions)
         }
     }
+}
+
+#[cfg(feature = "raster-decode")]
+fn decode_complete_webp(
+    bytes: &[u8],
+    container_dimensions: RadrootsBlossomRasterDimensions,
+) -> Result<RadrootsBlossomRasterDimensions, RadrootsBlossomError> {
+    let (width, height) =
+        WebPGetInfo(bytes).map_err(|_| RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+    let dimensions = RadrootsBlossomRasterDimensions::new(width, height)?;
+    require_matching_dimensions(dimensions, container_dimensions)?;
+
+    let decoded_bytes = bounded_decoded_byte_length(
+        u64::from(width)
+            .checked_mul(u64::from(height))
+            .and_then(|pixels| pixels.checked_mul(4)),
+    )?;
+    let stride = width
+        .checked_mul(4)
+        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+    let mut decoded = allocate_decoded_buffer(decoded_bytes)?;
+    WebPDecodeRGBAInto(bytes, &mut decoded, stride)
+        .map_err(|_| RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+    Ok(dimensions)
 }
 
 #[cfg(feature = "raster-decode")]
@@ -1008,8 +1031,18 @@ fn inspect_png_container(bytes: &[u8]) -> Result<RasterContainerInspection, Radr
     let mut position = SIGNATURE.len();
     let mut dimensions = None;
     let mut has_image_data = false;
+    let mut image_data_ended = false;
+    let mut color_type = None;
+    let mut has_palette = false;
     let mut animated = false;
+    let mut records = 0_usize;
     while position < bytes.len() {
+        records = records
+            .checked_add(1)
+            .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
+        if records > PUBLICATION_RASTER_MAX_CONTAINER_RECORDS {
+            return invalid_raster();
+        }
         let header_end = position
             .checked_add(8)
             .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
@@ -1051,10 +1084,33 @@ fn inspect_png_container(bytes: &[u8]) -> Result<RasterContainerInspection, Radr
                         .try_into()
                         .map_err(|_| RadrootsBlossomError::InvalidPublicationRaster)?,
                 );
+                let bit_depth = data[8];
+                let parsed_color_type = data[9];
+                if bit_depth != 8 || data[10] != 0 || data[11] != 0 || data[12] > 1 {
+                    return Err(RadrootsBlossomError::PublicationRasterProcessForbidden);
+                }
+                if !matches!(parsed_color_type, 0 | 2 | 3 | 4 | 6) {
+                    return Err(RadrootsBlossomError::PublicationRasterDecodeFailed);
+                }
                 dimensions = Some(RadrootsBlossomRasterDimensions::new(width, height)?);
+                color_type = Some(parsed_color_type);
             }
             b"IHDR" => return invalid_raster(),
-            b"IDAT" if dimensions.is_some() => has_image_data = true,
+            b"PLTE" if dimensions.is_some() && !has_palette && !has_image_data => {
+                if data.is_empty() || data.len() % 3 != 0 || data.len() > 768 {
+                    return invalid_raster();
+                }
+                has_palette = true;
+            }
+            b"PLTE" => return invalid_raster(),
+            b"IDAT"
+                if dimensions.is_some()
+                    && !image_data_ended
+                    && (color_type != Some(3) || has_palette) =>
+            {
+                has_image_data = true;
+            }
+            b"IDAT" => return invalid_raster(),
             b"acTL" | b"fcTL" | b"fdAT" => animated = true,
             b"IEND" if data.is_empty() && has_image_data && position == bytes.len() => {
                 return Ok(RasterContainerInspection {
@@ -1064,7 +1120,8 @@ fn inspect_png_container(bytes: &[u8]) -> Result<RasterContainerInspection, Radr
             }
             b"IEND" => return invalid_raster(),
             _ if dimensions.is_none() => return invalid_raster(),
-            _ => {}
+            _ if kind[0] & 0x20 == 0 => return invalid_raster(),
+            _ => image_data_ended |= has_image_data,
         }
     }
     invalid_raster()
@@ -1088,7 +1145,15 @@ fn inspect_webp_container(bytes: &[u8]) -> Result<RasterContainerInspection, Rad
     let mut dimensions = None;
     let mut primary_chunks = 0_u8;
     let mut animated = false;
+    let mut extended = false;
+    let mut records = 0_usize;
     while position < bytes.len() {
+        records = records
+            .checked_add(1)
+            .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
+        if records > PUBLICATION_RASTER_MAX_CONTAINER_RECORDS {
+            return invalid_raster();
+        }
         let header_end = position
             .checked_add(8)
             .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
@@ -1119,7 +1184,11 @@ fn inspect_webp_container(bytes: &[u8]) -> Result<RasterContainerInspection, Rad
 
         match &kind {
             b"ANIM" | b"ANMF" => animated = true,
-            b"VP8X" if data.len() == 10 => {
+            b"VP8X" if data.len() == 10 && !extended && primary_chunks == 0 => {
+                if data[0] & 0b1100_0001 != 0 || data[1..4] != [0, 0, 0] {
+                    return Err(RadrootsBlossomError::PublicationRasterProcessForbidden);
+                }
+                extended = true;
                 animated |= data[0] & 0b0000_0010 != 0;
                 let width = 1 + read_u24_le(&data[4..7]);
                 let height = 1 + read_u24_le(&data[7..10]);
@@ -1194,17 +1263,28 @@ fn inspect_jpeg_container(bytes: &[u8]) -> Result<JpegContainerInspection, Radro
     let mut position = 2_usize;
     let mut dimensions = None;
     let mut components = None;
+    let mut records = 0_usize;
     loop {
+        records = records
+            .checked_add(1)
+            .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
+        if records > PUBLICATION_RASTER_MAX_CONTAINER_RECORDS {
+            return invalid_raster();
+        }
         if bytes.get(position) != Some(&0xff) {
             return invalid_raster();
         }
         while bytes.get(position) == Some(&0xff) {
-            position += 1;
+            position = position
+                .checked_add(1)
+                .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
         }
         let marker = *bytes
             .get(position)
             .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
-        position += 1;
+        position = position
+            .checked_add(1)
+            .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
         match marker {
             0xd9 if position == bytes.len() => {
                 return Ok(JpegContainerInspection {
@@ -1277,18 +1357,26 @@ fn is_jpeg_start_of_frame(marker: u8) -> bool {
 fn jpeg_scan_end(bytes: &[u8], mut position: usize) -> Result<usize, RadrootsBlossomError> {
     while position < bytes.len() {
         if bytes[position] != 0xff {
-            position += 1;
+            position = position
+                .checked_add(1)
+                .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
             continue;
         }
         let marker_start = position;
         while bytes.get(position) == Some(&0xff) {
-            position += 1;
+            position = position
+                .checked_add(1)
+                .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
         }
         let marker = *bytes
             .get(position)
             .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
         match marker {
-            0x00 | 0xd0..=0xd7 => position += 1,
+            0x00 | 0xd0..=0xd7 => {
+                position = position
+                    .checked_add(1)
+                    .ok_or(RadrootsBlossomError::InvalidPublicationRaster)?;
+            }
             _ => return Ok(marker_start),
         }
     }
@@ -1378,6 +1466,23 @@ mod tests {
         for (kind, data) in chunks {
             output.extend_from_slice(&(data.len() as u32).to_be_bytes());
             output.extend_from_slice(kind);
+            output.extend_from_slice(data);
+            output.extend_from_slice(&[0; 4]);
+        }
+        output
+    }
+
+    fn png_with_record_count(record_count: usize) -> Vec<u8> {
+        assert!(record_count >= 3);
+        let ihdr = &PNG[16..29];
+        let idat = &PNG[41..54];
+        let mut output = b"\x89PNG\r\n\x1a\n".to_vec();
+        for (kind, data) in core::iter::once((*b"IHDR", ihdr))
+            .chain(core::iter::repeat_n((*b"tEXt", &[][..]), record_count - 3))
+            .chain([(*b"IDAT", idat), (*b"IEND", &[][..])])
+        {
+            output.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            output.extend_from_slice(&kind);
             output.extend_from_slice(data);
             output.extend_from_slice(&[0; 4]);
         }
@@ -1582,6 +1687,24 @@ mod tests {
 
     #[test]
     fn raster_dimensions_reject_each_axis_boundary() {
+        assert_eq!(
+            RadrootsBlossomRasterDimensions::new(
+                RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION,
+                1,
+            )
+            .unwrap()
+            .pixels(),
+            u64::from(RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION)
+        );
+        assert_eq!(
+            RadrootsBlossomRasterDimensions::new(
+                1,
+                RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION,
+            )
+            .unwrap()
+            .pixels(),
+            u64::from(RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DIMENSION)
+        );
         for (width, height) in [
             (0, 1),
             (1, 0),
@@ -1595,6 +1718,18 @@ mod tests {
                 "publication_raster_dimensions_out_of_range"
             );
         }
+        assert_eq!(
+            RadrootsBlossomRasterDimensions::new(5_000, 4_000)
+                .unwrap()
+                .pixels(),
+            RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_PIXELS
+        );
+        assert_eq!(
+            RadrootsBlossomRasterDimensions::new(5_001, 4_000)
+                .unwrap_err()
+                .code(),
+            "publication_raster_pixel_limit_exceeded"
+        );
     }
 
     #[cfg(feature = "raster-decode")]
@@ -1773,12 +1908,74 @@ mod tests {
     }
 
     #[test]
+    fn png_container_enforces_eight_bit_process_palette_and_record_limits() {
+        for index in [24, 26, 27, 28] {
+            let mut forbidden = PNG.to_vec();
+            forbidden[index] = match index {
+                24 => 16,
+                28 => 2,
+                _ => 1,
+            };
+            assert_eq!(
+                validate_png_container(&forbidden).unwrap_err().code(),
+                "publication_raster_process_forbidden"
+            );
+        }
+
+        let mut malformed_color = PNG.to_vec();
+        malformed_color[25] = 1;
+        assert_eq!(
+            validate_png_container(&malformed_color).unwrap_err().code(),
+            "publication_raster_decode_failed"
+        );
+
+        let mut indexed_ihdr = PNG[16..29].to_vec();
+        indexed_ihdr[9] = 3;
+        let missing_palette = png_with_chunks(&[
+            (*b"IHDR", &indexed_ihdr),
+            (*b"IDAT", &PNG[41..54]),
+            (*b"IEND", &[]),
+        ]);
+        assert_eq!(
+            validate_png_container(&missing_palette).unwrap_err().code(),
+            "invalid_publication_raster"
+        );
+        let indexed = png_with_chunks(&[
+            (*b"IHDR", &indexed_ihdr),
+            (*b"PLTE", &[0, 0, 0]),
+            (*b"IDAT", &PNG[41..54]),
+            (*b"IEND", &[]),
+        ]);
+        assert_eq!(
+            validate_png_container(&indexed).unwrap(),
+            RadrootsBlossomRasterDimensions::new(1, 1).unwrap()
+        );
+
+        assert!(
+            validate_png_container(&png_with_record_count(
+                PUBLICATION_RASTER_MAX_CONTAINER_RECORDS
+            ))
+            .is_ok()
+        );
+        assert_eq!(
+            validate_png_container(&png_with_record_count(
+                PUBLICATION_RASTER_MAX_CONTAINER_RECORDS + 1
+            ))
+            .unwrap_err()
+            .code(),
+            "invalid_publication_raster"
+        );
+    }
+
+    #[test]
     fn webp_container_covers_extended_lossless_and_lossy_boundaries() {
         let vp8x_1x1 = [0_u8; 10];
         let mut vp8x_2x1 = vp8x_1x1;
         vp8x_2x1[4] = 1;
         let mut vp8x_animated = vp8x_1x1;
         vp8x_animated[0] = 0x02;
+        let mut vp8x_reserved = vp8x_1x1;
+        vp8x_reserved[0] = 0x01;
         let vp8l_1x1 = [0x2f, 0, 0, 0, 0];
         let vp8_1x1 = [0, 0, 0, 0x9d, 0x01, 0x2a, 1, 0, 1, 0];
 
@@ -1825,6 +2022,21 @@ mod tests {
             validate_webp_container(&webp_with_chunks(&[(*b"VP8X", &[0; 9])]))
                 .unwrap_err()
                 .code(),
+            "invalid_publication_raster"
+        );
+        assert_eq!(
+            validate_webp_container(&webp_with_chunks(&[(*b"VP8X", &vp8x_reserved)]))
+                .unwrap_err()
+                .code(),
+            "publication_raster_process_forbidden"
+        );
+        assert_eq!(
+            validate_webp_container(&webp_with_chunks(&[
+                (*b"VP8X", &vp8x_1x1),
+                (*b"VP8X", &vp8x_1x1),
+            ]))
+            .unwrap_err()
+            .code(),
             "invalid_publication_raster"
         );
         assert_eq!(
@@ -2000,6 +2212,10 @@ mod tests {
     #[cfg(feature = "raster-decode")]
     #[test]
     fn decoder_authority_rejects_animation_resource_and_agreement_failures() {
+        assert_eq!(
+            RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES,
+            80_000_000
+        );
         reject_animation(false, false).unwrap();
         for (container_animated, decoder_animated) in [(true, false), (false, true), (true, true)] {
             assert_eq!(

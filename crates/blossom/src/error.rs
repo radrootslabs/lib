@@ -67,6 +67,7 @@ pub enum RadrootsBlossomError {
     UnsupportedPublicationRasterMediaType,
     InvalidPublicationRaster,
     PublicationJpegProcessForbidden,
+    PublicationRasterProcessForbidden,
     PublicationRasterAnimationForbidden,
     PublicationRasterDimensionsOutOfRange { width: u32, height: u32 },
     PublicationRasterPixelLimitExceeded { pixels: u64 },
@@ -164,6 +165,7 @@ impl RadrootsBlossomError {
             }
             Self::InvalidPublicationRaster => "invalid_publication_raster",
             Self::PublicationJpegProcessForbidden => "publication_jpeg_process_forbidden",
+            Self::PublicationRasterProcessForbidden => "publication_raster_process_forbidden",
             Self::PublicationRasterAnimationForbidden => "publication_raster_animation_forbidden",
             Self::PublicationRasterDimensionsOutOfRange { .. } => {
                 "publication_raster_dimensions_out_of_range"
@@ -395,6 +397,9 @@ impl fmt::Display for RadrootsBlossomError {
             Self::PublicationJpegProcessForbidden => {
                 f.write_str("publication JPEG must use an 8-bit sequential SOF0 or SOF1 process")
             }
+            Self::PublicationRasterProcessForbidden => f.write_str(
+                "publication PNG and WebP rasters must use an approved static 8-bit process",
+            ),
             Self::PublicationRasterAnimationForbidden => {
                 f.write_str("publication raster animation is forbidden")
             }
@@ -537,6 +542,7 @@ mod tests {
             RadrootsBlossomError::UnsupportedPublicationRasterMediaType,
             RadrootsBlossomError::InvalidPublicationRaster,
             RadrootsBlossomError::PublicationJpegProcessForbidden,
+            RadrootsBlossomError::PublicationRasterProcessForbidden,
             RadrootsBlossomError::PublicationRasterAnimationForbidden,
             RadrootsBlossomError::PublicationRasterDimensionsOutOfRange {
                 width: 0,

@@ -29,6 +29,7 @@ let
         ../../build/nix/toolchains.nix
         ../../dto_bindgen.toml
         ../../rust-toolchain.toml
+        ../../rust-toolchain-ios.toml
         ../../contracts
         ../../crates
         ../../tools
@@ -92,6 +93,13 @@ let
   coverageRuntimeInputs = stableRuntimeInputs ++ [
     toolchains.coverage
     cargoLlvmCov
+  ];
+  decoderSecurityStableRuntimeInputs = stableRuntimeInputs ++ [
+    pkgs.imagemagick
+    pkgs.time
+  ];
+  decoderSecurityIosRuntimeInputs = stableRuntimeInputs ++ [
+    toolchains.ios
   ];
   releaseRuntimeInputs = coverageRuntimeInputs;
   coreContractCrates = [
@@ -192,6 +200,155 @@ let
     cargo check -q ${coreContractCargoArgs}
     cargo test -q ${coreContractCargoArgs}
     cargo run -q -p xtask -- contract validate
+  '';
+  decoderSecurityStableCommand = ''
+    stable_cargo=${toolchains.stable}/bin/cargo
+    magick=${pkgs.imagemagick}/bin/magick
+
+    test_executable="$($stable_cargo test -p radroots_blossom \
+      --no-default-features \
+      --features raster-decode,serde \
+      --test decoder_security \
+      --no-run \
+      --message-format=json \
+      | jq -r 'select(.profile.test == true and .target.name == "decoder_security") | .executable' \
+      | tail -n 1)"
+    if [ -z "$test_executable" ] || [ ! -x "$test_executable" ]; then
+      echo "failed to resolve decoder_security test executable" >&2
+      exit 1
+    fi
+
+    ${lib.optionalString pkgs.stdenv.isDarwin ''
+      if otool -L "$test_executable" | grep -i 'libwebp'; then
+        echo "decoder test executable must not dynamically link libwebp" >&2
+        exit 1
+      fi
+    ''}
+
+    cargo_target_root="''${CARGO_TARGET_DIR:-$PWD/target}"
+    mkdir -p "$cargo_target_root"
+    resource_root="$(mktemp -d "$cargo_target_root/decoder-security-resource-matrix.XXXXXX")"
+    fixture_root="$resource_root/fixtures"
+    evidence_root="$resource_root/rss"
+    mkdir -p "$fixture_root" "$evidence_root"
+
+    "$magick" -size 5000x4000 xc:'#204060' -strip -colorspace Gray \
+      -sampling-factor 1x1 -quality 85 "$fixture_root/jpeg_grayscale.jpg"
+    "$magick" -size 5000x4000 xc:'#204060' -strip -type TrueColor \
+      -colorspace sRGB -sampling-factor 2x2 -quality 85 "$fixture_root/jpeg_rgb.jpg"
+    "$magick" -size 5000x4000 xc:'cmyk(10%,20%,30%,5%)' -strip \
+      -colorspace CMYK -type ColorSeparation -sampling-factor 1x1 -quality 85 \
+      "$fixture_root/jpeg_cmyk.jpg"
+    cp "$fixture_root/jpeg_rgb.jpg" "$fixture_root/jpeg_sof1.jpg"
+    perl -0777pi -e 's/\xFF\xC0/\xFF\xC1/ or die "SOF0 marker missing\n"' \
+      "$fixture_root/jpeg_sof1.jpg"
+
+    "$magick" -size 5000x4000 xc:'#204060' -strip -type TrueColor -depth 8 \
+      "PNG24:$fixture_root/png_rgb.png"
+    "$magick" -size 5000x4000 pattern:checkerboard -strip -type Palette -depth 8 \
+      -define png:color-type=3 -define png:bit-depth=8 \
+      "$fixture_root/png_palette.png"
+    "$magick" -size 5000x4000 xc:'rgba(32,64,96,0.5)' -strip -alpha on -depth 8 \
+      "PNG32:$fixture_root/png_rgba.png"
+    "$magick" -size 5000x4000 xc:'rgba(32,64,96,0.5)' -strip -alpha on -depth 8 \
+      -interlace PNG "PNG32:$fixture_root/png_adam7.png"
+
+    "$magick" -size 5000x4000 xc:'#204060' -strip -type TrueColor \
+      -define webp:lossless=false -quality 75 "$fixture_root/webp_vp8_rgb.webp"
+    "$magick" -size 5000x4000 xc:'#204060' -strip -alpha set -channel A \
+      -evaluate set 50% +channel -define webp:lossless=false -quality 75 \
+      "$fixture_root/webp_vp8_alpha.webp"
+    "$magick" -size 5000x4000 xc:'#204060' -strip -type TrueColor \
+      -define webp:lossless=true "$fixture_root/webp_vp8l_rgb.webp"
+    "$magick" -size 5000x4000 xc:'#204060' -strip -alpha set -channel A \
+      -evaluate set 50% +channel -define webp:lossless=true \
+      "$fixture_root/webp_vp8l_alpha.webp"
+
+    "$magick" -size 16384x1 xc:'#204060' -strip -type TrueColor -depth 8 \
+      "PNG24:$fixture_root/axis_width_16384.png"
+    "$magick" -size 1x16384 xc:'#204060' -strip -type TrueColor -depth 8 \
+      "PNG24:$fixture_root/axis_height_16384.png"
+
+    resource_cases='jpeg_grayscale jpeg_rgb jpeg_cmyk jpeg_sof1 png_rgb png_palette png_rgba png_adam7 webp_vp8_rgb webp_vp8_alpha webp_vp8l_rgb webp_vp8l_alpha'
+    evidence_file="$resource_root/maximum-rss-kib.tsv"
+    printf 'case_id\tmaximum_rss_kib\n' > "$evidence_file"
+    for resource_case in $resource_cases; do
+      highest_rss_kib=0
+      for repetition in 1 2 3; do
+        rss_file="$evidence_root/$resource_case.$repetition.rss-kib"
+        ${pkgs.time}/bin/time -f '%M' -o "$rss_file" \
+          env \
+            RADROOTS_DECODER_RESOURCE_CASE="$resource_case" \
+            RADROOTS_DECODER_RESOURCE_FIXTURE_ROOT="$fixture_root" \
+            "$test_executable" maximum_resource_probe --ignored --exact
+        peak_rss_kib="$(tr -d '[:space:]' < "$rss_file")"
+        case "$peak_rss_kib" in
+          ""|*[!0-9]*)
+            echo "invalid peak RSS measurement for $resource_case: $peak_rss_kib" >&2
+            exit 1
+            ;;
+        esac
+        if [ "$peak_rss_kib" -gt 131072 ]; then
+          echo "$resource_case peak RSS $peak_rss_kib KiB exceeds 131072 KiB" >&2
+          exit 1
+        fi
+        if [ "$peak_rss_kib" -gt "$highest_rss_kib" ]; then
+          highest_rss_kib="$peak_rss_kib"
+        fi
+      done
+      printf '%s\t%s\n' "$resource_case" "$highest_rss_kib" >> "$evidence_file"
+      echo "$resource_case peak RSS: $highest_rss_kib KiB (limit: 131072 KiB)"
+    done
+
+    for axis_case in width_16384 height_16384; do
+      env \
+        RADROOTS_DECODER_RESOURCE_AXIS_CASE="$axis_case" \
+        RADROOTS_DECODER_RESOURCE_FIXTURE_ROOT="$fixture_root" \
+        "$test_executable" axis_resource_probe --ignored --exact
+    done
+    echo "decoder resource evidence: $evidence_file"
+  '';
+  decoderSecurityIosCommand = ''
+    if [ "$(uname -s)" != Darwin ]; then
+      echo "the aarch64-apple-ios compile/link lane requires a Darwin host" >&2
+      exit 1
+    fi
+
+    ios_xcrun=/usr/bin/xcrun
+    ios_sdk="$(env -u DEVELOPER_DIR -u SDKROOT "$ios_xcrun" --sdk iphoneos --show-sdk-path)"
+    ios_clang="$(env -u DEVELOPER_DIR -u SDKROOT "$ios_xcrun" --sdk iphoneos --find clang)"
+    ios_ar="$(env -u DEVELOPER_DIR -u SDKROOT "$ios_xcrun" --sdk iphoneos --find ar)"
+    unset DEVELOPER_DIR
+    export SDKROOT="$ios_sdk"
+    export IPHONEOS_DEPLOYMENT_TARGET=16.0
+    export CC_aarch64_apple_ios="$ios_clang"
+    export AR_aarch64_apple_ios="$ios_ar"
+    export CFLAGS_aarch64_apple_ios="--target=arm64-apple-ios16.0 -isysroot $ios_sdk"
+    export CARGO_TARGET_AARCH64_APPLE_IOS_LINKER="$ios_clang"
+    export CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS="-C link-arg=-isysroot -C link-arg=$ios_sdk -C link-arg=-miphoneos-version-min=16.0"
+    export RUSTC=${toolchains.ios}/bin/rustc
+    export RUSTDOC=${toolchains.ios}/bin/rustdoc
+
+    ios_cargo=${toolchains.ios}/bin/cargo
+    "$ios_cargo" rustc -p radroots_blossom \
+      --lib \
+      --crate-type staticlib \
+      --target aarch64-apple-ios \
+      --no-default-features \
+      --features raster-decode,serde
+
+    ios_archive="''${CARGO_TARGET_DIR:?}/aarch64-apple-ios/debug/libradroots_blossom.a"
+    if [ ! -f "$ios_archive" ]; then
+      echo "missing aarch64-apple-ios static archive: $ios_archive" >&2
+      exit 1
+    fi
+    lipo -info "$ios_archive" | grep -F 'arm64' >/dev/null
+    archive_members="$(${pkgs.cctools}/bin/ar -t "$ios_archive")"
+    printf '%s\n' "$archive_members" | grep -F 'libwebp_sys' >/dev/null
+    printf '%s\n' "$archive_members" | grep -F -- '-webp_dec.o' >/dev/null
+    printf '%s\n' "$archive_members" | grep -F -- '-vp8_dec.o' >/dev/null
+    printf '%s\n' "$archive_members" | grep -F -- '-vp8l_dec.o' >/dev/null
+    echo "aarch64-apple-ios static link verified: $ios_archive"
   '';
   releasePreflightCommand = ''
     cargo check -q
@@ -344,6 +501,8 @@ in
     coverageReportCommand
     craneLib
     ensureRepoRoot
+    decoderSecurityIosCommand
+    decoderSecurityStableCommand
     mkRepoCheck
     releasePreflightCommand
     coreContractCargoArgs
@@ -358,6 +517,8 @@ in
   runtimeInputs = {
     stable = stableRuntimeInputs;
     coverage = coverageRuntimeInputs;
+    decoderSecurityIos = decoderSecurityIosRuntimeInputs;
+    decoderSecurityStable = decoderSecurityStableRuntimeInputs;
     release = releaseRuntimeInputs;
   };
 }

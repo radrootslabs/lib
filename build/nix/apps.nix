@@ -110,3 +110,11 @@ in
   };
 
 }
+// lib.optionalAttrs pkgs.stdenv.isDarwin {
+  blossom-raster-ios-compile-link = mkRepoApp {
+    name = "blossom-raster-ios-compile-link";
+    description = "Compile and statically link Blossom raster decoding for aarch64-apple-ios";
+    runtimeInputs = common.runtimeInputs.decoderSecurityIos;
+    command = common.decoderSecurityIosCommand;
+  };
+}

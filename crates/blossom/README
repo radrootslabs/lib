@@ -27,11 +27,25 @@ restart marker, and frame component without synthesizing missing input. The
 same bytes are then fully decoded to RGB pixels by exactly pinned `zune-jpeg`
 `0.5.15` and `zune-core` `0.5.1` in strict mode with unsafe intrinsics disabled.
 The profile accepts only 8-bit sequential SOF0/SOF1 JPEG; progressive SOF2 and
-every other process are rejected. `image` `0.25.10` is enabled only for PNG and WebP. The profile
-rejects PNG and WebP animation, bounds decoded output to `160,000,000` bytes
-before allocation, decodes the complete body, and derives dimensions
-internally. It checks complete-byte, URL, hash, MIME, length, container,
-animation, and dimension agreement before emitting deterministic per-URL
+every other process are rejected. `image` `0.25.10` is enabled in production
+only for PNG. WebP uses the safe `libwebp` `0.1.2` wrapper over statically
+vendored `libwebp-sys2` `0.1.11` and decodes directly into one checked,
+fallibly allocated RGBA buffer. Both dependencies are BSD-3-Clause; the native
+and unsafe implementation remains confined to those pinned dependencies, and
+the production boundary uses no subprocess, system dylib discovery, or network
+access. The profile rejects PNG and WebP animation, bounds decoded output to
+`80,000,000` bytes before allocation, decodes the complete body, and derives dimensions
+internally. PNG is limited to static 8-bit images with approved color types,
+one ordered palette, no unknown critical chunks, and at most `65,536`
+container records; WebP is limited to static images whose extended header
+carries no reserved flags and exactly one primary chunk under the same record
+budget. Sequential JPEG validation charges bounded scan, block,
+coefficient-step, marker-record, and entropy bit-read budgets, and
+unsupported PNG or WebP processes fail with the stable
+`publication_raster_process_forbidden` error. The decoder boundary is exercised by an isolated twelve-process
+maximum-resource matrix held under a 128 MiB peak-RSS gate and an
+`aarch64-apple-ios` static compile/link lane. It checks complete-byte, URL, hash, MIME, length,
+container, animation, and dimension agreement before emitting deterministic per-URL
 evidence. The crate performs no HTTP: an owning runtime supplies only the
 transport observations and exact complete body. The portable `no_std` core
 remains available without `raster-decode`, but cannot construct readiness

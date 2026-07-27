@@ -46,10 +46,16 @@ let
       inherit (common) cargoArtifacts;
       pname = "radroots-blossom-raster-decode-test";
       doCheck = false;
+      nativeBuildInputs = common.commonCraneArgs.nativeBuildInputs ++ [
+        pkgs.imagemagick
+        pkgs.jq
+        pkgs.time
+      ];
       buildPhaseCargoCommand = ''
         cargo test -p radroots_blossom --no-default-features --features serde \
           --test publication_readiness_persistence
         cargo test -p radroots_blossom --no-default-features --features raster-decode,serde
+        ${common.decoderSecurityStableCommand}
       '';
       installPhaseCommand = "mkdir -p $out";
     }

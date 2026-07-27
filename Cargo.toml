@@ -142,11 +142,14 @@ hkdf = { version = "0.12", default-features = false }
 hex = { version = "0.4" }
 image = { version = "=0.25.10", default-features = false, features = [
   "png",
-  "webp",
 ] }
 jiff-tzdb = { version = "=0.1.8", default-features = false }
 jsonschema = { version = "0.48.1", default-features = false }
 js-sys = { version = "0.3" }
+libwebp = { version = "=0.1.2", default-features = false, features = [
+  "1_1",
+  "static",
+] }
 mediatype = { version = "0.21", default-features = false }
 keyring = { version = "3.6.3", default-features = false, features = [
   "apple-native",

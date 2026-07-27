@@ -1,9 +1,13 @@
 use alloc::vec::Vec;
 
 use super::{
-    JpegContainerInspection, RadrootsBlossomError, RadrootsBlossomRasterDimensions,
-    is_jpeg_start_of_frame,
+    JpegContainerInspection, PUBLICATION_RASTER_MAX_CONTAINER_RECORDS, RadrootsBlossomError,
+    RadrootsBlossomRasterDimensions, is_jpeg_start_of_frame,
 };
+
+const MAX_SEQUENTIAL_JPEG_SCANS: u8 = 4;
+const MAX_SEQUENTIAL_JPEG_BLOCKS: u64 = 3_200_000;
+const MAX_SEQUENTIAL_JPEG_COEFFICIENT_STEPS: u64 = MAX_SEQUENTIAL_JPEG_BLOCKS * 64;
 
 #[derive(Clone, Copy)]
 struct SequentialJpegComponent {
@@ -126,19 +130,28 @@ struct SequentialJpegEntropyReader<'a> {
     position: usize,
     current_byte: u8,
     bits_remaining: u8,
+    bit_reads_remaining: u64,
 }
 
 impl<'a> SequentialJpegEntropyReader<'a> {
-    const fn new(bytes: &'a [u8], position: usize) -> Self {
+    fn new(bytes: &'a [u8], position: usize) -> Self {
         Self {
             bytes,
             position,
             current_byte: 0,
             bits_remaining: 0,
+            bit_reads_remaining: u64::try_from(bytes.len())
+                .ok()
+                .and_then(|length| length.checked_mul(8))
+                .unwrap_or(0),
         }
     }
 
     fn read_bit(&mut self) -> Result<u8, RadrootsBlossomError> {
+        self.bit_reads_remaining = self
+            .bit_reads_remaining
+            .checked_sub(1)
+            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
         if self.bits_remaining == 0 {
             self.current_byte = self.read_entropy_byte()?;
             self.bits_remaining = 8;
@@ -204,6 +217,46 @@ impl<'a> SequentialJpegEntropyReader<'a> {
     }
 }
 
+struct SequentialJpegWorkBudget {
+    scans_remaining: u8,
+    blocks_remaining: u64,
+    coefficient_steps_remaining: u64,
+}
+
+impl SequentialJpegWorkBudget {
+    const fn new() -> Self {
+        Self {
+            scans_remaining: MAX_SEQUENTIAL_JPEG_SCANS,
+            blocks_remaining: MAX_SEQUENTIAL_JPEG_BLOCKS,
+            coefficient_steps_remaining: MAX_SEQUENTIAL_JPEG_COEFFICIENT_STEPS,
+        }
+    }
+
+    fn charge_scan(&mut self) -> Result<(), RadrootsBlossomError> {
+        self.scans_remaining = self
+            .scans_remaining
+            .checked_sub(1)
+            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        Ok(())
+    }
+
+    fn charge_block(&mut self) -> Result<(), RadrootsBlossomError> {
+        self.blocks_remaining = self
+            .blocks_remaining
+            .checked_sub(1)
+            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        Ok(())
+    }
+
+    fn charge_coefficient_step(&mut self) -> Result<(), RadrootsBlossomError> {
+        self.coefficient_steps_remaining = self
+            .coefficient_steps_remaining
+            .checked_sub(1)
+            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        Ok(())
+    }
+}
+
 pub(super) fn validate(
     bytes: &[u8],
     container: JpegContainerInspection,
@@ -218,7 +271,15 @@ pub(super) fn validate(
     let mut restart_interval = 0_usize;
     let mut seen_components = [false; 4];
     let mut saw_scan = false;
+    let mut records = 0_usize;
+    let mut work_budget = SequentialJpegWorkBudget::new();
     loop {
+        records = records
+            .checked_add(1)
+            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        if records > PUBLICATION_RASTER_MAX_CONTAINER_RECORDS {
+            return invalid_entropy();
+        }
         let (marker, after_marker) = strict_marker(bytes, position)?;
         match marker {
             0xd9 => {
@@ -271,6 +332,7 @@ pub(super) fn validate(
                 position = next;
             }
             0xda => {
+                work_budget.charge_scan()?;
                 let current_frame = frame
                     .as_ref()
                     .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
@@ -290,6 +352,7 @@ pub(super) fn validate(
                     &dc_tables,
                     &ac_tables,
                     restart_interval,
+                    &mut work_budget,
                 )?;
                 for component in &scan.components {
                     seen_components[component.frame_index] = true;
@@ -500,6 +563,7 @@ fn validate_scan_entropy(
     dc_tables: &[Option<SequentialJpegHuffmanTable>; 4],
     ac_tables: &[Option<SequentialJpegHuffmanTable>; 4],
     restart_interval: usize,
+    work_budget: &mut SequentialJpegWorkBudget,
 ) -> Result<usize, RadrootsBlossomError> {
     let interleaved = scan.components.len() > 1;
     let mcu_count = scan_mcu_count(frame, scan, interleaved)?;
@@ -531,7 +595,8 @@ fn validate_scan_entropy(
                 .and_then(Option::as_ref)
                 .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
             for _ in 0..blocks {
-                validate_block(&mut reader, dc_table, ac_table)?;
+                work_budget.charge_block()?;
+                validate_block(&mut reader, dc_table, ac_table, work_budget)?;
             }
         }
     }
@@ -596,11 +661,13 @@ fn validate_block(
     reader: &mut SequentialJpegEntropyReader<'_>,
     dc_table: &SequentialJpegHuffmanTable,
     ac_table: &SequentialJpegHuffmanTable,
+    work_budget: &mut SequentialJpegWorkBudget,
 ) -> Result<(), RadrootsBlossomError> {
     let dc_magnitude = dc_table.decode_symbol(reader)?;
     reader.discard_bits(dc_magnitude)?;
     let mut coefficient = 1_usize;
     while coefficient < 64 {
+        work_budget.charge_coefficient_step()?;
         let symbol = ac_table.decode_symbol(reader)?;
         let run = usize::from(symbol >> 4);
         let magnitude = symbol & 0x0f;
@@ -1069,11 +1136,22 @@ mod tests {
         let dc = one_symbol_table(0, 0);
         let eob = one_symbol_table(1, 0);
         let mut eob_reader = SequentialJpegEntropyReader::new(&[0x3f], 0);
-        validate_block(&mut eob_reader, &dc, &eob).unwrap();
+        validate_block(
+            &mut eob_reader,
+            &dc,
+            &eob,
+            &mut SequentialJpegWorkBudget::new(),
+        )
+        .unwrap();
 
         let zrl = one_symbol_table(1, 0xf0);
         let mut zrl_reader = SequentialJpegEntropyReader::new(&[0x07], 0);
-        assert_decode_failed(validate_block(&mut zrl_reader, &dc, &zrl));
+        assert_decode_failed(validate_block(
+            &mut zrl_reader,
+            &dc,
+            &zrl,
+            &mut SequentialJpegWorkBudget::new(),
+        ));
 
         let overflowing_run = one_symbol_table(1, 0xf1);
         let mut overflowing_reader = SequentialJpegEntropyReader::new(&[0x00], 0);
@@ -1081,17 +1159,30 @@ mod tests {
             &mut overflowing_reader,
             &dc,
             &overflowing_run,
+            &mut SequentialJpegWorkBudget::new(),
         ));
 
         let exact_run = one_symbol_table(1, 0x81);
         let mut exact_reader = SequentialJpegEntropyReader::new(&[0x00, 0x00], 0);
-        validate_block(&mut exact_reader, &dc, &exact_run).unwrap();
+        validate_block(
+            &mut exact_reader,
+            &dc,
+            &exact_run,
+            &mut SequentialJpegWorkBudget::new(),
+        )
+        .unwrap();
 
         let mut mixed_counts = [0_u8; 16];
         mixed_counts[1] = 2;
         let mixed = SequentialJpegHuffmanTable::new(1, mixed_counts, &[0x11, 0]).unwrap();
         let mut mixed_reader = SequentialJpegEntropyReader::new(&[0x07], 0);
-        validate_block(&mut mixed_reader, &dc, &mixed).unwrap();
+        validate_block(
+            &mut mixed_reader,
+            &dc,
+            &mixed,
+            &mut SequentialJpegWorkBudget::new(),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -1205,6 +1296,7 @@ mod tests {
             &dc_tables,
             &ac_tables,
             0,
+            &mut SequentialJpegWorkBudget::new(),
         ));
 
         let missing_dc_scan = SequentialJpegScan {
@@ -1222,6 +1314,7 @@ mod tests {
             &dc_tables,
             &ac_tables,
             0,
+            &mut SequentialJpegWorkBudget::new(),
         ));
 
         let missing_ac_scan = SequentialJpegScan {
@@ -1239,6 +1332,41 @@ mod tests {
             &dc_tables,
             &ac_tables,
             0,
+            &mut SequentialJpegWorkBudget::new(),
         ));
+    }
+
+    #[test]
+    fn entropy_and_structural_work_budgets_fail_closed_at_exhaustion() {
+        assert_eq!(MAX_SEQUENTIAL_JPEG_SCANS, 4);
+        assert_eq!(MAX_SEQUENTIAL_JPEG_BLOCKS, 3_200_000);
+        assert_eq!(MAX_SEQUENTIAL_JPEG_COEFFICIENT_STEPS, 204_800_000);
+
+        let mut reader = SequentialJpegEntropyReader::new(&[0; 1], 0);
+        for _ in 0..8 {
+            reader.read_bit().unwrap();
+        }
+        assert_decode_failed(reader.read_bit());
+
+        let mut scan_budget = SequentialJpegWorkBudget {
+            scans_remaining: 1,
+            ..SequentialJpegWorkBudget::new()
+        };
+        scan_budget.charge_scan().unwrap();
+        assert_decode_failed(scan_budget.charge_scan());
+
+        let mut block_budget = SequentialJpegWorkBudget {
+            blocks_remaining: 1,
+            ..SequentialJpegWorkBudget::new()
+        };
+        block_budget.charge_block().unwrap();
+        assert_decode_failed(block_budget.charge_block());
+
+        let mut coefficient_budget = SequentialJpegWorkBudget {
+            coefficient_steps_remaining: 1,
+            ..SequentialJpegWorkBudget::new()
+        };
+        coefficient_budget.charge_coefficient_step().unwrap();
+        assert_decode_failed(coefficient_budget.charge_coefficient_step());
     }
 }
