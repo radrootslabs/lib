@@ -19,6 +19,7 @@ mod wasm_declarations;
 
 enum CommandAction<'a> {
     Architecture,
+    CheckApiBoundaries,
     CheckDependencyBoundaries,
     GenerateAll,
     GenerateTs,
@@ -40,6 +41,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
     let args = args.into_iter().collect::<Vec<_>>();
     match command_action(&args)? {
         CommandAction::Architecture => architecture::validate(&fs::workspace_root()?),
+        CommandAction::CheckApiBoundaries => {
+            architecture::validate_api_boundaries(&fs::workspace_root()?)
+        }
         CommandAction::CheckDependencyBoundaries => {
             architecture::validate_dependency_boundaries(&fs::workspace_root()?)
         }
@@ -56,6 +60,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
 fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
     match args {
         [command] if command == "architecture" => Ok(CommandAction::Architecture),
+        [command] if command == "check-api-boundaries" => Ok(CommandAction::CheckApiBoundaries),
         [command] if command == "check-dependency-boundaries" => {
             Ok(CommandAction::CheckDependencyBoundaries)
         }
@@ -78,7 +83,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask architecture | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -92,6 +97,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::Architecture
+        ));
+    }
+
+    #[test]
+    fn accepts_api_boundary_check() {
+        let args = ["check-api-boundaries".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::CheckApiBoundaries
         ));
     }
 
