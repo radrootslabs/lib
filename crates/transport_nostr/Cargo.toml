@@ -52,7 +52,7 @@ radroots_outbox = { workspace = true, optional = true, default-features = false,
   "sqlite",
   "runtime-tokio",
 ] }
-radroots_transport = { workspace = true, default-features = false }
+radroots_transport = { workspace = true, default-features = false, features = ["serde"] }
 futures = { workspace = true }
 hex = { workspace = true }
 nostr = { workspace = true }
@@ -68,6 +68,16 @@ radroots_blossom = { workspace = true, features = ["serde", "std"] }
 radroots_event_codec = { workspace = true, features = ["serde_json"] }
 sha2 = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
+
+[[test]]
+name = "phase1_outbox_publication"
+path = "tests/phase1_outbox_publication.rs"
+required-features = ["runtime-tokio"]
+
+[[test]]
+name = "transport"
+path = "tests/transport.rs"
+required-features = ["runtime-tokio"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }

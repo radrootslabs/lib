@@ -7,12 +7,17 @@ use futures::{StreamExt, future::BoxFuture};
 use nostr::{JsonUtil, filter::MatchEventOptions};
 use radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES;
 use radroots_event_store::{
-    RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventAdmissionStatus, RadrootsEventIngest,
-    RadrootsEventPersistence, RadrootsEventStore, RadrootsEventVisibility,
-    RadrootsTransportObservation, RadrootsTransportObservationType,
+    RadrootsEventAdmissionStatus, RadrootsEventIngest, RadrootsEventPersistence,
+    RadrootsEventStore, RadrootsEventVisibility, RadrootsTransportObservation,
+    RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent, RadrootsNostrFilter};
-use radroots_transport::{RadrootsTransportKind, RadrootsTransportTarget};
+use radroots_transport::{
+    RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT, RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES,
+    RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT, RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES,
+    RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT, RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES,
+    RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS, RadrootsTransportKind, RadrootsTransportTarget,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -20,10 +25,17 @@ use std::sync::{Arc, Mutex, PoisonError};
 const DEFAULT_RELAY_FETCH_TIMEOUT_MS: u64 = 10_000;
 const DEFAULT_RELAY_FETCH_RAW_SCAN_MULTIPLIER: usize = 64;
 pub const RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX: usize =
-    RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX as usize;
+    RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT;
 pub const RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX: usize =
-    RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX * DEFAULT_RELAY_FETCH_RAW_SCAN_MULTIPLIER;
-pub const RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX: usize = 64 * 1024 * 1024;
+    RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT;
+pub const RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX: usize =
+    RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES;
+pub const RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX: usize = RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT;
+pub const RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX: usize =
+    RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES;
+pub const RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX: usize =
+    RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES;
+pub const RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX: u64 = RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsRelayFetchMode {
@@ -41,7 +53,41 @@ impl RadrootsRelayFetchFilters {
     where
         I: IntoIterator<Item = RadrootsNostrFilter>,
     {
-        let filters = filters.into_iter().collect::<Vec<_>>();
+        let mut bounded_filters = Vec::new();
+        let mut aggregate_json_bytes = 0usize;
+        for filter in filters {
+            if bounded_filters.len() == RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX {
+                return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "filter_count",
+                    max: RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX,
+                    actual: RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX + 1,
+                });
+            }
+            let filter_json_bytes = filter.as_json().len();
+            if filter_json_bytes > RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX {
+                return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "filter_json_bytes",
+                    max: RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX,
+                    actual: filter_json_bytes,
+                });
+            }
+            aggregate_json_bytes = aggregate_json_bytes.checked_add(filter_json_bytes).ok_or(
+                RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "filter_set_json_bytes",
+                    max: RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX,
+                    actual: usize::MAX,
+                },
+            )?;
+            if aggregate_json_bytes > RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX {
+                return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "filter_set_json_bytes",
+                    max: RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX,
+                    actual: aggregate_json_bytes,
+                });
+            }
+            bounded_filters.push(filter);
+        }
+        let filters = bounded_filters;
         if filters.is_empty() {
             return Err(RadrootsRelayTransportError::EmptyFetchFilters);
         }
@@ -243,6 +289,13 @@ fn ensure_positive_timeout(
 ) -> Result<(), RadrootsRelayTransportError> {
     if value == 0 {
         return Err(RadrootsRelayTransportError::InvalidFetchLimit { field });
+    }
+    if value > RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX {
+        return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field,
+            max: RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX as usize,
+            actual: usize::try_from(value).unwrap_or(usize::MAX),
+        });
     }
     Ok(())
 }

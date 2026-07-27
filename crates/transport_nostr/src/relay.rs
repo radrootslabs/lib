@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsRelayTransportError;
-use radroots_transport::RadrootsTransportTarget;
+use radroots_transport::{
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    RadrootsTransportTarget,
+};
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
@@ -34,6 +37,16 @@ impl RadrootsRelayUrl {
         policy: RadrootsRelayUrlPolicy,
     ) -> Result<Self, RadrootsRelayTransportError> {
         let original = value.as_ref();
+        if original.len() > RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES {
+            return Err(RadrootsRelayTransportError::RelayUrlParse {
+                url: "<oversized>".to_owned(),
+                reason: format!(
+                    "relay URL exceeds {} UTF-8 bytes: observed {}",
+                    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+                    original.len()
+                ),
+            });
+        }
         let parsed =
             Url::parse(original).map_err(|error| RadrootsRelayTransportError::RelayUrlParse {
                 url: original.to_owned(),
@@ -265,6 +278,13 @@ impl RadrootsRelayTargetSet {
     {
         let mut ordered_relays = Vec::new();
         for relay in relays {
+            if ordered_relays.len() == RADROOTS_TRANSPORT_TARGET_MAX_COUNT {
+                return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "relay_target_count",
+                    max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+                    actual: RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1,
+                });
+            }
             let relay = RadrootsRelayUrl::parse(relay, policy)?;
             if ordered_relays.iter().any(|existing| existing == &relay) {
                 return Err(RadrootsRelayTransportError::DuplicateRelayUrl {
@@ -283,6 +303,13 @@ impl RadrootsRelayTargetSet {
     pub fn from_urls(relays: Vec<RadrootsRelayUrl>) -> Result<Self, RadrootsRelayTransportError> {
         let mut ordered_relays = Vec::new();
         for relay in relays {
+            if ordered_relays.len() == RADROOTS_TRANSPORT_TARGET_MAX_COUNT {
+                return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "relay_target_count",
+                    max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+                    actual: RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1,
+                });
+            }
             if ordered_relays.iter().any(|existing| existing == &relay) {
                 return Err(RadrootsRelayTransportError::DuplicateRelayUrl {
                     url: relay.into_string(),

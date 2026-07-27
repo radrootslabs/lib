@@ -15,8 +15,10 @@ pub use error::RadrootsRelayTransportError;
 pub use fetch::fetch_relay_events_blocking;
 #[cfg(feature = "storage")]
 pub use fetch::{
-    RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX,
-    RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX, RadrootsMockRelayFetchAdapter,
+    RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX, RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX, RadrootsMockRelayFetchAdapter,
     RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventAdmission,
     RadrootsRelayFetchEventReceipt, RadrootsRelayFetchEventValidStream,
     RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,

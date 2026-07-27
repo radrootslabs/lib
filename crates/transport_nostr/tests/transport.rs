@@ -19,6 +19,7 @@ use radroots_outbox::{
     RadrootsOutboxOperationStatus,
 };
 use radroots_transport::{
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
     RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
     RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
@@ -28,8 +29,10 @@ use radroots_transport::{
     RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
 };
 use radroots_transport_nostr::{
-    RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX,
-    RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX, RadrootsMockRelayFetchAdapter,
+    RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX, RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX,
+    RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX, RadrootsMockRelayFetchAdapter,
     RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsOutboxPublishPolicy,
     RadrootsRelayFetchEventAdmission, RadrootsRelayFetchEventValidStream,
     RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,
@@ -606,6 +609,21 @@ fn unsupported_relay_fetch_filter(limit: usize) -> RadrootsNostrFilter {
         .limit(limit)
 }
 
+fn relay_fetch_filter_with_json_bytes(target_bytes: usize) -> RadrootsNostrFilter {
+    let base = radroots_nostr_filter_tag(RadrootsNostrFilter::new(), "t", vec!["x".to_owned()])
+        .expect("base relay fetch filter");
+    let base_bytes = base.as_json().len();
+    assert!(target_bytes >= base_bytes);
+    let filter = radroots_nostr_filter_tag(
+        RadrootsNostrFilter::new(),
+        "t",
+        vec!["x".repeat(target_bytes - base_bytes + 1)],
+    )
+    .expect("sized relay fetch filter");
+    assert_eq!(filter.as_json().len(), target_bytes);
+    filter
+}
+
 fn fixture_relay_targets() -> RadrootsRelayTargetSet {
     RadrootsRelayTargetSet::new(
         [RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS],
@@ -884,6 +902,69 @@ fn relay_url_validation_and_target_normalization() {
     assert!(matches!(
         RadrootsRelayTargetSet::from_urls(vec![relay_path.clone(), relay_path]),
         Err(RadrootsRelayTransportError::DuplicateRelayUrl { .. })
+    ));
+}
+
+#[test]
+fn relay_urls_and_target_sets_enforce_resource_bounds() {
+    let prefix = "wss://relay.example.com/";
+    let exact = format!(
+        "{prefix}{}",
+        "x".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES - prefix.len())
+    );
+    let relay = RadrootsRelayUrl::parse(&exact, RadrootsRelayUrlPolicy::Public)
+        .expect("maximum-length relay URL");
+    assert_eq!(
+        relay.as_str().len(),
+        RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
+    );
+
+    let one_over = format!("{exact}x");
+    assert!(matches!(
+        RadrootsRelayUrl::parse(one_over, RadrootsRelayUrlPolicy::Public),
+        Err(RadrootsRelayTransportError::RelayUrlParse { url, reason })
+            if url == "<oversized>"
+                && reason.contains(&RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES.to_string())
+    ));
+
+    let exact_targets = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| format!("wss://relay-{index}.example.com"))
+        .collect::<Vec<_>>();
+    let targets = RadrootsRelayTargetSet::new(
+        exact_targets.iter().map(String::as_str),
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("maximum relay target set");
+    assert_eq!(targets.len(), RADROOTS_TRANSPORT_TARGET_MAX_COUNT);
+
+    let one_over_targets = (0..=RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| format!("wss://relay-{index}.example.com"))
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        RadrootsRelayTargetSet::new(
+            one_over_targets.iter().map(String::as_str),
+            RadrootsRelayUrlPolicy::Public,
+        ),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "relay_target_count",
+            max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+            actual,
+        }) if actual == RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1
+    ));
+
+    let parsed_one_over = one_over_targets
+        .iter()
+        .map(|url| {
+            RadrootsRelayUrl::parse(url, RadrootsRelayUrlPolicy::Public).expect("bounded relay URL")
+        })
+        .collect::<Vec<_>>();
+    assert!(matches!(
+        RadrootsRelayTargetSet::from_urls(parsed_one_over),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "relay_target_count",
+            max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+            actual,
+        }) if actual == RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1
     ));
 }
 
@@ -1820,6 +1901,53 @@ fn fetch_requests_reject_empty_filter_sets() {
 }
 
 #[test]
+fn fetch_filters_enforce_count_and_compact_json_bounds() {
+    let maximum_filter =
+        relay_fetch_filter_with_json_bytes(RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX);
+    let exact_filters = vec![maximum_filter.clone(); RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX];
+    let filters = RadrootsRelayFetchFilters::new(exact_filters).expect("maximum filter set");
+    assert_eq!(
+        filters.as_slice().len(),
+        RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX
+    );
+    assert_eq!(
+        filters
+            .as_slice()
+            .iter()
+            .map(|filter| filter.as_json().len())
+            .sum::<usize>(),
+        RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX
+    );
+    assert_eq!(
+        RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX * RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX,
+        RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX
+    );
+
+    assert!(matches!(
+        RadrootsRelayFetchFilters::new(vec![
+            post_relay_fetch_filter(1);
+            RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX + 1
+        ]),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "filter_count",
+            max: RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX,
+            actual,
+        }) if actual == RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX + 1
+    ));
+
+    let oversized_filter =
+        relay_fetch_filter_with_json_bytes(RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX + 1);
+    assert!(matches!(
+        RadrootsRelayFetchFilters::new([oversized_filter]),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "filter_json_bytes",
+            max: RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX,
+            actual,
+        }) if actual == RADROOTS_RELAY_FETCH_FILTER_JSON_BYTE_LIMIT_MAX + 1
+    ));
+}
+
+#[test]
 fn fetch_requests_reject_zero_limits_and_timeouts() {
     let filter = post_relay_fetch_filter(1);
     let filters = RadrootsRelayFetchFilters::new([filter.clone()]).expect("filters");
@@ -1852,6 +1980,25 @@ fn fetch_requests_reject_zero_limits_and_timeouts() {
     assert!(matches!(
         request.clone().with_timeout_ms(0),
         Err(RadrootsRelayTransportError::InvalidFetchLimit { field }) if field == "timeout_ms"
+    ));
+    let maximum_timeout = request
+        .clone()
+        .with_timeout_ms(RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX)
+        .expect("maximum timeout");
+    assert_eq!(
+        maximum_timeout.timeout_ms(),
+        RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX
+    );
+    assert!(matches!(
+        request
+            .clone()
+            .with_timeout_ms(RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX + 1),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "timeout_ms",
+            max,
+            actual,
+        }) if max == RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX as usize
+            && actual == RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX as usize + 1
     ));
     assert!(matches!(
         request.clone().with_raw_event_scan_limit(0),
