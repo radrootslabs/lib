@@ -4535,6 +4535,7 @@ dependencies = [
  "jiff-tzdb",
  "radroots_blossom",
  "radroots_core",
+ "radroots_identity",
  "secp256k1",
  "serde",
  "serde_json",

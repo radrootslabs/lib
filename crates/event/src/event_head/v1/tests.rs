@@ -1,12 +1,13 @@
 use super::*;
 use crate::RadrootsEventEnvelopeParts;
 use crate::contract::RadrootsContractMatchError;
+use crate::ids::parse_public_key;
 use crate::kinds::{
     KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_POST, KIND_PROFILE, KIND_TRADE_PROPOSAL,
 };
 
 fn hex_64(character: char) -> String {
-    core::iter::repeat_n(character, 64).collect()
+    crate::test_valid_hex_64(character)
 }
 
 fn hex_128(character: char) -> String {
@@ -90,7 +91,7 @@ fn replaceable_events_use_kind_and_pubkey_coordinates() {
         candidate.coordinate,
         RadrootsEventHeadCoordinate::Replaceable {
             kind: 10002,
-            pubkey: RadrootsPublicKey::parse(hex_64('a')).unwrap()
+            pubkey: parse_public_key(hex_64('a')).unwrap()
         }
     );
     assert_eq!(candidate.created_at, 5);
@@ -113,7 +114,7 @@ fn addressable_events_use_kind_pubkey_and_d_tag_coordinates() {
         candidate.coordinate,
         RadrootsEventHeadCoordinate::Addressable {
             kind: 30023,
-            pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+            pubkey: parse_public_key(hex_64('b')).unwrap(),
             d_tag: "article-1".to_owned()
         }
     );
@@ -198,7 +199,7 @@ fn contract_bridge_uses_replaceable_event_classes() {
         candidate.coordinate,
         RadrootsEventHeadCoordinate::Replaceable {
             kind: KIND_FOLLOW,
-            pubkey: RadrootsPublicKey::parse(hex_64('a')).unwrap()
+            pubkey: parse_public_key(hex_64('a')).unwrap()
         }
     );
 }
@@ -211,7 +212,7 @@ fn raw_nip01_bridge_uses_numeric_kind_classes_without_contract_identification() 
         replaceable.coordinate,
         RadrootsEventHeadCoordinate::Replaceable {
             kind: 19_999,
-            pubkey: RadrootsPublicKey::parse(hex_64('a')).unwrap(),
+            pubkey: parse_public_key(hex_64('a')).unwrap(),
         }
     );
 
@@ -227,7 +228,7 @@ fn raw_nip01_bridge_uses_numeric_kind_classes_without_contract_identification() 
         addressable.coordinate,
         RadrootsEventHeadCoordinate::Addressable {
             kind: 39_999,
-            pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+            pubkey: parse_public_key(hex_64('b')).unwrap(),
             d_tag: "unsupported".to_owned(),
         }
     );
@@ -273,7 +274,7 @@ fn raw_nip01_addressable_coordinates_treat_d_as_opaque_protocol_data() {
             candidate.coordinate,
             RadrootsEventHeadCoordinate::Addressable {
                 kind: 39_999,
-                pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+                pubkey: parse_public_key(hex_64('b')).unwrap(),
                 d_tag: expected.to_owned(),
             }
         );
@@ -309,7 +310,7 @@ fn contract_bridge_uses_addressable_event_classes() {
         candidate.coordinate,
         RadrootsEventHeadCoordinate::Addressable {
             kind: KIND_LIST_SET_GENERIC,
-            pubkey: RadrootsPublicKey::parse(hex_64('b')).unwrap(),
+            pubkey: parse_public_key(hex_64('b')).unwrap(),
             d_tag: "member_of.farms".to_owned()
         }
     );
@@ -331,7 +332,7 @@ fn contract_bridge_uses_profile_replaceable_heads() {
         candidate.coordinate,
         RadrootsEventHeadCoordinate::Replaceable {
             kind: KIND_PROFILE,
-            pubkey: RadrootsPublicKey::parse(hex_64('c')).unwrap()
+            pubkey: parse_public_key(hex_64('c')).unwrap()
         }
     );
 }

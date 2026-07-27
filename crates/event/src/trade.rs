@@ -12,8 +12,8 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::ids::{
-    RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
-    RadrootsInventoryBinId, RadrootsPublicKey, RadrootsTradeCandidateId, RadrootsTradeId,
+    PublicKey, RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId,
+    RadrootsIdParseError, RadrootsInventoryBinId, RadrootsTradeCandidateId, RadrootsTradeId,
     RadrootsTradeMutationId,
 };
 use crate::kinds::{
@@ -94,12 +94,12 @@ pub struct RadrootsTradeMutationEnvelopeV1 {
     pub schema_version: u16,
     pub trade_id: RadrootsTradeId,
     pub root_mutation_id: Option<RadrootsTradeMutationId>,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    pub buyer_pubkey: PublicKey,
+    pub seller_pubkey: PublicKey,
     pub farm_id: RadrootsDTag,
     pub parent_mutation_ids: Vec<RadrootsTradeMutationId>,
-    pub author_pubkey: RadrootsPublicKey,
-    pub counterparty_pubkey: RadrootsPublicKey,
+    pub author_pubkey: PublicKey,
+    pub counterparty_pubkey: PublicKey,
     pub authored_at_unix_s: u64,
     pub body: RadrootsTradeMutationBodyV1,
 }
@@ -217,8 +217,8 @@ pub struct RadrootsTradeCandidateTermsV1 {
     pub schema_version: u16,
     pub base_candidate_id: Option<RadrootsTradeCandidateId>,
     pub supersession_intent: Option<String>,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    pub buyer_pubkey: PublicKey,
+    pub seller_pubkey: PublicKey,
     pub farm_id: RadrootsDTag,
     pub lines: Vec<RadrootsTradeCandidateLineV1>,
     pub line_tombstones: Vec<RadrootsTradeLineTombstoneV1>,
@@ -451,7 +451,7 @@ impl RadrootsTradePrivateTermsRefV1 {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RadrootsSellerReservationAssertionV1 {
     pub reservation_id: RadrootsDTag,
-    pub inventory_authority_id: RadrootsPublicKey,
+    pub inventory_authority_id: PublicKey,
     pub inventory_epoch: u64,
     pub candidate_id: RadrootsTradeCandidateId,
     pub commitments: Vec<RadrootsSellerReservationLineV1>,
@@ -1076,6 +1076,7 @@ impl<'de> Visitor<'de> for NoDuplicateJsonValueVisitor {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
+    use crate::ids::parse_public_key;
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -1085,8 +1086,8 @@ mod tests {
         core::iter::repeat_n(character, 32).collect()
     }
 
-    fn pubkey(character: char) -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(hex_64(character)).unwrap()
+    fn pubkey(character: char) -> PublicKey {
+        parse_public_key(crate::test_valid_hex_64(character)).unwrap()
     }
 
     fn event_id(character: char) -> RadrootsEventId {
@@ -1118,7 +1119,7 @@ mod tests {
                 line_id: RadrootsDTag::parse("line-1").unwrap(),
                 listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-1",
-                    hex_64('b')
+                    crate::test_valid_hex_64('b')
                 ))
                 .unwrap(),
                 listing_event_id: event_id('c'),
@@ -1559,7 +1560,7 @@ mod tests {
     fn trade_candidate_deserialization_rejects_non_classified_listing_coordinates() {
         let mut value = serde_json::to_value(candidate()).expect("candidate json");
         value["lines"][0]["listing_addr"] =
-            serde_json::json!(format!("30023:{}:listing-1", hex_64('b')));
+            serde_json::json!(format!("30023:{}:listing-1", crate::test_valid_hex_64('b')));
 
         assert!(serde_json::from_value::<RadrootsTradeCandidateTermsV1>(value).is_err());
     }

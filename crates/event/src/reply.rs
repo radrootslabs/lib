@@ -3,7 +3,7 @@ use alloc::string::String;
 use core::fmt;
 
 use crate::{
-    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey},
+    ids::{PublicKey, RadrootsEventId, RadrootsIdParseError, parse_public_key},
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
@@ -116,14 +116,14 @@ impl std::error::Error for RadrootsNip10ReplyError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNip10ReplyReference {
     event_id: RadrootsEventId,
-    author: RadrootsPublicKey,
+    author: PublicKey,
     relay: Option<RadrootsNostrRelayHint>,
 }
 
 impl RadrootsNip10ReplyReference {
     pub fn new(
         event_id: RadrootsEventId,
-        author: RadrootsPublicKey,
+        author: PublicKey,
         relay: Option<RadrootsNostrRelayHint>,
     ) -> Result<Self, RadrootsNip10ReplyError> {
         if let Some(relay) = &relay {
@@ -143,8 +143,7 @@ impl RadrootsNip10ReplyReference {
     ) -> Result<Self, RadrootsNip10ReplyError> {
         let event_id =
             RadrootsEventId::parse(event_id).map_err(RadrootsNip10ReplyError::EventIdInvalid)?;
-        let author =
-            RadrootsPublicKey::parse(author).map_err(RadrootsNip10ReplyError::AuthorInvalid)?;
+        let author = parse_public_key(author).map_err(RadrootsNip10ReplyError::AuthorInvalid)?;
         let relay = match relay {
             None | Some("") => None,
             Some(relay) => Some(
@@ -159,7 +158,7 @@ impl RadrootsNip10ReplyReference {
         &self.event_id
     }
 
-    pub const fn author(&self) -> &RadrootsPublicKey {
+    pub const fn author(&self) -> &PublicKey {
         &self.author
     }
 
@@ -296,14 +295,14 @@ fn validate_authored_reply_wire_size(
         &mut tag_bytes,
         &mut tags_json_bytes,
         &mut tag_count,
-        &["p", root.author.as_str()],
+        &["p", root.author.to_hex().as_str()],
     );
     if let Some(parent) = parent.filter(|parent| parent.author != root.author) {
         add_tag(
             &mut tag_bytes,
             &mut tags_json_bytes,
             &mut tag_count,
-            &["p", parent.author.as_str()],
+            &["p", parent.author.to_hex().as_str()],
         );
     }
 
@@ -362,7 +361,7 @@ mod tests {
     fn reference(event: char, author: char) -> RadrootsNip10ReplyReference {
         RadrootsNip10ReplyReference::parse(
             event.to_string().repeat(64),
-            author.to_string().repeat(64),
+            crate::test_valid_hex_64(author),
             Some("wss://relay.example"),
         )
         .expect("reference")
@@ -404,19 +403,20 @@ mod tests {
     fn parses_and_canonicalizes_reference_identifiers() {
         let reference = RadrootsNip10ReplyReference::parse(
             "A".repeat(64),
-            "B".repeat(64),
+            crate::test_valid_hex_64('B'),
             Some("wss://relay.example"),
         )
         .expect("reference");
         assert_eq!(reference.event_id().as_str(), "a".repeat(64));
-        assert_eq!(reference.author().as_str(), "b".repeat(64));
+        assert_eq!(reference.author().to_hex(), crate::test_valid_hex_64('b'));
         assert_eq!(
             reference.relay().expect("relay").as_str(),
             "wss://relay.example"
         );
 
         let error =
-            RadrootsNip10ReplyReference::parse("not-an-id", "b".repeat(64), None).unwrap_err();
+            RadrootsNip10ReplyReference::parse("not-an-id", crate::test_valid_hex_64('b'), None)
+                .unwrap_err();
         assert_eq!(error.code(), "reply_event_id_invalid");
     }
 
@@ -441,13 +441,17 @@ mod tests {
             "{prefix}{}",
             "a".repeat(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES - prefix.len())
         );
-        RadrootsNip10ReplyReference::parse("a".repeat(64), "b".repeat(64), Some(&exact_relay))
-            .expect("exact tag-element limit");
+        RadrootsNip10ReplyReference::parse(
+            "a".repeat(64),
+            crate::test_valid_hex_64('b'),
+            Some(&exact_relay),
+        )
+        .expect("exact tag-element limit");
         let overflow_relay = format!("{exact_relay}a");
         assert!(matches!(
             RadrootsNip10ReplyReference::parse(
                 "a".repeat(64),
-                "b".repeat(64),
+                crate::test_valid_hex_64('b'),
                 Some(&overflow_relay),
             ),
             Err(RadrootsNip10ReplyError::TagElementTooLarge {

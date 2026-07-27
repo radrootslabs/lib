@@ -2,7 +2,7 @@ use super::*;
 use serde_json::json;
 
 fn hex_64(character: char) -> String {
-    core::iter::repeat_n(character, 64).collect()
+    crate::test_valid_hex_64(character)
 }
 
 fn hex_128(character: char) -> String {

@@ -7,7 +7,7 @@ use alloc::{string::String, string::ToString, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use crate::ids::{
-    RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
+    PublicKey, RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key,
 };
 use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
@@ -432,7 +432,8 @@ pub struct RadrootsEventEnvelopeParts {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventEnvelope {
     id: RadrootsEventId,
-    author: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    author: PublicKey,
     #[cfg_attr(feature = "dto-bindgen", dto(int = "json_number"))]
     created_at: RadrootsEventTimestamp,
     kind: RadrootsEventKind,
@@ -455,9 +456,9 @@ impl RadrootsEventEnvelope {
         if id.as_str() != parts.id.as_str() {
             return Err(RadrootsEventEnvelopeError::NonCanonicalId);
         }
-        let author = RadrootsPublicKey::parse(parts.author.as_str())
+        let author = parse_public_key(parts.author.as_str())
             .map_err(RadrootsEventEnvelopeError::InvalidAuthor)?;
-        if author.as_str() != parts.author.as_str() {
+        if author.to_hex() != parts.author {
             return Err(RadrootsEventEnvelopeError::NonCanonicalAuthor);
         }
         let sig = RadrootsEventSignature::parse(parts.sig.as_str())
@@ -495,13 +496,8 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn author(&self) -> &RadrootsPublicKey {
+    pub fn author(&self) -> &PublicKey {
         &self.author
-    }
-
-    #[inline]
-    pub fn author_str(&self) -> &str {
-        self.author.as_str()
     }
 
     #[inline]
@@ -561,7 +557,7 @@ impl RadrootsEventEnvelope {
     pub fn to_nip01_wire(&self) -> RadrootsNip01EventWire {
         RadrootsNip01EventWire {
             id: self.id.as_str().to_string(),
-            pubkey: self.author.as_str().to_string(),
+            pubkey: self.author.to_hex(),
             created_at: self.created_at.as_u64(),
             kind: self.kind.as_u32(),
             tags: self.tags.to_vec(),
@@ -611,7 +607,7 @@ mod tests {
     use super::*;
 
     fn hex_64(character: char) -> String {
-        core::iter::repeat_n(character, 64).collect()
+        crate::test_valid_hex_64(character)
     }
 
     fn hex_128(character: char) -> String {
@@ -635,7 +631,7 @@ mod tests {
         let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
 
         assert_eq!(envelope.id_str(), hex_64('1'));
-        assert_eq!(envelope.author_str(), hex_64('a'));
+        assert_eq!(envelope.author().to_hex(), hex_64('a'));
         assert_eq!(envelope.created_at_u64(), u64::from(u32::MAX) + 1);
         assert_eq!(envelope.kind_u32(), 30_023);
         assert_eq!(envelope.kind_class(), RadrootsEventKindClass::Addressable);
@@ -937,7 +933,7 @@ mod tests {
 
         let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
         assert_eq!(envelope.id().as_str(), envelope.id_str());
-        assert_eq!(envelope.author().as_str(), envelope.author_str());
+        assert_eq!(envelope.author().to_hex(), hex_64('a'));
         assert_eq!(envelope.created_at().as_u64(), envelope.created_at_u64());
         assert_eq!(envelope.kind().as_u32(), envelope.kind_u32());
         assert_eq!(envelope.tags().to_vec(), envelope.tags_as_vec());

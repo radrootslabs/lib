@@ -510,7 +510,7 @@ mod tests {
     ) -> RadrootsNip09DeletionAddressTarget {
         RadrootsNip09DeletionAddressTarget::parse(format!(
             "{kind}:{}:{identifier}",
-            character.to_string().repeat(64)
+            crate::test_valid_hex_64(character)
         ))
         .expect("address target")
     }
@@ -519,7 +519,7 @@ mod tests {
         total_bytes: usize,
         index: usize,
     ) -> RadrootsNip09DeletionAddressTarget {
-        let prefix = format!("30000:{}:", "a".repeat(64));
+        let prefix = format!("30000:{}:", crate::test_valid_hex_64('a'));
         let suffix = format!("{index:04x}");
         assert!(prefix.len() + suffix.len() <= total_bytes);
         RadrootsNip09DeletionAddressTarget::parse(format!(
@@ -559,12 +559,14 @@ mod tests {
             }
         );
 
-        let address =
-            RadrootsNip09DeletionAddressTarget::parse(format!("30000:{}:", "B".repeat(64)))
-                .expect("address target");
+        let address = RadrootsNip09DeletionAddressTarget::parse(format!(
+            "30000:{}:",
+            crate::test_valid_hex_64('B')
+        ))
+        .expect("address target");
         assert_eq!(
             address.coordinate().as_str(),
-            format!("30000:{}:", "b".repeat(64))
+            format!("30000:{}:", crate::test_valid_hex_64('b'))
         );
         assert_eq!(address.kind_hint(), 30_000);
 
@@ -632,11 +634,11 @@ mod tests {
         );
         assert_eq!(
             request.address_targets()[0].coordinate().as_str(),
-            format!("30402:{}:produce", "b".repeat(64))
+            format!("30402:{}:produce", crate::test_valid_hex_64('b'))
         );
         assert_eq!(
             request.address_targets()[1].coordinate().as_str(),
-            format!("31923:{}:harvest", "e".repeat(64))
+            format!("31923:{}:harvest", crate::test_valid_hex_64('e'))
         );
         assert_eq!(request.kind_hints(), &[1, 30_402, 31_923]);
     }
@@ -655,9 +657,11 @@ mod tests {
             }
         );
 
-        let uppercase_address =
-            RadrootsNip09DeletionAddressTarget::parse(format!("030402:{}:produce", "A".repeat(64)))
-                .expect("uppercase address");
+        let uppercase_address = RadrootsNip09DeletionAddressTarget::parse(format!(
+            "030402:{}:produce",
+            crate::test_valid_hex_64('A')
+        ))
+        .expect("uppercase address");
         assert_eq!(
             RadrootsAuthoredNip09DeletionRequest::new(
                 "",
@@ -666,7 +670,7 @@ mod tests {
             )
             .unwrap_err(),
             RadrootsNip09DeletionError::DuplicateAddressTarget {
-                coordinate: format!("30402:{}:produce", "a".repeat(64))
+                coordinate: format!("30402:{}:produce", crate::test_valid_hex_64('a'))
             }
         );
     }

@@ -8,6 +8,10 @@ struct ForbiddenEventName {
 
 const FORBIDDEN_EVENT_NAMES: &[ForbiddenEventName] = &[
     ForbiddenEventName {
+        pattern: "RadrootsPublicKey",
+        reason: "public author keys must use radroots_identity::PublicKey",
+    },
+    ForbiddenEventName {
         pattern: "pub fn from_wire_unchecked",
         reason: "unchecked signed-event construction must not be public API",
     },
@@ -113,7 +117,8 @@ fn collect_source_boundary_guard_files(root: &Path, paths: &mut Vec<PathBuf>) {
 }
 
 fn forbidden_event_name_allowed(relative_path: &str, pattern: &str) -> bool {
-    pattern == "RadrootsNostrEvent" && is_nostr_protocol_context(relative_path)
+    (pattern == "RadrootsPublicKey" && !relative_path.starts_with("crates/event/"))
+        || (pattern == "RadrootsNostrEvent" && is_nostr_protocol_context(relative_path))
 }
 
 fn is_nostr_protocol_context(relative_path: &str) -> bool {

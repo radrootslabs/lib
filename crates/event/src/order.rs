@@ -9,7 +9,7 @@ use alloc::{
 #[cfg(test)]
 use crate::ids::RadrootsOrderQuoteId;
 use crate::ids::{
-    RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId, RadrootsPublicKey,
+    PublicKey, RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId,
 };
 use crate::kinds::*;
 #[cfg(test)]
@@ -142,8 +142,10 @@ impl RadrootsOrderEconomics {
 pub struct RadrootsOrderRequest {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
 }
@@ -152,8 +154,6 @@ impl RadrootsOrderRequest {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
         validate_required_field(&self.order_id, "order_id")?;
         validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         validate_order_items(&self.items)?;
         self.economics.validate()?;
         validate_order_economics_binding(&self.items, &self.economics)
@@ -222,8 +222,10 @@ impl RadrootsOrderDecisionOutcome {
 pub struct RadrootsOrderDecision {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
     pub decision: RadrootsOrderDecisionOutcome,
 }
 
@@ -231,8 +233,6 @@ impl RadrootsOrderDecision {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
         validate_required_field(&self.order_id, "order_id")?;
         validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         self.decision.validate()
     }
 }
@@ -248,8 +248,10 @@ impl RadrootsOrderDecision {
 pub struct RadrootsOrderCancellation {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
     pub reason: String,
 }
 
@@ -257,8 +259,6 @@ impl RadrootsOrderCancellation {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
         validate_required_field(&self.order_id, "order_id")?;
         validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         validate_required_field(&self.reason, "reason")
     }
 }
@@ -749,18 +749,15 @@ mod tests {
     use super::*;
     use radroots_core::{Currency, Decimal, Money, Unit};
 
-    fn pubkey(character: char) -> RadrootsPublicKey {
-        core::iter::repeat_n(character, 64)
-            .collect::<String>()
-            .parse()
-            .unwrap()
+    fn pubkey(character: char) -> PublicKey {
+        crate::test_valid_hex_64(character).parse().unwrap()
     }
 
-    fn buyer_pubkey() -> RadrootsPublicKey {
+    fn buyer_pubkey() -> PublicKey {
         pubkey('b')
     }
 
-    fn seller_pubkey() -> RadrootsPublicKey {
+    fn seller_pubkey() -> PublicKey {
         pubkey('a')
     }
 

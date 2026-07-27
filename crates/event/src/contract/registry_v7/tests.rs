@@ -116,7 +116,7 @@ fn synthetic_kind_contract(kind: u32) -> RadrootsKindContract {
 fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: "0".repeat(64),
-        author: "1".repeat(64),
+        author: crate::test_valid_hex_64('1'),
         created_at: 1_700_000_000,
         kind,
         tags: tags
@@ -132,7 +132,7 @@ fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsEve
 fn unsigned_event_owned(kind: u32, tags: Vec<Vec<String>>, content: &str) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: "0".repeat(64),
-        author: "1".repeat(64),
+        author: crate::test_valid_hex_64('1'),
         created_at: 1_700_000_000,
         kind,
         tags,
@@ -143,7 +143,7 @@ fn unsigned_event_owned(kind: u32, tags: Vec<Vec<String>>, content: &str) -> Rad
 }
 
 fn hex_64(character: char) -> String {
-    core::iter::repeat_n(character, 64).collect()
+    crate::test_valid_hex_64(character)
 }
 
 fn event_ref_tag(name: &str, event_id: &str, author: &str, kind: u32) -> Vec<String> {
@@ -1281,16 +1281,19 @@ fn rejects_custom_knowledge_missing_schema_version() {
 
 #[test]
 fn rejects_authoritative_knowledge_status_fields() {
-    let event = unsigned_event(
+    let event = unsigned_event_owned(
         KIND_KNOWLEDGE_REVIEW,
         vec![
-            vec!["contract", "radroots.knowledge.review.v1"],
             vec![
-                "review_target",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-                "1111111111111111111111111111111111111111111111111111111111111111",
-                "30818",
-                "soil",
+                "contract".to_owned(),
+                "radroots.knowledge.review.v1".to_owned(),
+            ],
+            vec![
+                "review_target".to_owned(),
+                "0".repeat(64),
+                crate::test_valid_hex_64('1'),
+                "30818".to_owned(),
+                "soil".to_owned(),
             ],
         ],
         r#"{"schema":"radroots.knowledge.review.v1","schema_version":1,"canon_status":"approved"}"#,
@@ -1532,18 +1535,15 @@ fn validate_contract_tags_enforces_declared_value_types() {
         })
     );
 
-    let invalid_event_id = unsigned_event(
+    let invalid_event_id = unsigned_event_owned(
         KIND_WIKI_MERGE_REQUEST,
         vec![
             vec![
-                "a",
-                "30818:0000000000000000000000000000000000000000000000000000000000000000:soil",
+                "a".to_owned(),
+                format!("30818:{}:soil", crate::test_valid_hex_64('0')),
             ],
-            vec![
-                "p",
-                "1111111111111111111111111111111111111111111111111111111111111111",
-            ],
-            vec!["e", "not-hex"],
+            vec!["p".to_owned(), crate::test_valid_hex_64('1')],
+            vec!["e".to_owned(), "not-hex".to_owned()],
         ],
         "",
     );
@@ -1861,13 +1861,13 @@ fn validate_custom_knowledge_contract_rejects_missing_schema_and_bad_version() {
 
 #[test]
 fn validates_nip54_empty_redirect_content() {
-    let event = unsigned_event(
+    let event = unsigned_event_owned(
         KIND_WIKI_REDIRECT,
         vec![
-            vec!["d", "soil"],
+            vec!["d".to_owned(), "soil".to_owned()],
             vec![
-                "a",
-                "30818:0000000000000000000000000000000000000000000000000000000000000000:soil",
+                "a".to_owned(),
+                format!("30818:{}:soil", crate::test_valid_hex_64('0')),
             ],
         ],
         "",
@@ -1878,13 +1878,13 @@ fn validates_nip54_empty_redirect_content() {
         Ok(())
     );
 
-    let invalid = unsigned_event(
+    let invalid = unsigned_event_owned(
         KIND_WIKI_REDIRECT,
         vec![
-            vec!["d", "soil"],
+            vec!["d".to_owned(), "soil".to_owned()],
             vec![
-                "a",
-                "30818:0000000000000000000000000000000000000000000000000000000000000000:soil",
+                "a".to_owned(),
+                format!("30818:{}:soil", crate::test_valid_hex_64('0')),
             ],
         ],
         "{}",
