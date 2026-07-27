@@ -78,6 +78,10 @@ const SOURCE_FILES: &[(&str, &str)] = &[
         "crates/outbox/src/migrations.rs",
     ),
     ("schema_runtime", "crates/outbox/src/schema.rs"),
+    (
+        "sqlite_lifecycle_runtime",
+        "crates/outbox/src/sqlite_lifecycle.rs",
+    ),
     ("store_integration", "crates/outbox/src/store.rs"),
     ("vector_executor", VECTOR_EXECUTOR_RELATIVE),
     (
@@ -893,7 +897,7 @@ fn expected_manifest(
             "reserved_prefix": RESERVED_PREFIX,
             "catalog_fingerprint": "sha256_type_nul_name_nul_table_name_nul_sql_nul_sorted_v1",
             "migration_transaction": "begin_immediate_v1",
-            "rollback_transaction": "begin_exclusive_test_executor_v1",
+            "rollback_transaction": "begin_exclusive_offline_path_v1",
             "adoption": "exact_unledgered_0001_catalog_only_v1",
         },
         "migrations": migrations,
@@ -959,7 +963,7 @@ fn manifest_schema() -> Value {
                     "reserved_prefix": { "const": RESERVED_PREFIX },
                     "catalog_fingerprint": { "const": "sha256_type_nul_name_nul_table_name_nul_sql_nul_sorted_v1" },
                     "migration_transaction": { "const": "begin_immediate_v1" },
-                    "rollback_transaction": { "const": "begin_exclusive_test_executor_v1" },
+                    "rollback_transaction": { "const": "begin_exclusive_offline_path_v1" },
                     "adoption": { "const": "exact_unledgered_0001_catalog_only_v1" }
                 }
             },
@@ -1000,7 +1004,7 @@ fn manifest_schema() -> Value {
                 }
             },
             "source_files": {
-                "type": "array", "minItems": 16, "maxItems": 16,
+                "type": "array", "minItems": SOURCE_FILES.len(), "maxItems": SOURCE_FILES.len(),
                 "items": { "$ref": "#/$defs/source_file" }
             },
             "release": {

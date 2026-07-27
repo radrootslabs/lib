@@ -10,6 +10,8 @@ mod model;
 #[cfg(feature = "sqlite")]
 mod schema;
 #[cfg(feature = "sqlite")]
+mod sqlite_lifecycle;
+#[cfg(feature = "sqlite")]
 mod store;
 
 pub use error::RadrootsOutboxError;
@@ -29,5 +31,11 @@ pub use model::{
 };
 #[cfg(feature = "sqlite")]
 pub use schema::{RadrootsOutboxSchemaStatus, inspect_outbox_schema_status};
+#[cfg(feature = "sqlite")]
+pub use sqlite_lifecycle::{
+    RADROOTS_OUTBOX_DIAGNOSTIC_BYTES_MAX, RADROOTS_OUTBOX_FILE_CONNECTION_LIMIT,
+    RADROOTS_OUTBOX_FILE_PATH_BYTES_MAX, RADROOTS_OUTBOX_OPEN_DEADLINE_MILLIS,
+    RadrootsOutboxRollbackConfirmation,
+};
 #[cfg(feature = "sqlite")]
 pub use store::RadrootsOutbox;

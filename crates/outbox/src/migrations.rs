@@ -55,7 +55,6 @@ pub(crate) fn migration_for_version(
         .find(|migration| migration.version == version)
 }
 
-#[cfg(test)]
 pub(crate) fn is_outbox_owned_table_name(registry: &[OutboxMigration], name: &str) -> bool {
     sqlite_identifier_starts_with(name, OUTBOX_RESERVED_PREFIX)
         || registry

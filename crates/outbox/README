@@ -9,10 +9,14 @@ HTTP-auth signatures, must be constructed and sent inside their owning
 transport exchange. This keeps event-store insertion and duplicate outcomes
 unambiguous for every queued event.
 
-`open_pool` validates the declared SQLite backing mode, rejects
-multi-connection in-memory pools in every supported URL form, and configures
-every file-pool connection with foreign-key enforcement and the required busy
-timeout before migrations or writes.
+`open_memory` and `open_file` own their SQLite pool and configuration. File
+stores use a lazy pool capped at four connections. One five-second total
+deadline covers connection acquisition, schema authentication, migration,
+owned integrity, and WAL configuration; lock contention retries consume that
+same deadline. UTF-8, connection-local foreign-key enforcement, the complete
+ledger/catalog identity, owned-table foreign keys, and table-scoped integrity
+are verified before the store is exposed. WAL is configured only after the
+existing database is proven fresh, exactly adoptable, or managed.
 
 Schema identity is governed by an ordered, generated migration registry. The
 original `0001_outbox` up and down files are immutable contract inputs. An
@@ -23,8 +27,15 @@ fingerprint; unknown objects, counterfeit ledgers, history gaps, and newer
 schema versions fail before governed mutation. Unrelated caller tables in a
 shared SQLite database are outside the outbox fingerprint and remain untouched.
 
-`schema_status` authenticates the current catalog and history, while
-`migrate_to_current_schema` serializes exact adoption or append-only migration.
-Migration rollback descriptors remain executable in the migration-authority
-test suite; the separately governed store-lifecycle checkpoint owns any future
-offline production rollback surface.
+Catalog identifiers, catalog SQL, migration-ledger text, file paths, and
+integrity results are bounded before they enter public diagnostics.
+`RadrootsOutboxError::public_diagnostic` enforces the 4,096-byte diagnostic
+ceiling and redacts underlying SQLx detail from its display value.
+
+`schema_status` authenticates the current catalog and history. Migration and
+exact adoption occur only during owned open. Production does not accept a
+caller pool or expose its raw pool. Destructive rollback accepts only a file
+path with no live owned handles, requires explicit data-loss acknowledgement,
+uses an exclusive exact-target transaction, and leaves the database closed.
+Full-database `integrity_check` is available only as an explicit maintenance
+operation; normal open performs scoped owned-table checks.

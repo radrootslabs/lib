@@ -534,6 +534,19 @@ semver_impacts = [
 summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification, canonical persisted reload, exact sequential JPEG entropy accounting plus pinned strict zune-jpeg decoding, and internally authoritative full decoding for static JPEG, PNG, and WebP rasters."
 
 [[changes]]
+id = "outbox-authenticated-sqlite-lifecycle"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "remove_exported_function",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace caller-owned outbox pools and live schema mutation with a bounded lazy owned SQLite lifecycle: authenticate UTF-8, bounded ledger/catalog authority, owned foreign keys, and scoped integrity under one five-second deadline before WAL; cap diagnostics; expose explicit full integrity; and require a closed path plus typed data-loss acknowledgement for exclusive exact-target rollback."
+
+[[changes]]
 id = "outbox-versioned-migration-authority"
 classification = "breaking"
 semver_impacts = [

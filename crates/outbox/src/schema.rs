@@ -4,12 +4,18 @@ use crate::RadrootsOutboxError;
 use crate::migrations::{
     OUTBOX_LEDGER_CREATE_DDL, OUTBOX_LEDGER_DDL, OUTBOX_LEDGER_NAME, OUTBOX_MIGRATIONS,
     OUTBOX_RESERVED_PREFIX, OutboxMigration, RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
-    RADROOTS_OUTBOX_SCHEMA_VERSION_MIN, is_outbox_governed_schema_name, migration_for_version,
-    validate_embedded_migration_registry, validate_migration_registry,
+    RADROOTS_OUTBOX_SCHEMA_VERSION_MIN, is_outbox_governed_schema_name, is_outbox_owned_table_name,
+    migration_for_version, validate_embedded_migration_registry, validate_migration_registry,
 };
 use sha2::{Digest, Sha256};
-use sqlx::{Row, Sqlite, SqliteConnection, SqlitePool, Transaction};
+use sqlx::{Connection, Row, Sqlite, SqliteConnection, SqlitePool, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) const SQLITE_IDENTIFIER_BYTES_MAX: usize = 255;
+const SQLITE_CATALOG_SQL_BYTES_MAX: usize = 65_536;
+pub(crate) const SQLITE_LEDGER_NAME_BYTES_MAX: usize = 128;
+const SQLITE_LEDGER_DIGEST_BYTES_MAX: usize = 64;
+const SQLITE_INTEGRITY_RESULT_ROWS_MAX: i64 = 2;
 
 #[cfg(test)]
 const EMPTY_SCHEMA_SHA256: &str =
@@ -59,6 +65,21 @@ pub async fn inspect_outbox_schema_status(
     finish_schema_transaction(transaction, result).await
 }
 
+pub(crate) async fn inspect_outbox_schema_on_connection(
+    connection: &mut SqliteConnection,
+) -> Result<RadrootsOutboxSchemaStatus, RadrootsOutboxError> {
+    validate_embedded_migration_registry()?;
+    let mut transaction = connection.begin().await?;
+    let result = inspect_schema_on_connection(
+        &mut transaction,
+        OUTBOX_MIGRATIONS,
+        RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
+    )
+    .await;
+    finish_schema_transaction(transaction, result).await
+}
+
+#[cfg(test)]
 pub(crate) async fn migrate_outbox_schema(pool: &SqlitePool) -> Result<(), RadrootsOutboxError> {
     validate_embedded_migration_registry()?;
     migrate_outbox_schema_with_registry(
@@ -70,6 +91,26 @@ pub(crate) async fn migrate_outbox_schema(pool: &SqlitePool) -> Result<(), Radro
     .await
 }
 
+pub(crate) async fn migrate_outbox_schema_on_connection(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsOutboxError> {
+    validate_embedded_migration_registry()?;
+    validate_migration_registry(
+        OUTBOX_MIGRATIONS,
+        RADROOTS_OUTBOX_SCHEMA_VERSION_MIN,
+        RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
+    )?;
+    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+    let result = migrate_schema_on_connection(
+        &mut transaction,
+        OUTBOX_MIGRATIONS,
+        RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
+    )
+    .await;
+    finish_schema_transaction(transaction, result).await
+}
+
+#[cfg(test)]
 async fn migrate_outbox_schema_with_registry(
     pool: &SqlitePool,
     registry: &[OutboxMigration],
@@ -82,9 +123,8 @@ async fn migrate_outbox_schema_with_registry(
     finish_schema_transaction(transaction, result).await
 }
 
-#[cfg(test)]
-async fn rollback_outbox_schema_offline(
-    pool: &SqlitePool,
+pub(crate) async fn rollback_outbox_schema_on_connection(
+    connection: &mut SqliteConnection,
     target: u32,
 ) -> Result<(), RadrootsOutboxError> {
     if target < RADROOTS_OUTBOX_SCHEMA_VERSION_MIN {
@@ -94,7 +134,7 @@ async fn rollback_outbox_schema_offline(
         });
     }
     validate_embedded_migration_registry()?;
-    let mut transaction = pool.begin_with("BEGIN EXCLUSIVE").await?;
+    let mut transaction = connection.begin_with("BEGIN EXCLUSIVE").await?;
     let result = rollback_schema_on_connection(
         &mut transaction,
         OUTBOX_MIGRATIONS,
@@ -116,7 +156,7 @@ pub(crate) async fn destroy_outbox_schema_for_migration_test(
 }
 
 async fn finish_schema_transaction<T>(
-    transaction: Transaction<'static, Sqlite>,
+    transaction: Transaction<'_, Sqlite>,
     result: Result<T, RadrootsOutboxError>,
 ) -> Result<T, RadrootsOutboxError> {
     match result {
@@ -172,7 +212,6 @@ async fn migrate_schema_on_connection(
     }
 }
 
-#[cfg(test)]
 async fn rollback_schema_on_connection(
     connection: &mut SqliteConnection,
     registry: &[OutboxMigration],
@@ -285,7 +324,6 @@ async fn apply_migration_up(
     validate_schema_fingerprint(connection, registry, migration).await
 }
 
-#[cfg(test)]
 async fn apply_migration_down(
     connection: &mut SqliteConnection,
     registry: &[OutboxMigration],
@@ -427,7 +465,14 @@ async fn validate_outbox_temp_schema_with_registry(
     registry: &[OutboxMigration],
 ) -> Result<(), RadrootsOutboxError> {
     let collision = sqlx::query(
-        "SELECT type, name, tbl_name FROM temp.sqlite_schema
+        "SELECT
+            length(CAST(type AS BLOB)) AS type_bytes,
+            CASE WHEN length(CAST(type AS BLOB)) <= ? THEN type END AS bounded_type,
+            length(CAST(name AS BLOB)) AS name_bytes,
+            CASE WHEN length(CAST(name AS BLOB)) <= ? THEN name END AS bounded_name,
+            length(CAST(tbl_name AS BLOB)) AS table_name_bytes,
+            CASE WHEN length(CAST(tbl_name AS BLOB)) <= ? THEN tbl_name END AS bounded_table_name
+         FROM temp.sqlite_schema
          WHERE type IN ('trigger', 'view')
             OR lower(substr(name, 1, length(?))) = lower(?)
             OR lower(substr(tbl_name, 1, length(?))) = lower(?)
@@ -435,6 +480,9 @@ async fn validate_outbox_temp_schema_with_registry(
             OR tbl_name = ? COLLATE NOCASE
          ORDER BY type, name, tbl_name LIMIT 1",
     )
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
     .bind(OUTBOX_RESERVED_PREFIX)
     .bind(OUTBOX_RESERVED_PREFIX)
     .bind(OUTBOX_RESERVED_PREFIX)
@@ -444,9 +492,27 @@ async fn validate_outbox_temp_schema_with_registry(
     .fetch_optional(&mut *connection)
     .await?;
     if let Some(row) = collision {
-        let object_type: String = row.try_get("type")?;
-        let name: String = row.try_get("name")?;
-        let table_name: String = row.try_get("tbl_name")?;
+        let object_type = bounded_required_text(
+            &row,
+            "bounded_type",
+            "type_bytes",
+            "temporary catalog object type",
+            SQLITE_IDENTIFIER_BYTES_MAX,
+        )?;
+        let name = bounded_required_text(
+            &row,
+            "bounded_name",
+            "name_bytes",
+            "temporary catalog object name",
+            SQLITE_IDENTIFIER_BYTES_MAX,
+        )?;
+        let table_name = bounded_required_text(
+            &row,
+            "bounded_table_name",
+            "table_name_bytes",
+            "temporary catalog table name",
+            SQLITE_IDENTIFIER_BYTES_MAX,
+        )?;
         if matches!(object_type.as_str(), "trigger" | "view")
             || is_outbox_governed_schema_name(registry, &name)
             || is_outbox_governed_schema_name(registry, &table_name)
@@ -487,7 +553,16 @@ async fn read_catalog_bounded(
 ) -> Result<Vec<CatalogRow>, RadrootsOutboxError> {
     let row_limit = catalog_row_limit(registry)?;
     let rows = sqlx::query(
-        "SELECT type, name, tbl_name, sql FROM main.sqlite_schema
+        "SELECT
+            length(CAST(type AS BLOB)) AS type_bytes,
+            CASE WHEN length(CAST(type AS BLOB)) <= ? THEN type END AS bounded_type,
+            length(CAST(name AS BLOB)) AS name_bytes,
+            CASE WHEN length(CAST(name AS BLOB)) <= ? THEN name END AS bounded_name,
+            length(CAST(tbl_name AS BLOB)) AS table_name_bytes,
+            CASE WHEN length(CAST(tbl_name AS BLOB)) <= ? THEN tbl_name END AS bounded_table_name,
+            length(CAST(sql AS BLOB)) AS sql_bytes,
+            CASE WHEN sql IS NULL OR length(CAST(sql AS BLOB)) <= ? THEN sql END AS bounded_sql
+         FROM main.sqlite_schema
          WHERE lower(substr(name, 1, 7)) != 'sqlite_'
            AND (lower(substr(name, 1, length(?))) = lower(?)
              OR lower(substr(tbl_name, 1, length(?))) = lower(?)
@@ -495,6 +570,10 @@ async fn read_catalog_bounded(
              OR tbl_name = ? COLLATE NOCASE)
          ORDER BY type, name, tbl_name LIMIT ?",
     )
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_CATALOG_SQL_BYTES_MAX).unwrap_or(i64::MAX))
     .bind(OUTBOX_RESERVED_PREFIX)
     .bind(OUTBOX_RESERVED_PREFIX)
     .bind(OUTBOX_RESERVED_PREFIX)
@@ -512,13 +591,84 @@ async fn read_catalog_bounded(
     rows.into_iter()
         .map(|row| {
             Ok(CatalogRow {
-                object_type: row.try_get("type")?,
-                name: row.try_get("name")?,
-                table_name: row.try_get("tbl_name")?,
-                sql: row.try_get("sql")?,
+                object_type: bounded_required_text(
+                    &row,
+                    "bounded_type",
+                    "type_bytes",
+                    "catalog object type",
+                    SQLITE_IDENTIFIER_BYTES_MAX,
+                )?,
+                name: bounded_required_text(
+                    &row,
+                    "bounded_name",
+                    "name_bytes",
+                    "catalog object name",
+                    SQLITE_IDENTIFIER_BYTES_MAX,
+                )?,
+                table_name: bounded_required_text(
+                    &row,
+                    "bounded_table_name",
+                    "table_name_bytes",
+                    "catalog table name",
+                    SQLITE_IDENTIFIER_BYTES_MAX,
+                )?,
+                sql: bounded_optional_text(
+                    &row,
+                    "bounded_sql",
+                    "sql_bytes",
+                    "catalog SQL",
+                    SQLITE_CATALOG_SQL_BYTES_MAX,
+                )?,
             })
         })
         .collect()
+}
+
+fn bounded_required_text(
+    row: &sqlx::sqlite::SqliteRow,
+    value_column: &'static str,
+    length_column: &'static str,
+    field: &'static str,
+    max: usize,
+) -> Result<String, RadrootsOutboxError> {
+    let actual = bounded_text_length(row.try_get(length_column)?, field, max)?;
+    if actual > max {
+        return Err(RadrootsOutboxError::SqliteTextLimitExceeded { field, max, actual });
+    }
+    row.try_get::<Option<String>, _>(value_column)?.ok_or(
+        RadrootsOutboxError::SqliteLifecycleFailure {
+            stage: "bounded SQLite text decode",
+        },
+    )
+}
+
+fn bounded_optional_text(
+    row: &sqlx::sqlite::SqliteRow,
+    value_column: &'static str,
+    length_column: &'static str,
+    field: &'static str,
+    max: usize,
+) -> Result<Option<String>, RadrootsOutboxError> {
+    let Some(length) = row.try_get::<Option<i64>, _>(length_column)? else {
+        return Ok(None);
+    };
+    let actual = bounded_text_length(length, field, max)?;
+    if actual > max {
+        return Err(RadrootsOutboxError::SqliteTextLimitExceeded { field, max, actual });
+    }
+    row.try_get(value_column).map_err(Into::into)
+}
+
+fn bounded_text_length(
+    length: i64,
+    field: &'static str,
+    max: usize,
+) -> Result<usize, RadrootsOutboxError> {
+    usize::try_from(length).map_err(|_| RadrootsOutboxError::SqliteTextLimitExceeded {
+        field,
+        max,
+        actual: usize::MAX,
+    })
 }
 
 fn validate_ledger_catalog(catalog: &[CatalogRow]) -> Result<bool, RadrootsOutboxError> {
@@ -606,10 +756,22 @@ async fn read_history_bounded(
         }
     })?;
     let rows = sqlx::query(
-        "SELECT version, name, up_sha256, down_sha256, schema_sha256
+        "SELECT version,
+            length(CAST(name AS BLOB)) AS name_bytes,
+            CASE WHEN length(CAST(name AS BLOB)) <= ? THEN name END AS bounded_name,
+            length(CAST(up_sha256 AS BLOB)) AS up_sha256_bytes,
+            CASE WHEN length(CAST(up_sha256 AS BLOB)) <= ? THEN up_sha256 END AS bounded_up_sha256,
+            length(CAST(down_sha256 AS BLOB)) AS down_sha256_bytes,
+            CASE WHEN length(CAST(down_sha256 AS BLOB)) <= ? THEN down_sha256 END AS bounded_down_sha256,
+            length(CAST(schema_sha256 AS BLOB)) AS schema_sha256_bytes,
+            CASE WHEN length(CAST(schema_sha256 AS BLOB)) <= ? THEN schema_sha256 END AS bounded_schema_sha256
          FROM main.radroots_outbox_schema_migrations
          ORDER BY version LIMIT ?",
     )
+    .bind(i64::try_from(SQLITE_LEDGER_NAME_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_LEDGER_DIGEST_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_LEDGER_DIGEST_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_LEDGER_DIGEST_BYTES_MAX).unwrap_or(i64::MAX))
     .bind(row_limit)
     .fetch_all(&mut *connection)
     .await?;
@@ -617,10 +779,34 @@ async fn read_history_bounded(
         .map(|row| {
             Ok(AppliedMigration {
                 version: row.try_get("version")?,
-                name: row.try_get("name")?,
-                up_sha256: row.try_get("up_sha256")?,
-                down_sha256: row.try_get("down_sha256")?,
-                schema_sha256: row.try_get("schema_sha256")?,
+                name: bounded_required_text(
+                    &row,
+                    "bounded_name",
+                    "name_bytes",
+                    "migration ledger name",
+                    SQLITE_LEDGER_NAME_BYTES_MAX,
+                )?,
+                up_sha256: bounded_required_text(
+                    &row,
+                    "bounded_up_sha256",
+                    "up_sha256_bytes",
+                    "migration ledger up checksum",
+                    SQLITE_LEDGER_DIGEST_BYTES_MAX,
+                )?,
+                down_sha256: bounded_required_text(
+                    &row,
+                    "bounded_down_sha256",
+                    "down_sha256_bytes",
+                    "migration ledger down checksum",
+                    SQLITE_LEDGER_DIGEST_BYTES_MAX,
+                )?,
+                schema_sha256: bounded_required_text(
+                    &row,
+                    "bounded_schema_sha256",
+                    "schema_sha256_bytes",
+                    "migration ledger schema checksum",
+                    SQLITE_LEDGER_DIGEST_BYTES_MAX,
+                )?,
             })
         })
         .collect()
@@ -725,6 +911,121 @@ async fn validate_schema_fingerprint(
         });
     }
     Ok(())
+}
+
+pub(crate) async fn validate_outbox_owned_integrity(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsOutboxError> {
+    validate_embedded_migration_registry()?;
+    let tables = OUTBOX_MIGRATIONS
+        .iter()
+        .flat_map(|migration| migration.owned_table_names.iter().copied())
+        .collect::<BTreeSet<_>>();
+    for table in tables {
+        validate_owned_table_foreign_keys(connection, table).await?;
+        validate_integrity_results(connection, Some(table)).await?;
+    }
+    Ok(())
+}
+
+pub(crate) async fn validate_full_database_integrity(
+    connection: &mut SqliteConnection,
+) -> Result<(), RadrootsOutboxError> {
+    validate_integrity_results(connection, None).await
+}
+
+async fn validate_owned_table_foreign_keys(
+    connection: &mut SqliteConnection,
+    table: &'static str,
+) -> Result<(), RadrootsOutboxError> {
+    if !is_outbox_owned_table_name(OUTBOX_MIGRATIONS, table) {
+        return Err(RadrootsOutboxError::MigrationRegistryDefect {
+            reason: "scoped integrity table is outside outbox authority".to_owned(),
+        });
+    }
+    let row = sqlx::query(
+        "SELECT
+            length(CAST(\"table\" AS BLOB)) AS table_bytes,
+            CASE WHEN length(CAST(\"table\" AS BLOB)) <= ? THEN \"table\" END AS bounded_table,
+            rowid,
+            length(CAST(parent AS BLOB)) AS parent_bytes,
+            CASE WHEN length(CAST(parent AS BLOB)) <= ? THEN parent END AS bounded_parent,
+            fkid
+         FROM pragma_foreign_key_check(?) LIMIT 1",
+    )
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(i64::try_from(SQLITE_IDENTIFIER_BYTES_MAX).unwrap_or(i64::MAX))
+    .bind(table)
+    .fetch_optional(&mut *connection)
+    .await?;
+    if let Some(row) = row {
+        return Err(RadrootsOutboxError::ForeignKeyViolation {
+            table: bounded_required_text(
+                &row,
+                "bounded_table",
+                "table_bytes",
+                "foreign-key table name",
+                SQLITE_IDENTIFIER_BYTES_MAX,
+            )?,
+            rowid: row.try_get("rowid")?,
+            parent: bounded_required_text(
+                &row,
+                "bounded_parent",
+                "parent_bytes",
+                "foreign-key parent name",
+                SQLITE_IDENTIFIER_BYTES_MAX,
+            )?,
+            foreign_key_id: row.try_get("fkid")?,
+        });
+    }
+    Ok(())
+}
+
+async fn validate_integrity_results(
+    connection: &mut SqliteConnection,
+    table: Option<&'static str>,
+) -> Result<(), RadrootsOutboxError> {
+    let max = i64::try_from(crate::RADROOTS_OUTBOX_DIAGNOSTIC_BYTES_MAX).unwrap_or(i64::MAX);
+    let rows = if let Some(table) = table {
+        sqlx::query(
+            "SELECT
+                length(CAST(integrity_check AS BLOB)) AS detail_bytes,
+                CASE WHEN length(CAST(integrity_check AS BLOB)) <= ? THEN integrity_check END AS bounded_detail
+             FROM pragma_integrity_check(?) LIMIT ?",
+        )
+        .bind(max)
+        .bind(table)
+        .bind(SQLITE_INTEGRITY_RESULT_ROWS_MAX)
+        .fetch_all(&mut *connection)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT
+                length(CAST(integrity_check AS BLOB)) AS detail_bytes,
+                CASE WHEN length(CAST(integrity_check AS BLOB)) <= ? THEN integrity_check END AS bounded_detail
+             FROM pragma_integrity_check LIMIT ?",
+        )
+        .bind(max)
+        .bind(SQLITE_INTEGRITY_RESULT_ROWS_MAX)
+        .fetch_all(&mut *connection)
+        .await?
+    };
+    if rows.len() == 1 {
+        let detail = bounded_required_text(
+            &rows[0],
+            "bounded_detail",
+            "detail_bytes",
+            "integrity diagnostic",
+            crate::RADROOTS_OUTBOX_DIAGNOSTIC_BYTES_MAX,
+        )?;
+        if detail == "ok" {
+            return Ok(());
+        }
+        return Err(RadrootsOutboxError::IntegrityCheckFailed { detail });
+    }
+    Err(RadrootsOutboxError::IntegrityCheckFailed {
+        detail: "integrity check returned an invalid result cardinality".to_owned(),
+    })
 }
 
 #[cfg(test)]
@@ -1409,8 +1710,13 @@ mod tests {
     #[tokio::test]
     async fn migration_rollback_wrapper_rejects_exactly_below_the_registry_floor() {
         let pool = memory_pool().await;
+        let mut connection = pool.acquire().await.expect("connection");
         assert!(matches!(
-            rollback_outbox_schema_offline(&pool, RADROOTS_OUTBOX_SCHEMA_VERSION_MIN - 1).await,
+            rollback_outbox_schema_on_connection(
+                &mut connection,
+                RADROOTS_OUTBOX_SCHEMA_VERSION_MIN - 1,
+            )
+            .await,
             Err(RadrootsOutboxError::RollbackBelowVersionFloor {
                 floor: RADROOTS_OUTBOX_SCHEMA_VERSION_MIN,
                 target: 0,

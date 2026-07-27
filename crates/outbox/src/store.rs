@@ -14,8 +14,10 @@ use crate::model::{
     RadrootsOutboxSignedOperationInput, RadrootsOutboxSignedTradeMutationInput,
     RadrootsOutboxStatusSummary, RadrootsOutboxTradeMutationInput,
 };
-use crate::schema::{
-    RadrootsOutboxSchemaStatus, inspect_outbox_schema_status, migrate_outbox_schema,
+use crate::schema::{RadrootsOutboxSchemaStatus, inspect_outbox_schema_status};
+use crate::sqlite_lifecycle::{
+    OutboxFileLease, RadrootsOutboxRollbackConfirmation, open_file, open_memory,
+    rollback_file_offline, verify_full_integrity,
 };
 use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
@@ -38,56 +40,52 @@ use radroots_transport::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult};
-#[cfg(test)]
-use sqlx::{Connection, SqliteConnection};
+use sqlx::sqlite::SqliteQueryResult;
 use sqlx::{Row, SqlitePool};
 use std::collections::BTreeSet;
 use std::path::Path;
-use std::str::FromStr;
-use std::time::Duration;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RadrootsOutbox {
     pool: SqlitePool,
+    _file_lease: Option<Arc<OutboxFileLease>>,
 }
 
 impl RadrootsOutbox {
     pub async fn open_memory() -> Result<Self, RadrootsOutboxError> {
-        let options = SqliteConnectOptions::from_str("sqlite::memory:")?;
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await?;
-        configure_pool(&pool, false).await?;
-        migrate_outbox_schema(&pool).await?;
-        Ok(Self { pool })
+        let opened = open_memory().await?;
+        Ok(Self {
+            pool: opened.pool,
+            _file_lease: opened.file_lease,
+        })
     }
 
     pub async fn open_file(path: impl AsRef<Path>) -> Result<Self, RadrootsOutboxError> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await?;
-        configure_pool(&pool, true).await?;
-        migrate_outbox_schema(&pool).await?;
-        Ok(Self { pool })
+        let opened = open_file(path.as_ref()).await?;
+        Ok(Self {
+            pool: opened.pool,
+            _file_lease: opened.file_lease,
+        })
     }
 
-    pub async fn open_pool(
-        pool: SqlitePool,
-        file_backed: bool,
-    ) -> Result<Self, RadrootsOutboxError> {
-        configure_pool(&pool, file_backed).await?;
-        migrate_outbox_schema(&pool).await?;
-        Ok(Self { pool })
+    /// Performs an exact destructive migration rollback against a closed file.
+    pub async fn rollback_file_schema_offline(
+        path: impl AsRef<Path>,
+        target: u32,
+        confirmation: RadrootsOutboxRollbackConfirmation,
+    ) -> Result<(), RadrootsOutboxError> {
+        rollback_file_offline(path.as_ref(), target, confirmation).await
     }
 
-    pub fn pool(&self) -> &SqlitePool {
+    #[cfg(test)]
+    pub(crate) fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    /// Closes this owned pool. Existing clones are closed by the same action.
+    pub async fn close(self) {
+        self.pool.close().await;
     }
 
     /// Inspects and authenticates the governed outbox schema.
@@ -95,9 +93,9 @@ impl RadrootsOutbox {
         inspect_outbox_schema_status(&self.pool).await
     }
 
-    /// Serializes schema adoption or migration to the current supported version.
-    pub async fn migrate_to_current_schema(&self) -> Result<(), RadrootsOutboxError> {
-        migrate_outbox_schema(&self.pool).await
+    /// Runs an explicit full-database integrity maintenance check.
+    pub async fn verify_full_database_integrity(&self) -> Result<(), RadrootsOutboxError> {
+        verify_full_integrity(&self.pool).await
     }
 
     pub async fn pragma_foreign_keys(&self) -> Result<i64, RadrootsOutboxError> {
@@ -1813,82 +1811,6 @@ fn publish_lifecycle_from_plan_evaluation<'a>(
             now_ms,
         )
     }
-}
-
-async fn configure_pool(pool: &SqlitePool, file_backed: bool) -> Result<(), RadrootsOutboxError> {
-    let max_connections = pool.options().get_max_connections();
-    let existing_options = pool.connect_options();
-    let main_filename: String =
-        sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name = 'main'")
-            .fetch_one(pool)
-            .await?;
-    let database_is_memory = main_filename.is_empty();
-    if file_backed == database_is_memory {
-        return Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
-            file_backed,
-            filename: main_filename,
-        });
-    }
-    if !file_backed && max_connections != 1 {
-        return Err(RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount {
-            actual: max_connections,
-        });
-    }
-
-    let mut connect_options = existing_options
-        .as_ref()
-        .clone()
-        .foreign_keys(true)
-        .busy_timeout(Duration::from_millis(5_000));
-    if file_backed {
-        connect_options = connect_options.journal_mode(SqliteJournalMode::Wal);
-    }
-    pool.set_connect_options(connect_options);
-
-    let mut connections = Vec::with_capacity(max_connections as usize);
-    for _ in 0..max_connections {
-        connections.push(pool.acquire().await?);
-    }
-    for connection in &mut connections {
-        sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&mut **connection)
-            .await?;
-        sqlx::query("PRAGMA busy_timeout = 5000")
-            .execute(&mut **connection)
-            .await?;
-        if file_backed {
-            let actual = sqlx::query_scalar::<_, String>("PRAGMA main.journal_mode = WAL")
-                .fetch_one(&mut **connection)
-                .await?;
-            if actual != "wal" {
-                return Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual });
-            }
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-async fn file_pool_with_immutable_delete_journal(path: &Path) -> SqlitePool {
-    let mut writer = SqliteConnection::connect_with(
-        &SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true),
-    )
-    .await
-    .expect("writer connection");
-    let mode: String = sqlx::query_scalar("PRAGMA main.journal_mode = DELETE")
-        .fetch_one(&mut writer)
-        .await
-        .expect("delete journal mode");
-    assert_eq!(mode, "delete");
-    writer.close().await.expect("close writer");
-
-    SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(SqliteConnectOptions::new().filename(path).immutable(true))
-        .await
-        .expect("immutable pool")
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -4243,23 +4165,6 @@ mod tests {
                 version: crate::RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
             }
         );
-        outbox
-            .migrate_to_current_schema()
-            .await
-            .expect("idempotent migration");
-    }
-
-    #[tokio::test]
-    async fn file_pool_rejects_successful_non_wal_journal_result() {
-        let directory = tempfile::tempdir().expect("tempdir");
-        let path = directory.path().join("immutable-delete.sqlite");
-        let pool = file_pool_with_immutable_delete_journal(&path).await;
-
-        assert!(matches!(
-            RadrootsOutbox::open_pool(pool, true).await,
-            Err(RadrootsOutboxError::SqliteFileJournalModeNotWal { actual })
-                if actual == "delete"
-        ));
     }
 
     #[tokio::test]
@@ -4276,15 +4181,7 @@ mod tests {
             "wal"
         );
 
-        let options = SqliteConnectOptions::from_str("sqlite::memory:").expect("memory options");
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await
-            .expect("memory pool");
-        let outbox = RadrootsOutbox::open_pool(pool, false)
-            .await
-            .expect("pool outbox");
+        let outbox = RadrootsOutbox::open_memory().await.expect("memory outbox");
 
         let draft = generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "preflight");
         let signed_event = radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft)
@@ -4357,109 +4254,6 @@ mod tests {
             Err(RadrootsOutboxError::IdempotencyConflict { .. })
         ));
         transaction.commit().await.expect("commit transaction");
-    }
-
-    #[tokio::test]
-    async fn open_pool_configures_every_file_connection_and_rejects_unsafe_memory_pools() {
-        let memory_options = SqliteConnectOptions::from_str("sqlite::memory:")
-            .expect("memory options")
-            .foreign_keys(false);
-        let memory_pool = SqlitePoolOptions::new()
-            .max_connections(2)
-            .connect_with(memory_options)
-            .await
-            .expect("memory pool");
-        let memory_error = match RadrootsOutbox::open_pool(memory_pool, false).await {
-            Ok(_) => panic!("multi-connection memory pool must be rejected"),
-            Err(error) => error,
-        };
-        assert!(
-            matches!(
-                memory_error,
-                RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount { actual: 2 }
-            ),
-            "{memory_error:?}"
-        );
-
-        let mislabeled_memory_pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(
-                SqliteConnectOptions::from_str("sqlite::memory:")
-                    .expect("memory options")
-                    .foreign_keys(false),
-            )
-            .await
-            .expect("mislabeled memory pool");
-        assert!(matches!(
-            RadrootsOutbox::open_pool(mislabeled_memory_pool, true).await,
-            Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
-                file_backed: true,
-                ..
-            })
-        ));
-        for memory_url in ["sqlite://?mode=memory", "sqlite://named?mode=memory"] {
-            let mode_memory_pool = SqlitePoolOptions::new()
-                .max_connections(2)
-                .connect_with(
-                    SqliteConnectOptions::from_str(memory_url)
-                        .expect("mode-memory options")
-                        .foreign_keys(false),
-                )
-                .await
-                .expect("mode-memory pool");
-            assert!(matches!(
-                RadrootsOutbox::open_pool(mode_memory_pool, false).await,
-                Err(RadrootsOutboxError::UnsafeInMemoryPoolConnectionCount { actual: 2 })
-            ));
-
-            let mislabeled_mode_memory_pool = SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(
-                    SqliteConnectOptions::from_str(memory_url)
-                        .expect("mode-memory options")
-                        .foreign_keys(false),
-                )
-                .await
-                .expect("mislabeled mode-memory pool");
-            assert!(matches!(
-                RadrootsOutbox::open_pool(mislabeled_mode_memory_pool, true).await,
-                Err(RadrootsOutboxError::SqlitePoolBackingMismatch {
-                    file_backed: true,
-                    ..
-                })
-            ));
-        }
-
-        let directory = tempfile::tempdir().expect("tempdir");
-        let file_path = directory.path().join("multi-connection-outbox.sqlite");
-        let file_options = SqliteConnectOptions::new()
-            .filename(&file_path)
-            .create_if_missing(true)
-            .foreign_keys(false);
-        let file_pool = SqlitePoolOptions::new()
-            .max_connections(3)
-            .connect_with(file_options)
-            .await
-            .expect("file pool");
-        let outbox = RadrootsOutbox::open_pool(file_pool, true)
-            .await
-            .expect("file outbox");
-        let mut connections = Vec::new();
-        for _ in 0..3 {
-            connections.push(outbox.pool().acquire().await.expect("connection"));
-        }
-        for connection in &mut connections {
-            let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
-                .fetch_one(&mut **connection)
-                .await
-                .expect("foreign keys");
-            let busy_timeout: i64 = sqlx::query_scalar("PRAGMA busy_timeout")
-                .fetch_one(&mut **connection)
-                .await
-                .expect("busy timeout");
-            assert_eq!(foreign_keys, 1);
-            assert_eq!(busy_timeout, 5_000);
-        }
     }
 
     #[tokio::test]

@@ -7,8 +7,12 @@ use thiserror::Error;
 #[non_exhaustive]
 pub enum RadrootsOutboxError {
     #[cfg(feature = "sqlite")]
-    #[error("SQLx error: {0}")]
-    Sqlx(#[from] sqlx::Error),
+    #[error("SQLite operation failed")]
+    Sqlx(
+        #[source]
+        #[from]
+        sqlx::Error,
+    ),
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
@@ -38,16 +42,55 @@ pub enum RadrootsOutboxError {
     #[error("ephemeral event kind {kind} cannot enter the durable generic outbox")]
     EphemeralEventNotQueueable { kind: u32 },
 
-    #[error("in-memory SQLite pools must have exactly one connection; configured {actual}")]
-    UnsafeInMemoryPoolConnectionCount { actual: u32 },
-
-    #[error(
-        "SQLite pool backing does not match file_backed={file_backed}: configured filename {filename}"
-    )]
-    SqlitePoolBackingMismatch { file_backed: bool, filename: String },
-
     #[error("SQLite outbox file connection did not enter WAL journal mode; reported `{actual}`")]
     SqliteFileJournalModeNotWal { actual: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox main database must use UTF-8 encoding; reported `{actual}`")]
+    SqliteMainDatabaseEncodingNotUtf8 { actual: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox connection must enforce foreign keys; reported {actual}")]
+    SqliteForeignKeysNotEnabled { actual: i64 },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox open deadline of {limit_ms} ms was exhausted during {stage}")]
+    SqliteOpenDeadlineExceeded { stage: &'static str, limit_ms: u64 },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox file path is {actual} bytes; maximum is {max}")]
+    SqliteFilePathTooLong { max: usize, actual: usize },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox file path cannot identify one database file")]
+    SqliteFilePathInvalid,
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox file path could not be resolved")]
+    SqliteFilePathResolutionFailed {
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox offline rollback is already active for this database")]
+    SqliteOfflineRollbackInProgress,
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox offline rollback requires all owned live handles to be closed")]
+    SqliteOfflineRollbackHasLiveHandles,
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite outbox lifecycle failed during {stage}")]
+    SqliteLifecycleFailure { stage: &'static str },
+
+    #[cfg(feature = "sqlite")]
+    #[error("SQLite {field} is {actual} bytes; maximum is {max}")]
+    SqliteTextLimitExceeded {
+        field: &'static str,
+        max: usize,
+        actual: usize,
+    },
 
     #[cfg(feature = "sqlite")]
     #[error(
@@ -168,6 +211,21 @@ pub enum RadrootsOutboxError {
         rollback: sqlx::Error,
     },
 
+    #[cfg(feature = "sqlite")]
+    #[error("outbox SQLite integrity check failed: {detail}")]
+    IntegrityCheckFailed { detail: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "outbox foreign-key violation in `{table}` row {rowid:?} against `{parent}` constraint {foreign_key_id}"
+    )]
+    ForeignKeyViolation {
+        table: String,
+        rowid: Option<i64>,
+        parent: String,
+        foreign_key_id: i64,
+    },
+
     #[error(
         "trade mutation outbox metadata does not match the canonical mutation content: {field}"
     )]
@@ -248,5 +306,28 @@ pub enum RadrootsOutboxError {
 impl From<RadrootsTransportError> for RadrootsOutboxError {
     fn from(value: RadrootsTransportError) -> Self {
         Self::Transport(value)
+    }
+}
+
+impl RadrootsOutboxError {
+    /// Returns a stable public diagnostic capped at the governed byte ceiling.
+    pub fn public_diagnostic(&self) -> String {
+        #[cfg(feature = "sqlite")]
+        const LIMIT: usize = crate::RADROOTS_OUTBOX_DIAGNOSTIC_BYTES_MAX;
+        #[cfg(not(feature = "sqlite"))]
+        const LIMIT: usize = 4_096;
+
+        let diagnostic = self.to_string();
+        if diagnostic.len() <= LIMIT {
+            return diagnostic;
+        }
+        let suffix = "…";
+        let mut end = LIMIT.saturating_sub(suffix.len());
+        while !diagnostic.is_char_boundary(end) {
+            end = end.saturating_sub(1);
+        }
+        let mut bounded = diagnostic[..end].to_owned();
+        bounded.push_str(suffix);
+        bounded
     }
 }

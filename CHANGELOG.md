@@ -9,6 +9,16 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+<!-- release-change: outbox-authenticated-sqlite-lifecycle -->
+- Outbox SQLite open now owns a lazy pool capped at four file connections and
+  authenticates UTF-8, bounded catalog and ledger text, the managed schema,
+  owned foreign keys, and scoped integrity under one five-second deadline
+  before exposing the store. Persistent WAL configuration follows authority;
+  caller pools, raw pool access, and live-store migration were removed.
+  Destructive rollback is now an explicit data-loss-acknowledged offline-path
+  operation that rejects live owned handles, while full-database integrity is
+  a separate maintenance call and public diagnostics are capped at 4,096
+  bytes.
 <!-- release-change: outbox-versioned-migration-authority -->
 - Outbox schema initialization now uses an ordered, generated migration
   registry with immutable source checksums, authenticated catalog fingerprints,
@@ -17,7 +27,7 @@ publish policy both pass for the same source revision.
   identity; partial, changed, counterfeit, gapped, newer, or unknown outbox
   state fails before governed mutation while unrelated caller tables remain
   untouched. Raw migration SQL exports and live `migrate_down` were replaced by
-  authenticated schema status and migrate-to-current APIs. A machine-readable
+  authenticated schema status and owned open-time migration. A machine-readable
   matrix now governs no-default, SQLite, Tokio, event-store-adapter, and
   all-feature builds.
 - Event-store schema initialization now uses a transactional, checksummed

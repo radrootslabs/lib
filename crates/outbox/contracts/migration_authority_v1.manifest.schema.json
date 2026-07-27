@@ -209,7 +209,7 @@
           "const": "outbox_"
         },
         "rollback_transaction": {
-          "const": "begin_exclusive_test_executor_v1"
+          "const": "begin_exclusive_offline_path_v1"
         }
       },
       "required": [
@@ -291,8 +291,8 @@
       "items": {
         "$ref": "#/$defs/source_file"
       },
-      "maxItems": 16,
-      "minItems": 16,
+      "maxItems": 17,
+      "minItems": 17,
       "type": "array"
     },
     "version_bounds": {

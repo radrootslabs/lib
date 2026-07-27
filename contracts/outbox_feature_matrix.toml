@@ -4,7 +4,7 @@ package = "radroots_outbox"
 [feature_edges]
 default = ["event-store-adapter"]
 sqlite = ["dep:sqlx", "sqlx/sqlite-bundled"]
-runtime-tokio = ["sqlite", "sqlx/runtime-tokio"]
+runtime-tokio = ["sqlite", "sqlx/runtime-tokio", "dep:tokio"]
 event-store-adapter = [
   "runtime-tokio",
   "dep:radroots_event_store",
