@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![cfg(test)]
 
 use super::{
     EventAdmission, ReconciliationCapacityLimits, ReconciliationProfile, SourceGenerationProvider,

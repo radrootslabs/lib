@@ -530,6 +530,12 @@ fn is_ignorable_lcov_source_line(
 }
 
 fn is_cfg_test_source_line(source: &str, line_number: u64) -> bool {
+    if source.lines().any(|line| {
+        let trimmed = line.trim();
+        trimmed.starts_with("#![cfg(test)]") || trimmed.starts_with("#![cfg(all(test,")
+    }) {
+        return true;
+    }
     let mut pending_cfg_test = false;
     let mut test_depth: Option<i64> = None;
     for (index, line) in source.lines().enumerate() {
@@ -2354,6 +2360,14 @@ mod tests {
 
         assert!(is_cfg_test_source_line(source, 2));
         assert!(is_cfg_test_source_line(source, 4));
+        assert!(is_cfg_test_source_line(
+            "#![cfg(test)]\nfn helper() {}\n",
+            2
+        ));
+        assert!(is_cfg_test_source_line(
+            "#![cfg(all(test, feature = \"sqlite\"))]\nfn helper() {}\n",
+            2
+        ));
     }
 
     #[test]

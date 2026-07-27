@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 use super::RadrootsEventStore;
 use crate::model::{RadrootsEventIngest, RadrootsProjectionCursor};
 use crate::nip09::reconciliation_v1::{
