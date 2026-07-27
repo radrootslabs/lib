@@ -1,3 +1,5 @@
+//! Canonical three-letter currency codes and currency-specific minor units.
+
 use core::fmt;
 use core::str::FromStr;
 

@@ -1,3 +1,5 @@
+//! Non-negative monetary values and currency-aware quantization.
+
 use core::fmt;
 use rust_decimal::Decimal;
 use rust_decimal::RoundingStrategy;

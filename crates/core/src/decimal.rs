@@ -1,3 +1,5 @@
+//! Fixed-precision decimal values, checked arithmetic, and exact conversions.
+
 use core::fmt;
 use core::ops::{Add, Div, Mul, Sub};
 use core::str::FromStr;

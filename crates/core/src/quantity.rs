@@ -1,3 +1,5 @@
+//! Non-negative measured quantities and deterministic unit conversion.
+
 use core::fmt;
 
 use crate::Decimal;

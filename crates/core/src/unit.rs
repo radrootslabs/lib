@@ -1,3 +1,5 @@
+//! Unit codes, dimensions, parsing, and checked deterministic conversion.
+
 use core::fmt;
 use core::str::FromStr;
 

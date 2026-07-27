@@ -1,3 +1,5 @@
+//! Signed percentage values and deterministic percentage calculations.
+
 use core::fmt;
 use core::str::FromStr;
 

@@ -159,36 +159,36 @@
     {
       "role": "core_currency_value_authority",
       "path": "crates/core/src/currency.rs",
-      "byte_length": 4312,
-      "sha256": "adfae0ef03de95c2cd3bd7175f32a6c12723dace67b344367fad0f4d4af1e603",
+      "byte_length": 4390,
+      "sha256": "14b73f219a93ae5b70f1c63c93e0bd1a587c0e95c10e7978e855c6a3da204b5c",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_decimal_value_authority",
       "path": "crates/core/src/decimal.rs",
-      "byte_length": 8400,
-      "sha256": "93267e36f093ea64e488351bec54c5a142ba94c6de6985f352e9d75419d3e0ab",
+      "byte_length": 8480,
+      "sha256": "9b5bdc52fd13bffb3bd5fd2954c4c37fddc86be1bb7c754bef35bd9442a92381",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_money_value_authority",
       "path": "crates/core/src/money.rs",
-      "byte_length": 9147,
-      "sha256": "4f761da36418b2b0b2c909b55b4d80a42d14983b59fc1ebf118862557b527a93",
+      "byte_length": 9214,
+      "sha256": "3377f0ca92f1e66cf6d8cecb88cfd79304113873ef56757eb93cd3e63c2a4eb2",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_percent_value_authority",
       "path": "crates/core/src/percent.rs",
-      "byte_length": 3268,
-      "sha256": "4cfe54a631f911947bcc6e3f0d1607214d88009e87669589cf30b1e078bf8ca0",
+      "byte_length": 3341,
+      "sha256": "9c0a87ae035e2f574b1a6ea2844e924c70ce19645becda99508c680b7c4c846f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_quantity_value_authority",
       "path": "crates/core/src/quantity.rs",
-      "byte_length": 8035,
-      "sha256": "a8bcfe6b9038d3baf7a833f811cdd7ac467dc670123a156918ab208e901fdaf5",
+      "byte_length": 8108,
+      "sha256": "18237c5b905395dded9682418e05be1844623eef64943dc844fb28b0f4036c97",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -201,8 +201,8 @@
     {
       "role": "core_unit_value_authority",
       "path": "crates/core/src/unit.rs",
-      "byte_length": 10436,
-      "sha256": "fe17fb780c75a18d3b4678d9268726ba97814ed8da7775b65a03724df120560f",
+      "byte_length": 10512,
+      "sha256": "8228766a56d7c12df8a631a4d2878763a6d0095088b409bfd82bc4a9f89608bc",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
