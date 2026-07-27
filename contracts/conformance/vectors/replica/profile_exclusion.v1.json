@@ -1,0 +1,20 @@
+{
+  "suite": "replica_profile_exclusion_v1",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "replica_profile_exclusion_stored_rows_001",
+      "kind": "replica.profile_exclusion",
+      "input": {
+        "farm_profile_name": "Farm Profile",
+        "owner_profile_name": "Owner"
+      },
+      "expected": {
+        "stored_profile_rows": 2,
+        "transfer_event_count": 7,
+        "pending_event_count": 7,
+        "forbidden_kind": 0
+      }
+    }
+  ]
+}

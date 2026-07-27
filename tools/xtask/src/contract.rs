@@ -193,7 +193,9 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 31] = [
+const REPLICA_PROFILE_EXCLUSION_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/replica/profile_exclusion.v1.json";
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 32] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -309,6 +311,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 31] = [
     (
         "contracts/conformance/vectors/publication/phase1_media_readiness.v1.json",
         "crates/event_codec/tests/fixtures/phase1_publication_media_readiness.v1.json",
+    ),
+    (
+        REPLICA_PROFILE_EXCLUSION_VECTOR_RELATIVE,
+        "crates/replica_sync/tests/fixtures/profile_exclusion.v1.json",
     ),
     (
         "contracts/conformance/vectors/trade/parse_classified_listing_address.v1.json",
@@ -5669,50 +5675,6 @@ fn validate_replica_policy_source_witnesses(sync_root: &Path) -> Result<(), Stri
         ));
     }
 
-    let emit_path = sync_root.join("src/emit.rs");
-    let emit_source = fs::read_to_string(&emit_path)
-        .map_err(|error| format!("read {}: {error}", emit_path.display()))?;
-    let test_module_marker = "#[cfg(test)]\nmod tests {";
-    let test_module_start = emit_source.rfind(test_module_marker).ok_or_else(|| {
-        format!(
-            "replica emit source {} must keep its bottom test module behind #[cfg(test)]",
-            emit_path.display()
-        )
-    })?;
-    let production_source = &emit_source[..test_module_start];
-    if !production_source.contains("pub fn radroots_replica_sync_all_with_options(") {
-        return Err(format!(
-            "replica emit source {} is missing radroots_replica_sync_all_with_options",
-            emit_path.display()
-        ));
-    }
-    let production_code = production_source
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    for identifier in production_code
-        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
-        .filter(|identifier| !identifier.is_empty())
-    {
-        if identifier.to_ascii_lowercase().contains("profile") {
-            return Err(format!(
-                "replica emit production source {} must not contain Profile-related identifier {identifier}",
-                emit_path.display()
-            ));
-        }
-    }
-    let compact_production = production_code
-        .chars()
-        .filter(|character| !character.is_ascii_whitespace())
-        .collect::<String>();
-    if compact_production.contains("kind:0") {
-        return Err(format!(
-            "replica emit production source {} must not construct a literal kind-0 event",
-            emit_path.display()
-        ));
-    }
-
     Ok(())
 }
 
@@ -10906,11 +10868,9 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let cargo_path = root.join("crates/b/Cargo.toml");
         let lib_path = root.join("crates/b/src/lib.rs");
         let types_path = root.join("crates/b/src/types.rs");
-        let emit_path = root.join("crates/b/src/emit.rs");
         let cargo = fs::read_to_string(&cargo_path).expect("read replica cargo manifest");
         let lib = fs::read_to_string(&lib_path).expect("read replica lib source");
         let types = fs::read_to_string(&types_path).expect("read replica types source");
-        let emit = fs::read_to_string(&emit_path).expect("read replica emit source");
 
         write_file(
             &cargo_path,
@@ -10994,31 +10954,6 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let retired_error = validate_replica_contract(&bundle, &root)
             .expect_err("retired include_profiles identifier must fail");
         assert!(retired_error.contains("include_profiles is forbidden"));
-
-        write_file(&types_path, &types);
-        write_file(
-            &emit_path,
-            &emit.replace(
-                "#[cfg(test)]\nmod tests {}",
-                "fn emit_profile_event() {}\n\n#[cfg(test)]\nmod tests {}",
-            ),
-        );
-        let bundle = load_contract_bundle(&root).expect("load profile-emitter contract");
-        let profile_error = validate_replica_contract(&bundle, &root)
-            .expect_err("Profile-related production emitter must fail");
-        assert!(profile_error.contains("Profile-related identifier emit_profile_event"));
-
-        write_file(
-            &emit_path,
-            &emit.replace(
-                "#[cfg(test)]\nmod tests {}",
-                "fn emit_kind_zero() { let _event = Event { kind: 0 }; }\n\n#[cfg(test)]\nmod tests {}",
-            ),
-        );
-        let bundle = load_contract_bundle(&root).expect("load literal-kind-zero contract");
-        let kind_error = validate_replica_contract(&bundle, &root)
-            .expect_err("literal kind-0 production emitter must fail");
-        assert!(kind_error.contains("must not construct a literal kind-0 event"));
 
         let _ = fs::remove_dir_all(root);
     }

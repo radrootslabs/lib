@@ -1,6 +1,6 @@
 use crate::{
     RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaFarmSelector, RadrootsReplicaSyncRequest,
-    radroots_replica_sync_all,
+    radroots_replica_pending_publish_batch, radroots_replica_sync_all,
 };
 use radroots_event::gcs::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
@@ -11,7 +11,7 @@ use radroots_replica_schema::farm_member::IFarmMemberFields;
 use radroots_replica_schema::farm_member_claim::IFarmMemberClaimFields;
 use radroots_replica_schema::farm_tag::IFarmTagFields;
 use radroots_replica_schema::gcs_location::IGcsLocationFields;
-use radroots_replica_schema::nostr_profile::INostrProfileFields;
+use radroots_replica_schema::nostr_profile::{INostrProfileFields, INostrProfileFindMany};
 use radroots_replica_schema::plot::IPlotFields;
 use radroots_replica_schema::plot_gcs_location::IPlotGcsLocationFields;
 use radroots_replica_schema::plot_tag::IPlotTagFields;
@@ -21,7 +21,41 @@ use radroots_replica_store::{
 };
 use radroots_sql_core::SqlxSqliteExecutor;
 use radroots_sql_core::error::SqlError;
+use serde::Deserialize;
 use std::panic;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileExclusionSuite {
+    suite: String,
+    contract_version: String,
+    vectors: Vec<ProfileExclusionCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileExclusionCase {
+    id: String,
+    kind: String,
+    input: ProfileExclusionInput,
+    expected: ProfileExclusionExpected,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileExclusionInput {
+    farm_profile_name: String,
+    owner_profile_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileExclusionExpected {
+    stored_profile_rows: usize,
+    transfer_event_count: usize,
+    pending_event_count: usize,
+    forbidden_kind: u32,
+}
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -> T {
@@ -31,7 +65,18 @@ fn unwrap_sql<T>(result: Result<T, ReplicaSchemaError<SqlError>>, label: &str) -
 }
 
 #[test]
-fn sync_all_emits_expected_order_without_lossy_profiles() {
+fn profile_exclusion_vector_executes_sync_and_pending_publication() {
+    let suite = serde_json::from_str::<ProfileExclusionSuite>(include_str!(
+        "../tests/fixtures/profile_exclusion.v1.json"
+    ))
+    .expect("profile exclusion vector");
+    assert_eq!(suite.suite, "replica_profile_exclusion_v1");
+    assert_eq!(suite.contract_version, "1.0.0");
+    assert_eq!(suite.vectors.len(), 1);
+    let case = &suite.vectors[0];
+    assert_eq!(case.id, "replica_profile_exclusion_stored_rows_001");
+    assert_eq!(case.kind, "replica.profile_exclusion");
+
     let exec = SqlxSqliteExecutor::open_memory().expect("exec");
     migrations::run_all_up(&exec).expect("migrations");
 
@@ -172,7 +217,7 @@ fn sync_all_emits_expected_order_without_lossy_profiles() {
             &INostrProfileFields {
                 public_key: farm_pubkey.clone(),
                 profile_type: "farm".to_string(),
-                name: "Farm Profile".to_string(),
+                name: case.input.farm_profile_name.clone(),
                 display_name: None,
                 about: None,
                 website: None,
@@ -192,7 +237,7 @@ fn sync_all_emits_expected_order_without_lossy_profiles() {
             &INostrProfileFields {
                 public_key: owner_pubkey.clone(),
                 profile_type: "individual".to_string(),
-                name: "Owner".to_string(),
+                name: case.input.owner_profile_name.clone(),
                 display_name: None,
                 about: None,
                 website: None,
@@ -204,6 +249,19 @@ fn sync_all_emits_expected_order_without_lossy_profiles() {
             },
         ),
         "owner_profile",
+    );
+    let stored_profiles = unwrap_sql(
+        nostr_profile::find_many(
+            &exec,
+            &INostrProfileFindMany::Filter {
+                filter: Box::new(None),
+            },
+        ),
+        "stored_profiles",
+    );
+    assert_eq!(
+        stored_profiles.results.len(),
+        case.expected.stored_profile_rows
     );
 
     let request = RadrootsReplicaSyncRequest {
@@ -217,7 +275,7 @@ fn sync_all_emits_expected_order_without_lossy_profiles() {
     let bundle = radroots_replica_sync_all(&exec, &request).expect("sync");
 
     assert_eq!(bundle.version, RADROOTS_REPLICA_TRANSFER_VERSION);
-    assert_eq!(bundle.events.len(), 7);
+    assert_eq!(bundle.events.len(), case.expected.transfer_event_count);
     let kinds = bundle
         .events
         .iter()
@@ -226,6 +284,23 @@ fn sync_all_emits_expected_order_without_lossy_profiles() {
     assert_eq!(kinds[0], KIND_FARM);
     assert_eq!(kinds[1], KIND_PLOT);
     assert!(kinds[2..].iter().all(|kind| *kind == KIND_LIST_SET_GENERIC));
+    assert!(
+        kinds
+            .iter()
+            .all(|kind| *kind != case.expected.forbidden_kind)
+    );
+
+    let pending = radroots_replica_pending_publish_batch(&exec).expect("pending publication");
+    assert_eq!(
+        pending.pending_events.len(),
+        case.expected.pending_event_count
+    );
+    assert!(
+        pending
+            .pending_events
+            .iter()
+            .all(|event| event.kind != case.expected.forbidden_kind)
+    );
 }
 
 #[test]
