@@ -64,9 +64,9 @@
     },
     {
       "file": {
-        "byte_length": 133841,
+        "byte_length": 133831,
         "path": "crates/outbox/src/phase1_publication.rs",
-        "sha256": "41489c91ca667b8c1b7306925d254c43a0e7a498bd0b40c20b542c26a6e46417"
+        "sha256": "45eaf58cad4fcbba707ff91d12cb8f9c6c5ea4d0dfad85e6e3a00a403efe25d5"
       },
       "role": "phase1_publication_runtime"
     },

@@ -3495,7 +3495,7 @@ mod tests {
         );
 
         sqlx::query(
-            "CREATE TEMP TRIGGER fail_phase1_pending_receipt
+            "CREATE TRIGGER fail_phase1_pending_receipt
              BEFORE INSERT ON outbox_phase1_target_receipt
              BEGIN SELECT RAISE(ABORT, 'injected pending receipt failure'); END",
         )
@@ -3527,7 +3527,7 @@ mod tests {
             .unwrap();
         let pending_target = &pending.targets()[0];
         sqlx::query(
-            "CREATE TEMP TRIGGER fail_phase1_observed_receipt
+            "CREATE TRIGGER fail_phase1_observed_receipt
              BEFORE INSERT ON outbox_phase1_target_receipt
              WHEN NEW.observation_kind = 'accepted-observed'
              BEGIN SELECT RAISE(ABORT, 'injected observed receipt failure'); END",
