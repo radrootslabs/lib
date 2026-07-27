@@ -3079,6 +3079,8 @@ struct ReleaseContractFile {
     #[serde(default)]
     publication: Option<PublicationControl>,
     #[serde(default)]
+    workspace_classification: Option<WorkspaceReleaseClassification>,
+    #[serde(default)]
     classification: ReleaseClassification,
     #[serde(default)]
     publish: Option<ReleaseCrateSet>,
@@ -3111,6 +3113,52 @@ struct PublicationControl {
     frozen: bool,
     registry: String,
     final_enablement_step: u16,
+    #[serde(default)]
+    spec_id: String,
+    #[serde(default)]
+    approved_packages: Vec<String>,
+    #[serde(default)]
+    local_packages: Vec<String>,
+    #[serde(default)]
+    external_packages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceReleaseClassification {
+    #[serde(default)]
+    private: Vec<String>,
+    #[serde(default)]
+    build_codegen: Vec<String>,
+    #[serde(default)]
+    test_support: Vec<String>,
+    #[serde(default)]
+    preview: Vec<String>,
+    #[serde(default)]
+    retired: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseArchitecture {
+    spec_id: String,
+    package_count: usize,
+    repositories: CratesReleaseRepositories,
+    package: Vec<CratesReleasePackage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseRepositories {
+    lib: CratesReleaseRepository,
+    sdk: CratesReleaseRepository,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseRepository {
+    packages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleasePackage {
+    name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -8192,6 +8240,252 @@ fn validate_publication_control(
     Ok(true)
 }
 
+fn validate_v1_release_policy(
+    workspace_root: &Path,
+    release: &ReleaseContractFile,
+    workspace_packages: &BTreeSet<String>,
+    publish_configs: &BTreeMap<String, Option<PackagePublish>>,
+    require_v1: bool,
+) -> Result<Option<BTreeSet<String>>, String> {
+    let Some(control) = release.publication.as_ref() else {
+        if require_v1 {
+            return Err("publication control is required".to_string());
+        }
+        return Ok(None);
+    };
+    let declares_v1 = !control.spec_id.is_empty()
+        || !control.approved_packages.is_empty()
+        || !control.local_packages.is_empty()
+        || !control.external_packages.is_empty()
+        || release.workspace_classification.is_some();
+    if !declares_v1 {
+        if require_v1 {
+            return Err("publication must define the v1 approved package authority".to_string());
+        }
+        return Ok(None);
+    }
+
+    let architecture_path = workspace_root.join("docs/specs/radroots_crates_release_v1.toml");
+    let architecture = parse_toml::<CratesReleaseArchitecture>(&architecture_path)?;
+    let expected_approved = collect_unique_set(
+        &architecture
+            .package
+            .iter()
+            .map(|package| package.name.clone())
+            .collect::<Vec<_>>(),
+        "architecture.package.name",
+    )?;
+    if architecture.package_count != expected_approved.len() || architecture.package_count != 19 {
+        return Err(format!(
+            "release architecture must define exactly 19 unique packages, found package_count {} and {} unique package records",
+            architecture.package_count,
+            expected_approved.len()
+        ));
+    }
+    if control.spec_id != architecture.spec_id || control.spec_id != "radroots.crates.release.v1" {
+        return Err(format!(
+            "publication.spec_id {} must match architecture id {}",
+            control.spec_id, architecture.spec_id
+        ));
+    }
+
+    let approved = collect_unique_set(&control.approved_packages, "publication.approved_packages")?;
+    let local = collect_unique_set(&control.local_packages, "publication.local_packages")?;
+    let external = collect_unique_set(&control.external_packages, "publication.external_packages")?;
+    let expected_local = collect_unique_set(
+        &architecture.repositories.lib.packages,
+        "architecture.repositories.lib.packages",
+    )?;
+    let expected_external = collect_unique_set(
+        &architecture.repositories.sdk.packages,
+        "architecture.repositories.sdk.packages",
+    )?;
+    for (field, actual, expected) in [
+        (
+            "publication.approved_packages",
+            &approved,
+            &expected_approved,
+        ),
+        ("publication.local_packages", &local, &expected_local),
+        (
+            "publication.external_packages",
+            &external,
+            &expected_external,
+        ),
+    ] {
+        if actual != expected {
+            let missing = expected
+                .difference(actual)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let extra = actual
+                .difference(expected)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            return Err(format!(
+                "{field} is missing approved packages: {}; {field} has unapproved packages: {}",
+                join_set(&missing),
+                join_set(&extra)
+            ));
+        }
+    }
+    let ownership_overlap = local
+        .intersection(&external)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if !ownership_overlap.is_empty() {
+        return Err(format!(
+            "local and external approved package ownership overlaps: {}",
+            join_set(&ownership_overlap)
+        ));
+    }
+    let mut owned = local.clone();
+    owned.extend(external.iter().cloned());
+    if owned != approved {
+        return Err(
+            "local and external package ownership must partition approved packages".to_string(),
+        );
+    }
+    let external_in_workspace = external
+        .intersection(workspace_packages)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if !external_in_workspace.is_empty() {
+        return Err(format!(
+            "externally owned approved packages must not be workspace members: {}",
+            join_set(&external_in_workspace)
+        ));
+    }
+
+    let classification = release.workspace_classification.as_ref().ok_or_else(|| {
+        "workspace_classification is required for the v1 release policy".to_string()
+    })?;
+    let private = collect_unique_set(&classification.private, "workspace_classification.private")?;
+    let build_codegen = collect_unique_set(
+        &classification.build_codegen,
+        "workspace_classification.build_codegen",
+    )?;
+    let test_support = collect_unique_set(
+        &classification.test_support,
+        "workspace_classification.test_support",
+    )?;
+    let preview = collect_unique_set(&classification.preview, "workspace_classification.preview")?;
+    let retired = collect_unique_set(&classification.retired, "workspace_classification.retired")?;
+    let classes = [
+        ("private", &private),
+        ("build-codegen", &build_codegen),
+        ("test-support", &test_support),
+        ("preview", &preview),
+        ("retired", &retired),
+    ];
+    for index in 0..classes.len() {
+        for other_index in (index + 1)..classes.len() {
+            let overlap = classes[index]
+                .1
+                .intersection(classes[other_index].1)
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if !overlap.is_empty() {
+                return Err(format!(
+                    "workspace classification overlap is not allowed between {} and {}: {}",
+                    classes[index].0,
+                    classes[other_index].0,
+                    join_set(&overlap)
+                ));
+            }
+        }
+    }
+    let mut classified = BTreeSet::new();
+    for (_, entries) in classes {
+        classified.extend(entries.iter().cloned());
+    }
+    let local_workspace_packages = local
+        .intersection(workspace_packages)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let public_classification_overlap = classified
+        .intersection(&local_workspace_packages)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if !public_classification_overlap.is_empty() {
+        return Err(format!(
+            "approved local packages must not be classified as private workspace packages: {}",
+            join_set(&public_classification_overlap)
+        ));
+    }
+    let mut accounted = classified.clone();
+    accounted.extend(local_workspace_packages.iter().cloned());
+    if accounted != *workspace_packages {
+        let missing = workspace_packages
+            .difference(&accounted)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let extra = accounted
+            .difference(workspace_packages)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "workspace classification is missing packages: {}; workspace classification has unknown packages: {}",
+            join_set(&missing),
+            join_set(&extra)
+        ));
+    }
+
+    if control.registry != "crates-io" {
+        return Err("publication.registry must be crates-io".to_string());
+    }
+    if control.final_enablement_step != 305 {
+        return Err("publication.final_enablement_step must be 305".to_string());
+    }
+    let publish_order = collect_unique_set(&release.publish_order.crates, "publish_order.crates")?;
+    if control.frozen {
+        if !publish_order.is_empty() {
+            return Err(
+                "publish_order.crates must remain empty while publication is frozen".to_string(),
+            );
+        }
+        for (crate_name, publish) in publish_configs {
+            if !publish_config_is_non_public(publish.as_ref()) {
+                return Err(format!(
+                    "publication freeze requires workspace crate {} to set publish = false",
+                    crate_name
+                ));
+            }
+        }
+        return Ok(Some(BTreeSet::new()));
+    }
+
+    if local_workspace_packages != local {
+        let missing = local
+            .difference(&local_workspace_packages)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        return Err(format!(
+            "publication enablement is missing approved local workspace packages: {}",
+            join_set(&missing)
+        ));
+    }
+    if publish_order != local {
+        return Err("publish_order.crates must contain exactly the approved local packages when publication is enabled".to_string());
+    }
+    for (crate_name, publish) in publish_configs {
+        if local.contains(crate_name) {
+            if !publish_config_is_public(publish.as_ref()) {
+                return Err(format!(
+                    "approved local crate {} must set publish = [\"crates-io\"]",
+                    crate_name
+                ));
+            }
+        } else if !publish_config_is_non_public(publish.as_ref()) {
+            return Err(format!(
+                "private workspace crate {} must set publish = false",
+                crate_name
+            ));
+        }
+    }
+    Ok(Some(local))
+}
+
 #[cfg(test)]
 fn validate_release_publish_policy(
     workspace_root: &Path,
@@ -8212,6 +8506,19 @@ fn validate_release_publish_policy(
     let workspace_packages = workspace_package_names(workspace_root)?
         .into_iter()
         .collect::<BTreeSet<_>>();
+    let publish_configs = workspace_package_publish_configs(workspace_root)
+        .expect("workspace publish configs are stable");
+    if validate_v1_release_policy(
+        workspace_root,
+        &release,
+        &workspace_packages,
+        &publish_configs,
+        false,
+    )?
+    .is_some()
+    {
+        return Ok(());
+    }
     let uses_classification = release.uses_classification();
     let public_field = if uses_classification {
         "classification.public"
@@ -8319,8 +8626,6 @@ fn validate_release_publish_policy(
         }
     }
 
-    let publish_configs = workspace_package_publish_configs(workspace_root)
-        .expect("workspace publish configs are stable");
     if validate_publication_control(&release, &publish_configs, false)? {
         return Ok(());
     }
@@ -8493,6 +8798,10 @@ fn validate_contract_bundle_with_release_policy_override_and_profile(
             authority_profile,
             OperationAuthorityProfile::CapsuleCanonical
         ),
+        matches!(
+            authority_profile,
+            OperationAuthorityProfile::CapsuleCanonical
+        ),
     )?;
     Ok(())
 }
@@ -8510,6 +8819,7 @@ fn validate_release_publish_policy_with_override(
         contract_version,
         release_policy_override,
         true,
+        false,
     )
 }
 
@@ -8519,6 +8829,7 @@ fn validate_release_publish_policy_with_override_and_control(
     contract_version: &str,
     release_policy_override: Option<PathBuf>,
     require_publication_control: bool,
+    require_v1_policy: bool,
 ) -> Result<(), String> {
     let release = load_release_contract_with_override(
         workspace_root,
@@ -8538,6 +8849,19 @@ fn validate_release_publish_policy_with_override_and_control(
     let workspace_packages = workspace_package_names(workspace_root)?
         .into_iter()
         .collect::<BTreeSet<_>>();
+    let publish_configs = workspace_package_publish_configs(workspace_root)
+        .expect("workspace publish configs are stable");
+    if validate_v1_release_policy(
+        workspace_root,
+        &release,
+        &workspace_packages,
+        &publish_configs,
+        require_v1_policy,
+    )?
+    .is_some()
+    {
+        return Ok(());
+    }
     let uses_classification = release.uses_classification();
     let public_field = if uses_classification {
         "classification.public"
@@ -8645,8 +8969,6 @@ fn validate_release_publish_policy_with_override_and_control(
         }
     }
 
-    let publish_configs = workspace_package_publish_configs(workspace_root)
-        .expect("workspace publish configs are stable");
     if validate_publication_control(&release, &publish_configs, require_publication_control)? {
         return Ok(());
     }
@@ -11324,6 +11646,7 @@ readme = { workspace = true }
                 version: release.version.clone(),
             },
             publication: None,
+            workspace_classification: None,
             classification: ReleaseClassification::default(),
             publish: Some(ReleaseCrateSet {
                 crates: vec!["radroots_public".to_string()],
@@ -11347,6 +11670,7 @@ readme = { workspace = true }
                 version: release.version.clone(),
             },
             publication: None,
+            workspace_classification: None,
             classification: ReleaseClassification::default(),
             publish: None,
             internal: None,
@@ -11363,6 +11687,7 @@ readme = { workspace = true }
                 version: release.version.clone(),
             },
             publication: None,
+            workspace_classification: None,
             classification: ReleaseClassification {
                 internal: vec!["radroots_internal_only".to_string()],
                 ..ReleaseClassification::default()
@@ -11380,6 +11705,7 @@ readme = { workspace = true }
                 version: release.version.clone(),
             },
             publication: None,
+            workspace_classification: None,
             classification: ReleaseClassification {
                 deferred: vec!["radroots_deferred".to_string()],
                 ..ReleaseClassification::default()
@@ -11401,6 +11727,7 @@ readme = { workspace = true }
                 version: release.version.clone(),
             },
             publication: None,
+            workspace_classification: None,
             classification: ReleaseClassification {
                 retired: vec!["radroots_retired".to_string()],
                 ..ReleaseClassification::default()
@@ -11420,6 +11747,7 @@ readme = { workspace = true }
         let yank_only = ReleaseContractFile {
             release,
             publication: None,
+            workspace_classification: None,
             classification: ReleaseClassification {
                 yank_only: vec!["radroots_yank_only".to_string()],
                 ..ReleaseClassification::default()
@@ -12078,6 +12406,104 @@ crates = ["radroots_a"]
         )
         .expect_err("release policy must carry explicit publication control");
         assert!(missing_control.contains("publication control is required"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn v1_release_policy_covers_approved_unapproved_unclassified_and_private_fixtures() {
+        let root = create_synthetic_workspace("v1_release_policy");
+        let contract_root = root.join("contracts");
+        let release_policy_path = root_release_policy_path(&root);
+        for member in ["a", "b"] {
+            write_file(
+                &root.join("crates").join(member).join("Cargo.toml"),
+                &format!(
+                    "[package]\nname = \"radroots_{member}\"\nversion = \"1.0.0\"\nedition = \"2024\"\npublish = false\n"
+                ),
+            );
+        }
+
+        let approved = (1..=19)
+            .map(|index| format!("package-{index:02}"))
+            .collect::<Vec<_>>();
+        let approved_toml = approved
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let external_toml = approved[1..]
+            .iter()
+            .map(|name| format!("\"{name}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut architecture = format!(
+            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\n\n[repositories.lib]\npackages = [\"package-01\"]\n\n[repositories.sdk]\npackages = [{external_toml}]\n"
+        );
+        for name in &approved {
+            architecture.push_str(&format!("\n[[package]]\nname = \"{name}\"\n"));
+        }
+        write_file(
+            &root.join("docs/specs/radroots_crates_release_v1.toml"),
+            &architecture,
+        );
+
+        let policy = |approved_packages: &str, test_support: &str| {
+            format!(
+                r#"[release]
+version = "1.0.0"
+
+[publication]
+frozen = true
+registry = "crates-io"
+final_enablement_step = 305
+spec_id = "radroots.crates.release.v1"
+approved_packages = [{approved_packages}]
+local_packages = ["package-01"]
+external_packages = [{external_toml}]
+
+[workspace_classification]
+private = ["radroots_a"]
+build_codegen = []
+test_support = [{test_support}]
+preview = []
+retired = []
+
+[publish_order]
+crates = []
+"#
+            )
+        };
+
+        write_file(
+            &release_policy_path,
+            &policy(&approved_toml, "\"radroots_b\""),
+        );
+        validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect("approved and exhaustively classified fixture must pass");
+
+        let unapproved = format!("{approved_toml}, \"unapproved-public\"");
+        write_file(&release_policy_path, &policy(&unapproved, "\"radroots_b\""));
+        let unapproved_error = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("unapproved public package must fail");
+        assert!(unapproved_error.contains("unapproved packages: unapproved-public"));
+
+        write_file(&release_policy_path, &policy(&approved_toml, ""));
+        let unclassified = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("unclassified workspace package must fail");
+        assert!(unclassified.contains("workspace classification is missing packages: radroots_b"));
+
+        write_file(
+            &release_policy_path,
+            &policy(&approved_toml, "\"radroots_b\""),
+        );
+        write_file(
+            &root.join("crates/a/Cargo.toml"),
+            "[package]\nname = \"radroots_a\"\nversion = \"1.0.0\"\nedition = \"2024\"\npublish = [\"crates-io\"]\n",
+        );
+        let private = validate_release_publish_policy(&root, &contract_root, "1.0.0")
+            .expect_err("private package must remain non-publishable");
+        assert!(private.contains("publication freeze requires workspace crate radroots_a"));
 
         let _ = fs::remove_dir_all(root);
     }

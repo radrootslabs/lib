@@ -5,26 +5,70 @@ version = "1.0.0-alpha.1"
 frozen = true
 registry = "crates-io"
 final_enablement_step = 305
+spec_id = "radroots.crates.release.v1"
+approved_packages = [
+  "radroots-core",
+  "radroots-identity",
+  "radroots-blossom",
+  "radroots-protocol",
+  "radroots-event",
+  "radroots-event-codec",
+  "radroots-trade",
+  "radroots-signing",
+  "radroots-transport",
+  "radroots-nostr",
+  "radroots-nostr-connect",
+  "radroots-secrets",
+  "radroots-storage",
+  "radroots-storage-sqlite",
+  "radroots-transport-nostr",
+  "radroots-sync",
+  "radroots-geonames",
+  "radroots-sdk",
+  "radroots",
+]
+local_packages = [
+  "radroots-core",
+  "radroots-identity",
+  "radroots-blossom",
+  "radroots-protocol",
+  "radroots-event",
+  "radroots-event-codec",
+  "radroots-trade",
+  "radroots-signing",
+  "radroots-transport",
+  "radroots-nostr",
+  "radroots-nostr-connect",
+  "radroots-secrets",
+  "radroots-storage",
+  "radroots-storage-sqlite",
+  "radroots-transport-nostr",
+  "radroots-sync",
+  "radroots-geonames",
+]
+external_packages = ["radroots-sdk", "radroots"]
 
-[classification]
-public = [
+[workspace_classification]
+private = [
+  "radroots_authority",
   "radroots_blossom",
   "radroots_core",
   "radroots_event",
   "radroots_event_codec",
   "radroots_event_index",
+  "radroots_event_store",
   "radroots_geocoder",
   "radroots_identity",
   "radroots_log",
+  "radroots_net",
   "radroots_nostr",
   "radroots_nostr_accounts",
   "radroots_nostr_connect",
+  "radroots_nostr_runtime",
   "radroots_nostr_signer",
+  "radroots_outbox",
   "radroots_protected_store",
   "radroots_protocol_contract_v1",
-  "radroots_replica_schema",
-  "radroots_replica_store",
-  "radroots_replica_sync",
   "radroots_runtime",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
@@ -33,17 +77,20 @@ public = [
   "radroots_secret_vault",
   "radroots_sql_core",
   "radroots_trade",
+  "radroots_transport",
+  "radroots_transport_nostr",
+  "radroots_transport_publish_protocol",
 ]
-internal = [
-  "radroots_authority",
-  "radroots_event_store",
+build_codegen = ["xtask"]
+test_support = ["radroots_test_fixtures"]
+preview = [
   "radroots_mesh",
   "radroots_mesh_agent_client",
   "radroots_mesh_agent_proto",
-  "radroots_net",
-  "radroots_nostr_runtime",
   "radroots_nostrdb",
-  "radroots_outbox",
+  "radroots_replica_schema",
+  "radroots_replica_store",
+  "radroots_replica_sync",
   "radroots_simplex_agent_proto",
   "radroots_simplex_agent_runtime",
   "radroots_simplex_agent_store",
@@ -53,44 +100,11 @@ internal = [
   "radroots_simplex_smp_crypto",
   "radroots_simplex_smp_proto",
   "radroots_simplex_smp_transport",
-  "radroots_test_fixtures",
   "radroots_trade_sp1_guest",
   "radroots_trade_sp1_host",
-  "radroots_transport",
-  "radroots_transport_nostr",
-  "radroots_transport_publish_protocol",
   "radroots_transport_reticulum",
-  "xtask",
 ]
-deferred = []
 retired = []
-yank_only = []
 
 [publish_order]
-crates = [
-  "radroots_runtime_distribution",
-  "radroots_replica_schema",
-  "radroots_protocol_contract_v1",
-  "radroots_nostr_connect",
-  "radroots_sql_core",
-  "radroots_runtime_store",
-  "radroots_runtime_paths",
-  "radroots_log",
-  "radroots_secret_vault",
-  "radroots_protected_store",
-  "radroots_event_index",
-  "radroots_blossom",
-  "radroots_core",
-  "radroots_runtime_manager",
-  "radroots_replica_store",
-  "radroots_geocoder",
-  "radroots_event",
-  "radroots_runtime",
-  "radroots_identity",
-  "radroots_event_codec",
-  "radroots_trade",
-  "radroots_replica_sync",
-  "radroots_nostr",
-  "radroots_nostr_signer",
-  "radroots_nostr_accounts",
-]
+crates = []
