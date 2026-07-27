@@ -17,8 +17,9 @@ use radroots_transport::{
     RadrootsTransportPayload, RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus,
     RadrootsTransportTarget, RadrootsTransportTargetReceipt,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::RadrootsRelayOutcomeKind;
@@ -146,28 +147,131 @@ fn validate_publish_idempotency_key(value: &str) -> Result<(), RadrootsRelayTran
     Ok(())
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RadrootsRelayPublishRelayReceipt {
-    pub relay_url: String,
-    pub outcome: RadrootsRelayOutcome,
-    pub attempted: bool,
+    relay_url: String,
+    outcome: RadrootsRelayOutcome,
+    attempted: bool,
 }
 
 impl RadrootsRelayPublishRelayReceipt {
-    pub fn attempted(relay_url: impl Into<String>, outcome: RadrootsRelayOutcome) -> Self {
-        Self {
-            relay_url: relay_url.into(),
-            outcome,
-            attempted: true,
-        }
+    pub fn attempted(
+        relay_url: impl Into<String>,
+        outcome: RadrootsRelayOutcome,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::try_new(relay_url.into(), outcome, true)
     }
 
-    pub fn skipped(relay_url: impl Into<String>, outcome: RadrootsRelayOutcome) -> Self {
-        Self {
-            relay_url: relay_url.into(),
+    pub fn skipped(
+        relay_url: impl Into<String>,
+        outcome: RadrootsRelayOutcome,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::try_new(relay_url.into(), outcome, false)
+    }
+
+    fn try_new(
+        relay_url: String,
+        outcome: RadrootsRelayOutcome,
+        attempted: bool,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        validate_publish_receipt_relay_url(relay_url.as_str())?;
+        Ok(Self {
+            relay_url,
             outcome,
-            attempted: false,
+            attempted,
+        })
+    }
+
+    pub fn relay_url(&self) -> &str {
+        self.relay_url.as_str()
+    }
+
+    pub fn outcome(&self) -> &RadrootsRelayOutcome {
+        &self.outcome
+    }
+
+    pub fn was_attempted(&self) -> bool {
+        self.attempted
+    }
+}
+
+fn validate_publish_receipt_relay_url(relay_url: &str) -> Result<(), RadrootsRelayTransportError> {
+    RadrootsTransportTarget::nostr_relay(relay_url).map_err(|error| {
+        RadrootsRelayTransportError::InvalidPublishReceiptRelayUrl {
+            url: if relay_url.len() <= radroots_transport::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
+            {
+                relay_url.to_owned()
+            } else {
+                "<oversized>".to_owned()
+            },
+            reason: error.to_string(),
         }
+    })?;
+    Ok(())
+}
+
+struct BoundedPublishReceiptRelayUrl;
+
+impl<'de> de::Visitor<'de> for BoundedPublishReceiptRelayUrl {
+    type Value = String;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "a relay URL of at most {} UTF-8 bytes",
+            radroots_transport::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
+        )
+    }
+
+    fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_str(value)
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        validate_publish_receipt_relay_url(value)
+            .map_err(E::custom)
+            .map(|()| value.to_owned())
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        validate_publish_receipt_relay_url(value.as_str())
+            .map_err(E::custom)
+            .map(|()| value)
+    }
+}
+
+fn deserialize_publish_receipt_relay_url<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_string(BoundedPublishReceiptRelayUrl)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsRelayPublishRelayReceiptWire {
+    #[serde(deserialize_with = "deserialize_publish_receipt_relay_url")]
+    relay_url: String,
+    outcome: RadrootsRelayOutcome,
+    attempted: bool,
+}
+
+impl<'de> Deserialize<'de> for RadrootsRelayPublishRelayReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = RadrootsRelayPublishRelayReceiptWire::deserialize(deserializer)?;
+        Self::try_new(wire.relay_url, wire.outcome, wire.attempted).map_err(de::Error::custom)
     }
 }
 
@@ -743,10 +847,10 @@ fn normalize_publish_receipts(
             if let Some(receipt) = by_relay.remove(relay_url) {
                 Ok(receipt)
             } else {
-                Ok(RadrootsRelayPublishRelayReceipt::skipped(
+                RadrootsRelayPublishRelayReceipt::skipped(
                     relay_url,
                     RadrootsRelayOutcome::unknown("relay adapter omitted target receipt")?,
-                ))
+                )
             }
         })
         .collect()
@@ -849,7 +953,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
                 .lock()
                 .map_err(captured_raw_event_lock_error)?
                 .push(request.signed_event.signed_event().raw_json().to_owned());
-            Ok(request
+            request
                 .targets
                 .relays()
                 .iter()
@@ -861,7 +965,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
                         .unwrap_or_else(RadrootsRelayOutcome::accepted);
                     RadrootsRelayPublishRelayReceipt::attempted(relay.as_str(), outcome)
                 })
-                .collect())
+                .collect()
         })
     }
 }
@@ -940,10 +1044,10 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                             .get(target_url)
                             .cloned()
                             .unwrap_or_else(|| "relay did not connect".to_owned());
-                        Ok(RadrootsRelayPublishRelayReceipt::attempted(
+                        RadrootsRelayPublishRelayReceipt::attempted(
                             relay_url,
                             RadrootsRelayOutcome::connection_failed(reason)?,
-                        ))
+                        )
                     })
                     .collect();
             }
@@ -954,10 +1058,10 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                     return target_strings
                         .into_iter()
                         .map(|relay_url| {
-                            Ok(RadrootsRelayPublishRelayReceipt::attempted(
+                            RadrootsRelayPublishRelayReceipt::attempted(
                                 relay_url,
                                 RadrootsRelayOutcome::connection_failed(message.clone())?,
-                            ))
+                            )
                         })
                         .collect();
                 }
@@ -975,14 +1079,14 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                         RadrootsRelayOutcome::accepted_with_message(
                             "nostr-relay-pool-success-ok-message-unavailable",
                         )?,
-                    ));
+                    )?);
                     continue;
                 }
                 if let Some(reason) = connection_failures.get(target_url) {
                     receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
                         relay_url,
                         RadrootsRelayOutcome::connection_failed(reason.clone())?,
-                    ));
+                    )?);
                     continue;
                 }
                 let failed = output.failed.iter().find_map(|(failed_url, message)| {
@@ -1000,7 +1104,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                     )?);
                 receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
                     relay_url, outcome,
-                ));
+                )?);
             }
             Ok(receipts)
         })

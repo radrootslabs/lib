@@ -206,23 +206,18 @@ where
 
     for relay in &publish.relays {
         if relay
-            .outcome
+            .outcome()
             .kind()
             .transport_outcome_kind()
             .target_status()
             .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
             && publishable
-                .targets_for_relay(relay.relay_url.as_str())
+                .targets_for_relay(relay.relay_url())
                 .next()
                 .is_some()
         {
-            ingest_publish_observation(
-                event_store,
-                &signed_event,
-                relay.relay_url.as_str(),
-                now_ms,
-            )
-            .await?;
+            ingest_publish_observation(event_store, &signed_event, relay.relay_url(), now_ms)
+                .await?;
         }
     }
 
@@ -355,23 +350,18 @@ where
 
     for relay in &relay_receipts {
         if relay
-            .outcome
+            .outcome()
             .kind()
             .transport_outcome_kind()
             .target_status()
             .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
             && publishable
-                .targets_for_relay(relay.relay_url.as_str())
+                .targets_for_relay(relay.relay_url())
                 .next()
                 .is_some()
         {
-            ingest_publish_observation(
-                event_store,
-                &signed_event,
-                relay.relay_url.as_str(),
-                now_ms,
-            )
-            .await?;
+            ingest_publish_observation(event_store, &signed_event, relay.relay_url(), now_ms)
+                .await?;
         }
     }
 
@@ -422,10 +412,10 @@ fn adapter_transport_failure_receipt(
     let relays = relay_urls
         .into_iter()
         .map(|relay_url| {
-            Ok(RadrootsRelayPublishRelayReceipt::attempted(
+            RadrootsRelayPublishRelayReceipt::attempted(
                 relay_url,
                 RadrootsRelayOutcome::connection_failed(message.clone())?,
-            ))
+            )
         })
         .collect::<Result<Vec<_>, RadrootsRelayTransportError>>()?;
     Ok(RadrootsRelayPublishReceipt {
@@ -512,20 +502,20 @@ fn target_receipts_from_relay_receipts(
 ) -> Vec<RadrootsOutboxPublishTargetReceipt> {
     let mut target_receipts = Vec::new();
     for relay_receipt in relay_receipts {
-        for target in publishable.targets_for_relay(relay_receipt.relay_url.as_str()) {
+        for target in publishable.targets_for_relay(relay_receipt.relay_url()) {
             target_receipts.push(RadrootsOutboxPublishTargetReceipt {
                 delivery_target_id: target.delivery_target_id,
                 endpoint_uri: target.relay_url.clone(),
                 endpoint_fingerprint: target.endpoint_fingerprint.clone(),
                 target_scope: target.target_scope.clone(),
                 target_label: target.target_label.clone(),
-                attempted: relay_receipt.attempted,
+                attempted: relay_receipt.was_attempted(),
                 transport_status: relay_receipt
-                    .outcome
+                    .outcome()
                     .kind()
                     .transport_outcome_kind()
                     .target_status(),
-                outcome: relay_receipt.outcome.clone(),
+                outcome: relay_receipt.outcome().clone(),
             });
         }
     }
@@ -689,18 +679,18 @@ fn relay_receipts_from_transport_receipts(
     for receipt in delivery.target_receipts() {
         let outcome = relay_outcome_from_transport_outcome(receipt.outcome())?;
         let relay_receipt = if receipt.was_attempted() {
-            RadrootsRelayPublishRelayReceipt::attempted(receipt.target().uri().as_str(), outcome)
+            RadrootsRelayPublishRelayReceipt::attempted(receipt.target().uri().as_str(), outcome)?
         } else {
-            RadrootsRelayPublishRelayReceipt::skipped(receipt.target().uri().as_str(), outcome)
+            RadrootsRelayPublishRelayReceipt::skipped(receipt.target().uri().as_str(), outcome)?
         };
         if let Some(existing) = relay_receipts
             .iter()
-            .find(|existing| existing.relay_url == relay_receipt.relay_url)
+            .find(|existing| existing.relay_url() == relay_receipt.relay_url())
         {
             if existing != &relay_receipt {
                 return Err(
                     RadrootsRelayTransportError::ConflictingTransportReceiptRelayUrl {
-                        url: relay_receipt.relay_url,
+                        url: relay_receipt.relay_url().to_owned(),
                     },
                 );
             }
@@ -1250,7 +1240,8 @@ mod tests {
             &[RadrootsRelayPublishRelayReceipt::attempted(
                 target.uri().as_str(),
                 RadrootsRelayOutcome::accepted(),
-            )],
+            )
+            .expect("bounded relay receipt")],
         );
         assert_eq!(
             accepted_relay_receipts[0].transport_status,
@@ -1302,7 +1293,7 @@ mod tests {
         assert_eq!(receipt.terminal_count, 0);
         assert_eq!(receipt.quorum, 2);
         assert!(!receipt.quorum_met);
-        assert!(receipt.relays.iter().all(|relay| relay.attempted));
+        assert!(receipt.relays.iter().all(|relay| relay.was_attempted()));
     }
 
     #[test]

@@ -62,6 +62,12 @@ fn bounded_relay_outcome(
     outcome.expect("bounded relay outcome")
 }
 
+fn bounded_publish_relay_receipt(
+    receipt: Result<RadrootsRelayPublishRelayReceipt, RadrootsRelayTransportError>,
+) -> RadrootsRelayPublishRelayReceipt {
+    receipt.expect("bounded relay publish receipt")
+}
+
 struct TransportFailurePublishAdapter;
 
 impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
@@ -87,9 +93,11 @@ impl RadrootsRelayPublishAdapter for PartialPublishAdapter {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
     {
         Box::pin(async {
-            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
-                RELAY_PRIMARY_WSS,
-                RadrootsRelayOutcome::accepted(),
+            Ok(vec![bounded_publish_relay_receipt(
+                RadrootsRelayPublishRelayReceipt::attempted(
+                    RELAY_PRIMARY_WSS,
+                    RadrootsRelayOutcome::accepted(),
+                ),
             )])
         })
     }
@@ -104,9 +112,11 @@ impl RadrootsRelayPublishAdapter for SlashSpelledRelayReceiptPublishAdapter {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
     {
         Box::pin(async {
-            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
-                format!("{RELAY_PRIMARY_WSS}/"),
-                RadrootsRelayOutcome::accepted(),
+            Ok(vec![bounded_publish_relay_receipt(
+                RadrootsRelayPublishRelayReceipt::attempted(
+                    format!("{RELAY_PRIMARY_WSS}/"),
+                    RadrootsRelayOutcome::accepted(),
+                ),
             )])
         })
     }
@@ -145,14 +155,14 @@ impl RadrootsRelayPublishAdapter for UnknownRelayReceiptPublishAdapter {
                 .as_str()
                 .to_owned();
             Ok(vec![
-                RadrootsRelayPublishRelayReceipt::attempted(
+                bounded_publish_relay_receipt(RadrootsRelayPublishRelayReceipt::attempted(
                     relay,
                     RadrootsRelayOutcome::accepted(),
-                ),
-                RadrootsRelayPublishRelayReceipt::attempted(
+                )),
+                bounded_publish_relay_receipt(RadrootsRelayPublishRelayReceipt::attempted(
                     RELAY_TERTIARY_WSS,
                     RadrootsRelayOutcome::accepted(),
-                ),
+                )),
             ])
         })
     }
@@ -175,14 +185,14 @@ impl RadrootsRelayPublishAdapter for DuplicateRelayReceiptPublishAdapter {
                 .as_str()
                 .to_owned();
             Ok(vec![
-                RadrootsRelayPublishRelayReceipt::attempted(
+                bounded_publish_relay_receipt(RadrootsRelayPublishRelayReceipt::attempted(
                     relay.clone(),
                     RadrootsRelayOutcome::accepted(),
-                ),
-                RadrootsRelayPublishRelayReceipt::attempted(
+                )),
+                bounded_publish_relay_receipt(RadrootsRelayPublishRelayReceipt::attempted(
                     format!("{relay}/"),
                     RadrootsRelayOutcome::accepted(),
-                ),
+                )),
             ])
         })
     }
@@ -197,10 +207,11 @@ impl RadrootsRelayPublishAdapter for InvalidRelayReceiptPublishAdapter {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
     {
         Box::pin(async {
-            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
+            RadrootsRelayPublishRelayReceipt::attempted(
                 "not a relay URL",
                 RadrootsRelayOutcome::accepted(),
-            )])
+            )
+            .map(|receipt| vec![receipt])
         })
     }
 }
@@ -220,9 +231,8 @@ impl RadrootsRelayPublishAdapter for SkippedAcceptedRelayReceiptPublishAdapter {
                 .first()
                 .expect("fixture target")
                 .as_str();
-            Ok(vec![RadrootsRelayPublishRelayReceipt::skipped(
-                relay,
-                RadrootsRelayOutcome::accepted(),
+            Ok(vec![bounded_publish_relay_receipt(
+                RadrootsRelayPublishRelayReceipt::skipped(relay, RadrootsRelayOutcome::accepted()),
             )])
         })
     }
@@ -243,11 +253,13 @@ impl RadrootsRelayPublishAdapter for AttemptedSkippedRelayReceiptPublishAdapter 
                 .first()
                 .expect("fixture target")
                 .as_str();
-            Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
-                relay,
-                bounded_relay_outcome(RadrootsRelayOutcome::skipped_already_accepted(
-                    "already accepted",
-                )),
+            Ok(vec![bounded_publish_relay_receipt(
+                RadrootsRelayPublishRelayReceipt::attempted(
+                    relay,
+                    bounded_relay_outcome(RadrootsRelayOutcome::skipped_already_accepted(
+                        "already accepted",
+                    )),
+                ),
             )])
         })
     }
@@ -1243,6 +1255,50 @@ fn relay_outcome_messages_are_bounded_and_strictly_decoded() {
 }
 
 #[test]
+fn relay_publish_receipts_validate_bounded_wire_identity() {
+    let prefix = "wss://relay.example.com/";
+    let exact_url = format!(
+        "{prefix}{}",
+        "x".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES - prefix.len())
+    );
+    let receipt = RadrootsRelayPublishRelayReceipt::attempted(
+        exact_url.clone(),
+        RadrootsRelayOutcome::accepted(),
+    )
+    .expect("maximum relay receipt URL");
+    assert_eq!(receipt.relay_url(), exact_url);
+    assert!(receipt.was_attempted());
+    assert_eq!(receipt.outcome().kind(), RadrootsRelayOutcomeKind::Accepted);
+
+    let wire = serde_json::to_value(&receipt).expect("relay receipt JSON");
+    let decoded = serde_json::from_value::<RadrootsRelayPublishRelayReceipt>(wire)
+        .expect("strict relay receipt reload");
+    assert_eq!(decoded, receipt);
+
+    let one_over = format!("{exact_url}x");
+    assert!(matches!(
+        RadrootsRelayPublishRelayReceipt::attempted(
+            one_over,
+            RadrootsRelayOutcome::accepted(),
+        ),
+        Err(RadrootsRelayTransportError::InvalidPublishReceiptRelayUrl { url, .. })
+            if url == "<oversized>"
+    ));
+    assert!(
+        serde_json::from_value::<RadrootsRelayPublishRelayReceipt>(serde_json::json!({
+            "relay_url": RELAY_PRIMARY_WSS,
+            "outcome": {
+                "kind": "Accepted",
+                "message": null,
+            },
+            "attempted": true,
+            "extra": true,
+        }))
+        .is_err()
+    );
+}
+
+#[test]
 fn relay_transport_error_wraps_transport_contract_errors() {
     let error = RadrootsRelayTransportError::from(
         radroots_transport::RadrootsTransportError::EmptyTargetSet,
@@ -1724,13 +1780,13 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     assert_eq!(receipt.quorum, 2);
     assert!(!receipt.quorum_met);
 
-    let skipped = RadrootsRelayPublishRelayReceipt::skipped(
+    let skipped = bounded_publish_relay_receipt(RadrootsRelayPublishRelayReceipt::skipped(
         RELAY_TERTIARY_WSS,
         bounded_relay_outcome(RadrootsRelayOutcome::timeout("timeout: no OK")),
-    );
-    assert_eq!(skipped.relay_url, RELAY_TERTIARY_WSS);
-    assert!(!skipped.attempted);
-    assert_eq!(skipped.outcome.kind(), RadrootsRelayOutcomeKind::Timeout);
+    ));
+    assert_eq!(skipped.relay_url(), RELAY_TERTIARY_WSS);
+    assert!(!skipped.was_attempted());
+    assert_eq!(skipped.outcome().kind(), RadrootsRelayOutcomeKind::Timeout);
 
     let error = publish_signed_event(
         &TransportFailurePublishAdapter,
@@ -1814,9 +1870,9 @@ async fn publish_all_policy_uses_requested_target_count() {
     assert_eq!(receipt.quorum, 2);
     assert!(!receipt.quorum_met);
     assert_eq!(receipt.relays.len(), 2);
-    assert!(!receipt.relays[1].attempted);
+    assert!(!receipt.relays[1].was_attempted());
     assert_eq!(
-        receipt.relays[1].outcome.kind(),
+        receipt.relays[1].outcome().kind(),
         RadrootsRelayOutcomeKind::Unknown
     );
 
@@ -4221,7 +4277,7 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
     assert_eq!(published.quorum, 2);
     assert!(published.quorum_met);
     assert_eq!(published.relay_receipts.len(), 1);
-    assert_eq!(published.relay_receipts[0].relay_url, RELAY_PRIMARY_WSS);
+    assert_eq!(published.relay_receipts[0].relay_url(), RELAY_PRIMARY_WSS);
     assert_eq!(published.target_receipts.len(), 2);
     assert!(
         published
@@ -4448,7 +4504,7 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
     assert_eq!(published.quorum, 1);
     assert!(!published.quorum_met);
     assert_eq!(published.relay_receipts.len(), 1);
-    assert_eq!(published.relay_receipts[0].relay_url, RELAY_SECONDARY_WSS);
+    assert_eq!(published.relay_receipts[0].relay_url(), RELAY_SECONDARY_WSS);
     let event = outbox
         .get_event(receipt.outbox_event_id)
         .await
@@ -4740,7 +4796,7 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
         published
             .relay_receipts
             .iter()
-            .all(|relay| relay.outcome.kind() == RadrootsRelayOutcomeKind::ConnectionFailed)
+            .all(|relay| relay.outcome().kind() == RadrootsRelayOutcomeKind::ConnectionFailed)
     );
 
     let event = outbox
