@@ -40,6 +40,8 @@ struct DeviationRecord {
 #[derive(Debug, Deserialize)]
 struct ArchitectureIdentity {
     spec_id: String,
+    resolver: String,
+    rust_version: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +52,14 @@ struct WorkspaceManifest {
 #[derive(Debug, Deserialize)]
 struct WorkspaceMembers {
     members: Vec<String>,
+    resolver: String,
+    package: WorkspacePackage,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspacePackage {
+    #[serde(rename = "rust-version")]
+    rust_version: String,
 }
 
 pub fn validate(workspace_root: &Path) -> Result<(), String> {
@@ -60,10 +70,54 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     let architecture = toml::from_str::<ArchitectureIdentity>(&architecture_raw)
         .map_err(|error| format!("parse {}: {error}", architecture_path.display()))?;
 
+    validate_workspace_toolchain(workspace_root, &architecture)?;
+
     let ledger_path = workspace_root.join(DEVIATIONS_RELATIVE);
     let ledger_raw = fs::read_to_string(&ledger_path)
         .map_err(|error| format!("read {}: {error}", ledger_path.display()))?;
     validate_ledger(workspace_root, &architecture.spec_id, &ledger_raw)
+}
+
+fn validate_workspace_toolchain(
+    workspace_root: &Path,
+    architecture: &ArchitectureIdentity,
+) -> Result<(), String> {
+    let manifest_path = workspace_root.join("Cargo.toml");
+    let manifest_raw = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
+    let manifest = toml::from_str::<WorkspaceManifest>(&manifest_raw)
+        .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+    if manifest.workspace.resolver != architecture.resolver || architecture.resolver != "3" {
+        return Err(format!(
+            "workspace resolver {} must match architecture resolver {}",
+            manifest.workspace.resolver, architecture.resolver
+        ));
+    }
+    if manifest.workspace.package.rust_version != architecture.rust_version
+        || architecture.rust_version != "1.97.1"
+    {
+        return Err(format!(
+            "workspace rust-version {} must match architecture rust_version {}",
+            manifest.workspace.package.rust_version, architecture.rust_version
+        ));
+    }
+    let toolchain_path = workspace_root.join("rust-toolchain.toml");
+    let toolchain_raw = fs::read_to_string(&toolchain_path)
+        .map_err(|error| format!("read {}: {error}", toolchain_path.display()))?;
+    let toolchain = toolchain_raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("parse {}: {error}", toolchain_path.display()))?;
+    let channel = toolchain
+        .get("toolchain")
+        .and_then(|value| value.get("channel"))
+        .and_then(toml::Value::as_str);
+    if channel != Some(architecture.rust_version.as_str()) {
+        return Err(format!(
+            "rust-toolchain.toml channel must match architecture rust_version {}",
+            architecture.rust_version
+        ));
+    }
+    Ok(())
 }
 
 fn validate_workspace_members(workspace_root: &Path) -> Result<(), String> {
@@ -267,7 +321,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{validate_ledger, validate_workspace_members};
+    use super::{
+        ArchitectureIdentity, validate_ledger, validate_workspace_members,
+        validate_workspace_toolchain,
+    };
 
     fn test_root(label: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -338,18 +395,49 @@ adr_required = false
         }
         fs::write(
             root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/a\", \"tools/xtask\"]\n",
+            "[workspace]\nmembers = [\"crates/a\", \"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.97.1\"\n",
         )
         .expect("write complete workspace");
         validate_workspace_members(&root).expect("complete membership");
 
         fs::write(
             root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"tools/xtask\"]\n",
+            "[workspace]\nmembers = [\"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.97.1\"\n",
         )
         .expect("write incomplete workspace");
         let error = validate_workspace_members(&root).expect_err("missing member must fail");
         assert!(error.contains("missing local package roots: crates/a"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_toolchain_requires_exact_resolver_and_rust_version() {
+        let root = test_root("workspace_toolchain");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = []\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.97.1\"\n",
+        )
+        .expect("write workspace manifest");
+        fs::write(
+            root.join("rust-toolchain.toml"),
+            "[toolchain]\nchannel = \"1.97.1\"\n",
+        )
+        .expect("write toolchain");
+        let architecture = ArchitectureIdentity {
+            spec_id: "radroots.crates.release.v1".to_string(),
+            resolver: "3".to_string(),
+            rust_version: "1.97.1".to_string(),
+        };
+        validate_workspace_toolchain(&root, &architecture).expect("exact toolchain policy");
+
+        fs::write(
+            root.join("rust-toolchain.toml"),
+            "[toolchain]\nchannel = \"1.97.0\"\n",
+        )
+        .expect("write mismatched toolchain");
+        let error = validate_workspace_toolchain(&root, &architecture)
+            .expect_err("mismatched toolchain must fail");
+        assert!(error.contains("channel must match"));
         let _ = fs::remove_dir_all(root);
     }
 }
