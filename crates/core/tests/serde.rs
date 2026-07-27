@@ -3,9 +3,13 @@
 mod common;
 
 use core::str::FromStr;
+use std::collections::BTreeSet;
 
-use radroots_core::{Currency, Decimal, Money, Percent, Quantity, Unit};
+use radroots_core::{Currency, Decimal, Money, Percent, Quantity, QuantityPrice, Unit};
 use serde_json::Value;
+
+const SERIALIZATION_VECTORS: &str =
+    include_str!("../../../contracts/conformance/vectors/core/value_serialization.v1.json");
 
 #[test]
 fn decimal_serializes_as_string() {
@@ -60,4 +64,46 @@ fn currency_serializes_as_code() {
     let c = Currency::from_str("usd").unwrap();
     let json = serde_json::to_string(&c).unwrap();
     assert_eq!(json, "\"USD\"");
+}
+
+#[test]
+fn canonical_serialization_vectors_roundtrip_through_public_types() {
+    let suite: Value = serde_json::from_str(SERIALIZATION_VECTORS).unwrap();
+    assert_eq!(suite["suite"], "core_value_serialization");
+    assert_eq!(suite["contract_version"], "1.0.0");
+
+    let vectors = suite["vectors"].as_array().unwrap();
+    let mut ids = BTreeSet::new();
+    for vector in vectors {
+        let id = vector["id"].as_str().unwrap();
+        assert!(ids.insert(id), "duplicate vector id {id}");
+        let input = vector["input"].clone();
+        let actual = match vector["kind"].as_str().unwrap() {
+            "core.decimal.serde" => {
+                serde_json::to_value(serde_json::from_value::<Decimal>(input).unwrap()).unwrap()
+            }
+            "core.currency.serde" => {
+                serde_json::to_value(serde_json::from_value::<Currency>(input).unwrap()).unwrap()
+            }
+            "core.money.serde" => {
+                serde_json::to_value(serde_json::from_value::<Money>(input).unwrap()).unwrap()
+            }
+            "core.percent.serde" => {
+                serde_json::to_value(serde_json::from_value::<Percent>(input).unwrap()).unwrap()
+            }
+            "core.quantity.serde" => {
+                serde_json::to_value(serde_json::from_value::<Quantity>(input).unwrap()).unwrap()
+            }
+            "core.unit.serde" => {
+                serde_json::to_value(serde_json::from_value::<Unit>(input).unwrap()).unwrap()
+            }
+            "core.quantity_price.serde" => {
+                serde_json::to_value(serde_json::from_value::<QuantityPrice>(input).unwrap())
+                    .unwrap()
+            }
+            kind => panic!("unsupported serialization vector kind {kind}"),
+        };
+        assert_eq!(actual, vector["expected"], "vector {id}");
+    }
+    assert_eq!(ids.len(), 9);
 }

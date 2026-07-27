@@ -1,12 +1,39 @@
+//! Portable, deterministic value types for Radroots domain packages.
+//!
+//! Checked constructors and arithmetic preserve value invariants at trust
+//! boundaries:
+//!
+//! ```
+//! use radroots_core::{Currency, Decimal, Money};
+//!
+//! let price = Money::try_new("12.50".parse::<Decimal>()?, Currency::USD)?;
+//! let total = price.checked_mul_decimal(Decimal::from(2_u32))?;
+//! assert_eq!(total.amount().to_string(), "25");
+//! # Ok::<(), radroots_core::Error>(())
+//! ```
+//!
+//! Implementation-only serialization and code-generation modules are not
+//! public API:
+//!
+//! ```compile_fail
+//! use radroots_core::serde_ext;
+//! ```
+//!
+//! ```compile_fail
+//! use radroots_core::dto;
+//! ```
+
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
 
 pub mod currency;
 pub mod decimal;
 mod discount;
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod dto;
 mod error;
 pub mod money;
@@ -15,7 +42,7 @@ pub mod pricing;
 pub mod quantity;
 mod quantity_price;
 #[cfg(feature = "serde")]
-pub mod serde_ext;
+mod serde_ext;
 pub mod unit;
 
 pub use currency::Currency;

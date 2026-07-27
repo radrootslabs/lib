@@ -3,8 +3,8 @@ use core::fmt;
 use crate::{Decimal, Money, Quantity, Unit};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(test, derive(dto_bindgen::Dto))]
-#[cfg_attr(test, dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuantityPrice {
     pub amount: Money,
@@ -63,6 +63,23 @@ mod sealed {
 /// The `try_*` methods are the canonical checked surface. The infallible
 /// methods remain temporarily for first-party source compatibility and return
 /// zero when the corresponding checked operation fails.
+///
+/// Downstream crates may call this trait but cannot implement it:
+///
+/// ```compile_fail
+/// use radroots_core::{Money, Quantity};
+/// use radroots_core::pricing::{Error, QuantityPriceOps};
+///
+/// struct ForeignPrice;
+///
+/// impl QuantityPriceOps for ForeignPrice {
+///     fn cost_for(&self, _: &Quantity) -> Money { panic!() }
+///     fn cost_for_rounded(&self, _: &Quantity) -> Money { panic!() }
+///     fn cost_for_with_quantized_price(&self, _: &Quantity) -> Money { panic!() }
+///     fn try_cost_for(&self, _: &Quantity) -> Result<Money, Error> { panic!() }
+///     fn try_cost_for_rounded(&self, _: &Quantity) -> Result<Money, Error> { panic!() }
+/// }
+/// ```
 pub trait QuantityPriceOps: sealed::Sealed {
     /// Compatibility operation that returns zero on invalid input.
     #[must_use]

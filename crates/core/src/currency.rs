@@ -10,8 +10,8 @@ use std::string::String;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
-#[cfg_attr(test, derive(dto_bindgen::Dto))]
-#[cfg_attr(test, dto(as = "string"))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Currency([u8; 3]);
 

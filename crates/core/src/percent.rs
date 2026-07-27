@@ -5,12 +5,12 @@ use crate::Decimal;
 use crate::money::Money;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(test, derive(dto_bindgen::Dto))]
-#[cfg_attr(test, dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Percent {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
-    #[cfg_attr(test, dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub value: Decimal,
 }
 

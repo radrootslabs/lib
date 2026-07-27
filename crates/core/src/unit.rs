@@ -15,37 +15,37 @@ use crate::Decimal;
 const GRAMS_PER_OUNCE: Decimal = Decimal::from_parts(2_579_719_349, 6, 0, 9);
 const GRAMS_PER_POUND: Decimal = Decimal::from_parts(45_359_237, 0, 0, 5);
 
-#[cfg_attr(test, derive(dto_bindgen::Dto))]
-#[cfg_attr(test, dto(export))]
-#[cfg_attr(test, dto(as = "string_enum"))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(as = "string_enum"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnitDimension {
-    #[cfg_attr(test, dto(rename = "count"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "count"))]
     Count,
-    #[cfg_attr(test, dto(rename = "mass"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "mass"))]
     Mass,
-    #[cfg_attr(test, dto(rename = "volume"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "volume"))]
     Volume,
 }
 
-#[cfg_attr(test, derive(dto_bindgen::Dto))]
-#[cfg_attr(test, dto(export))]
-#[cfg_attr(test, dto(as = "string_enum"))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(as = "string_enum"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Unit {
-    #[cfg_attr(test, dto(rename = "each"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "each"))]
     Each,
-    #[cfg_attr(test, dto(rename = "kg"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "kg"))]
     MassKg,
-    #[cfg_attr(test, dto(rename = "g"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "g"))]
     MassG,
-    #[cfg_attr(test, dto(rename = "oz"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "oz"))]
     MassOz,
-    #[cfg_attr(test, dto(rename = "lb"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "lb"))]
     MassLb,
-    #[cfg_attr(test, dto(rename = "l"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "l"))]
     VolumeL,
-    #[cfg_attr(test, dto(rename = "ml"))]
+    #[cfg_attr(all(test, feature = "std"), dto(rename = "ml"))]
     VolumeMl,
 }
 

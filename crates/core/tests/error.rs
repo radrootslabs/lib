@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use std::error::Error as _;
 
 use radroots_core::{Error, Unit, currency, decimal, money, percent, pricing, quantity, unit};
@@ -20,6 +21,7 @@ fn aggregate_error_accepts_every_scoped_error() {
     ];
 
     for error in errors {
+        #[cfg(feature = "std")]
         assert!(error.source().is_some());
         assert!(!error.to_string().is_empty());
     }

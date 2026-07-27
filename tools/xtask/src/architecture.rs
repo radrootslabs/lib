@@ -7,6 +7,7 @@ use std::{
 use serde::Deserialize;
 
 mod api_leakage;
+mod core_contract;
 mod dependency_boundary;
 
 const DEVIATIONS_RELATIVE: &str = "docs/implementation/deviations.toml";
@@ -159,6 +160,7 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
         .iter()
         .map(|package| package.name.clone())
         .collect::<BTreeSet<_>>();
+    core_contract::validate(workspace_root)?;
     api_leakage::validate_policy_catalog(workspace_root, &architecture_packages)?;
     dependency_boundary::validate_policy_catalog(workspace_root, &architecture_packages)?;
     validate_workspace_toolchain(workspace_root, &architecture)?;
