@@ -6,7 +6,7 @@ edition.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Identity model for Radroots"
+description = "Public identity and account value types for Radroots"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots-identity"
@@ -18,9 +18,14 @@ name = "radroots_identity"
 [features]
 default = ["std", "json-file", "nip49"]
 std = [
+  "dep:nostr",
   "dep:radroots_protected_store",
   "dep:radroots_runtime_paths",
   "dep:radroots_secret_vault",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:tracing",
 ]
 json-file = ["std", "dep:radroots_runtime"]
 nip49 = ["std", "nostr/nip49"]
@@ -36,12 +41,12 @@ radroots_runtime_paths = { workspace = true, optional = true }
 radroots_secret_vault = { workspace = true, optional = true, features = [
   "std",
 ] }
-nostr = { workspace = true }
+nostr = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { version = "2", default-features = false, optional = true }
+tracing = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true }
 
 [dev-dependencies]

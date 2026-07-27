@@ -5,18 +5,25 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+pub mod account;
+#[cfg(feature = "std")]
 pub mod error;
+#[cfg(feature = "std")]
 pub mod identity;
+pub mod key;
+pub mod profile;
 #[cfg(feature = "std")]
 pub mod storage;
 pub mod username;
 
+#[cfg(feature = "std")]
 pub use error::IdentityError;
+#[cfg(feature = "std")]
 pub use identity::{
     DEFAULT_IDENTITY_PATH, RadrootsIdentity, RadrootsIdentityFile, RadrootsIdentityId,
     RadrootsIdentityProfile, RadrootsIdentityPublic, RadrootsIdentitySecretKeyFormat,
 };
-#[cfg(feature = "nip49")]
+#[cfg(all(feature = "std", feature = "nip49"))]
 pub use identity::{
     RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
 };
