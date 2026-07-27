@@ -109,11 +109,12 @@ fn sample_gcs() -> RadrootsGcsLocation {
 }
 
 fn sample_listing() -> RadrootsOperationalListing {
-    let quantity = Quantity::new(Decimal::from(1u32), Unit::Each);
-    let price = QuantityPrice::new(
-        Money::new(Decimal::from(10u32), Currency::USD),
+    let quantity = Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap();
+    let price = QuantityPrice::try_new(
+        Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
         quantity.clone(),
-    );
+    )
+    .unwrap();
 
     RadrootsOperationalListing {
         d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
@@ -268,7 +269,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         },
         start: 1,
         end: 2,
-        cap_quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -564,14 +565,17 @@ fn listing_and_message_builders_cover_optional_shapes() {
     ));
 
     let mut listing_with_discount_payload = listing_with_trade.clone();
-    listing_with_discount_payload.discounts = Some(vec![Discount {
-        scope: DiscountScope::Bin,
-        threshold: DiscountThreshold::BinCount {
-            bin_id: "bin-1".to_string(),
-            min: 2,
-        },
-        value: DiscountValue::MoneyPerBin(Money::new(Decimal::from(1u32), Currency::USD)),
-    }]);
+    listing_with_discount_payload.discounts = Some(vec![
+        Discount::try_new(
+            DiscountScope::Bin,
+            DiscountThreshold::BinCount {
+                bin_id: "bin-1".to_string(),
+                min: 2,
+            },
+            DiscountValue::MoneyPerBin(Money::try_new(Decimal::from(1u32), Currency::USD).unwrap()),
+        )
+        .unwrap(),
+    ]);
     #[cfg(feature = "serde_json")]
     {
         let tags =

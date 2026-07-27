@@ -5,69 +5,34 @@ use radroots_core::{
     pricing::{Error, QuantityPriceOps},
 };
 
-#[test]
-fn cost_for_scales_by_ratio() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::MassKg));
-    let cost = price.cost_for(&common::qty("2", Unit::MassKg));
-    assert_eq!(cost.amount, common::dec("20"));
+fn unit_price(amount: &str, per: &str, unit: Unit) -> QuantityPrice {
+    QuantityPrice::try_new(common::money(amount, "USD"), common::qty(per, unit))
+        .expect("valid price")
 }
 
 #[test]
-fn cost_for_returns_zero_on_unit_mismatch() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::MassKg));
-    let cost = price.cost_for(&common::qty("1", Unit::Each));
-    assert!(cost.amount.is_zero());
+fn checked_cost_scales_by_ratio_and_rounds_deterministically() {
+    let price = unit_price("10", "1", Unit::MassKg);
+    let cost = price.try_cost_for(&common::qty("2", Unit::MassKg)).unwrap();
+    assert_eq!(cost.amount(), common::dec("20"));
+
+    let rounded = unit_price("1.005", "1", Unit::Each)
+        .try_cost_for_rounded(&common::qty("2", Unit::Each))
+        .unwrap();
+    assert_eq!(rounded.amount(), common::dec("2.01"));
 }
 
 #[test]
-fn cost_for_rounded_and_quantized_price_differ() {
-    let price = QuantityPrice::new(common::money("1.005", "USD"), common::qty("1", Unit::Each));
-    let qty = common::qty("2", Unit::Each);
-    let rounded = price.cost_for_rounded(&qty);
-    let quantized = price.cost_for_with_quantized_price(&qty);
-
-    assert_eq!(rounded.amount, common::dec("2.01"));
-    assert_eq!(quantized.amount, common::dec("2.02"));
-}
-
-#[test]
-fn try_cost_for_validates_quantity_and_units() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::Each));
-    let zero_price = QuantityPrice::new(common::money("10", "USD"), common::qty("0", Unit::Each));
-
+fn checked_constructor_rejects_zero_per_quantity() {
     assert_eq!(
-        zero_price.try_cost_for(&common::qty("1", Unit::Each)),
+        QuantityPrice::try_new(common::money("1", "USD"), Quantity::zero(Unit::Each)),
         Err(Error::PerQuantityZero)
     );
-    assert_eq!(
-        price.try_cost_for(&common::qty("1", Unit::MassKg)),
-        Err(Error::UnitMismatch {
-            have: Unit::MassKg,
-            want: Unit::Each
-        })
-    );
 }
 
 #[test]
-fn checked_constructor_rejects_invalid_price_shapes() {
-    assert_eq!(
-        QuantityPrice::try_new(common::money("-1", "USD"), common::qty("1", Unit::Each),),
-        Err(Error::NegativePrice)
-    );
-    assert_eq!(
-        QuantityPrice::try_new(common::money("1", "USD"), common::qty("0", Unit::Each),),
-        Err(Error::PerQuantityZero)
-    );
-    assert_eq!(
-        QuantityPrice::try_new(common::money("1", "USD"), common::qty("-1", Unit::Each),),
-        Err(Error::PerQuantityNegative)
-    );
-}
-
-#[test]
-fn checked_cost_paths_never_silently_convert_errors_to_zero() {
-    let price =
-        QuantityPrice::try_new(common::money("10", "USD"), common::qty("1", Unit::Each)).unwrap();
+fn checked_cost_never_silently_converts_failures_to_zero() {
+    let price = unit_price("10", "1", Unit::Each);
     assert_eq!(
         price.try_cost_for(&common::qty("1", Unit::MassKg)),
         Err(Error::UnitMismatch {
@@ -76,13 +41,20 @@ fn checked_cost_paths_never_silently_convert_errors_to_zero() {
         })
     );
     assert_eq!(
-        price.try_cost_for(&common::qty("-1", Unit::Each)),
+        price.try_cost_for_amount_in(common::dec("-1"), Unit::Each),
         Err(Error::NegativeRequestedQuantity)
+    );
+    assert_eq!(
+        price.try_cost_for_rounded(&common::qty("1", Unit::MassKg)),
+        Err(Error::UnitMismatch {
+            have: Unit::MassKg,
+            want: Unit::Each,
+        })
     );
 }
 
 #[test]
-fn checked_cost_paths_report_arithmetic_overflow() {
+fn checked_cost_reports_arithmetic_overflow() {
     let price = QuantityPrice::try_new(
         Money::try_new(Decimal::MAX, Currency::USD).unwrap(),
         Quantity::try_new(Decimal::ONE, Unit::Each).unwrap(),
@@ -95,148 +67,72 @@ fn checked_cost_paths_report_arithmetic_overflow() {
 }
 
 #[test]
-fn try_cost_for_rounded_error_path_is_exercised() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::Each));
+fn amount_and_quantity_conversion_support_mass_and_volume() {
+    let mass = unit_price("10", "1", Unit::MassKg);
     assert_eq!(
-        price.try_cost_for_rounded(&common::qty("1", Unit::MassKg)),
-        Err(Error::UnitMismatch {
-            have: Unit::MassKg,
-            want: Unit::Each
-        })
+        mass.try_cost_for_amount_in(common::dec("500"), Unit::MassG)
+            .unwrap()
+            .amount(),
+        common::dec("5")
     );
-}
-
-#[test]
-fn try_cost_for_amount_in_converts_mass_units() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::MassKg));
-    let cost = price
-        .try_cost_for_amount_in(common::dec("500"), Unit::MassG)
-        .unwrap();
-    assert_eq!(cost.amount, common::dec("5"));
-}
-
-#[test]
-fn try_cost_for_amount_in_converts_volume_units() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::VolumeL));
-    let cost = price
-        .try_cost_for_amount_in(common::dec("500"), Unit::VolumeMl)
-        .unwrap();
-    assert_eq!(cost.amount, common::dec("5"));
-}
-
-#[test]
-fn try_cost_for_amount_in_rejects_non_convertible_units() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::MassKg));
     assert_eq!(
-        price.try_cost_for_amount_in(common::dec("1"), Unit::Each),
+        mass.try_cost_for_quantity_in(&common::qty("250", Unit::MassG))
+            .unwrap()
+            .amount(),
+        common::dec("2.5")
+    );
+    assert_eq!(
+        mass.try_cost_for_amount_in(common::dec("1"), Unit::Each),
         Err(Error::NonConvertibleUnits {
             from: Unit::Each,
-            to: Unit::MassKg
+            to: Unit::MassKg,
         })
     );
-}
 
-#[test]
-fn try_cost_for_amount_in_same_unit_path_is_exercised() {
-    let price = QuantityPrice::new(common::money("4", "USD"), common::qty("1", Unit::Each));
-    let out = price
-        .try_cost_for_amount_in(common::dec("3"), Unit::Each)
-        .unwrap();
-    assert_eq!(out.amount, common::dec("12"));
-}
-
-#[test]
-fn try_cost_for_quantity_in_path_is_exercised() {
-    let price = QuantityPrice::new(common::money("10", "USD"), common::qty("1", Unit::MassKg));
-    let qty = common::qty("250", Unit::MassG);
-    let out = price.try_cost_for_quantity_in(&qty).unwrap();
-    assert_eq!(out.amount, common::dec("2.5"));
-}
-
-#[test]
-fn try_to_unit_price_error_and_same_unit_paths_are_exercised() {
-    let zero = QuantityPrice::new(common::money("10", "USD"), common::qty("0", Unit::MassKg));
+    let volume = unit_price("10", "1", Unit::VolumeL);
     assert_eq!(
-        zero.try_to_unit_price(Unit::MassG),
+        volume
+            .try_cost_for_amount_in(common::dec("500"), Unit::VolumeMl)
+            .unwrap()
+            .amount(),
+        common::dec("5")
+    );
+}
+
+#[test]
+fn unit_price_conversion_is_checked_and_uses_accessors() {
+    let base = unit_price("5", "2", Unit::MassKg);
+    let same = base.try_to_unit_price(Unit::MassKg).unwrap();
+    assert_eq!(same.quantity().unit(), Unit::MassKg);
+    assert_eq!(same.quantity().amount(), Decimal::ONE);
+    assert_eq!(same.amount().amount(), common::dec("2.5"));
+    assert_eq!(
+        base.try_to_unit_price(Unit::VolumeMl),
+        Err(Error::NonConvertibleUnits {
+            from: Unit::MassKg,
+            to: Unit::VolumeMl,
+        })
+    );
+
+    let canonical = unit_price("6.99", "1", Unit::MassLb)
+        .try_to_canonical_unit_price()
+        .unwrap();
+    assert_eq!(canonical.quantity().unit(), Unit::MassG);
+    assert_eq!(canonical.quantity().amount(), Decimal::ONE);
+    assert!(canonical.is_price_per_canonical_unit());
+}
+
+#[test]
+fn unit_price_conversion_detects_precision_underflow() {
+    let tiny = unit_price("1", "0.0000000000000000000000000001", Unit::VolumeMl);
+    assert_eq!(
+        tiny.try_to_unit_price(Unit::VolumeL),
         Err(Error::PerQuantityZero)
     );
-
-    let base = QuantityPrice::new(common::money("5", "USD"), common::qty("2", Unit::MassKg));
-    let same = base.try_to_unit_price(Unit::MassKg).unwrap();
-    assert_eq!(same.quantity.unit, Unit::MassKg);
-    assert_eq!(same.quantity.amount, common::dec("1"));
-    assert_eq!(same.amount.amount, common::dec("2.5"));
-
-    let err = base.try_to_unit_price(Unit::VolumeMl).unwrap_err();
-    assert_eq!(
-        err,
-        Error::NonConvertibleUnits {
-            from: Unit::MassKg,
-            to: Unit::VolumeMl
-        }
-    );
 }
 
 #[test]
-fn cost_for_and_quantized_price_zero_paths_are_exercised() {
-    let p = QuantityPrice::new(common::money("3.33", "USD"), common::qty("1", Unit::Each));
-    let zero_qty = common::qty("0", Unit::Each);
-    assert!(p.cost_for(&zero_qty).amount.is_zero());
-    assert!(p.cost_for_with_quantized_price(&zero_qty).amount.is_zero());
-
-    let zero_per = QuantityPrice::new(common::money("3.33", "USD"), common::qty("0", Unit::Each));
-    assert!(
-        zero_per
-            .cost_for(&common::qty("1", Unit::Each))
-            .amount
-            .is_zero()
-    );
-    assert!(
-        zero_per
-            .cost_for_with_quantized_price(&common::qty("1", Unit::Each))
-            .amount
-            .is_zero()
-    );
-
-    let mismatch_qty = common::qty("1", Unit::MassG);
-    assert!(
-        p.cost_for_with_quantized_price(&mismatch_qty)
-            .amount
-            .is_zero()
-    );
-}
-
-#[test]
-fn try_to_unit_price_detects_underflow_to_zero_normalized_amount() {
-    let tiny = QuantityPrice::new(
-        common::money("1", "USD"),
-        common::qty("0.0000000000000000000000000001", Unit::VolumeMl),
-    );
-    let err = tiny.try_to_unit_price(Unit::VolumeL).unwrap_err();
-    assert_eq!(err, Error::PerQuantityZero);
-}
-
-#[test]
-fn try_to_canonical_unit_price_converts_units() {
-    let price = QuantityPrice::new(common::money("6.99", "USD"), common::qty("1", Unit::MassLb));
-    let canonical = price.try_to_canonical_unit_price().unwrap();
-    assert_eq!(canonical.quantity.unit, Unit::MassG);
-    assert_eq!(canonical.quantity.amount, common::dec("1"));
-    let expected = common::dec("6.99") / common::dec("453.59237");
-    assert_eq!(canonical.amount.amount, expected);
-}
-
-#[test]
-fn is_price_per_canonical_unit_detects_canonical() {
-    let price = QuantityPrice::new(common::money("1.00", "USD"), common::qty("1", Unit::MassG));
-    assert!(price.is_price_per_canonical_unit());
-
-    let price = QuantityPrice::new(common::money("1.00", "USD"), common::qty("1", Unit::MassKg));
-    assert!(!price.is_price_per_canonical_unit());
-}
-
-#[test]
-fn pricing_error_display_is_stable() {
+fn pricing_error_messages_are_stable() {
     assert_eq!(
         Error::PerQuantityZero.to_string(),
         "price quantity must be greater than zero"

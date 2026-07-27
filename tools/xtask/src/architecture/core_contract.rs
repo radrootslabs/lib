@@ -22,68 +22,6 @@ const CORE_ROOT_EXPORTS: [(&str, &str); 8] = [
     ("QuantityPrice", "pricing::QuantityPrice"),
     ("Unit", "unit::Unit"),
 ];
-const TEMPORARY_ROOT_EXPORTS: [(&str, &str); 20] = [
-    ("RadrootsCoreCurrency", "currency::RadrootsCoreCurrency"),
-    (
-        "RadrootsCoreCurrencyParseError",
-        "currency::RadrootsCoreCurrencyParseError",
-    ),
-    ("RadrootsCoreDecimal", "decimal::RadrootsCoreDecimal"),
-    ("RadrootsCoreDiscount", "discount::RadrootsCoreDiscount"),
-    (
-        "RadrootsCoreDiscountScope",
-        "discount::RadrootsCoreDiscountScope",
-    ),
-    (
-        "RadrootsCoreDiscountThreshold",
-        "discount::RadrootsCoreDiscountThreshold",
-    ),
-    (
-        "RadrootsCoreDiscountValue",
-        "discount::RadrootsCoreDiscountValue",
-    ),
-    ("RadrootsCoreMoney", "money::RadrootsCoreMoney"),
-    (
-        "RadrootsCoreMoneyInvariantError",
-        "money::RadrootsCoreMoneyInvariantError",
-    ),
-    ("RadrootsCorePercent", "percent::RadrootsCorePercent"),
-    (
-        "RadrootsCorePercentParseError",
-        "percent::RadrootsCorePercentParseError",
-    ),
-    ("RadrootsCoreQuantity", "quantity::RadrootsCoreQuantity"),
-    (
-        "RadrootsCoreQuantityInvariantError",
-        "quantity::RadrootsCoreQuantityInvariantError",
-    ),
-    (
-        "RadrootsCoreQuantityPrice",
-        "quantity_price::RadrootsCoreQuantityPrice",
-    ),
-    (
-        "RadrootsCoreQuantityPriceError",
-        "quantity_price::RadrootsCoreQuantityPriceError",
-    ),
-    (
-        "RadrootsCoreQuantityPriceOps",
-        "quantity_price::RadrootsCoreQuantityPriceOps",
-    ),
-    ("RadrootsCoreUnit", "unit::RadrootsCoreUnit"),
-    (
-        "RadrootsCoreUnitConvertError",
-        "unit::RadrootsCoreUnitConvertError",
-    ),
-    (
-        "RadrootsCoreUnitDimension",
-        "unit::RadrootsCoreUnitDimension",
-    ),
-    (
-        "RadrootsCoreUnitParseError",
-        "unit::RadrootsCoreUnitParseError",
-    ),
-];
-
 pub(super) fn validate(workspace_root: &Path) -> Result<(), String> {
     let architecture = read_toml(workspace_root, ARCHITECTURE_RELATIVE)?;
     let core_spec = architecture
@@ -267,12 +205,11 @@ fn validate_crate_root(
     }
     let expected_exports = CORE_ROOT_EXPORTS
         .into_iter()
-        .chain(TEMPORARY_ROOT_EXPORTS)
         .map(|(name, source)| (name.to_owned(), source.to_owned()))
         .collect::<BTreeMap<_, _>>();
     if exports != expected_exports {
         return Err(format!(
-            "radroots-core root exports must be the canonical contract plus the Step 034 compatibility set; expected {expected_exports:?}, found {exports:?}"
+            "radroots-core root exports must match the canonical contract; expected {expected_exports:?}, found {exports:?}"
         ));
     }
     Ok(())
@@ -420,7 +357,7 @@ fn collect_use_exports(
             };
             insert_export(exports, export_name, source)?;
         }
-        UseTree::Rename(rename) if rename.rename.to_string() != "_" => {
+        UseTree::Rename(rename) if rename.rename != "_" => {
             insert_export(
                 exports,
                 rename.rename.to_string(),
@@ -559,7 +496,6 @@ serde_json = { workspace = true }
         fs::write(root.path().join("crates/core/Cargo.toml"), MANIFEST).expect("core manifest");
         let exports = super::CORE_ROOT_EXPORTS
             .into_iter()
-            .chain(super::TEMPORARY_ROOT_EXPORTS)
             .map(|(_, source)| format!("pub use {source};"))
             .collect::<Vec<_>>()
             .join(" ");
@@ -627,7 +563,7 @@ serde_json = { workspace = true }
         fs::write(&lib_path, format!("{source} pub use fixture::Clock;"))
             .expect("extra export source");
         let error = validate(root.path()).expect_err("extra export must fail");
-        assert!(error.contains("root exports must be"), "{error}");
+        assert!(error.contains("root exports must match"), "{error}");
     }
 
     #[test]
@@ -641,7 +577,7 @@ serde_json = { workspace = true }
         )
         .expect("rebound export source");
         let error = validate(root.path()).expect_err("rebound export must fail");
-        assert!(error.contains("root exports must be"), "{error}");
+        assert!(error.contains("root exports must match"), "{error}");
 
         fs::write(&lib_path, format!("{source} pub use currency::*;")).expect("glob export source");
         let error = validate(root.path()).expect_err("glob export must fail");

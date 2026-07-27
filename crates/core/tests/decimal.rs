@@ -105,14 +105,9 @@ fn float_conversion_rejects_non_finite_values() {
 }
 
 #[test]
-fn from_str_exact_and_conversion_impl_paths_are_exercised() {
+fn from_str_exact_and_primitive_conversion_paths_are_exercised() {
     let exact = Decimal::from_str_exact("42.000").unwrap();
     assert_eq!(exact, common::dec("42"));
-
-    let from_decimal = Decimal::from(rust_decimal::Decimal::from(5u32));
-    assert_eq!(from_decimal, common::dec("5"));
-    let back: rust_decimal::Decimal = from_decimal.into();
-    assert_eq!(back, rust_decimal::Decimal::from(5u32));
 
     let from_u32 = Decimal::from(7u32);
     let from_i32 = Decimal::from(-2i32);

@@ -233,11 +233,12 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
-                price_per_canonical_unit: QuantityPrice {
-                    amount: Money::new(Decimal::from(20u32), Currency::USD),
-                    quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-                },
+                quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(Decimal::from(20u32), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,

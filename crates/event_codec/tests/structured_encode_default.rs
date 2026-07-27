@@ -107,11 +107,12 @@ fn sample_gcs() -> RadrootsGcsLocation {
 }
 
 fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
-    let quantity = Quantity::new(Decimal::from(1u32), Unit::Each);
-    let price = QuantityPrice::new(
-        Money::new(Decimal::from(10u32), Currency::USD),
+    let quantity = Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap();
+    let price = QuantityPrice::try_new(
+        Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
         quantity.clone(),
-    );
+    )
+    .unwrap();
     RadrootsOperationalListing {
         d_tag: listing_d_tag(d_tag),
         published_at: None,
@@ -256,7 +257,7 @@ fn sample_resource_cap() -> RadrootsResourceHarvestCap {
         },
         start: 1,
         end: 2,
-        cap_quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -564,7 +565,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         },
         start: 1,
         end: 2,
-        cap_quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -821,7 +822,7 @@ fn structured_build_tags_cover_required_field_errors() {
         },
         start: 1,
         end: 2,
-        cap_quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,

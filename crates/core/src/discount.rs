@@ -1,3 +1,5 @@
+use core::fmt;
+
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 #[cfg(feature = "std")]
@@ -39,15 +41,15 @@ pub enum DiscountValue {
     Percent(crate::Percent),
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub struct Discount {
-    pub scope: DiscountScope,
-    pub threshold: DiscountThreshold,
-    pub value: DiscountValue,
+    scope: DiscountScope,
+    threshold: DiscountThreshold,
+    value: DiscountValue,
 }
 
 #[non_exhaustive]
@@ -109,7 +111,7 @@ impl Discount {
             DiscountValue::MoneyPerBin(money) => money
                 .ensure_non_negative()
                 .map_err(|_| Error::NegativeValue)?,
-            DiscountValue::Percent(percent) if percent.value.is_sign_negative() => {
+            DiscountValue::Percent(percent) if percent.value().is_sign_negative() => {
                 return Err(Error::NegativeValue);
             }
             DiscountValue::Percent(_) => {}
@@ -122,15 +124,17 @@ impl Discount {
     }
 }
 
-#[deprecated(since = "0.1.0", note = "renamed to `pricing::Discount`")]
-pub use self::Discount as RadrootsCoreDiscount;
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Discount {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            scope: DiscountScope,
+            threshold: DiscountThreshold,
+            value: DiscountValue,
+        }
 
-#[deprecated(since = "0.1.0", note = "renamed to `pricing::DiscountScope`")]
-pub use self::DiscountScope as RadrootsCoreDiscountScope;
-
-#[deprecated(since = "0.1.0", note = "renamed to `pricing::DiscountThreshold`")]
-pub use self::DiscountThreshold as RadrootsCoreDiscountThreshold;
-
-#[deprecated(since = "0.1.0", note = "renamed to `pricing::DiscountValue`")]
-pub use self::DiscountValue as RadrootsCoreDiscountValue;
-use core::fmt;
+        let wire = Wire::deserialize(deserializer)?;
+        Self::try_new(wire.scope, wire.threshold, wire.value).map_err(serde::de::Error::custom)
+    }
+}

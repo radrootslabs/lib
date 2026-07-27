@@ -1,7 +1,6 @@
 //! Fixed-precision decimal values, checked arithmetic, and exact conversions.
 
 use core::fmt;
-use core::ops::{Add, Div, Mul, Sub};
 use core::str::FromStr;
 use rust_decimal::Decimal as RustDecimal;
 use rust_decimal::prelude::ToPrimitive;
@@ -17,7 +16,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeErr
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Decimal(pub RustDecimal);
+pub struct Decimal(RustDecimal);
 
 /// Errors produced while constructing or calculating with a [`Decimal`].
 ///
@@ -83,6 +82,16 @@ impl Decimal {
     }
 
     #[inline]
+    pub(crate) const fn from_backend(value: RustDecimal) -> Self {
+        Self(value)
+    }
+
+    #[inline]
+    pub(crate) const fn into_backend(self) -> RustDecimal {
+        self.0
+    }
+
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.0.is_zero()
     }
@@ -123,8 +132,8 @@ impl Decimal {
         Ok(())
     }
     #[inline]
-    pub fn normalize(&self) -> RustDecimal {
-        self.0.normalize()
+    pub fn normalize(&self) -> Self {
+        Self(self.0.normalize())
     }
 
     #[inline]
@@ -208,7 +217,7 @@ impl Decimal {
 #[cfg(feature = "serde")]
 impl Serialize for Decimal {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.normalize().to_string())
+        serializer.serialize_str(&self.0.normalize().to_string())
     }
 }
 
@@ -222,20 +231,10 @@ impl<'de> Deserialize<'de> for Decimal {
 
 impl fmt::Display for Decimal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.normalize().to_string())
+        f.write_str(&self.0.normalize().to_string())
     }
 }
 
-impl From<RustDecimal> for Decimal {
-    fn from(d: RustDecimal) -> Self {
-        Self(canonicalize_zero(d))
-    }
-}
-impl From<Decimal> for RustDecimal {
-    fn from(d: Decimal) -> Self {
-        d.0
-    }
-}
 impl From<u32> for Decimal {
     fn from(v: u32) -> Self {
         Self(RustDecimal::from(v))
@@ -257,31 +256,6 @@ impl From<i64> for Decimal {
     }
 }
 
-impl Add for Decimal {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self {
-        Self(self.0 + rhs.0)
-    }
-}
-impl Sub for Decimal {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self {
-        Self(self.0 - rhs.0)
-    }
-}
-impl Mul for Decimal {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self {
-        Self(self.0 * rhs.0)
-    }
-}
-impl Div for Decimal {
-    type Output = Self;
-    fn div(self, rhs: Self) -> Self {
-        Self(self.0 / rhs.0)
-    }
-}
-
 impl FromStr for Decimal {
     type Err = Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -291,6 +265,3 @@ impl FromStr for Decimal {
             .map_err(normalize_parse_error)
     }
 }
-
-#[deprecated(since = "0.1.0", note = "renamed to `Decimal`")]
-pub use self::Decimal as RadrootsCoreDecimal;

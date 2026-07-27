@@ -200,18 +200,6 @@ impl<'de> Deserialize<'de> for Unit {
     }
 }
 
-#[deprecated(since = "0.1.0", note = "renamed to `UnitDimension`")]
-pub use self::UnitDimension as RadrootsCoreUnitDimension;
-
-#[deprecated(since = "0.1.0", note = "renamed to `Unit`")]
-pub use self::Unit as RadrootsCoreUnit;
-
-#[deprecated(since = "0.1.0", note = "renamed to `unit::ParseError`")]
-pub use self::ParseError as RadrootsCoreUnitParseError;
-
-#[deprecated(since = "0.1.0", note = "renamed to `unit::ConvertError`")]
-pub use self::ConvertError as RadrootsCoreUnitConvertError;
-
 #[inline]
 pub fn parse_mass_unit(s: &str) -> Result<Unit, ParseError> {
     let u: Unit = Unit::from_str(s)?;

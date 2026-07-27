@@ -5,11 +5,6 @@ use radroots_core::pricing::{Error as PricingError, QuantityPriceOps};
 use radroots_core::{Decimal, Quantity};
 use radroots_event::operational_listing::RadrootsOperationalListingBin;
 
-pub trait BinPricingExt {
-    fn subtotal_for_count(&self, bin_count: u32) -> RadrootsOperationalListingSubtotal;
-    fn total_for_count(&self, bin_count: u32) -> RadrootsOperationalListingTotal;
-}
-
 pub trait BinPricingTryExt {
     fn try_subtotal_for_count(
         &self,
@@ -22,36 +17,16 @@ pub trait BinPricingTryExt {
 }
 
 #[inline]
-fn effective_quantity(bin: &RadrootsOperationalListingBin, bin_count: u32) -> Quantity {
-    let amount = bin.quantity.amount * Decimal::from(bin_count);
-    Quantity::new(amount, bin.quantity.unit)
-}
-
-impl BinPricingExt for RadrootsOperationalListingBin {
-    fn subtotal_for_count(&self, bin_count: u32) -> RadrootsOperationalListingSubtotal {
-        let effective_qty = effective_quantity(self, bin_count);
-        let money = self
-            .price_per_canonical_unit
-            .cost_for_rounded(&effective_qty);
-        let currency = money.currency;
-
-        RadrootsOperationalListingSubtotal {
-            price_amount: money,
-            price_currency: currency,
-            quantity_amount: effective_qty.amount,
-            quantity_unit: effective_qty.unit,
-        }
-    }
-
-    fn total_for_count(&self, bin_count: u32) -> RadrootsOperationalListingTotal {
-        let sub = self.subtotal_for_count(bin_count);
-        RadrootsOperationalListingTotal {
-            price_amount: sub.price_amount,
-            price_currency: sub.price_currency,
-            quantity_amount: sub.quantity_amount,
-            quantity_unit: sub.quantity_unit,
-        }
-    }
+fn effective_quantity(
+    bin: &RadrootsOperationalListingBin,
+    bin_count: u32,
+) -> Result<Quantity, PricingError> {
+    let amount = bin
+        .quantity
+        .amount()
+        .checked_mul(Decimal::from(bin_count))
+        .map_err(|_| PricingError::ArithmeticOverflow)?;
+    Quantity::try_new(amount, bin.quantity.unit()).map_err(|_| PricingError::ArithmeticOverflow)
 }
 
 impl BinPricingTryExt for RadrootsOperationalListingBin {
@@ -59,17 +34,17 @@ impl BinPricingTryExt for RadrootsOperationalListingBin {
         &self,
         bin_count: u32,
     ) -> Result<RadrootsOperationalListingSubtotal, PricingError> {
-        let effective_qty = effective_quantity(self, bin_count);
+        let effective_qty = effective_quantity(self, bin_count)?;
         let money = self
             .price_per_canonical_unit
             .try_cost_for_rounded(&effective_qty)?;
-        let currency = money.currency;
+        let currency = money.currency();
 
         Ok(RadrootsOperationalListingSubtotal {
             price_amount: money,
             price_currency: currency,
-            quantity_amount: effective_qty.amount,
-            quantity_unit: effective_qty.unit,
+            quantity_amount: effective_qty.amount(),
+            quantity_unit: effective_qty.unit(),
         })
     }
 
@@ -89,7 +64,7 @@ impl BinPricingTryExt for RadrootsOperationalListingBin {
 
 #[cfg(test)]
 mod tests {
-    use super::{BinPricingExt, BinPricingTryExt};
+    use super::BinPricingTryExt;
     use radroots_core::pricing::Error as PricingError;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::ids::RadrootsInventoryBinId;
@@ -102,11 +77,12 @@ mod tests {
     fn valid_bin() -> RadrootsOperationalListingBin {
         RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
-            quantity: Quantity::new(Decimal::from(2u32), Unit::MassG),
-            price_per_canonical_unit: QuantityPrice::new(
-                Money::new(Decimal::from(5u32), Currency::USD),
-                Quantity::new(Decimal::from(1u32), Unit::MassG),
-            ),
+            quantity: Quantity::try_new(Decimal::from(2u32), Unit::MassG).unwrap(),
+            price_per_canonical_unit: QuantityPrice::try_new(
+                Money::try_new(Decimal::from(5u32), Currency::USD).unwrap(),
+                Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+            )
+            .unwrap(),
             display_amount: None,
             display_unit: None,
             display_label: None,
@@ -119,11 +95,12 @@ mod tests {
     fn try_subtotal_for_rejects_unit_mismatch() {
         let bin = RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
-            quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-            price_per_canonical_unit: QuantityPrice::new(
-                Money::new(Decimal::from(10u32), Currency::USD),
-                Quantity::new(Decimal::from(1u32), Unit::Each),
-            ),
+            quantity: Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+            price_per_canonical_unit: QuantityPrice::try_new(
+                Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
+                Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
+            )
+            .unwrap(),
             display_amount: None,
             display_unit: None,
             display_label: None,
@@ -144,12 +121,12 @@ mod tests {
     #[test]
     fn subtotal_and_total_for_count_follow_effective_quantity() {
         let bin = valid_bin();
-        let subtotal = bin.subtotal_for_count(3);
-        let total = bin.total_for_count(3);
+        let subtotal = bin.try_subtotal_for_count(3).unwrap();
+        let total = bin.try_total_for_count(3).unwrap();
 
         assert_eq!(subtotal.quantity_amount, Decimal::from(6u32));
         assert_eq!(subtotal.quantity_unit, Unit::MassG);
-        assert_eq!(subtotal.price_amount.amount, Decimal::from(30u32));
+        assert_eq!(subtotal.price_amount.amount(), Decimal::from(30u32));
         assert_eq!(subtotal.price_currency, Currency::USD);
 
         assert_eq!(total.quantity_amount, subtotal.quantity_amount);
@@ -159,13 +136,13 @@ mod tests {
     }
 
     #[test]
-    fn try_subtotal_and_try_total_match_non_fallible_paths() {
+    fn try_subtotal_and_try_total_match() {
         let bin = valid_bin();
         let subtotal = bin.try_subtotal_for_count(4).expect("subtotal");
         let total = bin.try_total_for_count(4).expect("total");
 
         assert_eq!(subtotal.quantity_amount, Decimal::from(8u32));
-        assert_eq!(subtotal.price_amount.amount, Decimal::from(40u32));
+        assert_eq!(subtotal.price_amount.amount(), Decimal::from(40u32));
         assert_eq!(total.quantity_amount, subtotal.quantity_amount);
         assert_eq!(total.price_amount, subtotal.price_amount);
     }
@@ -174,11 +151,12 @@ mod tests {
     fn try_total_for_count_propagates_subtotal_errors() {
         let bin = RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
-            quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-            price_per_canonical_unit: QuantityPrice::new(
-                Money::new(Decimal::from(10u32), Currency::USD),
-                Quantity::new(Decimal::from(1u32), Unit::Each),
-            ),
+            quantity: Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+            price_per_canonical_unit: QuantityPrice::try_new(
+                Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
+                Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
+            )
+            .unwrap(),
             display_amount: None,
             display_unit: None,
             display_label: None,

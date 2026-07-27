@@ -10,33 +10,20 @@ use alloc::string::String;
 #[cfg(feature = "std")]
 use std::string::String;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quantity {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
-    pub amount: Decimal,
-    pub unit: Unit,
+    amount: Decimal,
+    unit: Unit,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub label: Option<String>,
+    label: Option<String>,
 }
 
 impl Quantity {
-    /// Compatibility constructor for already-validated internal values.
-    ///
-    /// New boundary code should use [`Self::try_new`]. The unchecked shape is
-    /// retained only until the scheduled first-party consumer migration.
-    #[inline]
-    pub fn new(amount: Decimal, unit: Unit) -> Self {
-        Self {
-            amount,
-            unit,
-            label: None,
-        }
-    }
-
     #[inline]
     pub fn try_new(amount: Decimal, unit: Unit) -> Result<Self, Error> {
         if amount.is_sign_negative() && !amount.is_zero() {
@@ -129,7 +116,7 @@ impl Quantity {
     }
 
     #[inline]
-    pub fn ensure_non_negative(&self) -> Result<(), Error> {
+    pub(crate) fn ensure_non_negative(&self) -> Result<(), Error> {
         if self.amount.is_sign_negative() && !self.amount.is_zero() {
             return Err(Error::NegativeAmount);
         }
@@ -137,15 +124,7 @@ impl Quantity {
     }
 
     #[inline]
-    pub fn with_scale(mut self, scale: u32) -> Self {
-        self.amount.rescale(scale);
-        self
-    }
-
-    #[inline]
     pub fn try_add(&self, rhs: &Quantity) -> Result<Quantity, Error> {
-        self.ensure_non_negative()?;
-        rhs.ensure_non_negative()?;
         if self.unit != rhs.unit {
             return Err(Error::UnitMismatch);
         }
@@ -158,8 +137,6 @@ impl Quantity {
 
     #[inline]
     pub fn try_sub(&self, rhs: &Quantity) -> Result<Quantity, Error> {
-        self.ensure_non_negative()?;
-        rhs.ensure_non_negative()?;
         if self.unit != rhs.unit {
             return Err(Error::UnitMismatch);
         }
@@ -184,7 +161,6 @@ impl Quantity {
 
     #[inline]
     pub fn checked_mul_decimal(&self, factor: Decimal) -> Result<Quantity, Error> {
-        self.ensure_non_negative()?;
         let amount = self.amount.checked_mul(factor)?;
         if amount.is_sign_negative() {
             return Err(Error::NegativeAmount);
@@ -198,7 +174,6 @@ impl Quantity {
 
     #[inline]
     pub fn checked_div_decimal(&self, divisor: Decimal) -> Result<Quantity, Error> {
-        self.ensure_non_negative()?;
         let amount = self.amount.checked_div(divisor)?;
         if amount.is_sign_negative() {
             return Err(Error::NegativeAmount);
@@ -209,23 +184,24 @@ impl Quantity {
             label: self.label.clone(),
         })
     }
+}
 
-    #[inline]
-    pub fn mul_decimal(&self, factor: Decimal) -> Quantity {
-        Quantity {
-            amount: self.amount * factor,
-            unit: self.unit,
-            label: self.label.clone(),
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Quantity {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            #[serde(with = "crate::serde_ext::decimal_str")]
+            amount: Decimal,
+            unit: Unit,
+            #[serde(default)]
+            label: Option<String>,
         }
-    }
 
-    #[inline]
-    pub fn div_decimal(&self, divisor: Decimal) -> Quantity {
-        Quantity {
-            amount: self.amount / divisor,
-            unit: self.unit,
-            label: self.label.clone(),
-        }
+        let wire = Wire::deserialize(deserializer)?;
+        Self::try_new(wire.amount, wire.unit)
+            .map(|quantity| quantity.with_optional_label(wire.label))
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -274,33 +250,3 @@ impl From<crate::decimal::Error> for Error {
         }
     }
 }
-
-use core::ops::{Div, Mul};
-
-impl Mul<Decimal> for Quantity {
-    type Output = Quantity;
-    fn mul(self, rhs: Decimal) -> Quantity {
-        Quantity {
-            amount: self.amount * rhs,
-            unit: self.unit,
-            label: self.label,
-        }
-    }
-}
-
-impl Div<Decimal> for Quantity {
-    type Output = Quantity;
-    fn div(self, rhs: Decimal) -> Quantity {
-        Quantity {
-            amount: self.amount / rhs,
-            unit: self.unit,
-            label: self.label,
-        }
-    }
-}
-
-#[deprecated(since = "0.1.0", note = "renamed to `Quantity`")]
-pub use self::Quantity as RadrootsCoreQuantity;
-
-#[deprecated(since = "0.1.0", note = "renamed to `quantity::Error`")]
-pub use self::Error as RadrootsCoreQuantityInvariantError;

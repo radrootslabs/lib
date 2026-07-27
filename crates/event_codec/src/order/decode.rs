@@ -465,7 +465,7 @@ mod tests {
     }
 
     fn usd(raw: &str) -> Money {
-        Money::new(decimal(raw), Currency::USD)
+        Money::try_new(decimal(raw), Currency::USD).unwrap()
     }
 
     fn request_economics() -> RadrootsOrderEconomics {

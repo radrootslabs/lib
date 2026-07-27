@@ -144,9 +144,3 @@ impl<'de> Deserialize<'de> for Currency {
         s.parse().map_err(D::Error::custom)
     }
 }
-
-#[deprecated(since = "0.1.0", note = "renamed to `Currency`")]
-pub use self::Currency as RadrootsCoreCurrency;
-
-#[deprecated(since = "0.1.0", note = "renamed to `currency::ParseError`")]
-pub use self::ParseError as RadrootsCoreCurrencyParseError;

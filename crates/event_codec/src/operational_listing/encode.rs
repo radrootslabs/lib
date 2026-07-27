@@ -104,11 +104,12 @@ mod tests {
             primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-                quantity: Quantity::new(decimal("1"), Unit::MassG),
-                price_per_canonical_unit: QuantityPrice::new(
-                    Money::new(decimal("1"), Currency::USD),
-                    Quantity::new(Decimal::ONE, Unit::MassG),
-                ),
+                quantity: Quantity::try_new(decimal("1"), Unit::MassG).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(decimal("1"), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::ONE, Unit::MassG).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,

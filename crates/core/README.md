@@ -66,8 +66,9 @@ side effect.
 Use `try_*`, `checked_*`, parsing, and exact-conversion APIs at trust
 boundaries. They reject negative money or quantities, mismatched currencies or
 units, division by zero, overflow, and lossy exact conversions as applicable.
-Compatibility constructors and operator overloads assume their inputs have
-already been validated and are not the boundary API for untrusted values.
+Public composite values keep invariant-bearing fields private and expose only
+checked construction and arithmetic, so invalid native state cannot be created
+through the supported public API.
 
 Currency and unit parsers normalize their documented textual spellings.
 Decimal display and serialization normalize insignificant trailing zeroes.
@@ -86,9 +87,9 @@ other number-limited formats do not introduce floating-point loss. Currencies
 and units use their canonical string codes; aggregate values use named fields.
 Wire compatibility is governed by the repository conformance vectors.
 
-Deserializing a composite value is not a substitute for boundary validation.
-Call the applicable validator or reconstruct through a checked constructor
-before committing untrusted decoded data.
+Deserializing a composite value re-applies the same invariants as its checked
+constructor. Callers remain responsible for application-specific policy and
+resource limits before committing untrusted decoded data.
 
 ## Execution and commit semantics
 

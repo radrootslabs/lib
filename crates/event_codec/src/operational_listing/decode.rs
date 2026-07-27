@@ -472,7 +472,10 @@ fn decode_operational_listing_from_event_parts(
                 if bin.quantity.is_some() {
                     return Err(OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_BIN));
                 }
-                bin.quantity = Some(Quantity::new(amount, unit));
+                bin.quantity =
+                    Some(Quantity::try_new(amount, unit).map_err(|_| {
+                        OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_BIN)
+                    })?);
 
                 match tag.as_slice() {
                     [_, _, _, _, display_amount_raw, display_unit_raw]
@@ -504,10 +507,12 @@ fn decode_operational_listing_from_event_parts(
                 let currency = parse_currency(&tag[3], TAG_RADROOTS_PRICE)?;
                 let per_amount = parse_decimal(&tag[4], TAG_RADROOTS_PRICE)?;
                 let per_unit = parse_unit(&tag[5], TAG_RADROOTS_PRICE)?;
-                let price_per_canonical_unit = QuantityPrice::new(
-                    Money::new(amount, currency),
-                    Quantity::new(per_amount, per_unit),
-                );
+                let money = Money::try_new(amount, currency)
+                    .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_PRICE))?;
+                let quantity = Quantity::try_new(per_amount, per_unit)
+                    .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_PRICE))?;
+                let price_per_canonical_unit = QuantityPrice::try_new(money, quantity)
+                    .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_PRICE))?;
                 if !price_per_canonical_unit.is_price_per_canonical_unit() {
                     return Err(OperationalListingDecodeError::InvalidTag(
                         TAG_RADROOTS_PRICE,
@@ -530,7 +535,10 @@ fn decode_operational_listing_from_event_parts(
                     [_, _, _, _, _, _, display_price_raw, display_unit_raw] => {
                         let display_price = parse_decimal(display_price_raw, TAG_RADROOTS_PRICE)?;
                         let display_unit = parse_unit(display_unit_raw, TAG_RADROOTS_PRICE)?;
-                        bin.display_price = Some(Money::new(display_price, currency));
+                        bin.display_price =
+                            Some(Money::try_new(display_price, currency).map_err(|_| {
+                                OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_PRICE)
+                            })?);
                         bin.display_price_unit = Some(display_unit);
                     }
                     _ => {}
@@ -868,7 +876,7 @@ fn build_bins(
                 .ok_or(OperationalListingDecodeError::MissingTag(
                     TAG_RADROOTS_PRICE,
                 ))?;
-        if quantity.unit != price.quantity.unit {
+        if quantity.unit() != price.quantity().unit() {
             return Err(OperationalListingDecodeError::InvalidTag(
                 TAG_RADROOTS_PRICE,
             ));

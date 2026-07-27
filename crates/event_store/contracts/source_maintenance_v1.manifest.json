@@ -159,50 +159,50 @@
     {
       "role": "core_currency_value_authority",
       "path": "crates/core/src/currency.rs",
-      "byte_length": 4390,
-      "sha256": "14b73f219a93ae5b70f1c63c93e0bd1a587c0e95c10e7978e855c6a3da204b5c",
+      "byte_length": 4142,
+      "sha256": "42e6da2d8d2fdd6955dc2d83e98dd00266e02bc910b69923b117662c05089d14",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_decimal_value_authority",
       "path": "crates/core/src/decimal.rs",
-      "byte_length": 8480,
-      "sha256": "9b5bdc52fd13bffb3bd5fd2954c4c37fddc86be1bb7c754bef35bd9442a92381",
+      "byte_length": 7839,
+      "sha256": "4b1d681a92d7a9e074bee7e1f20eb1499bb05bfc6528a6c9ba69fa7d00416550",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_money_value_authority",
       "path": "crates/core/src/money.rs",
-      "byte_length": 9214,
-      "sha256": "3377f0ca92f1e66cf6d8cecb88cfd79304113873ef56757eb93cd3e63c2a4eb2",
+      "byte_length": 8025,
+      "sha256": "3f30bc21e21951a62fdc5d4033736ed42a883df590e8403940775bd2edfeebc5",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_percent_value_authority",
       "path": "crates/core/src/percent.rs",
-      "byte_length": 3341,
-      "sha256": "9c0a87ae035e2f574b1a6ea2844e924c70ce19645becda99508c680b7c4c846f",
+      "byte_length": 2652,
+      "sha256": "42ceab109881329f3539d06a0ee0381ab4359985fe185a18d58a9c9558c5eb7f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_quantity_value_authority",
       "path": "crates/core/src/quantity.rs",
-      "byte_length": 8108,
-      "sha256": "18237c5b905395dded9682418e05be1844623eef64943dc844fb28b0f4036c97",
+      "byte_length": 6785,
+      "sha256": "d14e619da3829cdaf3ca7385fb892d330c286c1e21455c135c37518cbb588b5f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_quantity_price_value_authority",
       "path": "crates/core/src/quantity_price.rs",
-      "byte_length": 8988,
-      "sha256": "0b6fa25c5ad4c7d809bd81cdc2c054f5c4ad9d7963fe0824843df5ce9acddba7",
+      "byte_length": 7061,
+      "sha256": "d60f70377099470ed283f45868a5119d7bb46143cb250b5082a4c038ba7f6cdc",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_unit_value_authority",
       "path": "crates/core/src/unit.rs",
-      "byte_length": 10512,
-      "sha256": "8228766a56d7c12df8a631a4d2878763a6d0095088b409bfd82bc4a9f89608bc",
+      "byte_length": 10023,
+      "sha256": "550e9582b6a5290aac3f637b83853b21fefcbab92c432d067c83448f4b2fe3e9",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

@@ -56,6 +56,18 @@ fn bin_id(raw: &str) -> RadrootsInventoryBinId {
     raw.parse().unwrap()
 }
 
+fn money(amount: Decimal, currency: Currency) -> Money {
+    Money::try_new(amount, currency).unwrap()
+}
+
+fn quantity(amount: Decimal, unit: Unit) -> Quantity {
+    Quantity::try_new(amount, unit).unwrap()
+}
+
+fn quantity_price(amount: Money, quantity: Quantity) -> QuantityPrice {
+    QuantityPrice::try_new(amount, quantity).unwrap()
+}
+
 fn sample_operational_listing_tags() -> Vec<Vec<String>> {
     operational_listing_build_tags(&sample_listing("AAAAAAAAAAAAAAAAAAAAAg")).unwrap()
 }
@@ -100,11 +112,8 @@ fn assert_invalid_tag(tags: Vec<Vec<String>>, expected: &'static str) {
 }
 
 fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
-    let quantity = Quantity::new(Decimal::from(1u32), Unit::Each);
-    let price = QuantityPrice::new(
-        Money::new(Decimal::from(10u32), Currency::USD),
-        quantity.clone(),
-    );
+    let quantity = quantity(Decimal::from(1u32), Unit::Each);
+    let price = quantity_price(money(Decimal::from(10u32), Currency::USD), quantity.clone());
 
     RadrootsOperationalListing {
         d_tag: listing_d_tag(d_tag),
@@ -219,7 +228,7 @@ fn operational_listing_from_event_parts_does_not_allow_json_content_to_override_
     listing.product.title = "Content override".to_string();
     listing.product.category = "Content category".to_string();
     listing.inventory_available = Some(Decimal::from(99u32));
-    listing.bins[0].quantity.amount = Decimal::from(42u32);
+    listing.bins[0].quantity = quantity(Decimal::from(42u32), Unit::Each);
 
     let decoded =
         operational_listing_from_event_parts(&tags, &serde_json::to_string(&listing).unwrap())
@@ -228,7 +237,7 @@ fn operational_listing_from_event_parts_does_not_allow_json_content_to_override_
     assert_eq!(decoded.product.title, "Widget");
     assert_eq!(decoded.product.category, "Tools");
     assert_eq!(decoded.inventory_available, None);
-    assert_eq!(decoded.bins[0].quantity.amount, Decimal::from(1u32));
+    assert_eq!(decoded.bins[0].quantity.amount(), Decimal::from(1u32));
 }
 
 #[test]
@@ -299,22 +308,30 @@ fn execute_listing_parse_vector(vector: &Value, id: &str) {
                 .find(|bin| bin.bin_id == listing.primary_bin_id)
                 .expect("primary listing bin");
             assert_eq!(
-                primary.quantity.amount.to_string(),
+                primary.quantity.amount().to_string(),
                 expected["quantity_amount"],
                 "{id}"
             );
             assert_eq!(
-                primary.quantity.unit.code(),
+                primary.quantity.unit().code(),
                 expected["quantity_unit"],
                 "{id}"
             );
             assert_eq!(
-                primary.price_per_canonical_unit.amount.amount.to_string(),
+                primary
+                    .price_per_canonical_unit
+                    .amount()
+                    .amount()
+                    .to_string(),
                 expected["price_amount"],
                 "{id}"
             );
             assert_eq!(
-                primary.price_per_canonical_unit.amount.currency.as_str(),
+                primary
+                    .price_per_canonical_unit
+                    .amount()
+                    .currency()
+                    .as_str(),
                 expected["price_currency"],
                 "{id}"
             );
@@ -370,30 +387,30 @@ fn sample_listing_full(d_tag: &str) -> RadrootsOperationalListing {
         primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
-            quantity: Quantity::new(qty_amount, Unit::MassG),
-            price_per_canonical_unit: QuantityPrice::new(
-                Money::new(price_amount, Currency::USD),
-                Quantity::new(Decimal::from(1u32), Unit::MassG),
+            quantity: quantity(qty_amount, Unit::MassG),
+            price_per_canonical_unit: quantity_price(
+                money(price_amount, Currency::USD),
+                quantity(Decimal::from(1u32), Unit::MassG),
             ),
             display_amount: Some(display_qty),
             display_unit: Some(Unit::MassKg),
             display_label: Some("bag".to_string()),
-            display_price: Some(Money::new(display_price, Currency::USD)),
+            display_price: Some(money(display_price, Currency::USD)),
             display_price_unit: Some(Unit::MassKg),
         }],
         resource_area: None,
         plot: None,
-        discounts: Some(vec![Discount {
-            scope: DiscountScope::Bin,
-            threshold: DiscountThreshold::BinCount {
-                bin_id: "bin-1".to_string(),
-                min: 5,
-            },
-            value: DiscountValue::MoneyPerBin(Money::new(
-                Decimal::from_str("2").unwrap(),
-                Currency::USD,
-            )),
-        }]),
+        discounts: Some(vec![
+            Discount::try_new(
+                DiscountScope::Bin,
+                DiscountThreshold::BinCount {
+                    bin_id: "bin-1".to_string(),
+                    min: 5,
+                },
+                DiscountValue::MoneyPerBin(money(Decimal::from_str("2").unwrap(), Currency::USD)),
+            )
+            .unwrap(),
+        ]),
         inventory_available: None,
         availability: None,
         delivery_method: None,
@@ -1312,15 +1329,15 @@ fn operational_listing_tags_full_uses_single_generic_price_for_primary_bin() {
     let mut listing = sample_listing_full("AAAAAAAAAAAAAAAAAAAAAw");
     listing.bins.push(RadrootsOperationalListingBin {
         bin_id: bin_id("bin-2"),
-        quantity: Quantity::new(Decimal::from_str("500").unwrap(), Unit::MassG),
-        price_per_canonical_unit: QuantityPrice::new(
-            Money::new(Decimal::from_str("0.02").unwrap(), Currency::USD),
-            Quantity::new(Decimal::from(1u32), Unit::MassG),
+        quantity: quantity(Decimal::from_str("500").unwrap(), Unit::MassG),
+        price_per_canonical_unit: quantity_price(
+            money(Decimal::from_str("0.02").unwrap(), Currency::USD),
+            quantity(Decimal::from(1u32), Unit::MassG),
         ),
         display_amount: Some(Decimal::from(500u32)),
         display_unit: Some(Unit::MassG),
         display_label: Some("sample".to_string()),
-        display_price: Some(Money::new(Decimal::from_str("10").unwrap(), Currency::USD)),
+        display_price: Some(money(Decimal::from_str("10").unwrap(), Currency::USD)),
         display_price_unit: Some(Unit::MassG),
     });
 

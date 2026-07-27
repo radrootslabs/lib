@@ -188,8 +188,8 @@ pub fn validate_operational_listing_model(
         product_type,
         primary_bin_id: primary_bin_id.clone(),
         bin_quantity: primary_bin.quantity.clone(),
-        unit: primary_bin.quantity.unit,
-        unit_price: primary_bin.price_per_canonical_unit.amount.clone(),
+        unit: primary_bin.quantity.unit(),
+        unit_price: primary_bin.price_per_canonical_unit.amount().clone(),
         inventory_available,
         availability,
         location,
@@ -201,16 +201,16 @@ pub fn validate_operational_listing_model(
 fn validate_listing_bin(
     bin: &RadrootsOperationalListingBin,
 ) -> Result<(), OperationalListingValidationError> {
-    if bin.quantity.amount.is_sign_negative() || !bin.quantity.is_canonical() {
+    if bin.quantity.amount().is_sign_negative() || !bin.quantity.is_canonical() {
         return Err(OperationalListingValidationError::InvalidBin);
     }
     if !bin.price_per_canonical_unit.is_price_per_canonical_unit()
         || bin
             .price_per_canonical_unit
-            .amount
-            .amount
+            .amount()
+            .amount()
             .is_sign_negative()
-        || bin.price_per_canonical_unit.quantity.unit != bin.quantity.unit
+        || bin.price_per_canonical_unit.quantity().unit() != bin.quantity.unit()
     {
         return Err(OperationalListingValidationError::InvalidPrice);
     }
@@ -297,11 +297,12 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
-                price_per_canonical_unit: QuantityPrice {
-                    amount: Money::new(Decimal::from(20u32), Currency::USD),
-                    quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-                },
+                quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(Decimal::from(20u32), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,
@@ -352,22 +353,22 @@ mod tests {
             tags.push(vec![
                 "radroots:bin".into(),
                 bin.bin_id.to_string(),
-                bin.quantity.amount.to_string(),
-                bin.quantity.unit.code().to_string(),
+                bin.quantity.amount().to_string(),
+                bin.quantity.unit().code().to_string(),
             ]);
             tags.push(vec![
                 "radroots:price".into(),
                 bin.bin_id.to_string(),
-                bin.price_per_canonical_unit.amount.amount.to_string(),
+                bin.price_per_canonical_unit.amount().amount().to_string(),
                 bin.price_per_canonical_unit
-                    .amount
-                    .currency
+                    .amount()
+                    .currency()
                     .as_str()
                     .to_string(),
-                bin.price_per_canonical_unit.quantity.amount.to_string(),
+                bin.price_per_canonical_unit.quantity().amount().to_string(),
                 bin.price_per_canonical_unit
-                    .quantity
-                    .unit
+                    .quantity()
+                    .unit()
                     .code()
                     .to_string(),
             ]);
@@ -489,19 +490,6 @@ mod tests {
         listing
     }
 
-    fn assert_model_and_signed_event_error(
-        listing: RadrootsOperationalListing,
-        expected: OperationalListingValidationError,
-    ) {
-        let event_error = validate_operational_listing_event(&base_event(&listing))
-            .expect_err("signed event semantic error");
-        let model_error = validate_operational_listing_model(listing, &seller_pubkey())
-            .expect_err("model semantic error");
-
-        assert_eq!(event_error, expected);
-        assert_eq!(model_error, event_error);
-    }
-
     #[test]
     fn validate_listing_ok() {
         let listing = base_listing();
@@ -546,18 +534,6 @@ mod tests {
         let model_error = validate_operational_listing_model(listing, &other_seller_pubkey())
             .expect_err("model seller error");
         assert_eq!(model_error, event_error);
-
-        let mut listing = listing_with_secondary_bin();
-        listing.bins[1].quantity.amount = "-1".parse().expect("negative decimal");
-        assert_model_and_signed_event_error(listing, OperationalListingValidationError::InvalidBin);
-
-        let mut listing = listing_with_secondary_bin();
-        listing.bins[1].price_per_canonical_unit.amount.amount =
-            "-1".parse().expect("negative decimal");
-        assert_model_and_signed_event_error(
-            listing,
-            OperationalListingValidationError::InvalidPrice,
-        );
     }
 
     #[test]
@@ -606,11 +582,7 @@ mod tests {
     #[test]
     fn model_validation_rejects_invalid_secondary_bin_quantities() {
         assert_secondary_bin_model_error(
-            |bin| bin.quantity.amount = "-1".parse().expect("negative decimal"),
-            OperationalListingValidationError::InvalidBin,
-        );
-        assert_secondary_bin_model_error(
-            |bin| bin.quantity.unit = Unit::MassKg,
+            |bin| bin.quantity = Quantity::try_new(Decimal::ONE, Unit::MassKg).unwrap(),
             OperationalListingValidationError::InvalidBin,
         );
     }
@@ -619,26 +591,31 @@ mod tests {
     fn model_validation_rejects_invalid_secondary_bin_prices() {
         assert_secondary_bin_model_error(
             |bin| {
-                bin.price_per_canonical_unit.quantity.amount = Decimal::from(2u32);
+                bin.price_per_canonical_unit = QuantityPrice::try_new(
+                    bin.price_per_canonical_unit.amount().clone(),
+                    Quantity::try_new(Decimal::from(2u32), Unit::MassG).unwrap(),
+                )
+                .unwrap();
             },
             OperationalListingValidationError::InvalidPrice,
         );
         assert_secondary_bin_model_error(
             |bin| {
-                bin.price_per_canonical_unit.quantity.unit = Unit::MassKg;
+                bin.price_per_canonical_unit = QuantityPrice::try_new(
+                    bin.price_per_canonical_unit.amount().clone(),
+                    Quantity::try_new(Decimal::ONE, Unit::MassKg).unwrap(),
+                )
+                .unwrap();
             },
             OperationalListingValidationError::InvalidPrice,
         );
         assert_secondary_bin_model_error(
             |bin| {
-                bin.price_per_canonical_unit.amount.amount =
-                    "-1".parse().expect("negative decimal");
-            },
-            OperationalListingValidationError::InvalidPrice,
-        );
-        assert_secondary_bin_model_error(
-            |bin| {
-                bin.price_per_canonical_unit.quantity.unit = Unit::Each;
+                bin.price_per_canonical_unit = QuantityPrice::try_new(
+                    bin.price_per_canonical_unit.amount().clone(),
+                    Quantity::try_new(Decimal::ONE, Unit::Each).unwrap(),
+                )
+                .unwrap();
             },
             OperationalListingValidationError::InvalidPrice,
         );
@@ -824,16 +801,9 @@ mod tests {
     }
 
     #[test]
-    fn validate_listing_rejects_negative_quantity() {
-        let mut listing = base_listing();
-        listing.bins[0].quantity.amount = "-1".parse().unwrap();
-        assert_validation_err(listing, OperationalListingValidationError::InvalidBin);
-    }
-
-    #[test]
     fn validate_listing_rejects_non_canonical_quantity() {
         let mut listing = base_listing();
-        listing.bins[0].quantity.unit = Unit::MassKg;
+        listing.bins[0].quantity = Quantity::try_new(Decimal::ONE, Unit::MassKg).unwrap();
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
@@ -845,7 +815,11 @@ mod tests {
     #[test]
     fn validate_listing_rejects_non_canonical_price_quantity() {
         let mut listing = base_listing();
-        listing.bins[0].price_per_canonical_unit.quantity.unit = Unit::MassKg;
+        listing.bins[0].price_per_canonical_unit = QuantityPrice::try_new(
+            listing.bins[0].price_per_canonical_unit.amount().clone(),
+            Quantity::try_new(Decimal::ONE, Unit::MassKg).unwrap(),
+        )
+        .unwrap();
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
@@ -855,16 +829,13 @@ mod tests {
     }
 
     #[test]
-    fn validate_listing_rejects_negative_price_amount() {
-        let mut listing = base_listing();
-        listing.bins[0].price_per_canonical_unit.amount.amount = "-1".parse().unwrap();
-        assert_validation_err(listing, OperationalListingValidationError::InvalidPrice);
-    }
-
-    #[test]
     fn validate_listing_rejects_price_unit_mismatch() {
         let mut listing = base_listing();
-        listing.bins[0].price_per_canonical_unit.quantity.unit = Unit::Each;
+        listing.bins[0].price_per_canonical_unit = QuantityPrice::try_new(
+            listing.bins[0].price_per_canonical_unit.amount().clone(),
+            Quantity::try_new(Decimal::ONE, Unit::Each).unwrap(),
+        )
+        .unwrap();
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {

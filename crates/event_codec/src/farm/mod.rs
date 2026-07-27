@@ -496,11 +496,12 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: Quantity::new(Decimal::from(1u32), Unit::Each),
-                price_per_canonical_unit: QuantityPrice::new(
-                    Money::new(Decimal::from(10u32), Currency::USD),
-                    Quantity::new(Decimal::from(1u32), Unit::Each),
-                ),
+                quantity: Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,

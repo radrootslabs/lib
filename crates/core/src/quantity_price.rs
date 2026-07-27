@@ -2,13 +2,13 @@ use core::fmt;
 
 use crate::{Decimal, Money, Quantity, Unit};
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuantityPrice {
-    pub amount: Money,
-    pub quantity: Quantity,
+    amount: Money,
+    quantity: Quantity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,10 +60,6 @@ mod sealed {
 
 /// Sealed pricing operations implemented by [`QuantityPrice`].
 ///
-/// The `try_*` methods are the canonical checked surface. The infallible
-/// methods remain temporarily for first-party source compatibility and return
-/// zero when the corresponding checked operation fails.
-///
 /// Downstream crates may call this trait but cannot implement it:
 ///
 /// ```compile_fail
@@ -73,51 +69,30 @@ mod sealed {
 /// struct ForeignPrice;
 ///
 /// impl QuantityPriceOps for ForeignPrice {
-///     fn cost_for(&self, _: &Quantity) -> Money { panic!() }
-///     fn cost_for_rounded(&self, _: &Quantity) -> Money { panic!() }
-///     fn cost_for_with_quantized_price(&self, _: &Quantity) -> Money { panic!() }
 ///     fn try_cost_for(&self, _: &Quantity) -> Result<Money, Error> { panic!() }
 ///     fn try_cost_for_rounded(&self, _: &Quantity) -> Result<Money, Error> { panic!() }
 /// }
 /// ```
 pub trait QuantityPriceOps: sealed::Sealed {
-    /// Compatibility operation that returns zero on invalid input.
-    #[must_use]
-    fn cost_for(&self, qty: &Quantity) -> Money;
-
-    /// Calculates first, then rounds the final result to the currency exponent
-    /// with midpoint-away-from-zero rounding.
-    #[must_use]
-    fn cost_for_rounded(&self, qty: &Quantity) -> Money;
-
-    /// Rounds the price first, then calculates the requested cost without a
-    /// second quantization.
-    #[must_use]
-    fn cost_for_with_quantized_price(&self, qty: &Quantity) -> Money;
-
+    /// Calculates the requested cost without silently converting invalid
+    /// quantities, unit mismatches, or arithmetic failures into zero.
     fn try_cost_for(&self, qty: &Quantity) -> Result<Money, Error>;
 
+    /// Calculates first, then rounds the final result to the currency exponent
+    /// with deterministic midpoint-away-from-zero rounding.
     fn try_cost_for_rounded(&self, qty: &Quantity) -> Result<Money, Error>;
 }
 
 impl QuantityPrice {
-    /// Compatibility constructor for already-validated internal values.
-    ///
-    /// New boundary code should use [`Self::try_new`].
-    #[inline]
-    pub fn new(amount: Money, quantity: Quantity) -> Self {
-        Self { amount, quantity }
-    }
-
     #[inline]
     pub fn try_new(amount: Money, quantity: Quantity) -> Result<Self, Error> {
         amount
             .ensure_non_negative()
             .map_err(|_| Error::NegativePrice)?;
-        if quantity.amount.is_sign_negative() {
+        if quantity.amount().is_sign_negative() {
             return Err(Error::PerQuantityNegative);
         }
-        if quantity.amount.is_zero() {
+        if quantity.amount().is_zero() {
             return Err(Error::PerQuantityZero);
         }
         Ok(Self { amount, quantity })
@@ -142,7 +117,7 @@ impl QuantityPrice {
     pub fn try_cost_for_amount_in(&self, amount: Decimal, unit: Unit) -> Result<Money, Error> {
         use crate::unit::convert_unit_decimal;
 
-        let target = self.quantity.unit;
+        let target = self.quantity.unit();
 
         let normalized = if unit == target {
             amount
@@ -158,13 +133,13 @@ impl QuantityPrice {
 
     #[inline]
     pub fn try_cost_for_quantity_in(&self, qty: &Quantity) -> Result<Money, Error> {
-        self.try_cost_for_amount_in(qty.amount, qty.unit)
+        self.try_cost_for_amount_in(qty.amount(), qty.unit())
     }
 
     #[inline]
     pub fn is_price_per_canonical_unit(&self) -> bool {
-        self.quantity.unit == self.quantity.unit.canonical_unit()
-            && self.quantity.amount == Decimal::ONE
+        self.quantity.unit() == self.quantity.unit().canonical_unit()
+            && self.quantity.amount() == Decimal::ONE
     }
 
     #[inline]
@@ -173,11 +148,11 @@ impl QuantityPrice {
 
         self.validate()?;
 
-        let normalized = if self.quantity.unit == unit {
-            self.quantity.amount
+        let normalized = if self.quantity.unit() == unit {
+            self.quantity.amount()
         } else {
-            convert_unit_decimal(self.quantity.amount, self.quantity.unit, unit)
-                .map_err(|error| map_conversion_error(error, self.quantity.unit, unit))?
+            convert_unit_decimal(self.quantity.amount(), self.quantity.unit(), unit)
+                .map_err(|error| map_conversion_error(error, self.quantity.unit(), unit))?
         };
 
         if normalized.is_zero() {
@@ -188,66 +163,46 @@ impl QuantityPrice {
             .amount
             .checked_div_decimal(normalized)
             .map_err(|_| Error::ArithmeticOverflow)?;
-        Self::try_new(amount, Quantity::new(Decimal::ONE, unit))
+        let quantity =
+            Quantity::try_new(Decimal::ONE, unit).map_err(|_| Error::ArithmeticOverflow)?;
+        Self::try_new(amount, quantity)
     }
 
     #[inline]
     pub fn try_to_canonical_unit_price(&self) -> Result<QuantityPrice, Error> {
-        self.try_to_unit_price(self.quantity.unit.canonical_unit())
+        self.try_to_unit_price(self.quantity.unit().canonical_unit())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for QuantityPrice {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            amount: Money,
+            quantity: Quantity,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        Self::try_new(wire.amount, wire.quantity).map_err(serde::de::Error::custom)
     }
 }
 
 impl QuantityPriceOps for QuantityPrice {
     #[inline]
-    fn cost_for(&self, qty: &Quantity) -> Money {
-        if qty.amount.is_zero() {
-            return Money::zero(self.amount.currency);
-        }
-        if self.quantity.amount.is_zero() {
-            return Money::zero(self.amount.currency);
-        }
-        if qty.unit != self.quantity.unit {
-            return Money::zero(self.amount.currency);
-        }
-
-        let ratio = qty.amount / self.quantity.amount;
-        self.amount.mul_decimal(ratio)
-    }
-
-    #[inline]
-    fn cost_for_rounded(&self, qty: &Quantity) -> Money {
-        self.cost_for(qty).quantize_to_currency()
-    }
-
-    #[inline]
-    fn cost_for_with_quantized_price(&self, qty: &Quantity) -> Money {
-        if qty.amount.is_zero() {
-            return Money::zero(self.amount.currency);
-        }
-        if self.quantity.amount.is_zero() {
-            return Money::zero(self.amount.currency);
-        }
-        if qty.unit != self.quantity.unit {
-            return Money::zero(self.amount.currency);
-        }
-        let unit_price_q = self.amount.clone().quantize_to_currency();
-        unit_price_q.mul_decimal(qty.amount / self.quantity.amount)
-    }
-
-    #[inline]
     fn try_cost_for(&self, qty: &Quantity) -> Result<Money, Error> {
         self.validate()?;
         qty.ensure_non_negative()
             .map_err(|_| Error::NegativeRequestedQuantity)?;
-        if qty.unit != self.quantity.unit {
+        if qty.unit() != self.quantity.unit() {
             return Err(Error::UnitMismatch {
-                have: qty.unit,
-                want: self.quantity.unit,
+                have: qty.unit(),
+                want: self.quantity.unit(),
             });
         }
         let ratio = qty
-            .amount
-            .checked_div(self.quantity.amount)
+            .amount()
+            .checked_div(self.quantity.amount())
             .map_err(|_| Error::ArithmeticOverflow)?;
         self.amount
             .checked_mul_decimal(ratio)
@@ -259,12 +214,3 @@ impl QuantityPriceOps for QuantityPrice {
         Ok(self.try_cost_for(qty)?.quantize_to_currency())
     }
 }
-
-#[deprecated(since = "0.1.0", note = "renamed to `QuantityPrice`")]
-pub use self::QuantityPrice as RadrootsCoreQuantityPrice;
-
-#[deprecated(since = "0.1.0", note = "renamed to `pricing::Error`")]
-pub use self::Error as RadrootsCoreQuantityPriceError;
-
-#[deprecated(since = "0.1.0", note = "renamed to `pricing::QuantityPriceOps`")]
-pub use self::QuantityPriceOps as RadrootsCoreQuantityPriceOps;

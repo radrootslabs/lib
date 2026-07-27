@@ -176,7 +176,7 @@ fn sample_resource_cap(d_tag: &str) -> RadrootsResourceHarvestCap {
         },
         start: 100,
         end: 200,
-        cap_quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,

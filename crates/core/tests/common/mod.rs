@@ -13,11 +13,11 @@ pub fn currency(code: &str) -> Currency {
 }
 
 pub fn money(amount: &str, code: &str) -> Money {
-    Money::new(dec(amount), currency(code))
+    Money::try_new(dec(amount), currency(code)).expect("valid money")
 }
 
 pub fn qty(amount: &str, unit: Unit) -> Quantity {
-    Quantity::new(dec(amount), unit)
+    Quantity::try_new(dec(amount), unit).expect("valid quantity")
 }
 
 pub fn percent(s: &str) -> Percent {

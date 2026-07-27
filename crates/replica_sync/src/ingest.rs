@@ -2147,11 +2147,14 @@ mod tests {
             primary_bin_id: "bin-a".parse().expect("primary bin id"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: "bin-a".parse().expect("bin id"),
-                quantity: Quantity::new(listing_decimal("12"), Unit::Each).with_label("unit label"),
-                price_per_canonical_unit: QuantityPrice::new(
-                    Money::new(listing_decimal("6"), listing_currency()),
-                    Quantity::new(listing_decimal("1"), Unit::Each),
-                ),
+                quantity: Quantity::try_new(listing_decimal("12"), Unit::Each)
+                    .unwrap()
+                    .with_label("unit label"),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(listing_decimal("6"), listing_currency()).unwrap(),
+                    Quantity::try_new(listing_decimal("1"), Unit::Each).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,

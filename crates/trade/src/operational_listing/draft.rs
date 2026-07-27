@@ -250,11 +250,12 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
-                price_per_canonical_unit: QuantityPrice {
-                    amount: Money::new(Decimal::from(20u32), Currency::USD),
-                    quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-                },
+                quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(Decimal::from(20u32), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,
@@ -529,7 +530,7 @@ mod tests {
         let mut invalid_quantity_listing = listing();
         let mut secondary_bin = invalid_quantity_listing.bins[0].clone();
         secondary_bin.bin_id = bin_id("bin-2");
-        secondary_bin.quantity.amount = "-1".parse().expect("negative decimal");
+        secondary_bin.quantity = Quantity::try_new(Decimal::ONE, Unit::MassKg).unwrap();
         invalid_quantity_listing.bins.push(secondary_bin);
 
         let error = RadrootsOperationalListingCanonicalEdit::new(
@@ -548,7 +549,11 @@ mod tests {
         let mut mismatched_unit_listing = listing();
         let mut secondary_bin = mismatched_unit_listing.bins[0].clone();
         secondary_bin.bin_id = bin_id("bin-2");
-        secondary_bin.price_per_canonical_unit.quantity.unit = Unit::Each;
+        secondary_bin.price_per_canonical_unit = QuantityPrice::try_new(
+            secondary_bin.price_per_canonical_unit.amount().clone(),
+            Quantity::try_new(Decimal::ONE, Unit::Each).unwrap(),
+        )
+        .unwrap();
         mismatched_unit_listing.bins.push(secondary_bin);
 
         let error = RadrootsOperationalListingCanonicalEdit::new(

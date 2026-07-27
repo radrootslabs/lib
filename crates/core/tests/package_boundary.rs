@@ -24,25 +24,10 @@ fn canonical_value_paths_are_public() {
     let _ = core::mem::size_of::<radroots_core::pricing::Error>();
 }
 
-#[allow(deprecated)]
 #[test]
-fn temporary_legacy_aliases_remain_source_compatible() {
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCorePercent,
-        RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError,
-        RadrootsCoreQuantityPriceOps, RadrootsCoreUnit, RadrootsCoreUnitDimension,
-    };
-
-    let decimal = RadrootsCoreDecimal(rust_decimal::Decimal::ONE);
-    let currency = RadrootsCoreCurrency::USD;
-    let money = RadrootsCoreMoney::new(decimal, currency);
-    let quantity = RadrootsCoreQuantity::new(decimal, RadrootsCoreUnit::Each);
-    let _ = RadrootsCorePercent::new(decimal);
-    let price = RadrootsCoreQuantityPrice::new(money, quantity);
-    let _ = RadrootsCoreQuantityPriceOps::try_cost_for(
-        &price,
-        &RadrootsCoreQuantity::new(decimal, RadrootsCoreUnit::Each),
-    );
-    let _ = RadrootsCoreQuantityPriceError::PerQuantityZero;
-    let _ = RadrootsCoreUnitDimension::Count;
+fn canonical_values_use_checked_construction() {
+    let money = Money::try_new(Decimal::ONE, Currency::USD).expect("valid money");
+    let quantity = Quantity::try_new(Decimal::ONE, Unit::Each).expect("valid quantity");
+    let price = QuantityPrice::try_new(money, quantity).expect("valid price");
+    assert_eq!(price.quantity().unit(), Unit::Each);
 }

@@ -13,7 +13,7 @@ use crate::money::Money;
 pub struct Percent {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
-    pub value: Decimal,
+    value: Decimal,
 }
 
 impl Percent {
@@ -28,10 +28,8 @@ impl Percent {
     }
 
     #[inline]
-    pub fn from_ratio(ratio_0_to_1: Decimal) -> Self {
-        Self {
-            value: ratio_0_to_1 * Decimal::from(100u32),
-        }
+    pub const fn value(&self) -> Decimal {
+        self.value
     }
 
     #[inline]
@@ -42,23 +40,8 @@ impl Percent {
     }
 
     #[inline]
-    pub fn to_ratio(&self) -> Decimal {
-        self.value / Decimal::from(100u32)
-    }
-
-    #[inline]
     pub fn try_to_ratio(&self) -> Result<Decimal, crate::decimal::Error> {
         self.value.checked_div(Decimal::from(100u32))
-    }
-
-    #[inline]
-    pub fn of_money(&self, base: &Money) -> Money {
-        base.mul_decimal(self.to_ratio())
-    }
-
-    #[inline]
-    pub fn of_money_quantized(&self, base: &Money) -> Money {
-        base.mul_decimal(self.to_ratio()).quantize_to_currency()
     }
 
     #[inline]
@@ -107,9 +90,3 @@ impl fmt::Display for ParseError {
 
 #[cfg(feature = "std")]
 impl std::error::Error for ParseError {}
-
-#[deprecated(since = "0.1.0", note = "renamed to `Percent`")]
-pub use self::Percent as RadrootsCorePercent;
-
-#[deprecated(since = "0.1.0", note = "renamed to `percent::ParseError`")]
-pub use self::ParseError as RadrootsCorePercentParseError;

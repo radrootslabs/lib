@@ -55,6 +55,18 @@ fn decimal(value: &str) -> Decimal {
     Decimal::from_str(value).expect("valid decimal")
 }
 
+fn money(amount: Decimal, currency: Currency) -> Money {
+    Money::try_new(amount, currency).unwrap()
+}
+
+fn quantity(amount: Decimal, unit: Unit) -> Quantity {
+    Quantity::try_new(amount, unit).unwrap()
+}
+
+fn quantity_price(amount: Money, quantity: Quantity) -> QuantityPrice {
+    QuantityPrice::try_new(amount, quantity).unwrap()
+}
+
 fn listing_d_tag(raw: &str) -> RadrootsDTag {
     raw.parse().unwrap()
 }
@@ -157,11 +169,9 @@ fn sample_plot() -> RadrootsPlot {
 }
 
 fn sample_listing() -> RadrootsOperationalListing {
-    let quantity = Quantity::new(Decimal::from(1u32), Unit::Each);
-    let price_per_canonical_unit = QuantityPrice::new(
-        Money::new(Decimal::from(10u32), Currency::USD),
-        quantity.clone(),
-    );
+    let quantity = quantity(Decimal::from(1u32), Unit::Each);
+    let price_per_canonical_unit =
+        quantity_price(money(Decimal::from(10u32), Currency::USD), quantity.clone());
 
     RadrootsOperationalListing {
         d_tag: listing_d_tag(VALID_DOC_D_TAG),
@@ -235,7 +245,7 @@ fn sample_resource_cap() -> RadrootsResourceHarvestCap {
         },
         start: 1,
         end: 2,
-        cap_quantity: Quantity::new(decimal("1000"), Unit::MassG),
+        cap_quantity: quantity(decimal("1000"), Unit::MassG),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -868,7 +878,7 @@ fn listing_encode_paths() {
     ));
 
     let mut invalid = sample_listing();
-    invalid.bins[0].display_price = Some(Money::new(decimal("10"), Currency::USD));
+    invalid.bins[0].display_price = Some(money(decimal("10"), Currency::USD));
     invalid.bins[0].display_price_unit = None;
     let err =
         operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
@@ -879,8 +889,7 @@ fn listing_encode_paths() {
     ));
 
     let mut listing_with_display_price = sample_listing();
-    listing_with_display_price.bins[0].display_price =
-        Some(Money::new(decimal("10"), Currency::USD));
+    listing_with_display_price.bins[0].display_price = Some(money(decimal("10"), Currency::USD));
     listing_with_display_price.bins[0].display_price_unit = Some(Unit::Each);
     let display_price_tags = operational_listing_tags_with_options(
         &listing_with_display_price,
@@ -894,7 +903,7 @@ fn listing_encode_paths() {
     }));
 
     let mut invalid = listing_with_display_price.clone();
-    invalid.bins[0].display_price = Some(Money::new(decimal("10"), Currency::EUR));
+    invalid.bins[0].display_price = Some(money(decimal("10"), Currency::EUR));
     let err =
         operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
             .expect_err("display price currency mismatch");
@@ -915,10 +924,10 @@ fn listing_encode_paths() {
     ));
 
     let mut invalid = sample_listing();
-    invalid.bins[0].quantity = Quantity::new(decimal("1"), Unit::MassKg);
-    invalid.bins[0].price_per_canonical_unit = QuantityPrice::new(
-        Money::new(decimal("10"), Currency::USD),
-        Quantity::new(decimal("1"), Unit::MassG),
+    invalid.bins[0].quantity = quantity(decimal("1"), Unit::MassKg);
+    invalid.bins[0].price_per_canonical_unit = quantity_price(
+        money(decimal("10"), Currency::USD),
+        quantity(decimal("1"), Unit::MassG),
     );
     let err =
         operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
@@ -929,9 +938,9 @@ fn listing_encode_paths() {
     ));
 
     let mut invalid = sample_listing();
-    invalid.bins[0].price_per_canonical_unit = QuantityPrice::new(
-        Money::new(decimal("10"), Currency::USD),
-        Quantity::new(decimal("2"), Unit::Each),
+    invalid.bins[0].price_per_canonical_unit = quantity_price(
+        money(decimal("10"), Currency::USD),
+        quantity(decimal("2"), Unit::Each),
     );
     let err =
         operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
@@ -942,9 +951,9 @@ fn listing_encode_paths() {
     ));
 
     let mut invalid = sample_listing();
-    invalid.bins[0].price_per_canonical_unit = QuantityPrice::new(
-        Money::new(decimal("10"), Currency::USD),
-        Quantity::new(decimal("1"), Unit::MassG),
+    invalid.bins[0].price_per_canonical_unit = quantity_price(
+        money(decimal("10"), Currency::USD),
+        quantity(decimal("1"), Unit::MassG),
     );
     let err =
         operational_listing_tags_with_options(&invalid, OperationalListingTagOptions::default())
@@ -1290,6 +1299,6 @@ fn document_encode_paths() {
 
 #[test]
 fn resource_harvest_cap_money_type_sanity() {
-    let money = Money::new(decimal("1"), Currency::USD);
-    assert_eq!(money.amount.to_string(), "1");
+    let money = money(decimal("1"), Currency::USD);
+    assert_eq!(money.amount().to_string(), "1");
 }
