@@ -1834,12 +1834,21 @@ fn prepare_delivery_plan(
     event_id: &str,
     input: &RadrootsOutboxDeliveryPlanInput,
 ) -> Result<PreparedDeliveryPlan, RadrootsOutboxError> {
-    if input.transport_profile_id.trim().is_empty() {
+    if input.transport_profile_id.is_empty() {
         return Err(RadrootsOutboxError::EmptyTransportProfileId);
     }
+    if input.transport_profile_id != input.transport_profile_id.trim()
+        || input
+            .transport_profile_id
+            .chars()
+            .any(|character| character.is_whitespace() || character.is_control())
+        || input.transport_profile_id.len()
+            > radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES
+    {
+        return Err(RadrootsOutboxError::InvalidTransportProfileId);
+    }
     let targets = input.targets.clone();
-    let is_no_wait = input.satisfaction_policy == RadrootsTransportSatisfactionPolicy::no_wait();
-    if targets.is_empty() && !is_no_wait {
+    if targets.is_empty() {
         return Err(RadrootsOutboxError::EmptyDeliveryTargets);
     }
     validate_unique_targets(&targets)?;
@@ -1873,7 +1882,7 @@ fn prepare_delivery_plan(
         input.target_policy_version,
     );
     Ok(PreparedDeliveryPlan {
-        transport_profile_id: input.transport_profile_id.trim().to_owned(),
+        transport_profile_id: input.transport_profile_id.clone(),
         target_policy_fingerprint,
         target_policy_version: input.target_policy_version,
         satisfaction_policy,
@@ -3670,6 +3679,16 @@ mod tests {
 
     #[test]
     fn validation_and_persisted_value_parsers_reject_malformed_contract_data() {
+        let truly_empty_profile = RadrootsOutboxDeliveryPlanInput::new(
+            "",
+            1,
+            RadrootsTransportSatisfactionPolicy::no_wait(),
+            vec![nostr_target(NOSTR_PRIMARY_WSS)],
+        );
+        assert!(matches!(
+            prepare_delivery_plan("event-empty-profile", &truly_empty_profile),
+            Err(RadrootsOutboxError::EmptyTransportProfileId)
+        ));
         let empty_profile = RadrootsOutboxDeliveryPlanInput::new(
             "  ",
             1,
@@ -3678,8 +3697,42 @@ mod tests {
         );
         assert!(matches!(
             prepare_delivery_plan("event-empty-profile", &empty_profile),
-            Err(RadrootsOutboxError::EmptyTransportProfileId)
+            Err(RadrootsOutboxError::InvalidTransportProfileId)
         ));
+        let whitespace_profile = RadrootsOutboxDeliveryPlanInput::new(
+            "transport nostr.local",
+            1,
+            RadrootsTransportSatisfactionPolicy::no_wait(),
+            vec![nostr_target(NOSTR_PRIMARY_WSS)],
+        );
+        assert!(matches!(
+            prepare_delivery_plan("event-whitespace-profile", &whitespace_profile),
+            Err(RadrootsOutboxError::InvalidTransportProfileId)
+        ));
+        let oversized_profile = RadrootsOutboxDeliveryPlanInput::new(
+            "x".repeat(radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1),
+            1,
+            RadrootsTransportSatisfactionPolicy::no_wait(),
+            vec![nostr_target(NOSTR_PRIMARY_WSS)],
+        );
+        assert!(matches!(
+            prepare_delivery_plan("event-oversized-profile", &oversized_profile),
+            Err(RadrootsOutboxError::InvalidTransportProfileId)
+        ));
+        let exact_profile_id =
+            "x".repeat(radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES);
+        let exact_profile = RadrootsOutboxDeliveryPlanInput::new(
+            exact_profile_id.clone(),
+            1,
+            RadrootsTransportSatisfactionPolicy::no_wait(),
+            vec![nostr_target(NOSTR_PRIMARY_WSS)],
+        );
+        assert_eq!(
+            prepare_delivery_plan("event-exact-profile", &exact_profile)
+                .expect("exact profile boundary")
+                .transport_profile_id,
+            exact_profile_id
+        );
 
         for (stored, required_count) in [
             ("no_wait", 1),
@@ -3913,7 +3966,10 @@ mod tests {
             RadrootsTransportSatisfactionPolicy::no_wait(),
             Vec::new(),
         );
-        assert!(prepare_delivery_plan("event-no-wait", &empty_no_wait).is_ok());
+        assert!(matches!(
+            prepare_delivery_plan("event-no-wait", &empty_no_wait),
+            Err(RadrootsOutboxError::EmptyDeliveryTargets)
+        ));
     }
 
     fn delivery_plan(targets: Vec<RadrootsTransportTarget>) -> RadrootsOutboxDeliveryPlanInput {
@@ -5679,19 +5735,27 @@ mod tests {
     #[tokio::test]
     async fn enqueue_rejects_empty_delivery_targets_before_persistence() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
-        let draft = generic_draft(hex_64('a').as_str(), "hello");
+        for policy in [
+            RadrootsTransportSatisfactionPolicy::all_accepted(),
+            RadrootsTransportSatisfactionPolicy::no_wait(),
+        ] {
+            let err = outbox
+                .enqueue_operation(RadrootsOutboxOperationInput::new(
+                    "publish_post",
+                    generic_draft(hex_64('a').as_str(), "hello"),
+                    RadrootsOutboxDeliveryPlanInput::new(
+                        "transport.nostr.local",
+                        1,
+                        policy,
+                        Vec::new(),
+                    ),
+                    1_000,
+                ))
+                .await
+                .expect_err("empty targets");
 
-        let err = outbox
-            .enqueue_operation(RadrootsOutboxOperationInput::new(
-                "publish_post",
-                draft,
-                delivery_plan(Vec::new()),
-                1_000,
-            ))
-            .await
-            .expect_err("empty targets");
-
-        assert!(matches!(err, RadrootsOutboxError::EmptyDeliveryTargets));
+            assert!(matches!(err, RadrootsOutboxError::EmptyDeliveryTargets));
+        }
         assert_eq!(table_count(&outbox, "outbox_operations").await, 0);
         assert_eq!(table_count(&outbox, "outbox_event").await, 0);
         assert_eq!(table_count(&outbox, "outbox_delivery_plan").await, 0);

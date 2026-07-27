@@ -233,10 +233,10 @@
     },
     {
       "file": {
-        "byte_length": 11269,
+        "byte_length": 11376,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/error.rs",
-        "sha256": "496eca49b17431890251224b9d1818370a8174056f2dab57002f224dbfdb917d"
+        "sha256": "c54e9396c48629aecb5a2b8958ff83bb28f5a803b0e4efba734321917d42afe2"
       },
       "role": "outbox_error_surface"
     },
@@ -278,10 +278,10 @@
     },
     {
       "file": {
-        "byte_length": 320734,
+        "byte_length": 323369,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/store.rs",
-        "sha256": "2fbc9690e98bc651953e081a57265bd9778c8dd124c9b26a02668c3bc0f14314"
+        "sha256": "2cfd5994923edd45e990f56a5e021152016611ba70e297858e187bb840a17216"
       },
       "role": "store_integration"
     },

@@ -10,6 +10,8 @@ and service helpers for the `radroots` core libraries.
    crates;
  * service bootstrap, shutdown signal, backoff, and tracing initialization
    utilities;
+ * optional validated transport delivery jobs, bounded worker admission, partial
+   delivery receipts, and signature-verified inbound observation authority;
  * an optional CLI layer for configuration parsing and process startup.
 
 ## Copyright

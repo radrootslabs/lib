@@ -44,6 +44,7 @@ pub use tracing::{
 };
 #[cfg(feature = "transport")]
 pub use transport::{
+    RADROOTS_RUNTIME_DELIVERY_QUEUE_DEFAULT_CAPACITY, RADROOTS_RUNTIME_DELIVERY_QUEUE_MAX_CAPACITY,
     RadrootsRuntimeBoundedQueue, RadrootsRuntimeQueueStatus, RadrootsRuntimeQueueTask,
     RadrootsRuntimeTransportDispatchRequest, RadrootsRuntimeTransportError,
     RadrootsRuntimeTransportFuture, RadrootsRuntimeTransportPayload,

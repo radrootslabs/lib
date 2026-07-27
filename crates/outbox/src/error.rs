@@ -39,6 +39,9 @@ pub enum RadrootsOutboxError {
     #[error("transport profile id cannot be empty")]
     EmptyTransportProfileId,
 
+    #[error("transport profile id is not a bounded canonical identifier")]
+    InvalidTransportProfileId,
+
     #[error("trade mutation drafts require the semantic trade mutation outbox API")]
     TradeMutationRequiresSemanticOutbox,
 
