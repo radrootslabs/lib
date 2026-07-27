@@ -117,6 +117,7 @@ struct CratesReleasePackage {
 pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
     let root = workspace_root()?;
+    crate::architecture::validate(&root)?;
     check_publication_policy(&root)?;
     validate_sdk_contracts(&root)?;
     check_sdk_feature_matrix(&root)?;
