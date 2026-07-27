@@ -1,6 +1,6 @@
 [package]
 name = "radroots_sdk"
-publish = ["crates-io"]
+publish = false
 version.workspace = true
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]

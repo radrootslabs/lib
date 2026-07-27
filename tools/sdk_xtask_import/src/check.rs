@@ -64,9 +64,23 @@ struct CargoMetadataPackage {
     name: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct PublicationPolicyFile {
+    publication: PublicationPolicy,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicationPolicy {
+    frozen: bool,
+    registry: String,
+    final_enablement_step: u16,
+    approved_packages: Vec<String>,
+}
+
 pub fn check() -> Result<(), String> {
     validate_package_matrix()?;
     let root = workspace_root()?;
+    check_publication_policy(&root)?;
     validate_sdk_contracts(&root)?;
     check_sdk_feature_matrix(&root)?;
     check_forbidden_packages(&root)?;
@@ -76,6 +90,87 @@ pub fn check() -> Result<(), String> {
     cli_host::check_cli_host()?;
     check_package_build_artifacts(&root)?;
     check_npm_pack_payloads(&root)?;
+    Ok(())
+}
+
+fn check_publication_policy(root: &Path) -> Result<(), String> {
+    let policy_path = root.join("contracts/releases/publication.toml");
+    let raw = fs::read_to_string(&policy_path)
+        .map_err(|error| format!("failed to read {}: {error}", policy_path.display()))?;
+    let policy = toml::from_str::<PublicationPolicyFile>(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", policy_path.display()))?
+        .publication;
+    if policy.registry != "crates-io" {
+        return Err("publication.registry must be crates-io".to_owned());
+    }
+    if policy.final_enablement_step != 305 {
+        return Err("publication.final_enablement_step must be 305".to_owned());
+    }
+    let approved_package_count = policy.approved_packages.len();
+    let approved = policy
+        .approved_packages
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if approved.len() != approved_package_count {
+        return Err("publication.approved_packages must not contain duplicates".to_owned());
+    }
+    if approved != BTreeSet::from(["radroots".to_owned(), "radroots-sdk".to_owned()]) {
+        return Err(
+            "publication.approved_packages must contain exactly radroots-sdk and radroots"
+                .to_owned(),
+        );
+    }
+
+    let mut workspace_packages = BTreeSet::new();
+    for path in sdk_manifest_paths(root)?.into_iter().skip(1) {
+        let raw = fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+        let manifest = raw
+            .parse::<toml::Value>()
+            .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| format!("{} must define [package]", path.display()))?;
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("{} package.name must be a string", path.display()))?;
+        if !workspace_packages.insert(name.to_owned()) {
+            return Err(format!("duplicate workspace package name {name}"));
+        }
+        let publish = package.get("publish");
+        if policy.frozen {
+            if publish.and_then(toml::Value::as_bool) != Some(false) {
+                return Err(format!(
+                    "publication freeze requires workspace package {name} to set publish = false"
+                ));
+            }
+        } else if approved.contains(name) {
+            let registries = publish.and_then(toml::Value::as_array).ok_or_else(|| {
+                format!("approved package {name} must set publish = [\"crates-io\"]")
+            })?;
+            if registries.len() != 1 || registries[0].as_str() != Some("crates-io") {
+                return Err(format!(
+                    "approved package {name} must set publish = [\"crates-io\"]"
+                ));
+            }
+        } else if publish.and_then(toml::Value::as_bool) != Some(false) {
+            return Err(format!(
+                "non-approved workspace package {name} must set publish = false"
+            ));
+        }
+    }
+    if !policy.frozen && !approved.is_subset(&workspace_packages) {
+        let missing = approved
+            .difference(&workspace_packages)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "publication enablement is missing approved workspace packages: {missing}"
+        ));
+    }
     Ok(())
 }
 
@@ -1674,15 +1769,121 @@ mod tests {
         PackedPackage, check_binding_crate_sources, check_generated_package_artifact_inventory,
         check_manifest_reticulum_dependency_boundaries, check_no_typescript_files,
         check_package_distribution_metadata, check_package_index, check_package_json,
-        check_package_surface_artifacts, check_packed_package_json, check_reticulum_feature_entry,
-        check_wasm_package_surface, consumer_smoke_script, expected_packed_dist_files,
-        is_forbidden_reticulum_runtime_name, normalized_package_path, parse_pnpm_pack_entry,
-        read_packed_package_json, validate_npm_pack_payload, validate_packed_dist_inventory,
+        check_package_surface_artifacts, check_packed_package_json, check_publication_policy,
+        check_reticulum_feature_entry, check_wasm_package_surface, consumer_smoke_script,
+        expected_packed_dist_files, is_forbidden_reticulum_runtime_name, normalized_package_path,
+        parse_pnpm_pack_entry, read_packed_package_json, validate_npm_pack_payload,
+        validate_packed_dist_inventory,
     };
 
     #[test]
     fn package_skeleton_is_valid() {
         validate_package_matrix().expect("package matrix validates");
+    }
+
+    #[test]
+    fn publication_freeze_rejects_publishable_or_implicit_packages() {
+        let root = test_root("publication_freeze");
+        fs::create_dir_all(root.join("contracts/releases")).expect("create contracts");
+        fs::create_dir_all(root.join("crates/a")).expect("create crate a");
+        fs::create_dir_all(root.join("crates/b")).expect("create crate b");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\", \"crates/b\"]\n",
+        )
+        .expect("write workspace");
+        fs::write(
+            root.join("contracts/releases/publication.toml"),
+            r#"[publication]
+frozen = true
+registry = "crates-io"
+final_enablement_step = 305
+approved_packages = ["radroots-sdk", "radroots"]
+"#,
+        )
+        .expect("write policy");
+        fs::write(
+            root.join("crates/a/Cargo.toml"),
+            "[package]\nname = \"crate-a\"\nversion = \"0.1.0\"\npublish = false\n",
+        )
+        .expect("write crate a");
+        fs::write(
+            root.join("crates/b/Cargo.toml"),
+            "[package]\nname = \"crate-b\"\nversion = \"0.1.0\"\npublish = false\n",
+        )
+        .expect("write crate b");
+        check_publication_policy(&root).expect("private workspace satisfies freeze");
+
+        fs::write(
+            root.join("crates/a/Cargo.toml"),
+            "[package]\nname = \"crate-a\"\nversion = \"0.1.0\"\npublish = [\"crates-io\"]\n",
+        )
+        .expect("make crate a publishable");
+        let publishable =
+            check_publication_policy(&root).expect_err("publishable crate must fail freeze");
+        assert!(publishable.contains("publication freeze requires workspace package crate-a"));
+
+        fs::write(
+            root.join("crates/a/Cargo.toml"),
+            "[package]\nname = \"crate-a\"\nversion = \"0.1.0\"\n",
+        )
+        .expect("remove publish control");
+        let implicit =
+            check_publication_policy(&root).expect_err("implicit publishability must fail freeze");
+        assert!(implicit.contains("publication freeze requires workspace package crate-a"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn publication_enablement_allows_only_the_two_approved_packages() {
+        let root = test_root("publication_enablement");
+        fs::create_dir_all(root.join("contracts/releases")).expect("create contracts");
+        for member in ["sdk", "facade", "tool"] {
+            fs::create_dir_all(root.join("crates").join(member)).expect("create member");
+        }
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/sdk\", \"crates/facade\", \"crates/tool\"]\n",
+        )
+        .expect("write workspace");
+        fs::write(
+            root.join("contracts/releases/publication.toml"),
+            r#"[publication]
+frozen = false
+registry = "crates-io"
+final_enablement_step = 305
+approved_packages = ["radroots-sdk", "radroots"]
+"#,
+        )
+        .expect("write policy");
+        fs::write(
+            root.join("crates/sdk/Cargo.toml"),
+            "[package]\nname = \"radroots-sdk\"\nversion = \"0.1.0\"\npublish = [\"crates-io\"]\n",
+        )
+        .expect("write SDK manifest");
+        fs::write(
+            root.join("crates/facade/Cargo.toml"),
+            "[package]\nname = \"radroots\"\nversion = \"0.1.0\"\npublish = [\"crates-io\"]\n",
+        )
+        .expect("write facade manifest");
+        fs::write(
+            root.join("crates/tool/Cargo.toml"),
+            "[package]\nname = \"build-tool\"\nversion = \"0.1.0\"\npublish = false\n",
+        )
+        .expect("write tool manifest");
+        check_publication_policy(&root).expect("approved package staging should pass");
+
+        fs::write(
+            root.join("crates/tool/Cargo.toml"),
+            "[package]\nname = \"build-tool\"\nversion = \"0.1.0\"\npublish = [\"crates-io\"]\n",
+        )
+        .expect("make tool publishable");
+        let extra = check_publication_policy(&root)
+            .expect_err("non-approved publishable package must fail enablement");
+        assert!(extra.contains("non-approved workspace package build-tool"));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
