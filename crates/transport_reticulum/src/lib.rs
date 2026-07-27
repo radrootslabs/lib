@@ -275,7 +275,8 @@ impl RadrootsReticulumTransport {
             .iter()
             .cloned()
             .map(|target| RadrootsTransportTargetReceipt::skipped(target, outcome.clone()))
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| RadrootsReticulumError::InvalidDeliveryReceipt)?;
         RadrootsTransportDeliveryReceipt::for_request(&request, target_receipts)
             .map_err(|_| RadrootsReticulumError::InvalidDeliveryReceipt)
     }
@@ -338,7 +339,7 @@ impl RadrootsTransport for RadrootsReticulumTransport {
                 .iter()
                 .cloned()
                 .map(|target| RadrootsTransportTargetReceipt::skipped(target, outcome.clone()))
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             Ok(RadrootsTransportFetchReceipt::new(
                 request.request_id,
                 target_receipts,
@@ -437,7 +438,7 @@ fn ensure_reticulum_targets(
 }
 
 fn reticulum_outcome(behavior: RadrootsReticulumBehavior) -> RadrootsTransportOutcome {
-    let mut outcome = match behavior {
+    let outcome = match behavior {
         RadrootsReticulumBehavior::RejectDeliveryAttempts => {
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
         }
@@ -445,23 +446,19 @@ fn reticulum_outcome(behavior: RadrootsReticulumBehavior) -> RadrootsTransportOu
             RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented)
         }
     };
-    outcome.code = Some(
-        match behavior {
+    outcome
+        .try_with_code(match behavior {
             RadrootsReticulumBehavior::RejectDeliveryAttempts => UNAVAILABLE_CODE,
             RadrootsReticulumBehavior::DeferDeliveryPlans => DEFERRED_CODE,
-        }
-        .to_owned(),
-    );
-    outcome.message = Some(
-        match behavior {
+        })
+        .expect("static Reticulum outcome code is bounded")
+        .try_with_message(match behavior {
             RadrootsReticulumBehavior::RejectDeliveryAttempts => {
                 RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
             }
             RadrootsReticulumBehavior::DeferDeliveryPlans => DEFERRED_MESSAGE,
-        }
-        .to_owned(),
-    );
-    outcome
+        })
+        .expect("static Reticulum outcome message is bounded")
 }
 
 #[cfg(test)]
@@ -633,8 +630,8 @@ mod tests {
                 .deliver(delivery_request(vec![reticulum_target()]))
                 .expect("deferred delivery")
                 .target_receipts()[0]
-                .outcome
-                .kind,
+                .outcome()
+                .kind(),
             RadrootsTransportOutcomeKind::DeferredUntilImplemented
         );
 
@@ -676,8 +673,8 @@ mod tests {
             RadrootsReticulumBehavior::DeferDeliveryPlans,
         ] {
             let outcome = reticulum_outcome(behavior);
-            assert!(outcome.code.is_some());
-            assert!(outcome.message.is_some());
+            assert!(outcome.code().is_some());
+            assert!(outcome.message().is_some());
         }
     }
 }

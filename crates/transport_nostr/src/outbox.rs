@@ -207,8 +207,9 @@ where
     for relay in &publish.relays {
         if relay
             .outcome
-            .to_transport_outcome()
-            .status
+            .kind
+            .transport_outcome_kind()
+            .target_status()
             .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
             && publishable
                 .targets_for_relay(relay.relay_url.as_str())
@@ -355,8 +356,9 @@ where
     for relay in &relay_receipts {
         if relay
             .outcome
-            .to_transport_outcome()
-            .status
+            .kind
+            .transport_outcome_kind()
+            .target_status()
             .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
             && publishable
                 .targets_for_relay(relay.relay_url.as_str())
@@ -518,7 +520,11 @@ fn target_receipts_from_relay_receipts(
                 target_scope: target.target_scope.clone(),
                 target_label: target.target_label.clone(),
                 attempted: relay_receipt.attempted,
-                transport_status: relay_receipt.outcome.to_transport_outcome().status,
+                transport_status: relay_receipt
+                    .outcome
+                    .kind
+                    .transport_outcome_kind()
+                    .target_status(),
                 outcome: relay_receipt.outcome.clone(),
             });
         }
@@ -537,16 +543,16 @@ fn target_receipts_from_transport_receipts(
             publishable
                 .relays
                 .iter()
-                .find(|target| target.endpoint_fingerprint == *receipt.target.fingerprint())
+                .find(|target| target.endpoint_fingerprint == *receipt.target().fingerprint())
                 .map(|target| RadrootsOutboxPublishTargetReceipt {
                     delivery_target_id: target.delivery_target_id,
                     endpoint_uri: target.relay_url.clone(),
                     endpoint_fingerprint: target.endpoint_fingerprint.clone(),
                     target_scope: target.target_scope.clone(),
                     target_label: target.target_label.clone(),
-                    attempted: receipt.attempted,
-                    transport_status: receipt.status,
-                    outcome: relay_outcome_from_transport_outcome(&receipt.outcome),
+                    attempted: receipt.was_attempted(),
+                    transport_status: receipt.status(),
+                    outcome: relay_outcome_from_transport_outcome(receipt.outcome()),
                 })
         })
         .collect()
@@ -684,11 +690,11 @@ fn relay_receipts_from_transport_receipts(
 ) -> Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError> {
     let mut relay_receipts: Vec<RadrootsRelayPublishRelayReceipt> = Vec::new();
     for receipt in delivery.target_receipts() {
-        let outcome = relay_outcome_from_transport_outcome(&receipt.outcome);
-        let relay_receipt = if receipt.attempted {
-            RadrootsRelayPublishRelayReceipt::attempted(receipt.target.uri().as_str(), outcome)
+        let outcome = relay_outcome_from_transport_outcome(receipt.outcome());
+        let relay_receipt = if receipt.was_attempted() {
+            RadrootsRelayPublishRelayReceipt::attempted(receipt.target().uri().as_str(), outcome)
         } else {
-            RadrootsRelayPublishRelayReceipt::skipped(receipt.target.uri().as_str(), outcome)
+            RadrootsRelayPublishRelayReceipt::skipped(receipt.target().uri().as_str(), outcome)
         };
         if let Some(existing) = relay_receipts
             .iter()
@@ -712,13 +718,12 @@ fn relay_outcome_from_transport_outcome(
     outcome: &RadrootsTransportOutcome,
 ) -> RadrootsRelayOutcome {
     let kind = outcome
-        .code
-        .as_deref()
+        .code()
         .and_then(relay_outcome_kind_from_code)
-        .unwrap_or_else(|| relay_outcome_kind_from_transport_outcome(outcome.kind));
+        .unwrap_or_else(|| relay_outcome_kind_from_transport_outcome(outcome.kind()));
     RadrootsRelayOutcome {
         kind,
-        message: outcome.message.clone(),
+        message: outcome.message().map(str::to_owned),
     }
 }
 
@@ -1363,10 +1368,11 @@ mod tests {
                 relay_kind
             );
             let outcome = RadrootsTransportOutcome::new(transport_kind)
-                .with_message(format!("{transport_kind:?}"));
+                .try_with_message(format!("{transport_kind:?}"))
+                .expect("bounded test outcome message");
             let relay_outcome = relay_outcome_from_transport_outcome(&outcome);
             assert_eq!(relay_outcome.kind, relay_kind);
-            assert_eq!(relay_outcome.message, outcome.message);
+            assert_eq!(relay_outcome.message.as_deref(), outcome.message());
         }
 
         let code_cases = [
@@ -1408,7 +1414,8 @@ mod tests {
             assert_eq!(
                 relay_outcome_from_transport_outcome(
                     &RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Rejected)
-                        .with_code(code)
+                        .try_with_code(code)
+                        .expect("bounded test outcome code")
                 )
                 .kind,
                 relay_kind
@@ -1418,7 +1425,8 @@ mod tests {
         assert_eq!(
             relay_outcome_from_transport_outcome(
                 &RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen)
-                    .with_code("unrecognized")
+                    .try_with_code("unrecognized")
+                    .expect("bounded test outcome code")
             )
             .kind,
             RadrootsRelayOutcomeKind::Accepted

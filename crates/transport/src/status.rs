@@ -1,4 +1,5 @@
 use crate::{
+    RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES, RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES,
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
     RadrootsTransportImplementationState, RadrootsTransportKind,
     delivery::RadrootsTransportSatisfactionClass,
@@ -143,10 +144,10 @@ impl RadrootsTransportOutcomeKind {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportOutcome {
-    pub kind: RadrootsTransportOutcomeKind,
-    pub status: RadrootsTransportDeliveryTargetStatus,
-    pub code: Option<String>,
-    pub message: Option<String>,
+    kind: RadrootsTransportOutcomeKind,
+    status: RadrootsTransportDeliveryTargetStatus,
+    code: Option<String>,
+    message: Option<String>,
 }
 
 impl RadrootsTransportOutcome {
@@ -159,19 +160,67 @@ impl RadrootsTransportOutcome {
         }
     }
 
-    pub fn with_message(mut self, message: impl Into<String>) -> Self {
-        self.message = Some(message.into());
-        self
+    pub fn try_with_message(
+        mut self,
+        message: impl Into<String>,
+    ) -> Result<Self, crate::RadrootsTransportError> {
+        let message = message.into();
+        crate::limits::ensure_resource_limit(
+            "transport_outcome_message",
+            message.len(),
+            RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES,
+        )?;
+        self.message = Some(message);
+        Ok(self)
     }
 
-    pub fn with_code(mut self, code: impl Into<String>) -> Self {
-        self.code = Some(code.into());
-        self
+    pub fn try_with_code(
+        mut self,
+        code: impl Into<String>,
+    ) -> Result<Self, crate::RadrootsTransportError> {
+        let code = code.into();
+        crate::limits::ensure_resource_limit(
+            "transport_outcome_code",
+            code.len(),
+            RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
+        )?;
+        self.code = Some(code);
+        Ok(self)
+    }
+
+    pub fn kind(&self) -> RadrootsTransportOutcomeKind {
+        self.kind
+    }
+
+    pub fn status(&self) -> RadrootsTransportDeliveryTargetStatus {
+        self.status
+    }
+
+    pub fn code(&self) -> Option<&str> {
+        self.code.as_deref()
+    }
+
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
     }
 
     pub fn validate(&self) -> Result<(), crate::RadrootsTransportError> {
         if self.status != self.kind.target_status() {
             return Err(crate::RadrootsTransportError::TransportOutcomeStatusMismatch);
+        }
+        if let Some(code) = &self.code {
+            crate::limits::ensure_resource_limit(
+                "transport_outcome_code",
+                code.len(),
+                RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
+            )?;
+        }
+        if let Some(message) = &self.message {
+            crate::limits::ensure_resource_limit(
+                "transport_outcome_message",
+                message.len(),
+                RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES,
+            )?;
         }
         Ok(())
     }
@@ -183,8 +232,34 @@ impl RadrootsTransportOutcome {
 struct RadrootsTransportOutcomeWire {
     kind: RadrootsTransportOutcomeKind,
     status: RadrootsTransportDeliveryTargetStatus,
+    #[serde(deserialize_with = "deserialize_outcome_code")]
     code: Option<String>,
+    #[serde(deserialize_with = "deserialize_outcome_message")]
     message: Option<String>,
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_outcome_code<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_option_string(
+        deserializer,
+        "transport_outcome_code",
+        RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_outcome_message<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_option_string(
+        deserializer,
+        "transport_outcome_message",
+        RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES,
+    )
 }
 
 #[cfg(feature = "serde")]

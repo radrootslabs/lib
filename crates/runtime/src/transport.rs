@@ -531,10 +531,10 @@ impl<'a> RadrootsRuntimeDeliveryWorker<'a> {
                     })?;
                 for target_receipt in receipt.target_receipts().iter().cloned() {
                     target_states.insert(
-                        target_receipt.target.fingerprint().as_str().to_owned(),
+                        target_receipt.target().fingerprint().as_str().to_owned(),
                         RadrootsRuntimeDeliveryTargetState {
-                            target: target_receipt.target.clone(),
-                            status: target_receipt.status,
+                            target: target_receipt.target().clone(),
+                            status: target_receipt.status(),
                         },
                     );
                     plan_target_receipts.push(target_receipt);
@@ -1005,7 +1005,7 @@ mod tests {
             1
         );
         assert_eq!(
-            receipt.target_receipts()[0].status,
+            receipt.target_receipts()[0].status(),
             RadrootsTransportDeliveryTargetStatus::Accepted
         );
     }
@@ -1087,7 +1087,7 @@ mod tests {
             0
         );
         assert_eq!(
-            receipt.target_receipts()[0].status,
+            receipt.target_receipts()[0].status(),
             RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
         );
     }
@@ -1160,7 +1160,7 @@ mod tests {
         );
         assert_eq!(receipt.target_receipts.len(), 1);
         assert_eq!(
-            receipt.target_receipts[0].status,
+            receipt.target_receipts[0].status(),
             RadrootsTransportDeliveryTargetStatus::Accepted
         );
     }

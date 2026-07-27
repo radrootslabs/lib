@@ -293,13 +293,13 @@ fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
     assert_eq!(receipt.target_receipts().len(), 1);
     assert_eq!(
         receipt.target_receipts()[0]
-            .target
+            .target()
             .scope()
             .map(|scope| scope.as_str()),
         Some("farm-north.mesh_1")
     );
     assert_eq!(
-        receipt.target_receipts()[0].status,
+        receipt.target_receipts()[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
@@ -318,13 +318,13 @@ fn direct_reticulum_delivery_accepts_any_typed_scope_as_inert_metadata() {
         .expect("deferred delivery receipt");
     assert_eq!(
         deferred.target_receipts()[0]
-            .target
+            .target()
             .scope()
             .map(|scope| scope.as_str()),
         Some("farm-south.mesh_2")
     );
     assert_eq!(
-        deferred.target_receipts()[0].status,
+        deferred.target_receipts()[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
@@ -370,7 +370,7 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
     ))
     .expect("delivery receipt");
     assert_eq!(
-        delivery.target_receipts()[0].status,
+        delivery.target_receipts()[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 
@@ -381,7 +381,7 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
     .expect("fetch receipt");
     assert_eq!(fetch.fetched_count, 0);
     assert_eq!(
-        fetch.target_receipts[0].status,
+        fetch.target_receipts[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 }
@@ -399,19 +399,19 @@ fn reject_delivery_attempts_returns_unavailable_without_success_or_nostr_routing
     );
     for target_receipt in receipt.target_receipts() {
         assert_eq!(
-            target_receipt.target.kind(),
+            target_receipt.target().kind(),
             &RadrootsTransportKind::Reticulum
         );
         assert_eq!(
-            target_receipt.status,
+            target_receipt.status(),
             RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
         );
         assert_eq!(
-            target_receipt.outcome.code.as_deref(),
+            target_receipt.outcome().code(),
             Some("transport_unavailable")
         );
         assert_eq!(
-            target_receipt.outcome.message.as_deref(),
+            target_receipt.outcome().message(),
             Some(RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE)
         );
     }
@@ -451,11 +451,11 @@ fn deferred_delivery_plan_mode_never_counts_as_satisfied() {
         0
     );
     assert_eq!(
-        receipt.target_receipts()[0].status,
+        receipt.target_receipts()[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
-        receipt.target_receipts()[0].outcome.code.as_deref(),
+        receipt.target_receipts()[0].outcome().code(),
         Some("deferred_until_implemented")
     );
     assert!(
@@ -512,7 +512,7 @@ fn fetch_reports_deferred_until_implemented_without_observed_events() {
     assert_eq!(receipt.scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
     assert_eq!(receipt.agent_endpoint, None);
     assert_eq!(
-        receipt.outcome.status,
+        receipt.outcome.status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
@@ -536,7 +536,7 @@ fn fetch_reports_deferred_until_implemented_without_observed_events() {
         .fetch(RadrootsReticulumFetchRequest::new("fetch-deferred", 1).expect("fetch"))
         .expect("fetch receipt");
     assert_eq!(
-        deferred.outcome.status,
+        deferred.outcome.status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 }
@@ -573,7 +573,7 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
         )]))
         .expect("delivery receipt");
     assert_eq!(
-        receipt.target_receipts()[0].status,
+        receipt.target_receipts()[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     let fetch = transport

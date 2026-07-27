@@ -32,6 +32,17 @@ where
     })
 }
 
+pub(crate) fn deserialize_option_string<'de, D>(
+    deserializer: D,
+    field: &'static str,
+    max: usize,
+) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserializer.deserialize_option(BoundedOptionStringVisitor { field, max })
+}
+
 struct BoundedStringVisitor {
     field: &'static str,
     max: usize,
@@ -93,6 +104,44 @@ struct BoundedVecVisitor<T> {
     field: &'static str,
     max: usize,
     marker: PhantomData<T>,
+}
+
+struct BoundedOptionStringVisitor {
+    field: &'static str,
+    max: usize,
+}
+
+impl<'de> Visitor<'de> for BoundedOptionStringVisitor {
+    type Value = Option<String>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "an optional string of at most {} UTF-8 bytes",
+            self.max
+        )
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserialize_string(deserializer, self.field, self.max).map(Some)
+    }
 }
 
 impl<'de, T> Visitor<'de> for BoundedVecVisitor<T>

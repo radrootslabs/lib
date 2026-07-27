@@ -186,7 +186,7 @@ async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_iden
         .await
         .unwrap();
         assert_eq!(
-            first_receipt.target_receipts()[0].status,
+            first_receipt.target_receipts()[0].status(),
             RadrootsTransportDeliveryTargetStatus::FailedRetryable
         );
         assert_eq!(
@@ -229,7 +229,7 @@ async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_iden
         .await
         .unwrap();
         assert_eq!(
-            retry_receipt.target_receipts()[0].status,
+            retry_receipt.target_receipts()[0].status(),
             RadrootsTransportDeliveryTargetStatus::Accepted
         );
         assert_eq!(

@@ -277,7 +277,7 @@ where
                         transport_failure_target_receipts(
                             request.target_set().targets(),
                             message.as_str(),
-                        ),
+                        )?,
                     );
                 }
                 Err(error) => return Err(nostr_error_to_transport_error(error)),
@@ -287,7 +287,7 @@ where
                 target_receipts_from_relay_receipts(
                     request.target_set().targets(),
                     relay_receipts.as_slice(),
-                ),
+                )?,
             )
         })
     }
@@ -609,7 +609,7 @@ fn relay_targets_from_transport_targets(
 fn target_receipts_from_relay_receipts(
     targets: &[RadrootsTransportTarget],
     relay_receipts: &[RadrootsRelayPublishRelayReceipt],
-) -> Vec<RadrootsTransportTargetReceipt> {
+) -> Result<Vec<RadrootsTransportTargetReceipt>, RadrootsTransportError> {
     targets
         .iter()
         .cloned()
@@ -617,21 +617,22 @@ fn target_receipts_from_relay_receipts(
             let relay_receipt = relay_receipts
                 .iter()
                 .find(|receipt| relay_receipt_matches_target(receipt, &target));
-            match relay_receipt {
+            let receipt = match relay_receipt {
                 Some(receipt) if receipt.attempted => RadrootsTransportTargetReceipt::attempted(
                     target,
-                    receipt.outcome.to_transport_outcome(),
+                    receipt.outcome.to_transport_outcome()?,
                 ),
                 Some(receipt) => RadrootsTransportTargetReceipt::skipped(
                     target,
-                    receipt.outcome.to_transport_outcome(),
-                ),
+                    receipt.outcome.to_transport_outcome()?,
+                )?,
                 None => RadrootsTransportTargetReceipt::skipped(
                     target,
                     RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::RouteUnavailable)
-                        .with_message("relay adapter omitted target receipt"),
-                ),
-            }
+                        .try_with_message("relay adapter omitted target receipt")?,
+                )?,
+            };
+            Ok(receipt)
         })
         .collect()
 }
@@ -639,7 +640,7 @@ fn target_receipts_from_relay_receipts(
 fn transport_failure_target_receipts(
     targets: &[RadrootsTransportTarget],
     message: &str,
-) -> Vec<RadrootsTransportTargetReceipt> {
+) -> Result<Vec<RadrootsTransportTargetReceipt>, RadrootsTransportError> {
     targets
         .iter()
         .cloned()
@@ -647,7 +648,7 @@ fn transport_failure_target_receipts(
             RadrootsTransportTargetReceipt::skipped(
                 target,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::ConnectionFailed)
-                    .with_message(message.to_owned()),
+                    .try_with_message(message.to_owned())?,
             )
         })
         .collect()
@@ -767,8 +768,9 @@ fn relay_publish_satisfies_policy(
                 relay_receipt_counts_toward_quorum(receipt)
                     && receipt
                         .outcome
-                        .to_transport_outcome()
-                        .status
+                        .kind
+                        .transport_outcome_kind()
+                        .target_status()
                         .counts_as_satisfied(class)
             })
             .count();
@@ -782,8 +784,9 @@ fn relay_publish_satisfies_policy(
             && relay_receipt_counts_toward_quorum(receipt)
             && receipt
                 .outcome
-                .to_transport_outcome()
-                .status
+                .kind
+                .transport_outcome_kind()
+                .target_status()
                 .counts_as_satisfied(class)
         {
             satisfied_required_targets.insert(target.fingerprint().clone());

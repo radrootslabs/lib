@@ -1,23 +1,24 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
-    RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
-    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
-    RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
-    RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
-    RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES, RadrootsTransport, RadrootsTransportCapabilities,
-    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
+    RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES, RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
+    RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
+    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
+    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportSatisfactionPolicyKind,
     RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetLabel,
-    RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
-    ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
-    ReticulumFragmentIntegrityV1, ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1,
-    ReticulumPrivacySemanticsV1,
+    RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
+    RadrootsTransportTargetUri, ReticulumCapabilityReportV1, ReticulumDestinationV1,
+    ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
+    ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
 };
 use serde_json::Value;
 use std::borrow::ToOwned;
@@ -1101,10 +1102,12 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
     ];
 
     for (kind, label, status, satisfied_classes) in cases {
-        let outcome = RadrootsTransportOutcome::new(kind).with_message("transport detail");
+        let outcome = RadrootsTransportOutcome::new(kind)
+            .try_with_message("transport detail")
+            .expect("bounded transport detail");
         assert_eq!(kind.as_str(), label);
-        assert_eq!(outcome.kind, kind);
-        assert_eq!(outcome.status, status);
+        assert_eq!(outcome.kind(), kind);
+        assert_eq!(outcome.status(), status);
         for class in classes {
             assert_eq!(
                 kind.counts_as_satisfied(class),
@@ -1112,13 +1115,13 @@ fn typed_outcome_kinds_drive_status_and_satisfaction_semantics() {
                 "{kind:?} / {class:?}"
             );
         }
-        assert_eq!(outcome.message.as_deref(), Some("transport detail"));
+        assert_eq!(outcome.message(), Some("transport detail"));
     }
 
     let deferred_until_implemented =
         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DeferredUntilImplemented);
     assert_eq!(
-        deferred_until_implemented.status,
+        deferred_until_implemented.status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     deferred_until_implemented
@@ -1318,7 +1321,7 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
     )
     .expect("deliver");
     assert_eq!(
-        delivery.target_receipts()[0].outcome.kind,
+        delivery.target_receipts()[0].outcome().kind(),
         RadrootsTransportOutcomeKind::Delivered
     );
     let fetch = futures::executor::block_on(
@@ -1327,7 +1330,7 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
     .expect("fetch");
     assert_eq!(fetch.fetched_count, 1);
     assert_eq!(
-        fetch.target_receipts[0].outcome.kind,
+        fetch.target_receipts[0].outcome().kind(),
         RadrootsTransportOutcomeKind::Seen
     );
 }
@@ -1538,47 +1541,10 @@ fn delivery_requests_and_receipts_reject_forged_identity_and_cardinality() {
         .expect_err("unexpected receipt"),
         RadrootsTransportError::UnexpectedDeliveryTargetReceipt
     );
-    let mut mismatched_status = accepted_second.clone();
-    mismatched_status.status = RadrootsTransportDeliveryTargetStatus::Pending;
     assert_eq!(
-        RadrootsTransportDeliveryReceipt::new(
-            "request",
-            targets.clone(),
-            vec![accepted_first.clone(), mismatched_status],
-        )
-        .expect_err("status mismatch"),
-        RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
-    );
-    let mut forged_outcome = RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted);
-    forged_outcome.status = RadrootsTransportDeliveryTargetStatus::Pending;
-    assert_eq!(
-        RadrootsTransportDeliveryReceipt::new(
-            "request",
-            targets.clone(),
-            vec![
-                accepted_first.clone(),
-                RadrootsTransportTargetReceipt {
-                    target: second.clone(),
-                    attempted: true,
-                    status: RadrootsTransportDeliveryTargetStatus::Pending,
-                    outcome: forged_outcome,
-                },
-            ],
-        )
-        .expect_err("outcome status mismatch"),
-        RadrootsTransportError::TransportOutcomeStatusMismatch
-    );
-    assert_eq!(
-        RadrootsTransportDeliveryReceipt::new(
-            "request",
-            targets.clone(),
-            vec![
-                accepted_first.clone(),
-                RadrootsTransportTargetReceipt::skipped(
-                    second.clone(),
-                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
-                ),
-            ],
+        RadrootsTransportTargetReceipt::skipped(
+            second.clone(),
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
         )
         .expect_err("skipped accepted outcome"),
         RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
@@ -1590,8 +1556,8 @@ fn delivery_requests_and_receipts_reject_forged_identity_and_cardinality() {
         vec![accepted_second, accepted_first],
     )
     .expect("canonical receipt");
-    assert_eq!(receipt.target_receipts()[0].target, first);
-    assert_eq!(receipt.target_receipts()[1].target, second);
+    assert_eq!(receipt.target_receipts()[0].target(), &first);
+    assert_eq!(receipt.target_receipts()[1].target(), &second);
     receipt
         .validate_for_request(&request)
         .expect("matching request");
@@ -1665,6 +1631,68 @@ fn delivery_request_and_receipt_deserialization_revalidates_invariants() {
         serde_json::to_value(&receipt.target_receipts()[0]).expect("target receipt wire");
     direct_attempt_wire["attempted"] = Value::Bool(false);
     assert!(serde_json::from_value::<RadrootsTransportTargetReceipt>(direct_attempt_wire).is_err());
+
+    let exact_outcome_wire = serde_json::json!({
+        "kind": "Accepted",
+        "status": "Accepted",
+        "code": "c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES),
+        "message": "m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES),
+    });
+    let exact_outcome_json =
+        serde_json::to_string(&exact_outcome_wire).expect("exact outcome JSON");
+    serde_json::from_str::<RadrootsTransportOutcome>(&exact_outcome_json)
+        .expect("decode exact outcome wire");
+    for (field, value, expected_limit) in [
+        (
+            "code",
+            "c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1),
+            "transport_outcome_code",
+        ),
+        (
+            "message",
+            "m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES + 1),
+            "transport_outcome_message",
+        ),
+    ] {
+        let mut one_over = exact_outcome_wire.clone();
+        one_over[field] = Value::String(value);
+        let encoded = serde_json::to_string(&one_over).expect("one-over outcome JSON");
+        assert!(
+            serde_json::from_str::<RadrootsTransportOutcome>(&encoded)
+                .expect_err("reject one-over outcome wire")
+                .to_string()
+                .contains(expected_limit)
+        );
+    }
+    let mut unknown_outcome = exact_outcome_wire;
+    unknown_outcome["unknown"] = Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsTransportOutcome>(unknown_outcome).is_err());
+
+    let mut exact_request_id_wire = serde_json::to_value(&receipt).expect("receipt wire");
+    exact_request_id_wire["request_id"] =
+        Value::String("r".repeat(RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES));
+    serde_json::from_value::<RadrootsTransportDeliveryReceipt>(exact_request_id_wire)
+        .expect("decode exact receipt request id");
+    let mut one_over_request_id_wire = serde_json::to_value(&receipt).expect("receipt wire");
+    one_over_request_id_wire["request_id"] =
+        Value::String("r".repeat(RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES + 1));
+    assert!(
+        serde_json::from_value::<RadrootsTransportDeliveryReceipt>(one_over_request_id_wire)
+            .expect_err("reject one-over receipt request id")
+            .to_string()
+            .contains("delivery_request_id")
+    );
+
+    let mut one_over_receipts_wire = serde_json::to_value(&receipt).expect("receipt wire");
+    let receipt_item = one_over_receipts_wire["target_receipts"][0].clone();
+    one_over_receipts_wire["target_receipts"] =
+        Value::Array(vec![receipt_item; RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1]);
+    assert!(
+        serde_json::from_value::<RadrootsTransportDeliveryReceipt>(one_over_receipts_wire)
+            .expect_err("reject one-over receipt collection before identity validation")
+            .to_string()
+            .contains("delivery_target_receipt_count")
+    );
 
     let mut payload_wire = serde_json::to_value(opaque_payload()).expect("payload wire");
     payload_wire["OpaqueBytes"]["digest"] = Value::String("0".repeat(64));
@@ -1844,10 +1872,11 @@ fn payload_contract_covers_all_validation_boundaries() {
 fn status_contract_covers_builders_and_availability_defaults() {
     assert_eq!(
         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
-            .with_code("accepted")
-            .with_message("accepted by transport")
-            .code
-            .as_deref(),
+            .try_with_code("accepted")
+            .expect("bounded code")
+            .try_with_message("accepted by transport")
+            .expect("bounded message")
+            .code(),
         Some("accepted")
     );
 
@@ -2200,6 +2229,90 @@ fn transport_bounds_targets_enforce_exact_and_one_over_before_set_work() {
             field: "required_target_count",
             max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
             actual: RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1,
+        }
+    );
+}
+
+#[test]
+fn transport_bounds_outcomes_and_receipts_enforce_exact_and_one_over() {
+    let exact_code = "c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES);
+    let exact_message = "m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES);
+    let exact_outcome = RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+        .try_with_code(exact_code)
+        .expect("exact outcome code")
+        .try_with_message(exact_message)
+        .expect("exact outcome message");
+    assert_eq!(
+        exact_outcome.code().map(str::len),
+        Some(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES)
+    );
+    assert_eq!(
+        exact_outcome.message().map(str::len),
+        Some(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES)
+    );
+    assert_eq!(
+        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+            .try_with_code("c".repeat(RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1))
+            .expect_err("one-over outcome code"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "transport_outcome_code",
+            max: RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES + 1,
+        }
+    );
+    assert_eq!(
+        RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+            .try_with_message("m".repeat(RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES + 1))
+            .expect_err("one-over outcome message"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "transport_outcome_message",
+            max: RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES + 1,
+        }
+    );
+
+    let first = RadrootsTransportTarget::local("local:diagnostic-first").expect("first target");
+    let second = RadrootsTransportTarget::local("local:diagnostic-second").expect("second target");
+    let target_set = RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()])
+        .expect("diagnostic target set");
+    let half = RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES / 2;
+    let exact_receipts = vec![
+        RadrootsTransportTargetReceipt::new(
+            first.clone(),
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+                .try_with_message("a".repeat(half))
+                .expect("first diagnostic"),
+        ),
+        RadrootsTransportTargetReceipt::new(
+            second.clone(),
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+                .try_with_message("b".repeat(half))
+                .expect("second diagnostic"),
+        ),
+    ];
+    RadrootsTransportDeliveryReceipt::new("request", target_set.clone(), exact_receipts)
+        .expect("exact aggregate diagnostic budget");
+    let one_over_receipts = vec![
+        RadrootsTransportTargetReceipt::new(
+            first,
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+                .try_with_message("a".repeat(half))
+                .expect("first diagnostic"),
+        ),
+        RadrootsTransportTargetReceipt::new(
+            second,
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted)
+                .try_with_message("b".repeat(half + 1))
+                .expect("second diagnostic"),
+        ),
+    ];
+    assert_eq!(
+        RadrootsTransportDeliveryReceipt::new("request", target_set, one_over_receipts)
+            .expect_err("one-over aggregate diagnostic budget"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "delivery_diagnostic_bytes",
+            max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1,
         }
     );
 }

@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
-use radroots_transport::{RadrootsTransportOutcome, RadrootsTransportOutcomeKind};
+use radroots_transport::{
+    RadrootsTransportError, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -206,12 +208,12 @@ impl RadrootsRelayOutcome {
         self.kind.is_terminal_failure()
     }
 
-    pub fn to_transport_outcome(&self) -> RadrootsTransportOutcome {
+    pub fn to_transport_outcome(&self) -> Result<RadrootsTransportOutcome, RadrootsTransportError> {
         let mut outcome = RadrootsTransportOutcome::new(self.kind.transport_outcome_kind())
-            .with_code(self.kind.as_str());
+            .try_with_code(self.kind.as_str())?;
         if let Some(message) = &self.message {
-            outcome = outcome.with_message(message.clone());
+            outcome = outcome.try_with_message(message.clone())?;
         }
-        outcome
+        Ok(outcome)
     }
 }

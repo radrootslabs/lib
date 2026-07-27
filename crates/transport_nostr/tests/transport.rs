@@ -1027,43 +1027,52 @@ fn outcome_prefix_classification_covers_required_kinds() {
     assert!(RadrootsRelayOutcome::relay_url_rejected("unsafe relay").is_terminal_failure());
     assert!(RadrootsRelayOutcome::classify("mute: pubkey muted").is_terminal_failure());
     assert_eq!(
-        RadrootsRelayOutcome::accepted().to_transport_outcome().kind,
+        RadrootsRelayOutcome::accepted()
+            .to_transport_outcome()
+            .expect("bounded outcome")
+            .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::Accepted
     );
     assert_eq!(
         RadrootsRelayOutcome::accepted()
             .to_transport_outcome()
-            .status,
+            .expect("bounded outcome")
+            .status(),
         radroots_transport::RadrootsTransportDeliveryTargetStatus::Accepted
     );
     assert_eq!(
         RadrootsRelayOutcome::timeout("timeout: no OK")
             .to_transport_outcome()
-            .kind,
+            .expect("bounded outcome")
+            .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::Timeout
     );
     assert_eq!(
         RadrootsRelayOutcome::timeout("timeout: no OK")
             .to_transport_outcome()
-            .status,
+            .expect("bounded outcome")
+            .status(),
         radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
     assert_eq!(
         RadrootsRelayOutcome::classify("restricted: denied")
             .to_transport_outcome()
-            .kind,
+            .expect("bounded outcome")
+            .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::Rejected
     );
     assert_eq!(
         RadrootsRelayOutcome::classify("restricted: denied")
             .to_transport_outcome()
-            .status,
+            .expect("bounded outcome")
+            .status(),
         radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedTerminal
     );
     assert_eq!(
         RadrootsRelayOutcome::relay_url_rejected("unsafe")
             .to_transport_outcome()
-            .kind,
+            .expect("bounded outcome")
+            .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::RouteUnavailable
     );
     assert_eq!(
@@ -1075,7 +1084,8 @@ fn outcome_prefix_classification_covers_required_kinds() {
     assert_eq!(
         RadrootsRelayOutcome::unknown("adapter omitted receipt")
             .to_transport_outcome()
-            .kind,
+            .expect("bounded outcome")
+            .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::TransportUnavailable
     );
     assert_eq!(
@@ -1176,9 +1186,9 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     assert_eq!(status, expected_status);
     assert_eq!(receipt.request_id(), "facade-request-1");
     assert_eq!(receipt.target_receipts().len(), 1);
-    assert_eq!(receipt.target_receipts()[0].target, target);
+    assert_eq!(receipt.target_receipts()[0].target(), &target);
     assert_eq!(
-        receipt.target_receipts()[0].outcome.kind,
+        receipt.target_receipts()[0].outcome().kind(),
         radroots_transport::RadrootsTransportOutcomeKind::Accepted
     );
     assert!(
@@ -1418,8 +1428,8 @@ async fn nostr_transport_facade_preserves_adapter_failure_and_omission_evidence(
         .expect("failure receipts");
     assert_eq!(failed.target_receipts().len(), 2);
     assert!(failed.target_receipts().iter().all(|receipt| {
-        receipt.outcome.kind == RadrootsTransportOutcomeKind::ConnectionFailed
-            && receipt.status == RadrootsTransportDeliveryTargetStatus::FailedRetryable
+        receipt.outcome().kind() == RadrootsTransportOutcomeKind::ConnectionFailed
+            && receipt.status() == RadrootsTransportDeliveryTargetStatus::FailedRetryable
     }));
 
     let partial = RadrootsNostrTransport::new(PartialPublishAdapter)
@@ -1436,7 +1446,7 @@ async fn nostr_transport_facade_preserves_adapter_failure_and_omission_evidence(
         .expect("partial receipts");
     assert_eq!(partial.target_receipts().len(), 2);
     assert_eq!(
-        partial.target_receipts()[1].outcome.kind,
+        partial.target_receipts()[1].outcome().kind(),
         RadrootsTransportOutcomeKind::TransportUnavailable
     );
 
@@ -1483,9 +1493,9 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
         .expect("delivery");
 
     assert_eq!(receipt.target_receipts().len(), 1);
-    assert_eq!(receipt.target_receipts()[0].target, target);
+    assert_eq!(receipt.target_receipts()[0].target(), &target);
     assert_eq!(
-        receipt.target_receipts()[0].status,
+        receipt.target_receipts()[0].status(),
         radroots_transport::RadrootsTransportDeliveryTargetStatus::Accepted
     );
     assert!(receipt.is_satisfied_by(&policy).expect("satisfaction"));
@@ -1530,8 +1540,8 @@ async fn nostr_transport_facade_preserves_scoped_duplicate_target_metadata() {
     let receipt = transport.deliver(request).await.expect("delivery");
 
     assert_eq!(receipt.target_receipts().len(), 2);
-    assert_eq!(receipt.target_receipts()[0].target, first);
-    assert_eq!(receipt.target_receipts()[1].target, second);
+    assert_eq!(receipt.target_receipts()[0].target(), &first);
+    assert_eq!(receipt.target_receipts()[1].target(), &second);
     assert!(receipt.is_satisfied_by(&policy).expect("satisfaction"));
     assert_eq!(adapter.captured_raw_events().len(), 1);
 }
@@ -3664,47 +3674,16 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
     assert_outbox_publish_observations(&observations, 6);
 }
 
-#[tokio::test]
-async fn outbox_transport_facade_rejects_pending_receipts() {
-    let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
-    let store = RadrootsEventStore::open_memory().await.expect("store");
-    let draft = generic_draft("pending transport receipt");
-    outbox
-        .enqueue_operation(all_accepted_outbox_operation_input(
-            draft,
-            [RELAY_PRIMARY_WSS],
-        ))
-        .await
-        .expect("enqueue");
-    let claimed = outbox
-        .claim_next_ready_event("signer", "pending-sign", 2_000, 1_000)
-        .await
-        .expect("sign claim")
-        .expect("sign claim");
-    complete_claimed_signing(&outbox, &claimed, 1_100).await;
-    let publish_claim = outbox
-        .claim_next_ready_event("publisher", "pending-publish", 3_000, 1_100)
-        .await
-        .expect("publish claim")
-        .expect("publish claim");
-    let mut forged_outcome = RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted);
-    forged_outcome.status = RadrootsTransportDeliveryTargetStatus::Pending;
-    let transport = ScriptedTransport::new(vec![forged_outcome]);
-
-    let error = publish_claimed_outbox_event_with_transport(
-        &outbox,
-        &store,
-        &transport,
-        &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
-        2_200,
-    )
-    .await
-    .expect_err("pending receipt rejected");
-    assert!(matches!(
-        error,
-        RadrootsRelayTransportError::TransportContract(_)
-    ));
+#[test]
+fn transport_outcome_wire_rejects_pending_accepted_status() {
+    let error = serde_json::from_value::<RadrootsTransportOutcome>(serde_json::json!({
+        "kind": "Accepted",
+        "status": "Pending",
+        "code": null,
+        "message": null,
+    }))
+    .expect_err("pending accepted outcome rejected before transport execution");
+    assert!(error.to_string().contains("status"));
 }
 
 #[tokio::test]

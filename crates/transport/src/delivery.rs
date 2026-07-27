@@ -1,8 +1,9 @@
 use crate::{
-    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
+    RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportPayload, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetSet,
 };
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
@@ -458,6 +459,7 @@ fn validate_delivery_timestamp(now_ms: i64) -> Result<(), RadrootsTransportError
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RadrootsTransportDeliveryRequestWire {
+    #[serde(deserialize_with = "deserialize_delivery_request_id")]
     request_id: String,
     payload: RadrootsTransportPayload,
     target_set: RadrootsTransportTargetSet,
@@ -486,10 +488,10 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportDeliveryRequest {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportTargetReceipt {
-    pub target: RadrootsTransportTarget,
-    pub attempted: bool,
-    pub status: RadrootsTransportDeliveryTargetStatus,
-    pub outcome: RadrootsTransportOutcome,
+    target: RadrootsTransportTarget,
+    attempted: bool,
+    status: RadrootsTransportDeliveryTargetStatus,
+    outcome: RadrootsTransportOutcome,
 }
 
 impl RadrootsTransportTargetReceipt {
@@ -501,28 +503,49 @@ impl RadrootsTransportTargetReceipt {
         Self {
             target,
             attempted: true,
-            status: outcome.status,
+            status: outcome.status(),
             outcome,
         }
     }
 
-    pub fn skipped(target: RadrootsTransportTarget, outcome: RadrootsTransportOutcome) -> Self {
-        Self {
+    pub fn skipped(
+        target: RadrootsTransportTarget,
+        outcome: RadrootsTransportOutcome,
+    ) -> Result<Self, RadrootsTransportError> {
+        let receipt = Self {
             target,
             attempted: false,
-            status: outcome.status,
+            status: outcome.status(),
             outcome,
-        }
+        };
+        receipt.validate()?;
+        Ok(receipt)
+    }
+
+    pub fn target(&self) -> &RadrootsTransportTarget {
+        &self.target
+    }
+
+    pub fn was_attempted(&self) -> bool {
+        self.attempted
+    }
+
+    pub fn status(&self) -> RadrootsTransportDeliveryTargetStatus {
+        self.status
+    }
+
+    pub fn outcome(&self) -> &RadrootsTransportOutcome {
+        &self.outcome
     }
 
     fn validate(&self) -> Result<(), RadrootsTransportError> {
         self.outcome.validate()?;
-        if self.status != self.outcome.status {
+        if self.status != self.outcome.status() {
             return Err(RadrootsTransportError::DeliveryTargetReceiptStatusMismatch);
         }
         if !self.attempted
             && self.status.counts_as_accepted_satisfaction()
-            && self.outcome.kind != RadrootsTransportOutcomeKind::DuplicateAccepted
+            && self.outcome.kind() != RadrootsTransportOutcomeKind::DuplicateAccepted
         {
             return Err(RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch);
         }
@@ -585,32 +608,55 @@ impl RadrootsTransportDeliveryReceipt {
     ) -> Result<Self, RadrootsTransportError> {
         let request_id = request_id.into();
         validate_delivery_request_id(request_id.as_str())?;
+        crate::limits::ensure_resource_limit(
+            "delivery_target_receipt_count",
+            target_receipts.len(),
+            RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+        )?;
 
-        let mut receipts_by_fingerprint: BTreeMap<String, RadrootsTransportTargetReceipt> =
-            BTreeMap::new();
-        for receipt in target_receipts {
+        let mut receipt_fingerprints = BTreeSet::new();
+        let mut diagnostic_bytes = 0usize;
+        for receipt in &target_receipts {
             receipt.validate()?;
+            diagnostic_bytes = diagnostic_bytes
+                .checked_add(receipt.outcome().message().map_or(0, str::len))
+                .ok_or(RadrootsTransportError::ResourceLimitExceeded {
+                    field: "delivery_diagnostic_bytes",
+                    max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+                    actual: usize::MAX,
+                })?;
+            crate::limits::ensure_resource_limit(
+                "delivery_diagnostic_bytes",
+                diagnostic_bytes,
+                RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            )?;
             let Some(requested_target) = target_set
                 .targets()
                 .iter()
-                .find(|target| target.fingerprint() == receipt.target.fingerprint())
+                .find(|target| target.fingerprint() == receipt.target().fingerprint())
             else {
                 return Err(RadrootsTransportError::UnexpectedDeliveryTargetReceipt);
             };
-            if requested_target != &receipt.target {
+            if requested_target != receipt.target() {
                 return Err(RadrootsTransportError::UnexpectedDeliveryTargetReceipt);
             }
-            if receipts_by_fingerprint
-                .insert(receipt.target.fingerprint().as_str().into(), receipt)
-                .is_some()
-            {
+            if !receipt_fingerprints.insert(receipt.target().fingerprint().as_str()) {
                 return Err(RadrootsTransportError::DuplicateDeliveryTargetReceipt);
             }
         }
 
-        if receipts_by_fingerprint.len() != target_set.len() {
+        if receipt_fingerprints.len() != target_set.len() {
             return Err(RadrootsTransportError::MissingDeliveryTargetReceipt);
         }
+        let mut receipts_by_fingerprint = target_receipts
+            .into_iter()
+            .map(|receipt| {
+                (
+                    String::from(receipt.target().fingerprint().as_str()),
+                    receipt,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         let target_receipts = target_set
             .targets()
             .iter()
@@ -659,7 +705,7 @@ impl RadrootsTransportDeliveryReceipt {
     ) -> usize {
         self.target_receipts
             .iter()
-            .filter(|receipt| receipt.status.counts_as_satisfied(satisfaction_class))
+            .filter(|receipt| receipt.status().counts_as_satisfied(satisfaction_class))
             .count()
     }
 
@@ -681,8 +727,8 @@ impl RadrootsTransportDeliveryReceipt {
         validate_required_targets(targets)?;
         Ok(targets.iter().all(|required| {
             self.target_receipts.iter().any(|receipt| {
-                receipt.target.fingerprint() == required
-                    && receipt.status.counts_as_satisfied(class)
+                receipt.target().fingerprint() == required
+                    && receipt.status().counts_as_satisfied(class)
             })
         }))
     }
@@ -692,9 +738,37 @@ impl RadrootsTransportDeliveryReceipt {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RadrootsTransportDeliveryReceiptWire {
+    #[serde(deserialize_with = "deserialize_delivery_request_id")]
     request_id: String,
     target_set: RadrootsTransportTargetSet,
+    #[serde(deserialize_with = "deserialize_delivery_target_receipts")]
     target_receipts: Vec<RadrootsTransportTargetReceipt>,
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_delivery_request_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(
+        deserializer,
+        "delivery_request_id",
+        RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_delivery_target_receipts<'de, D>(
+    deserializer: D,
+) -> Result<Vec<RadrootsTransportTargetReceipt>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_vec(
+        deserializer,
+        "delivery_target_receipt_count",
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    )
 }
 
 #[cfg(feature = "serde")]
