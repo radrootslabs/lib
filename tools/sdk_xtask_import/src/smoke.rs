@@ -60,7 +60,7 @@ fn render_consumer_manifest(sdk_path: &Path, nostr_version: &str) -> Result<Stri
         .map_err(|error| format!("failed to render SDK path: {error}"))?;
     Ok(format!(
         r#"[package]
-name = "radroots-sdk-knowledge-smoke"
+name = "radroots_sdk_knowledge_smoke"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -220,6 +220,7 @@ mod tests {
         let manifest =
             render_consumer_manifest(Path::new("/tmp/radroots_sdk"), "=0.44.2").expect("manifest");
 
+        assert!(manifest.contains("name = \"radroots_sdk_knowledge_smoke\""));
         assert!(manifest.contains("nostr = \"=0.44.2\""));
         assert!(!manifest.contains("nostr = \"0.44.2\""));
     }

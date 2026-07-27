@@ -29,7 +29,7 @@ const PACKAGE_LICENSE: &str = "MIT OR Apache-2.0";
 const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
 const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
 const PUBLISH_ACCESS: &str = "public";
-const ALLOWED_RETICULUM_PREVIEW_PACKAGE: &str = "radroots-transport-reticulum";
+const ALLOWED_RETICULUM_PREVIEW_PACKAGE: &str = "radroots_transport_reticulum";
 const RADROOTS_FACADE_MODULES: [&str; 11] = [
     "client",
     "event",
@@ -730,8 +730,7 @@ fn check_reticulum_feature_entry(
         .map_or((feature_dependency, None), |(name, feature)| {
             (name, Some(feature))
         });
-    let normalized_dependency = normalize_package_name(dependency_name);
-    if normalized_dependency == ALLOWED_RETICULUM_PREVIEW_PACKAGE && dependency_feature.is_some() {
+    if dependency_name == ALLOWED_RETICULUM_PREVIEW_PACKAGE && dependency_feature.is_some() {
         return Err(format!(
             "{manifest_label} feature `{feature_name}` must not enable Reticulum preview crate features through `{entry}`"
         ));
@@ -796,10 +795,10 @@ fn reject_forbidden_reticulum_runtime_name(
 }
 
 fn is_forbidden_reticulum_runtime_name(name: &str) -> bool {
-    let normalized = normalize_package_name(name);
-    if normalized == ALLOWED_RETICULUM_PREVIEW_PACKAGE {
+    if name == ALLOWED_RETICULUM_PREVIEW_PACKAGE {
         return false;
     }
+    let normalized = normalize_package_name(name);
     matches!(
         normalized.as_str(),
         "rns" | "rnsd" | "reticulum" | "reticulum-rs" | "python" | "pyo3"
@@ -2442,17 +2441,14 @@ transport-reticulum-preview = []
             "python-runtime",
             "pyo3",
             "pyo3-ffi",
+            "radroots-transport-reticulum",
         ] {
             assert!(
                 is_forbidden_reticulum_runtime_name(name),
                 "{name} must be forbidden"
             );
         }
-        for name in [
-            "radroots_transport_reticulum",
-            "radroots-transport-reticulum",
-            "dto_bindgen_backend_python",
-        ] {
+        for name in ["radroots_transport_reticulum", "dto_bindgen_backend_python"] {
             assert!(
                 !is_forbidden_reticulum_runtime_name(name),
                 "{name} must be allowed"

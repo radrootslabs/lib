@@ -810,6 +810,10 @@ fn validate_workspace_members(workspace_root: &Path) -> Result<(), String> {
         .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
     let manifest = toml::from_str::<WorkspaceMembershipManifest>(&manifest_raw)
         .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+    let manifest_value = manifest_raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+    validate_manifest_dependency_keys(&manifest_value, "Cargo.toml")?;
     let declared = manifest
         .workspace
         .members
@@ -829,7 +833,42 @@ fn validate_workspace_members(workspace_root: &Path) -> Result<(), String> {
                 .is_dir()
                 && entry.path().join("Cargo.toml").is_file()
             {
-                discovered.insert(format!("{root}/{}", entry.file_name().to_string_lossy()));
+                let directory_name = entry.file_name().to_string_lossy().into_owned();
+                require_lower_snake_case(
+                    &directory_name,
+                    &format!("{root}/{directory_name} crate directory"),
+                )?;
+                let package_manifest_path = entry.path().join("Cargo.toml");
+                let package_manifest_raw =
+                    fs::read_to_string(&package_manifest_path).map_err(|error| {
+                        format!("read {}: {error}", package_manifest_path.display())
+                    })?;
+                let package_manifest =
+                    package_manifest_raw
+                        .parse::<toml::Value>()
+                        .map_err(|error| {
+                            format!("parse {}: {error}", package_manifest_path.display())
+                        })?;
+                let package_name = package_manifest
+                    .get("package")
+                    .and_then(toml::Value::as_table)
+                    .and_then(|package| package.get("name"))
+                    .and_then(toml::Value::as_str)
+                    .ok_or_else(|| {
+                        format!(
+                            "{} is missing package.name",
+                            package_manifest_path.display()
+                        )
+                    })?;
+                require_lower_snake_case(
+                    package_name,
+                    &format!("{} package.name", package_manifest_path.display()),
+                )?;
+                validate_manifest_dependency_keys(
+                    &package_manifest,
+                    &package_manifest_path.display().to_string(),
+                )?;
+                discovered.insert(format!("{root}/{directory_name}"));
             }
         }
     }
@@ -849,6 +888,79 @@ fn validate_workspace_members(workspace_root: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn validate_manifest_dependency_keys(manifest: &toml::Value, label: &str) -> Result<(), String> {
+    let Some(manifest) = manifest.as_table() else {
+        return Err(format!("{label} must be a TOML table"));
+    };
+    for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        if let Some(dependencies) = manifest.get(section).and_then(toml::Value::as_table) {
+            validate_dependency_keys(dependencies, label, section)?;
+        }
+    }
+    if let Some(workspace_dependencies) = manifest
+        .get("workspace")
+        .and_then(toml::Value::as_table)
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table)
+    {
+        validate_dependency_keys(workspace_dependencies, label, "workspace.dependencies")?;
+    }
+    if let Some(targets) = manifest.get("target").and_then(toml::Value::as_table) {
+        for (target, target_value) in targets {
+            let Some(target_table) = target_value.as_table() else {
+                continue;
+            };
+            for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                if let Some(dependencies) =
+                    target_table.get(section).and_then(toml::Value::as_table)
+                {
+                    validate_dependency_keys(
+                        dependencies,
+                        label,
+                        &format!("target.{target}.{section}"),
+                    )?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_dependency_keys(
+    dependencies: &toml::value::Table,
+    label: &str,
+    section: &str,
+) -> Result<(), String> {
+    for key in dependencies
+        .keys()
+        .filter(|key| key.starts_with("radroots"))
+    {
+        require_lower_snake_case(key, &format!("{label} {section} dependency key"))?;
+    }
+    Ok(())
+}
+
+fn require_lower_snake_case(value: &str, label: &str) -> Result<(), String> {
+    if is_lower_snake_case(value) {
+        Ok(())
+    } else {
+        Err(format!("{label} `{value}` must use lowercase snake case"))
+    }
+}
+
+fn is_lower_snake_case(value: &str) -> bool {
+    !value.is_empty()
+        && value.split('_').all(|segment| {
+            segment
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_lowercase)
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        })
 }
 
 fn validate_ledger(
@@ -1121,6 +1233,50 @@ adr_required = false
         .expect("write incomplete workspace");
         let error = validate_workspace_members(&root).expect_err("missing member must fail");
         assert!(error.contains("missing local package roots: crates/a"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_identity_rejects_kebab_case_crate_names_and_dependency_keys() {
+        let root = test_root("workspace_snake_case_identity");
+        fs::create_dir_all(root.join("crates/radroots_probe")).expect("create package root");
+        fs::create_dir_all(root.join("tools/xtask")).expect("create xtask root");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/radroots_probe\", \"tools/xtask\"]\nresolver = \"3\"\n",
+        )
+        .expect("write workspace manifest");
+        fs::write(
+            root.join("crates/radroots_probe/Cargo.toml"),
+            "[package]\nname = \"radroots-probe\"\n",
+        )
+        .expect("write kebab package manifest");
+        fs::write(
+            root.join("tools/xtask/Cargo.toml"),
+            "[package]\nname = \"xtask\"\n",
+        )
+        .expect("write xtask manifest");
+
+        let package_error = validate_workspace_members(&root)
+            .expect_err("kebab-case Cargo package identity must fail");
+        assert!(package_error.contains("package.name"));
+        assert!(package_error.contains("lowercase snake case"));
+
+        fs::write(
+            root.join("crates/radroots_probe/Cargo.toml"),
+            "[package]\nname = \"radroots_probe\"\n",
+        )
+        .expect("write snake package manifest");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/radroots_probe\", \"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.dependencies]\nradroots-probe = \"0.1.0\"\n",
+        )
+        .expect("write kebab dependency key");
+
+        let dependency_error = validate_workspace_members(&root)
+            .expect_err("kebab-case Radroots dependency key must fail");
+        assert!(dependency_error.contains("workspace.dependencies dependency key"));
+        assert!(dependency_error.contains("lowercase snake case"));
         let _ = fs::remove_dir_all(root);
     }
 
