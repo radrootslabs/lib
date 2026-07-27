@@ -20,11 +20,15 @@ let
         ../../Cargo.toml
         ../../Cargo.lock
         ../../CHANGELOG.md
+        ../../LICENSE-APACHE
+        ../../LICENSE-MIT
         ../../README
         ../../dto_bindgen.toml
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates
+        ../../docs/implementation
+        ../../docs/specs
         ../../tools
       ]
     );

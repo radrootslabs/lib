@@ -62,6 +62,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/radrootslabs/lib"
 homepage = "https://radroots.org"
 readme = "README"
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+
+[workspace.metadata.radroots.public-package]
+version = "0.1.0"
+authors = ["Tyson Lupul <tyson@radroots.org>"]
+readme = "README.md"
 
 [workspace.dependencies]
 dto_bindgen = { version = "0.1.0" }

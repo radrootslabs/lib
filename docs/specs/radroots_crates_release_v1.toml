@@ -64,8 +64,25 @@ default_features = ["std", "serde"]
 features = ["std", "serde"]
 required_radroots_dependencies = []
 optional_radroots_dependencies = []
-modules = ["currency", "decimal", "money", "percent", "pricing", "quantity", "unit"]
-root_exports = ["Currency", "Decimal", "Money", "Percent", "Quantity", "QuantityPrice", "Unit", "Error"]
+modules = [
+  "currency",
+  "decimal",
+  "money",
+  "percent",
+  "pricing",
+  "quantity",
+  "unit",
+]
+root_exports = [
+  "Currency",
+  "Decimal",
+  "Money",
+  "Percent",
+  "Quantity",
+  "QuantityPrice",
+  "Unit",
+  "Error",
+]
 forbidden = "Identifiers, identities, event kinds, networking, persistence, clocks, filesystem paths, process behavior, or application configuration."
 
 [[package]]
@@ -80,7 +97,15 @@ features = ["std", "serde"]
 required_radroots_dependencies = []
 optional_radroots_dependencies = []
 modules = ["account", "key", "profile", "username"]
-root_exports = ["AccountId", "IdentityId", "PublicIdentity", "PublicKey", "Profile", "Username", "Error"]
+root_exports = [
+  "AccountId",
+  "IdentityId",
+  "PublicIdentity",
+  "PublicKey",
+  "Profile",
+  "Username",
+  "Error",
+]
 forbidden = "Secret keys, key generation, NIP-49 encryption, keyrings, files, SQLite, runtime paths, upstream nostr::Event values, signer sessions, or host account selection."
 
 [[package]]
@@ -95,7 +120,15 @@ features = ["std", "serde"]
 required_radroots_dependencies = []
 optional_radroots_dependencies = []
 modules = ["authorization", "descriptor", "hash", "media_type", "url"]
-root_exports = ["BlobUrl", "Sha256", "MediaType", "BlobDescriptor", "ByteVerifiedDescriptor", "AuthorizationClaim", "Error"]
+root_exports = [
+  "BlobUrl",
+  "Sha256",
+  "MediaType",
+  "BlobDescriptor",
+  "ByteVerifiedDescriptor",
+  "AuthorizationClaim",
+  "Error",
+]
 forbidden = "HTTP clients, upload scheduling, cache management, filesystem traversal, application media policy, or global authentication state."
 
 [[package]]
@@ -109,7 +142,14 @@ default_features = ["std", "serde"]
 features = ["std", "serde"]
 required_radroots_dependencies = []
 optional_radroots_dependencies = []
-modules = ["capability::v1", "error::v1", "event::v1", "runtime::v1", "radrootsd::transport_publish::v5", "schema"]
+modules = [
+  "capability::v1",
+  "error::v1",
+  "event::v1",
+  "runtime::v1",
+  "radrootsd::transport_publish::v5",
+  "schema",
+]
 root_exports = []
 forbidden = "Native clients, storage, network I/O, executor/runtime ownership, domain reducers, upstream dependency types, unversioned serialized DTOs, or package names containing protocol generations."
 
@@ -122,10 +162,42 @@ platform = "no_std + alloc; std feature"
 responsibility = "Canonical Radroots event-domain models, validated event identifiers, tags, event contracts, authoring drafts, signed/verified typestates, and NIP-01 wire-neutral representations."
 default_features = ["std", "serde"]
 features = ["std", "serde", "knowledge"]
-required_radroots_dependencies = ["radroots-core", "radroots-identity", "radroots-blossom", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-core",
+  "radroots-identity",
+  "radroots-blossom",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
-modules = ["admission", "calendar", "contract", "draft", "envelope", "farm", "food", "id", "knowledge", "listing", "media", "post", "profile", "social", "tag", "trade", "wire"]
-root_exports = ["Event", "EventDraft", "SignedEvent", "VerifiedEvent", "EventId", "EventKind", "EventTag", "Error"]
+modules = [
+  "admission",
+  "calendar",
+  "contract",
+  "draft",
+  "envelope",
+  "farm",
+  "food",
+  "id",
+  "knowledge",
+  "listing",
+  "media",
+  "post",
+  "profile",
+  "social",
+  "tag",
+  "trade",
+  "wire",
+]
+root_exports = [
+  "Event",
+  "EventDraft",
+  "SignedEvent",
+  "VerifiedEvent",
+  "EventId",
+  "EventKind",
+  "EventTag",
+  "Error",
+]
 forbidden = "Live Nostr clients, relay pools, signing backends, SQLite, outbox claims, retry scheduling, application state, or duplicate trade/order identifier concepts."
 
 [[package]]
@@ -137,7 +209,11 @@ platform = "no_std + alloc where selected features permit; std feature"
 responsibility = "Deterministic canonical encoding, decoding, ID/signature verification, contract validation, admission, and manifest generation for Radroots events."
 default_features = ["std", "json"]
 features = ["std", "serde", "json", "knowledge", "manifests"]
-required_radroots_dependencies = ["radroots-event", "radroots-blossom", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-event",
+  "radroots-blossom",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
 modules = ["admission", "canonical", "decode", "encode", "manifest", "verify"]
 root_exports = ["Codec", "DecodeError", "EncodeError", "VerificationError"]
@@ -152,10 +228,21 @@ platform = "no_std + alloc for model/reducer; std feature"
 responsibility = "Trade validation, evidence models, deterministic reduction, conflict analysis, and side-effect-free workflow plans over the canonical event trade model."
 default_features = ["std", "serde", "json"]
 features = ["std", "serde", "json"]
-required_radroots_dependencies = ["radroots-core", "radroots-identity", "radroots-event"]
+required_radroots_dependencies = [
+  "radroots-core",
+  "radroots-identity",
+  "radroots-event",
+]
 optional_radroots_dependencies = []
 modules = ["evidence", "model", "reducer", "validation", "workflow"]
-root_exports = ["Projection", "ReductionInput", "ReducerIssue", "WorkflowPlan", "ValidationError", "Error"]
+root_exports = [
+  "Projection",
+  "ReductionInput",
+  "ReducerIssue",
+  "WorkflowPlan",
+  "ValidationError",
+  "Error",
+]
 forbidden = "A second TradeId definition, actor authorization, signers, event-store access, SQLx, filesystem state, transport delivery, outbox mutation, or process scheduling."
 
 [[package]]
@@ -167,10 +254,29 @@ platform = "no_std + alloc core; std feature"
 responsibility = "Object-safe author/signing SPI, actor provenance, authorization checks, requests, receipts, progress, capabilities, and normalized signing errors."
 default_features = ["std", "serde"]
 features = ["std", "serde"]
-required_radroots_dependencies = ["radroots-identity", "radroots-event", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-identity",
+  "radroots-event",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
-modules = ["actor", "capability", "error", "request", "receipt", "signer", "status"]
-root_exports = ["Actor", "Signer", "SignRequest", "SignReceipt", "SignerStatus", "Error"]
+modules = [
+  "actor",
+  "capability",
+  "error",
+  "request",
+  "receipt",
+  "signer",
+  "status",
+]
+root_exports = [
+  "Actor",
+  "Signer",
+  "SignRequest",
+  "SignReceipt",
+  "SignerStatus",
+  "Error",
+]
 forbidden = "Raw secret-key ownership, keyrings, relay networking, NIP-46 session persistence, SQL, UI prompts, or executor creation."
 
 [[package]]
@@ -182,10 +288,34 @@ platform = "no_std + alloc data model; std feature"
 responsibility = "Transport-neutral target identities, capability/status models, source and sink SPIs, delivery/fetch policies, bounded requests, provenance, and normalized outcomes."
 default_features = ["std", "serde"]
 features = ["std", "serde"]
-required_radroots_dependencies = ["radroots-identity", "radroots-event", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-identity",
+  "radroots-event",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
-modules = ["capability", "endpoint", "error", "outcome", "policy", "sink", "source", "target"]
-root_exports = ["TransportId", "Target", "TargetSet", "EventSource", "EventSink", "DeliveryRequest", "DeliveryReceipt", "FetchRequest", "FetchPage", "Error"]
+modules = [
+  "capability",
+  "endpoint",
+  "error",
+  "outcome",
+  "policy",
+  "sink",
+  "source",
+  "target",
+]
+root_exports = [
+  "TransportId",
+  "Target",
+  "TargetSet",
+  "EventSource",
+  "EventSink",
+  "DeliveryRequest",
+  "DeliveryReceipt",
+  "FetchRequest",
+  "FetchPage",
+  "Error",
+]
 forbidden = "Closed enums that prevent new transports, Reticulum-specific constants, Nostr URLs at the generic root, storage/outbox access, retries, scheduler ownership, or silent fallback."
 
 [[package]]
@@ -197,7 +327,11 @@ platform = "no_std + alloc for conversion surface; std feature"
 responsibility = "Portable conversion between Radroots native event/identity types and Nostr protocol types, typed NIP helpers, and concrete local signing adapters; no live relay client."
 default_features = ["std", "events"]
 features = ["std", "events", "signing", "nip17", "blossom"]
-required_radroots_dependencies = ["radroots-identity", "radroots-event", "radroots-event-codec"]
+required_radroots_dependencies = [
+  "radroots-identity",
+  "radroots-event",
+  "radroots-event-codec",
+]
 optional_radroots_dependencies = ["radroots-signing", "radroots-blossom"]
 modules = ["blossom", "event", "filter", "key", "nip17", "signing", "tag"]
 root_exports = ["Error"]
@@ -212,10 +346,33 @@ platform = "std for v1; protocol data kept portable"
 responsibility = "Nostr Connect/NIP-46 URIs, methods, permissions, requests, responses, client/server state machines, timeout-independent protocol validation, and normalized errors."
 default_features = ["serde"]
 features = ["serde"]
-required_radroots_dependencies = ["radroots-identity", "radroots-event", "radroots-nostr", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-identity",
+  "radroots-event",
+  "radroots-nostr",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
-modules = ["client", "error", "message", "method", "permission", "server", "uri"]
-root_exports = ["Client", "Server", "Method", "Permission", "Request", "Response", "BunkerUri", "ClientUri", "Error"]
+modules = [
+  "client",
+  "error",
+  "message",
+  "method",
+  "permission",
+  "server",
+  "uri",
+]
+root_exports = [
+  "Client",
+  "Server",
+  "Method",
+  "Permission",
+  "Request",
+  "Response",
+  "BunkerUri",
+  "ClientUri",
+  "Error",
+]
 forbidden = "Relay-pool implementation, secret persistence, approval UI, global sessions, Tokio runtime ownership, or Myc-specific service storage."
 
 [[package]]
@@ -229,8 +386,24 @@ default_features = ["std", "serde"]
 features = ["std", "serde", "memory", "file", "keyring"]
 required_radroots_dependencies = []
 optional_radroots_dependencies = []
-modules = ["envelope", "error", "id", "provider", "wrapping", "memory", "file", "keyring"]
-root_exports = ["SecretId", "SecretRef", "SecretProvider", "KeyWrapping", "EncryptedEnvelope", "Error"]
+modules = [
+  "envelope",
+  "error",
+  "id",
+  "provider",
+  "wrapping",
+  "memory",
+  "file",
+  "keyring",
+]
+root_exports = [
+  "SecretId",
+  "SecretRef",
+  "SecretProvider",
+  "KeyWrapping",
+  "EncryptedEnvelope",
+  "Error",
+]
 forbidden = "Public secret bytes, Clone/Debug/Serialize for secret-bearing values, identity profiles, domain tables, arbitrary key/value storage, hidden key generation, or process-global vaults."
 
 [[package]]
@@ -242,10 +415,34 @@ platform = "std for v1"
 responsibility = "Backend-neutral canonical event, operation journal, outbox, transport evidence, projection, private-artifact metadata, backup, status, and atomic commit interfaces, plus an in-memory reference backend."
 default_features = ["memory", "serde"]
 features = ["memory", "serde"]
-required_radroots_dependencies = ["radroots-event", "radroots-trade", "radroots-transport", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-event",
+  "radroots-trade",
+  "radroots-transport",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
-modules = ["atomic", "backup", "event", "journal", "memory", "outbox", "private_artifact", "projection", "status"]
-root_exports = ["Storage", "EventStore", "Journal", "Outbox", "ProjectionStore", "BackupSource", "StorageStatus", "Error"]
+modules = [
+  "atomic",
+  "backup",
+  "event",
+  "journal",
+  "memory",
+  "outbox",
+  "private_artifact",
+  "projection",
+  "status",
+]
+root_exports = [
+  "Storage",
+  "EventStore",
+  "Journal",
+  "Outbox",
+  "ProjectionStore",
+  "BackupSource",
+  "StorageStatus",
+  "Error",
+]
 forbidden = "SQL text, SQLx pools or transactions, filesystem paths, application UI state, concrete retry loops, Nostr clients, or unconstrained raw key/value escape hatches."
 
 [[package]]
@@ -257,9 +454,21 @@ platform = "std-only native backend"
 responsibility = "SQLite implementation of the storage SPIs with schema migration, WAL, locking, integrity, backup/restore, crash recovery, and encrypted private storage."
 default_features = []
 features = []
-required_radroots_dependencies = ["radroots-storage", "radroots-event-codec", "radroots-secrets"]
+required_radroots_dependencies = [
+  "radroots-storage",
+  "radroots-event-codec",
+  "radroots-secrets",
+]
 optional_radroots_dependencies = []
-modules = ["backup", "config", "integrity", "lock", "migration", "open", "status"]
+modules = [
+  "backup",
+  "config",
+  "integrity",
+  "lock",
+  "migration",
+  "open",
+  "status",
+]
 root_exports = ["SqliteStorage", "OpenOptions", "OpenMode", "Paths", "Error"]
 forbidden = "Public SqlitePool/Connection/Transaction handles, caller-supplied arbitrary SQL, Studio state, global connection pools, runtime installation, or silent schema downgrade."
 
@@ -272,10 +481,21 @@ platform = "std-only; Tokio implementation detail in v1"
 responsibility = "Concrete Nostr EventSource/EventSink implementation: relay URL policy, connection, NIP-42 authentication, bounded fetch pages, delivery, status, and relay-outcome normalization."
 default_features = []
 features = []
-required_radroots_dependencies = ["radroots-transport", "radroots-nostr", "radroots-event-codec", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-transport",
+  "radroots-nostr",
+  "radroots-event-codec",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
 modules = ["auth", "client", "relay", "sink", "source", "status"]
-root_exports = ["NostrTransport", "Config", "RelayUrl", "RelayUrlPolicy", "Error"]
+root_exports = [
+  "NostrTransport",
+  "Config",
+  "RelayUrl",
+  "RelayUrlPolicy",
+  "Error",
+]
 forbidden = "Event-store ingestion, outbox claiming, retry scheduling, projection refresh, global relay clients, direct SQL, or transport fallback."
 
 [[package]]
@@ -287,10 +507,26 @@ platform = "std-only in v1; executor-neutral public API"
 responsibility = "Shared pull, verification, canonical admission, duplicate handling, projection refresh, outbox signing/delivery, status, and retry-decision orchestration without owning scheduling."
 default_features = ["serde"]
 features = ["serde"]
-required_radroots_dependencies = ["radroots-event", "radroots-event-codec", "radroots-signing", "radroots-transport", "radroots-storage", "radroots-trade", "radroots-protocol"]
+required_radroots_dependencies = [
+  "radroots-event",
+  "radroots-event-codec",
+  "radroots-signing",
+  "radroots-transport",
+  "radroots-storage",
+  "radroots-trade",
+  "radroots-protocol",
+]
 optional_radroots_dependencies = []
 modules = ["ingest", "policy", "projection", "pull", "push", "status"]
-root_exports = ["Engine", "PullRequest", "PullReceipt", "PushRequest", "PushReceipt", "SyncStatus", "Error"]
+root_exports = [
+  "Engine",
+  "PullRequest",
+  "PullReceipt",
+  "PushRequest",
+  "PushReceipt",
+  "SyncStatus",
+  "Error",
+]
 forbidden = "Creating an executor, spawning hidden workers, installing timers globally, owning process lifecycle, storing UI state, or transport-specific branches outside adapters."
 
 [[package]]
@@ -305,7 +541,15 @@ features = []
 required_radroots_dependencies = []
 optional_radroots_dependencies = []
 modules = ["asset", "database", "download", "model", "query"]
-root_exports = ["Geocoder", "AssetSpec", "AssetStatus", "Query", "Candidate", "Point", "Error"]
+root_exports = [
+  "Geocoder",
+  "AssetSpec",
+  "AssetStatus",
+  "Query",
+  "Candidate",
+  "Point",
+  "Error",
+]
 forbidden = "Generic multi-provider abstraction before a second provider exists, runtime-path policy, hidden downloads, SDK configuration types, SQLx/reqwest types in the public API, or test-fixture features."
 
 [[package]]
@@ -316,10 +560,52 @@ tier = "advanced front door"
 platform = "std-only native engine"
 responsibility = "Host-neutral asynchronous client engine, product operations, capability reporting, explicit storage/signing/transport composition, diagnostics, backup/restore, and safe commit semantics."
 default_features = ["memory"]
-features = ["memory", "sqlite", "sync", "nostr", "nip46", "local-signing", "radrootsd", "geonames", "knowledge", "native", "full"]
-required_radroots_dependencies = ["radroots-core", "radroots-identity", "radroots-protocol", "radroots-event", "radroots-event-codec", "radroots-trade", "radroots-signing", "radroots-transport", "radroots-storage"]
-optional_radroots_dependencies = ["radroots-secrets", "radroots-storage-sqlite", "radroots-nostr", "radroots-nostr-connect", "radroots-transport-nostr", "radroots-sync", "radroots-geonames"]
-modules = ["capability", "client", "diagnostics", "error", "farm", "listing", "signing", "storage", "sync", "trade", "transport"]
+features = [
+  "memory",
+  "sqlite",
+  "sync",
+  "nostr",
+  "nip46",
+  "local-signing",
+  "radrootsd",
+  "geonames",
+  "knowledge",
+  "native",
+  "full",
+]
+required_radroots_dependencies = [
+  "radroots-core",
+  "radroots-identity",
+  "radroots-protocol",
+  "radroots-event",
+  "radroots-event-codec",
+  "radroots-trade",
+  "radroots-signing",
+  "radroots-transport",
+  "radroots-storage",
+]
+optional_radroots_dependencies = [
+  "radroots-secrets",
+  "radroots-storage-sqlite",
+  "radroots-nostr",
+  "radroots-nostr-connect",
+  "radroots-transport-nostr",
+  "radroots-sync",
+  "radroots-geonames",
+]
+modules = [
+  "capability",
+  "client",
+  "diagnostics",
+  "error",
+  "farm",
+  "listing",
+  "signing",
+  "storage",
+  "sync",
+  "trade",
+  "transport",
+]
 root_exports = ["Client", "ClientBuilder", "Error", "Result"]
 forbidden = "Global runtimes or subscribers, hidden workers, process signals, CLI parsing, UI state, Studio databases, raw SQLx/upstream client types, broad wildcard reexports, or a nominal no_std claim."
 
@@ -331,9 +617,37 @@ tier = "ordinary-user front door"
 platform = "std-only"
 responsibility = "Canonical Rust onboarding package with curated modules, safe defaults, stable convenience builders, domain aggregation, examples, and primary documentation."
 default_features = ["client"]
-features = ["client", "native", "nostr", "nip46", "radrootsd", "geonames", "knowledge", "full"]
-required_radroots_dependencies = ["radroots-sdk", "radroots-core", "radroots-identity", "radroots-event", "radroots-trade", "radroots-transport"]
+features = [
+  "client",
+  "native",
+  "nostr",
+  "nip46",
+  "radrootsd",
+  "geonames",
+  "knowledge",
+  "full",
+]
+required_radroots_dependencies = [
+  "radroots-sdk",
+  "radroots-core",
+  "radroots-identity",
+  "radroots-event",
+  "radroots-trade",
+  "radroots-transport",
+]
 optional_radroots_dependencies = []
-modules = ["client", "event", "farm", "identity", "knowledge", "listing", "signing", "storage", "sync", "trade", "transport"]
+modules = [
+  "client",
+  "event",
+  "farm",
+  "identity",
+  "knowledge",
+  "listing",
+  "signing",
+  "storage",
+  "sync",
+  "trade",
+  "transport",
+]
 root_exports = ["Client", "ClientBuilder", "Error", "Result"]
 forbidden = "A public radroots::sdk namespace, wildcard reexport of radroots-sdk, duplicate engine implementation, CLI binary, hidden network/filesystem/keychain side effects, or exposure of every lower-crate symbol."

@@ -14328,7 +14328,7 @@ fn validate_governed_compiler_inputs(workspace_root: &Path) -> Result<(), String
     let expected_toolchain: toml::Value = toml::from_str(
         r#"
 [toolchain]
-channel = "1.97.0"
+channel = "1.97.1"
 components = ["clippy", "rust-analyzer", "rust-src", "rustfmt"]
 targets = ["wasm32-unknown-unknown"]
 "#,
@@ -14336,7 +14336,7 @@ targets = ["wasm32-unknown-unknown"]
     .map_err(|error| format!("parse governed Rust toolchain expectation: {error}"))?;
     if toolchain != expected_toolchain {
         return Err(format!(
-            "{RUST_TOOLCHAIN_RELATIVE} must remain the exact governed Rust 1.97.0 toolchain document"
+            "{RUST_TOOLCHAIN_RELATIVE} must remain the exact governed Rust 1.97.1 toolchain document"
         ));
     }
     for legacy_relative in ["rust-toolchain", ".cargo/config"] {
@@ -14537,7 +14537,7 @@ xtask = "run -q -p xtask --"
             "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must not exclude or narrow the default governed workspace member graph"
         ));
     }
-    if workspace.get("resolver").and_then(toml::Value::as_str) != Some("2")
+    if workspace.get("resolver").and_then(toml::Value::as_str) != Some("3")
         || workspace_package
             .get("edition")
             .and_then(toml::Value::as_str)
@@ -14545,10 +14545,10 @@ xtask = "run -q -p xtask --"
         || workspace_package
             .get("rust-version")
             .and_then(toml::Value::as_str)
-            != Some("1.97.0")
+            != Some("1.97.1")
     {
         return Err(format!(
-            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must retain resolver 2, edition 2024, and rust-version 1.97.0 compiler authority"
+            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must retain resolver 3, edition 2024, and rust-version 1.97.1 compiler authority"
         ));
     }
     if workspace_manifest.get("replace").is_some()
@@ -21092,12 +21092,12 @@ async fn nip09_reconciliation_v1_result_vector() {
         let toolchain = fs::read_to_string(&toolchain_path).expect("Rust toolchain");
         fs::write(
             &toolchain_path,
-            toolchain.replacen("channel = \"1.97.0\"", "channel = \"nightly\"", 1),
+            toolchain.replacen("channel = \"1.97.1\"", "channel = \"nightly\"", 1),
         )
         .expect("write toolchain mutation");
         let error = validate_governed_compiler_inputs(workspace.path())
             .expect_err("Rust toolchain mutation must fail");
-        assert!(error.contains("exact governed Rust 1.97.0"), "{error}");
+        assert!(error.contains("exact governed Rust 1.97.1"), "{error}");
         fs::write(&toolchain_path, toolchain).expect("restore Rust toolchain");
 
         let legacy_toolchain_path = workspace.path().join("rust-toolchain");
@@ -21224,7 +21224,7 @@ async fn nip09_reconciliation_v1_result_vector() {
         for (label, mutation) in [
             (
                 "resolver",
-                workspace_manifest.replacen("resolver = \"2\"", "resolver = \"1\"", 1),
+                workspace_manifest.replacen("resolver = \"3\"", "resolver = \"1\"", 1),
             ),
             (
                 "edition",
@@ -21237,7 +21237,7 @@ async fn nip09_reconciliation_v1_result_vector() {
             let error = validate_governed_compiler_inputs(workspace.path())
                 .expect_err("workspace compiler authority mutation must fail");
             assert!(
-                error.contains("resolver 2, edition 2024, and rust-version 1.97.0"),
+                error.contains("resolver 3, edition 2024, and rust-version 1.97.1"),
                 "{label} produced unexpected error: {error}"
             );
             fs::write(&workspace_manifest_path, &workspace_manifest)
