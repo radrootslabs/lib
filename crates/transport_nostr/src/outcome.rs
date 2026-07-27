@@ -186,35 +186,16 @@ impl RadrootsRelayOutcome {
 
     pub fn classify(message: impl AsRef<str>) -> Result<Self, crate::RadrootsRelayTransportError> {
         let message = message.as_ref().trim();
-        let lower = message.to_ascii_lowercase();
-        let kind = if lower.starts_with("duplicate:") {
-            RadrootsRelayOutcomeKind::DuplicateAccepted
-        } else if lower.starts_with("blocked:") {
-            RadrootsRelayOutcomeKind::Blocked
-        } else if lower.starts_with("rate-limited:") {
-            RadrootsRelayOutcomeKind::RateLimited
-        } else if lower.starts_with("invalid:") {
-            RadrootsRelayOutcomeKind::Invalid
-        } else if lower.starts_with("pow:") {
-            RadrootsRelayOutcomeKind::PowRequired
-        } else if lower.starts_with("restricted:") {
-            RadrootsRelayOutcomeKind::Restricted
-        } else if lower.starts_with("auth-required:") {
-            RadrootsRelayOutcomeKind::AuthRequired
-        } else if lower.starts_with("mute:") {
-            RadrootsRelayOutcomeKind::Muted
-        } else if lower.starts_with("unsupported:") {
-            RadrootsRelayOutcomeKind::Unsupported
-        } else if lower.starts_with("payment-required:") {
-            RadrootsRelayOutcomeKind::PaymentRequired
-        } else if lower.starts_with("error:") {
-            RadrootsRelayOutcomeKind::Error
-        } else if lower.starts_with("timeout:") {
-            RadrootsRelayOutcomeKind::Timeout
-        } else {
-            RadrootsRelayOutcomeKind::Unknown
-        };
+        let kind = classify_relay_outcome_kind(message);
         Self::try_new(kind, Some(message.to_owned()))
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn classify_redacted(
+        message: impl AsRef<str>,
+    ) -> Result<Self, crate::RadrootsRelayTransportError> {
+        let kind = classify_relay_outcome_kind(message.as_ref().trim());
+        Self::try_new(kind, Some(format!("relay-{}", kind.as_str())))
     }
 
     pub fn kind(&self) -> RadrootsRelayOutcomeKind {
@@ -244,6 +225,43 @@ impl RadrootsRelayOutcome {
         }
         Ok(outcome)
     }
+}
+
+fn classify_relay_outcome_kind(message: &str) -> RadrootsRelayOutcomeKind {
+    if starts_with_ascii_case_insensitive(message, "duplicate:") {
+        RadrootsRelayOutcomeKind::DuplicateAccepted
+    } else if starts_with_ascii_case_insensitive(message, "blocked:") {
+        RadrootsRelayOutcomeKind::Blocked
+    } else if starts_with_ascii_case_insensitive(message, "rate-limited:") {
+        RadrootsRelayOutcomeKind::RateLimited
+    } else if starts_with_ascii_case_insensitive(message, "invalid:") {
+        RadrootsRelayOutcomeKind::Invalid
+    } else if starts_with_ascii_case_insensitive(message, "pow:") {
+        RadrootsRelayOutcomeKind::PowRequired
+    } else if starts_with_ascii_case_insensitive(message, "restricted:") {
+        RadrootsRelayOutcomeKind::Restricted
+    } else if starts_with_ascii_case_insensitive(message, "auth-required:") {
+        RadrootsRelayOutcomeKind::AuthRequired
+    } else if starts_with_ascii_case_insensitive(message, "mute:") {
+        RadrootsRelayOutcomeKind::Muted
+    } else if starts_with_ascii_case_insensitive(message, "unsupported:") {
+        RadrootsRelayOutcomeKind::Unsupported
+    } else if starts_with_ascii_case_insensitive(message, "payment-required:") {
+        RadrootsRelayOutcomeKind::PaymentRequired
+    } else if starts_with_ascii_case_insensitive(message, "error:") {
+        RadrootsRelayOutcomeKind::Error
+    } else if starts_with_ascii_case_insensitive(message, "timeout:") {
+        RadrootsRelayOutcomeKind::Timeout
+    } else {
+        RadrootsRelayOutcomeKind::Unknown
+    }
+}
+
+fn starts_with_ascii_case_insensitive(value: &str, prefix: &str) -> bool {
+    value
+        .as_bytes()
+        .get(..prefix.len())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix.as_bytes()))
 }
 
 fn ensure_relay_outcome_message(message: &str) -> Result<(), crate::RadrootsRelayTransportError> {

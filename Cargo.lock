@@ -5243,9 +5243,12 @@ dependencies = [
 name = "radroots_transport_nostr"
 version = "1.0.0-alpha.1"
 dependencies = [
+ "async-wsocket",
  "futures",
  "hex",
  "nostr",
+ "nostr-relay-pool",
+ "nostr-sdk",
  "radroots_authority",
  "radroots_blossom",
  "radroots_event",
@@ -5261,6 +5264,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-tungstenite",
  "url",
 ]
 

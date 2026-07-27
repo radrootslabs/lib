@@ -1,6 +1,10 @@
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "client")]
+mod connector;
+#[cfg(feature = "client")]
+mod diagnostic;
 mod error;
 #[cfg(feature = "storage")]
 mod fetch;
@@ -19,13 +23,14 @@ pub use fetch::{
     RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX, RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX,
     RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX,
     RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX, RadrootsMockRelayFetchAdapter,
-    RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEventAdmission,
-    RadrootsRelayFetchEventReceipt, RadrootsRelayFetchEventValidStream,
-    RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,
-    RadrootsRelayFetchFailure, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
-    RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt,
-    RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest, RadrootsRelayFetchedEvent,
-    RadrootsRelayFetchedEventsReceipt, fetch_and_ingest_relay_events, fetch_relay_events,
+    RadrootsNostrClientFetchAdapter, RadrootsRelayFetchAdapter, RadrootsRelayFetchEmitter,
+    RadrootsRelayFetchEventAdmission, RadrootsRelayFetchEventReceipt,
+    RadrootsRelayFetchEventValidStream, RadrootsRelayFetchEventVerification,
+    RadrootsRelayFetchEventVisibility, RadrootsRelayFetchFailure, RadrootsRelayFetchFilters,
+    RadrootsRelayFetchItem, RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind,
+    RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest,
+    RadrootsRelayFetchedEvent, RadrootsRelayFetchedEventsReceipt, fetch_and_ingest_relay_events,
+    fetch_relay_events,
 };
 #[cfg(feature = "storage")]
 pub use outbox::{

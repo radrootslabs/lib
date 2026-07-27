@@ -15,7 +15,12 @@ readme = "README"
 default = ["std", "client", "storage", "runtime-tokio"]
 std = []
 client = [
+  "dep:async-wsocket",
+  "dep:nostr-relay-pool",
+  "dep:nostr-sdk",
   "dep:radroots_nostr",
+  "dep:tokio",
+  "dep:tokio-tungstenite",
   "radroots_nostr/std",
   "radroots_nostr/client",
   "radroots_nostr/events",
@@ -35,6 +40,7 @@ runtime-tokio = [
 ]
 
 [dependencies]
+async-wsocket = { workspace = true, optional = true }
 radroots_event = { workspace = true, default-features = false, features = [
   "serde",
   "signature",
@@ -57,11 +63,14 @@ radroots_transport = { workspace = true, default-features = false, features = ["
 futures = { workspace = true }
 hex = { workspace = true }
 nostr = { workspace = true }
+nostr-relay-pool = { workspace = true, optional = true }
+nostr-sdk = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["rt"] }
+tokio = { workspace = true, optional = true, features = ["net", "rt", "time"] }
+tokio-tungstenite = { workspace = true, optional = true }
 url = { workspace = true }
 
 [dev-dependencies]

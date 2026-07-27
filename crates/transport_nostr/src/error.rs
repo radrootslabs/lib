@@ -103,6 +103,9 @@ pub enum RadrootsRelayTransportError {
         actual: usize,
     },
 
+    #[error("Relay fetch exceeded its {timeout_ms} millisecond total deadline")]
+    FetchDeadlineExceeded { timeout_ms: u64 },
+
     #[error("Relay transport {field} uses {actual} UTF-8 bytes; maximum is {max}")]
     DiagnosticLimitExceeded {
         field: &'static str,

@@ -182,6 +182,14 @@ impl RadrootsNostrClient {
         self.inner.try_connect(timeout).await
     }
 
+    pub async fn disconnect(&self) {
+        self.inner.disconnect().await;
+    }
+
+    pub async fn shutdown(&self) {
+        self.inner.shutdown().await;
+    }
+
     pub async fn add_relay(&self, url: &str) -> Result<bool, RadrootsNostrError> {
         Ok(self.inner.add_relay(url).await?)
     }
@@ -197,6 +205,10 @@ impl RadrootsNostrClient {
     pub async fn remove_relay(&self, url: &str) -> Result<(), RadrootsNostrError> {
         self.inner.force_remove_relay(url).await?;
         Ok(())
+    }
+
+    pub async fn force_remove_all_relays(&self) {
+        self.inner.force_remove_all_relays().await;
     }
 
     pub async fn relays(&self) -> HashMap<RadrootsNostrRelayUrl, RadrootsNostrRelay> {
@@ -506,6 +518,29 @@ mod tests {
         client
             .unsubscribe(&RadrootsNostrSubscriptionId::new("missing"))
             .await;
+    }
+
+    #[tokio::test]
+    async fn client_lifecycle_request_scoped_cleanup_prevents_relay_inheritance() {
+        let first = RadrootsNostrClient::new_signerless();
+        first
+            .add_write_relay("wss://relay-a.example")
+            .await
+            .expect("first request relay");
+        first
+            .add_read_relay("wss://relay-b.example")
+            .await
+            .expect("second request relay");
+        assert_eq!(first.relays().await.len(), 2);
+
+        first.disconnect().await;
+        first.force_remove_all_relays().await;
+        assert!(first.relays().await.is_empty());
+        first.shutdown().await;
+
+        let second = RadrootsNostrClient::new_signerless();
+        assert!(second.relays().await.is_empty());
+        second.shutdown().await;
     }
 
     #[tokio::test]

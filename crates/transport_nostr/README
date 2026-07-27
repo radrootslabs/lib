@@ -15,7 +15,7 @@ Every fetch path verifies the NIP-01 id and signature before filter matching,
 unique-event budgeting, or returning an event. Repeated event ids preserve
 per-relay observation evidence without consuming the unique-event limit. The
 unique-event limit is bounded at 1,000 so final stored-event visibility can be
-evaluated in one coherent event-store snapshot. A fetch scans at most 64,000
+evaluated in one coherent event-store snapshot. A fetch scans at most 4,096
 raw events and 64 MiB of aggregate raw JSON, and rejects any individual raw
 event over 256 KiB before Radroots parses adapter raw JSON. Count and byte
 budgets are charged globally, in adapter order, before Radroots parsing,
@@ -43,9 +43,10 @@ separate flags and aggregate counts. Local event-store failures abort the
 operation and remain typed transport errors, so callers can retry without
 confusing storage failure with bad relay input.
 
-`RadrootsRelayUrlPolicy::Public` is for trusted relay configuration. It rejects
-non-canonical and known non-global literal destinations, but hostname checks do
-not pin DNS resolution in the SDK connector and are not an SSRF boundary for
-attacker-controlled relay hostnames. Validate resolved addresses at the network
-boundary or use a connector that pins approved resolutions before accepting
-untrusted relay configuration.
+`RadrootsRelayUrlPolicy::Public` rejects non-canonical and known non-global
+literal destinations. The official publish and fetch adapters additionally
+resolve every hostname at connect and reconnect, reject the complete answer if
+any address is forbidden, and pin that accepted answer through TCP connect
+while retaining the original hostname for TLS verification. Parsing a public
+relay URL by itself remains syntax validation rather than an SSRF boundary;
+custom adapters must enforce equivalent resolution and connection policy.

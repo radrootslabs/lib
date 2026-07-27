@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "client")]
+use crate::connector::request_scoped_nostr_client;
+#[cfg(feature = "client")]
+use crate::diagnostic::stable_connection_diagnostic;
 use crate::error::ensure_nonnegative_timestamp;
 use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransportError};
 #[cfg(feature = "client")]
@@ -10,6 +14,8 @@ use radroots_event::{
     ids::RadrootsEventId,
     wire::RadrootsNip01EventWire,
 };
+#[cfg(feature = "client")]
+use radroots_transport::RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS;
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
@@ -31,6 +37,9 @@ use radroots_nostr::prelude::{RadrootsNostrClient, RadrootsNostrEvent};
 
 #[cfg(feature = "client")]
 const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(feature = "client")]
+const RELAY_PUBLISH_TOTAL_TIMEOUT: Duration =
+    Duration::from_millis(RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS);
 pub const RADROOTS_RELAY_PUBLISH_IDEMPOTENCY_KEY_MAX_BYTES: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -326,6 +335,7 @@ impl RadrootsRelayPublishReceipt {
                 ),
             });
         }
+        validate_publish_diagnostic_budget(&relays)?;
         let mut canonical_relays = Vec::with_capacity(relays.len());
         for receipt in &relays {
             let canonical = RadrootsTransportTarget::nostr_relay(receipt.relay_url())?
@@ -420,6 +430,32 @@ impl RadrootsRelayPublishReceipt {
     ) -> (String, Vec<RadrootsRelayPublishRelayReceipt>) {
         (self.event_id.into_string(), self.relays)
     }
+}
+
+fn validate_publish_diagnostic_budget(
+    relays: &[RadrootsRelayPublishRelayReceipt],
+) -> Result<(), RadrootsRelayTransportError> {
+    let max = radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES;
+    let mut actual = 0usize;
+    for receipt in relays {
+        if let Some(message) = receipt.outcome().message() {
+            actual = actual.checked_add(message.len()).ok_or(
+                RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                    field: "publish_request_diagnostics",
+                    max,
+                    actual: usize::MAX,
+                },
+            )?;
+            if actual > max {
+                return Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                    field: "publish_request_diagnostics",
+                    max,
+                    actual,
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 struct BoundedPublishRelayReceipts;
@@ -677,6 +713,7 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         }
         RadrootsRelayTransportError::Transport(_) => RadrootsTransportError::InvalidTransportKind,
         RadrootsRelayTransportError::EmptyFetchFilters
+        | RadrootsRelayTransportError::FetchDeadlineExceeded { .. }
         | RadrootsRelayTransportError::InvalidFetchLimit { .. }
         | RadrootsRelayTransportError::FetchLimitTooLarge { .. }
         | RadrootsRelayTransportError::InvalidFetchReceipt { .. }
@@ -1199,16 +1236,20 @@ fn captured_raw_event_lock_error<T>(_error: PoisonError<T>) -> RadrootsRelayTran
 }
 
 #[cfg(feature = "client")]
-#[derive(Clone)]
-pub struct RadrootsNostrClientPublishAdapter {
-    client: RadrootsNostrClient,
-}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RadrootsNostrClientPublishAdapter;
 
 #[cfg(feature = "client")]
 impl RadrootsNostrClientPublishAdapter {
     #[cfg_attr(coverage_nightly, coverage(off))]
-    pub fn new(client: RadrootsNostrClient) -> Self {
-        Self { client }
+    /// Compatibility constructor that consumes, but never reuses, the supplied
+    /// client so each publication owns an isolated relay pool.
+    pub fn new(_client: RadrootsNostrClient) -> Self {
+        Self
+    }
+
+    pub const fn request_scoped() -> Self {
+        Self
     }
 }
 
@@ -1221,115 +1262,145 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
     {
         Box::pin(async move {
-            let event =
-                RadrootsNostrEvent::from_json(request.signed_event.signed_event().raw_json())
+            let timeout_targets = request.targets.relay_strings();
+            let execution = async move {
+                let client = request_scoped_nostr_client();
+                let result = async {
+                    let event = RadrootsNostrEvent::from_json(
+                        request.signed_event.signed_event().raw_json(),
+                    )
                     .map_err(|error| {
                         RadrootsRelayTransportError::NostrEventJson(error.to_string())
                     })?;
-            ensure_raw_event_matches_signed_event(&event, request.signed_event.signed_event())?;
-            let target_strings = request.targets.relay_strings();
-            for relay_url in &target_strings {
-                self.client
-                    .add_write_relay(relay_url.as_str())
-                    .await
-                    .map_err(|error| RadrootsRelayTransportError::Transport(error.to_string()))?;
-            }
-            let connection_output = self.client.try_connect(RELAY_CONNECT_TIMEOUT).await;
-            let target_url_set = target_strings
-                .iter()
-                .map(|relay_url| relay_url.trim_end_matches('/').to_owned())
-                .collect::<BTreeSet<_>>();
-            let connected_strings = self
-                .client
-                .relays()
-                .await
-                .into_values()
-                .filter(|relay| relay.is_connected())
-                .map(|relay| relay.url().to_string())
-                .filter(|relay_url| target_url_set.contains(relay_url.trim_end_matches('/')))
-                .collect::<Vec<_>>();
-            let connection_failures = connection_output
-                .failed
-                .iter()
-                .map(|(relay, reason)| {
-                    (
-                        relay.to_string().trim_end_matches('/').to_owned(),
-                        reason.clone(),
-                    )
-                })
-                .collect::<BTreeMap<_, _>>();
-            if connected_strings.is_empty() {
-                return target_strings
-                    .into_iter()
-                    .map(|relay_url| {
-                        let target_url = relay_url.trim_end_matches('/');
-                        let reason = connection_failures
-                            .get(target_url)
-                            .cloned()
-                            .unwrap_or_else(|| "relay did not connect".to_owned());
-                        RadrootsRelayPublishRelayReceipt::attempted(
-                            relay_url,
-                            RadrootsRelayOutcome::connection_failed(reason)?,
-                        )
-                    })
-                    .collect();
-            }
-            let output = match self.client.send_event_to(connected_strings, &event).await {
-                Ok(output) => output,
-                Err(error) => {
-                    let message = error.to_string();
-                    return target_strings
-                        .into_iter()
-                        .map(|relay_url| {
-                            RadrootsRelayPublishRelayReceipt::attempted(
-                                relay_url,
-                                RadrootsRelayOutcome::connection_failed(message.clone())?,
+                    ensure_raw_event_matches_signed_event(
+                        &event,
+                        request.signed_event.signed_event(),
+                    )?;
+                    let target_strings = request.targets.relay_strings();
+                    for relay_url in &target_strings {
+                        client
+                            .add_write_relay(relay_url.as_str())
+                            .await
+                            .map_err(|error| {
+                                RadrootsRelayTransportError::Transport(
+                                    stable_connection_diagnostic(&error.to_string()).to_owned(),
+                                )
+                            })?;
+                    }
+                    let connection_output = client.try_connect(RELAY_CONNECT_TIMEOUT).await;
+                    let target_url_set = target_strings
+                        .iter()
+                        .map(|relay_url| relay_url.trim_end_matches('/').to_owned())
+                        .collect::<BTreeSet<_>>();
+                    let connected_strings = client
+                        .relays()
+                        .await
+                        .into_values()
+                        .filter(|relay| relay.is_connected())
+                        .map(|relay| relay.url().to_string())
+                        .filter(|relay_url| {
+                            target_url_set.contains(relay_url.trim_end_matches('/'))
+                        })
+                        .collect::<Vec<_>>();
+                    let connection_failures = connection_output
+                        .failed
+                        .iter()
+                        .map(|(relay, reason)| {
+                            (
+                                relay.to_string().trim_end_matches('/').to_owned(),
+                                stable_connection_diagnostic(reason).to_owned(),
                             )
                         })
-                        .collect();
-                }
-            };
-            let mut receipts = Vec::new();
-            for relay_url in &target_strings {
-                let target_url = relay_url.trim_end_matches('/');
-                let success = output
-                    .success
-                    .iter()
-                    .any(|success_url| success_url.to_string().trim_end_matches('/') == target_url);
-                if success {
-                    receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
-                        relay_url,
-                        RadrootsRelayOutcome::accepted_with_message(
-                            "nostr-relay-pool-success-ok-message-unavailable",
-                        )?,
-                    )?);
-                    continue;
-                }
-                if let Some(reason) = connection_failures.get(target_url) {
-                    receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
-                        relay_url,
-                        RadrootsRelayOutcome::connection_failed(reason.clone())?,
-                    )?);
-                    continue;
-                }
-                let failed = output.failed.iter().find_map(|(failed_url, message)| {
-                    if failed_url.to_string().trim_end_matches('/') == target_url {
-                        Some(message.clone())
-                    } else {
-                        None
+                        .collect::<BTreeMap<_, _>>();
+                    if connected_strings.is_empty() {
+                        return target_strings
+                            .into_iter()
+                            .map(|relay_url| {
+                                let target_url = relay_url.trim_end_matches('/');
+                                let reason = connection_failures
+                                    .get(target_url)
+                                    .cloned()
+                                    .unwrap_or_else(|| "connection-failed".to_owned());
+                                RadrootsRelayPublishRelayReceipt::attempted(
+                                    relay_url,
+                                    RadrootsRelayOutcome::connection_failed(reason)?,
+                                )
+                            })
+                            .collect();
                     }
-                });
-                let outcome = failed
-                    .map(RadrootsRelayOutcome::classify)
-                    .transpose()?
-                    .unwrap_or(RadrootsRelayOutcome::classify(
-                        "error: relay output omitted target",
-                    )?);
-                receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
-                    relay_url, outcome,
-                )?);
+                    let output = match client.send_event_to(connected_strings, &event).await {
+                        Ok(output) => output,
+                        Err(error) => {
+                            let message =
+                                stable_connection_diagnostic(&error.to_string()).to_owned();
+                            return target_strings
+                                .into_iter()
+                                .map(|relay_url| {
+                                    RadrootsRelayPublishRelayReceipt::attempted(
+                                        relay_url,
+                                        RadrootsRelayOutcome::connection_failed(message.clone())?,
+                                    )
+                                })
+                                .collect();
+                        }
+                    };
+                    let mut receipts = Vec::new();
+                    for relay_url in &target_strings {
+                        let target_url = relay_url.trim_end_matches('/');
+                        let success = output.success.iter().any(|success_url| {
+                            success_url.to_string().trim_end_matches('/') == target_url
+                        });
+                        if success {
+                            receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
+                                relay_url,
+                                RadrootsRelayOutcome::accepted_with_message(
+                                    "nostr-relay-pool-success-ok-message-unavailable",
+                                )?,
+                            )?);
+                            continue;
+                        }
+                        if let Some(reason) = connection_failures.get(target_url) {
+                            receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
+                                relay_url,
+                                RadrootsRelayOutcome::connection_failed(reason.clone())?,
+                            )?);
+                            continue;
+                        }
+                        let failed = output.failed.iter().find_map(|(failed_url, message)| {
+                            if failed_url.to_string().trim_end_matches('/') == target_url {
+                                Some(message.clone())
+                            } else {
+                                None
+                            }
+                        });
+                        let outcome = failed
+                            .map(RadrootsRelayOutcome::classify_redacted)
+                            .transpose()?
+                            .unwrap_or(RadrootsRelayOutcome::classify_redacted(
+                                "error: relay output omitted target",
+                            )?);
+                        receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
+                            relay_url, outcome,
+                        )?);
+                    }
+                    Ok(receipts)
+                }
+                .await;
+                client.shutdown().await;
+                result
+            };
+            match tokio::time::timeout(RELAY_PUBLISH_TOTAL_TIMEOUT, execution).await {
+                Ok(result) => result,
+                Err(_) => timeout_targets
+                    .into_iter()
+                    .map(|relay_url| {
+                        RadrootsRelayPublishRelayReceipt::attempted(
+                            relay_url,
+                            RadrootsRelayOutcome::timeout("publish-total-deadline-exceeded")?,
+                        )
+                    })
+                    .collect(),
             }
-            Ok(receipts)
         })
     }
 }
@@ -1389,7 +1460,11 @@ fn ensure_raw_event_matches_signed_event(
 
 #[cfg(all(test, feature = "client"))]
 mod tests {
-    use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
+    use super::{
+        RadrootsNostrEvent, RadrootsRelayOutcome, RadrootsRelayPublishReceipt,
+        RadrootsRelayPublishRelayReceipt, RadrootsRelayTransportError,
+        ensure_raw_event_matches_signed_event,
+    };
     use nostr::JsonUtil;
     use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
     use radroots_event::kinds::KIND_GEOCHAT;
@@ -1462,5 +1537,36 @@ mod tests {
         let mut wire = signed_event.wire().clone();
         wire.tags.push(vec!["t".to_owned(), "compost".to_owned()]);
         assert_mismatch(raw_event_from_wire(wire), &signed_event);
+    }
+
+    #[test]
+    fn relay_security_publish_diagnostics_share_one_complete_receipt_budget() {
+        let max = radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES;
+        let receipt = |relay: &str, message: String| {
+            RadrootsRelayPublishRelayReceipt::attempted(
+                relay,
+                RadrootsRelayOutcome::unknown(message).expect("bounded outcome"),
+            )
+            .expect("relay receipt")
+        };
+        let exact = vec![
+            receipt("wss://relay-a.example", "a".repeat(max / 2)),
+            receipt("wss://relay-b.example", "b".repeat(max / 2)),
+        ];
+        RadrootsRelayPublishReceipt::new("00".repeat(32), 1, false, exact)
+            .expect("exact publish diagnostic budget");
+
+        let one_over = vec![
+            receipt("wss://relay-a.example", "a".repeat(max / 2)),
+            receipt("wss://relay-b.example", "b".repeat(max / 2 + 1)),
+        ];
+        assert!(matches!(
+            RadrootsRelayPublishReceipt::new("00".repeat(32), 1, false, one_over),
+            Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                field: "publish_request_diagnostics",
+                max: observed_max,
+                actual,
+            }) if observed_max == max && actual == max + 1
+        ));
     }
 }
