@@ -99,9 +99,9 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
     let closure_root = cargo_target_root.join(CLOSURE_DIRECTORY);
     reset_owned_closure_directory(&cargo_target_root, &closure_root)?;
     let archive_root = closure_root.join("archives");
-    let extracted_root = closure_root.join("extracted");
     let list_root = closure_root.join("package-lists");
     let check_root = closure_root.join("archive-workspace");
+    let extracted_root = check_root.join("members");
     for directory in [&archive_root, &extracted_root, &list_root, &check_root] {
         fs::create_dir_all(directory)
             .map_err(|error| format!("create {}: {error}", directory.display()))?;
