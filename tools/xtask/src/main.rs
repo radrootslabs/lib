@@ -19,6 +19,7 @@ use std::process::ExitCode;
 fn usage() {
     eprintln!("usage:");
     eprintln!("  cargo xtask architecture");
+    eprintln!("  cargo xtask architecture-ci");
     eprintln!("  cargo xtask check-api-boundaries");
     eprintln!("  cargo xtask check-dependency-boundaries");
     eprintln!("  cargo xtask contract validate");
@@ -147,6 +148,10 @@ fn run_contract(args: &[String]) -> Result<(), String> {
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("architecture") if args.len() == 1 => architecture::validate(&workspace_root()),
+        Some("architecture-ci") if args.len() == 1 => {
+            architecture::validate_ci(&workspace_root())?;
+            validate_contract()
+        }
         Some("check-api-boundaries") if args.len() == 1 => {
             architecture::validate_api_boundaries(&workspace_root())
         }

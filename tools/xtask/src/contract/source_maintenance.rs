@@ -76,7 +76,7 @@ const RESULT_VECTOR_EXECUTOR_TEST: &str = "source_maintenance_v1_result_vector";
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "585b9221b4cf1e68bc637528972cfe016f2dfd78fee800ddc7a0593411781c03";
+    "f5e6d2f42277238ba3af7ed2603bdd699258dc9e8400b0acaece070858e9aaf8";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",

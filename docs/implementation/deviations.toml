@@ -6,7 +6,18 @@ id = "RCRV1-DEV-001"
 date = "2026-07-27"
 status = "active"
 approval = "Explicit user correction dated 2026-07-27."
-affected_steps = ["015", "016", "017", "018", "019", "020", "021", "022", "023"]
+affected_steps = [
+  "015",
+  "016",
+  "017",
+  "018",
+  "019",
+  "020",
+  "021",
+  "022",
+  "023",
+  "026",
+]
 spec_anchors = [
   "docs/specs/radroots_crates_release_v1.md#repository-ownership",
   "docs/specs/radroots_crates_release_v1.toml#repository_policy",
@@ -19,6 +30,7 @@ replacement_action = "Retain the two existing standalone repositories; replace i
 verification = [
   "Both repository-local architecture validators resolve every spec anchor.",
   "The synchronized architecture catalog enforces the exact 17/2 ownership partition.",
+  "Each standalone repository owns a required architecture CI adapter over its repository-local command surface.",
 ]
 unresolved_risk = "Parent gitlinks cannot advance until the new standalone commits are public-remote reachable under separate authorization."
 normative_architecture_change = false

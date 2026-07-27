@@ -66,6 +66,19 @@ in
   replica-sync-legacy-ingest-check = replicaSyncLegacyCheck;
   replica-sync-legacy-ingest-test = replicaSyncLegacyTest;
 
+  architecture = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-architecture";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo run --locked -q -p xtask -- architecture-ci
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
+
   guards = common.mkRepoCheck {
     name = "repo-guards";
     runtimeInputs = [

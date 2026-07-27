@@ -186,6 +186,9 @@ let
   checkCommand = ''
     cargo check --workspace --all-targets
   '';
+  architectureCommand = ''
+    cargo run --locked -q -p xtask -- architecture-ci
+  '';
   contractCommand = ''
     cargo run -q -p xtask -- hygiene forbidden-identifiers
     cargo check -q ${coreContractCargoArgs}
@@ -334,6 +337,7 @@ let
 in
 {
   inherit
+    architectureCommand
     cargoLlvmCov
     cargoArtifacts
     checkCommand

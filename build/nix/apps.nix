@@ -54,6 +54,13 @@ let
     };
 in
 {
+  architecture = mkRepoApp {
+    name = "architecture";
+    description = "Run crates-release architecture and freshness checks";
+    runtimeInputs = common.runtimeInputs.stable;
+    command = common.architectureCommand;
+  };
+
   check = mkRepoApp {
     name = "check";
     description = "Run cargo check across the radroots workspace";
