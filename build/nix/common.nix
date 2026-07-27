@@ -27,6 +27,7 @@ let
         ../../rust-toolchain.toml
         ../../contracts
         ../../crates
+        ../../docs/decisions
         ../../docs/implementation
         ../../docs/specs
         ../../tools
