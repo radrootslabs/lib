@@ -12,19 +12,22 @@ homepage.workspace = true
 readme = "README"
 
 [features]
-default = ["sqlite", "runtime-tokio"]
+default = ["event-store-adapter"]
 sqlite = ["dep:sqlx", "sqlx/sqlite-bundled"]
-runtime-tokio = ["sqlx/runtime-tokio"]
+runtime-tokio = ["sqlite", "sqlx/runtime-tokio"]
+event-store-adapter = [
+  "runtime-tokio",
+  "dep:radroots_event_store",
+  "radroots_event_store/sqlite",
+  "radroots_event_store/runtime-tokio",
+]
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false, features = [
   "std",
   "serde",
 ] }
-radroots_event_store = { workspace = true, default-features = false, features = [
-  "sqlite",
-  "runtime-tokio",
-] }
+radroots_event_store = { workspace = true, default-features = false, optional = true }
 radroots_transport = { workspace = true, default-features = false }
 hex = { workspace = true }
 serde = { workspace = true, features = ["std"] }

@@ -2,17 +2,18 @@
 
 use crate::RadrootsOutboxError;
 use crate::migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
+#[cfg(feature = "event-store-adapter")]
+use crate::model::RadrootsOutboxEventStoreIngestReceipt;
 use crate::model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanRecord,
     RadrootsOutboxDeliveryPlanStatus, RadrootsOutboxDeliveryTargetRecord,
     RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEnqueueReceipt, RadrootsOutboxEnqueueStatus,
-    RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt,
-    RadrootsOutboxIdempotencyPreflight, RadrootsOutboxOperationInput,
-    RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus, RadrootsOutboxReticulumBehavior,
-    RadrootsOutboxReticulumEventRecord, RadrootsOutboxSignedOperationInput,
-    RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
-    RadrootsOutboxTradeMutationInput,
+    RadrootsOutboxEventRecord, RadrootsOutboxEventState, RadrootsOutboxIdempotencyPreflight,
+    RadrootsOutboxOperationInput, RadrootsOutboxOperationRecord, RadrootsOutboxOperationStatus,
+    RadrootsOutboxReticulumBehavior, RadrootsOutboxReticulumEventRecord,
+    RadrootsOutboxSignedOperationInput, RadrootsOutboxSignedTradeMutationInput,
+    RadrootsOutboxStatusSummary, RadrootsOutboxTradeMutationInput,
 };
 use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
@@ -22,6 +23,7 @@ use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS;
 use radroots_event::trade::trade_mutation_from_canonical_content;
 use radroots_event::wire::RadrootsNip01EventWire;
+#[cfg(feature = "event-store-adapter")]
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
@@ -1209,6 +1211,7 @@ impl RadrootsOutbox {
         Ok(changed.rows_affected())
     }
 
+    #[cfg(feature = "event-store-adapter")]
     pub async fn ingest_signed_event_local(
         &self,
         event_store: &RadrootsEventStore,
@@ -1605,6 +1608,7 @@ impl RadrootsOutbox {
         Ok(())
     }
 
+    #[cfg(feature = "event-store-adapter")]
     async fn claimed_event(
         &self,
         outbox_event_id: i64,
@@ -3447,6 +3451,7 @@ mod tests {
         .expect("generic draft")
     }
 
+    #[cfg(feature = "event-store-adapter")]
     fn durable_draft(expected_pubkey: &str, label: &str) -> RadrootsEventDraft {
         RadrootsEventDraft::new(
             "radroots.social.follow_list.v1",
@@ -8062,6 +8067,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "event-store-adapter")]
     #[tokio::test]
     async fn local_signed_event_ingest_records_one_idempotent_local_import_observation() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
@@ -8133,6 +8139,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "event-store-adapter")]
     #[tokio::test]
     async fn local_signed_event_ingest_rejects_negative_observation_time_without_mutation() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
@@ -8194,6 +8201,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "event-store-adapter")]
     #[tokio::test]
     async fn local_ingest_rejects_an_invalid_signature_without_marking_the_outbox_or_store() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");

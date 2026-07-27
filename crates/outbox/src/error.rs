@@ -5,12 +5,14 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RadrootsOutboxError {
+    #[cfg(feature = "sqlite")]
     #[error("SQLx error: {0}")]
     Sqlx(#[from] sqlx::Error),
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[cfg(feature = "event-store-adapter")]
     #[error("Event store error: {0}")]
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
 

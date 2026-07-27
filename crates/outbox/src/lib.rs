@@ -2,11 +2,14 @@
 #![forbid(unsafe_code)]
 
 mod error;
+#[cfg(feature = "sqlite")]
 mod migrations;
 mod model;
+#[cfg(feature = "sqlite")]
 mod store;
 
 pub use error::RadrootsOutboxError;
+#[cfg(feature = "sqlite")]
 pub use migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 pub use model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
@@ -20,4 +23,5 @@ pub use model::{
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
 };
+#[cfg(feature = "sqlite")]
 pub use store::RadrootsOutbox;
