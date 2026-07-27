@@ -1,7 +1,7 @@
 use core::fmt;
 
-use crate::RadrootsCoreDecimal;
-use crate::unit::{RadrootsCoreUnit, RadrootsCoreUnitConvertError, convert_unit_decimal};
+use crate::Decimal;
+use crate::unit::{RadrootsCoreUnitConvertError, Unit, convert_unit_decimal};
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
@@ -12,18 +12,18 @@ use std::string::String;
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsCoreQuantity {
+pub struct Quantity {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub amount: RadrootsCoreDecimal,
-    pub unit: RadrootsCoreUnit,
+    pub amount: Decimal,
+    pub unit: Unit,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub label: Option<String>,
 }
 
-impl RadrootsCoreQuantity {
+impl Quantity {
     #[inline]
-    pub fn new(amount: RadrootsCoreDecimal, unit: RadrootsCoreUnit) -> Self {
+    pub fn new(amount: Decimal, unit: Unit) -> Self {
         Self {
             amount,
             unit,
@@ -50,9 +50,9 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn zero(unit: RadrootsCoreUnit) -> Self {
+    pub fn zero(unit: Unit) -> Self {
         Self {
-            amount: RadrootsCoreDecimal::ZERO,
+            amount: Decimal::ZERO,
             unit,
             label: None,
         }
@@ -69,20 +69,17 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn canonical_unit(&self) -> RadrootsCoreUnit {
+    pub fn canonical_unit(&self) -> Unit {
         self.unit.canonical_unit()
     }
 
     #[inline]
-    pub fn try_convert_to(
-        &self,
-        unit: RadrootsCoreUnit,
-    ) -> Result<RadrootsCoreQuantity, RadrootsCoreUnitConvertError> {
+    pub fn try_convert_to(&self, unit: Unit) -> Result<Quantity, RadrootsCoreUnitConvertError> {
         if self.unit == unit {
             return Ok(self.clone());
         }
         let amount = convert_unit_decimal(self.amount, self.unit, unit)?;
-        Ok(RadrootsCoreQuantity {
+        Ok(Quantity {
             amount,
             unit,
             label: self.label.clone(),
@@ -90,7 +87,7 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn to_canonical(&self) -> Result<RadrootsCoreQuantity, RadrootsCoreUnitConvertError> {
+    pub fn to_canonical(&self) -> Result<Quantity, RadrootsCoreUnitConvertError> {
         self.try_convert_to(self.unit.canonical_unit())
     }
 
@@ -109,14 +106,11 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn try_add(
-        &self,
-        rhs: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreQuantity, RadrootsCoreQuantityInvariantError> {
+    pub fn try_add(&self, rhs: &Quantity) -> Result<Quantity, RadrootsCoreQuantityInvariantError> {
         if self.unit != rhs.unit {
             return Err(RadrootsCoreQuantityInvariantError::UnitMismatch);
         }
-        Ok(RadrootsCoreQuantity {
+        Ok(Quantity {
             amount: self.amount + rhs.amount,
             unit: self.unit,
             label: self.label.clone(),
@@ -124,23 +118,20 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn try_sub(
-        &self,
-        rhs: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreQuantity, RadrootsCoreQuantityInvariantError> {
+    pub fn try_sub(&self, rhs: &Quantity) -> Result<Quantity, RadrootsCoreQuantityInvariantError> {
         if self.unit != rhs.unit {
             return Err(RadrootsCoreQuantityInvariantError::UnitMismatch);
         }
-        Ok(RadrootsCoreQuantity {
+        Ok(Quantity {
             amount: self.amount - rhs.amount,
             unit: self.unit,
             label: self.label.clone(),
         })
     }
 
-    pub fn checked_add(&self, rhs: &RadrootsCoreQuantity) -> Option<RadrootsCoreQuantity> {
+    pub fn checked_add(&self, rhs: &Quantity) -> Option<Quantity> {
         if self.unit == rhs.unit {
-            Some(RadrootsCoreQuantity {
+            Some(Quantity {
                 amount: self.amount + rhs.amount,
                 unit: self.unit,
                 label: self.label.clone(),
@@ -150,9 +141,9 @@ impl RadrootsCoreQuantity {
         }
     }
 
-    pub fn checked_sub(&self, rhs: &RadrootsCoreQuantity) -> Option<RadrootsCoreQuantity> {
+    pub fn checked_sub(&self, rhs: &Quantity) -> Option<Quantity> {
         if self.unit == rhs.unit {
-            Some(RadrootsCoreQuantity {
+            Some(Quantity {
                 amount: self.amount - rhs.amount,
                 unit: self.unit,
                 label: self.label.clone(),
@@ -163,8 +154,8 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn mul_decimal(&self, factor: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
+    pub fn mul_decimal(&self, factor: Decimal) -> Quantity {
+        Quantity {
             amount: self.amount * factor,
             unit: self.unit,
             label: self.label.clone(),
@@ -172,8 +163,8 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn div_decimal(&self, divisor: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
+    pub fn div_decimal(&self, divisor: Decimal) -> Quantity {
+        Quantity {
             amount: self.amount / divisor,
             unit: self.unit,
             label: self.label.clone(),
@@ -181,7 +172,7 @@ impl RadrootsCoreQuantity {
     }
 }
 
-impl fmt::Display for RadrootsCoreQuantity {
+impl fmt::Display for Quantity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.amount.normalize(), self.unit)?;
         if let Some(label) = &self.label {
@@ -216,10 +207,10 @@ impl std::error::Error for RadrootsCoreQuantityInvariantError {}
 
 use core::ops::{Div, Mul};
 
-impl Mul<RadrootsCoreDecimal> for RadrootsCoreQuantity {
-    type Output = RadrootsCoreQuantity;
-    fn mul(self, rhs: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
+impl Mul<Decimal> for Quantity {
+    type Output = Quantity;
+    fn mul(self, rhs: Decimal) -> Quantity {
+        Quantity {
             amount: self.amount * rhs,
             unit: self.unit,
             label: self.label,
@@ -227,13 +218,16 @@ impl Mul<RadrootsCoreDecimal> for RadrootsCoreQuantity {
     }
 }
 
-impl Div<RadrootsCoreDecimal> for RadrootsCoreQuantity {
-    type Output = RadrootsCoreQuantity;
-    fn div(self, rhs: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
+impl Div<Decimal> for Quantity {
+    type Output = Quantity;
+    fn div(self, rhs: Decimal) -> Quantity {
+        Quantity {
             amount: self.amount / rhs,
             unit: self.unit,
             label: self.label,
         }
     }
 }
+
+#[deprecated(since = "0.1.0", note = "renamed to `Quantity`")]
+pub use self::Quantity as RadrootsCoreQuantity;

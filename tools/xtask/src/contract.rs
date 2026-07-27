@@ -8086,7 +8086,7 @@ fn validate_required_coverage_summary_with_policy(
     Ok(())
 }
 
-const CORE_UNIT_DIMENSION_ENUM: &str = "RadrootsCoreUnitDimension";
+const CORE_UNIT_DIMENSION_ENUM: &str = "UnitDimension";
 const CORE_UNIT_DIMENSION_ORDER: [&str; 3] = ["Count", "Mass", "Volume"];
 
 fn extract_enum_body<'a>(source: &'a str, enum_name: &str) -> Result<&'a str, String> {
@@ -9414,7 +9414,7 @@ version = "1.0.0"
         );
         write_file(
             &root.join("crates").join("core").join("src").join("unit.rs"),
-            r#"pub enum RadrootsCoreUnitDimension {
+            r#"pub enum UnitDimension {
     Count,
     Mass,
     Volume,
@@ -11208,13 +11208,13 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
     #[test]
     fn parses_enum_variants_in_declared_order() {
         let source = r#"
-pub enum RadrootsCoreUnitDimension {
+pub enum UnitDimension {
     Count,
     Mass,
     Volume,
 }
 "#;
-        let enum_body = extract_enum_body(source, "RadrootsCoreUnitDimension").expect("enum body");
+        let enum_body = extract_enum_body(source, "UnitDimension").expect("enum body");
         let variants = parse_enum_variants(enum_body);
         assert_eq!(variants, vec!["Count", "Mass", "Volume"]);
     }
@@ -11222,13 +11222,13 @@ pub enum RadrootsCoreUnitDimension {
     #[test]
     fn fails_when_enum_order_does_not_match_contract() {
         let source = r#"
-pub enum RadrootsCoreUnitDimension {
+pub enum UnitDimension {
     Mass,
     Count,
     Volume,
 }
 "#;
-        let enum_body = extract_enum_body(source, "RadrootsCoreUnitDimension").expect("enum body");
+        let enum_body = extract_enum_body(source, "UnitDimension").expect("enum body");
         let variants = parse_enum_variants(enum_body);
         let expected = CORE_UNIT_DIMENSION_ORDER
             .iter()
@@ -11898,22 +11898,17 @@ members = ["crates/a", "crates/b"]
 
     #[test]
     fn enum_extract_and_parse_error_paths_are_reported() {
-        let missing = extract_enum_body("pub struct X;", "RadrootsCoreUnitDimension")
-            .expect_err("missing enum");
+        let missing =
+            extract_enum_body("pub struct X;", "UnitDimension").expect_err("missing enum");
         assert!(missing.contains("missing enum"));
 
-        let missing_brace = extract_enum_body(
-            "pub enum RadrootsCoreUnitDimension",
-            "RadrootsCoreUnitDimension",
-        )
-        .expect_err("missing opening brace");
+        let missing_brace = extract_enum_body("pub enum UnitDimension", "UnitDimension")
+            .expect_err("missing opening brace");
         assert!(missing_brace.contains("missing opening brace"));
 
-        let missing_close = extract_enum_body(
-            "pub enum RadrootsCoreUnitDimension { Count, Mass",
-            "RadrootsCoreUnitDimension",
-        )
-        .expect_err("missing closing brace");
+        let missing_close =
+            extract_enum_body("pub enum UnitDimension { Count, Mass", "UnitDimension")
+                .expect_err("missing closing brace");
         assert!(missing_close.contains("missing closing brace"));
 
         let variants = parse_enum_variants(
@@ -11928,8 +11923,8 @@ members = ["crates/a", "crates/b"]
         assert_eq!(variants, vec!["Count".to_string()]);
 
         let nested = extract_enum_body(
-            "pub enum RadrootsCoreUnitDimension { Count = { 1 }, Mass = 2 }",
-            "RadrootsCoreUnitDimension",
+            "pub enum UnitDimension { Count = { 1 }, Mass = 2 }",
+            "UnitDimension",
         )
         .expect("nested braces in enum body");
         assert!(nested.contains("Count"));
@@ -13631,7 +13626,7 @@ requires_release_notes = true
         let bundle = load_contract_bundle(&root).expect("load bundle");
         write_file(
             &root.join("crates").join("core").join("src").join("unit.rs"),
-            r#"pub enum RadrootsCoreUnitDimension {
+            r#"pub enum UnitDimension {
 Mass,
 Count,
 Volume,
@@ -13643,7 +13638,7 @@ Volume,
 
         write_file(
             &root.join("crates").join("core").join("src").join("unit.rs"),
-            r#"pub enum RadrootsCoreUnitDimension {
+            r#"pub enum UnitDimension {
 Count,
 Mass,
 Volume,
@@ -13794,7 +13789,7 @@ readme = { workspace = true }
                 .join("core")
                 .join("src")
                 .join("unit.rs"),
-            r#"pub enum RadrootsCoreUnitDimension {
+            r#"pub enum UnitDimension {
 Mass,
 Count,
 Volume,

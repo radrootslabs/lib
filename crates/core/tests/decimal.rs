@@ -2,17 +2,17 @@ mod common;
 
 use core::str::FromStr;
 
-use radroots_core::RadrootsCoreDecimal;
+use radroots_core::Decimal;
 
 #[test]
 fn display_normalizes_trailing_zeros() {
-    let d = RadrootsCoreDecimal::from_str("1.2300").unwrap();
+    let d = Decimal::from_str("1.2300").unwrap();
     assert_eq!(d.to_string(), "1.23");
 }
 
 #[test]
 fn scale_reflects_input_precision() {
-    let d = RadrootsCoreDecimal::from_str("1.2300").unwrap();
+    let d = Decimal::from_str("1.2300").unwrap();
     assert_eq!(d.scale(), 4);
 }
 
@@ -26,25 +26,25 @@ fn to_u64_exact_requires_whole_number() {
 
 #[test]
 fn from_f64_display_roundtrips_reasonably() {
-    let d = RadrootsCoreDecimal::from_f64_display(1.25).unwrap();
+    let d = Decimal::from_f64_display(1.25).unwrap();
     let v = d.to_f64_lossy().expect("f64 conversion");
     assert!((v - 1.25).abs() < 1e-12);
 }
 
 #[test]
 fn from_str_exact_and_conversion_impl_paths_are_exercised() {
-    let exact = RadrootsCoreDecimal::from_str_exact("42.000").unwrap();
+    let exact = Decimal::from_str_exact("42.000").unwrap();
     assert_eq!(exact, common::dec("42"));
 
-    let from_decimal = RadrootsCoreDecimal::from(rust_decimal::Decimal::from(5u32));
+    let from_decimal = Decimal::from(rust_decimal::Decimal::from(5u32));
     assert_eq!(from_decimal, common::dec("5"));
     let back: rust_decimal::Decimal = from_decimal.into();
     assert_eq!(back, rust_decimal::Decimal::from(5u32));
 
-    let from_u32 = RadrootsCoreDecimal::from(7u32);
-    let from_i32 = RadrootsCoreDecimal::from(-2i32);
-    let from_u64 = RadrootsCoreDecimal::from(11u64);
-    let from_i64 = RadrootsCoreDecimal::from(-9i64);
+    let from_u32 = Decimal::from(7u32);
+    let from_i32 = Decimal::from(-2i32);
+    let from_u64 = Decimal::from(11u64);
+    let from_i64 = Decimal::from(-9i64);
     assert_eq!(from_u32, common::dec("7"));
     assert_eq!(from_i32, common::dec("-2"));
     assert_eq!(from_u64, common::dec("11"));
@@ -54,8 +54,8 @@ fn from_str_exact_and_conversion_impl_paths_are_exercised() {
 #[cfg(feature = "serde")]
 #[test]
 fn serde_deserialize_error_paths_are_exercised() {
-    let parse_err = serde_json::from_str::<RadrootsCoreDecimal>("\"not-a-decimal\"").unwrap_err();
+    let parse_err = serde_json::from_str::<Decimal>("\"not-a-decimal\"").unwrap_err();
     assert!(!parse_err.to_string().is_empty());
-    let non_string_err = serde_json::from_str::<RadrootsCoreDecimal>("123").unwrap_err();
+    let non_string_err = serde_json::from_str::<Decimal>("123").unwrap_err();
     assert!(non_string_err.to_string().contains("invalid type"));
 }

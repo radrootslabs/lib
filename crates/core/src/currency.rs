@@ -13,9 +13,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeErr
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsCoreCurrency([u8; 3]);
+pub struct Currency([u8; 3]);
 
-impl RadrootsCoreCurrency {
+impl Currency {
     #[inline]
     pub const fn from_const(bytes: [u8; 3]) -> Result<Self, RadrootsCoreCurrencyParseError> {
         if Self::is_ascii_upper(bytes[0])
@@ -46,12 +46,12 @@ impl RadrootsCoreCurrency {
         core::str::from_utf8(&self.0).unwrap_or("???")
     }
 
-    pub const USD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"USD");
-    pub const EUR: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"EUR");
-    pub const GBP: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"GBP");
-    pub const JPY: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"JPY");
-    pub const CAD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"CAD");
-    pub const AUD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"AUD");
+    pub const USD: Currency = Currency(*b"USD");
+    pub const EUR: Currency = Currency(*b"EUR");
+    pub const GBP: Currency = Currency(*b"GBP");
+    pub const JPY: Currency = Currency(*b"JPY");
+    pub const CAD: Currency = Currency(*b"CAD");
+    pub const AUD: Currency = Currency(*b"AUD");
 
     #[inline]
     pub const fn minor_unit_exponent(&self) -> u32 {
@@ -69,28 +69,26 @@ impl RadrootsCoreCurrency {
     }
 }
 
-impl fmt::Debug for RadrootsCoreCurrency {
+impl fmt::Debug for Currency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("RadrootsCoreCurrency")
-            .field(&self.as_str())
-            .finish()
+        f.debug_tuple("Currency").field(&self.as_str()).finish()
     }
 }
 
-impl fmt::Display for RadrootsCoreCurrency {
+impl fmt::Display for Currency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl TryFrom<&str> for RadrootsCoreCurrency {
+impl TryFrom<&str> for Currency {
     type Error = RadrootsCoreCurrencyParseError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()
     }
 }
 
-impl FromStr for RadrootsCoreCurrency {
+impl FromStr for Currency {
     type Err = RadrootsCoreCurrencyParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -123,16 +121,19 @@ impl fmt::Display for RadrootsCoreCurrencyParseError {
 impl std::error::Error for RadrootsCoreCurrencyParseError {}
 
 #[cfg(feature = "serde")]
-impl Serialize for RadrootsCoreCurrency {
+impl Serialize for Currency {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_str(self.as_str())
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for RadrootsCoreCurrency {
+impl<'de> Deserialize<'de> for Currency {
     fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
         let s = String::deserialize(de)?;
         s.parse().map_err(D::Error::custom)
     }
 }
+
+#[deprecated(since = "0.1.0", note = "renamed to `Currency`")]
+pub use self::Currency as RadrootsCoreCurrency;

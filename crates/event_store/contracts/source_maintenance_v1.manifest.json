@@ -157,6 +157,55 @@
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
+      "role": "core_currency_value_authority",
+      "path": "crates/core/src/currency.rs",
+      "byte_length": 4095,
+      "sha256": "fdd7ccb88abdf7b91a362fdeeded752346331c5510ed1c769ec69a2780fa333a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "core_decimal_value_authority",
+      "path": "crates/core/src/decimal.rs",
+      "byte_length": 3851,
+      "sha256": "741c16a8cad7a769a7cf74458ef56141f04badb62de107966a9be85d241faa39",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "core_money_value_authority",
+      "path": "crates/core/src/money.rs",
+      "byte_length": 6615,
+      "sha256": "8e830a3a01a2252d06275306848bf2389b5e4fb6a88bb85015bc6a072da969d0",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "core_percent_value_authority",
+      "path": "crates/core/src/percent.rs",
+      "byte_length": 2266,
+      "sha256": "f0d7d9c66734666070620e95b9d46a22f5b21b881aa93a9a8b914fb2b5f86d69",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "core_quantity_value_authority",
+      "path": "crates/core/src/quantity.rs",
+      "byte_length": 6189,
+      "sha256": "9b5450b602f6da4bf85e644bc362cec777638b4a95b6d4d4af791ec9f501d3ae",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "core_quantity_price_value_authority",
+      "path": "crates/core/src/quantity_price.rs",
+      "byte_length": 5579,
+      "sha256": "166a3a6a43733dcafc39f917f166710fa24f408dbaf1c5133f9a51e5732d6d20",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "core_unit_value_authority",
+      "path": "crates/core/src/unit.rs",
+      "byte_length": 9280,
+      "sha256": "736239f31fd0864fd1c1862aa6df49d56d4d0d8991ef6e7a25d83ab1b99a5896",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
       "role": "event_store_error_and_limits",
       "path": "crates/event_store/src/error.rs",
       "byte_length": 19421,
@@ -236,8 +285,8 @@
     {
       "role": "predecessor_successor_governance",
       "path": "tools/xtask/src/contract/food_availability_projection.rs",
-      "byte_length": 195036,
-      "sha256": "d3c567ea3b4ea709723af2d5b6a2dc47993c6ba42c1d62895bd26fa101ebf829",
+      "byte_length": 194594,
+      "sha256": "4b2961fc69c8204ad5470c0e51c93533063e49d7a14da00a53598c3e8d0cdf6b",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -250,15 +299,15 @@
     {
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
-      "byte_length": 176811,
-      "sha256": "c9acc9934b3ce89505046049d4c125f4fde7d03224ffeeb0f22d10c7b22e1774",
+      "byte_length": 177996,
+      "sha256": "c309da38f12101d77c4de1caa49ef443252cac6238b49692182851c2cf894bda",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 500480,
-      "sha256": "84739ad8b78bae49ea1f992672101bd83135415042cb22a85dbcbf5c878fc097",
+      "byte_length": 500241,
+      "sha256": "972e2a6b1099267e11d9a34e73fd38b20fc217a3dd79bd9a0f1f060b680ba2ba",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

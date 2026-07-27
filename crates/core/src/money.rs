@@ -7,9 +7,9 @@ use rust_decimal::prelude::ToPrimitive;
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsCoreMoney {
-    pub amount: crate::RadrootsCoreDecimal,
-    pub currency: crate::RadrootsCoreCurrency,
+pub struct Money {
+    pub amount: crate::Decimal,
+    pub currency: crate::Currency,
 }
 
 #[non_exhaustive]
@@ -35,16 +35,16 @@ impl fmt::Display for RadrootsCoreMoneyInvariantError {
 #[cfg(feature = "std")]
 impl std::error::Error for RadrootsCoreMoneyInvariantError {}
 
-impl RadrootsCoreMoney {
+impl Money {
     #[inline]
-    pub fn new(amount: crate::RadrootsCoreDecimal, currency: crate::RadrootsCoreCurrency) -> Self {
+    pub fn new(amount: crate::Decimal, currency: crate::Currency) -> Self {
         Self { amount, currency }
     }
 
     #[inline]
-    pub fn zero(currency: crate::RadrootsCoreCurrency) -> Self {
+    pub fn zero(currency: crate::Currency) -> Self {
         Self {
-            amount: crate::RadrootsCoreDecimal::ZERO,
+            amount: crate::Decimal::ZERO,
             currency,
         }
     }
@@ -97,24 +97,24 @@ impl RadrootsCoreMoney {
     }
 
     #[inline]
-    pub fn mul_decimal(&self, factor: crate::RadrootsCoreDecimal) -> Self {
+    pub fn mul_decimal(&self, factor: crate::Decimal) -> Self {
         Self::new(self.amount * factor, self.currency)
     }
 
     #[inline]
-    pub fn div_decimal(&self, divisor: crate::RadrootsCoreDecimal) -> Self {
+    pub fn div_decimal(&self, divisor: crate::Decimal) -> Self {
         Self::new(self.amount / divisor, self.currency)
     }
 
     #[inline]
-    pub fn from_minor_units_u64(amount_minor: u64, currency: crate::RadrootsCoreCurrency) -> Self {
+    pub fn from_minor_units_u64(amount_minor: u64, currency: crate::Currency) -> Self {
         let e = currency.minor_unit_exponent();
         let major = Decimal::from_i128_with_scale(amount_minor as i128, e);
-        Self::new(crate::RadrootsCoreDecimal(major), currency)
+        Self::new(crate::Decimal(major), currency)
     }
 
     #[inline]
-    pub fn from_minor_units_u32(amount_minor: u32, currency: crate::RadrootsCoreCurrency) -> Self {
+    pub fn from_minor_units_u32(amount_minor: u32, currency: crate::Currency) -> Self {
         Self::from_minor_units_u64(amount_minor as u64, currency)
     }
 
@@ -175,7 +175,7 @@ impl RadrootsCoreMoney {
     }
 }
 
-impl fmt::Display for RadrootsCoreMoney {
+impl fmt::Display for Money {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.amount, self.currency)
     }
@@ -183,19 +183,22 @@ impl fmt::Display for RadrootsCoreMoney {
 
 use core::ops::{Div, Mul};
 
-impl Mul<crate::RadrootsCoreDecimal> for RadrootsCoreMoney {
+impl Mul<crate::Decimal> for Money {
     type Output = Self;
-    fn mul(self, rhs: crate::RadrootsCoreDecimal) -> Self {
+    fn mul(self, rhs: crate::Decimal) -> Self {
         self.mul_decimal(rhs)
     }
 }
 
-impl Div<crate::RadrootsCoreDecimal> for RadrootsCoreMoney {
+impl Div<crate::Decimal> for Money {
     type Output = Self;
-    fn div(self, rhs: crate::RadrootsCoreDecimal) -> Self {
+    fn div(self, rhs: crate::Decimal) -> Self {
         self.div_decimal(rhs)
     }
 }
+
+#[deprecated(since = "0.1.0", note = "renamed to `Money`")]
+pub use self::Money as RadrootsCoreMoney;
 
 #[cfg(test)]
 mod tests {
@@ -203,10 +206,10 @@ mod tests {
 
     #[test]
     fn pow10_internal_paths_cover_fallback_branches() {
-        assert_eq!(RadrootsCoreMoney::pow10(0), Decimal::ONE);
-        assert_eq!(RadrootsCoreMoney::pow10(1), Decimal::from(10u32));
-        assert_eq!(RadrootsCoreMoney::pow10(2), Decimal::from(100u32));
-        assert_eq!(RadrootsCoreMoney::pow10(3), Decimal::from(1_000u32));
-        assert_eq!(RadrootsCoreMoney::pow10(6), Decimal::from(1_000_000u32));
+        assert_eq!(Money::pow10(0), Decimal::ONE);
+        assert_eq!(Money::pow10(1), Decimal::from(10u32));
+        assert_eq!(Money::pow10(2), Decimal::from(100u32));
+        assert_eq!(Money::pow10(3), Decimal::from(1_000u32));
+        assert_eq!(Money::pow10(6), Decimal::from(1_000_000u32));
     }
 }

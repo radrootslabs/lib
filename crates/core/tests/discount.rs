@@ -1,18 +1,18 @@
 mod common;
 
 use radroots_core::{
-    RadrootsCoreDiscount, RadrootsCoreDiscountScope, RadrootsCoreDiscountThreshold,
-    RadrootsCoreDiscountValue, RadrootsCorePercent, RadrootsCoreUnit,
+    Percent, RadrootsCoreDiscount, RadrootsCoreDiscountScope, RadrootsCoreDiscountThreshold,
+    RadrootsCoreDiscountValue, Unit,
 };
 
 #[test]
 fn is_non_negative_validates_discount_shapes() {
     let money_pos = common::money("1", "USD");
     let money_neg = common::money("-1", "USD");
-    let qty_pos = common::qty("1", RadrootsCoreUnit::Each);
-    let qty_neg = common::qty("-1", RadrootsCoreUnit::Each);
-    let pct_pos = RadrootsCorePercent::new(common::dec("10"));
-    let pct_neg = RadrootsCorePercent::new(common::dec("-5"));
+    let qty_pos = common::qty("1", Unit::Each);
+    let qty_neg = common::qty("-1", Unit::Each);
+    let pct_pos = Percent::new(common::dec("10"));
+    let pct_neg = Percent::new(common::dec("-5"));
 
     let d = RadrootsCoreDiscount {
         scope: RadrootsCoreDiscountScope::Bin,

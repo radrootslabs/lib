@@ -247,6 +247,34 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "Cargo.toml",
     },
     SourceSpec {
+        role: "core_currency_value_authority",
+        path: "crates/core/src/currency.rs",
+    },
+    SourceSpec {
+        role: "core_decimal_value_authority",
+        path: "crates/core/src/decimal.rs",
+    },
+    SourceSpec {
+        role: "core_money_value_authority",
+        path: "crates/core/src/money.rs",
+    },
+    SourceSpec {
+        role: "core_percent_value_authority",
+        path: "crates/core/src/percent.rs",
+    },
+    SourceSpec {
+        role: "core_quantity_value_authority",
+        path: "crates/core/src/quantity.rs",
+    },
+    SourceSpec {
+        role: "core_quantity_price_value_authority",
+        path: "crates/core/src/quantity_price.rs",
+    },
+    SourceSpec {
+        role: "core_unit_value_authority",
+        path: "crates/core/src/unit.rs",
+    },
+    SourceSpec {
         role: "event_store_error_and_limits",
         path: "crates/event_store/src/error.rs",
     },
@@ -319,6 +347,13 @@ pub(super) fn source_contract_fixture_source_paths() -> Vec<&'static str> {
 
 const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "Cargo.toml",
+    "crates/core/src/currency.rs",
+    "crates/core/src/decimal.rs",
+    "crates/core/src/money.rs",
+    "crates/core/src/percent.rs",
+    "crates/core/src/quantity.rs",
+    "crates/core/src/quantity_price.rs",
+    "crates/core/src/unit.rs",
     "crates/event_store/src/error.rs",
     "crates/event_store/src/generated.rs",
     "crates/event_store/src/lib.rs",
@@ -329,6 +364,11 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_store/src/store.rs",
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
 ];
+
+#[cfg(test)]
+pub(super) fn predecessor_superseded_source_paths() -> &'static [&'static str] {
+    PREDECESSOR_SUPERSEDED_SOURCE_PATHS
+}
 
 const GENERATED_ARTIFACT_PATHS: &[&str] = &[
     MANIFEST_RELATIVE,

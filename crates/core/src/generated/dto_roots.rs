@@ -8,13 +8,11 @@ pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescrip
         ::dto_bindgen::export::RootDescriptor::new::<crate::discount::RadrootsCoreDiscountThreshold>(
         ),
         ::dto_bindgen::export::RootDescriptor::new::<crate::discount::RadrootsCoreDiscountValue>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::money::RadrootsCoreMoney>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::percent::RadrootsCorePercent>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::quantity::RadrootsCoreQuantity>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::quantity_price::RadrootsCoreQuantityPrice,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::unit::RadrootsCoreUnit>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::unit::RadrootsCoreUnitDimension>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::money::Money>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::percent::Percent>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::quantity::Quantity>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::quantity_price::QuantityPrice>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::unit::Unit>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::unit::UnitDimension>(),
     ]
 }

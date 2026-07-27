@@ -23,7 +23,7 @@ pub enum RadrootsCoreDiscountScope {
 )]
 pub enum RadrootsCoreDiscountThreshold {
     BinCount { bin_id: String, min: u32 },
-    OrderQuantity { min: crate::RadrootsCoreQuantity },
+    OrderQuantity { min: crate::Quantity },
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -35,8 +35,8 @@ pub enum RadrootsCoreDiscountThreshold {
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
 )]
 pub enum RadrootsCoreDiscountValue {
-    MoneyPerBin(crate::RadrootsCoreMoney),
-    Percent(crate::RadrootsCorePercent),
+    MoneyPerBin(crate::Money),
+    Percent(crate::Percent),
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
