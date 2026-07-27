@@ -1,15 +1,18 @@
 [package]
-name = "radroots_transport"
+name = "radroots-transport"
 publish = false
-version = "1.0.0-alpha.1"
+version = "0.1.0"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Transport-neutral delivery model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_transport"
 
 [features]
 default = ["serde"]
@@ -23,5 +26,5 @@ sha2 = { workspace = true, default-features = false }
 futures = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

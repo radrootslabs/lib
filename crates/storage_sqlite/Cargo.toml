@@ -1,0 +1,18 @@
+[package]
+name = "radroots-storage-sqlite"
+description = "SQLite storage backend for Radroots"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+name = "radroots_storage_sqlite"
+
+[lints]
+workspace = true

@@ -21,40 +21,10 @@ use radroots_runtime_paths::{
     RadrootsHostEnvironment, RadrootsPathOverrides, RadrootsPathProfile, RadrootsPathResolver,
     RadrootsPlatform,
 };
-use std::{
-    ffi::OsString,
-    path::PathBuf,
-    sync::{Mutex, OnceLock},
-};
+use std::path::PathBuf;
 use test_fixtures::{ApprovedFixtureIdentity, FIXTURE_ALICE, FIXTURE_BOB};
 
-fn home_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-struct EnvVarGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl EnvVarGuard {
-    fn remove(key: &'static str) -> Self {
-        let previous = std::env::var_os(key);
-        unsafe { std::env::remove_var(key) };
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(value) = self.previous.as_ref() {
-            unsafe { std::env::set_var(self.key, value) };
-        } else {
-            unsafe { std::env::remove_var(self.key) };
-        }
-    }
-}
+const MISSING_HOME_CHILD: &str = "RADROOTS_IDENTITY_MISSING_HOME_CHILD";
 
 fn fixture_keys(fixture: ApprovedFixtureIdentity) -> nostr::Keys {
     let secret = nostr::SecretKey::from_hex(fixture.secret_key_hex).unwrap();
@@ -638,9 +608,29 @@ fn default_path_for_reports_missing_home_dir() {
 
 #[test]
 fn load_or_generate_without_explicit_path_propagates_default_path_errors() {
-    let _lock = home_env_lock().lock().unwrap();
-    let _guard = EnvVarGuard::remove("HOME");
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "load_or_generate_without_explicit_path_child",
+            "--nocapture",
+        ])
+        .env_remove("HOME")
+        .env(MISSING_HOME_CHILD, "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "child test failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
 
+#[test]
+fn load_or_generate_without_explicit_path_child() {
+    if std::env::var_os(MISSING_HOME_CHILD).is_none() {
+        return;
+    }
     let err = RadrootsIdentity::load_or_generate::<&std::path::Path>(None, false).unwrap_err();
     assert!(matches!(err, IdentityError::Paths(_)));
 }

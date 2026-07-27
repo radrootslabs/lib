@@ -1,16 +1,19 @@
 [package]
-name = "radroots_nostr_connect"
+name = "radroots-nostr-connect"
 publish = false
-version = "1.0.0-alpha.1"
+version = "0.1.0"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "NIP-46 protocol model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots_nostr_connect"
-readme = "README"
+documentation = "https://docs.rs/radroots-nostr-connect"
+readme = "README.md"
+
+[lib]
+name = "radroots_nostr_connect"
 
 [dependencies]
 nostr = { workspace = true, features = ["nip44"] }
@@ -22,5 +25,5 @@ url = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

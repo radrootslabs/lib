@@ -1,4 +1,4 @@
-# radroots_core
+# radroots-core
 
 This is the README for `radroots_core`, which provides core value types and
 unit semantics for the `radroots` core libraries.

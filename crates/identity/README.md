@@ -1,4 +1,4 @@
-# radroots_identity
+# radroots-identity
 
 This is the README for `radroots_identity`, which provides identity models,
 encrypted file storage, and profile utilities for the `radroots` core

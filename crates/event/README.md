@@ -1,4 +1,4 @@
-# radroots_event
+# radroots-event
 
 This is the README for `radroots_event`, which provides typed `radroots` event
 models, kinds, and tag conventions for the `radroots` core libraries.

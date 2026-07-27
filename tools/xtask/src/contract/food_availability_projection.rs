@@ -2638,13 +2638,17 @@ fn validate_blossom_dependency_values(
         .and_then(toml::Value::as_table)
         .ok_or_else(|| "Cargo.toml must define workspace dependency radroots_blossom".to_owned())?;
     if workspace_dependency
-        .get("path")
+        .get("package")
         .and_then(toml::Value::as_str)
-        != Some("crates/blossom")
+        != Some("radroots-blossom")
+        || workspace_dependency
+            .get("path")
+            .and_then(toml::Value::as_str)
+            != Some("crates/blossom")
         || workspace_dependency
             .get("version")
             .and_then(toml::Value::as_str)
-            != Some("=1.0.0-alpha.1")
+            != Some("=0.1.0")
         || workspace_dependency
             .get("default-features")
             .and_then(toml::Value::as_bool)

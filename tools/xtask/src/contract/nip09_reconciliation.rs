@@ -236,7 +236,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "0aa0aeb7988745aad1101c820a340c8ac04a5833c2ec7f7c997b5d9dfac010a3",
+        "2a5e34872160a39daf03ffd15f32fc824e91b2c0253b4bca84c6610b0238ca32",
     ),
 ];
 
@@ -577,7 +577,11 @@ const RUNTIME_DEPENDENCY_ROOTS: [RuntimeDependencyRootSpec; 10] = [
 
 #[derive(Clone, Copy)]
 struct CargoPackageFeatureSpec {
+    // The reconciliation manifest predates the Cargo package-name migration and
+    // records the Rust crate identifier. Keep that immutable identifier separate
+    // from the package name validated in the current Cargo manifest.
     package: &'static str,
+    cargo_package_name: &'static str,
     manifest_path: &'static str,
     default_features_enabled: bool,
     selected_features: &'static [&'static str],
@@ -587,6 +591,7 @@ struct CargoPackageFeatureSpec {
 const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     CargoPackageFeatureSpec {
         package: "radroots_core",
+        cargo_package_name: "radroots-core",
         manifest_path: CORE_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["serde", "std"],
@@ -594,6 +599,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event_store",
+        cargo_package_name: "radroots_event_store",
         manifest_path: EVENT_STORE_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: true,
         selected_features: &["runtime-tokio", "sqlite"],
@@ -601,6 +607,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event_codec",
+        cargo_package_name: "radroots-event-codec",
         manifest_path: EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["nostr", "serde", "serde_json", "std"],
@@ -608,6 +615,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event",
+        cargo_package_name: "radroots-event",
         manifest_path: EVENT_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["serde", "std"],
@@ -615,6 +623,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_blossom",
+        cargo_package_name: "radroots-blossom",
         manifest_path: BLOSSOM_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["std"],
@@ -14383,22 +14392,54 @@ xtask = "run -q -p xtask --"
     }
 
     let governed_packages = [
-        (CORE_CARGO_MANIFEST_RELATIVE, "radroots_core"),
-        (EVENT_CARGO_MANIFEST_RELATIVE, "radroots_event"),
-        (EVENT_CODEC_CARGO_MANIFEST_RELATIVE, "radroots_event_codec"),
-        (BLOSSOM_CARGO_MANIFEST_RELATIVE, "radroots_blossom"),
-        (EVENT_STORE_CARGO_MANIFEST_RELATIVE, "radroots_event_store"),
-        (TRANSPORT_CARGO_MANIFEST_RELATIVE, "radroots_transport"),
+        (
+            CORE_CARGO_MANIFEST_RELATIVE,
+            "radroots-core",
+            "0.1.0",
+            Some("radroots_core"),
+        ),
+        (
+            EVENT_CARGO_MANIFEST_RELATIVE,
+            "radroots-event",
+            "0.1.0",
+            Some("radroots_event"),
+        ),
+        (
+            EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
+            "radroots-event-codec",
+            "0.1.0",
+            Some("radroots_event_codec"),
+        ),
+        (
+            BLOSSOM_CARGO_MANIFEST_RELATIVE,
+            "radroots-blossom",
+            "0.1.0",
+            Some("radroots_blossom"),
+        ),
+        (
+            EVENT_STORE_CARGO_MANIFEST_RELATIVE,
+            "radroots_event_store",
+            "1.0.0-alpha.1",
+            None,
+        ),
+        (
+            TRANSPORT_CARGO_MANIFEST_RELATIVE,
+            "radroots-transport",
+            "0.1.0",
+            Some("radroots_transport"),
+        ),
     ];
     let mut actual_identities = Vec::new();
-    for (relative, expected_package_name) in governed_packages {
+    for (relative, expected_package_name, expected_version, expected_crate_name) in
+        governed_packages
+    {
         let manifest = parse_cargo_manifest(workspace_root, relative)?;
         let package = manifest
             .get("package")
             .and_then(toml::Value::as_table)
             .ok_or_else(|| format!("{relative} must declare [package]"))?;
         if package.get("name").and_then(toml::Value::as_str) != Some(expected_package_name)
-            || package.get("version").and_then(toml::Value::as_str) != Some("1.0.0-alpha.1")
+            || package.get("version").and_then(toml::Value::as_str) != Some(expected_version)
             || package
                 .get("edition")
                 .and_then(toml::Value::as_table)
@@ -14413,8 +14454,21 @@ xtask = "run -q -p xtask --"
                 != Some(true)
         {
             return Err(format!(
-                "{relative} compiler package identity must remain {expected_package_name} 1.0.0-alpha.1 with workspace edition and rust-version"
+                "{relative} compiler package identity must remain {expected_package_name} {expected_version} with workspace edition and rust-version"
             ));
+        }
+        match (expected_crate_name, manifest.get("lib")) {
+            (None, None) => {}
+            (Some(expected), Some(lib))
+                if lib.as_table().is_some_and(|lib| {
+                    lib.len() == 1
+                        && lib.get("name").and_then(toml::Value::as_str) == Some(expected)
+                }) => {}
+            _ => {
+                return Err(format!(
+                    "{relative} must preserve its exact Rust crate name without target-path authority"
+                ));
+            }
         }
         if [
             "build",
@@ -14434,7 +14488,6 @@ xtask = "run -q -p xtask --"
         if [
             "build-dependencies",
             "target",
-            "lib",
             "bin",
             "example",
             "test",
@@ -14671,10 +14724,10 @@ fn describe_cargo_package_features(
         .and_then(|package| package.get("name"))
         .and_then(toml::Value::as_str)
         .ok_or_else(|| format!("{} must declare package.name", spec.manifest_path))?;
-    if package_name != spec.package {
+    if package_name != spec.cargo_package_name {
         return Err(format!(
             "{} package.name must be {}",
-            spec.manifest_path, spec.package
+            spec.manifest_path, spec.cargo_package_name
         ));
     }
     let feature_table = manifest
@@ -20473,8 +20526,8 @@ pub(crate) fn migration_for_version"#,
         let cargo_lock_path = workspace.path().join(CARGO_LOCK_RELATIVE);
         let cargo_lock = fs::read_to_string(&cargo_lock_path).expect("Cargo.lock");
         let transport_lock_package = r#"[[package]]
-name = "radroots_transport"
-version = "1.0.0-alpha.1"
+name = "radroots-transport"
+version = "0.1.0"
 dependencies = [
  "futures",
  "serde",
@@ -20483,8 +20536,8 @@ dependencies = [
 ]
 "#;
         let future_transport_lock_package = r#"[[package]]
-name = "radroots_transport"
-version = "1.0.0-alpha.1"
+name = "radroots-transport"
+version = "0.1.0"
 dependencies = [
  "futures",
  "serde",

@@ -1,4 +1,4 @@
-# radroots_blossom
+# radroots-blossom
 
 `radroots_blossom` provides portable, runtime-independent primitives for
 Blossom blob hashes, root hash paths, blob URLs, BUD-02 descriptors,

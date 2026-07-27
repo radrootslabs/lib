@@ -1,16 +1,19 @@
 [package]
-name = "radroots_trade"
+name = "radroots-trade"
 publish = false
-version = "1.0.0-alpha.1"
+version = "0.1.0"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Trade domain model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots_trade"
-readme = "README"
+documentation = "https://docs.rs/radroots-trade"
+readme = "README.md"
+
+[lib]
+name = "radroots_trade"
 
 [features]
 default = ["std", "serde", "serde_json"]
@@ -90,5 +93,5 @@ sqlx = { workspace = true, default-features = false, features = [
 ] }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

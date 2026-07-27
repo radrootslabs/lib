@@ -1,4 +1,4 @@
-# radroots_trade
+# radroots-trade
 
 This is the README for `radroots_trade`, which provides shared trade workflow
 helpers for the `radroots` core libraries.

@@ -152,8 +152,8 @@
     {
       "role": "workspace_dependency_authority",
       "path": "Cargo.toml",
-      "byte_length": 11092,
-      "sha256": "812ce187ddab5e4b95e61b0af42333f41fd772d5dfdc76b72093ef33b3dcdf47",
+      "byte_length": 11546,
+      "sha256": "0378afe281a46e02e83e128324efefc3da950abf3e1d3d06c75b628f69810bd2",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -236,15 +236,15 @@
     {
       "role": "predecessor_successor_governance",
       "path": "tools/xtask/src/contract/food_availability_projection.rs",
-      "byte_length": 194901,
-      "sha256": "01fe9546c95244b4197b3d2a6cec3d72e1f7c48f088bc93f168b5e2e4977b048",
+      "byte_length": 195036,
+      "sha256": "d3c567ea3b4ea709723af2d5b6a2dc47993c6ba42c1d62895bd26fa101ebf829",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 833937,
-      "sha256": "ee111a10b9b51f213d7c18558aaffb3bc4054449ca585be8f8ea1a9dbd464f60",
+      "byte_length": 835585,
+      "sha256": "51d524cb00d2d96dc0da35fc9133c54f2e5328a830d56b8d5e83a7f1e9654ddc",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -257,8 +257,8 @@
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 499596,
-      "sha256": "ece5990259eeacac8bb12a27e89f889f82f8641b958103a0ef97eaa6d2f66fb0",
+      "byte_length": 500480,
+      "sha256": "84739ad8b78bae49ea1f992672101bd83135415042cb22a85dbcbf5c878fc097",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

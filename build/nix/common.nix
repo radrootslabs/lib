@@ -94,16 +94,16 @@ let
   releaseRuntimeInputs = coverageRuntimeInputs;
   coreContractCrates = [
     "xtask"
-    "radroots_blossom"
-    "radroots_core"
-    "radroots_event"
-    "radroots_trade"
-    "radroots_identity"
+    "radroots-blossom"
+    "radroots-core"
+    "radroots-event"
+    "radroots-trade"
+    "radroots-identity"
     "radroots_replica_schema"
-    "radroots_event_codec"
+    "radroots-event-codec"
     "radroots_event_store"
-    "radroots_nostr"
-    "radroots_nostr_connect"
+    "radroots-nostr"
+    "radroots-nostr-connect"
     "radroots_nostr_signer"
   ];
   coreContractCargoArgs =

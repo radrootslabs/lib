@@ -51,19 +51,12 @@ external_packages = ["radroots-sdk", "radroots"]
 [workspace_classification]
 private = [
   "radroots_authority",
-  "radroots_blossom",
-  "radroots_core",
-  "radroots_event",
-  "radroots_event_codec",
   "radroots_event_index",
   "radroots_event_store",
   "radroots_geocoder",
-  "radroots_identity",
   "radroots_log",
   "radroots_net",
-  "radroots_nostr",
   "radroots_nostr_accounts",
-  "radroots_nostr_connect",
   "radroots_nostr_runtime",
   "radroots_nostr_signer",
   "radroots_outbox",
@@ -76,9 +69,6 @@ private = [
   "radroots_runtime_store",
   "radroots_secret_vault",
   "radroots_sql_core",
-  "radroots_trade",
-  "radroots_transport",
-  "radroots_transport_nostr",
   "radroots_transport_publish_protocol",
 ]
 build_codegen = ["xtask"]

@@ -1,4 +1,4 @@
-# radroots_nostr
+# radroots-nostr
 
 This is the README for `radroots_nostr`, which provides shared Nostr protocol
 primitives for the `radroots` core libraries.

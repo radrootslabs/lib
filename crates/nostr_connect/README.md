@@ -1,4 +1,4 @@
-# radroots_nostr_connect
+# radroots-nostr-connect
 
 This is the README for `radroots_nostr_connect`, which provides NIP-46
 connection and URI models for the `radroots` core libraries.

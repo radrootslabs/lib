@@ -3141,6 +3141,7 @@ struct WorkspaceReleaseClassification {
 struct CratesReleaseArchitecture {
     spec_id: String,
     package_count: usize,
+    initial_version: String,
     repositories: CratesReleaseRepositories,
     package: Vec<CratesReleasePackage>,
 }
@@ -3829,27 +3830,46 @@ fn validate_workspace_version_lockstep(
         ));
     }
 
-    let exact_requirement = format!("={contract_version}");
+    let architecture_path = workspace_root.join("docs/specs/radroots_crates_release_v1.toml");
+    let public_versions = if architecture_path.is_file() {
+        let architecture = parse_toml::<CratesReleaseArchitecture>(&architecture_path)?;
+        architecture
+            .repositories
+            .lib
+            .packages
+            .into_iter()
+            .map(|name| (name, architecture.initial_version.clone()))
+            .collect::<BTreeMap<_, _>>()
+    } else {
+        BTreeMap::new()
+    };
     let mut governed_packages = BTreeMap::new();
     for member in &workspace_manifest.workspace.members {
         let package_path = workspace_root.join(member).join("Cargo.toml");
         let package = parse_toml::<VersionedPackageCargoManifest>(&package_path)?;
+        let expected_version = public_versions
+            .get(&package.package.name)
+            .map_or(contract_version, String::as_str);
         match package.package.version {
-            PackageVersionSource::Literal(ref version) if version == contract_version => {}
+            PackageVersionSource::Literal(ref version) if version == expected_version => {}
             PackageVersionSource::Literal(version) => {
                 return Err(format!(
-                    "workspace member {member} package version {version} must match contract version {contract_version}"
+                    "workspace member {member} package version {version} must match governed version {expected_version}"
                 ));
             }
             PackageVersionSource::Workspace { workspace } => {
                 return Err(format!(
-                    "workspace member {member} must set an explicit package version {contract_version}, not version.workspace = {workspace}, so mounted path consumers preserve the public package version"
+                    "workspace member {member} must set an explicit package version {expected_version}, not version.workspace = {workspace}, so mounted path consumers preserve the governed package version"
                 ));
             }
         }
-        governed_packages.insert(member.clone(), package.package.name.clone());
+        governed_packages.insert(
+            member.clone(),
+            (package.package.name.clone(), expected_version.to_owned()),
+        );
 
         if package.package.name.starts_with("radroots_") {
+            let exact_requirement = format!("={expected_version}");
             let dependency = workspace_manifest
                 .workspace
                 .dependencies
@@ -3879,25 +3899,26 @@ fn validate_workspace_version_lockstep(
         let Some(path) = dependency.path.as_deref() else {
             continue;
         };
-        if governed_packages.contains_key(path)
-            && dependency.version.as_deref() != Some(exact_requirement.as_str())
-        {
+        let Some((_, expected_version)) = governed_packages.get(path) else {
+            continue;
+        };
+        let exact_requirement = format!("={expected_version}");
+        if dependency.version.as_deref() != Some(exact_requirement.as_str()) {
             return Err(format!(
                 "workspace path dependency {dependency_name} version must be the exact requirement {exact_requirement}"
             ));
         }
     }
 
-    validate_cargo_lock_version_lockstep(workspace_root, contract_version, &governed_packages)
+    validate_cargo_lock_version_lockstep(workspace_root, &governed_packages)
 }
 
 fn validate_cargo_lock_version_lockstep(
     workspace_root: &Path,
-    contract_version: &str,
-    governed_packages: &BTreeMap<String, String>,
+    governed_packages: &BTreeMap<String, (String, String)>,
 ) -> Result<(), String> {
     let lock = parse_toml::<CargoLockManifest>(&workspace_root.join("Cargo.lock"))?;
-    for (member, package_name) in governed_packages {
+    for (member, (package_name, expected_version)) in governed_packages {
         let workspace_entries = lock
             .package
             .iter()
@@ -3908,9 +3929,9 @@ fn validate_cargo_lock_version_lockstep(
                 "Cargo.lock must contain exactly one source-free entry for workspace member {member} ({package_name})"
             ));
         }
-        if workspace_entries[0].version != contract_version {
+        if workspace_entries[0].version != *expected_version {
             return Err(format!(
-                "Cargo.lock package {package_name} version {} must match contract version {contract_version}",
+                "Cargo.lock package {package_name} version {} must match governed version {expected_version}",
                 workspace_entries[0].version
             ));
         }
@@ -12444,7 +12465,7 @@ crates = ["radroots_a"]
             .collect::<Vec<_>>()
             .join(", ");
         let mut architecture = format!(
-            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\n\n[repositories.lib]\npackages = [\"package-01\"]\n\n[repositories.sdk]\npackages = [{external_toml}]\n"
+            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\ninitial_version = \"0.1.0\"\n\n[repositories.lib]\npackages = [\"package-01\"]\n\n[repositories.sdk]\npackages = [{external_toml}]\n"
         );
         for name in &approved {
             architecture.push_str(&format!("\n[[package]]\nname = \"{name}\"\n"));

@@ -1,16 +1,19 @@
 [package]
-name = "radroots_identity"
+name = "radroots-identity"
 publish = false
-version = "1.0.0-alpha.1"
+version = "0.1.0"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Identity model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots_identity"
-readme = "README"
+documentation = "https://docs.rs/radroots-identity"
+readme = "README.md"
+
+[lib]
+name = "radroots_identity"
 
 [features]
 default = ["std", "json-file", "nip49"]
@@ -44,5 +47,5 @@ zeroize = { workspace = true, optional = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true
