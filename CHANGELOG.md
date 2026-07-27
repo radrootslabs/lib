@@ -30,6 +30,15 @@ publish policy both pass for the same source revision.
   authenticated schema status and owned open-time migration. A machine-readable
   matrix now governs no-default, SQLite, Tokio, event-store-adapter, and
   all-feature builds.
+<!-- release-change: outbox-phase1-publication-state -->
+- Outbox schema version `2` adds an isolated typed Phase 1 publication state
+  machine. Enqueue accepts only sealed allowlisted artifacts with complete
+  media-readiness bindings, persists exact canonical bytes and raw fixed-width
+  operation identities, and uses bounded canonical relay targets. Revision-CAS
+  transitions and opaque expiring claims fence signing and target workers;
+  signed-event bytes are immutable, while dispatch intent, uncertain results,
+  receipts, and accepted-observation repair identities remain durable without
+  performing network publication.
 - Event-store schema initialization now uses a transactional, checksummed
   migration authority with exact legacy-baseline adoption, shared-database
   catalog scoping, tamper-evident fail-closed managed history, exact catalog

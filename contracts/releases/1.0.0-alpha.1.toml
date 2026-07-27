@@ -560,3 +560,16 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Replace raw outbox migration SQL and live migrate-down with an append-only generated registry, immutable checksums, exact unledgered-0001 adoption, a tamper-evident ledger and catalog fingerprint, registry-derived version bounds, governed feature profiles, and an executable conformance contract while freezing the 0001 migration bytes."
+
+[[changes]]
+id = "outbox-phase1-publication-state"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "change_exported_algorithm_behavior",
+]
+summary = "Add authenticated schema version 2 and a sealed Phase 1 publication state machine that persists exact artifact, readiness, signed-event, target-policy, dispatch-intent, receipt, and observation-repair authority under bounded canonical targets, stable raw fixed-width identities, revision compare-and-swap, and opaque expiring claims without performing network publication."

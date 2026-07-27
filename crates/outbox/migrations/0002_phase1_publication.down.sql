@@ -1,0 +1,5 @@
+DROP TABLE outbox_phase1_observation_repair;
+DROP TABLE outbox_phase1_target_receipt;
+DROP TABLE outbox_phase1_dispatch_intent;
+DROP TABLE outbox_phase1_delivery_target;
+DROP TABLE outbox_phase1_publication;

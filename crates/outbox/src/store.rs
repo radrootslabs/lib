@@ -48,7 +48,7 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RadrootsOutbox {
-    pool: SqlitePool,
+    pub(crate) pool: SqlitePool,
     _file_lease: Option<Arc<OutboxFileLease>>,
 }
 

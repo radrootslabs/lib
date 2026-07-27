@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://radroots.org/contracts/outbox/phase1_publication_v1.manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_id": {
+      "const": "radroots_outbox.phase1_publication.v1"
+    },
+    "descriptor": {
+      "$ref": "#/$defs/file"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "migration": {
+      "additionalProperties": false,
+      "properties": {
+        "down": {
+          "$ref": "#/$defs/file"
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "up": {
+          "$ref": "#/$defs/file"
+        },
+        "version": {
+          "const": 2
+        }
+      },
+      "required": [
+        "version",
+        "schema_sha256",
+        "up",
+        "down"
+      ],
+      "type": "object"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "change_id": {
+          "const": "outbox-phase1-publication-state"
+        },
+        "changelog": {
+          "const": "CHANGELOG.md"
+        },
+        "record": {
+          "const": "contracts/releases/1.0.0-alpha.1.toml"
+        }
+      },
+      "required": [
+        "change_id",
+        "record",
+        "changelog"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "$ref": "#/$defs/file"
+        },
+        "executor": {
+          "$ref": "#/$defs/file"
+        },
+        "executor_id": {
+          "const": "radroots_outbox.phase1_publication.v1.result_vector_executor.v1"
+        },
+        "executor_test": {
+          "const": "phase1_publication_v1_result_vector"
+        },
+        "mirror_path": {
+          "const": "crates/outbox/tests/fixtures/phase1_publication.v1.json"
+        }
+      },
+      "required": [
+        "canonical",
+        "mirror_path",
+        "executor",
+        "executor_id",
+        "executor_test"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "$ref": "#/$defs/file"
+          },
+          "role": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "file"
+        ],
+        "type": "object"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "type": "array"
+    },
+    "state_machine": {
+      "additionalProperties": false,
+      "properties": {
+        "event_state_count": {
+          "const": 9
+        },
+        "stable_error_count": {
+          "const": 25
+        },
+        "target_state_count": {
+          "const": 8
+        },
+        "transition_count": {
+          "const": 25
+        }
+      },
+      "required": [
+        "event_state_count",
+        "target_state_count",
+        "transition_count",
+        "stable_error_count"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "manifest_schema",
+    "descriptor",
+    "migration",
+    "state_machine",
+    "result_vector",
+    "source_files",
+    "release"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_outbox.phase1_publication.v1",
+  "executor": {
+    "id": "radroots_outbox.phase1_publication.v1.result_vector_executor.v1",
+    "path": "crates/outbox/tests/phase1_publication_v1_result_vector.rs",
+    "test": "phase1_publication_v1_result_vector"
+  },
+  "identity_vector": {
+    "fixture": "update",
+    "target_uri": "wss://relay.example/",
+    "required_target_count": 1,
+    "artifact_digest": "9ad318496bd4a710fbc7f3e0f6d5a01de808d352db91ca56a12e710904784cc5",
+    "readiness_digest": "bf9c1ff2a2c26d62d45b9f5a1eea727ce8f8d7ee92e749364900c12ff1546be5",
+    "endpoint_fingerprint": "59bf3d289a2344bdc61c426484877df2f122d3936115f45e68e812d2189f21d2",
+    "target_policy_digest": "e7577fbe841b140993f9cf317e1f562d926b64eb19625220a7c0bfaa8bce4fbb",
+    "operation_digest": "01a16b215292e90af4c7a76556a86b54d7910ed01757acc8429bda5f1c5fb72b",
+    "dispatch_digest": "0e35ef0a2769586300ecb3b4760e6a034a60ee68344126dc875168e3876618a4"
+  },
+  "cases": [
+    { "id": "identity_preimages", "execution": "direct_executor", "expected_outcome": "accepted" },
+    { "id": "typed_enqueue", "execution": "direct_executor", "expected_outcome": "accepted" },
+    { "id": "duplicate_enqueue", "execution": "direct_executor", "expected_outcome": "accepted_idempotent" },
+    { "id": "target_count_exact", "execution": "direct_executor", "expected_outcome": "accepted" },
+    { "id": "target_count_one_over", "execution": "direct_executor", "expected_outcome": "rejected", "expected_error": "phase1_publication_target_count" },
+    { "id": "target_uri_exact", "execution": "direct_executor", "expected_outcome": "accepted" },
+    { "id": "target_uri_one_over", "execution": "direct_executor", "expected_outcome": "rejected", "expected_error": "phase1_publication_target_uri_too_large" },
+    { "id": "empty_required_policy", "execution": "direct_executor", "expected_outcome": "rejected", "expected_error": "phase1_publication_required_target_count" },
+    { "id": "two_worker_claim_race", "execution": "direct_executor", "expected_outcome": "one_winner" },
+    { "id": "expired_lease_reclaim", "execution": "direct_executor", "expected_outcome": "accepted" },
+    { "id": "stale_claim_rejected", "execution": "direct_executor", "expected_outcome": "rejected", "expected_error": "phase1_publication_claim_invalid" },
+    { "id": "migration_rollback_reopen", "execution": "direct_executor", "expected_outcome": "accepted" }
+  ]
+}

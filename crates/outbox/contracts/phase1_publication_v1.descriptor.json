@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_outbox.phase1_publication.v1",
+  "migration": {
+    "version": 2,
+    "name": "phase1_publication",
+    "up_path": "crates/outbox/migrations/0002_phase1_publication.up.sql",
+    "up_sha256": "84f0c9897cff8d002961cb6ad9dee53edcf28853d1407483519b00bdbf029308",
+    "down_path": "crates/outbox/migrations/0002_phase1_publication.down.sql",
+    "down_sha256": "57a5a00ca4257973097acf7f5cc64494dd0bc73fcfa00af2e6c8bb1f61823928",
+    "schema_sha256": "a56af9ba400fd51c97d48886fbb3f3733adb97458d7109fa8989c1b7e0c8bcaf"
+  },
+  "resource_limits": {
+    "target_count": 16,
+    "target_uri_bytes": 2048,
+    "diagnostic_bytes": 4096,
+    "claim_lease_millis": 300000
+  },
+  "operation_identity": {
+    "algorithm": "sha256_raw_fixed_width_v1",
+    "domain": "radroots.phase1.publication-operation.v1",
+    "domain_terminator_hex": "00",
+    "preimage": [
+      "artifact_digest_32",
+      "media_readiness_binding_digest_32",
+      "expected_author_32",
+      "target_policy_digest_32"
+    ]
+  },
+  "dispatch_identity": {
+    "algorithm": "sha256_raw_fixed_width_v1",
+    "domain": "radroots.phase1.relay-dispatch.v1",
+    "domain_terminator_hex": "00",
+    "preimage": [
+      "event_id_32",
+      "target_policy_digest_32",
+      "endpoint_fingerprint_32"
+    ]
+  },
+  "event_states": [
+    "ready",
+    "claimed-for-signing",
+    "signed-ready",
+    "dispatching",
+    "published",
+    "failed-retryable",
+    "failed-terminal",
+    "quarantined",
+    "cancelled"
+  ],
+  "target_states": [
+    "pending",
+    "in-flight",
+    "accepted-observation-pending",
+    "accepted-observed",
+    "failed-retryable",
+    "failed-terminal",
+    "uncertain",
+    "cancelled"
+  ],
+  "transitions": [
+    { "id": "claim-ready", "scope": "event", "from": "ready", "to": "claimed-for-signing", "revision_cas": true, "lease_predicate": "absent-or-expired", "durable_side_effect": "replace-claim", "retry_class": "none", "repair_edge": false, "terminal_destination": false },
+    { "id": "reclaim-signing", "scope": "event", "from": "claimed-for-signing", "to": "claimed-for-signing", "revision_cas": true, "lease_predicate": "expired", "durable_side_effect": "replace-claim", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "claim-sign-retry", "scope": "event", "from": "failed-retryable", "to": "claimed-for-signing", "revision_cas": true, "lease_predicate": "absent-or-expired", "durable_side_effect": "replace-claim", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "renew-signing", "scope": "event", "from": "claimed-for-signing", "to": "claimed-for-signing", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "extend-claim", "retry_class": "none", "repair_edge": false, "terminal_destination": false },
+    { "id": "release-signing", "scope": "event", "from": "claimed-for-signing", "to": "ready", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "clear-claim", "retry_class": "none", "repair_edge": false, "terminal_destination": false },
+    { "id": "complete-signing", "scope": "event", "from": "claimed-for-signing", "to": "signed-ready", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-immutable-signed-bytes", "retry_class": "none", "repair_edge": false, "terminal_destination": false },
+    { "id": "retry-signing", "scope": "event", "from": "claimed-for-signing", "to": "failed-retryable", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-bounded-error", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "fail-signing", "scope": "event", "from": "claimed-for-signing", "to": "failed-terminal", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-bounded-error", "retry_class": "terminal", "repair_edge": false, "terminal_destination": true },
+    { "id": "quarantine-signing", "scope": "event", "from": "claimed-for-signing", "to": "quarantined", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-bounded-error", "retry_class": "terminal", "repair_edge": false, "terminal_destination": true },
+    { "id": "cancel-signing", "scope": "event", "from": "claimed-for-signing", "to": "cancelled", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "clear-claim", "retry_class": "terminal", "repair_edge": false, "terminal_destination": true },
+    { "id": "begin-dispatch", "scope": "event", "from": "signed-ready", "to": "dispatching", "revision_cas": true, "lease_predicate": "target-matching-live-token", "durable_side_effect": "persist-dispatch-intent", "retry_class": "none", "repair_edge": false, "terminal_destination": false },
+    { "id": "continue-dispatch", "scope": "event", "from": "dispatching", "to": "dispatching", "revision_cas": true, "lease_predicate": "target-matching-live-token", "durable_side_effect": "persist-dispatch-intent", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "dispatch-published", "scope": "event", "from": "dispatching", "to": "published", "revision_cas": true, "lease_predicate": "target-matching-live-token", "durable_side_effect": "persist-target-receipt", "retry_class": "none", "repair_edge": false, "terminal_destination": true },
+    { "id": "dispatch-waiting", "scope": "event", "from": "dispatching", "to": "signed-ready", "revision_cas": true, "lease_predicate": "target-matching-live-token", "durable_side_effect": "persist-target-result", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "dispatch-exhausted", "scope": "event", "from": "dispatching", "to": "failed-terminal", "revision_cas": true, "lease_predicate": "target-matching-live-token", "durable_side_effect": "persist-target-result", "retry_class": "terminal", "repair_edge": false, "terminal_destination": true },
+    { "id": "claim-target", "scope": "target", "from": "pending", "to": "in-flight", "revision_cas": true, "lease_predicate": "absent-or-expired", "durable_side_effect": "persist-dispatch-intent", "retry_class": "none", "repair_edge": false, "terminal_destination": false },
+    { "id": "retry-target", "scope": "target", "from": "failed-retryable", "to": "in-flight", "revision_cas": true, "lease_predicate": "absent-or-expired", "durable_side_effect": "reuse-dispatch-intent", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "repair-uncertain-target", "scope": "target", "from": "uncertain", "to": "in-flight", "revision_cas": true, "lease_predicate": "absent-or-expired", "durable_side_effect": "reuse-dispatch-intent", "retry_class": "repair", "repair_edge": true, "terminal_destination": false },
+    { "id": "target-accepted-pending", "scope": "target", "from": "in-flight", "to": "accepted-observation-pending", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-receipt-and-repair", "retry_class": "repair", "repair_edge": true, "terminal_destination": false },
+    { "id": "target-accepted", "scope": "target", "from": "in-flight", "to": "accepted-observed", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-receipt", "retry_class": "none", "repair_edge": false, "terminal_destination": true },
+    { "id": "target-retryable", "scope": "target", "from": "in-flight", "to": "failed-retryable", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-bounded-error", "retry_class": "retryable", "repair_edge": false, "terminal_destination": false },
+    { "id": "target-terminal", "scope": "target", "from": "in-flight", "to": "failed-terminal", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-bounded-error", "retry_class": "terminal", "repair_edge": false, "terminal_destination": true },
+    { "id": "target-uncertain", "scope": "target", "from": "in-flight", "to": "uncertain", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "persist-bounded-error", "retry_class": "repair", "repair_edge": true, "terminal_destination": false },
+    { "id": "target-cancelled", "scope": "target", "from": "in-flight", "to": "cancelled", "revision_cas": true, "lease_predicate": "matching-live-token", "durable_side_effect": "clear-claim", "retry_class": "terminal", "repair_edge": false, "terminal_destination": true },
+    { "id": "observation-repaired", "scope": "target", "from": "accepted-observation-pending", "to": "accepted-observed", "revision_cas": true, "lease_predicate": "repair-revision-cas", "durable_side_effect": "complete-repair-and-receipt", "retry_class": "repair", "repair_edge": true, "terminal_destination": true }
+  ],
+  "stable_errors": [
+    "phase1_publication_artifact_invalid",
+    "phase1_publication_claim_invalid",
+    "phase1_publication_diagnostic_too_large",
+    "phase1_publication_entropy_unavailable",
+    "phase1_publication_idempotency_conflict",
+    "phase1_publication_integer_range",
+    "phase1_publication_lease_invalid",
+    "phase1_publication_not_found",
+    "phase1_publication_readiness_invalid",
+    "phase1_publication_required_target_count",
+    "phase1_publication_revision_conflict",
+    "phase1_publication_signed_event_invalid",
+    "phase1_publication_signed_event_mismatch",
+    "phase1_publication_sqlite",
+    "phase1_publication_state_conflict",
+    "phase1_publication_stored_authority_invalid",
+    "phase1_publication_stored_digest_invalid",
+    "phase1_publication_stored_state_invalid",
+    "phase1_publication_stored_value_too_large",
+    "phase1_publication_target_count",
+    "phase1_publication_target_duplicate",
+    "phase1_publication_target_not_found",
+    "phase1_publication_target_uri_invalid",
+    "phase1_publication_target_uri_too_large",
+    "phase1_publication_time_invalid"
+  ]
+}

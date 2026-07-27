@@ -1,0 +1,152 @@
+{
+  "contract_id": "radroots_outbox.phase1_publication.v1",
+  "descriptor": {
+    "byte_length": 10119,
+    "path": "crates/outbox/contracts/phase1_publication_v1.descriptor.json",
+    "sha256": "2a85ff1ff4ef45dcfbac2e255b818000b61a218277b97931dc2af7a489716067"
+  },
+  "manifest_schema": {
+    "byte_length": 3806,
+    "path": "crates/outbox/contracts/phase1_publication_v1.manifest.schema.json",
+    "sha256": "48587292d857b56a97fa053f68712251b16de6e814d3697f13e7e5d5a4497d77"
+  },
+  "migration": {
+    "down": {
+      "byte_length": 208,
+      "path": "crates/outbox/migrations/0002_phase1_publication.down.sql",
+      "sha256": "57a5a00ca4257973097acf7f5cc64494dd0bc73fcfa00af2e6c8bb1f61823928"
+    },
+    "schema_sha256": "a56af9ba400fd51c97d48886fbb3f3733adb97458d7109fa8989c1b7e0c8bcaf",
+    "up": {
+      "byte_length": 5733,
+      "path": "crates/outbox/migrations/0002_phase1_publication.up.sql",
+      "sha256": "84f0c9897cff8d002961cb6ad9dee53edcf28853d1407483519b00bdbf029308"
+    },
+    "version": 2
+  },
+  "release": {
+    "change_id": "outbox-phase1-publication-state",
+    "changelog": "CHANGELOG.md",
+    "record": "contracts/releases/1.0.0-alpha.1.toml"
+  },
+  "result_vector": {
+    "canonical": {
+      "byte_length": 2464,
+      "path": "contracts/conformance/vectors/outbox/phase1_publication.v1.json",
+      "sha256": "0a21d59ce5050a0e27569bbde4dd958483a7d91099eac3a482bc989c80a385eb"
+    },
+    "executor": {
+      "byte_length": 8528,
+      "path": "crates/outbox/tests/phase1_publication_v1_result_vector.rs",
+      "sha256": "8e656a6cf7cdf9366ec815846634998c7ae1e10e33ade31044748cfd6a33ba90"
+    },
+    "executor_id": "radroots_outbox.phase1_publication.v1.result_vector_executor.v1",
+    "executor_test": "phase1_publication_v1_result_vector",
+    "mirror_path": "crates/outbox/tests/fixtures/phase1_publication.v1.json"
+  },
+  "schema_version": 1,
+  "source_files": [
+    {
+      "file": {
+        "byte_length": 1873,
+        "path": "crates/outbox/Cargo.toml",
+        "sha256": "95364a40f818d5d7aa4589a42774e650b590e1e1e7d4c3ed4dc8220cc8cadcbf"
+      },
+      "role": "outbox_package_manifest"
+    },
+    {
+      "file": {
+        "byte_length": 2604,
+        "path": "crates/outbox/src/lib.rs",
+        "sha256": "a97deba8ec374102ba6b3c243e414cf99f14ab4fa374dd6f245b5339793ca037"
+      },
+      "role": "outbox_public_surface"
+    },
+    {
+      "file": {
+        "byte_length": 101112,
+        "path": "crates/outbox/src/phase1_publication.rs",
+        "sha256": "9019a23d593b27d9a0e1b67871d8da53c91b5a0b0a2a37698c64cbbfe9111272"
+      },
+      "role": "phase1_publication_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 64349,
+        "path": "crates/outbox/src/schema.rs",
+        "sha256": "4c06effa3c57fd6f56e733a6a61a920ed00c63938cc7122da762a3135d2402c5"
+      },
+      "role": "outbox_schema_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 2664,
+        "path": "crates/outbox/src/generated/outbox_migration_registry.rs",
+        "sha256": "23c6438b11f7576b64848cc645bdd844727771a26bea73a20243ea7db38d5386"
+      },
+      "role": "migration_registry_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 2497,
+        "path": "crates/outbox/contracts/migration_registry.v1.json",
+        "sha256": "a93768922b973ab4a98dcaf371cfea1d9c307d0a1eb9a3909899a9e679de31a5"
+      },
+      "role": "migration_registry_source"
+    },
+    {
+      "file": {
+        "byte_length": 8528,
+        "path": "crates/outbox/tests/phase1_publication_v1_result_vector.rs",
+        "sha256": "8e656a6cf7cdf9366ec815846634998c7ae1e10e33ade31044748cfd6a33ba90"
+      },
+      "role": "vector_executor"
+    },
+    {
+      "file": {
+        "byte_length": 24248,
+        "path": "tools/xtask/src/contract/outbox_phase1_publication.rs",
+        "sha256": "4c81dea379e674066f0822d52f7d90e601a2d5311d5f88b809f760682c42bfa0"
+      },
+      "role": "contract_governance"
+    },
+    {
+      "file": {
+        "byte_length": 486359,
+        "path": "tools/xtask/src/contract.rs",
+        "sha256": "96468090685099e9d3722d45cf05170f3da83376150cbf58fee776157e6be649"
+      },
+      "role": "contract_dispatch"
+    },
+    {
+      "file": {
+        "byte_length": 24752,
+        "path": "tools/xtask/src/main.rs",
+        "sha256": "4defaf823f7ab58322b59a568eb07d68e09c66830a9624b043529e29a3032daf"
+      },
+      "role": "xtask_dispatch"
+    },
+    {
+      "file": {
+        "byte_length": 25965,
+        "path": "contracts/releases/1.0.0-alpha.1.toml",
+        "sha256": "a23dae6f24e7d4202826970b2f8c6a7d942d79e068c3ab1f17e5fc96e0ca1603"
+      },
+      "role": "release_record"
+    },
+    {
+      "file": {
+        "byte_length": 36955,
+        "path": "CHANGELOG.md",
+        "sha256": "68e74a02a28a5c24643befca7038d143c5f5e6f941e314e98b1d6dfc1094e28d"
+      },
+      "role": "release_notes"
+    }
+  ],
+  "state_machine": {
+    "event_state_count": 9,
+    "stable_error_count": 25,
+    "target_state_count": 8,
+    "transition_count": 25
+  }
+}

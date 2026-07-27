@@ -13,7 +13,14 @@ readme = "README"
 
 [features]
 default = ["event-store-adapter"]
-sqlite = ["dep:sqlx", "sqlx/sqlite-bundled"]
+sqlite = [
+  "dep:getrandom",
+  "dep:radroots_event_codec",
+  "dep:sqlx",
+  "dep:url",
+  "radroots_event/signature",
+  "sqlx/sqlite-bundled",
+]
 runtime-tokio = ["sqlite", "sqlx/runtime-tokio", "dep:tokio"]
 event-store-adapter = [
   "runtime-tokio",
@@ -28,7 +35,12 @@ radroots_event = { workspace = true, default-features = false, features = [
   "serde",
 ] }
 radroots_event_store = { workspace = true, default-features = false, optional = true }
+radroots_event_codec = { workspace = true, default-features = false, features = [
+  "serde_json",
+  "std",
+], optional = true }
 radroots_transport = { workspace = true, default-features = false }
+getrandom = { workspace = true, optional = true, features = ["std"] }
 hex = { workspace = true }
 serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true, features = ["std"] }
@@ -36,6 +48,7 @@ sha2 = { workspace = true }
 sqlx = { workspace = true, optional = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["time"] }
+url = { workspace = true, optional = true }
 
 [dev-dependencies]
 radroots_nostr = { workspace = true, default-features = false, features = [

@@ -36,4 +36,34 @@ const OUTBOX_MIGRATION_0001: OutboxMigration = OutboxMigration {
     ],
 };
 
-pub(crate) const OUTBOX_MIGRATIONS: &[OutboxMigration] = &[OUTBOX_MIGRATION_0001];
+const OUTBOX_MIGRATION_0002: OutboxMigration = OutboxMigration {
+    version: 2,
+    name: "phase1_publication",
+    up_sql: include_str!("../../migrations/0002_phase1_publication.up.sql"),
+    down_sql: include_str!("../../migrations/0002_phase1_publication.down.sql"),
+    up_len: 5733,
+    down_len: 208,
+    up_sha256: "84f0c9897cff8d002961cb6ad9dee53edcf28853d1407483519b00bdbf029308",
+    down_sha256: "57a5a00ca4257973097acf7f5cc64494dd0bc73fcfa00af2e6c8bb1f61823928",
+    schema_sha256: "a56af9ba400fd51c97d48886fbb3f3733adb97458d7109fa8989c1b7e0c8bcaf",
+    owned_object_names: &[
+        "outbox_phase1_delivery_target",
+        "outbox_phase1_delivery_target_ready_idx",
+        "outbox_phase1_dispatch_intent",
+        "outbox_phase1_observation_repair",
+        "outbox_phase1_publication",
+        "outbox_phase1_publication_event_idx",
+        "outbox_phase1_publication_ready_idx",
+        "outbox_phase1_target_receipt",
+    ],
+    owned_table_names: &[
+        "outbox_phase1_delivery_target",
+        "outbox_phase1_dispatch_intent",
+        "outbox_phase1_observation_repair",
+        "outbox_phase1_publication",
+        "outbox_phase1_target_receipt",
+    ],
+};
+
+pub(crate) const OUTBOX_MIGRATIONS: &[OutboxMigration] =
+    &[OUTBOX_MIGRATION_0001, OUTBOX_MIGRATION_0002];

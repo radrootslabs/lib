@@ -917,8 +917,14 @@ pub(crate) async fn validate_outbox_owned_integrity(
     connection: &mut SqliteConnection,
 ) -> Result<(), RadrootsOutboxError> {
     validate_embedded_migration_registry()?;
+    let current = match inspect_outbox_schema_on_connection(connection).await? {
+        RadrootsOutboxSchemaStatus::Managed { version } => version,
+        RadrootsOutboxSchemaStatus::UnledgeredBaseline => RADROOTS_OUTBOX_SCHEMA_VERSION_MIN,
+        RadrootsOutboxSchemaStatus::Uninitialized => return Ok(()),
+    };
     let tables = OUTBOX_MIGRATIONS
         .iter()
+        .filter(|migration| migration.version <= current)
         .flat_map(|migration| migration.owned_table_names.iter().copied())
         .collect::<BTreeSet<_>>();
     for table in tables {
@@ -1068,7 +1074,9 @@ mod tests {
             inspect_outbox_schema_status(&pool)
                 .await
                 .expect("managed schema"),
-            RadrootsOutboxSchemaStatus::Managed { version: 1 }
+            RadrootsOutboxSchemaStatus::Managed {
+                version: RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
+            }
         );
     }
 
@@ -1089,15 +1097,15 @@ mod tests {
         .expect("ledger count")
     }
 
-    async fn synthetic_v2_registry(pool: &SqlitePool) -> [OutboxMigration; 2] {
+    async fn synthetic_v3_registry(pool: &SqlitePool) -> [OutboxMigration; 3] {
         const UP_SQL: &str = "CREATE TABLE outbox_future (value TEXT NOT NULL) STRICT;\n";
         const DOWN_SQL: &str = "DROP TABLE outbox_future;\n";
 
-        migrate_outbox_schema(pool).await.expect("version 1");
+        migrate_outbox_schema(pool).await.expect("version 2");
         sqlx::raw_sql(UP_SQL)
             .execute(pool)
             .await
-            .expect("synthetic version 2 schema");
+            .expect("synthetic version 3 schema");
         let catalog = sqlx::query(
             "SELECT type, name, tbl_name, sql FROM main.sqlite_schema
              WHERE lower(substr(name, 1, 7)) != 'sqlite_'
@@ -1110,7 +1118,7 @@ mod tests {
         .bind(OUTBOX_RESERVED_PREFIX)
         .fetch_all(pool)
         .await
-        .expect("synthetic version 2 catalog")
+        .expect("synthetic version 3 catalog")
         .into_iter()
         .map(|row| CatalogRow {
             object_type: row.try_get("type").expect("catalog type"),
@@ -1123,7 +1131,7 @@ mod tests {
         sqlx::raw_sql(DOWN_SQL)
             .execute(pool)
             .await
-            .expect("remove synthetic version 2 schema");
+            .expect("remove synthetic version 3 schema");
 
         let up_sha256 =
             Box::leak(crate::migrations::sha256_hex(UP_SQL.as_bytes()).into_boxed_str());
@@ -1131,8 +1139,9 @@ mod tests {
             Box::leak(crate::migrations::sha256_hex(DOWN_SQL.as_bytes()).into_boxed_str());
         [
             OUTBOX_MIGRATIONS[0],
+            OUTBOX_MIGRATIONS[1],
             OutboxMigration {
-                version: 2,
+                version: 3,
                 name: "future",
                 up_sql: UP_SQL,
                 down_sql: DOWN_SQL,
@@ -1168,16 +1177,16 @@ mod tests {
         .execute(&pool)
         .await
         .expect("caller state");
-        let registry = synthetic_v2_registry(&pool).await;
+        let registry = synthetic_v3_registry(&pool).await;
 
-        migrate_outbox_schema_with_registry(&pool, &registry, 1, 2)
+        migrate_outbox_schema_with_registry(&pool, &registry, 1, 3)
             .await
-            .expect("advance to version 2");
+            .expect("advance to version 3");
         assert_eq!(
-            inspect_with_registry(&pool, &registry, 2)
+            inspect_with_registry(&pool, &registry, 3)
                 .await
-                .expect("managed version 2"),
-            RadrootsOutboxSchemaStatus::Managed { version: 2 }
+                .expect("managed version 3"),
+            RadrootsOutboxSchemaStatus::Managed { version: 3 }
         );
         let future_objects: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'outbox_future'",
@@ -1191,15 +1200,15 @@ mod tests {
             .begin_with("BEGIN EXCLUSIVE")
             .await
             .expect("rollback transaction");
-        let result = rollback_schema_on_connection(&mut transaction, &registry, 2, 1).await;
+        let result = rollback_schema_on_connection(&mut transaction, &registry, 3, 2).await;
         finish_schema_transaction(transaction, result)
             .await
-            .expect("rollback to version 1");
+            .expect("rollback to version 2");
         assert_eq!(
-            inspect_with_registry(&pool, &registry, 2)
+            inspect_with_registry(&pool, &registry, 3)
                 .await
-                .expect("managed version 1"),
-            RadrootsOutboxSchemaStatus::Managed { version: 1 }
+                .expect("managed version 2"),
+            RadrootsOutboxSchemaStatus::Managed { version: 2 }
         );
         let future_objects: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'outbox_future'",
@@ -1218,7 +1227,7 @@ mod tests {
             .begin_with("BEGIN EXCLUSIVE")
             .await
             .expect("ahead transaction");
-        let result = rollback_schema_on_connection(&mut transaction, &registry, 2, 2).await;
+        let result = rollback_schema_on_connection(&mut transaction, &registry, 3, 3).await;
         assert!(matches!(
             result,
             Err(RadrootsOutboxError::RollbackAhead { .. })
@@ -1233,7 +1242,7 @@ mod tests {
             .begin_with("BEGIN EXCLUSIVE")
             .await
             .expect("unmanaged transaction");
-        let result = rollback_schema_on_connection(&mut transaction, &registry, 2, 1).await;
+        let result = rollback_schema_on_connection(&mut transaction, &registry, 3, 2).await;
         assert!(matches!(
             result,
             Err(RadrootsOutboxError::RollbackUnmanaged)
@@ -1254,27 +1263,27 @@ mod tests {
         .execute(&pool)
         .await
         .expect("caller state");
-        let mut registry = synthetic_v2_registry(&pool).await;
+        let mut registry = synthetic_v3_registry(&pool).await;
 
         let mut connection = pool.acquire().await.expect("catalog connection");
         let before_catalog = read_catalog_bounded(&mut connection, &registry)
             .await
             .expect("before catalog");
         let before_fingerprint = catalog_fingerprint(&governed_catalog(&before_catalog, &registry));
-        let before_history = read_history_bounded(&mut connection, 2)
+        let before_history = read_history_bounded(&mut connection, 3)
             .await
             .expect("before history");
         drop(connection);
 
-        registry[1].owned_object_names = &["outbox_expected"];
-        registry[1].owned_table_names = &["outbox_expected"];
-        let error = migrate_outbox_schema_with_registry(&pool, &registry, 1, 2)
+        registry[2].owned_object_names = &["outbox_expected"];
+        registry[2].owned_table_names = &["outbox_expected"];
+        let error = migrate_outbox_schema_with_registry(&pool, &registry, 1, 3)
             .await
             .expect_err("post-UP catalog delta must fail");
         assert!(matches!(
             error,
             RadrootsOutboxError::MigrationCatalogDeltaMismatch {
-                version: 2,
+                version: 3,
                 direction: "up",
                 ..
             }
@@ -1285,7 +1294,7 @@ mod tests {
             .await
             .expect("after catalog");
         let after_fingerprint = catalog_fingerprint(&governed_catalog(&after_catalog, &registry));
-        let after_history = read_history_bounded(&mut connection, 2)
+        let after_history = read_history_bounded(&mut connection, 3)
             .await
             .expect("after history");
         drop(connection);
@@ -1295,7 +1304,7 @@ mod tests {
             inspect_outbox_schema_status(&pool)
                 .await
                 .expect("restored managed schema"),
-            RadrootsOutboxSchemaStatus::Managed { version: 1 }
+            RadrootsOutboxSchemaStatus::Managed { version: 2 }
         );
         let future_objects: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'outbox_future'",
@@ -1460,7 +1469,7 @@ mod tests {
                     .fetch_one(&pool)
                     .await
                     .expect("ledger rows");
-            assert_eq!(rows, 1);
+            assert_eq!(rows, i64::from(RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT));
         }
     }
 
@@ -1470,7 +1479,7 @@ mod tests {
         migrate_outbox_schema(&newer).await.expect("migration");
         sqlx::query(
             "INSERT INTO radroots_outbox_schema_migrations(version, name, up_sha256, down_sha256, schema_sha256)
-             VALUES (2, 'future', ?, ?, ?)",
+             VALUES (3, 'future', ?, ?, ?)",
         )
         .bind("a".repeat(64))
         .bind("b".repeat(64))
@@ -1481,8 +1490,8 @@ mod tests {
         assert!(matches!(
             inspect_outbox_schema_status(&newer).await,
             Err(RadrootsOutboxError::SchemaTooNew {
-                current: 1,
-                database: 2
+                current: 2,
+                database: 3
             })
         ));
 
@@ -1494,7 +1503,7 @@ mod tests {
             .expect("unknown governed object");
         assert!(matches!(
             inspect_outbox_schema_status(&overflow).await,
-            Err(RadrootsOutboxError::GovernedCatalogCapacityExceeded { max: 14 })
+            Err(RadrootsOutboxError::GovernedCatalogCapacityExceeded { max: 22 })
         ));
     }
 
@@ -1520,11 +1529,15 @@ mod tests {
         ));
         assert!(matches!(
             validate_history_against_registry(
-                &[row(1, &OUTBOX_MIGRATIONS[0]), row(2, &OUTBOX_MIGRATIONS[0])],
+                &[
+                    row(1, &OUTBOX_MIGRATIONS[0]),
+                    row(2, &OUTBOX_MIGRATIONS[1]),
+                    row(3, &OUTBOX_MIGRATIONS[0]),
+                ],
                 OUTBOX_MIGRATIONS,
                 3,
             ),
-            Err(RadrootsOutboxError::UnknownMigration { version: 2 })
+            Err(RadrootsOutboxError::UnknownMigration { version: 3 })
         ));
 
         assert!(matches!(

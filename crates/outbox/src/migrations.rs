@@ -437,7 +437,8 @@ mod tests {
         let registry = [legacy];
 
         assert!(migration_for_version(OUTBOX_MIGRATIONS, 1).is_some());
-        assert!(migration_for_version(OUTBOX_MIGRATIONS, 2).is_none());
+        assert!(migration_for_version(OUTBOX_MIGRATIONS, 2).is_some());
+        assert!(migration_for_version(OUTBOX_MIGRATIONS, 3).is_none());
         assert!(sqlite_identifier_starts_with("OUTBOX_EVENT", "outbox_"));
         assert!(!sqlite_identifier_starts_with("short", "outbox_"));
         assert!(is_outbox_owned_table_name(&registry, "outbox_new"));
@@ -529,7 +530,7 @@ mod tests {
             2,
         ));
 
-        assert_registry_defect(validate_migration_registry(OUTBOX_MIGRATIONS, 1, 2));
+        assert_registry_defect(validate_migration_registry(OUTBOX_MIGRATIONS, 1, 3));
         validate_migration_registry(&[OUTBOX_MIGRATIONS[0], future_migration()], 1, 2)
             .expect("contiguous synthetic registry");
 

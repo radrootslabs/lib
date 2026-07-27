@@ -809,6 +809,11 @@ fn generated_runtime_registry(registry: &Registry) -> Result<String, String> {
             "pub(crate) const OUTBOX_MIGRATIONS: &[OutboxMigration] = &[OUTBOX_MIGRATION_{:04}];\n",
             registry.migrations[0].version
         ));
+    } else if registry.migrations.len() == 2 {
+        generated.push_str(&format!(
+            "pub(crate) const OUTBOX_MIGRATIONS: &[OutboxMigration] =\n    &[OUTBOX_MIGRATION_{:04}, OUTBOX_MIGRATION_{:04}];\n",
+            registry.migrations[0].version, registry.migrations[1].version
+        ));
     } else {
         generated.push_str("pub(crate) const OUTBOX_MIGRATIONS: &[OutboxMigration] = &[\n");
         for migration in &registry.migrations {
@@ -1128,20 +1133,29 @@ mod tests {
     #[test]
     fn outbox_registry_accepts_an_appended_successor_and_rejects_a_gap() {
         let mut registry = load_and_validate_registry(&workspace_root()).expect("live registry");
+        let successor_index = registry.migrations.len();
+        let successor_version = registry
+            .migrations
+            .last()
+            .expect("non-empty live registry")
+            .version
+            + 1;
         let mut successor = registry.migrations[0].clone();
-        successor.version = 2;
+        successor.version = successor_version;
         successor.name = "future".to_owned();
-        successor.up_path = "crates/outbox/migrations/0002_future.up.sql".to_owned();
-        successor.down_path = "crates/outbox/migrations/0002_future.down.sql".to_owned();
+        successor.up_path =
+            format!("crates/outbox/migrations/{successor_version:04}_future.up.sql");
+        successor.down_path =
+            format!("crates/outbox/migrations/{successor_version:04}_future.down.sql");
         successor.owned_objects = vec!["outbox_future".to_owned()];
         successor.owned_tables = vec!["outbox_future".to_owned()];
         registry.migrations.push(successor);
         validate_registry_shape(&registry).expect("contiguous successor");
-        registry.migrations[1].version = 3;
+        registry.migrations[successor_index].version = successor_version + 1;
         assert!(
             validate_registry_shape(&registry)
                 .expect_err("gap")
-                .contains("expected 2")
+                .contains(&format!("expected {successor_version}"))
         );
     }
 

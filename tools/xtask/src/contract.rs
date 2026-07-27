@@ -10,6 +10,7 @@ mod deletion_authority;
 mod food_availability_projection;
 mod nip09_reconciliation;
 mod outbox_migration;
+mod outbox_phase1_publication;
 #[allow(dead_code)]
 mod phase1_publication_allowlist;
 mod phase1_publication_media_readiness;
@@ -37,6 +38,9 @@ pub(crate) use nip09_reconciliation::{
 };
 pub(crate) use outbox_migration::{
     validate_outbox_migration_manifest, write_outbox_migration_manifest,
+};
+pub(crate) use outbox_phase1_publication::{
+    validate_outbox_phase1_publication_manifest, write_outbox_phase1_publication_manifest,
 };
 pub(crate) use phase1_publication_media_readiness::{
     validate_immutable_blossom_publication_readiness_predecessor,
@@ -87,6 +91,7 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_phase1_publication_media_readiness_manifest(workspace_root)?;
     validate_blossom_raster_decoder_security_manifest(workspace_root)?;
     validate_outbox_migration_manifest(workspace_root)?;
+    validate_outbox_phase1_publication_manifest(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
 
@@ -150,12 +155,15 @@ const RAW_SOURCE_REBUILD_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/event_store/raw_source_rebuild.v1.json";
 const OUTBOX_MIGRATION_CONFORMANCE_VECTOR_RELATIVE: &str =
     "contracts/conformance/vectors/outbox/migration_authority.v1.json";
-const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 5] = [
+const OUTBOX_PHASE1_PUBLICATION_CONFORMANCE_VECTOR_RELATIVE: &str =
+    "contracts/conformance/vectors/outbox/phase1_publication.v1.json";
+const SPECIALIZED_CONFORMANCE_VECTOR_RELATIVES: [&str; 6] = [
     NIP09_RECONCILIATION_CONFORMANCE_VECTOR_RELATIVE,
     FOOD_AVAILABILITY_PROJECTION_CONFORMANCE_VECTOR_RELATIVE,
     SOURCE_MAINTENANCE_CONFORMANCE_VECTOR_RELATIVE,
     RAW_SOURCE_REBUILD_CONFORMANCE_VECTOR_RELATIVE,
     OUTBOX_MIGRATION_CONFORMANCE_VECTOR_RELATIVE,
+    OUTBOX_PHASE1_PUBLICATION_CONFORMANCE_VECTOR_RELATIVE,
 ];
 const KNOWLEDGE_MANIFEST_RELATIVE: &str =
     "contracts/knowledge/knowledge_event_contract_manifest.v2.json";
@@ -177,7 +185,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 30] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 31] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -201,6 +209,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 30] = [
     (
         OUTBOX_MIGRATION_CONFORMANCE_VECTOR_RELATIVE,
         "crates/outbox/tests/fixtures/migration_authority.v1.json",
+    ),
+    (
+        OUTBOX_PHASE1_PUBLICATION_CONFORMANCE_VECTOR_RELATIVE,
+        "crates/outbox/tests/fixtures/phase1_publication.v1.json",
     ),
     (
         "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",

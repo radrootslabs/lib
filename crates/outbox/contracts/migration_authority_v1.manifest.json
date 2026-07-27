@@ -28,7 +28,11 @@
       },
       {
         "enables": [
+          "dep:getrandom",
+          "dep:radroots_event_codec",
           "dep:sqlx",
+          "dep:url",
+          "radroots_event/signature",
           "sqlx/sqlite-bundled"
         ],
         "feature": "sqlite"
@@ -79,17 +83,17 @@
       }
     ],
     "source": {
-      "byte_length": 902,
+      "byte_length": 1001,
       "hash_algorithm": "sha256_bytes_v1",
       "path": "contracts/outbox_feature_matrix.toml",
-      "sha256": "846a9c0a41f538e5f55f352602ca898f4508e0b6d657ddb11b77eb0f76d19e55"
+      "sha256": "bc6578853c07f8901019e007e1cd9d7e87c41e0ef92425ad17781e528bcd15a1"
     }
   },
   "generated_runtime": {
-    "byte_length": 1452,
+    "byte_length": 2664,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/outbox/src/generated/outbox_migration_registry.rs",
-    "sha256": "616be98c5ba8054e08a6109357a713a39a0086040272a1f6165f54530b469a91"
+    "sha256": "23c6438b11f7576b64848cc645bdd844727771a26bea73a20243ea7db38d5386"
   },
   "ledger": {
     "adoption": "exact_unledgered_0001_catalog_only_v1",
@@ -144,13 +148,47 @@
         "sha256": "a7ee775d32c2b9f845961425362e1b1e558ce0d025f7d22dd58f118ba4dab4fa"
       },
       "version": 1
+    },
+    {
+      "down": {
+        "byte_length": 208,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/migrations/0002_phase1_publication.down.sql",
+        "sha256": "57a5a00ca4257973097acf7f5cc64494dd0bc73fcfa00af2e6c8bb1f61823928"
+      },
+      "name": "phase1_publication",
+      "owned_objects": [
+        "outbox_phase1_delivery_target",
+        "outbox_phase1_delivery_target_ready_idx",
+        "outbox_phase1_dispatch_intent",
+        "outbox_phase1_observation_repair",
+        "outbox_phase1_publication",
+        "outbox_phase1_publication_event_idx",
+        "outbox_phase1_publication_ready_idx",
+        "outbox_phase1_target_receipt"
+      ],
+      "owned_tables": [
+        "outbox_phase1_delivery_target",
+        "outbox_phase1_dispatch_intent",
+        "outbox_phase1_observation_repair",
+        "outbox_phase1_publication",
+        "outbox_phase1_target_receipt"
+      ],
+      "schema_sha256": "a56af9ba400fd51c97d48886fbb3f3733adb97458d7109fa8989c1b7e0c8bcaf",
+      "up": {
+        "byte_length": 5733,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/migrations/0002_phase1_publication.up.sql",
+        "sha256": "84f0c9897cff8d002961cb6ad9dee53edcf28853d1407483519b00bdbf029308"
+      },
+      "version": 2
     }
   ],
   "registry_source": {
-    "byte_length": 1329,
+    "byte_length": 2497,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/outbox/contracts/migration_registry.v1.json",
-    "sha256": "c46e65d7274ea58d0574efaa6694e6f65702f9cf2cc49000af1278ae7c123e0e"
+    "sha256": "a93768922b973ab4a98dcaf371cfea1d9c307d0a1eb9a3909899a9e679de31a5"
   },
   "release": {
     "change_id": "outbox-versioned-migration-authority",
@@ -178,19 +216,19 @@
   "source_files": [
     {
       "file": {
-        "byte_length": 1532,
+        "byte_length": 1873,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/Cargo.toml",
-        "sha256": "144c3da533519c9e5cf830dfd9ca7e7c8309cd8b581245141cf869f6ae41a47b"
+        "sha256": "95364a40f818d5d7aa4589a42774e650b590e1e1e7d4c3ed4dc8220cc8cadcbf"
       },
       "role": "outbox_package_manifest"
     },
     {
       "file": {
-        "byte_length": 1684,
+        "byte_length": 2604,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/lib.rs",
-        "sha256": "8a5ac45f4b88eee78078773d6400ae658f5180771a8f51c3ba1c6c6a95d2fe76"
+        "sha256": "a97deba8ec374102ba6b3c243e414cf99f14ab4fa374dd6f245b5339793ca037"
       },
       "role": "outbox_public_surface"
     },
@@ -214,19 +252,19 @@
     },
     {
       "file": {
-        "byte_length": 22839,
+        "byte_length": 22911,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/migrations.rs",
-        "sha256": "f207cab712cbc4bdf8b9fe1892e553ced3512adab6b7b6883c8cbe79c7205255"
+        "sha256": "360d74823f943d541585d0fe41296c0ef1cb5a5a898f8c2957d105081787018d"
       },
       "role": "migration_registry_runtime"
     },
     {
       "file": {
-        "byte_length": 63715,
+        "byte_length": 64349,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/schema.rs",
-        "sha256": "135341d8d47171bf587bd17bb5ec5085c00648290ba84cdfc9feb348e6e214dd"
+        "sha256": "4c06effa3c57fd6f56e733a6a61a920ed00c63938cc7122da762a3135d2402c5"
       },
       "role": "schema_runtime"
     },
@@ -241,10 +279,10 @@
     },
     {
       "file": {
-        "byte_length": 318687,
+        "byte_length": 318698,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/store.rs",
-        "sha256": "6aa76ba0e86554a92dd3e21b6b74853bd5c061edef69c5024e740dcbf777d193"
+        "sha256": "7f324a44658eb670ab82d30eaa80fe290a93f1cc3203e94ec62517ab015182c9"
       },
       "role": "store_integration"
     },
@@ -259,28 +297,28 @@
     },
     {
       "file": {
-        "byte_length": 46145,
+        "byte_length": 46807,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/contract/outbox_migration.rs",
-        "sha256": "2ee39f355148e42a80ed73f7d292a7f03c42b12e9bdd03d849c01dda17254784"
+        "sha256": "feecba3ecb9ac05891877ef1de1b1e17f85fd349dbcc5b0f4cd7a09d2d6e0dda"
       },
       "role": "contract_governance"
     },
     {
       "file": {
-        "byte_length": 485783,
+        "byte_length": 486359,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "cb3cbb45378551db7a3b1309dbc742d81f90af0c8a067065bb4e8698b744c5ef"
+        "sha256": "96468090685099e9d3722d45cf05170f3da83376150cbf58fee776157e6be649"
       },
       "role": "contract_dispatch"
     },
     {
       "file": {
-        "byte_length": 23735,
+        "byte_length": 24752,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/main.rs",
-        "sha256": "5f08b60c2d35a0a2a2b2743c9906538963282a5ed93a03a76087a9bfd282c07d"
+        "sha256": "4defaf823f7ab58322b59a568eb07d68e09c66830a9624b043529e29a3032daf"
       },
       "role": "xtask_dispatch"
     },
@@ -313,25 +351,25 @@
     },
     {
       "file": {
-        "byte_length": 25312,
+        "byte_length": 25965,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "1ae79c394b13c64d785436e98a0743789eba7786adb2ec4edff7df1344c4f2c6"
+        "sha256": "a23dae6f24e7d4202826970b2f8c6a7d942d79e068c3ab1f17e5fc96e0ca1603"
       },
       "role": "release_record"
     },
     {
       "file": {
-        "byte_length": 36323,
+        "byte_length": 36955,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "CHANGELOG.md",
-        "sha256": "3ee8e0d37238113448ddcf44ecd7f60e38d74e87a45ba712a1a3730d157510a3"
+        "sha256": "68e74a02a28a5c24643befca7038d143c5f5e6f941e314e98b1d6dfc1094e28d"
       },
       "role": "release_notes"
     }
   ],
   "version_bounds": {
-    "current": 1,
+    "current": 2,
     "derivation": "first_and_last_ordered_registry_entries_v1",
     "minimum": 1
   }

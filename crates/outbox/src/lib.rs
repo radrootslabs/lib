@@ -8,6 +8,8 @@ mod generated;
 mod migrations;
 mod model;
 #[cfg(feature = "sqlite")]
+mod phase1_publication;
+#[cfg(feature = "sqlite")]
 mod schema;
 #[cfg(feature = "sqlite")]
 mod sqlite_lifecycle;
@@ -28,6 +30,19 @@ pub use model::{
     RadrootsOutboxReticulumEventRecord, RadrootsOutboxSignedOperationInput,
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
+};
+#[cfg(feature = "sqlite")]
+pub use phase1_publication::{
+    RADROOTS_PHASE1_PUBLICATION_CLAIM_LEASE_MAX_MILLIS,
+    RADROOTS_PHASE1_PUBLICATION_DIAGNOSTIC_MAX_BYTES, RADROOTS_PHASE1_PUBLICATION_ERROR_CODES,
+    RADROOTS_PHASE1_PUBLICATION_TARGET_MAX_COUNT, RADROOTS_PHASE1_PUBLICATION_TARGET_URI_MAX_BYTES,
+    RADROOTS_PHASE1_PUBLICATION_TRANSITIONS, RadrootsPhase1PublicationClaim,
+    RadrootsPhase1PublicationEnqueueReceipt, RadrootsPhase1PublicationEnqueueStatus,
+    RadrootsPhase1PublicationError, RadrootsPhase1PublicationEventState,
+    RadrootsPhase1PublicationRecord, RadrootsPhase1PublicationTarget,
+    RadrootsPhase1PublicationTargetClaim, RadrootsPhase1PublicationTargetPolicy,
+    RadrootsPhase1PublicationTargetState, RadrootsPhase1PublicationTransition,
+    RadrootsPhase1PublicationTransitionRetryClass, RadrootsPhase1PublicationTransitionScope,
 };
 #[cfg(feature = "sqlite")]
 pub use schema::{RadrootsOutboxSchemaStatus, inspect_outbox_schema_status};
