@@ -175,7 +175,8 @@ async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_iden
 
         let first_adapter = RadrootsMockRelayPublishAdapter::new().with_outcome(
             RELAY,
-            RadrootsRelayOutcome::connection_failed("relay unavailable"),
+            RadrootsRelayOutcome::connection_failed("relay unavailable")
+                .expect("bounded relay outcome"),
         );
         let first_transport = RadrootsNostrTransport::new(first_adapter.clone());
         let first_receipt = publish_claimed_phase1_publication_target_with_transport(

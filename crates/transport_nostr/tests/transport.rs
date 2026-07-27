@@ -19,12 +19,13 @@ use radroots_outbox::{
     RadrootsOutboxOperationStatus,
 };
 use radroots_transport::{
-    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
-    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES, RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RadrootsTransport, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
 };
@@ -54,6 +55,12 @@ const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
 const RELAY_PRIMARY_WSS: &str = "wss://relay.example.com";
 const RELAY_SECONDARY_WSS: &str = "wss://relay-2.example.com";
 const RELAY_TERTIARY_WSS: &str = "wss://relay-3.example.com";
+
+fn bounded_relay_outcome(
+    outcome: Result<RadrootsRelayOutcome, RadrootsRelayTransportError>,
+) -> RadrootsRelayOutcome {
+    outcome.expect("bounded relay outcome")
+}
 
 struct TransportFailurePublishAdapter;
 
@@ -238,7 +245,9 @@ impl RadrootsRelayPublishAdapter for AttemptedSkippedRelayReceiptPublishAdapter 
                 .as_str();
             Ok(vec![RadrootsRelayPublishRelayReceipt::attempted(
                 relay,
-                RadrootsRelayOutcome::skipped_already_accepted("already accepted"),
+                bounded_relay_outcome(RadrootsRelayOutcome::skipped_already_accepted(
+                    "already accepted",
+                )),
             )])
         })
     }
@@ -1058,8 +1067,8 @@ fn outcome_prefix_classification_covers_required_kinds() {
     ];
 
     for (message, kind) in cases {
-        let outcome = RadrootsRelayOutcome::classify(message);
-        assert_eq!(outcome.kind, kind);
+        let outcome = bounded_relay_outcome(RadrootsRelayOutcome::classify(message));
+        assert_eq!(outcome.kind(), kind);
     }
     let labels = [
         (RadrootsRelayOutcomeKind::Accepted, "accepted"),
@@ -1099,14 +1108,32 @@ fn outcome_prefix_classification_covers_required_kinds() {
         assert_eq!(kind.as_str(), label);
     }
 
-    assert!(RadrootsRelayOutcome::classify("duplicate: already have it").counts_toward_quorum());
     assert!(
-        RadrootsRelayOutcome::skipped_already_accepted("already accepted").counts_toward_quorum()
+        bounded_relay_outcome(RadrootsRelayOutcome::classify("duplicate: already have it"))
+            .counts_toward_quorum()
     );
-    assert!(RadrootsRelayOutcome::classify("auth-required: challenge").is_retryable());
-    assert!(RadrootsRelayOutcome::classify("restricted: denied").is_terminal_failure());
-    assert!(RadrootsRelayOutcome::relay_url_rejected("unsafe relay").is_terminal_failure());
-    assert!(RadrootsRelayOutcome::classify("mute: pubkey muted").is_terminal_failure());
+    assert!(
+        bounded_relay_outcome(RadrootsRelayOutcome::skipped_already_accepted(
+            "already accepted"
+        ))
+        .counts_toward_quorum()
+    );
+    assert!(
+        bounded_relay_outcome(RadrootsRelayOutcome::classify("auth-required: challenge"))
+            .is_retryable()
+    );
+    assert!(
+        bounded_relay_outcome(RadrootsRelayOutcome::classify("restricted: denied"))
+            .is_terminal_failure()
+    );
+    assert!(
+        bounded_relay_outcome(RadrootsRelayOutcome::relay_url_rejected("unsafe relay"))
+            .is_terminal_failure()
+    );
+    assert!(
+        bounded_relay_outcome(RadrootsRelayOutcome::classify("mute: pubkey muted"))
+            .is_terminal_failure()
+    );
     assert_eq!(
         RadrootsRelayOutcome::accepted()
             .to_transport_outcome()
@@ -1122,58 +1149,96 @@ fn outcome_prefix_classification_covers_required_kinds() {
         radroots_transport::RadrootsTransportDeliveryTargetStatus::Accepted
     );
     assert_eq!(
-        RadrootsRelayOutcome::timeout("timeout: no OK")
+        bounded_relay_outcome(RadrootsRelayOutcome::timeout("timeout: no OK"))
             .to_transport_outcome()
             .expect("bounded outcome")
             .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::Timeout
     );
     assert_eq!(
-        RadrootsRelayOutcome::timeout("timeout: no OK")
+        bounded_relay_outcome(RadrootsRelayOutcome::timeout("timeout: no OK"))
             .to_transport_outcome()
             .expect("bounded outcome")
             .status(),
         radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedRetryable
     );
     assert_eq!(
-        RadrootsRelayOutcome::classify("restricted: denied")
+        bounded_relay_outcome(RadrootsRelayOutcome::classify("restricted: denied"))
             .to_transport_outcome()
             .expect("bounded outcome")
             .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::Rejected
     );
     assert_eq!(
-        RadrootsRelayOutcome::classify("restricted: denied")
+        bounded_relay_outcome(RadrootsRelayOutcome::classify("restricted: denied"))
             .to_transport_outcome()
             .expect("bounded outcome")
             .status(),
         radroots_transport::RadrootsTransportDeliveryTargetStatus::FailedTerminal
     );
     assert_eq!(
-        RadrootsRelayOutcome::relay_url_rejected("unsafe")
+        bounded_relay_outcome(RadrootsRelayOutcome::relay_url_rejected("unsafe"))
             .to_transport_outcome()
             .expect("bounded outcome")
             .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::RouteUnavailable
     );
     assert_eq!(
-        RadrootsRelayOutcome::connection_failed("offline")
-            .kind
+        bounded_relay_outcome(RadrootsRelayOutcome::connection_failed("offline"))
+            .kind()
             .as_str(),
         "connection_failed"
     );
     assert_eq!(
-        RadrootsRelayOutcome::unknown("adapter omitted receipt")
+        bounded_relay_outcome(RadrootsRelayOutcome::unknown("adapter omitted receipt"))
             .to_transport_outcome()
             .expect("bounded outcome")
             .kind(),
         radroots_transport::RadrootsTransportOutcomeKind::TransportUnavailable
     );
     assert_eq!(
-        RadrootsRelayOutcome::relay_url_rejected("unsafe")
-            .kind
+        bounded_relay_outcome(RadrootsRelayOutcome::relay_url_rejected("unsafe"))
+            .kind()
             .as_str(),
         "relay_url_rejected"
+    );
+}
+
+#[test]
+fn relay_outcome_messages_are_bounded_and_strictly_decoded() {
+    let exact_message = "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES);
+    let outcome = RadrootsRelayOutcome::unknown(exact_message.clone())
+        .expect("maximum relay outcome message");
+    assert_eq!(outcome.kind(), RadrootsRelayOutcomeKind::Unknown);
+    assert_eq!(outcome.message(), Some(exact_message.as_str()));
+
+    let wire = serde_json::to_value(&outcome).expect("relay outcome JSON");
+    let decoded =
+        serde_json::from_value::<RadrootsRelayOutcome>(wire).expect("strict relay outcome reload");
+    assert_eq!(decoded, outcome);
+
+    let one_over = "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1);
+    assert!(matches!(
+        RadrootsRelayOutcome::unknown(one_over.clone()),
+        Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+            field: "relay_outcome_message",
+            max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            actual,
+        }) if actual == RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1
+    ));
+    let error = serde_json::from_value::<RadrootsRelayOutcome>(serde_json::json!({
+        "kind": "Unknown",
+        "message": one_over,
+    }))
+    .expect_err("oversized relay outcome message rejected");
+    assert!(error.to_string().contains("relay_outcome_message"));
+    assert!(
+        serde_json::from_value::<RadrootsRelayOutcome>(serde_json::json!({
+            "kind": "Accepted",
+            "message": null,
+            "extra": true,
+        }))
+        .is_err()
     );
 }
 
@@ -1200,11 +1265,11 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
     let adapter = RadrootsMockRelayPublishAdapter::new()
         .with_outcome(
             RELAY_SECONDARY_WSS,
-            RadrootsRelayOutcome::classify("duplicate: already have it"),
+            bounded_relay_outcome(RadrootsRelayOutcome::classify("duplicate: already have it")),
         )
         .with_outcome(
             RELAY_TERTIARY_WSS,
-            RadrootsRelayOutcome::classify("auth-required: challenge"),
+            bounded_relay_outcome(RadrootsRelayOutcome::classify("auth-required: challenge")),
         );
 
     let receipt = publish_signed_event(
@@ -1637,7 +1702,9 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     .expect("targets");
     let adapter = RadrootsMockRelayPublishAdapter::new().with_outcome(
         RELAY_SECONDARY_WSS,
-        RadrootsRelayOutcome::classify("restricted: group write denied"),
+        bounded_relay_outcome(RadrootsRelayOutcome::classify(
+            "restricted: group write denied",
+        )),
     );
 
     let receipt = publish_signed_event(
@@ -1659,11 +1726,11 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
 
     let skipped = RadrootsRelayPublishRelayReceipt::skipped(
         RELAY_TERTIARY_WSS,
-        RadrootsRelayOutcome::timeout("timeout: no OK"),
+        bounded_relay_outcome(RadrootsRelayOutcome::timeout("timeout: no OK")),
     );
     assert_eq!(skipped.relay_url, RELAY_TERTIARY_WSS);
     assert!(!skipped.attempted);
-    assert_eq!(skipped.outcome.kind, RadrootsRelayOutcomeKind::Timeout);
+    assert_eq!(skipped.outcome.kind(), RadrootsRelayOutcomeKind::Timeout);
 
     let error = publish_signed_event(
         &TransportFailurePublishAdapter,
@@ -1693,7 +1760,9 @@ async fn publish_required_target_policy_uses_relay_fingerprints() {
     let adapter = RadrootsMockRelayPublishAdapter::new()
         .with_outcome(
             RELAY_PRIMARY_WSS,
-            RadrootsRelayOutcome::classify("restricted: required relay rejected"),
+            bounded_relay_outcome(RadrootsRelayOutcome::classify(
+                "restricted: required relay rejected",
+            )),
         )
         .with_outcome(RELAY_SECONDARY_WSS, RadrootsRelayOutcome::accepted());
 
@@ -1747,7 +1816,7 @@ async fn publish_all_policy_uses_requested_target_count() {
     assert_eq!(receipt.relays.len(), 2);
     assert!(!receipt.relays[1].attempted);
     assert_eq!(
-        receipt.relays[1].outcome.kind,
+        receipt.relays[1].outcome.kind(),
         RadrootsRelayOutcomeKind::Unknown
     );
 
@@ -2515,7 +2584,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
             .relay_outcome
             .as_ref()
             .expect("auth outcome")
-            .kind,
+            .kind(),
         RadrootsRelayOutcomeKind::AuthRequired
     );
     assert_eq!(receipt.relay_outcomes[2].relay_url, RELAY_TERTIARY_WSS);
@@ -2524,7 +2593,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
             .relay_outcome
             .as_ref()
             .expect("restricted outcome")
-            .kind,
+            .kind(),
         RadrootsRelayOutcomeKind::Restricted
     );
     assert_eq!(
@@ -3111,7 +3180,7 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
             .relay_outcome
             .as_ref()
             .expect("closed outcome")
-            .kind,
+            .kind(),
         RadrootsRelayOutcomeKind::AuthRequired
     );
     assert_eq!(
@@ -3531,11 +3600,13 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         .with_outcome(RELAY_PRIMARY_WSS, RadrootsRelayOutcome::accepted())
         .with_outcome(
             RELAY_SECONDARY_WSS,
-            RadrootsRelayOutcome::timeout("timeout: no OK"),
+            bounded_relay_outcome(RadrootsRelayOutcome::timeout("timeout: no OK")),
         )
         .with_outcome(
             RELAY_TERTIARY_WSS,
-            RadrootsRelayOutcome::duplicate_accepted("duplicate: already have it"),
+            bounded_relay_outcome(RadrootsRelayOutcome::duplicate_accepted(
+                "duplicate: already have it",
+            )),
         );
     let first = publish_claimed_outbox_event(
         &outbox,
@@ -3657,7 +3728,7 @@ async fn outbox_transport_facade_persists_partial_success_and_retryable_failures
         .with_outcome(RELAY_PRIMARY_WSS, RadrootsRelayOutcome::accepted())
         .with_outcome(
             RELAY_SECONDARY_WSS,
-            RadrootsRelayOutcome::timeout("timeout: transport facade"),
+            bounded_relay_outcome(RadrootsRelayOutcome::timeout("timeout: transport facade")),
         );
     let transport = RadrootsNostrTransport::new(adapter);
     let published = publish_claimed_outbox_event_with_transport(
@@ -4358,7 +4429,7 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
 
     let adapter = RadrootsMockRelayPublishAdapter::new().with_outcome(
         RELAY_SECONDARY_WSS,
-        RadrootsRelayOutcome::timeout("required relay timeout"),
+        bounded_relay_outcome(RadrootsRelayOutcome::timeout("required relay timeout")),
     );
     let published = publish_claimed_outbox_event(
         &outbox,
@@ -4669,7 +4740,7 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
         published
             .relay_receipts
             .iter()
-            .all(|relay| relay.outcome.kind == RadrootsRelayOutcomeKind::ConnectionFailed)
+            .all(|relay| relay.outcome.kind() == RadrootsRelayOutcomeKind::ConnectionFailed)
     );
 
     let event = outbox
@@ -4938,11 +5009,15 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
         .with_outcome(RELAY_PRIMARY_WSS, RadrootsRelayOutcome::accepted())
         .with_outcome(
             RELAY_SECONDARY_WSS,
-            RadrootsRelayOutcome::duplicate_accepted("duplicate: already have it"),
+            bounded_relay_outcome(RadrootsRelayOutcome::duplicate_accepted(
+                "duplicate: already have it",
+            )),
         )
         .with_outcome(
             RELAY_TERTIARY_WSS,
-            RadrootsRelayOutcome::classify("restricted: group write denied"),
+            bounded_relay_outcome(RadrootsRelayOutcome::classify(
+                "restricted: group write denied",
+            )),
         );
     let published = publish_claimed_outbox_event(
         &outbox,

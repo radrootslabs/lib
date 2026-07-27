@@ -344,6 +344,9 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         | RadrootsRelayTransportError::RequiredTargetNotRequested { .. } => {
             RadrootsTransportError::InvalidTransportKind
         }
+        RadrootsRelayTransportError::DiagnosticLimitExceeded { field, max, actual } => {
+            RadrootsTransportError::ResourceLimitExceeded { field, max, actual }
+        }
         #[cfg(feature = "storage")]
         RadrootsRelayTransportError::EventStore(_)
         | RadrootsRelayTransportError::Outbox(_)
@@ -718,11 +721,11 @@ fn normalize_publish_receipts(
         receipt.relay_url.clone_from(&canonical);
         if (!receipt.attempted
             && matches!(
-                receipt.outcome.kind,
+                receipt.outcome.kind(),
                 RadrootsRelayOutcomeKind::Accepted | RadrootsRelayOutcomeKind::DuplicateAccepted
             ))
             || (receipt.attempted
-                && receipt.outcome.kind == RadrootsRelayOutcomeKind::SkippedAlreadyAccepted)
+                && receipt.outcome.kind() == RadrootsRelayOutcomeKind::SkippedAlreadyAccepted)
         {
             return Err(
                 RadrootsRelayTransportError::InvalidPublishReceiptAttemptState { url: canonical },
@@ -734,23 +737,25 @@ fn normalize_publish_receipts(
             );
         }
     }
-    Ok(requested_relays
+    requested_relays
         .iter()
         .map(|relay_url| {
-            by_relay.remove(relay_url).unwrap_or_else(|| {
-                RadrootsRelayPublishRelayReceipt::skipped(
+            if let Some(receipt) = by_relay.remove(relay_url) {
+                Ok(receipt)
+            } else {
+                Ok(RadrootsRelayPublishRelayReceipt::skipped(
                     relay_url,
-                    RadrootsRelayOutcome::unknown("relay adapter omitted target receipt"),
-                )
-            })
+                    RadrootsRelayOutcome::unknown("relay adapter omitted target receipt")?,
+                ))
+            }
         })
-        .collect())
+        .collect()
 }
 
 fn relay_receipt_counts_toward_quorum(receipt: &RadrootsRelayPublishRelayReceipt) -> bool {
     receipt.outcome.counts_toward_quorum()
         && (receipt.attempted
-            || receipt.outcome.kind == RadrootsRelayOutcomeKind::SkippedAlreadyAccepted)
+            || receipt.outcome.kind() == RadrootsRelayOutcomeKind::SkippedAlreadyAccepted)
 }
 
 fn relay_publish_satisfies_policy(
@@ -768,7 +773,7 @@ fn relay_publish_satisfies_policy(
                 relay_receipt_counts_toward_quorum(receipt)
                     && receipt
                         .outcome
-                        .kind
+                        .kind()
                         .transport_outcome_kind()
                         .target_status()
                         .counts_as_satisfied(class)
@@ -784,7 +789,7 @@ fn relay_publish_satisfies_policy(
             && relay_receipt_counts_toward_quorum(receipt)
             && receipt
                 .outcome
-                .kind
+                .kind()
                 .transport_outcome_kind()
                 .target_status()
                 .counts_as_satisfied(class)
@@ -927,7 +932,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                 })
                 .collect::<BTreeMap<_, _>>();
             if connected_strings.is_empty() {
-                return Ok(target_strings
+                return target_strings
                     .into_iter()
                     .map(|relay_url| {
                         let target_url = relay_url.trim_end_matches('/');
@@ -935,26 +940,26 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                             .get(target_url)
                             .cloned()
                             .unwrap_or_else(|| "relay did not connect".to_owned());
-                        RadrootsRelayPublishRelayReceipt::attempted(
+                        Ok(RadrootsRelayPublishRelayReceipt::attempted(
                             relay_url,
-                            RadrootsRelayOutcome::connection_failed(reason),
-                        )
+                            RadrootsRelayOutcome::connection_failed(reason)?,
+                        ))
                     })
-                    .collect());
+                    .collect();
             }
             let output = match self.client.send_event_to(connected_strings, &event).await {
                 Ok(output) => output,
                 Err(error) => {
                     let message = error.to_string();
-                    return Ok(target_strings
+                    return target_strings
                         .into_iter()
                         .map(|relay_url| {
-                            RadrootsRelayPublishRelayReceipt::attempted(
+                            Ok(RadrootsRelayPublishRelayReceipt::attempted(
                                 relay_url,
-                                RadrootsRelayOutcome::connection_failed(message.clone()),
-                            )
+                                RadrootsRelayOutcome::connection_failed(message.clone())?,
+                            ))
                         })
-                        .collect());
+                        .collect();
                 }
             };
             let mut receipts = Vec::new();
@@ -967,19 +972,16 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                 if success {
                     receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
                         relay_url,
-                        RadrootsRelayOutcome {
-                            kind: RadrootsRelayOutcomeKind::Accepted,
-                            message: Some(
-                                "nostr-relay-pool-success-ok-message-unavailable".to_owned(),
-                            ),
-                        },
+                        RadrootsRelayOutcome::accepted_with_message(
+                            "nostr-relay-pool-success-ok-message-unavailable",
+                        )?,
                     ));
                     continue;
                 }
                 if let Some(reason) = connection_failures.get(target_url) {
                     receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
                         relay_url,
-                        RadrootsRelayOutcome::connection_failed(reason.clone()),
+                        RadrootsRelayOutcome::connection_failed(reason.clone())?,
                     ));
                     continue;
                 }
@@ -992,9 +994,10 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
                 });
                 let outcome = failed
                     .map(RadrootsRelayOutcome::classify)
-                    .unwrap_or_else(|| {
-                        RadrootsRelayOutcome::classify("error: relay output omitted target")
-                    });
+                    .transpose()?
+                    .unwrap_or(RadrootsRelayOutcome::classify(
+                        "error: relay output omitted target",
+                    )?);
                 receipts.push(RadrootsRelayPublishRelayReceipt::attempted(
                     relay_url, outcome,
                 ));

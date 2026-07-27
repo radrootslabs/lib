@@ -1147,7 +1147,7 @@ fn process_relay_fetch_items(
                     .push(RadrootsRelayFetchRelayOutcome {
                         relay_url,
                         kind: RadrootsRelayFetchOutcomeKind::Closed,
-                        relay_outcome: Some(RadrootsRelayOutcome::classify(message.as_str())),
+                        relay_outcome: Some(RadrootsRelayOutcome::classify(message.as_str())?),
                         message: Some(message),
                     });
             }

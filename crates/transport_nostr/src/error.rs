@@ -93,6 +93,13 @@ pub enum RadrootsRelayTransportError {
         actual: usize,
     },
 
+    #[error("Relay transport {field} uses {actual} UTF-8 bytes; maximum is {max}")]
+    DiagnosticLimitExceeded {
+        field: &'static str,
+        max: usize,
+        actual: usize,
+    },
+
     #[error("Relay transport {field} cannot be negative: {value}")]
     InvalidTimestamp { field: &'static str, value: i64 },
 
