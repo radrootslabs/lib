@@ -28,11 +28,21 @@ cargo_args = ["--no-default-features", "--features", "sqlite", "--all-targets"]
 
 [[profiles]]
 id = "sqlite-runtime-tokio"
-cargo_args = ["--no-default-features", "--features", "sqlite,runtime-tokio", "--all-targets"]
+cargo_args = [
+  "--no-default-features",
+  "--features",
+  "sqlite,runtime-tokio",
+  "--all-targets",
+]
 
 [[profiles]]
 id = "event-store-adapter"
-cargo_args = ["--no-default-features", "--features", "event-store-adapter", "--all-targets"]
+cargo_args = [
+  "--no-default-features",
+  "--features",
+  "event-store-adapter",
+  "--all-targets",
+]
 
 [[profiles]]
 id = "all-features"

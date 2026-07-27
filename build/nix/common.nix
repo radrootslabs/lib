@@ -7,7 +7,12 @@
 let
   root = ../..;
   cargoToml = builtins.fromTOML (builtins.readFile ../../Cargo.toml);
-  outboxFeatureMatrix = builtins.fromTOML (builtins.readFile ../../contracts/outbox_feature_matrix.toml);
+  outboxFeatureMatrix = builtins.fromTOML (
+    builtins.readFile ../../contracts/outbox_feature_matrix.toml
+  );
+  phase1FeatureMatrix = builtins.fromTOML (
+    builtins.readFile ../../contracts/phase1_feature_matrix.toml
+  );
   version = cargoToml.workspace.package.version;
   darwinBuildInputs = lib.optionals pkgs.stdenv.isDarwin [
     pkgs.libiconv
@@ -231,6 +236,30 @@ let
     profile:
     "cargo check -q -p ${lib.escapeShellArg outboxFeatureMatrix.package} ${lib.escapeShellArgs profile.cargo_args}"
   ) outboxFeatureMatrix.profiles;
+  phase1FeatureMatrixCommand = lib.concatMapStringsSep "\n" (
+    profile:
+    let
+      args = [
+        "check"
+        "-q"
+        "-p"
+        profile.package
+      ]
+      ++ lib.optional profile.no_default_features "--no-default-features"
+      ++ lib.optional profile.all_features "--all-features"
+      ++ lib.optionals (profile.features != [ ]) [
+        "--features"
+        (lib.concatStringsSep "," profile.features)
+      ]
+      ++ lib.optional profile.all_targets "--all-targets"
+      ++ lib.optional (!profile.all_targets) "--lib"
+      ++ lib.optionals (profile.target != "host") [
+        "--target"
+        profile.target
+      ];
+    in
+    "cargo ${lib.escapeShellArgs args}"
+  ) phase1FeatureMatrix.profiles;
   contractCommand = ''
     cargo run -q -p xtask -- hygiene forbidden-identifiers
     cargo check -q ${coreContractCargoArgs}
@@ -583,6 +612,7 @@ in
     fuzzCargoDeps
     mkRepoCheck
     outboxFeatureMatrixCommand
+    phase1FeatureMatrixCommand
     releasePreflightCommand
     coreContractCargoArgs
     sharedEnv

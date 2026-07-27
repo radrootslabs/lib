@@ -82,10 +82,10 @@
       }
     ],
     "source": {
-      "byte_length": 971,
+      "byte_length": 993,
       "hash_algorithm": "sha256_bytes_v1",
       "path": "contracts/outbox_feature_matrix.toml",
-      "sha256": "a668160e547ac00b6ff9bb8d64277190fc62eb45a63ec343b6b1771440c398cb"
+      "sha256": "7489116bba5bf46c2f2f0e73176bd7906387944b8b507466b6b78cdfc41e4fbe"
     }
   },
   "generated_runtime": {
@@ -323,19 +323,19 @@
     },
     {
       "file": {
-        "byte_length": 21116,
+        "byte_length": 22002,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "build/nix/common.nix",
-        "sha256": "37ee0871648c4ac379935e7c3030384c297d7ca715999e5b4347daaf31674cb7"
+        "sha256": "6ba87f6039ee7a7e06c1179293bb46cf2b5137a6aaa4f0fecbe61e27caa2259e"
       },
       "role": "nix_feature_executor"
     },
     {
       "file": {
-        "byte_length": 4987,
+        "byte_length": 5378,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "build/nix/checks.nix",
-        "sha256": "8fb9d256a234a91c2f863594aa6962dcc458bce82d499dd6a993811b11182e2c"
+        "sha256": "ce66cbf81365342c87ba5b994d69c6b4d55e2f4d9c9f823b8b53575a8eebe758"
       },
       "role": "nix_feature_check"
     },

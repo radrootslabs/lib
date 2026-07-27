@@ -20,6 +20,8 @@ default = ["std"]
 std = [
   "radroots_event/std",
   "radroots_event_codec/std",
+  "dep:radroots_replica_store",
+  "radroots_replica_store/std",
   "radroots_sql_core/std",
 ]
 legacy-ingest = ["std", "radroots_event_codec/nostr", "dep:base64", "dep:uuid"]
@@ -39,7 +41,7 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
 ] }
 radroots_sql_core = { workspace = true }
 radroots_replica_schema = { workspace = true }
-radroots_replica_store = { workspace = true }
+radroots_replica_store = { workspace = true, optional = true }
 hex = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",

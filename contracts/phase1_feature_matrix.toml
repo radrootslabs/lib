@@ -1,0 +1,687 @@
+schema_version = 1
+wasm_target = "wasm32-unknown-unknown"
+required_categories = [
+  "all-features",
+  "minimal",
+  "raster",
+  "runtime",
+  "serde",
+  "signature",
+  "sqlite",
+  "std",
+  "wasm",
+]
+
+[packages]
+radroots_authority = "crates/authority/Cargo.toml"
+radroots_blossom = "crates/blossom/Cargo.toml"
+radroots_event = "crates/event/Cargo.toml"
+radroots_event_codec = "crates/event_codec/Cargo.toml"
+radroots_event_store = "crates/event_store/Cargo.toml"
+radroots_nostr = "crates/nostr/Cargo.toml"
+radroots_outbox = "crates/outbox/Cargo.toml"
+radroots_replica_sync = "crates/replica_sync/Cargo.toml"
+radroots_runtime = "crates/runtime/Cargo.toml"
+radroots_transport = "crates/transport/Cargo.toml"
+radroots_transport_nostr = "crates/transport_nostr/Cargo.toml"
+radroots_transport_reticulum = "crates/transport_reticulum/Cargo.toml"
+
+[[profiles]]
+id = "authority-minimal"
+package = "radroots_authority"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "authority-std"
+package = "radroots_authority"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "authority-local-signer"
+package = "radroots_authority"
+category = "signature"
+no_default_features = true
+all_features = false
+features = ["local_signer"]
+requires = ["std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "authority-all-features"
+package = "radroots_authority"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "blossom-minimal"
+package = "radroots_blossom"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "blossom-serde"
+package = "radroots_blossom"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "blossom-std"
+package = "radroots_blossom"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "blossom-raster"
+package = "radroots_blossom"
+category = "raster"
+no_default_features = true
+all_features = false
+features = ["raster-decode", "serde"]
+requires = ["serde", "std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "blossom-all-features"
+package = "radroots_blossom"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "blossom-wasm-serde"
+package = "radroots_blossom"
+category = "wasm"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "wasm32-unknown-unknown"
+
+[[profiles]]
+id = "event-minimal"
+package = "radroots_event"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-serde"
+package = "radroots_event"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-std"
+package = "radroots_event"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-signature"
+package = "radroots_event"
+category = "signature"
+no_default_features = true
+all_features = false
+features = ["signature"]
+requires = ["signature"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-all-features"
+package = "radroots_event"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "event-wasm-serde"
+package = "radroots_event"
+category = "wasm"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "wasm32-unknown-unknown"
+
+[[profiles]]
+id = "event-codec-minimal"
+package = "radroots_event_codec"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-codec-serde"
+package = "radroots_event_codec"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-codec-serde-json"
+package = "radroots_event_codec"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["serde_json"]
+requires = ["serde"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-codec-std"
+package = "radroots_event_codec"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-codec-nostr"
+package = "radroots_event_codec"
+category = "signature"
+no_default_features = true
+all_features = false
+features = ["nostr", "serde_json"]
+requires = ["serde", "std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "event-codec-all-features"
+package = "radroots_event_codec"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "event-codec-wasm-serde-json"
+package = "radroots_event_codec"
+category = "wasm"
+no_default_features = true
+all_features = false
+features = ["serde_json"]
+requires = ["serde"]
+all_targets = false
+target = "wasm32-unknown-unknown"
+
+[[profiles]]
+id = "event-store-minimal"
+package = "radroots_event_store"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "event-store-sqlite"
+package = "radroots_event_store"
+category = "sqlite"
+no_default_features = true
+all_features = false
+features = ["sqlite"]
+requires = ["sqlite"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "event-store-runtime"
+package = "radroots_event_store"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["runtime-tokio", "sqlite"]
+requires = ["runtime-tokio", "sqlite"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "event-store-all-features"
+package = "radroots_event_store"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "nostr-minimal"
+package = "radroots_nostr"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "nostr-std"
+package = "radroots_nostr"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "nostr-codec"
+package = "radroots_nostr"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["codec"]
+requires = ["codec"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "nostr-events"
+package = "radroots_nostr"
+category = "signature"
+no_default_features = true
+all_features = false
+features = ["events"]
+requires = ["std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "nostr-client"
+package = "radroots_nostr"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["client"]
+requires = ["std"]
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "nostr-all-features"
+package = "radroots_nostr"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "outbox-minimal"
+package = "radroots_outbox"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "outbox-sqlite"
+package = "radroots_outbox"
+category = "sqlite"
+no_default_features = true
+all_features = false
+features = ["sqlite"]
+requires = ["sqlite"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "outbox-runtime"
+package = "radroots_outbox"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["runtime-tokio", "sqlite"]
+requires = ["runtime-tokio", "sqlite"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "outbox-event-store-adapter"
+package = "radroots_outbox"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["event-store-adapter"]
+requires = ["runtime-tokio", "sqlite"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "outbox-all-features"
+package = "radroots_outbox"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "replica-sync-minimal"
+package = "radroots_replica_sync"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "replica-sync-std"
+package = "radroots_replica_sync"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "replica-sync-legacy"
+package = "radroots_replica_sync"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["legacy-ingest"]
+requires = ["std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "replica-sync-all-features"
+package = "radroots_replica_sync"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "replica-sync-wasm-minimal"
+package = "radroots_replica_sync"
+category = "wasm"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "wasm32-unknown-unknown"
+
+[[profiles]]
+id = "runtime-minimal"
+package = "radroots_runtime"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "runtime-transport"
+package = "radroots_runtime"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["transport"]
+requires = ["transport"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "runtime-workers"
+package = "radroots_runtime"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["transport-workers"]
+requires = ["transport"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "runtime-all-features"
+package = "radroots_runtime"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-minimal"
+package = "radroots_transport"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "transport-serde"
+package = "radroots_transport"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-all-features"
+package = "radroots_transport"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-wasm-serde"
+package = "radroots_transport"
+category = "wasm"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "wasm32-unknown-unknown"
+
+[[profiles]]
+id = "transport-nostr-minimal"
+package = "radroots_transport_nostr"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-nostr-std"
+package = "radroots_transport_nostr"
+category = "std"
+no_default_features = true
+all_features = false
+features = ["std"]
+requires = ["std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-nostr-client"
+package = "radroots_transport_nostr"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["client", "std"]
+requires = ["client", "std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-nostr-runtime"
+package = "radroots_transport_nostr"
+category = "runtime"
+no_default_features = true
+all_features = false
+features = ["runtime-tokio", "std"]
+requires = ["client", "storage", "std"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-nostr-all-features"
+package = "radroots_transport_nostr"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-reticulum-minimal"
+package = "radroots_transport_reticulum"
+category = "minimal"
+no_default_features = true
+all_features = false
+features = []
+requires = []
+all_targets = false
+target = "host"
+
+[[profiles]]
+id = "transport-reticulum-serde"
+package = "radroots_transport_reticulum"
+category = "serde"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-reticulum-all-features"
+package = "radroots_transport_reticulum"
+category = "all-features"
+no_default_features = false
+all_features = true
+features = []
+requires = []
+all_targets = true
+target = "host"
+
+[[profiles]]
+id = "transport-reticulum-wasm-serde"
+package = "radroots_transport_reticulum"
+category = "wasm"
+no_default_features = true
+all_features = false
+features = ["serde"]
+requires = ["serde"]
+all_targets = false
+target = "wasm32-unknown-unknown"
