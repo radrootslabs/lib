@@ -278,10 +278,10 @@
     },
     {
       "file": {
-        "byte_length": 320981,
+        "byte_length": 320734,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/store.rs",
-        "sha256": "6c983dc2854dbb62de093cf748e0b761965f37c32bcf5d2f9bcaee56eb2f2d99"
+        "sha256": "2fbc9690e98bc651953e081a57265bd9778c8dd124c9b26a02668c3bc0f14314"
       },
       "role": "store_integration"
     },

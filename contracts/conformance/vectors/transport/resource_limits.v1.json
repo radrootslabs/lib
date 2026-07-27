@@ -1,0 +1,246 @@
+{
+  "suite": "transport_resource_limits",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "transport_signed_event_json_max_bytes_001",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 262144,
+        "unit": "bytes"
+      }
+    },
+    {
+      "id": "transport_reticulum_payload_max_bytes_002",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 65536,
+        "unit": "bytes"
+      }
+    },
+    {
+      "id": "transport_opaque_payload_max_bytes_003",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 65536,
+        "unit": "bytes"
+      }
+    },
+    {
+      "id": "transport_endpoint_uri_max_bytes_004",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 2048,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_identifier_max_bytes_005",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 256,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_target_scope_max_bytes_006",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 256,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_target_label_max_bytes_007",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 256,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_unique_target_max_count_008",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 16,
+        "unit": "items"
+      }
+    },
+    {
+      "id": "transport_fetch_filter_max_count_009",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 16,
+        "unit": "items"
+      }
+    },
+    {
+      "id": "transport_fetch_filter_max_bytes_010",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 65536,
+        "unit": "compact_json_bytes"
+      }
+    },
+    {
+      "id": "transport_fetch_filters_max_bytes_011",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT * RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 1048576,
+        "unit": "compact_json_bytes"
+      }
+    },
+    {
+      "id": "transport_fetch_admitted_event_max_count_012",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 1000,
+        "unit": "items"
+      }
+    },
+    {
+      "id": "transport_fetch_raw_item_max_count_013",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 4096,
+        "unit": "items"
+      }
+    },
+    {
+      "id": "transport_fetch_raw_json_max_bytes_014",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 67108864,
+        "unit": "bytes"
+      }
+    },
+    {
+      "id": "transport_complete_request_diagnostic_max_bytes_015",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 4096,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_outcome_code_max_bytes_016",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 256,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_outcome_message_max_bytes_017",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 4096,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_total_deadline_max_ms_018",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS",
+        "derivation": "resource_authority"
+      },
+      "expected": {
+        "maximum": 30000,
+        "unit": "milliseconds"
+      }
+    },
+    {
+      "id": "transport_delivery_request_id_max_bytes_019",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 256,
+        "unit": "utf8_bytes"
+      }
+    },
+    {
+      "id": "transport_fetch_request_id_max_bytes_020",
+      "kind": "transport.resource_limit.exact",
+      "input": {
+        "authority": "radroots_transport::RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES",
+        "derivation": "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES"
+      },
+      "expected": {
+        "maximum": 256,
+        "unit": "utf8_bytes"
+      }
+    }
+  ]
+}

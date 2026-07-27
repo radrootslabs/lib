@@ -734,14 +734,16 @@ mod tests {
 
         fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
             Box::pin(async move {
-                Ok(RadrootsTransportStatus::new(
+                RadrootsTransportStatus::new(
                     self.kind.clone(),
                     true,
                     RadrootsTransportImplementationState::Real,
                     true,
                     "ready",
                 )
-                .with_capabilities(RadrootsTransportCapabilities::deliver_and_fetch()))
+                .map(|status| {
+                    status.with_capabilities(RadrootsTransportCapabilities::deliver_and_fetch())
+                })
             })
         }
 
@@ -820,13 +822,13 @@ mod tests {
 
         fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
             Box::pin(async {
-                Ok(RadrootsTransportStatus::new(
+                RadrootsTransportStatus::new(
                     RadrootsTransportKind::Nostr,
                     true,
                     RadrootsTransportImplementationState::Real,
                     true,
                     "forged receipt fixture",
-                ))
+                )
             })
         }
 
@@ -982,10 +984,10 @@ mod tests {
             .await
             .expect("receipt");
         let status = transport.status().await.expect("status");
-        assert_eq!(status.kind, RadrootsTransportKind::Nostr);
+        assert_eq!(status.kind(), &RadrootsTransportKind::Nostr);
         assert_eq!(
-            status.capabilities,
-            RadrootsTransportCapabilities::deliver_and_fetch()
+            status.capabilities(),
+            &RadrootsTransportCapabilities::deliver_and_fetch()
         );
         let fetch = transport
             .fetch(
@@ -1059,19 +1061,19 @@ mod tests {
             .expect("receipt");
         let status = transport.status().await.expect("status");
         assert_eq!(
-            status.implementation,
+            status.implementation(),
             RadrootsTransportImplementationState::Real
         );
         assert_eq!(
-            status.maturity,
+            status.maturity(),
             RadrootsTransportCapabilityMaturity::Preview
         );
         assert_eq!(
-            status.availability,
+            status.availability(),
             RadrootsTransportCapabilityAvailability::Unavailable
         );
-        assert!(!status.capabilities.deliver);
-        assert!(!status.capabilities.fetch);
+        assert!(!status.capabilities().can_deliver());
+        assert!(!status.capabilities().can_fetch());
         let fetch = transport
             .fetch(
                 RadrootsTransportFetchRequest::new(

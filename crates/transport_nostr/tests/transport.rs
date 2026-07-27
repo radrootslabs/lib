@@ -326,13 +326,13 @@ impl RadrootsTransport for ScriptedTransport {
 
     fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
         Box::pin(async {
-            Ok(RadrootsTransportStatus::new(
+            RadrootsTransportStatus::new(
                 RadrootsTransportKind::Nostr,
                 true,
                 RadrootsTransportImplementationState::Real,
                 true,
                 "scripted",
-            ))
+            )
         })
     }
 
@@ -378,13 +378,13 @@ impl RadrootsTransport for ForgedReceiptTransport {
 
     fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
         Box::pin(async {
-            Ok(RadrootsTransportStatus::new(
+            RadrootsTransportStatus::new(
                 RadrootsTransportKind::Nostr,
                 true,
                 RadrootsTransportImplementationState::Real,
                 true,
                 "forged receipt fixture",
-            ))
+            )
         })
     }
 
@@ -1480,7 +1480,8 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
         RadrootsTransportImplementationState::Real,
         true,
         "fixture ready",
-    );
+    )
+    .expect("fixture status");
     let transport = RadrootsNostrTransport::new(&adapter).with_status(expected_status.clone());
     assert_eq!(transport.transport_kind(), RadrootsTransportKind::Nostr);
     assert!(transport.adapter().captured_raw_events().is_empty());
@@ -3991,6 +3992,24 @@ async fn fetch_receipts_enforce_outer_item_and_complete_diagnostic_budgets() {
     ));
 }
 
+#[test]
+fn outbox_publish_policy_rejects_negative_time_and_seals_configuration() {
+    assert!(matches!(
+        RadrootsOutboxPublishPolicy::new(-1),
+        Err(RadrootsRelayTransportError::InvalidTimestamp {
+            field: "next_attempt_after_ms",
+            value: -1,
+        })
+    ));
+    let policy = RadrootsOutboxPublishPolicy::new(0)
+        .expect("zero next-attempt timestamp")
+        .republish_accepted_relays(true)
+        .with_relay_url_policy(RadrootsRelayUrlPolicy::Localhost);
+    assert_eq!(policy.next_attempt_after_ms(), 0);
+    assert!(policy.should_republish_accepted_relays());
+    assert_eq!(policy.relay_url_policy(), RadrootsRelayUrlPolicy::Localhost);
+}
+
 #[tokio::test]
 async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
     let outbox = RadrootsOutbox::open_memory().await.expect("outbox");
@@ -4037,15 +4056,15 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(first.attempted_count, 3);
-    assert_eq!(first.accepted_count, 2);
-    assert!(!first.quorum_met);
+    assert_eq!(first.attempted_count(), 3);
+    assert_eq!(first.accepted_count(), 2);
+    assert!(!first.quorum_met());
     let event = outbox
         .get_event(receipt.outbox_event_id)
         .await
@@ -4094,14 +4113,14 @@ async fn outbox_publish_persists_partial_success_and_skips_accepted_retry() {
         &store,
         &retry_adapter,
         &retry_claim,
-        RadrootsOutboxPublishPolicy::new(3_000),
+        RadrootsOutboxPublishPolicy::new(3_000).expect("valid publish policy"),
         2_600,
     )
     .await
     .expect("retry publish");
 
-    assert_eq!(second.local_ingest.event_id, signed.id_str());
-    assert_eq!(second.attempted_count, 1);
+    assert_eq!(second.local_ingest().event_id, signed.id_str());
+    assert_eq!(second.attempted_count(), 1);
     assert_eq!(retry_adapter.captured_raw_events().len(), 1);
 
     let event = outbox
@@ -4160,19 +4179,19 @@ async fn outbox_transport_facade_persists_partial_success_and_retryable_failures
         &store,
         &transport,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("transport publish");
 
-    assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 2);
-    assert_eq!(published.accepted_count, 1);
-    assert_eq!(published.retryable_count, 1);
-    assert_eq!(published.terminal_count, 0);
-    assert!(!published.quorum_met);
-    assert_eq!(published.relay_receipts.len(), 2);
+    assert_eq!(published.event_id(), signed.id_str());
+    assert_eq!(published.attempted_count(), 2);
+    assert_eq!(published.accepted_count(), 1);
+    assert_eq!(published.retryable_count(), 1);
+    assert_eq!(published.terminal_count(), 0);
+    assert!(!published.quorum_met());
+    assert_eq!(published.relay_receipts().len(), 2);
     let targets = outbox
         .delivery_targets(receipt.outbox_event_id)
         .await
@@ -4265,20 +4284,20 @@ async fn outbox_transport_facade_persists_every_delivery_status() {
         &store,
         &transport,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("transport publish");
 
-    assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 14);
-    assert_eq!(published.accepted_count, 6);
-    assert_eq!(published.retryable_count, 3);
-    assert_eq!(published.terminal_count, 5);
-    assert!(!published.quorum_met);
-    assert_eq!(published.target_receipts.len(), 14);
-    assert_eq!(published.relay_receipts.len(), 14);
+    assert_eq!(published.event_id(), signed.id_str());
+    assert_eq!(published.attempted_count(), 14);
+    assert_eq!(published.accepted_count(), 6);
+    assert_eq!(published.retryable_count(), 3);
+    assert_eq!(published.terminal_count(), 5);
+    assert!(!published.quorum_met());
+    assert_eq!(published.target_receipts().len(), 14);
+    assert_eq!(published.relay_receipts().len(), 14);
     let targets = outbox
         .delivery_targets(receipt.outbox_event_id)
         .await
@@ -4360,7 +4379,7 @@ async fn outbox_transport_facade_rejects_receipts_forged_for_another_request() {
             &store,
             &ForgedReceiptTransport { forged },
             &publish_claim,
-            RadrootsOutboxPublishPolicy::new(2_500),
+            RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
             2_200,
         )
         .await
@@ -4422,15 +4441,15 @@ async fn outbox_transport_facade_handles_empty_and_invalid_claim_plans() {
         &store,
         &ScriptedTransport::new(Vec::new()),
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("already satisfied publish");
-    assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 0);
-    assert_eq!(published.accepted_count, 2);
-    assert!(published.quorum_met);
+    assert_eq!(published.event_id(), signed.id_str());
+    assert_eq!(published.attempted_count(), 0);
+    assert_eq!(published.accepted_count(), 2);
+    assert!(published.quorum_met());
 
     let second_draft = generic_draft("invalid claimed plan");
     outbox
@@ -4458,7 +4477,7 @@ async fn outbox_transport_facade_handles_empty_and_invalid_claim_plans() {
         &store,
         &ScriptedTransport::new(Vec::new()),
         &invalid_claim,
-        RadrootsOutboxPublishPolicy::new(3_500),
+        RadrootsOutboxPublishPolicy::new(3_500).expect("valid publish policy"),
         2_400,
     )
     .await
@@ -4471,7 +4490,7 @@ async fn outbox_transport_facade_handles_empty_and_invalid_claim_plans() {
         &store,
         &ScriptedTransport::new(Vec::new()),
         &invalid_claim,
-        RadrootsOutboxPublishPolicy::new(3_500),
+        RadrootsOutboxPublishPolicy::new(3_500).expect("valid publish policy"),
         2_401,
     )
     .await
@@ -4509,7 +4528,7 @@ async fn outbox_transport_facade_requires_signed_claims() {
         &store,
         &ScriptedTransport::new(Vec::new()),
         &claimed,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         1_100,
     )
     .await
@@ -4550,7 +4569,7 @@ async fn outbox_transport_facade_rejects_non_nostr_transport_before_mutation() {
         &store,
         &transport,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
@@ -4630,36 +4649,36 @@ async fn outbox_publish_fans_out_endpoint_receipts_to_scoped_logical_targets() {
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id_str());
-    assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 2);
-    assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.retryable_count, 0);
-    assert_eq!(published.terminal_count, 0);
-    assert_eq!(published.quorum, 2);
-    assert!(published.quorum_met);
-    assert_eq!(published.relay_receipts.len(), 1);
-    assert_eq!(published.relay_receipts[0].relay_url(), RELAY_PRIMARY_WSS);
-    assert_eq!(published.target_receipts.len(), 2);
+    assert_eq!(published.local_ingest().event_id, signed.id_str());
+    assert_eq!(published.event_id(), signed.id_str());
+    assert_eq!(published.attempted_count(), 2);
+    assert_eq!(published.accepted_count(), 2);
+    assert_eq!(published.retryable_count(), 0);
+    assert_eq!(published.terminal_count(), 0);
+    assert_eq!(published.quorum(), 2);
+    assert!(published.quorum_met());
+    assert_eq!(published.relay_receipts().len(), 1);
+    assert_eq!(published.relay_receipts()[0].relay_url(), RELAY_PRIMARY_WSS);
+    assert_eq!(published.target_receipts().len(), 2);
     assert!(
         published
-            .target_receipts
+            .target_receipts()
             .iter()
-            .all(|target| target.endpoint_uri == RELAY_PRIMARY_WSS && target.attempted)
+            .all(|target| target.endpoint_uri() == RELAY_PRIMARY_WSS && target.attempted())
     );
-    assert!(published.target_receipts.iter().any(|target| {
-        target.target_scope.as_deref() == Some("foodshed.west")
-            && target.target_label.as_deref() == Some("West foodshed")
+    assert!(published.target_receipts().iter().any(|target| {
+        target.target_scope() == Some("foodshed.west")
+            && target.target_label() == Some("West foodshed")
     }));
-    assert!(published.target_receipts.iter().any(|target| {
-        target.target_scope.as_deref() == Some("foodshed.east")
-            && target.target_label.as_deref() == Some("East foodshed")
+    assert!(published.target_receipts().iter().any(|target| {
+        target.target_scope() == Some("foodshed.east")
+            && target.target_label() == Some("East foodshed")
     }));
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
@@ -4735,34 +4754,34 @@ async fn outbox_transport_facade_fans_out_endpoint_receipts_to_scoped_logical_ta
         &store,
         &transport,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("transport publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id_str());
-    assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 2);
-    assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.retryable_count, 0);
-    assert_eq!(published.terminal_count, 0);
-    assert_eq!(published.quorum, 2);
-    assert!(published.quorum_met);
-    assert_eq!(published.relay_receipts.len(), 1);
-    assert_eq!(published.target_receipts.len(), 2);
-    assert!(published.target_receipts.iter().all(|target| {
-        target.endpoint_uri == RELAY_PRIMARY_WSS
-            && target.attempted
-            && target.transport_status == RadrootsTransportDeliveryTargetStatus::Accepted
+    assert_eq!(published.local_ingest().event_id, signed.id_str());
+    assert_eq!(published.event_id(), signed.id_str());
+    assert_eq!(published.attempted_count(), 2);
+    assert_eq!(published.accepted_count(), 2);
+    assert_eq!(published.retryable_count(), 0);
+    assert_eq!(published.terminal_count(), 0);
+    assert_eq!(published.quorum(), 2);
+    assert!(published.quorum_met());
+    assert_eq!(published.relay_receipts().len(), 1);
+    assert_eq!(published.target_receipts().len(), 2);
+    assert!(published.target_receipts().iter().all(|target| {
+        target.endpoint_uri() == RELAY_PRIMARY_WSS
+            && target.attempted()
+            && target.transport_status() == RadrootsTransportDeliveryTargetStatus::Accepted
     }));
-    assert!(published.target_receipts.iter().any(|target| {
-        target.target_scope.as_deref() == Some("foodshed.west")
-            && target.target_label.as_deref() == Some("West foodshed")
+    assert!(published.target_receipts().iter().any(|target| {
+        target.target_scope() == Some("foodshed.west")
+            && target.target_label() == Some("West foodshed")
     }));
-    assert!(published.target_receipts.iter().any(|target| {
-        target.target_scope.as_deref() == Some("foodshed.east")
-            && target.target_label.as_deref() == Some("East foodshed")
+    assert!(published.target_receipts().iter().any(|target| {
+        target.target_scope() == Some("foodshed.east")
+            && target.target_label() == Some("East foodshed")
     }));
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
@@ -4860,19 +4879,22 @@ async fn outbox_publish_required_target_failure_is_not_satisfied_by_optional_suc
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.attempted_count, 1);
-    assert_eq!(published.accepted_count, 0);
-    assert_eq!(published.retryable_count, 1);
-    assert_eq!(published.quorum, 1);
-    assert!(!published.quorum_met);
-    assert_eq!(published.relay_receipts.len(), 1);
-    assert_eq!(published.relay_receipts[0].relay_url(), RELAY_SECONDARY_WSS);
+    assert_eq!(published.attempted_count(), 1);
+    assert_eq!(published.accepted_count(), 0);
+    assert_eq!(published.retryable_count(), 1);
+    assert_eq!(published.quorum(), 1);
+    assert!(!published.quorum_met());
+    assert_eq!(published.relay_receipts().len(), 1);
+    assert_eq!(
+        published.relay_receipts()[0].relay_url(),
+        RELAY_SECONDARY_WSS
+    );
     let event = outbox
         .get_event(receipt.outbox_event_id)
         .await
@@ -4953,18 +4975,18 @@ async fn outbox_publish_required_target_success_is_not_blocked_by_optional_retry
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 1);
-    assert_eq!(published.accepted_count, 1);
-    assert_eq!(published.retryable_count, 0);
-    assert_eq!(published.quorum, 1);
-    assert!(published.quorum_met);
+    assert_eq!(published.local_ingest().event_id, signed.id_str());
+    assert_eq!(published.attempted_count(), 1);
+    assert_eq!(published.accepted_count(), 1);
+    assert_eq!(published.retryable_count(), 0);
+    assert_eq!(published.quorum(), 1);
+    assert!(published.quorum_met());
     let event = outbox
         .get_event(receipt.outbox_event_id)
         .await
@@ -5069,25 +5091,27 @@ async fn outbox_publish_required_targets_fan_out_same_endpoint_scoped_receipts()
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500).republish_accepted_relays(true),
+        RadrootsOutboxPublishPolicy::new(2_500)
+            .expect("valid publish policy")
+            .republish_accepted_relays(true),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.attempted_count, 2);
-    assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.quorum, 1);
-    assert!(published.quorum_met);
-    assert_eq!(published.relay_receipts.len(), 1);
-    assert_eq!(published.target_receipts.len(), 2);
-    assert!(published.target_receipts.iter().any(|target| {
-        &target.endpoint_fingerprint == required.fingerprint()
-            && target.target_scope.as_deref() == Some("foodshed.west")
+    assert_eq!(published.attempted_count(), 2);
+    assert_eq!(published.accepted_count(), 2);
+    assert_eq!(published.quorum(), 1);
+    assert!(published.quorum_met());
+    assert_eq!(published.relay_receipts().len(), 1);
+    assert_eq!(published.target_receipts().len(), 2);
+    assert!(published.target_receipts().iter().any(|target| {
+        target.endpoint_fingerprint() == required.fingerprint()
+            && target.target_scope() == Some("foodshed.west")
     }));
-    assert!(published.target_receipts.iter().any(|target| {
-        &target.endpoint_fingerprint == optional.fingerprint()
-            && target.target_scope.as_deref() == Some("foodshed.east")
+    assert!(published.target_receipts().iter().any(|target| {
+        target.endpoint_fingerprint() == optional.fingerprint()
+            && target.target_scope() == Some("foodshed.east")
     }));
     let event = outbox
         .get_event(receipt.outbox_event_id)
@@ -5149,20 +5173,20 @@ async fn outbox_transport_publish_failure_releases_retryable_claim() {
         &store,
         &TransportFailurePublishAdapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.attempted_count, 2);
-    assert_eq!(published.accepted_count, 0);
-    assert_eq!(published.retryable_count, 2);
-    assert_eq!(published.terminal_count, 0);
-    assert!(!published.quorum_met);
+    assert_eq!(published.attempted_count(), 2);
+    assert_eq!(published.accepted_count(), 0);
+    assert_eq!(published.retryable_count(), 2);
+    assert_eq!(published.terminal_count(), 0);
+    assert!(!published.quorum_met());
     assert!(
         published
-            .relay_receipts
+            .relay_receipts()
             .iter()
             .all(|relay| relay.outcome().kind() == RadrootsRelayOutcomeKind::ConnectionFailed)
     );
@@ -5251,20 +5275,20 @@ async fn outbox_publish_marks_published_without_adapter_when_all_relays_already_
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id_str());
-    assert_eq!(published.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 0);
-    assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.quorum, 0);
-    assert!(published.quorum_met);
-    assert!(published.target_receipts.is_empty());
-    assert!(published.relay_receipts.is_empty());
+    assert_eq!(published.local_ingest().event_id, signed.id_str());
+    assert_eq!(published.event_id(), signed.id_str());
+    assert_eq!(published.attempted_count(), 0);
+    assert_eq!(published.accepted_count(), 2);
+    assert_eq!(published.quorum(), 0);
+    assert!(published.quorum_met());
+    assert!(published.target_receipts().is_empty());
+    assert!(published.relay_receipts().is_empty());
     assert!(adapter.captured_raw_events().is_empty());
 
     let event = outbox
@@ -5311,7 +5335,7 @@ async fn outbox_publish_rejects_unknown_adapter_receipts() {
         &store,
         &UnknownRelayReceiptPublishAdapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
@@ -5375,13 +5399,13 @@ async fn outbox_publish_skips_non_nostr_targets() {
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.attempted_count, 1);
+    assert_eq!(published.attempted_count(), 1);
     assert_eq!(adapter.captured_raw_events().len(), 1);
     let event = outbox
         .get_event(receipt.outbox_event_id)
@@ -5448,16 +5472,16 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.quorum, 2);
-    assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.terminal_count, 1);
-    assert!(published.quorum_met);
+    assert_eq!(published.quorum(), 2);
+    assert_eq!(published.accepted_count(), 2);
+    assert_eq!(published.terminal_count(), 1);
+    assert!(published.quorum_met());
 
     let event = outbox
         .get_event(receipt.outbox_event_id)
@@ -5543,18 +5567,19 @@ async fn outbox_publish_republishes_accepted_relays_when_policy_requests_it() {
         &adapter,
         &publish_claim,
         RadrootsOutboxPublishPolicy::new(2_500)
+            .expect("valid publish policy")
             .republish_accepted_relays(true)
-            .relay_url_policy(RadrootsRelayUrlPolicy::Public),
+            .with_relay_url_policy(RadrootsRelayUrlPolicy::Public),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.local_ingest.event_id, signed.id_str());
-    assert_eq!(published.attempted_count, 2);
-    assert_eq!(published.accepted_count, 2);
-    assert_eq!(published.quorum, 1);
-    assert!(published.quorum_met);
+    assert_eq!(published.local_ingest().event_id, signed.id_str());
+    assert_eq!(published.attempted_count(), 2);
+    assert_eq!(published.accepted_count(), 2);
+    assert_eq!(published.quorum(), 1);
+    assert!(published.quorum_met());
     assert_eq!(adapter.captured_raw_events().len(), 1);
 
     let event = outbox
@@ -5626,16 +5651,18 @@ async fn outbox_publish_republish_policy_keeps_terminal_targets_excluded() {
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500).republish_accepted_relays(true),
+        RadrootsOutboxPublishPolicy::new(2_500)
+            .expect("valid publish policy")
+            .republish_accepted_relays(true),
         2_200,
     )
     .await
     .expect("publish");
 
-    assert_eq!(published.attempted_count, 1);
-    assert_eq!(published.accepted_count, 1);
-    assert_eq!(published.quorum, 1);
-    assert!(published.quorum_met);
+    assert_eq!(published.attempted_count(), 1);
+    assert_eq!(published.accepted_count(), 1);
+    assert_eq!(published.quorum(), 1);
+    assert!(published.quorum_met());
     assert_eq!(adapter.captured_raw_events().len(), 1);
     let event = outbox
         .get_event(receipt.outbox_event_id)
@@ -5669,7 +5696,7 @@ async fn outbox_publish_requires_claimed_signed_event() {
         &store,
         &adapter,
         &claimed,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         1_100,
     )
     .await
@@ -5713,7 +5740,7 @@ async fn outbox_publish_propagates_non_transport_adapter_errors_after_target_fil
         &store,
         &NostrJsonFailurePublishAdapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
@@ -5761,7 +5788,7 @@ async fn outbox_publish_rejects_invalid_relay_target_uri_before_adapter_publish(
         &store,
         &adapter,
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_200,
     )
     .await
@@ -5778,7 +5805,7 @@ async fn outbox_publish_rejects_invalid_relay_target_uri_before_adapter_publish(
         &store,
         &ScriptedTransport::new(Vec::new()),
         &publish_claim,
-        RadrootsOutboxPublishPolicy::new(2_500),
+        RadrootsOutboxPublishPolicy::new(2_500).expect("valid publish policy"),
         2_201,
     )
     .await

@@ -564,6 +564,7 @@ impl<A> RadrootsNostrTransport<A> {
                 true,
                 "ready",
             )
+            .expect("static Nostr transport status")
             .with_capabilities(RadrootsTransportCapabilities::deliver_only()),
         }
     }

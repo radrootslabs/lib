@@ -27,18 +27,19 @@ use radroots_transport::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishPolicy {
-    pub next_attempt_after_ms: i64,
-    pub republish_accepted_relays: bool,
-    pub relay_url_policy: RadrootsRelayUrlPolicy,
+    next_attempt_after_ms: i64,
+    republish_accepted_relays: bool,
+    relay_url_policy: RadrootsRelayUrlPolicy,
 }
 
 impl RadrootsOutboxPublishPolicy {
-    pub fn new(next_attempt_after_ms: i64) -> Self {
-        Self {
+    pub fn new(next_attempt_after_ms: i64) -> Result<Self, RadrootsRelayTransportError> {
+        ensure_nonnegative_timestamp("next_attempt_after_ms", next_attempt_after_ms)?;
+        Ok(Self {
             next_attempt_after_ms,
             republish_accepted_relays: false,
             relay_url_policy: RadrootsRelayUrlPolicy::Public,
-        }
+        })
     }
 
     pub fn republish_accepted_relays(mut self, enabled: bool) -> Self {
@@ -46,36 +47,124 @@ impl RadrootsOutboxPublishPolicy {
         self
     }
 
-    pub fn relay_url_policy(mut self, policy: RadrootsRelayUrlPolicy) -> Self {
+    pub fn with_relay_url_policy(mut self, policy: RadrootsRelayUrlPolicy) -> Self {
         self.relay_url_policy = policy;
         self
+    }
+
+    pub const fn next_attempt_after_ms(&self) -> i64 {
+        self.next_attempt_after_ms
+    }
+
+    pub const fn should_republish_accepted_relays(&self) -> bool {
+        self.republish_accepted_relays
+    }
+
+    pub const fn relay_url_policy(&self) -> RadrootsRelayUrlPolicy {
+        self.relay_url_policy
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishReceipt {
-    pub local_ingest: RadrootsOutboxEventStoreIngestReceipt,
-    pub event_id: String,
-    pub attempted_count: usize,
-    pub accepted_count: usize,
-    pub retryable_count: usize,
-    pub terminal_count: usize,
-    pub quorum: usize,
-    pub quorum_met: bool,
-    pub target_receipts: Vec<RadrootsOutboxPublishTargetReceipt>,
-    pub relay_receipts: Vec<RadrootsRelayPublishRelayReceipt>,
+    local_ingest: RadrootsOutboxEventStoreIngestReceipt,
+    event_id: String,
+    attempted_count: usize,
+    accepted_count: usize,
+    retryable_count: usize,
+    terminal_count: usize,
+    quorum: usize,
+    quorum_met: bool,
+    target_receipts: Vec<RadrootsOutboxPublishTargetReceipt>,
+    relay_receipts: Vec<RadrootsRelayPublishRelayReceipt>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxPublishTargetReceipt {
-    pub delivery_target_id: i64,
-    pub endpoint_uri: String,
-    pub endpoint_fingerprint: RadrootsTransportTargetFingerprint,
-    pub target_scope: Option<String>,
-    pub target_label: Option<String>,
-    pub attempted: bool,
-    pub transport_status: RadrootsTransportDeliveryTargetStatus,
-    pub outcome: RadrootsRelayOutcome,
+    delivery_target_id: i64,
+    endpoint_uri: String,
+    endpoint_fingerprint: RadrootsTransportTargetFingerprint,
+    target_scope: Option<String>,
+    target_label: Option<String>,
+    attempted: bool,
+    transport_status: RadrootsTransportDeliveryTargetStatus,
+    outcome: RadrootsRelayOutcome,
+}
+
+impl RadrootsOutboxPublishReceipt {
+    pub const fn local_ingest(&self) -> &RadrootsOutboxEventStoreIngestReceipt {
+        &self.local_ingest
+    }
+
+    pub fn event_id(&self) -> &str {
+        self.event_id.as_str()
+    }
+
+    pub const fn attempted_count(&self) -> usize {
+        self.attempted_count
+    }
+
+    pub const fn accepted_count(&self) -> usize {
+        self.accepted_count
+    }
+
+    pub const fn retryable_count(&self) -> usize {
+        self.retryable_count
+    }
+
+    pub const fn terminal_count(&self) -> usize {
+        self.terminal_count
+    }
+
+    pub const fn quorum(&self) -> usize {
+        self.quorum
+    }
+
+    pub const fn quorum_met(&self) -> bool {
+        self.quorum_met
+    }
+
+    pub fn target_receipts(&self) -> &[RadrootsOutboxPublishTargetReceipt] {
+        self.target_receipts.as_slice()
+    }
+
+    pub fn relay_receipts(&self) -> &[RadrootsRelayPublishRelayReceipt] {
+        self.relay_receipts.as_slice()
+    }
+}
+
+impl RadrootsOutboxPublishTargetReceipt {
+    pub const fn delivery_target_id(&self) -> i64 {
+        self.delivery_target_id
+    }
+
+    pub fn endpoint_uri(&self) -> &str {
+        self.endpoint_uri.as_str()
+    }
+
+    pub const fn endpoint_fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+        &self.endpoint_fingerprint
+    }
+
+    pub fn target_scope(&self) -> Option<&str> {
+        self.target_scope.as_deref()
+    }
+
+    pub fn target_label(&self) -> Option<&str> {
+        self.target_label.as_deref()
+    }
+
+    pub const fn attempted(&self) -> bool {
+        self.attempted
+    }
+
+    pub const fn transport_status(&self) -> RadrootsTransportDeliveryTargetStatus {
+        self.transport_status
+    }
+
+    pub const fn outcome(&self) -> &RadrootsRelayOutcome {
+        &self.outcome
+    }
 }
 
 pub fn phase1_publication_delivery_request(

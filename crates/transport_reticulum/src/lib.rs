@@ -10,15 +10,16 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport,
-    RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
-    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt, ReticulumCapabilityReportV1, ReticulumDestinationV1,
-    ReticulumPayloadPolicyV1,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RadrootsTransport, RadrootsTransportCapabilities,
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest, RadrootsTransportError,
+    RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest, RadrootsTransportFuture,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
+    RadrootsTransportTarget, RadrootsTransportTargetReceipt, ReticulumCapabilityReportV1,
+    ReticulumDestinationV1,
 };
 
 const DEFAULT_PROFILE_ID: &str = "transport.reticulum.default";
@@ -35,7 +36,7 @@ pub enum RadrootsReticulumBehavior {
     DeferDeliveryPlans,
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumEndpoint {
     uri: String,
@@ -73,7 +74,26 @@ impl fmt::Display for RadrootsReticulumEndpoint {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsReticulumEndpointWire {
+    #[serde(deserialize_with = "deserialize_endpoint_uri")]
+    uri: String,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsReticulumEndpoint {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsReticulumEndpointWire::deserialize(deserializer)?;
+        Self::parse(wire.uri).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumAgentEndpoint {
     uri: String,
@@ -89,6 +109,7 @@ impl RadrootsReticulumAgentEndpoint {
                 .any(|ch| ch.is_ascii_control() || ch.is_ascii_whitespace())
             || !uri.starts_with(RETICULUM_AGENT_ENDPOINT_PREFIX)
             || uri.len() == RETICULUM_AGENT_ENDPOINT_PREFIX.len()
+            || uri.len() > RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
         {
             return Err(RadrootsReticulumError::InvalidAgentEndpoint);
         }
@@ -112,7 +133,26 @@ impl fmt::Display for RadrootsReticulumAgentEndpoint {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsReticulumAgentEndpointWire {
+    #[serde(deserialize_with = "deserialize_endpoint_uri")]
+    uri: String,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsReticulumAgentEndpoint {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsReticulumAgentEndpointWire::deserialize(deserializer)?;
+        Self::parse(wire.uri).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumProfile {
     profile_id: String,
@@ -133,16 +173,16 @@ impl RadrootsReticulumProfile {
         behavior: RadrootsReticulumBehavior,
     ) -> Result<Self, RadrootsReticulumError> {
         let profile_id = profile_id.into();
-        if profile_id.trim().is_empty() || profile_id.chars().any(char::is_whitespace) {
+        if profile_id.trim().is_empty()
+            || profile_id.chars().any(char::is_whitespace)
+            || profile_id.len() > RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES
+        {
             return Err(RadrootsReticulumError::InvalidProfileId);
         }
         let destination = ReticulumDestinationV1::new(endpoint.as_str(), scope.clone(), None)
             .map_err(|_| RadrootsReticulumError::InvalidEndpoint)?;
-        let capability_report = ReticulumCapabilityReportV1 {
-            destination: destination.clone(),
-            payload_policy: ReticulumPayloadPolicyV1::v1(),
-            ..ReticulumCapabilityReportV1::unavailable_local()
-        };
+        let capability_report =
+            ReticulumCapabilityReportV1::unavailable(destination.clone(), agent_endpoint.is_none());
         Ok(Self {
             profile_id,
             endpoint,
@@ -162,7 +202,7 @@ impl RadrootsReticulumProfile {
             scope: RadrootsTransportMeshScopeId::local_reticulum(),
             agent_endpoint: None,
             behavior: RadrootsReticulumBehavior::RejectDeliveryAttempts,
-            destination: capability_report.destination.clone(),
+            destination: capability_report.destination().clone(),
             capability_report,
         }
     }
@@ -190,6 +230,8 @@ impl RadrootsReticulumProfile {
 
     pub fn with_agent_endpoint(mut self, agent_endpoint: RadrootsReticulumAgentEndpoint) -> Self {
         self.agent_endpoint = Some(agent_endpoint);
+        self.capability_report =
+            ReticulumCapabilityReportV1::unavailable(self.destination.clone(), false);
         self
     }
 
@@ -206,25 +248,29 @@ impl RadrootsReticulumProfile {
     }
 
     pub fn status(&self) -> RadrootsReticulumStatus {
-        RadrootsReticulumStatus {
-            behavior: self.behavior,
-            scope: self.scope.clone(),
-            agent_endpoint: self.agent_endpoint.clone(),
-            destination: self.destination.clone(),
-            capability_report: self.capability_report.clone(),
-            transport_status: RadrootsTransportStatus::new(
-                RadrootsTransportKind::Reticulum,
-                true,
-                RadrootsTransportImplementationState::Real,
-                false,
-                RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
-            )
-            .with_maturity(RadrootsTransportCapabilityMaturity::Preview)
-            .with_availability(RadrootsTransportCapabilityAvailability::Unavailable)
-            .with_capabilities(RadrootsTransportCapabilities::reticulum_unavailable())
-            .with_profile_id(self.profile_id.clone())
-            .with_endpoint_uri(self.endpoint.as_str()),
-        }
+        let transport_status = RadrootsTransportStatus::new(
+            RadrootsTransportKind::Reticulum,
+            true,
+            RadrootsTransportImplementationState::Real,
+            false,
+            RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+        )
+        .expect("static Reticulum transport status")
+        .with_maturity(RadrootsTransportCapabilityMaturity::Preview)
+        .with_availability(RadrootsTransportCapabilityAvailability::Unavailable)
+        .with_capabilities(RadrootsTransportCapabilities::reticulum_unavailable())
+        .try_with_profile_id(self.profile_id.clone())
+        .and_then(|status| status.try_with_endpoint_uri(self.endpoint.as_str()))
+        .expect("validated Reticulum profile status");
+        RadrootsReticulumStatus::new(
+            self.behavior,
+            self.scope.clone(),
+            self.agent_endpoint.clone(),
+            self.destination.clone(),
+            self.capability_report.clone(),
+            transport_status,
+        )
+        .expect("validated Reticulum profile status")
     }
 }
 
@@ -234,15 +280,149 @@ impl Default for RadrootsReticulumProfile {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsReticulumProfileWire {
+    #[serde(deserialize_with = "deserialize_identifier")]
+    profile_id: String,
+    endpoint: RadrootsReticulumEndpoint,
+    scope: RadrootsTransportMeshScopeId,
+    agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+    behavior: RadrootsReticulumBehavior,
+    destination: ReticulumDestinationV1,
+    capability_report: ReticulumCapabilityReportV1,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsReticulumProfile {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsReticulumProfileWire::deserialize(deserializer)?;
+        let profile = Self::new(
+            wire.profile_id,
+            wire.endpoint,
+            wire.scope,
+            wire.agent_endpoint,
+            wire.behavior,
+        )
+        .map_err(serde::de::Error::custom)?;
+        if profile.destination != wire.destination
+            || profile.capability_report != wire.capability_report
+        {
+            return Err(serde::de::Error::custom(
+                "Reticulum profile derived authority does not match its inputs",
+            ));
+        }
+        Ok(profile)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumStatus {
-    pub behavior: RadrootsReticulumBehavior,
-    pub scope: RadrootsTransportMeshScopeId,
-    pub agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
-    pub destination: ReticulumDestinationV1,
-    pub capability_report: ReticulumCapabilityReportV1,
-    pub transport_status: RadrootsTransportStatus,
+    behavior: RadrootsReticulumBehavior,
+    scope: RadrootsTransportMeshScopeId,
+    agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+    destination: ReticulumDestinationV1,
+    capability_report: ReticulumCapabilityReportV1,
+    transport_status: RadrootsTransportStatus,
+}
+
+impl RadrootsReticulumStatus {
+    fn new(
+        behavior: RadrootsReticulumBehavior,
+        scope: RadrootsTransportMeshScopeId,
+        agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+        destination: ReticulumDestinationV1,
+        capability_report: ReticulumCapabilityReportV1,
+        transport_status: RadrootsTransportStatus,
+    ) -> Result<Self, RadrootsReticulumError> {
+        let expected_report =
+            ReticulumCapabilityReportV1::unavailable(destination.clone(), agent_endpoint.is_none());
+        if destination.routing().scope() != &scope
+            || capability_report != expected_report
+            || transport_status.kind() != &RadrootsTransportKind::Reticulum
+            || !transport_status.is_configured()
+            || transport_status.implementation() != RadrootsTransportImplementationState::Real
+            || transport_status.maturity() != RadrootsTransportCapabilityMaturity::Preview
+            || transport_status.availability()
+                != RadrootsTransportCapabilityAvailability::Unavailable
+            || transport_status.is_usable_for_delivery()
+            || transport_status.capabilities()
+                != &RadrootsTransportCapabilities::reticulum_unavailable()
+            || transport_status.profile_id().is_none()
+            || transport_status.endpoint_uri() != Some(destination.uri().as_str())
+            || transport_status.message() != RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
+        {
+            return Err(RadrootsReticulumError::InvalidStatus);
+        }
+        Ok(Self {
+            behavior,
+            scope,
+            agent_endpoint,
+            destination,
+            capability_report,
+            transport_status,
+        })
+    }
+
+    pub const fn behavior(&self) -> RadrootsReticulumBehavior {
+        self.behavior
+    }
+
+    pub const fn scope(&self) -> &RadrootsTransportMeshScopeId {
+        &self.scope
+    }
+
+    pub fn agent_endpoint(&self) -> Option<&RadrootsReticulumAgentEndpoint> {
+        self.agent_endpoint.as_ref()
+    }
+
+    pub const fn destination(&self) -> &ReticulumDestinationV1 {
+        &self.destination
+    }
+
+    pub const fn capability_report(&self) -> &ReticulumCapabilityReportV1 {
+        &self.capability_report
+    }
+
+    pub const fn transport_status(&self) -> &RadrootsTransportStatus {
+        &self.transport_status
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsReticulumStatusWire {
+    behavior: RadrootsReticulumBehavior,
+    scope: RadrootsTransportMeshScopeId,
+    agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+    destination: ReticulumDestinationV1,
+    capability_report: ReticulumCapabilityReportV1,
+    transport_status: RadrootsTransportStatus,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsReticulumStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsReticulumStatusWire::deserialize(deserializer)?;
+        Self::new(
+            wire.behavior,
+            wire.scope,
+            wire.agent_endpoint,
+            wire.destination,
+            wire.capability_report,
+            wire.transport_status,
+        )
+        .map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -285,18 +465,15 @@ impl RadrootsReticulumTransport {
         &self,
         request: RadrootsReticulumFetchRequest,
     ) -> Result<RadrootsReticulumFetchReceipt, RadrootsReticulumError> {
-        if request.max_events == 0 {
-            return Err(RadrootsReticulumError::InvalidFetchLimit);
-        }
-        Ok(RadrootsReticulumFetchReceipt {
-            request_id: request.request_id,
-            endpoint_uri: self.profile.endpoint.as_str().to_owned(),
-            scope: self.profile.scope.clone(),
-            agent_endpoint: self.profile.agent_endpoint.clone(),
-            outcome: reticulum_outcome(self.profile.behavior),
-            observed_event_count: 0,
-            implementation: RadrootsTransportImplementationState::Real,
-        })
+        RadrootsReticulumFetchReceipt::new(
+            request.request_id,
+            self.profile.endpoint.as_str().to_owned(),
+            self.profile.scope.clone(),
+            self.profile.agent_endpoint.clone(),
+            reticulum_outcome(self.profile.behavior),
+            0,
+            RadrootsTransportImplementationState::Real,
+        )
     }
 }
 
@@ -312,7 +489,7 @@ impl RadrootsTransport for RadrootsReticulumTransport {
     }
 
     fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
-        Box::pin(async move { Ok(self.profile.status().transport_status) })
+        Box::pin(async move { Ok(self.profile.status().transport_status().clone()) })
     }
 
     fn deliver<'a>(
@@ -345,11 +522,11 @@ impl RadrootsTransport for RadrootsReticulumTransport {
     }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumFetchRequest {
-    pub request_id: String,
-    pub max_events: u16,
+    request_id: String,
+    max_events: u16,
 }
 
 impl RadrootsReticulumFetchRequest {
@@ -357,26 +534,157 @@ impl RadrootsReticulumFetchRequest {
         request_id: impl Into<String>,
         max_events: u16,
     ) -> Result<Self, RadrootsReticulumError> {
-        if max_events == 0 {
+        let request_id = request_id.into();
+        if !is_valid_identifier(request_id.as_str()) {
+            return Err(RadrootsReticulumError::InvalidFetchRequestId);
+        }
+        if max_events == 0
+            || usize::from(max_events) > RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT
+        {
             return Err(RadrootsReticulumError::InvalidFetchLimit);
         }
         Ok(Self {
-            request_id: request_id.into(),
+            request_id,
             max_events,
         })
     }
+
+    pub fn request_id(&self) -> &str {
+        self.request_id.as_str()
+    }
+
+    pub const fn max_events(&self) -> u16 {
+        self.max_events
+    }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsReticulumFetchRequestWire {
+    #[serde(deserialize_with = "deserialize_identifier")]
+    request_id: String,
+    max_events: u16,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsReticulumFetchRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsReticulumFetchRequestWire::deserialize(deserializer)?;
+        Self::new(wire.request_id, wire.max_events).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsReticulumFetchReceipt {
-    pub request_id: String,
-    pub endpoint_uri: String,
-    pub scope: RadrootsTransportMeshScopeId,
-    pub agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
-    pub outcome: RadrootsTransportOutcome,
-    pub observed_event_count: usize,
-    pub implementation: RadrootsTransportImplementationState,
+    request_id: String,
+    endpoint_uri: String,
+    scope: RadrootsTransportMeshScopeId,
+    agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+    outcome: RadrootsTransportOutcome,
+    observed_event_count: usize,
+    implementation: RadrootsTransportImplementationState,
+}
+
+impl RadrootsReticulumFetchReceipt {
+    fn new(
+        request_id: String,
+        endpoint_uri: String,
+        scope: RadrootsTransportMeshScopeId,
+        agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+        outcome: RadrootsTransportOutcome,
+        observed_event_count: usize,
+        implementation: RadrootsTransportImplementationState,
+    ) -> Result<Self, RadrootsReticulumError> {
+        if !is_valid_identifier(request_id.as_str())
+            || RadrootsReticulumEndpoint::parse(endpoint_uri.as_str()).is_err()
+            || observed_event_count != 0
+            || implementation != RadrootsTransportImplementationState::Real
+            || !matches!(
+                outcome.kind(),
+                RadrootsTransportOutcomeKind::TransportUnavailable
+                    | RadrootsTransportOutcomeKind::DeferredUntilImplemented
+            )
+        {
+            return Err(RadrootsReticulumError::InvalidFetchReceipt);
+        }
+        Ok(Self {
+            request_id,
+            endpoint_uri,
+            scope,
+            agent_endpoint,
+            outcome,
+            observed_event_count,
+            implementation,
+        })
+    }
+
+    pub fn request_id(&self) -> &str {
+        self.request_id.as_str()
+    }
+
+    pub fn endpoint_uri(&self) -> &str {
+        self.endpoint_uri.as_str()
+    }
+
+    pub const fn scope(&self) -> &RadrootsTransportMeshScopeId {
+        &self.scope
+    }
+
+    pub fn agent_endpoint(&self) -> Option<&RadrootsReticulumAgentEndpoint> {
+        self.agent_endpoint.as_ref()
+    }
+
+    pub const fn outcome(&self) -> &RadrootsTransportOutcome {
+        &self.outcome
+    }
+
+    pub const fn observed_event_count(&self) -> usize {
+        self.observed_event_count
+    }
+
+    pub const fn implementation(&self) -> RadrootsTransportImplementationState {
+        self.implementation
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsReticulumFetchReceiptWire {
+    #[serde(deserialize_with = "deserialize_identifier")]
+    request_id: String,
+    #[serde(deserialize_with = "deserialize_endpoint_uri")]
+    endpoint_uri: String,
+    scope: RadrootsTransportMeshScopeId,
+    agent_endpoint: Option<RadrootsReticulumAgentEndpoint>,
+    outcome: RadrootsTransportOutcome,
+    observed_event_count: usize,
+    implementation: RadrootsTransportImplementationState,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsReticulumFetchReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsReticulumFetchReceiptWire::deserialize(deserializer)?;
+        Self::new(
+            wire.request_id,
+            wire.endpoint_uri,
+            wire.scope,
+            wire.agent_endpoint,
+            wire.outcome,
+            wire.observed_event_count,
+            wire.implementation,
+        )
+        .map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -385,6 +693,9 @@ pub enum RadrootsReticulumError {
     InvalidAgentEndpoint,
     InvalidProfileId,
     InvalidFetchLimit,
+    InvalidFetchRequestId,
+    InvalidFetchReceipt,
+    InvalidStatus,
     NonReticulumTarget,
     InvalidDeliveryReceipt,
 }
@@ -395,7 +706,10 @@ impl fmt::Display for RadrootsReticulumError {
             Self::InvalidEndpoint => "invalid Reticulum endpoint",
             Self::InvalidAgentEndpoint => "invalid Reticulum agent endpoint",
             Self::InvalidProfileId => "invalid Reticulum profile id",
-            Self::InvalidFetchLimit => "Reticulum fetch limit must be greater than zero",
+            Self::InvalidFetchLimit => "Reticulum fetch limit must be between 1 and 1000",
+            Self::InvalidFetchRequestId => "invalid Reticulum fetch request id",
+            Self::InvalidFetchReceipt => "invalid Reticulum fetch receipt",
+            Self::InvalidStatus => "invalid Reticulum status",
             Self::NonReticulumTarget => "Reticulum transport received a non-Reticulum target",
             Self::InvalidDeliveryReceipt => "Reticulum transport produced an invalid receipt",
         })
@@ -410,6 +724,9 @@ fn reticulum_error_to_transport_error(error: RadrootsReticulumError) -> Radroots
         RadrootsReticulumError::InvalidAgentEndpoint
         | RadrootsReticulumError::InvalidProfileId
         | RadrootsReticulumError::InvalidFetchLimit
+        | RadrootsReticulumError::InvalidFetchRequestId
+        | RadrootsReticulumError::InvalidFetchReceipt
+        | RadrootsReticulumError::InvalidStatus
         | RadrootsReticulumError::InvalidDeliveryReceipt => {
             RadrootsTransportError::InvalidTransportKind
         }
@@ -455,6 +772,71 @@ fn reticulum_outcome(behavior: RadrootsReticulumBehavior) -> RadrootsTransportOu
             RadrootsReticulumBehavior::DeferDeliveryPlans => DEFERRED_MESSAGE,
         })
         .expect("static Reticulum outcome message is bounded")
+}
+
+fn is_valid_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value == value.trim()
+        && !value.chars().any(char::is_whitespace)
+        && value.len() <= RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_endpoint_uri<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_bounded_string(deserializer, RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES)
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_identifier<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_bounded_string(deserializer, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES)
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_bounded_string<'de, D>(deserializer: D, max: usize) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserializer.deserialize_string(BoundedStringVisitor { max })
+}
+
+#[cfg(feature = "serde")]
+struct BoundedStringVisitor {
+    max: usize,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::de::Visitor<'de> for BoundedStringVisitor {
+    type Value = String;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "a string of at most {} UTF-8 bytes", self.max)
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if value.len() > self.max {
+            return Err(E::invalid_length(value.len(), &self));
+        }
+        Ok(value.to_owned())
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if value.len() > self.max {
+            return Err(E::invalid_length(value.len(), &self));
+        }
+        Ok(value)
+    }
 }
 
 #[cfg(test)]
@@ -557,9 +939,9 @@ mod tests {
         );
         assert_eq!(
             profile.destination(),
-            &profile.capability_report().destination
+            profile.capability_report().destination()
         );
-        assert_eq!(profile.status().behavior, profile.behavior());
+        assert_eq!(profile.status().behavior(), profile.behavior());
 
         let default_profile = RadrootsReticulumProfile::deferred_until_implemented();
         assert_eq!(default_profile, RadrootsReticulumProfile::default());
@@ -568,7 +950,7 @@ mod tests {
         assert!(RadrootsReticulumFetchRequest::new("invalid", 0).is_err());
         let fetch =
             RadrootsReticulumFetchRequest::new("fetch".to_string(), 1).expect("fetch request");
-        assert_eq!(fetch.request_id, "fetch");
+        assert_eq!(fetch.request_id(), "fetch");
     }
 
     #[test]
@@ -587,17 +969,10 @@ mod tests {
             rejecting
                 .fetch(RadrootsReticulumFetchRequest::new("direct-fetch", 1).expect("fetch"))
                 .expect("direct fetch")
-                .observed_event_count,
+                .observed_event_count(),
             0
         );
-        assert!(
-            rejecting
-                .fetch(RadrootsReticulumFetchRequest {
-                    request_id: "invalid-fetch".to_owned(),
-                    max_events: 0,
-                })
-                .is_err()
-        );
+        assert!(RadrootsReticulumFetchRequest::new("invalid-fetch", 0).is_err());
 
         assert_eq!(
             RadrootsTransport::transport_kind(&rejecting),

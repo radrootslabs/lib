@@ -4,11 +4,14 @@ use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
     RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
     RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
-    RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
-    RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
-    RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES, RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
-    RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
-    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+    RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES, RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT,
+    RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES, RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT,
+    RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES, RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES,
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
+    RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES, RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES,
+    RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
+    RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES, RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS,
     RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
     RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
@@ -68,15 +71,15 @@ fn reticulum_destination_v1_is_canonical_and_stable() {
     assert_eq!(destination, local);
     assert_eq!(destination.uri().as_str(), RADROOTS_RETICULUM_ENDPOINT_URI);
     assert_eq!(
-        destination.routing().scope.as_str(),
+        destination.routing().scope().as_str(),
         RADROOTS_RETICULUM_SCOPE_ID
     );
     assert_eq!(
-        destination.routing().gateway,
+        destination.routing().gateway(),
         ReticulumGatewaySemanticsV1::NoGatewayForwarding
     );
     assert_eq!(
-        destination.routing().privacy,
+        destination.routing().privacy(),
         ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
     );
     assert_eq!(destination.fingerprint(), target.fingerprint());
@@ -147,33 +150,89 @@ fn reticulum_destination_deserialization_revalidates_canonical_identity() {
 fn reticulum_capability_report_v1_is_explicitly_unavailable_without_fragmentation() {
     let report = ReticulumCapabilityReportV1::unavailable_local();
 
-    assert!(report.delivery_required);
-    assert!(!report.fetch_required);
-    assert!(!report.can_deliver);
-    assert!(!report.can_fetch);
-    assert!(!report.can_discover);
-    assert!(!report.can_forward_gateway);
-    assert!(!report.can_observe_receipts);
+    assert!(report.is_delivery_required());
+    assert!(!report.is_fetch_required());
+    assert!(!report.can_deliver());
+    assert!(!report.can_fetch());
+    assert!(!report.can_discover());
+    assert!(!report.can_forward_gateway());
+    assert!(!report.can_observe_receipts());
     assert_eq!(
-        report.payload_policy.fragment_policy.mode,
+        report.payload_policy().fragment_policy().mode(),
         ReticulumFragmentationModeV1::Unsupported
-    );
-    assert_eq!(report.payload_policy.fragment_policy.max_fragment_count, 1);
-    assert_eq!(
-        report.payload_policy.fragment_policy.max_reassembled_bytes,
-        report.payload_policy.max_payload_bytes
     );
     assert_eq!(
         report
-            .payload_policy
-            .fragment_policy
-            .duplicate_fragment_behavior,
+            .payload_policy()
+            .fragment_policy()
+            .max_fragment_count(),
+        1
+    );
+    assert_eq!(
+        report
+            .payload_policy()
+            .fragment_policy()
+            .max_reassembled_bytes(),
+        report.payload_policy().max_payload_bytes()
+    );
+    assert_eq!(
+        report
+            .payload_policy()
+            .fragment_policy()
+            .duplicate_fragment_behavior(),
         ReticulumDuplicateFragmentBehaviorV1::Reject
     );
     assert_eq!(
-        report.payload_policy.fragment_policy.integrity_verification,
+        report
+            .payload_policy()
+            .fragment_policy()
+            .integrity_verification(),
         ReticulumFragmentIntegrityV1::PayloadDigest
     );
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_bounds_reticulum_policy_wire_rejects_forged_or_unknown_state() {
+    let report = ReticulumCapabilityReportV1::unavailable_local();
+    let canonical = serde_json::to_value(&report).expect("serialize capability report");
+    assert_eq!(
+        serde_json::from_value::<ReticulumCapabilityReportV1>(canonical.clone())
+            .expect("reload capability report"),
+        report
+    );
+
+    for pointer in [
+        "/fetch_required",
+        "/can_deliver",
+        "/can_fetch",
+        "/can_discover",
+        "/can_forward_gateway",
+        "/can_observe_receipts",
+    ] {
+        let mut forged = canonical.clone();
+        *forged.pointer_mut(pointer).expect("capability field") = Value::Bool(true);
+        assert!(serde_json::from_value::<ReticulumCapabilityReportV1>(forged).is_err());
+    }
+    for (pointer, value) in [
+        ("/payload_policy/max_payload_bytes", Value::from(65_535)),
+        (
+            "/payload_policy/fragment_policy/max_fragment_count",
+            Value::from(2),
+        ),
+        (
+            "/payload_policy/fragment_policy/max_reassembled_bytes",
+            Value::from(65_535),
+        ),
+    ] {
+        let mut forged = canonical.clone();
+        *forged.pointer_mut(pointer).expect("policy field") = value;
+        assert!(serde_json::from_value::<ReticulumCapabilityReportV1>(forged).is_err());
+    }
+
+    let mut unknown = canonical;
+    unknown["unexpected"] = Value::Bool(true);
+    assert!(serde_json::from_value::<ReticulumCapabilityReportV1>(unknown).is_err());
 }
 
 #[test]
@@ -422,26 +481,26 @@ fn transport_status_models_canonical_configuration_and_delivery_usability() {
         true,
         "ready",
     )
-    .with_profile_id("transport.nostr.default")
-    .with_endpoint_uri("wss://relay.example");
+    .expect("bounded status")
+    .try_with_profile_id("transport.nostr.default")
+    .expect("bounded profile id")
+    .try_with_endpoint_uri("wss://relay.example")
+    .expect("bounded endpoint URI");
 
-    assert_eq!(status.kind, RadrootsTransportKind::Nostr);
+    assert_eq!(status.kind(), &RadrootsTransportKind::Nostr);
+    assert_eq!(status.profile_id(), Some("transport.nostr.default"));
+    assert_eq!(status.endpoint_uri(), Some("wss://relay.example"));
+    assert!(status.is_configured());
     assert_eq!(
-        status.profile_id.as_deref(),
-        Some("transport.nostr.default")
-    );
-    assert_eq!(status.endpoint_uri.as_deref(), Some("wss://relay.example"));
-    assert!(status.configured);
-    assert_eq!(
-        status.implementation,
+        status.implementation(),
         RadrootsTransportImplementationState::Real
     );
-    assert!(status.usable_for_delivery);
+    assert!(status.is_usable_for_delivery());
     assert_eq!(
-        status.capabilities,
-        RadrootsTransportCapabilities::deliver_only()
+        status.capabilities(),
+        &RadrootsTransportCapabilities::deliver_only()
     );
-    assert_eq!(status.message, "ready");
+    assert_eq!(status.message(), "ready");
 
     let json = serde_json::to_value(&status).expect("status json");
     assert_eq!(json["transport"], "nostr");
@@ -803,6 +862,183 @@ fn checked_in_transport_target_uri_vectors_match_parser_behavior() {
             other => panic!("unknown transport target vector kind {other}"),
         }
     }
+}
+
+#[test]
+fn transport_bounds_checked_in_resource_manifest_matches_exported_constants() {
+    let vectors =
+        include_str!("../../../contracts/conformance/vectors/transport/resource_limits.v1.json");
+    let document: Value = serde_json::from_str(vectors).expect("transport resource manifest json");
+    let entries = document
+        .get("vectors")
+        .and_then(Value::as_array)
+        .expect("transport resource vectors");
+    let expected = [
+        (
+            "transport_signed_event_json_max_bytes_001",
+            "radroots_transport::RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES as u64,
+            "bytes",
+        ),
+        (
+            "transport_reticulum_payload_max_bytes_002",
+            "radroots_transport::RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES as u64,
+            "bytes",
+        ),
+        (
+            "transport_opaque_payload_max_bytes_003",
+            "radroots_transport::RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES",
+            "RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES",
+            RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES as u64,
+            "bytes",
+        ),
+        (
+            "transport_endpoint_uri_max_bytes_004",
+            "radroots_transport::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_identifier_max_bytes_005",
+            "radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_target_scope_max_bytes_006",
+            "radroots_transport::RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES",
+            "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+            RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_target_label_max_bytes_007",
+            "radroots_transport::RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES",
+            "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+            RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_unique_target_max_count_008",
+            "radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT",
+            "resource_authority",
+            RADROOTS_TRANSPORT_TARGET_MAX_COUNT as u64,
+            "items",
+        ),
+        (
+            "transport_fetch_filter_max_count_009",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT",
+            "resource_authority",
+            RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT as u64,
+            "items",
+        ),
+        (
+            "transport_fetch_filter_max_bytes_010",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES as u64,
+            "compact_json_bytes",
+        ),
+        (
+            "transport_fetch_filters_max_bytes_011",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES",
+            "RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT * RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES",
+            RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES as u64,
+            "compact_json_bytes",
+        ),
+        (
+            "transport_fetch_admitted_event_max_count_012",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT",
+            "resource_authority",
+            RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT as u64,
+            "items",
+        ),
+        (
+            "transport_fetch_raw_item_max_count_013",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT",
+            "resource_authority",
+            RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT as u64,
+            "items",
+        ),
+        (
+            "transport_fetch_raw_json_max_bytes_014",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES as u64,
+            "bytes",
+        ),
+        (
+            "transport_complete_request_diagnostic_max_bytes_015",
+            "radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES",
+            "resource_authority",
+            RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_outcome_code_max_bytes_016",
+            "radroots_transport::RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES",
+            "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+            RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_outcome_message_max_bytes_017",
+            "radroots_transport::RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES",
+            "RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES",
+            RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_total_deadline_max_ms_018",
+            "radroots_transport::RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS",
+            "resource_authority",
+            RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS,
+            "milliseconds",
+        ),
+        (
+            "transport_delivery_request_id_max_bytes_019",
+            "radroots_transport::RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES",
+            "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+            RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+        (
+            "transport_fetch_request_id_max_bytes_020",
+            "radroots_transport::RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES",
+            "RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES",
+            RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES as u64,
+            "utf8_bytes",
+        ),
+    ];
+
+    assert_eq!(entries.len(), expected.len());
+    for (entry, (id, authority, derivation, maximum, unit)) in entries.iter().zip(expected) {
+        assert_eq!(
+            entry,
+            &serde_json::json!({
+                "id": id,
+                "kind": "transport.resource_limit.exact",
+                "input": {
+                    "authority": authority,
+                    "derivation": derivation,
+                },
+                "expected": {
+                    "maximum": maximum,
+                    "unit": unit,
+                },
+            })
+        );
+    }
+
+    assert_eq!(
+        RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES,
+        RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT * RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES
+    );
 }
 
 #[test]
@@ -1283,14 +1519,16 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
 
         fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
             Box::pin(async move {
-                Ok(RadrootsTransportStatus::new(
+                RadrootsTransportStatus::new(
                     RadrootsTransportKind::Local,
                     true,
                     RadrootsTransportImplementationState::Real,
                     true,
                     "ready",
                 )
-                .with_capabilities(RadrootsTransportCapabilities::deliver_and_fetch()))
+                .map(|status| {
+                    status.with_capabilities(RadrootsTransportCapabilities::deliver_and_fetch())
+                })
             })
         }
 
@@ -1332,10 +1570,10 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
     let transport = MemoryTransport { target };
     assert_eq!(transport.transport_kind(), RadrootsTransportKind::Local);
     let status = futures::executor::block_on(transport.status()).expect("status");
-    assert_eq!(status.kind, RadrootsTransportKind::Local);
+    assert_eq!(status.kind(), &RadrootsTransportKind::Local);
     assert_eq!(
-        status.capabilities,
-        RadrootsTransportCapabilities::deliver_and_fetch()
+        status.capabilities(),
+        &RadrootsTransportCapabilities::deliver_and_fetch()
     );
     let delivery = futures::executor::block_on(
         transport.deliver(
@@ -1910,8 +2148,8 @@ fn status_contract_covers_builders_and_availability_defaults() {
         Some("accepted")
     );
 
-    assert!(!RadrootsTransportCapabilities::none().deliver);
-    assert!(RadrootsTransportCapabilities::fetch_only().fetch);
+    assert!(!RadrootsTransportCapabilities::none().can_deliver());
+    assert!(RadrootsTransportCapabilities::fetch_only().can_fetch());
     assert_eq!(
         RadrootsTransportCapabilities::reticulum_unavailable(),
         RadrootsTransportCapabilities::none()
@@ -1920,11 +2158,11 @@ fn status_contract_covers_builders_and_availability_defaults() {
         .with_discovery(true)
         .with_gateway_forwarding(true)
         .with_receipt_observation(true);
-    assert!(capabilities.deliver);
-    assert!(capabilities.fetch);
-    assert!(capabilities.discovery);
-    assert!(capabilities.gateway_forwarding);
-    assert!(capabilities.receipt_observation);
+    assert!(capabilities.can_deliver());
+    assert!(capabilities.can_fetch());
+    assert!(capabilities.can_discover());
+    assert!(capabilities.can_forward_gateway());
+    assert!(capabilities.can_observe_receipts());
 
     let unavailable = RadrootsTransportStatus::new(
         RadrootsTransportKind::Reticulum,
@@ -1933,27 +2171,127 @@ fn status_contract_covers_builders_and_availability_defaults() {
         false,
         "unavailable",
     )
+    .expect("bounded status")
     .with_capabilities(capabilities.clone())
     .with_maturity(RadrootsTransportCapabilityMaturity::Preview)
     .with_availability(RadrootsTransportCapabilityAvailability::Degraded)
-    .with_profile_id("reticulum.local")
-    .with_endpoint_uri(RADROOTS_RETICULUM_ENDPOINT_URI);
+    .try_with_profile_id("reticulum.local")
+    .expect("bounded profile id")
+    .try_with_endpoint_uri(RADROOTS_RETICULUM_ENDPOINT_URI)
+    .expect("bounded endpoint URI");
     assert_eq!(
-        unavailable.availability,
+        unavailable.availability(),
         RadrootsTransportCapabilityAvailability::Degraded
     );
     assert_eq!(
-        unavailable.maturity,
+        unavailable.maturity(),
         RadrootsTransportCapabilityMaturity::Preview
     );
-    assert_eq!(unavailable.capabilities, capabilities);
-    assert!(!unavailable.usable_for_delivery);
+    assert_eq!(unavailable.capabilities(), &capabilities);
+    assert!(!unavailable.is_usable_for_delivery());
 
     assert!(!RadrootsTransportDeliveryTargetStatus::Accepted.is_ready_for_attempt());
     assert!(!RadrootsTransportDeliveryTargetStatus::Accepted.is_retryable_failure());
     assert!(RadrootsTransportDeliveryTargetStatus::SkippedPolicyDenied.is_terminal_failure());
     assert!(!RadrootsTransportDeliveryTargetStatus::Accepted.is_terminal_failure());
     assert!(!RadrootsTransportDeliveryTargetStatus::Accepted.is_deferred_until_implemented());
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_bounds_status_construction_and_wire_are_strict() {
+    let exact_message = "m".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES);
+    let exact_profile = "p".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES);
+    let exact_endpoint = "e".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES);
+    let status = RadrootsTransportStatus::new(
+        RadrootsTransportKind::Local,
+        true,
+        RadrootsTransportImplementationState::Real,
+        true,
+        exact_message,
+    )
+    .expect("exact status message")
+    .try_with_profile_id(exact_profile)
+    .expect("exact profile id")
+    .try_with_endpoint_uri(exact_endpoint)
+    .expect("exact endpoint URI");
+    let wire = serde_json::to_value(&status).expect("serialize bounded status");
+    assert_eq!(
+        serde_json::from_value::<RadrootsTransportStatus>(wire.clone())
+            .expect("reload bounded status"),
+        status
+    );
+
+    assert_eq!(
+        RadrootsTransportStatus::new(
+            RadrootsTransportKind::Local,
+            true,
+            RadrootsTransportImplementationState::Real,
+            true,
+            "m".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        )
+        .expect_err("one-over status message"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "transport_status_message",
+            max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1,
+        }
+    );
+    assert_eq!(
+        RadrootsTransportStatus::new(
+            RadrootsTransportKind::Local,
+            true,
+            RadrootsTransportImplementationState::Real,
+            true,
+            "ready",
+        )
+        .expect("status")
+        .try_with_profile_id("p".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1))
+        .expect_err("one-over profile id"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "transport_status_profile_id",
+            max: RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1,
+        }
+    );
+    assert_eq!(
+        RadrootsTransportStatus::new(
+            RadrootsTransportKind::Local,
+            true,
+            RadrootsTransportImplementationState::Real,
+            true,
+            "ready",
+        )
+        .expect("status")
+        .try_with_endpoint_uri("e".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES + 1))
+        .expect_err("one-over endpoint URI"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "transport_status_endpoint_uri",
+            max: RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES + 1,
+        }
+    );
+
+    for field in ["message", "profile_id", "endpoint_uri"] {
+        let mut oversized = wire.clone();
+        let max = match field {
+            "message" => RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            "profile_id" => RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+            "endpoint_uri" => RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+            _ => unreachable!(),
+        };
+        oversized[field] = Value::String("x".repeat(max + 1));
+        assert!(serde_json::from_value::<RadrootsTransportStatus>(oversized).is_err());
+    }
+    let mut unknown = wire;
+    unknown["unexpected"] = Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsTransportStatus>(unknown).is_err());
+
+    let capabilities = serde_json::to_value(RadrootsTransportCapabilities::none())
+        .expect("serialize capabilities");
+    let mut unknown_capability = capabilities;
+    unknown_capability["unexpected"] = Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsTransportCapabilities>(unknown_capability).is_err());
 }
 
 #[test]

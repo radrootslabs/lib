@@ -281,13 +281,14 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportOutcome {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportCapabilities {
-    pub deliver: bool,
-    pub fetch: bool,
-    pub discovery: bool,
-    pub gateway_forwarding: bool,
-    pub receipt_observation: bool,
+    deliver: bool,
+    fetch: bool,
+    discovery: bool,
+    gateway_forwarding: bool,
+    receipt_observation: bool,
 }
 
 impl RadrootsTransportCapabilities {
@@ -355,22 +356,42 @@ impl RadrootsTransportCapabilities {
             receipt_observation: false,
         }
     }
+
+    pub const fn can_deliver(&self) -> bool {
+        self.deliver
+    }
+
+    pub const fn can_fetch(&self) -> bool {
+        self.fetch
+    }
+
+    pub const fn can_discover(&self) -> bool {
+        self.discovery
+    }
+
+    pub const fn can_forward_gateway(&self) -> bool {
+        self.gateway_forwarding
+    }
+
+    pub const fn can_observe_receipts(&self) -> bool {
+        self.receipt_observation
+    }
 }
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTransportStatus {
     #[cfg_attr(feature = "serde", serde(rename = "transport"))]
-    pub kind: RadrootsTransportKind,
-    pub profile_id: Option<String>,
-    pub endpoint_uri: Option<String>,
-    pub configured: bool,
-    pub implementation: RadrootsTransportImplementationState,
-    pub maturity: RadrootsTransportCapabilityMaturity,
-    pub availability: RadrootsTransportCapabilityAvailability,
-    pub usable_for_delivery: bool,
-    pub capabilities: RadrootsTransportCapabilities,
-    pub message: String,
+    kind: RadrootsTransportKind,
+    profile_id: Option<String>,
+    endpoint_uri: Option<String>,
+    configured: bool,
+    implementation: RadrootsTransportImplementationState,
+    maturity: RadrootsTransportCapabilityMaturity,
+    availability: RadrootsTransportCapabilityAvailability,
+    usable_for_delivery: bool,
+    capabilities: RadrootsTransportCapabilities,
+    message: String,
 }
 
 impl RadrootsTransportStatus {
@@ -380,8 +401,14 @@ impl RadrootsTransportStatus {
         implementation: RadrootsTransportImplementationState,
         usable_for_delivery: bool,
         message: impl Into<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, crate::RadrootsTransportError> {
+        let message = message.into();
+        crate::limits::ensure_resource_limit(
+            "transport_status_message",
+            message.len(),
+            crate::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+        )?;
+        Ok(Self {
             kind,
             profile_id: None,
             endpoint_uri: None,
@@ -399,8 +426,8 @@ impl RadrootsTransportStatus {
             } else {
                 RadrootsTransportCapabilities::none()
             },
-            message: message.into(),
-        }
+            message,
+        })
     }
 
     pub fn with_capabilities(mut self, capabilities: RadrootsTransportCapabilities) -> Self {
@@ -421,13 +448,159 @@ impl RadrootsTransportStatus {
         self
     }
 
-    pub fn with_profile_id(mut self, profile_id: impl Into<String>) -> Self {
-        self.profile_id = Some(profile_id.into());
-        self
+    pub fn try_with_profile_id(
+        mut self,
+        profile_id: impl Into<String>,
+    ) -> Result<Self, crate::RadrootsTransportError> {
+        let profile_id = profile_id.into();
+        crate::limits::ensure_resource_limit(
+            "transport_status_profile_id",
+            profile_id.len(),
+            crate::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+        )?;
+        self.profile_id = Some(profile_id);
+        Ok(self)
     }
 
-    pub fn with_endpoint_uri(mut self, endpoint_uri: impl Into<String>) -> Self {
-        self.endpoint_uri = Some(endpoint_uri.into());
-        self
+    pub fn try_with_endpoint_uri(
+        mut self,
+        endpoint_uri: impl Into<String>,
+    ) -> Result<Self, crate::RadrootsTransportError> {
+        let endpoint_uri = endpoint_uri.into();
+        crate::limits::ensure_resource_limit(
+            "transport_status_endpoint_uri",
+            endpoint_uri.len(),
+            crate::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+        )?;
+        self.endpoint_uri = Some(endpoint_uri);
+        Ok(self)
+    }
+
+    pub const fn kind(&self) -> &RadrootsTransportKind {
+        &self.kind
+    }
+
+    pub fn profile_id(&self) -> Option<&str> {
+        self.profile_id.as_deref()
+    }
+
+    pub fn endpoint_uri(&self) -> Option<&str> {
+        self.endpoint_uri.as_deref()
+    }
+
+    pub const fn is_configured(&self) -> bool {
+        self.configured
+    }
+
+    pub const fn implementation(&self) -> RadrootsTransportImplementationState {
+        self.implementation
+    }
+
+    pub const fn maturity(&self) -> RadrootsTransportCapabilityMaturity {
+        self.maturity
+    }
+
+    pub const fn availability(&self) -> RadrootsTransportCapabilityAvailability {
+        self.availability
+    }
+
+    pub const fn is_usable_for_delivery(&self) -> bool {
+        self.usable_for_delivery
+    }
+
+    pub const fn capabilities(&self) -> &RadrootsTransportCapabilities {
+        &self.capabilities
+    }
+
+    pub fn message(&self) -> &str {
+        self.message.as_str()
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsTransportStatusWire {
+    #[serde(rename = "transport")]
+    kind: RadrootsTransportKind,
+    #[serde(deserialize_with = "deserialize_status_profile_id")]
+    profile_id: Option<String>,
+    #[serde(deserialize_with = "deserialize_status_endpoint_uri")]
+    endpoint_uri: Option<String>,
+    configured: bool,
+    implementation: RadrootsTransportImplementationState,
+    maturity: RadrootsTransportCapabilityMaturity,
+    availability: RadrootsTransportCapabilityAvailability,
+    usable_for_delivery: bool,
+    capabilities: RadrootsTransportCapabilities,
+    #[serde(deserialize_with = "deserialize_status_message")]
+    message: String,
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_status_profile_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_option_string(
+        deserializer,
+        "transport_status_profile_id",
+        crate::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_status_endpoint_uri<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_option_string(
+        deserializer,
+        "transport_status_endpoint_uri",
+        crate::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_status_message<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(
+        deserializer,
+        "transport_status_message",
+        crate::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RadrootsTransportStatus {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let wire = RadrootsTransportStatusWire::deserialize(deserializer)?;
+        let status = Self::new(
+            wire.kind,
+            wire.configured,
+            wire.implementation,
+            wire.usable_for_delivery,
+            wire.message,
+        )
+        .map_err(serde::de::Error::custom)?
+        .with_maturity(wire.maturity)
+        .with_availability(wire.availability)
+        .with_capabilities(wire.capabilities);
+        let status = match wire.profile_id {
+            Some(profile_id) => status
+                .try_with_profile_id(profile_id)
+                .map_err(serde::de::Error::custom)?,
+            None => status,
+        };
+        match wire.endpoint_uri {
+            Some(endpoint_uri) => status.try_with_endpoint_uri(endpoint_uri),
+            None => Ok(status),
+        }
+        .map_err(serde::de::Error::custom)
     }
 }

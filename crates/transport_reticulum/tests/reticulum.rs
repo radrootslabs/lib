@@ -1,13 +1,18 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransport,
-    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportFetchRequest, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
+    RadrootsTransport, RadrootsTransportCapabilityAvailability,
+    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportFetchRequest,
+    RadrootsTransportImplementationState, RadrootsTransportKind, RadrootsTransportMeshScopeId,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetSet,
     ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
     ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
+};
+#[cfg(feature = "serde")]
+use radroots_transport::{
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
 };
 use radroots_transport_reticulum::{
     RadrootsReticulumAgentEndpoint, RadrootsReticulumBehavior, RadrootsReticulumEndpoint,
@@ -61,24 +66,24 @@ fn default_profile_is_configured_deferred_until_implemented_and_rejecting() {
         RadrootsReticulumBehavior::RejectDeliveryAttempts
     );
     assert_eq!(
-        status.transport_status.implementation,
+        status.transport_status().implementation(),
         RadrootsTransportImplementationState::Real
     );
     assert_eq!(
-        status.transport_status.maturity,
+        status.transport_status().maturity(),
         RadrootsTransportCapabilityMaturity::Preview
     );
     assert_eq!(
-        status.transport_status.availability,
+        status.transport_status().availability(),
         RadrootsTransportCapabilityAvailability::Unavailable
     );
-    assert!(status.transport_status.configured);
+    assert!(status.transport_status().is_configured());
     assert_eq!(
-        status.transport_status.profile_id.as_deref(),
+        status.transport_status().profile_id(),
         Some("transport.reticulum.default")
     );
     assert_eq!(
-        status.transport_status.endpoint_uri.as_deref(),
+        status.transport_status().endpoint_uri(),
         Some(RADROOTS_RETICULUM_ENDPOINT_URI)
     );
     assert_eq!(
@@ -86,63 +91,67 @@ fn default_profile_is_configured_deferred_until_implemented_and_rejecting() {
         RADROOTS_RETICULUM_ENDPOINT_URI
     );
     assert_eq!(
-        profile.destination().routing().scope.as_str(),
+        profile.destination().routing().scope().as_str(),
         RADROOTS_RETICULUM_SCOPE_ID
     );
     assert_eq!(
-        status.destination.routing().gateway,
+        status.destination().routing().gateway(),
         ReticulumGatewaySemanticsV1::NoGatewayForwarding
     );
     assert_eq!(
-        status.destination.routing().privacy,
+        status.destination().routing().privacy(),
         ReticulumPrivacySemanticsV1::CanonicalSignedEventBytesOnly
     );
-    assert!(status.capability_report.delivery_required);
-    assert!(!status.capability_report.fetch_required);
-    assert!(!status.capability_report.can_deliver);
-    assert!(!status.capability_report.can_fetch);
-    assert!(!status.capability_report.can_discover);
-    assert!(!status.capability_report.can_forward_gateway);
-    assert!(!status.capability_report.can_observe_receipts);
+    assert!(status.capability_report().is_delivery_required());
+    assert!(!status.capability_report().is_fetch_required());
+    assert!(!status.capability_report().can_deliver());
+    assert!(!status.capability_report().can_fetch());
+    assert!(!status.capability_report().can_discover());
+    assert!(!status.capability_report().can_forward_gateway());
+    assert!(!status.capability_report().can_observe_receipts());
     assert_eq!(
-        status.capability_report.destination.fingerprint(),
-        status.destination.fingerprint()
+        status.capability_report().destination().fingerprint(),
+        status.destination().fingerprint()
     );
     assert_eq!(
-        status.capability_report.payload_policy.fragment_policy.mode,
+        status
+            .capability_report()
+            .payload_policy()
+            .fragment_policy()
+            .mode(),
         ReticulumFragmentationModeV1::Unsupported
     );
     assert_eq!(
         status
-            .capability_report
-            .payload_policy
-            .fragment_policy
-            .max_fragment_count,
+            .capability_report()
+            .payload_policy()
+            .fragment_policy()
+            .max_fragment_count(),
         1
     );
     assert_eq!(
         status
-            .capability_report
-            .payload_policy
-            .fragment_policy
-            .duplicate_fragment_behavior,
+            .capability_report()
+            .payload_policy()
+            .fragment_policy()
+            .duplicate_fragment_behavior(),
         ReticulumDuplicateFragmentBehaviorV1::Reject
     );
     assert_eq!(
         status
-            .capability_report
-            .payload_policy
-            .fragment_policy
-            .integrity_verification,
+            .capability_report()
+            .payload_policy()
+            .fragment_policy()
+            .integrity_verification(),
         ReticulumFragmentIntegrityV1::PayloadDigest
     );
     assert_eq!(
-        status.transport_status.message,
+        status.transport_status().message(),
         RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE
     );
-    assert!(!status.transport_status.usable_for_delivery);
-    assert_eq!(status.scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
-    assert_eq!(status.agent_endpoint, None);
+    assert!(!status.transport_status().is_usable_for_delivery());
+    assert_eq!(status.scope().as_str(), RADROOTS_RETICULUM_SCOPE_ID);
+    assert_eq!(status.agent_endpoint(), None);
 }
 
 #[test]
@@ -276,9 +285,9 @@ fn endpoint_and_profile_validation_are_strict_and_canonical() {
     assert_eq!(
         profile
             .capability_report()
-            .destination
+            .destination()
             .routing()
-            .scope
+            .scope()
             .as_str(),
         RADROOTS_RETICULUM_SCOPE_ID
     );
@@ -341,22 +350,22 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
             .expect("target set");
     let status = futures::executor::block_on(RadrootsTransport::status(&transport))
         .expect("transport status");
-    assert_eq!(status.kind, RadrootsTransportKind::Reticulum);
+    assert_eq!(status.kind(), &RadrootsTransportKind::Reticulum);
     assert_eq!(
-        status.implementation,
+        status.implementation(),
         RadrootsTransportImplementationState::Real
     );
     assert_eq!(
-        status.maturity,
+        status.maturity(),
         RadrootsTransportCapabilityMaturity::Preview
     );
     assert_eq!(
-        status.availability,
+        status.availability(),
         RadrootsTransportCapabilityAvailability::Unavailable
     );
-    assert!(!status.usable_for_delivery);
-    assert!(!status.capabilities.deliver);
-    assert!(!status.capabilities.fetch);
+    assert!(!status.is_usable_for_delivery());
+    assert!(!status.capabilities().can_deliver());
+    assert!(!status.capabilities().can_fetch());
 
     let delivery = futures::executor::block_on(RadrootsTransport::deliver(
         &transport,
@@ -495,24 +504,24 @@ fn fetch_reports_deferred_until_implemented_without_observed_events() {
         "transport.reticulum.default"
     );
     assert_eq!(
-        transport.status().transport_status.implementation,
+        transport.status().transport_status().implementation(),
         RadrootsTransportImplementationState::Real
     );
     let receipt = transport
         .fetch(RadrootsReticulumFetchRequest::new("fetch-1", 10).expect("fetch request"))
         .expect("fetch receipt");
 
-    assert_eq!(receipt.request_id, "fetch-1");
-    assert_eq!(receipt.endpoint_uri, RADROOTS_RETICULUM_ENDPOINT_URI);
-    assert_eq!(receipt.observed_event_count, 0);
+    assert_eq!(receipt.request_id(), "fetch-1");
+    assert_eq!(receipt.endpoint_uri(), RADROOTS_RETICULUM_ENDPOINT_URI);
+    assert_eq!(receipt.observed_event_count(), 0);
     assert_eq!(
-        receipt.implementation,
+        receipt.implementation(),
         RadrootsTransportImplementationState::Real
     );
-    assert_eq!(receipt.scope.as_str(), RADROOTS_RETICULUM_SCOPE_ID);
-    assert_eq!(receipt.agent_endpoint, None);
+    assert_eq!(receipt.scope().as_str(), RADROOTS_RETICULUM_SCOPE_ID);
+    assert_eq!(receipt.agent_endpoint(), None);
     assert_eq!(
-        receipt.outcome.status(),
+        receipt.outcome().status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
     assert_eq!(
@@ -520,12 +529,12 @@ fn fetch_reports_deferred_until_implemented_without_observed_events() {
         RadrootsReticulumError::InvalidFetchLimit
     );
     assert_eq!(
-        transport
-            .fetch(RadrootsReticulumFetchRequest {
-                request_id: "fetch-public-zero".to_owned(),
-                max_events: 0,
-            })
-            .expect_err("zero limit at transport boundary"),
+        RadrootsReticulumFetchRequest::new(
+            "fetch-over",
+            u16::try_from(RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT + 1)
+                .expect("one-over limit fits u16"),
+        )
+        .expect_err("one-over limit"),
         RadrootsReticulumError::InvalidFetchLimit
     );
     let deferred_transport = RadrootsReticulumTransport::new(
@@ -536,7 +545,7 @@ fn fetch_reports_deferred_until_implemented_without_observed_events() {
         .fetch(RadrootsReticulumFetchRequest::new("fetch-deferred", 1).expect("fetch"))
         .expect("fetch receipt");
     assert_eq!(
-        deferred.outcome.status(),
+        deferred.outcome().status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 }
@@ -550,22 +559,29 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
     );
     let status = transport.status();
     assert_eq!(
-        status
-            .agent_endpoint
-            .as_ref()
-            .map(|endpoint| endpoint.as_str()),
+        status.agent_endpoint().map(|endpoint| endpoint.as_str()),
         Some("reticulum-agent://localhost:19999")
     );
     assert_eq!(
-        status.transport_status.implementation,
+        status.transport_status().implementation(),
         RadrootsTransportImplementationState::Real
     );
-    assert!(!status.transport_status.usable_for_delivery);
-    assert!(!status.transport_status.capabilities.deliver);
-    assert!(!status.transport_status.capabilities.fetch);
-    assert!(!status.transport_status.capabilities.discovery);
-    assert!(!status.transport_status.capabilities.gateway_forwarding);
-    assert!(!status.transport_status.capabilities.receipt_observation);
+    assert!(!status.transport_status().is_usable_for_delivery());
+    assert!(!status.transport_status().capabilities().can_deliver());
+    assert!(!status.transport_status().capabilities().can_fetch());
+    assert!(!status.transport_status().capabilities().can_discover());
+    assert!(
+        !status
+            .transport_status()
+            .capabilities()
+            .can_forward_gateway()
+    );
+    assert!(
+        !status
+            .transport_status()
+            .capabilities()
+            .can_observe_receipts()
+    );
 
     let receipt = transport
         .deliver(delivery_request(vec![reticulum_target(
@@ -580,15 +596,12 @@ fn configured_agent_endpoint_is_metadata_only_for_status_delivery_and_fetch() {
         .fetch(RadrootsReticulumFetchRequest::new("fetch-agent", 1).expect("fetch"))
         .expect("fetch receipt");
     assert_eq!(
-        fetch
-            .agent_endpoint
-            .as_ref()
-            .map(|endpoint| endpoint.as_str()),
+        fetch.agent_endpoint().map(|endpoint| endpoint.as_str()),
         Some("reticulum-agent://localhost:19999")
     );
-    assert_eq!(fetch.observed_event_count, 0);
+    assert_eq!(fetch.observed_event_count(), 0);
     assert_eq!(
-        fetch.implementation,
+        fetch.implementation(),
         RadrootsTransportImplementationState::Real
     );
 }
@@ -602,6 +615,103 @@ fn public_models_round_trip_through_serde() {
     let decoded: RadrootsReticulumProfile = serde_json::from_str(&json).expect("profile decode");
 
     assert_eq!(decoded, profile);
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_bounds_reticulum_public_wire_is_strict_and_revalidated() {
+    let exact_request = RadrootsReticulumFetchRequest::new(
+        "r".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES),
+        u16::try_from(RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT)
+            .expect("event maximum fits u16"),
+    )
+    .expect("exact fetch request");
+    assert_eq!(
+        exact_request.request_id().len(),
+        RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES
+    );
+    assert_eq!(
+        usize::from(exact_request.max_events()),
+        RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT
+    );
+    assert_eq!(
+        RadrootsReticulumFetchRequest::new(
+            "r".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1),
+            1,
+        )
+        .expect_err("one-over request id"),
+        RadrootsReticulumError::InvalidFetchRequestId
+    );
+
+    let exact_agent = format!(
+        "reticulum-agent:{}",
+        "a".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES - "reticulum-agent:".len())
+    );
+    assert_eq!(
+        RadrootsReticulumAgentEndpoint::parse(exact_agent)
+            .expect("exact agent endpoint")
+            .as_str()
+            .len(),
+        RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
+    );
+    assert_eq!(
+        RadrootsReticulumAgentEndpoint::parse(format!(
+            "reticulum-agent:{}",
+            "a".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES - "reticulum-agent:".len() + 1)
+        ))
+        .expect_err("one-over agent endpoint"),
+        RadrootsReticulumError::InvalidAgentEndpoint
+    );
+
+    let transport = RadrootsReticulumTransport::default();
+    let status = transport.status();
+    let receipt = transport
+        .fetch(RadrootsReticulumFetchRequest::new("fetch-wire", 1).expect("fetch request"))
+        .expect("fetch receipt");
+    let request_wire = serde_json::to_value(&exact_request).expect("request wire");
+    let status_wire = serde_json::to_value(&status).expect("status wire");
+    let receipt_wire = serde_json::to_value(&receipt).expect("receipt wire");
+
+    let mut request_over = request_wire.clone();
+    request_over["max_events"] =
+        serde_json::Value::from(RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT + 1);
+    assert!(serde_json::from_value::<RadrootsReticulumFetchRequest>(request_over).is_err());
+    let mut status_forged = status_wire.clone();
+    status_forged["capability_report"]["can_deliver"] = serde_json::Value::Bool(true);
+    assert!(
+        serde_json::from_value::<radroots_transport_reticulum::RadrootsReticulumStatus>(
+            status_forged
+        )
+        .is_err()
+    );
+    let mut receipt_forged = receipt_wire.clone();
+    receipt_forged["observed_event_count"] = serde_json::Value::from(1);
+    assert!(
+        serde_json::from_value::<radroots_transport_reticulum::RadrootsReticulumFetchReceipt>(
+            receipt_forged
+        )
+        .is_err()
+    );
+
+    let mut request_unknown = request_wire;
+    request_unknown["unexpected"] = serde_json::Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsReticulumFetchRequest>(request_unknown).is_err());
+    let mut status_unknown = status_wire;
+    status_unknown["unexpected"] = serde_json::Value::Bool(true);
+    assert!(
+        serde_json::from_value::<radroots_transport_reticulum::RadrootsReticulumStatus>(
+            status_unknown
+        )
+        .is_err()
+    );
+    let mut receipt_unknown = receipt_wire;
+    receipt_unknown["unexpected"] = serde_json::Value::Bool(true);
+    assert!(
+        serde_json::from_value::<radroots_transport_reticulum::RadrootsReticulumFetchReceipt>(
+            receipt_unknown
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -644,7 +754,19 @@ fn reticulum_errors_and_defaults_are_stable() {
         ),
         (
             RadrootsReticulumError::InvalidFetchLimit,
-            "Reticulum fetch limit must be greater than zero",
+            "Reticulum fetch limit must be between 1 and 1000",
+        ),
+        (
+            RadrootsReticulumError::InvalidFetchRequestId,
+            "invalid Reticulum fetch request id",
+        ),
+        (
+            RadrootsReticulumError::InvalidFetchReceipt,
+            "invalid Reticulum fetch receipt",
+        ),
+        (
+            RadrootsReticulumError::InvalidStatus,
+            "invalid Reticulum status",
         ),
         (
             RadrootsReticulumError::NonReticulumTarget,
