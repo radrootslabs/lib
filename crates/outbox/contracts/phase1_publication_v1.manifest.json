@@ -112,17 +112,17 @@
     },
     {
       "file": {
-        "byte_length": 495349,
+        "byte_length": 494829,
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "fc6c2e794ef5c787ed134f38982b1c18518cde30fb21643669428fa05a3eccd3"
+        "sha256": "487946ba039f8d72b5ed1d372c42d49337d009d161aa31495fc7b232da4c03e8"
       },
       "role": "contract_dispatch"
     },
     {
       "file": {
-        "byte_length": 24752,
+        "byte_length": 24835,
         "path": "tools/xtask/src/main.rs",
-        "sha256": "4defaf823f7ab58322b59a568eb07d68e09c66830a9624b043529e29a3032daf"
+        "sha256": "0c75609e8a3612ff17ce8b99d6fafba84994865e1863535ac818d9a54678bf90"
       },
       "role": "xtask_dispatch"
     },

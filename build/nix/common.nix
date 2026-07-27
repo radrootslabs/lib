@@ -119,7 +119,7 @@ let
   fuzzCargoDeps = pkgs.rustPlatform.importCargoLock {
     lockFile = ../../fuzz/Cargo.lock;
   };
-  releaseRuntimeInputs = coverageRuntimeInputs;
+  releaseRuntimeInputs = coverageRuntimeInputs ++ [ pkgs.gnutar ];
   coreContractCrates = [
     "xtask"
     "radroots_blossom"
@@ -429,6 +429,7 @@ let
     cargo check -q
     cargo test -q -p xtask
     cargo run -q -p xtask -- contract validate
+    cargo run -q -p xtask -- release preflight
 
     required_file="$(mktemp)"
     trap 'rm -f "$required_file"' EXIT
@@ -457,7 +458,6 @@ let
       --out target/coverage/coverage-refresh.tsv \
       --status-out target/coverage/coverage-refresh-status.tsv
 
-    cargo run -q -p xtask -- release preflight
     echo "release preflight complete"
   '';
   coverageReportCommand = ''

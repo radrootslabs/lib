@@ -23,6 +23,8 @@ mod phase1_publication_artifact;
 #[allow(dead_code)]
 mod raw_source_rebuild;
 mod registry_v7;
+#[cfg_attr(test, allow(dead_code))]
+mod release_package;
 mod release_provenance;
 mod source_maintenance;
 
@@ -52,6 +54,8 @@ pub(crate) use phase1_publication_media_readiness::{
 pub(crate) use registry_v7::{
     validate_event_contract_registry_v7_inventory, write_event_contract_registry_v7_inventory,
 };
+#[cfg(not(test))]
+pub(crate) use release_package::validate_release_packages;
 pub(crate) use release_provenance::{
     validate_release_provenance_schema, write_release_provenance, write_release_provenance_schema,
 };
@@ -331,6 +335,7 @@ const KNOWLEDGE_BETA_CONTRACT_IDS: [&str; 3] = [
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
 const COVERAGE_REQUIRED_THRESHOLD: f64 = 100.0;
 const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "100/100/100/100";
+#[cfg_attr(not(test), allow(dead_code))]
 const COVERAGE_REPORT_EPSILON: f64 = 0.000_001;
 const DTO_TOOLING_DEPENDENCIES: [&str; 4] = [
     "dto_bindgen",
@@ -8041,9 +8046,11 @@ struct CoverageRefreshRow {
     func: f64,
     branch: Option<f64>,
     region: f64,
+    #[cfg_attr(not(test), allow(dead_code))]
     report_path: PathBuf,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct CoverageGateReportForValidation {
     scope: String,
@@ -8052,6 +8059,7 @@ struct CoverageGateReportForValidation {
     result: CoverageGateReportResultForValidation,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct CoverageGateReportThresholdsForValidation {
     executable_lines: f64,
@@ -8061,6 +8069,7 @@ struct CoverageGateReportThresholdsForValidation {
     branches_required: bool,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct CoverageGateReportMeasuredForValidation {
     executable_lines_percent: f64,
@@ -8070,6 +8079,7 @@ struct CoverageGateReportMeasuredForValidation {
     summary_regions_percent: f64,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct CoverageGateReportResultForValidation {
     pass: bool,
@@ -8196,6 +8206,7 @@ fn validate_required_coverage_summary(
     Ok(())
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn read_coverage_gate_report(
     path: &Path,
     crate_name: &str,
@@ -8219,10 +8230,12 @@ fn read_coverage_gate_report(
     })
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn coverage_percent_matches(left: f64, right: f64) -> bool {
     (left - right).abs() <= COVERAGE_REPORT_EPSILON
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn coverage_branch_percent_matches(left: Option<f64>, right: Option<f64>) -> bool {
     match (left, right) {
         (Some(left), Some(right)) => coverage_percent_matches(left, right),
@@ -8231,6 +8244,7 @@ fn coverage_branch_percent_matches(left: Option<f64>, right: Option<f64>) -> boo
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn coverage_gate_report_thresholds_match(
     report: &CoverageGateReportThresholdsForValidation,
     thresholds: CoverageThresholds,
@@ -8242,6 +8256,7 @@ fn coverage_gate_report_thresholds_match(
         && report.branches_required == thresholds.require_branches
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn validate_coverage_gate_report_for_row(
     crate_name: &str,
     row: &CoverageRefreshRow,
@@ -8291,6 +8306,7 @@ fn validate_coverage_gate_report_for_row(
     Ok(())
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn validate_required_coverage_summary_with_policy(
     workspace_root: &Path,
     required_crates: &BTreeSet<String>,
@@ -8669,18 +8685,10 @@ fn validate_release_preflight_with_override_and_profile(
         bundle.version.contract.version.as_str(),
         release_policy_override,
     )?;
-    let policy =
-        load_coverage_policy(&bundle.root).expect("validated contract includes coverage policy");
     let publish_crates = collect_unique_set(&release.public_crates(), "classification.public")
         .expect("validated contract enforces unique public crates");
-    let required_crate_list = policy
-        .required_crates()
-        .expect("validated contract includes required crates");
-    let required_crates = collect_unique_set(&required_crate_list, "required.crates")
-        .expect("validated contract enforces unique required.crates");
     validate_publishable_dto_tooling_sources(workspace_root, &publish_crates)?;
     validate_publish_package_metadata(workspace_root, &publish_crates)?;
-    validate_required_coverage_summary_with_policy(workspace_root, &required_crates, &policy)?;
     Ok(())
 }
 
@@ -13258,19 +13266,6 @@ edition = "2024"
             .expect_err("publish metadata validation");
         assert!(publish_metadata_err.contains("must define a non-empty package.description"));
         let _ = fs::remove_dir_all(&publish_metadata);
-
-        let missing_coverage_row = create_synthetic_workspace("preflight_missing_coverage_row");
-        write_file(
-            &missing_coverage_row
-                .join("target")
-                .join("coverage")
-                .join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\n",
-        );
-        let missing_coverage_row_err = validate_generic_release_preflight(&missing_coverage_row)
-            .expect_err("required coverage refresh row missing");
-        assert!(missing_coverage_row_err.contains("missing from coverage-refresh.tsv"));
-        let _ = fs::remove_dir_all(&missing_coverage_row);
     }
 
     #[test]

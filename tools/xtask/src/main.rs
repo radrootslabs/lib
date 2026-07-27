@@ -87,7 +87,10 @@ fn release_preflight() -> Result<(), String> {
 fn release_preflight_at(root: &Path) -> Result<(), String> {
     dto_roots::check(root)?;
     contract::validate_artifact_contracts(root)?;
-    contract::validate_release_preflight(root)
+    contract::validate_release_preflight(root)?;
+    #[cfg(not(test))]
+    contract::validate_release_packages(root)?;
+    Ok(())
 }
 
 fn run_release(args: &[String]) -> Result<(), String> {
