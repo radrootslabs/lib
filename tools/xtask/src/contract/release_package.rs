@@ -106,6 +106,7 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
         fs::create_dir_all(directory)
             .map_err(|error| format!("create {}: {error}", directory.display()))?;
     }
+    let source_patch_config = write_source_patch_config(&closure_root, &workspace_packages)?;
 
     for package in &policy.publish_order.crates {
         let package_list = cargo_package_list(workspace_root, package)?;
@@ -118,8 +119,9 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
         )
         .map_err(|error| format!("write package list for {package}: {error}"))?;
 
-        run_cargo(
+        run_cargo_with_config(
             workspace_root,
+            &source_patch_config,
             &["package", "--locked", "--no-verify", "-p", package],
             &format!("package {package}"),
         )?;
@@ -361,6 +363,29 @@ fn cargo_package_list(workspace_root: &Path, package: &str) -> Result<BTreeSet<S
 
 fn run_cargo(directory: &Path, args: &[&str], purpose: &str) -> Result<(), String> {
     cargo_output(directory, args, purpose).map(|_| ())
+}
+
+fn run_cargo_with_config(
+    directory: &Path,
+    config_path: &Path,
+    args: &[&str],
+    purpose: &str,
+) -> Result<(), String> {
+    let output = Command::new("cargo")
+        .args(["--config"])
+        .arg(config_path)
+        .args(args)
+        .current_dir(directory)
+        .output()
+        .map_err(|error| format!("{purpose}: run cargo {}: {error}", args.join(" ")))?;
+    if !output.status.success() {
+        return Err(format!(
+            "{purpose}: cargo {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(())
 }
 
 fn cargo_output(directory: &Path, args: &[&str], purpose: &str) -> Result<Output, String> {
@@ -814,6 +839,23 @@ fn load_workspace_packages(workspace_root: &Path) -> Result<Vec<PackageWorkspace
     Ok(packages)
 }
 
+fn write_source_patch_config(
+    closure_root: &Path,
+    packages: &[PackageWorkspaceEntry],
+) -> Result<PathBuf, String> {
+    let config_path = closure_root.join("source-patches.toml");
+    let mut config = String::from("[patch.crates-io]\n");
+    for package in packages {
+        config.push_str(&format!(
+            "{} = {{ path = {:?} }}\n",
+            package.name, package.source_directory
+        ));
+    }
+    fs::write(&config_path, config)
+        .map_err(|error| format!("write source patch config: {error}"))?;
+    Ok(config_path)
+}
+
 fn write_archive_workspace(
     workspace_root: &Path,
     extracted_root: &Path,
@@ -963,5 +1005,21 @@ version = "=1.0.0-alpha.1"
         let contents =
             fs::read_to_string(destination.join("README")).expect("read extracted README");
         assert_eq!(contents, "readme");
+    }
+
+    #[test]
+    fn source_patch_config_maps_workspace_packages_without_touching_sources() {
+        let root = tempfile::tempdir().expect("temporary closure root");
+        let packages = [PackageWorkspaceEntry {
+            name: "radroots_fixture".to_owned(),
+            source_directory: root.path().join("source"),
+        }];
+        let config_path =
+            write_source_patch_config(root.path(), &packages).expect("write source patches");
+        let config = load_toml::<toml::Value>(&config_path).expect("parse source patches");
+        assert_eq!(
+            config["patch"]["crates-io"]["radroots_fixture"]["path"].as_str(),
+            packages[0].source_directory.to_str()
+        );
     }
 }
