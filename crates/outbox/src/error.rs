@@ -4,6 +4,7 @@ use radroots_transport::RadrootsTransportError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum RadrootsOutboxError {
     #[cfg(feature = "sqlite")]
     #[error("SQLx error: {0}")]
@@ -47,6 +48,125 @@ pub enum RadrootsOutboxError {
 
     #[error("SQLite outbox file connection did not enter WAL journal mode; reported `{actual}`")]
     SqliteFileJournalModeNotWal { actual: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "temporary schema object `{name}` ({object_type}, table `{table_name}`) collides with outbox authority"
+    )]
+    TemporarySchemaCollision {
+        object_type: String,
+        name: String,
+        table_name: String,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox migration registry defect: {reason}")]
+    MigrationRegistryDefect { reason: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "embedded outbox migration {version} {direction} length mismatch: expected {expected}, found {actual}"
+    )]
+    EmbeddedMigrationLengthMismatch {
+        version: u32,
+        direction: &'static str,
+        expected: usize,
+        actual: usize,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "embedded outbox migration {version} {direction} checksum mismatch: expected {expected}, found {actual}"
+    )]
+    EmbeddedMigrationChecksumMismatch {
+        version: u32,
+        direction: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox migration {version} {direction} catalog delta mismatch: {reason}")]
+    MigrationCatalogDeltaMismatch {
+        version: u32,
+        direction: &'static str,
+        reason: String,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox governed catalog exceeds the supported {max} rows")]
+    GovernedCatalogCapacityExceeded { max: usize },
+
+    #[cfg(feature = "sqlite")]
+    #[error("unmanaged outbox schema has fingerprint {actual_schema_sha256}")]
+    UnmanagedSchema { actual_schema_sha256: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox migration ledger catalog is invalid: {reason}")]
+    MigrationLedgerDrift { reason: String },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox migration history gap: expected version {expected}, found {actual:?}")]
+    MigrationHistoryGap { expected: u32, actual: Option<u32> },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox migration history references unknown version {version}")]
+    UnknownMigration { version: u32 },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox schema version {database} is newer than supported version {current}")]
+    SchemaTooNew { current: u32, database: i64 },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox migration {version} name drift: expected `{expected}`, found `{actual}`")]
+    MigrationHistoryNameDrift {
+        version: u32,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "outbox migration {version} {field} checksum drift: expected {expected}, found {actual}"
+    )]
+    MigrationHistoryChecksumDrift {
+        version: u32,
+        field: &'static str,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "outbox schema fingerprint mismatch at version {version}: expected {expected}, found {actual}"
+    )]
+    SchemaFingerprintMismatch {
+        version: u32,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox rollback target {target} is below the supported version floor {floor}")]
+    RollbackBelowVersionFloor { floor: u32, target: u32 },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox rollback target {target} is ahead of managed version {current}")]
+    RollbackAhead { current: u32, target: u32 },
+
+    #[cfg(feature = "sqlite")]
+    #[error("outbox rollback requires a managed schema")]
+    RollbackUnmanaged,
+
+    #[cfg(feature = "sqlite")]
+    #[error(
+        "outbox schema operation failed: {primary}; transaction rollback also failed: {rollback}"
+    )]
+    MigrationTransactionRollbackFailed {
+        #[source]
+        primary: Box<RadrootsOutboxError>,
+        rollback: sqlx::Error,
+    },
 
     #[error(
         "trade mutation outbox metadata does not match the canonical mutation content: {field}"

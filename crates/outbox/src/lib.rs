@@ -6,11 +6,13 @@ mod error;
 mod migrations;
 mod model;
 #[cfg(feature = "sqlite")]
+mod schema;
+#[cfg(feature = "sqlite")]
 mod store;
 
 pub use error::RadrootsOutboxError;
 #[cfg(feature = "sqlite")]
-pub use migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
+pub use migrations::{RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT, RADROOTS_OUTBOX_SCHEMA_VERSION_MIN};
 pub use model::{
     RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryAttemptRecord,
     RadrootsOutboxDeliveryPlanInput, RadrootsOutboxDeliveryPlanRecord,
@@ -23,5 +25,7 @@ pub use model::{
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
 };
+#[cfg(feature = "sqlite")]
+pub use schema::{RadrootsOutboxSchemaStatus, inspect_outbox_schema_status};
 #[cfg(feature = "sqlite")]
 pub use store::RadrootsOutbox;

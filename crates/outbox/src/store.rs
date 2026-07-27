@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsOutboxError;
-use crate::migrations::{OUTBOX_MIGRATION_DOWN, OUTBOX_MIGRATION_UP};
 #[cfg(feature = "event-store-adapter")]
 use crate::model::RadrootsOutboxEventStoreIngestReceipt;
 use crate::model::{
@@ -14,6 +13,9 @@ use crate::model::{
     RadrootsOutboxReticulumBehavior, RadrootsOutboxReticulumEventRecord,
     RadrootsOutboxSignedOperationInput, RadrootsOutboxSignedTradeMutationInput,
     RadrootsOutboxStatusSummary, RadrootsOutboxTradeMutationInput,
+};
+use crate::schema::{
+    RadrootsOutboxSchemaStatus, inspect_outbox_schema_status, migrate_outbox_schema,
 };
 use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
@@ -58,7 +60,7 @@ impl RadrootsOutbox {
             .connect_with(options)
             .await?;
         configure_pool(&pool, false).await?;
-        apply_up(&pool).await?;
+        migrate_outbox_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -71,7 +73,7 @@ impl RadrootsOutbox {
             .connect_with(options)
             .await?;
         configure_pool(&pool, true).await?;
-        apply_up(&pool).await?;
+        migrate_outbox_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -80,7 +82,7 @@ impl RadrootsOutbox {
         file_backed: bool,
     ) -> Result<Self, RadrootsOutboxError> {
         configure_pool(&pool, file_backed).await?;
-        apply_up(&pool).await?;
+        migrate_outbox_schema(&pool).await?;
         Ok(Self { pool })
     }
 
@@ -88,8 +90,14 @@ impl RadrootsOutbox {
         &self.pool
     }
 
-    pub async fn migrate_down(&self) -> Result<(), RadrootsOutboxError> {
-        apply_down(&self.pool).await
+    /// Inspects and authenticates the governed outbox schema.
+    pub async fn schema_status(&self) -> Result<RadrootsOutboxSchemaStatus, RadrootsOutboxError> {
+        inspect_outbox_schema_status(&self.pool).await
+    }
+
+    /// Serializes schema adoption or migration to the current supported version.
+    pub async fn migrate_to_current_schema(&self) -> Result<(), RadrootsOutboxError> {
+        migrate_outbox_schema(&self.pool).await
     }
 
     pub async fn pragma_foreign_keys(&self) -> Result<i64, RadrootsOutboxError> {
@@ -1881,18 +1889,6 @@ async fn file_pool_with_immutable_delete_journal(path: &Path) -> SqlitePool {
         .connect_with(SqliteConnectOptions::new().filename(path).immutable(true))
         .await
         .expect("immutable pool")
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn apply_up(pool: &SqlitePool) -> Result<(), RadrootsOutboxError> {
-    sqlx::raw_sql(OUTBOX_MIGRATION_UP).execute(pool).await?;
-    Ok(())
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn apply_down(pool: &SqlitePool) -> Result<(), RadrootsOutboxError> {
-    sqlx::raw_sql(OUTBOX_MIGRATION_DOWN).execute(pool).await?;
-    Ok(())
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -4184,7 +4180,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn migration_applies_delivery_plan_schema_and_migrates_down() {
+    async fn migration_applies_and_authenticates_delivery_plan_schema() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
 
         assert_eq!(outbox.pragma_foreign_keys().await.expect("foreign keys"), 1);
@@ -4241,14 +4237,16 @@ mod tests {
             "outcome_kind"
         );
 
-        outbox.migrate_down().await.expect("migrate down");
-        let row = sqlx::query(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'outbox_event'",
-        )
-        .fetch_optional(outbox.pool())
-        .await
-        .expect("table query");
-        assert!(row.is_none());
+        assert_eq!(
+            outbox.schema_status().await.expect("schema status"),
+            RadrootsOutboxSchemaStatus::Managed {
+                version: crate::RADROOTS_OUTBOX_SCHEMA_VERSION_CURRENT,
+            }
+        );
+        outbox
+            .migrate_to_current_schema()
+            .await
+            .expect("idempotent migration");
     }
 
     #[tokio::test]
