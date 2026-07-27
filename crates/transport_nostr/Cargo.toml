@@ -54,6 +54,7 @@ radroots_outbox = { workspace = true, optional = true, default-features = false,
 ] }
 radroots_transport = { workspace = true, default-features = false }
 futures = { workspace = true }
+hex = { workspace = true }
 nostr = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
@@ -62,6 +63,10 @@ tokio = { workspace = true, optional = true, features = ["rt"] }
 url = { workspace = true }
 
 [dev-dependencies]
+radroots_authority = { workspace = true, features = ["local_signer"] }
+radroots_blossom = { workspace = true, features = ["serde", "std"] }
+radroots_event_codec = { workspace = true, features = ["serde_json"] }
+sha2 = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints.rust]

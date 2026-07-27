@@ -1,14 +1,14 @@
 {
   "contract_id": "radroots_outbox.phase1_publication.v1",
   "descriptor": {
-    "byte_length": 10119,
+    "byte_length": 11023,
     "path": "crates/outbox/contracts/phase1_publication_v1.descriptor.json",
-    "sha256": "2a85ff1ff4ef45dcfbac2e255b818000b61a218277b97931dc2af7a489716067"
+    "sha256": "7c8f1a99e4c7001af5238d164c04acfd70afc6e7133a447602ae5b5d2a1f6622"
   },
   "manifest_schema": {
     "byte_length": 3806,
     "path": "crates/outbox/contracts/phase1_publication_v1.manifest.schema.json",
-    "sha256": "48587292d857b56a97fa053f68712251b16de6e814d3697f13e7e5d5a4497d77"
+    "sha256": "05a810c798676197608cdfd2bc081fb003e4b878c285a338eed6abe636c0817d"
   },
   "migration": {
     "down": {
@@ -56,17 +56,17 @@
     },
     {
       "file": {
-        "byte_length": 2604,
+        "byte_length": 2651,
         "path": "crates/outbox/src/lib.rs",
-        "sha256": "a97deba8ec374102ba6b3c243e414cf99f14ab4fa374dd6f245b5339793ca037"
+        "sha256": "13f1096c4d81ad23078b6fa043e8d616016029109aba4551b756ada436edc91c"
       },
       "role": "outbox_public_surface"
     },
     {
       "file": {
-        "byte_length": 101112,
+        "byte_length": 118318,
         "path": "crates/outbox/src/phase1_publication.rs",
-        "sha256": "9019a23d593b27d9a0e1b67871d8da53c91b5a0b0a2a37698c64cbbfe9111272"
+        "sha256": "5ee6745c8eb36fdc18e8578880ca246cc1579e24ae7e7b89559ceaf1ffcbbc73"
       },
       "role": "phase1_publication_runtime"
     },
@@ -106,7 +106,7 @@
       "file": {
         "byte_length": 24248,
         "path": "tools/xtask/src/contract/outbox_phase1_publication.rs",
-        "sha256": "4c81dea379e674066f0822d52f7d90e601a2d5311d5f88b809f760682c42bfa0"
+        "sha256": "8a2a09944d78bd67b76a7e1857e6815af2c4ebe712bb14ed48eb66e4cb156dd3"
       },
       "role": "contract_governance"
     },
@@ -128,17 +128,17 @@
     },
     {
       "file": {
-        "byte_length": 26484,
+        "byte_length": 27060,
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "331a32e5ca7ba615a04e5837a1a06173f9d1d5ba663103255206d9dd39097dd8"
+        "sha256": "7dc8f9403dd9eb79fa6381f0dd3eb2a233d2f376eda38f6ec501ff29b98a2923"
       },
       "role": "release_record"
     },
     {
       "file": {
-        "byte_length": 37356,
+        "byte_length": 37874,
         "path": "CHANGELOG.md",
-        "sha256": "bb26037e84cfb120ba372320dc15b5e1e865f49a8835b8635847df3bf9ab25f5"
+        "sha256": "290225f031b2b6f7a393f0c6baa50eee06e1e2e5b8cb2f177bca3ae9c0ee581e"
       },
       "role": "release_notes"
     }
@@ -147,6 +147,6 @@
     "event_state_count": 9,
     "stable_error_count": 25,
     "target_state_count": 8,
-    "transition_count": 25
+    "transition_count": 28
   }
 }

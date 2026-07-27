@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
-use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
+use crate::{
+    RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner,
+    RadrootsPhase1PublicationSigner,
+};
 use radroots_event::contract::{RadrootsEventContract, event_contract};
 use radroots_event::draft::{
     RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent, RadrootsVerifiedSignedEvent,
@@ -8,6 +11,7 @@ use radroots_event::draft::{
 };
 #[cfg(test)]
 use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact;
 
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::ToString};
@@ -82,6 +86,59 @@ where
     sign_authorized_draft_with_validator(actor, signer, draft, |draft| draft.validate_for_signing())
 }
 
+/// Signs one freshly preflighted member of the sealed Phase 1 publication set.
+///
+/// Unlike [`sign_authorized_draft`], this entry point deliberately accepts no
+/// generic draft. The media-ready artifact is the typed authoring capability;
+/// its frozen draft fields are passed intact to the signer and checked again
+/// against the returned signed object before signature verification.
+pub fn sign_authorized_phase1_publication<S>(
+    actor: &RadrootsActorContext,
+    signer: &S,
+    ready: &RadrootsPhase1MediaReadyPublicationArtifact,
+) -> Result<RadrootsVerifiedSignedEvent, RadrootsAuthorityError>
+where
+    S: RadrootsPhase1PublicationSigner + ?Sized,
+{
+    let artifact = ready.artifact();
+    let draft = artifact.draft();
+    let contract = event_contract(artifact.event_contract_id()).ok_or_else(|| {
+        RadrootsAuthorityError::UnknownContract {
+            contract_id: artifact.event_contract_id().to_owned(),
+        }
+    })?;
+    if contract.kind != draft.kind() {
+        return Err(RadrootsAuthorityError::DraftKindMismatch {
+            contract_id: contract.id.to_owned(),
+            expected_kind: contract.kind,
+            actual_kind: draft.kind(),
+        });
+    }
+    authorize_actor_for_contract(actor, contract)?;
+    if actor.pubkey() != artifact.expected_author() {
+        return Err(RadrootsAuthorityError::ActorPubkeyMismatch {
+            expected_pubkey: artifact.expected_author().as_str().to_owned(),
+            actor_pubkey: actor.pubkey().as_str().to_owned(),
+        });
+    }
+    if RadrootsEventSigner::pubkey(signer) != artifact.expected_author() {
+        return Err(RadrootsAuthorityError::SignerPubkeyMismatch {
+            expected_pubkey: artifact.expected_author().as_str().to_owned(),
+            signer_pubkey: RadrootsEventSigner::pubkey(signer).as_str().to_owned(),
+        });
+    }
+
+    let signed_event = signer.sign_phase1_publication_draft(
+        draft,
+        artifact.expected_author(),
+        artifact.expected_event_id(),
+    )?;
+    validate_signed_event_matches_phase1_publication(&signed_event, ready)?;
+    signed_event
+        .verify_signature()
+        .map_err(RadrootsAuthorityError::SignedEventSignatureVerification)
+}
+
 fn sign_authorized_draft_with_validator<S, V>(
     actor: &RadrootsActorContext,
     signer: &S,
@@ -108,6 +165,51 @@ pub fn validate_signed_event_matches_draft(
 ) -> Result<(), RadrootsAuthorityError> {
     validate_signed_nostr_event_matches_draft(signed_event, draft)
         .map_err(authority_error_from_draft_validation)
+}
+
+fn validate_signed_event_matches_phase1_publication(
+    signed_event: &RadrootsSignedEvent,
+    ready: &RadrootsPhase1MediaReadyPublicationArtifact,
+) -> Result<(), RadrootsAuthorityError> {
+    let artifact = ready.artifact();
+    let draft = artifact.draft();
+    if signed_event.pubkey_str() != artifact.expected_author().as_str() {
+        return Err(RadrootsAuthorityError::SignedEventPubkeyMismatch {
+            expected_pubkey: artifact.expected_author().as_str().to_owned(),
+            actual_pubkey: signed_event.pubkey_str().to_owned(),
+        });
+    }
+    if signed_event.id_str() != artifact.expected_event_id().as_str() {
+        return Err(RadrootsAuthorityError::SignedEventIdMismatch {
+            expected_event_id: artifact.expected_event_id().as_str().to_owned(),
+            actual_event_id: signed_event.id_str().to_owned(),
+        });
+    }
+    if signed_event.created_at() != draft.created_at() {
+        return Err(RadrootsAuthorityError::SignedEventCreatedAtMismatch {
+            expected_created_at: draft.created_at(),
+            actual_created_at: signed_event.created_at(),
+        });
+    }
+    if signed_event.kind() != draft.kind() {
+        return Err(RadrootsAuthorityError::SignedEventKindMismatch {
+            expected_kind: draft.kind(),
+            actual_kind: signed_event.kind(),
+        });
+    }
+    if signed_event.tags_as_vec() != draft.tags() {
+        return Err(RadrootsAuthorityError::SignedEventTagsMismatch {
+            expected_len: draft.tags().len(),
+            actual_len: signed_event.tags_as_vec().len(),
+        });
+    }
+    if signed_event.content() != draft.content() {
+        return Err(RadrootsAuthorityError::SignedEventContentMismatch {
+            expected_len: draft.content().len(),
+            actual_len: signed_event.content().len(),
+        });
+    }
+    Ok(())
 }
 
 fn authority_error_from_draft_validation(error: RadrootsDraftError) -> RadrootsAuthorityError {
@@ -175,10 +277,17 @@ mod tests {
     use radroots_event::contract::{
         RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsActorRole, event_contract,
     };
-    use radroots_event::ids::RadrootsPublicKey;
+    use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
     use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
+    use radroots_event::post::RadrootsAuthoredUpdate;
+    use radroots_event_codec::wire::publication::allowlist::allow_phase1_publication_artifact;
+    use radroots_event_codec::wire::publication::{
+        RadrootsPhase1PublicationArtifact, RadrootsPhase1PublicationDraft,
+        bind_phase1_publication_media_readiness,
+    };
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
+        radroots_nostr_sign_phase1_publication_draft,
     };
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
@@ -385,6 +494,25 @@ mod tests {
                 RadrootsSignerError::SigningFailed {
                     message: error.to_string(),
                 }
+            })
+        }
+    }
+
+    impl RadrootsPhase1PublicationSigner for ValidSigner {
+        fn sign_phase1_publication_draft(
+            &self,
+            draft: &RadrootsPhase1PublicationDraft,
+            expected_pubkey: &RadrootsPublicKey,
+            expected_event_id: &RadrootsEventId,
+        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+            radroots_nostr_sign_phase1_publication_draft(
+                &self.keys,
+                draft,
+                expected_pubkey,
+                expected_event_id,
+            )
+            .map_err(|error| RadrootsSignerError::SigningFailed {
+                message: error.to_string(),
             })
         }
     }
@@ -692,6 +820,39 @@ mod tests {
             draft.expected_pubkey_str()
         );
         assert_eq!(signed.signed_event().kind(), KIND_CLASSIFIED_LISTING);
+    }
+
+    #[test]
+    fn phase1_publication_signing_uses_sealed_typed_draft() {
+        let artifact = RadrootsPhase1PublicationArtifact::from_update(
+            &RadrootsAuthoredUpdate::new("Victoria carrots are ready").unwrap(),
+            1_784_347_200,
+            FIXTURE_ALICE_PUBLIC_KEY_HEX,
+        )
+        .unwrap();
+        let ready = bind_phase1_publication_media_readiness(
+            allow_phase1_publication_artifact(artifact).unwrap(),
+            Vec::new(),
+        )
+        .unwrap();
+        let actor = RadrootsActorContext::test(
+            FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            Vec::<RadrootsActorRole>::new(),
+        )
+        .unwrap();
+        let signed = sign_authorized_phase1_publication(&actor, &ValidSigner::fixture(), &ready)
+            .expect("verified Phase 1 publication");
+
+        assert_eq!(
+            signed.signed_event().raw_json().as_bytes(),
+            serde_json::to_string(signed.signed_event().wire())
+                .unwrap()
+                .as_bytes()
+        );
+        assert_eq!(
+            signed.signed_event().id_str(),
+            ready.artifact().expected_event_id().as_str()
+        );
     }
 
     #[test]

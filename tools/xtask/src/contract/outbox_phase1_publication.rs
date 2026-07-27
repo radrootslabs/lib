@@ -391,8 +391,8 @@ fn validate_identity(identity: &Identity, domain: &str, preimage: &[&str]) -> Re
 }
 
 fn validate_transitions(descriptor: &Descriptor) -> Result<(), String> {
-    if descriptor.transitions.len() != 25 {
-        return Err("Phase 1 publication transition inventory must contain 25 entries".to_owned());
+    if descriptor.transitions.len() != 28 {
+        return Err("Phase 1 publication transition inventory must contain 28 entries".to_owned());
     }
     let event_states = descriptor.event_states.iter().collect::<BTreeSet<_>>();
     let target_states = descriptor.target_states.iter().collect::<BTreeSet<_>>();
@@ -565,7 +565,7 @@ fn manifest_schema() -> Value {
                 "properties": {
                     "event_state_count": { "const": 9 },
                     "target_state_count": { "const": 8 },
-                    "transition_count": { "const": 25 },
+                    "transition_count": { "const": 28 },
                     "stable_error_count": { "const": 25 }
                 }
             },

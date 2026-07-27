@@ -39,10 +39,11 @@ pub use phase1_publication::{
     RADROOTS_PHASE1_PUBLICATION_TRANSITIONS, RadrootsPhase1PublicationClaim,
     RadrootsPhase1PublicationEnqueueReceipt, RadrootsPhase1PublicationEnqueueStatus,
     RadrootsPhase1PublicationError, RadrootsPhase1PublicationEventState,
-    RadrootsPhase1PublicationRecord, RadrootsPhase1PublicationTarget,
-    RadrootsPhase1PublicationTargetClaim, RadrootsPhase1PublicationTargetPolicy,
-    RadrootsPhase1PublicationTargetState, RadrootsPhase1PublicationTransition,
-    RadrootsPhase1PublicationTransitionRetryClass, RadrootsPhase1PublicationTransitionScope,
+    RadrootsPhase1PublicationRecord, RadrootsPhase1PublicationSigningPreflight,
+    RadrootsPhase1PublicationTarget, RadrootsPhase1PublicationTargetClaim,
+    RadrootsPhase1PublicationTargetPolicy, RadrootsPhase1PublicationTargetState,
+    RadrootsPhase1PublicationTransition, RadrootsPhase1PublicationTransitionRetryClass,
+    RadrootsPhase1PublicationTransitionScope,
 };
 #[cfg(feature = "sqlite")]
 pub use schema::{RadrootsOutboxSchemaStatus, inspect_outbox_schema_status};

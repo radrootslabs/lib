@@ -165,7 +165,9 @@ pub mod prelude {
     pub use crate::event_adapters::{to_post_event_metadata, to_profile_event_metadata};
 
     #[cfg(feature = "events")]
-    pub use crate::draft_signing::radroots_nostr_sign_frozen_draft;
+    pub use crate::draft_signing::{
+        radroots_nostr_sign_frozen_draft, radroots_nostr_sign_phase1_publication_draft,
+    };
 
     #[cfg(feature = "events")]
     pub use crate::event_convert::{radroots_event_from_nostr, radroots_event_ptr_from_nostr};

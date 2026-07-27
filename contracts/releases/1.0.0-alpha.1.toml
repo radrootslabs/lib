@@ -584,3 +584,15 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Require BIP340-verified signed-event typestate at authority, outbox, runtime, inbound-observation, and direct Nostr publication boundaries; reject invalid signatures before durable, event-store, or adapter mutation, including corrupted stored signatures on reload."
+
+[[changes]]
+id = "phase1-verified-signing-retry-bridge"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "change_exported_function_signature",
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+]
+summary = "Bridge sealed Phase 1 typed publication preflight through authorized signature verification into immutable exact event-object persistence, terminal corruption quarantine, and stable per-target retry dispatch without reopening generic TypedOnly authoring or claiming WebSocket frame identity."

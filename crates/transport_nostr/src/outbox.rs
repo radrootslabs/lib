@@ -15,6 +15,7 @@ use radroots_event_store::{
 use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
     RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventStoreIngestReceipt,
+    RadrootsPhase1PublicationTargetClaim,
 };
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
@@ -75,6 +76,53 @@ pub struct RadrootsOutboxPublishTargetReceipt {
     pub attempted: bool,
     pub transport_status: RadrootsTransportDeliveryTargetStatus,
     pub outcome: RadrootsRelayOutcome,
+}
+
+pub fn phase1_publication_delivery_request(
+    claim: &RadrootsPhase1PublicationTargetClaim,
+    now_ms: i64,
+) -> Result<RadrootsTransportDeliveryRequest, RadrootsRelayTransportError> {
+    ensure_nonnegative_timestamp("now_ms", now_ms)?;
+    let payload = verified_signed_event_payload(claim.signed_event())
+        .map_err(transport_error_to_relay_error)?;
+    let target = RadrootsTransportTarget::nostr_relay(claim.endpoint_uri())
+        .map_err(transport_error_to_relay_error)?;
+    let target_set =
+        RadrootsTransportTargetSet::new(vec![target]).map_err(transport_error_to_relay_error)?;
+    RadrootsTransportDeliveryRequest::new(
+        hex::encode(claim.dispatch_digest()),
+        payload,
+        target_set,
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
+    )
+    .and_then(|request| request.try_with_now_ms(now_ms))
+    .map_err(transport_error_to_relay_error)
+}
+
+pub async fn publish_claimed_phase1_publication_target_with_transport<T>(
+    transport: &T,
+    claim: &RadrootsPhase1PublicationTargetClaim,
+    now_ms: i64,
+) -> Result<RadrootsTransportDeliveryReceipt, RadrootsRelayTransportError>
+where
+    T: RadrootsTransport + ?Sized,
+{
+    let transport_kind = transport.transport_kind();
+    if transport_kind != RadrootsTransportKind::Nostr {
+        return Err(RadrootsRelayTransportError::UnexpectedTransportKind {
+            expected: "nostr",
+            actual: transport_kind.canonical_label(),
+        });
+    }
+    let request = phase1_publication_delivery_request(claim, now_ms)?;
+    let receipt = transport
+        .deliver(request.clone())
+        .await
+        .map_err(transport_error_to_relay_error)?;
+    receipt
+        .validate_for_request(&request)
+        .map_err(transport_error_to_relay_error)?;
+    Ok(receipt)
 }
 
 pub async fn publish_claimed_outbox_event<A>(

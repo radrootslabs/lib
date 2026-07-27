@@ -4595,6 +4595,7 @@ name = "radroots_authority"
 version = "1.0.0-alpha.1"
 dependencies = [
  "radroots_event",
+ "radroots_event_codec",
  "radroots_nostr",
  "serde_json",
 ]
@@ -5243,14 +5244,19 @@ name = "radroots_transport_nostr"
 version = "1.0.0-alpha.1"
 dependencies = [
  "futures",
+ "hex",
  "nostr",
+ "radroots_authority",
+ "radroots_blossom",
  "radroots_event",
+ "radroots_event_codec",
  "radroots_event_store",
  "radroots_nostr",
  "radroots_outbox",
  "radroots_transport",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 1.0.69",
  "tokio",
  "url",

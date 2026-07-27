@@ -2,9 +2,10 @@
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::RadrootsPublicKey;
+use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 #[cfg(test)]
 use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event_codec::wire::publication::RadrootsPhase1PublicationDraft;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignerIdentity {
@@ -29,6 +30,19 @@ pub trait RadrootsEventSigner {
     fn sign_frozen_draft(
         &self,
         draft: &RadrootsEventDraft,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError>;
+}
+
+/// Signing capability for the sealed Phase 1 typed publication set.
+///
+/// The draft cannot be constructed from arbitrary wire parts. Authority passes
+/// it only after the owning media-ready artifact has been revalidated.
+pub trait RadrootsPhase1PublicationSigner: RadrootsEventSigner {
+    fn sign_phase1_publication_draft(
+        &self,
+        draft: &RadrootsPhase1PublicationDraft,
+        expected_pubkey: &RadrootsPublicKey,
+        expected_event_id: &RadrootsEventId,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError>;
 }
 

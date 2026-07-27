@@ -45,6 +45,13 @@ publish policy both pass for the same source revision.
   observations, and direct Nostr publication require the verified signed-event
   typestate; invalid or corrupted signatures fail before durable, event-store,
   or relay-adapter mutation.
+<!-- release-change: phase1-verified-signing-retry-bridge -->
+- Phase 1 publication now crosses a claim-fenced, freshly revalidated typed
+  signing preflight into an authorized signer without reopening generic
+  `TypedOnly` draft construction. The original signature-verified NIP-01 event
+  JSON object bytes are persisted once, quarantined on durable corruption, and
+  reused with the same per-target dispatch identity across retries. Exact-byte
+  identity applies to the decoded event object, not WebSocket framing.
 - Event-store schema initialization now uses a transactional, checksummed
   migration authority with exact legacy-baseline adoption, shared-database
   catalog scoping, tamper-evident fail-closed managed history, exact catalog

@@ -5,7 +5,9 @@ use crate::events::radroots_nostr_build_event_unchecked;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
 use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event_codec::wire::publication::RadrootsPhase1PublicationDraft;
 
 pub fn radroots_nostr_sign_frozen_draft(
     keys: &RadrootsNostrKeys,
@@ -31,6 +33,40 @@ pub fn radroots_nostr_sign_frozen_draft(
     if actual_event_id != draft.expected_event_id_str() {
         return Err(RadrootsNostrError::FrozenDraftEventIdMismatch {
             expected_event_id: draft.expected_event_id_str().to_owned(),
+            actual_event_id,
+        });
+    }
+
+    let raw_json = event.as_json();
+    let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
+    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(Into::into)
+}
+
+pub fn radroots_nostr_sign_phase1_publication_draft(
+    keys: &RadrootsNostrKeys,
+    draft: &RadrootsPhase1PublicationDraft,
+    expected_pubkey: &RadrootsPublicKey,
+    expected_event_id: &RadrootsEventId,
+) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
+    let actual_pubkey = keys.public_key().to_hex();
+    if actual_pubkey != expected_pubkey.as_str() {
+        return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
+            expected_pubkey: expected_pubkey.as_str().to_owned(),
+            actual_pubkey,
+        });
+    }
+
+    let event = radroots_nostr_build_event_unchecked(
+        draft.kind(),
+        draft.content().to_owned(),
+        draft.tags().to_vec(),
+    )?
+    .custom_created_at(RadrootsNostrTimestamp::from_secs(draft.created_at()))
+    .sign_with_keys(keys)?;
+    let actual_event_id = event.id.to_hex();
+    if actual_event_id != expected_event_id.as_str() {
+        return Err(RadrootsNostrError::FrozenDraftEventIdMismatch {
+            expected_event_id: expected_event_id.as_str().to_owned(),
             actual_event_id,
         });
     }

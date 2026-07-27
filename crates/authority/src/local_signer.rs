@@ -1,9 +1,16 @@
 #![forbid(unsafe_code)]
 
-use crate::{RadrootsAuthorityError, RadrootsEventSigner, RadrootsSignerError};
+use crate::{
+    RadrootsAuthorityError, RadrootsEventSigner, RadrootsPhase1PublicationSigner,
+    RadrootsSignerError,
+};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::RadrootsPublicKey;
-use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
+use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event_codec::wire::publication::RadrootsPhase1PublicationDraft;
+use radroots_nostr::prelude::{
+    RadrootsNostrKeys, radroots_nostr_sign_frozen_draft,
+    radroots_nostr_sign_phase1_publication_draft,
+};
 
 pub struct RadrootsLocalEventSigner {
     keys: RadrootsNostrKeys,
@@ -31,6 +38,25 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
             }
+        })
+    }
+}
+
+impl RadrootsPhase1PublicationSigner for RadrootsLocalEventSigner {
+    fn sign_phase1_publication_draft(
+        &self,
+        draft: &RadrootsPhase1PublicationDraft,
+        expected_pubkey: &RadrootsPublicKey,
+        expected_event_id: &RadrootsEventId,
+    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+        radroots_nostr_sign_phase1_publication_draft(
+            &self.keys,
+            draft,
+            expected_pubkey,
+            expected_event_id,
+        )
+        .map_err(|error| RadrootsSignerError::SigningFailed {
+            message: error.to_string(),
         })
     }
 }

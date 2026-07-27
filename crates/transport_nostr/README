@@ -3,6 +3,14 @@
 Deterministic Nostr relay transport substrate for exact signed-event publish,
 fetch ingest, and outbox delivery target coordination.
 
+Phase 1 outbox publication preserves and retries the exact signature-verified
+NIP-01 event JSON object bytes persisted by signing. Its stable dispatch
+identity excludes attempts, leases, clocks, and process identity. This byte
+identity does not extend to WebSocket frames: an adapter may reserialize the
+event while constructing `["EVENT", <event>]`, and WebSocket fragmentation is
+not protocol identity. Captured-adapter conformance therefore proves exact
+decoded event-object bytes, not identical frame bytes.
+
 Every fetch path verifies the NIP-01 id and signature before filter matching,
 unique-event budgeting, or returning an event. Repeated event ids preserve
 per-relay observation evidence without consuming the unique-event limit. The
