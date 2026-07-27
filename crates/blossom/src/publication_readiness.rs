@@ -1650,6 +1650,59 @@ mod tests {
         }
     }
 
+    #[cfg(all(feature = "raster-decode", feature = "serde"))]
+    #[test]
+    fn readiness_evidence_wire_rejects_invalid_and_noncanonical_fields() {
+        fn canonical_wire() -> PublicationReadinessEvidenceWire {
+            let expected = verified(PNG);
+            let (upload, head, get) = observations(PNG);
+            let evidence = verify_publication_readiness(
+                &expected,
+                PNG,
+                RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+                &upload,
+                &head,
+                &get,
+            )
+            .unwrap();
+            serde_json::from_slice(&evidence.to_canonical_json().unwrap()).unwrap()
+        }
+
+        for media_type in ["not a media type", "image/PNG", "image/gif"] {
+            let mut wire = canonical_wire();
+            wire.media_type = media_type.to_string();
+            assert_eq!(
+                readiness_evidence_from_wire(wire).unwrap_err().code(),
+                "publication_readiness_evidence_field_invalid",
+                "{media_type}",
+            );
+        }
+
+        for raster_format in ["still_webp", "unknown"] {
+            let mut wire = canonical_wire();
+            wire.raster_format = raster_format.to_string();
+            assert_eq!(
+                readiness_evidence_from_wire(wire).unwrap_err().code(),
+                "publication_readiness_evidence_field_invalid",
+                "{raster_format}",
+            );
+        }
+
+        let canonical_url = canonical_wire().url;
+        for url in [
+            "not a URL".to_string(),
+            canonical_url.replace("cdn.example", "CDN.example"),
+        ] {
+            let mut wire = canonical_wire();
+            wire.url = url.clone();
+            assert_eq!(
+                readiness_evidence_from_wire(wire).unwrap_err().code(),
+                "publication_readiness_evidence_field_invalid",
+                "{url}",
+            );
+        }
+    }
+
     #[test]
     fn bounded_get_collector_rejects_status_bounds_and_body_shape() {
         let url = verified(PNG).url().clone();

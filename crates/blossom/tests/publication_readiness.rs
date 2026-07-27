@@ -174,48 +174,8 @@ fn publication_readiness_evidence_revalidates_every_persisted_fact() {
             "publication_readiness_evidence_field_invalid",
         ),
         (
-            "media_type",
-            serde_json::json!("not a media type"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
-            "media_type",
-            serde_json::json!("image/PNG"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
-            "media_type",
-            serde_json::json!("image/gif"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
             "raster_format",
             serde_json::json!("jpeg"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
-            "raster_format",
-            serde_json::json!("still_webp"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
-            "raster_format",
-            serde_json::json!("unknown"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
-            "url",
-            serde_json::json!("not a URL"),
-            "publication_readiness_evidence_field_invalid",
-        ),
-        (
-            "url",
-            serde_json::json!(
-                evidence
-                    .url()
-                    .as_str()
-                    .replace("cdn.example", "CDN.example")
-            ),
             "publication_readiness_evidence_field_invalid",
         ),
         (
