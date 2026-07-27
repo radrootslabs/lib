@@ -1,6 +1,11 @@
 [release]
 version = "1.0.0-alpha.1"
 
+[publication]
+frozen = true
+registry = "crates-io"
+final_enablement_step = 305
+
 [classification]
 public = [
   "radroots_blossom",

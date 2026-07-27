@@ -3077,6 +3077,8 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
 struct ReleaseContractFile {
     release: ReleaseSection,
     #[serde(default)]
+    publication: Option<PublicationControl>,
+    #[serde(default)]
     classification: ReleaseClassification,
     #[serde(default)]
     publish: Option<ReleaseCrateSet>,
@@ -3102,6 +3104,13 @@ struct ReleaseClassification {
 #[derive(Debug, Deserialize)]
 struct ReleaseSection {
     version: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicationControl {
+    frozen: bool,
+    registry: String,
+    final_enablement_step: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -8152,6 +8161,37 @@ fn publish_config_is_non_public(publish: Option<&PackagePublish>) -> bool {
     matches!(publish, Some(PackagePublish::Bool(false)))
 }
 
+fn validate_publication_control(
+    release: &ReleaseContractFile,
+    publish_configs: &BTreeMap<String, Option<PackagePublish>>,
+    require_control: bool,
+) -> Result<bool, String> {
+    let Some(control) = release.publication.as_ref() else {
+        if require_control {
+            return Err("publication control is required".to_string());
+        }
+        return Ok(false);
+    };
+    if control.registry != "crates-io" {
+        return Err("publication.registry must be crates-io".to_string());
+    }
+    if control.final_enablement_step != 305 {
+        return Err("publication.final_enablement_step must be 305".to_string());
+    }
+    if !control.frozen {
+        return Ok(false);
+    }
+    for (crate_name, publish) in publish_configs {
+        if !publish_config_is_non_public(publish.as_ref()) {
+            return Err(format!(
+                "publication freeze requires workspace crate {} to set publish = false",
+                crate_name
+            ));
+        }
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 fn validate_release_publish_policy(
     workspace_root: &Path,
@@ -8281,6 +8321,9 @@ fn validate_release_publish_policy(
 
     let publish_configs = workspace_package_publish_configs(workspace_root)
         .expect("workspace publish configs are stable");
+    if validate_publication_control(&release, &publish_configs, false)? {
+        return Ok(());
+    }
     for crate_name in &public_set {
         let publish = publish_configs[crate_name].as_ref();
         if !publish_config_is_public(publish) {
@@ -8441,20 +8484,41 @@ fn validate_contract_bundle_with_release_policy_override_and_profile(
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
     validate_version_governance(bundle, workspace_root)?;
-    validate_release_publish_policy_with_override(
+    validate_release_publish_policy_with_override_and_control(
         workspace_root,
         &bundle.root,
         bundle.version.contract.version.as_str(),
         release_policy_override,
+        matches!(
+            authority_profile,
+            OperationAuthorityProfile::CapsuleCanonical
+        ),
     )?;
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_release_publish_policy_with_override(
+    workspace_root: &Path,
+    contract_root: &Path,
+    contract_version: &str,
+    release_policy_override: Option<PathBuf>,
+) -> Result<(), String> {
+    validate_release_publish_policy_with_override_and_control(
+        workspace_root,
+        contract_root,
+        contract_version,
+        release_policy_override,
+        true,
+    )
+}
+
+fn validate_release_publish_policy_with_override_and_control(
     workspace_root: &Path,
     _contract_root: &Path,
     contract_version: &str,
     release_policy_override: Option<PathBuf>,
+    require_publication_control: bool,
 ) -> Result<(), String> {
     let release = load_release_contract_with_override(
         workspace_root,
@@ -8583,6 +8647,9 @@ fn validate_release_publish_policy_with_override(
 
     let publish_configs = workspace_package_publish_configs(workspace_root)
         .expect("workspace publish configs are stable");
+    if validate_publication_control(&release, &publish_configs, require_publication_control)? {
+        return Ok(());
+    }
     for crate_name in &public_set {
         let publish = publish_configs[crate_name].as_ref();
         if !publish_config_is_public(publish) {
@@ -11256,6 +11323,7 @@ readme = { workspace = true }
             release: ReleaseSection {
                 version: release.version.clone(),
             },
+            publication: None,
             classification: ReleaseClassification::default(),
             publish: Some(ReleaseCrateSet {
                 crates: vec!["radroots_public".to_string()],
@@ -11278,6 +11346,7 @@ readme = { workspace = true }
             release: ReleaseSection {
                 version: release.version.clone(),
             },
+            publication: None,
             classification: ReleaseClassification::default(),
             publish: None,
             internal: None,
@@ -11293,6 +11362,7 @@ readme = { workspace = true }
             release: ReleaseSection {
                 version: release.version.clone(),
             },
+            publication: None,
             classification: ReleaseClassification {
                 internal: vec!["radroots_internal_only".to_string()],
                 ..ReleaseClassification::default()
@@ -11309,6 +11379,7 @@ readme = { workspace = true }
             release: ReleaseSection {
                 version: release.version.clone(),
             },
+            publication: None,
             classification: ReleaseClassification {
                 deferred: vec!["radroots_deferred".to_string()],
                 ..ReleaseClassification::default()
@@ -11329,6 +11400,7 @@ readme = { workspace = true }
             release: ReleaseSection {
                 version: release.version.clone(),
             },
+            publication: None,
             classification: ReleaseClassification {
                 retired: vec!["radroots_retired".to_string()],
                 ..ReleaseClassification::default()
@@ -11347,6 +11419,7 @@ readme = { workspace = true }
 
         let yank_only = ReleaseContractFile {
             release,
+            publication: None,
             classification: ReleaseClassification {
                 yank_only: vec!["radroots_yank_only".to_string()],
                 ..ReleaseClassification::default()
@@ -11918,6 +11991,93 @@ edition = "2024"
         let internal_flag = validate_release_publish_policy(&root, &contract_root, "1.0.0")
             .expect_err("internal crate must be non-publishable");
         assert!(internal_flag.contains("non-public crate"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn publication_freeze_requires_every_workspace_package_to_be_private() {
+        let root = create_synthetic_workspace("publication_freeze");
+        let contract_root = root.join("contracts");
+        let release_policy_path = root_release_policy_path(&root);
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+version = "1.0.0"
+edition = "2024"
+publish = false
+"#,
+        );
+        write_file(
+            &release_policy_path,
+            r#"[release]
+version = "1.0.0"
+
+[publication]
+frozen = true
+registry = "crates-io"
+final_enablement_step = 305
+
+[publish]
+crates = ["radroots_a"]
+
+[internal]
+crates = ["radroots_b"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+        );
+        validate_release_publish_policy_with_override(
+            &root,
+            &contract_root,
+            "1.0.0",
+            Some(release_policy_path.clone()),
+        )
+        .expect("fully private workspace should satisfy publication freeze");
+
+        write_file(
+            &root.join("crates").join("a").join("Cargo.toml"),
+            r#"[package]
+name = "radroots_a"
+version = "1.0.0"
+edition = "2024"
+publish = ["crates-io"]
+"#,
+        );
+        let publishable = validate_release_publish_policy_with_override(
+            &root,
+            &contract_root,
+            "1.0.0",
+            Some(release_policy_path.clone()),
+        )
+        .expect_err("publication freeze must reject a publishable package");
+        assert!(publishable.contains("publication freeze requires workspace crate radroots_a"));
+
+        write_file(
+            &release_policy_path,
+            r#"[release]
+version = "1.0.0"
+
+[publish]
+crates = ["radroots_a"]
+
+[internal]
+crates = ["radroots_b"]
+
+[publish_order]
+crates = ["radroots_a"]
+"#,
+        );
+        let missing_control = validate_release_publish_policy_with_override(
+            &root,
+            &contract_root,
+            "1.0.0",
+            Some(release_policy_path),
+        )
+        .expect_err("release policy must carry explicit publication control");
+        assert!(missing_control.contains("publication control is required"));
 
         let _ = fs::remove_dir_all(root);
     }
