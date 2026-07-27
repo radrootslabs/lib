@@ -2439,11 +2439,11 @@ async fn fetch_verifies_events_before_acceptance_budgeting() {
     assert_eq!(receipt.verification_failed_count, 1);
     assert_eq!(receipt.skipped_over_limit_count, 0);
     assert_eq!(
-        receipt.event_receipts[0].verification,
+        receipt.event_receipts[0].verification(),
         RadrootsRelayFetchEventVerification::Failed
     );
     assert_eq!(
-        receipt.event_receipts[1].verification,
+        receipt.event_receipts[1].verification(),
         RadrootsRelayFetchEventVerification::Verified
     );
 }
@@ -2476,10 +2476,10 @@ async fn fetch_deduplicates_event_ids_without_starving_unique_events() {
     assert_eq!(receipt.skipped_over_limit_count, 0);
     assert_eq!(receipt.event_receipts.len(), 3);
     assert_eq!(
-        receipt.event_receipts[1].event_id.as_deref(),
+        receipt.event_receipts[1].event_id(),
         Some(first_id.as_str())
     );
-    assert!(receipt.event_receipts[1].duplicate);
+    assert!(receipt.event_receipts[1].was_duplicate());
 }
 
 #[tokio::test]
@@ -2616,14 +2616,18 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     assert_eq!(receipt.notice_count, 1);
     assert_eq!(
         receipt.inserted_count,
-        receipt.events.iter().filter(|event| event.inserted).count()
+        receipt
+            .events
+            .iter()
+            .filter(|event| event.was_inserted())
+            .count()
     );
     assert_eq!(
         receipt.duplicate_count,
         receipt
             .events
             .iter()
-            .filter(|event| event.duplicate)
+            .filter(|event| event.was_duplicate())
             .count()
     );
     assert_eq!(
@@ -2631,7 +2635,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         receipt
             .events
             .iter()
-            .filter(|event| event.not_persisted)
+            .filter(|event| event.was_not_persisted())
             .count()
     );
     assert_eq!(
@@ -2639,7 +2643,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         receipt
             .events
             .iter()
-            .filter(|event| event.admission == RadrootsRelayFetchEventAdmission::Unsupported)
+            .filter(|event| event.admission() == RadrootsRelayFetchEventAdmission::Unsupported)
             .count()
     );
     assert_eq!(
@@ -2647,7 +2651,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         receipt
             .events
             .iter()
-            .filter(|event| event.admission == RadrootsRelayFetchEventAdmission::Invalid)
+            .filter(|event| event.admission() == RadrootsRelayFetchEventAdmission::Invalid)
             .count()
     );
     assert_eq!(
@@ -2655,7 +2659,7 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         receipt
             .events
             .iter()
-            .filter(|event| event.verification == RadrootsRelayFetchEventVerification::Failed)
+            .filter(|event| event.verification() == RadrootsRelayFetchEventVerification::Failed)
             .count()
     );
     assert_eq!(
@@ -2663,16 +2667,16 @@ async fn fetch_ingests_events_and_records_transport_observations() {
         receipt
             .events
             .iter()
-            .filter(|event| event.malformed)
+            .filter(|event| event.is_malformed())
             .count()
     );
     assert!(receipt.events.iter().all(|event| {
-        usize::from(event.inserted)
-            + usize::from(event.duplicate)
-            + usize::from(event.not_persisted)
+        usize::from(event.was_inserted())
+            + usize::from(event.was_duplicate())
+            + usize::from(event.was_not_persisted())
             <= 1
-            && (!event.malformed
-                || event.verification == RadrootsRelayFetchEventVerification::NotEvaluated)
+            && (!event.is_malformed()
+                || event.verification() == RadrootsRelayFetchEventVerification::NotEvaluated)
     }));
     assert_eq!(receipt.relay_outcomes.len(), 4);
     assert_eq!(receipt.relay_outcomes[0].relay_url(), RELAY_PRIMARY_WSS);
@@ -2703,75 +2707,72 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     );
     assert!(receipt.relay_outcomes[3].relay_outcome().is_none());
     assert_eq!(
-        receipt.events[0].admission,
+        receipt.events[0].admission(),
         RadrootsRelayFetchEventAdmission::Admitted
     );
     assert_eq!(
-        receipt.events[0].valid_stream,
+        receipt.events[0].valid_stream(),
         RadrootsRelayFetchEventValidStream::Eligible
     );
     assert_eq!(
-        receipt.events[0].visibility,
+        receipt.events[0].visibility(),
         RadrootsRelayFetchEventVisibility::Visible
     );
     assert_eq!(
-        receipt.events[1].admission,
+        receipt.events[1].admission(),
         RadrootsRelayFetchEventAdmission::Admitted
     );
     assert_eq!(
-        receipt.events[1].valid_stream,
+        receipt.events[1].valid_stream(),
         RadrootsRelayFetchEventValidStream::Eligible
     );
     assert_eq!(
-        receipt.events[1].visibility,
+        receipt.events[1].visibility(),
         RadrootsRelayFetchEventVisibility::Visible
     );
     assert_eq!(
-        receipt.events[2].admission,
+        receipt.events[2].admission(),
         RadrootsRelayFetchEventAdmission::Unsupported
     );
+    assert_eq!(receipt.events[2].admission_code(), Some("unsupported_kind"));
     assert_eq!(
-        receipt.events[2].admission_code.as_deref(),
-        Some("unsupported_kind")
-    );
-    assert_eq!(
-        receipt.events[2].valid_stream,
+        receipt.events[2].valid_stream(),
         RadrootsRelayFetchEventValidStream::Ineligible
     );
     assert_eq!(
-        receipt.events[2].visibility,
+        receipt.events[2].visibility(),
         RadrootsRelayFetchEventVisibility::NotAdmitted
     );
     assert_eq!(
-        receipt.events[3].admission,
+        receipt.events[3].admission(),
         RadrootsRelayFetchEventAdmission::Invalid
     );
     assert_eq!(
-        receipt.events[3].admission_code.as_deref(),
+        receipt.events[3].admission_code(),
         Some("reply_event_id_invalid")
     );
     assert_eq!(
-        receipt.events[3].valid_stream,
+        receipt.events[3].valid_stream(),
         RadrootsRelayFetchEventValidStream::Ineligible
     );
     assert_eq!(
-        receipt.events[3].visibility,
+        receipt.events[3].visibility(),
         RadrootsRelayFetchEventVisibility::NotAdmitted
     );
     assert_eq!(
-        receipt.events[4].verification,
+        receipt.events[4].verification(),
         RadrootsRelayFetchEventVerification::Failed
     );
     assert_eq!(
-        receipt.events[4].admission,
+        receipt.events[4].admission(),
         RadrootsRelayFetchEventAdmission::NotEvaluated
     );
     assert_eq!(
-        receipt.events[5].verification,
+        receipt.events[5].verification(),
         RadrootsRelayFetchEventVerification::NotEvaluated
     );
     assert_eq!(
-        receipt.events[5].admission,
+        receipt.events[5].admission(),
         RadrootsRelayFetchEventAdmission::NotEvaluated
     );
 
@@ -2855,19 +2856,19 @@ async fn fetch_reports_final_replaceable_visibility_when_newer_arrives_first() {
     assert_eq!(receipt.visible_count, 1);
     assert_eq!(receipt.not_current_count, 1);
     assert_eq!(
-        receipt.events[0].visibility,
+        receipt.events[0].visibility(),
         RadrootsRelayFetchEventVisibility::Visible
     );
     assert_eq!(
-        receipt.events[1].admission,
+        receipt.events[1].admission(),
         RadrootsRelayFetchEventAdmission::Admitted
     );
     assert_eq!(
-        receipt.events[1].valid_stream,
+        receipt.events[1].valid_stream(),
         RadrootsRelayFetchEventValidStream::Eligible
     );
     assert_eq!(
-        receipt.events[1].visibility,
+        receipt.events[1].visibility(),
         RadrootsRelayFetchEventVisibility::NotCurrent
     );
 }
@@ -2904,11 +2905,11 @@ async fn fetch_reports_final_replaceable_visibility_when_older_arrives_first() {
     assert_eq!(receipt.visible_count, 1);
     assert_eq!(receipt.not_current_count, 1);
     assert_eq!(
-        receipt.events[0].visibility,
+        receipt.events[0].visibility(),
         RadrootsRelayFetchEventVisibility::NotCurrent
     );
     assert_eq!(
-        receipt.events[1].visibility,
+        receipt.events[1].visibility(),
         RadrootsRelayFetchEventVisibility::Visible
     );
 }
@@ -2958,7 +2959,7 @@ async fn fetch_maps_one_final_visibility_snapshot_back_to_duplicate_receipts() {
         receipt
             .events
             .iter()
-            .map(|event| event.event_id.as_deref())
+            .map(|event| event.event_id())
             .collect::<Vec<_>>(),
         vec![
             Some(older_id.as_str()),
@@ -2970,7 +2971,7 @@ async fn fetch_maps_one_final_visibility_snapshot_back_to_duplicate_receipts() {
         receipt
             .events
             .iter()
-            .map(|event| event.visibility)
+            .map(|event| event.visibility())
             .collect::<Vec<_>>(),
         vec![
             RadrootsRelayFetchEventVisibility::NotCurrent,
@@ -2978,7 +2979,7 @@ async fn fetch_maps_one_final_visibility_snapshot_back_to_duplicate_receipts() {
             RadrootsRelayFetchEventVisibility::NotCurrent,
         ]
     );
-    assert!(receipt.events[2].duplicate);
+    assert!(receipt.events[2].was_duplicate());
 }
 
 #[tokio::test]
@@ -3024,23 +3025,23 @@ async fn fetch_reports_store_suppression_when_deletion_precedes_target_replay() 
     assert_eq!(receipt.suppressed_count, 1);
     assert_eq!(receipt.not_current_count, 0);
     assert_eq!(
-        receipt.events[0].visibility,
+        receipt.events[0].visibility(),
         RadrootsRelayFetchEventVisibility::Visible
     );
     assert_eq!(
-        receipt.events[1].event_id.as_deref(),
+        receipt.events[1].event_id(),
         Some(target.id.to_hex().as_str())
     );
     assert_eq!(
-        receipt.events[1].admission,
+        receipt.events[1].admission(),
         RadrootsRelayFetchEventAdmission::Admitted
     );
     assert_eq!(
-        receipt.events[1].valid_stream,
+        receipt.events[1].valid_stream(),
         RadrootsRelayFetchEventValidStream::Eligible
     );
     assert_eq!(
-        receipt.events[1].visibility,
+        receipt.events[1].visibility(),
         RadrootsRelayFetchEventVisibility::Suppressed
     );
 }
@@ -3076,14 +3077,14 @@ async fn fetch_reports_ephemeral_events_as_not_persisted_without_duplicate_or_st
     assert_eq!(receipt.valid_stream_eligible_count, 0);
     assert_eq!(receipt.events.len(), 2);
     assert!(receipt.events.iter().all(|event| {
-        !event.inserted
-            && !event.duplicate
-            && event.not_persisted
-            && event.verification == RadrootsRelayFetchEventVerification::Verified
-            && event.admission == RadrootsRelayFetchEventAdmission::Admitted
-            && event.admission_code.is_none()
-            && event.valid_stream == RadrootsRelayFetchEventValidStream::Ineligible
-            && event.visibility == RadrootsRelayFetchEventVisibility::NotPersisted
+        !event.was_inserted()
+            && !event.was_duplicate()
+            && event.was_not_persisted()
+            && event.verification() == RadrootsRelayFetchEventVerification::Verified
+            && event.admission() == RadrootsRelayFetchEventAdmission::Admitted
+            && event.admission_code().is_none()
+            && event.valid_stream() == RadrootsRelayFetchEventValidStream::Ineligible
+            && event.visibility() == RadrootsRelayFetchEventVisibility::NotPersisted
     }));
     assert!(
         store
@@ -3146,9 +3147,9 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     assert_eq!(receipt.malformed_count, 0);
     assert_eq!(receipt.admission_unsupported_count, 0);
     assert_eq!(receipt.events.len(), 3);
-    assert!(receipt.events[0].out_of_filter);
-    assert!(!receipt.events[1].out_of_filter);
-    assert!(receipt.events[2].out_of_filter);
+    assert!(receipt.events[0].is_out_of_filter());
+    assert!(!receipt.events[1].is_out_of_filter());
+    assert!(receipt.events[2].is_out_of_filter());
     assert!(
         store
             .raw_event(accepted.id_str())
@@ -3212,10 +3213,10 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
     assert_eq!(receipt.out_of_filter_count, 1);
     assert_eq!(receipt.skipped_over_limit_count, 1);
     assert_eq!(receipt.events.len(), 4);
-    assert!(receipt.events[0].malformed);
-    assert!(receipt.events[1].out_of_filter);
-    assert!(receipt.events[2].inserted);
-    assert!(receipt.events[3].skipped_over_limit);
+    assert!(receipt.events[0].is_malformed());
+    assert!(receipt.events[1].is_out_of_filter());
+    assert!(receipt.events[2].was_inserted());
+    assert!(receipt.events[3].was_skipped_over_limit());
     assert_eq!(receipt.eose_count, 1);
     assert_eq!(receipt.closed_count, 1);
     assert_eq!(receipt.notice_count, 1);
@@ -3318,10 +3319,10 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
     assert_eq!(receipt.closed_count, 1);
     assert_eq!(receipt.notice_count, 1);
     assert_eq!(receipt.event_receipts.len(), 4);
-    assert!(receipt.event_receipts[0].malformed);
-    assert!(receipt.event_receipts[1].out_of_filter);
-    assert!(!receipt.event_receipts[2].malformed);
-    assert!(receipt.event_receipts[3].skipped_over_limit);
+    assert!(receipt.event_receipts[0].is_malformed());
+    assert!(receipt.event_receipts[1].is_out_of_filter());
+    assert!(!receipt.event_receipts[2].is_malformed());
+    assert!(receipt.event_receipts[3].was_skipped_over_limit());
 }
 
 #[tokio::test]
@@ -3468,7 +3469,7 @@ async fn fetch_raw_json_budget_charges_every_preparse_event_class() {
     assert_eq!(receipt.duplicate_count, 1);
     assert_eq!(receipt.skipped_over_limit_count, 2);
     assert_eq!(receipt.events.len(), 5);
-    assert!(receipt.events[4].skipped_over_limit);
+    assert!(receipt.events[4].was_skipped_over_limit());
     assert_eq!(receipt.eose_count, 2);
 }
 
@@ -3719,6 +3720,118 @@ fn fetch_relay_outcomes_and_failures_seal_state_and_strict_wire() {
     let mut unknown_failure = failure_wire;
     unknown_failure["extra"] = serde_json::json!(true);
     assert!(serde_json::from_value::<RadrootsRelayFetchFailure>(unknown_failure).is_err());
+}
+
+#[test]
+fn fetch_event_receipts_reject_oversized_and_incoherent_wire_state() {
+    let event_id = "a".repeat(64);
+    let exact_message = "m".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES);
+    let accepted_wire = serde_json::json!({
+        "relay_url": RELAY_PRIMARY_WSS,
+        "event_id": event_id,
+        "inserted": false,
+        "duplicate": false,
+        "not_persisted": false,
+        "malformed": false,
+        "out_of_filter": false,
+        "skipped_over_limit": false,
+        "verification": "verified",
+        "admission": "not_evaluated",
+        "admission_code": null,
+        "valid_stream": "not_evaluated",
+        "visibility": "not_evaluated",
+        "message": exact_message,
+    });
+    let accepted =
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            accepted_wire.clone(),
+        )
+        .expect("exact-limit accepted event receipt");
+    assert_eq!(accepted.relay_url(), RELAY_PRIMARY_WSS);
+    assert_eq!(accepted.event_id(), Some(event_id.as_str()));
+    assert_eq!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            serde_json::to_value(&accepted).expect("event receipt wire"),
+        )
+        .expect("strict event receipt reload"),
+        accepted
+    );
+
+    let mut oversized_message = accepted_wire.clone();
+    oversized_message["message"] =
+        serde_json::json!("m".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1));
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            oversized_message,
+        )
+        .is_err()
+    );
+
+    let mut exact_code = accepted_wire.clone();
+    exact_code["inserted"] = serde_json::json!(true);
+    exact_code["admission"] = serde_json::json!("admitted");
+    exact_code["admission_code"] =
+        serde_json::json!("c".repeat(radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES));
+    exact_code["valid_stream"] = serde_json::json!("eligible");
+    exact_code["visibility"] = serde_json::json!("visible");
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            exact_code.clone(),
+        )
+        .is_ok()
+    );
+    exact_code["admission_code"] = serde_json::json!(
+        "c".repeat(radroots_transport::RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1)
+    );
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            exact_code,
+        )
+        .is_err()
+    );
+
+    for mutation in [
+        ("duplicate", serde_json::json!(true)),
+        ("event_id", serde_json::json!("not-an-event-id")),
+        ("extra", serde_json::json!(true)),
+    ] {
+        let mut wire = accepted_wire.clone();
+        wire["inserted"] = serde_json::json!(true);
+        wire[mutation.0] = mutation.1;
+        assert!(
+            serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+                wire
+            )
+            .is_err(),
+            "mutation {} must be rejected",
+            mutation.0
+        );
+    }
+
+    let mut malformed_verified = accepted_wire.clone();
+    malformed_verified["malformed"] = serde_json::json!(true);
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            malformed_verified,
+        )
+        .is_err()
+    );
+    let mut unevaluated_with_semantics = accepted_wire.clone();
+    unevaluated_with_semantics["admission_code"] = serde_json::json!("code");
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            unevaluated_with_semantics,
+        )
+        .is_err()
+    );
+    let mut false_not_persisted_visibility = accepted_wire;
+    false_not_persisted_visibility["visibility"] = serde_json::json!("not_persisted");
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayFetchEventReceipt>(
+            false_not_persisted_visibility,
+        )
+        .is_err()
+    );
 }
 
 #[tokio::test]
@@ -5556,9 +5669,9 @@ async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
     assert_eq!(receipt.valid_stream_eligible_count, 1_000);
     assert_eq!(receipt.visible_count, 1_000);
     assert_eq!(receipt.events.len(), 1_000);
-    assert!(receipt.events.iter().all(|event| event.valid_stream
+    assert!(receipt.events.iter().all(|event| event.valid_stream()
         == RadrootsRelayFetchEventValidStream::Eligible
-        && event.visibility == RadrootsRelayFetchEventVisibility::Visible));
+        && event.visibility() == RadrootsRelayFetchEventVisibility::Visible));
     let replay = store.valid_stream_after(0, 1_000).await.expect("replay");
     assert_eq!(replay.len(), 1_000);
 }
