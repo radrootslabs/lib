@@ -1,4 +1,4 @@
-# radroots-protocol
+# radroots_protocol
 
 Versioned cross-process and cross-language schemas for Radroots.
 

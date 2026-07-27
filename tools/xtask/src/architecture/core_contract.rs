@@ -29,11 +29,11 @@ pub(super) fn validate(workspace_root: &Path) -> Result<(), String> {
         .and_then(toml::Value::as_array)
         .and_then(|packages| {
             packages.iter().find(|package| {
-                package.get("name").and_then(toml::Value::as_str) == Some("radroots-core")
+                package.get("name").and_then(toml::Value::as_str) == Some("radroots_core")
             })
         })
         .and_then(toml::Value::as_table)
-        .ok_or_else(|| format!("{ARCHITECTURE_RELATIVE} is missing radroots-core"))?;
+        .ok_or_else(|| format!("{ARCHITECTURE_RELATIVE} is missing radroots_core"))?;
 
     let manifest = read_toml(workspace_root, CORE_MANIFEST_RELATIVE)?;
     validate_manifest(core_spec, &manifest)?;
@@ -48,9 +48,9 @@ fn validate_manifest(core_spec: &toml::value::Table, manifest: &toml::Value) -> 
         .get("package")
         .and_then(toml::Value::as_table)
         .ok_or_else(|| format!("{CORE_MANIFEST_RELATIVE} is missing [package]"))?;
-    if package.get("name").and_then(toml::Value::as_str) != Some("radroots-core") {
+    if package.get("name").and_then(toml::Value::as_str) != Some("radroots_core") {
         return Err(format!(
-            "{CORE_MANIFEST_RELATIVE} package.name must be radroots-core"
+            "{CORE_MANIFEST_RELATIVE} package.name must be radroots_core"
         ));
     }
     let library = manifest
@@ -77,7 +77,7 @@ fn validate_manifest(core_spec: &toml::value::Table, manifest: &toml::Value) -> 
         .collect::<BTreeSet<_>>();
     if actual_features != expected_features {
         return Err(format!(
-            "radroots-core public features must be exactly {expected_features:?}, found {actual_features:?}"
+            "radroots_core public features must be exactly {expected_features:?}, found {actual_features:?}"
         ));
     }
     let expected_default = spec_strings(core_spec, "default_features")?;
@@ -87,7 +87,7 @@ fn validate_manifest(core_spec: &toml::value::Table, manifest: &toml::Value) -> 
     )?;
     if actual_default != expected_default {
         return Err(format!(
-            "radroots-core default features must be exactly {expected_default:?}, found {actual_default:?}"
+            "radroots_core default features must be exactly {expected_default:?}, found {actual_default:?}"
         ));
     }
     let std_enables = value_strings(
@@ -95,7 +95,7 @@ fn validate_manifest(core_spec: &toml::value::Table, manifest: &toml::Value) -> 
         &format!("{CORE_MANIFEST_RELATIVE} features.std"),
     )?;
     if !std_enables.is_empty() {
-        return Err("radroots-core std must remain an empty additive marker".to_owned());
+        return Err("radroots_core std must remain an empty additive marker".to_owned());
     }
     let serde_enables = value_strings(
         features.get("serde"),
@@ -104,7 +104,7 @@ fn validate_manifest(core_spec: &toml::value::Table, manifest: &toml::Value) -> 
     let expected_serde = BTreeSet::from(["dep:serde".to_owned(), "rust_decimal/serde".to_owned()]);
     if serde_enables != expected_serde {
         return Err(format!(
-            "radroots-core serde feature must enable {expected_serde:?}, found {serde_enables:?}"
+            "radroots_core serde feature must enable {expected_serde:?}, found {serde_enables:?}"
         ));
     }
 
@@ -137,7 +137,7 @@ fn validate_manifest(core_spec: &toml::value::Table, manifest: &toml::Value) -> 
             })
         })
     {
-        return Err("radroots-core must not declare target-specific dependencies".to_owned());
+        return Err("radroots_core must not declare target-specific dependencies".to_owned());
     }
 
     let dependencies = manifest
@@ -190,7 +190,7 @@ fn validate_crate_root(
     let expected_modules = spec_strings(core_spec, "modules")?;
     if modules != expected_modules {
         return Err(format!(
-            "radroots-core public modules must be exactly {expected_modules:?}, found {modules:?}"
+            "radroots_core public modules must be exactly {expected_modules:?}, found {modules:?}"
         ));
     }
     let specified_exports = spec_strings(core_spec, "root_exports")?;
@@ -200,7 +200,7 @@ fn validate_crate_root(
         .collect::<BTreeSet<_>>();
     if specified_exports != canonical_exports {
         return Err(format!(
-            "radroots-core canonical root exports must be exactly {canonical_exports:?}, found {specified_exports:?}"
+            "radroots_core canonical root exports must be exactly {canonical_exports:?}, found {specified_exports:?}"
         ));
     }
     let expected_exports = CORE_ROOT_EXPORTS
@@ -209,7 +209,7 @@ fn validate_crate_root(
         .collect::<BTreeMap<_, _>>();
     if exports != expected_exports {
         return Err(format!(
-            "radroots-core root exports must match the canonical contract; expected {expected_exports:?}, found {exports:?}"
+            "radroots_core root exports must match the canonical contract; expected {expected_exports:?}, found {exports:?}"
         ));
     }
     Ok(())
@@ -227,7 +227,7 @@ fn validate_dependency_names(
         .unwrap_or_default();
     if actual != expected {
         return Err(format!(
-            "radroots-core {section} must be exactly {expected:?}, found {actual:?}"
+            "radroots_core {section} must be exactly {expected:?}, found {actual:?}"
         ));
     }
     Ok(())
@@ -242,7 +242,7 @@ fn reject_nonempty_dependency_section(
         .and_then(toml::Value::as_table)
         .is_some_and(|dependencies| !dependencies.is_empty())
     {
-        return Err(format!("radroots-core must not declare {section}"));
+        return Err(format!("radroots_core must not declare {section}"));
     }
     Ok(())
 }
@@ -257,7 +257,7 @@ fn validate_dependency_shape(
     let dependency = dependencies
         .get(name)
         .and_then(toml::Value::as_table)
-        .ok_or_else(|| format!("radroots-core dependency {name} must use a dependency table"))?;
+        .ok_or_else(|| format!("radroots_core dependency {name} must use a dependency table"))?;
     if dependency.get("workspace").and_then(toml::Value::as_bool) != Some(true)
         || dependency
             .get("optional")
@@ -271,7 +271,7 @@ fn validate_dependency_shape(
             != default_features
     {
         return Err(format!(
-            "radroots-core dependency {name} has a noncanonical workspace/optional/default-features shape"
+            "radroots_core dependency {name} has a noncanonical workspace/optional/default-features shape"
         ));
     }
     let mut expected_keys = BTreeSet::from(["workspace", "default-features"]);
@@ -287,7 +287,7 @@ fn validate_dependency_shape(
         .collect::<BTreeSet<_>>();
     if actual_keys != expected_keys {
         return Err(format!(
-            "radroots-core dependency {name} keys must be exactly {expected_keys:?}, found {actual_keys:?}"
+            "radroots_core dependency {name} keys must be exactly {expected_keys:?}, found {actual_keys:?}"
         ));
     }
     let actual_features = match dependency.get("features") {
@@ -303,7 +303,7 @@ fn validate_dependency_shape(
         .collect::<BTreeSet<_>>();
     if actual_features != expected_features {
         return Err(format!(
-            "radroots-core dependency {name} features must be {expected_features:?}, found {actual_features:?}"
+            "radroots_core dependency {name} features must be {expected_features:?}, found {actual_features:?}"
         ));
     }
     Ok(())
@@ -312,7 +312,7 @@ fn validate_dependency_shape(
 fn spec_strings(package: &toml::value::Table, field: &str) -> Result<BTreeSet<String>, String> {
     value_strings(
         package.get(field),
-        &format!("{ARCHITECTURE_RELATIVE} radroots-core.{field}"),
+        &format!("{ARCHITECTURE_RELATIVE} radroots_core.{field}"),
     )
 }
 
@@ -454,7 +454,7 @@ mod tests {
 
     const SPEC: &str = r#"
 [[package]]
-name = "radroots-core"
+name = "radroots_core"
 features = ["std", "serde"]
 default_features = ["std", "serde"]
 modules = ["currency", "decimal", "money", "percent", "pricing", "quantity", "unit"]
@@ -463,7 +463,7 @@ root_exports = ["Currency", "Decimal", "Money", "Percent", "Quantity", "Quantity
 
     const MANIFEST: &str = r#"
 [package]
-name = "radroots-core"
+name = "radroots_core"
 
 [lib]
 name = "radroots_core"

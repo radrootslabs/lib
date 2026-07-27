@@ -23,75 +23,75 @@ forbidden_public_paths = [
 ]
 
 [[package]]
-name = "radroots-core"
+name = "radroots_core"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-identity"
+name = "radroots_identity"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-blossom"
+name = "radroots_blossom"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-protocol"
+name = "radroots_protocol"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-event"
+name = "radroots_event"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-event-codec"
+name = "radroots_event_codec"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-trade"
+name = "radroots_trade"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-signing"
+name = "radroots_signing"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-transport"
+name = "radroots_transport"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-nostr"
+name = "radroots_nostr"
 allowed_public_paths = ["nostr"]
 
 [[package]]
-name = "radroots-nostr-connect"
+name = "radroots_nostr_connect"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-secrets"
+name = "radroots_secrets"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-storage"
+name = "radroots_storage"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-storage-sqlite"
+name = "radroots_storage_sqlite"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-transport-nostr"
+name = "radroots_transport_nostr"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-sync"
+name = "radroots_sync"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-geonames"
+name = "radroots_geonames"
 allowed_public_paths = []
 
 [[package]]
-name = "radroots-sdk"
+name = "radroots_sdk"
 allowed_public_paths = []
 
 [[package]]
@@ -99,7 +99,7 @@ name = "radroots"
 allowed_public_paths = []
 [[exception]]
 id = "RCRV1-API-003"
-package = "radroots-nostr"
+package = "radroots_nostr"
 source = "src/client.rs"
 forbidden_path = "nostr_sdk"
 items = [
@@ -113,7 +113,7 @@ rationale = "Legacy client ownership remains visible only until the Nostr packag
 
 [[exception]]
 id = "RCRV1-API-004"
-package = "radroots-nostr"
+package = "radroots_nostr"
 source = "src/error.rs"
 forbidden_path = "nostr_sdk"
 items = ["error::RadrootsNostrError"]
@@ -127,7 +127,7 @@ rationale = "Legacy SDK error variants remain exact-scoped until normalized adap
 
 [[exception]]
 id = "RCRV1-API-005"
-package = "radroots-nostr"
+package = "radroots_nostr"
 source = "src/types.rs"
 forbidden_path = "nostr_sdk"
 items = [
@@ -156,7 +156,7 @@ rationale = "Broad live-client aliases are frozen and must be removed with the N
 
 [[exception]]
 id = "RCRV1-API-006"
-package = "radroots-nostr-connect"
+package = "radroots_nostr_connect"
 source = "src/client.rs"
 forbidden_path = "nostr"
 items = [
@@ -179,7 +179,7 @@ rationale = "Legacy client state-machine signatures retain exact protocol types 
 
 [[exception]]
 id = "RCRV1-API-007"
-package = "radroots-nostr-connect"
+package = "radroots_nostr_connect"
 source = "src/message.rs"
 forbidden_path = "nostr"
 items = [
@@ -200,7 +200,7 @@ rationale = "Legacy request and response envelopes retain exact Nostr values unt
 
 [[exception]]
 id = "RCRV1-API-008"
-package = "radroots-nostr-connect"
+package = "radroots_nostr_connect"
 source = "src/uri.rs"
 forbidden_path = "nostr"
 items = [

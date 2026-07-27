@@ -1,5 +1,5 @@
 [package]
-name = "radroots-signing"
+name = "radroots_signing"
 description = "Signing abstractions and authorization policy for Radroots"
 version = "0.1.0"
 edition.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "radroots-sync"
+name = "radroots_sync"
 description = "Synchronization orchestration for Radroots"
 version = "0.1.0"
 edition.workspace = true

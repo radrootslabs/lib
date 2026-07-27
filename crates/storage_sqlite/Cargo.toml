@@ -1,5 +1,5 @@
 [package]
-name = "radroots-storage-sqlite"
+name = "radroots_storage_sqlite"
 description = "SQLite storage backend for Radroots"
 version = "0.1.0"
 edition.workspace = true

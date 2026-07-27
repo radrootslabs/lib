@@ -1,6 +1,6 @@
-# radroots-core
+# radroots_core
 
-`radroots-core` provides the portable, deterministic value model shared by
+`radroots_core` provides the portable, deterministic value model shared by
 Radroots domain packages: decimals, currencies, money, percentages,
 quantities, units, and pricing.
 
@@ -34,7 +34,7 @@ The same program is available as the checked
 ## Public API
 
 The crate root intentionally exports the common value types and aggregate
-[`Error`](https://docs.rs/radroots-core/latest/radroots_core/enum.Error.html).
+[`Error`](https://docs.rs/radroots_core/latest/radroots_core/enum.Error.html).
 Focused errors and operations remain in these modules:
 
 - `currency` — canonical three-letter ASCII currency codes;
@@ -46,7 +46,7 @@ Focused errors and operations remain in these modules:
 - `unit` — unit parsing, dimensions, and deterministic conversions.
 
 The normative responsibility and dependency boundary are defined by the
-[`radroots-core` package charter](../../docs/specs/radroots_crates_release_v1.md).
+[`radroots_core` package charter](../../docs/specs/radroots_crates_release_v1.md).
 The reviewed pre-release surface is recorded in
 [`docs/api`](../../docs/api/README.md).
 
@@ -101,10 +101,10 @@ any durable commit because the crate owns no durable state. Methods taking
 
 ## Intended consumers
 
-`radroots-core` is intended for lower-level Radroots domain crates and for
+`radroots_core` is intended for lower-level Radroots domain crates and for
 integrators that need the portable value model directly. Applications should
 normally begin with the curated `radroots` crate or the advanced
-`radroots-sdk` composition surface.
+`radroots_sdk` composition surface.
 
 The package is pre-1.0. Its durable responsibility and package identity are
 fixed, while API-breaking changes follow the workspace's pre-1.0 versioning

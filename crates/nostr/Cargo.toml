@@ -1,5 +1,5 @@
 [package]
-name = "radroots-nostr"
+name = "radroots_nostr"
 publish = false
 version = "0.1.0"
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 description = "Nostr integration layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots-nostr"
+documentation = "https://docs.rs/radroots_nostr"
 readme = "README.md"
 
 [lib]

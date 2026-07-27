@@ -1,5 +1,5 @@
 [package]
-name = "radroots-event"
+name = "radroots_event"
 publish = false
 version = "0.1.0"
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 description = "Domain event model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots-event"
+documentation = "https://docs.rs/radroots_event"
 readme = "README.md"
 
 [lib]

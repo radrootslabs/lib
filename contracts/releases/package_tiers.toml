@@ -7,47 +7,47 @@ enforced_dependency_kinds = ["normal", "dev", "build"]
 id = "foundation"
 rank = 0
 packages = [
-  "radroots-core",
-  "radroots-identity",
-  "radroots-blossom",
-  "radroots-protocol",
+  "radroots_core",
+  "radroots_identity",
+  "radroots_blossom",
+  "radroots_protocol",
 ]
 
 [[tier]]
 id = "domain"
 rank = 1
-packages = ["radroots-event", "radroots-event-codec", "radroots-trade"]
+packages = ["radroots_event", "radroots_event_codec", "radroots_trade"]
 
 [[tier]]
 id = "spi"
 rank = 2
 packages = [
-  "radroots-signing",
-  "radroots-transport",
-  "radroots-secrets",
-  "radroots-storage",
+  "radroots_signing",
+  "radroots_transport",
+  "radroots_secrets",
+  "radroots_storage",
 ]
 
 [[tier]]
 id = "adapter"
 rank = 3
 packages = [
-  "radroots-nostr",
-  "radroots-nostr-connect",
-  "radroots-storage-sqlite",
-  "radroots-transport-nostr",
-  "radroots-geonames",
+  "radroots_nostr",
+  "radroots_nostr_connect",
+  "radroots_storage_sqlite",
+  "radroots_transport_nostr",
+  "radroots_geonames",
 ]
 
 [[tier]]
 id = "orchestration"
 rank = 4
-packages = ["radroots-sync"]
+packages = ["radroots_sync"]
 
 [[tier]]
 id = "sdk"
 rank = 5
-packages = ["radroots-sdk"]
+packages = ["radroots_sdk"]
 
 [[tier]]
 id = "facade"
@@ -58,8 +58,8 @@ packages = ["radroots"]
 # removed by the manifest-alignment checkpoint. Normal, build, target, or
 # feature-broadened forms remain forbidden.
 [[temporary_exception]]
-owner = "radroots-trade"
-dependency = "radroots-nostr"
+owner = "radroots_trade"
+dependency = "radroots_nostr"
 kind = "dev"
 target = "all"
 features = ["events", "std"]
@@ -68,8 +68,8 @@ removal_step = 88
 rationale = "Existing trade conformance tests consume Nostr vectors until the Step 088 package boundary alignment."
 
 [[temporary_exception]]
-owner = "radroots-trade"
-dependency = "radroots-transport"
+owner = "radroots_trade"
+dependency = "radroots_transport"
 kind = "dev"
 target = "all"
 features = []

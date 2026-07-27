@@ -1,4 +1,4 @@
-# radroots-sync
+# radroots_sync
 
 Synchronization orchestration for Radroots.
 

@@ -1,5 +1,5 @@
 [package]
-name = "radroots-identity"
+name = "radroots_identity"
 publish = false
 version = "0.1.0"
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 description = "Public identity and account value types for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots-identity"
+documentation = "https://docs.rs/radroots_identity"
 readme = "README.md"
 
 [lib]

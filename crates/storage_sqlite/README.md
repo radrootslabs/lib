@@ -1,4 +1,4 @@
-# radroots-storage-sqlite
+# radroots_storage_sqlite
 
 SQLite storage backend for Radroots.
 

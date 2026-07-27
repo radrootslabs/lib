@@ -1,4 +1,4 @@
-# radroots-signing
+# radroots_signing
 
 Signing abstractions and authorization policy for Radroots.
 

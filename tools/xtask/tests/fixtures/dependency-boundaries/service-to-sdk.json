@@ -1,11 +1,11 @@
 {
   "packages": [
     {
-      "id": "fixture#radroots-sync@0.1.0",
-      "name": "radroots-sync",
+      "id": "fixture#radroots_sync@0.1.0",
+      "name": "radroots_sync",
       "dependencies": [
         {
-          "name": "radroots-sdk",
+          "name": "radroots_sdk",
           "rename": "client_engine",
           "kind": null,
           "features": ["memory"],
@@ -15,19 +15,19 @@
       ]
     },
     {
-      "id": "fixture#radroots-sdk@0.1.0",
-      "name": "radroots-sdk",
+      "id": "fixture#radroots_sdk@0.1.0",
+      "name": "radroots_sdk",
       "dependencies": []
     }
   ],
   "resolve": {
     "nodes": [
       {
-        "id": "fixture#radroots-sync@0.1.0",
+        "id": "fixture#radroots_sync@0.1.0",
         "deps": [
           {
             "name": "client_engine",
-            "pkg": "fixture#radroots-sdk@0.1.0",
+            "pkg": "fixture#radroots_sdk@0.1.0",
             "dep_kinds": [
               {
                 "kind": null,
@@ -38,7 +38,7 @@
         ]
       },
       {
-        "id": "fixture#radroots-sdk@0.1.0",
+        "id": "fixture#radroots_sdk@0.1.0",
         "deps": []
       }
     ]

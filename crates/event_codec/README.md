@@ -1,4 +1,4 @@
-# radroots-event-codec
+# radroots_event_codec
 
 This is the README for `radroots_event_codec`, which provides canonical event
 codecs and tag builders for the `radroots` core libraries.

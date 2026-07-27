@@ -1,5 +1,5 @@
 [package]
-name = "radroots-protocol"
+name = "radroots_protocol"
 description = "Versioned wire contracts for Radroots"
 version = "0.1.0"
 edition.workspace = true

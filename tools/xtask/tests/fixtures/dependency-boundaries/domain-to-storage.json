@@ -1,11 +1,11 @@
 {
   "packages": [
     {
-      "id": "fixture#radroots-event@0.1.0",
-      "name": "radroots-event",
+      "id": "fixture#radroots_event@0.1.0",
+      "name": "radroots_event",
       "dependencies": [
         {
-          "name": "radroots-storage",
+          "name": "radroots_storage",
           "rename": "storage_alias",
           "kind": null,
           "features": ["memory"],
@@ -15,19 +15,19 @@
       ]
     },
     {
-      "id": "fixture#radroots-storage@0.1.0",
-      "name": "radroots-storage",
+      "id": "fixture#radroots_storage@0.1.0",
+      "name": "radroots_storage",
       "dependencies": []
     }
   ],
   "resolve": {
     "nodes": [
       {
-        "id": "fixture#radroots-event@0.1.0",
+        "id": "fixture#radroots_event@0.1.0",
         "deps": [
           {
             "name": "storage_alias",
-            "pkg": "fixture#radroots-storage@0.1.0",
+            "pkg": "fixture#radroots_storage@0.1.0",
             "dep_kinds": [
               {
                 "kind": null,
@@ -38,7 +38,7 @@
         ]
       },
       {
-        "id": "fixture#radroots-storage@0.1.0",
+        "id": "fixture#radroots_storage@0.1.0",
         "deps": []
       }
     ]

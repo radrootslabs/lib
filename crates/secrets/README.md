@@ -1,4 +1,4 @@
-# radroots-secrets
+# radroots_secrets
 
 Secret material and protected-storage abstractions for Radroots.
 

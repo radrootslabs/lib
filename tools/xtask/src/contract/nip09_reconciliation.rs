@@ -590,7 +590,7 @@ struct CargoPackageFeatureSpec {
 const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     CargoPackageFeatureSpec {
         package: "radroots_core",
-        cargo_package_name: "radroots-core",
+        cargo_package_name: "radroots_core",
         manifest_path: CORE_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["serde", "std"],
@@ -606,7 +606,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event_codec",
-        cargo_package_name: "radroots-event-codec",
+        cargo_package_name: "radroots_event_codec",
         manifest_path: EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["nostr", "serde", "serde_json", "std"],
@@ -614,7 +614,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event",
-        cargo_package_name: "radroots-event",
+        cargo_package_name: "radroots_event",
         manifest_path: EVENT_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["serde", "std"],
@@ -622,7 +622,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_blossom",
-        cargo_package_name: "radroots-blossom",
+        cargo_package_name: "radroots_blossom",
         manifest_path: BLOSSOM_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["std"],
@@ -14393,25 +14393,25 @@ xtask = "run -q -p xtask --"
     let governed_packages = [
         (
             CORE_CARGO_MANIFEST_RELATIVE,
-            "radroots-core",
+            "radroots_core",
             "0.1.0",
             Some("radroots_core"),
         ),
         (
             EVENT_CARGO_MANIFEST_RELATIVE,
-            "radroots-event",
+            "radroots_event",
             "0.1.0",
             Some("radroots_event"),
         ),
         (
             EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
-            "radroots-event-codec",
+            "radroots_event_codec",
             "0.1.0",
             Some("radroots_event_codec"),
         ),
         (
             BLOSSOM_CARGO_MANIFEST_RELATIVE,
-            "radroots-blossom",
+            "radroots_blossom",
             "0.1.0",
             Some("radroots_blossom"),
         ),
@@ -14423,7 +14423,7 @@ xtask = "run -q -p xtask --"
         ),
         (
             TRANSPORT_CARGO_MANIFEST_RELATIVE,
-            "radroots-transport",
+            "radroots_transport",
             "0.1.0",
             Some("radroots_transport"),
         ),
@@ -20525,7 +20525,7 @@ pub(crate) fn migration_for_version"#,
         let cargo_lock_path = workspace.path().join(CARGO_LOCK_RELATIVE);
         let cargo_lock = fs::read_to_string(&cargo_lock_path).expect("Cargo.lock");
         let transport_lock_package = r#"[[package]]
-name = "radroots-transport"
+name = "radroots_transport"
 version = "0.1.0"
 dependencies = [
  "futures",
@@ -20535,7 +20535,7 @@ dependencies = [
 ]
 "#;
         let future_transport_lock_package = r#"[[package]]
-name = "radroots-transport"
+name = "radroots_transport"
 version = "0.1.0"
 dependencies = [
  "futures",

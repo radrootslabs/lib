@@ -152,8 +152,8 @@
     {
       "role": "workspace_dependency_authority",
       "path": "Cargo.toml",
-      "byte_length": 11506,
-      "sha256": "af871d7567594f75da8385691297a5ce170f51ae54c4c318db10b99d458a3335",
+      "byte_length": 12385,
+      "sha256": "c53c5c5a464267d7df850e03fdfa99dcde0b469972cf921f9b81c18b52a9c4b2",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -286,14 +286,14 @@
       "role": "predecessor_successor_governance",
       "path": "tools/xtask/src/contract/food_availability_projection.rs",
       "byte_length": 194594,
-      "sha256": "4b2961fc69c8204ad5470c0e51c93533063e49d7a14da00a53598c3e8d0cdf6b",
+      "sha256": "b859df0608b000f0de53f6543d2dea9501fa9080f57e3fdd8d9e71acf386e0a7",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
       "byte_length": 835558,
-      "sha256": "51a01360e2c32c83056cb36e22b850e6b09d2ad4e4a749097564b4a100709a16",
+      "sha256": "6218e33cc8445fce59194508f73290e7eea8c91495fbe77a5323b258ef21f4a6",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

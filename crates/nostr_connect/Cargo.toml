@@ -1,5 +1,5 @@
 [package]
-name = "radroots-nostr-connect"
+name = "radroots_nostr_connect"
 publish = false
 version = "0.1.0"
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 description = "NIP-46 protocol model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots-nostr-connect"
+documentation = "https://docs.rs/radroots_nostr_connect"
 readme = "README.md"
 
 [lib]

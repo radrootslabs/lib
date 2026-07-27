@@ -32,17 +32,17 @@ let
       pname = "radroots-core-conformance";
       doCheck = false;
       buildPhaseCargoCommand = ''
-        cargo check -p radroots-core --all-targets --no-default-features --locked
-        cargo check -p radroots-core --all-targets --no-default-features --features std --locked
-        cargo check -p radroots-core --all-targets --no-default-features --features serde --locked
-        cargo check -p radroots-core --all-targets --locked
-        cargo check -p radroots-core --all-targets --all-features --locked
-        cargo clippy -p radroots-core --all-targets --all-features --locked -- -D warnings
-        cargo test -p radroots-core --all-targets --all-features --locked
-        cargo check -p radroots-core --no-default-features --target wasm32-unknown-unknown --locked
-        cargo check -p radroots-core --no-default-features --features serde --target wasm32-unknown-unknown --locked
-        RUSTDOCFLAGS="-D warnings" cargo doc -p radroots-core --all-features --no-deps --locked
-        cargo test -p radroots-core --all-features --doc --locked
+        cargo check -p radroots_core --all-targets --no-default-features --locked
+        cargo check -p radroots_core --all-targets --no-default-features --features std --locked
+        cargo check -p radroots_core --all-targets --no-default-features --features serde --locked
+        cargo check -p radroots_core --all-targets --locked
+        cargo check -p radroots_core --all-targets --all-features --locked
+        cargo clippy -p radroots_core --all-targets --all-features --locked -- -D warnings
+        cargo test -p radroots_core --all-targets --all-features --locked
+        cargo check -p radroots_core --no-default-features --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_core --no-default-features --features serde --target wasm32-unknown-unknown --locked
+        RUSTDOCFLAGS="-D warnings" cargo doc -p radroots_core --all-features --no-deps --locked
+        cargo test -p radroots_core --all-features --doc --locked
       '';
       installPhaseCommand = "mkdir -p $out";
     }

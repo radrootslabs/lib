@@ -1,4 +1,4 @@
-# radroots-storage
+# radroots_storage
 
 Backend-neutral persistence abstractions for Radroots.
 

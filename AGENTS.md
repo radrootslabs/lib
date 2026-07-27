@@ -85,7 +85,7 @@ Before editing code:
 - Behavior changes that affect public surfaces must update the relevant contract metadata, conformance vectors, export rules, or validation flows in the same change.
 - Keep pure flake checks and repo-aware command apps aligned with the documented Nix command map.
 - This repository owns packages 1-17 in `radroots.crates.release.v1`, from
-  `radroots-core` through `radroots-geonames`. `radroots-sdk` and `radroots`
+  `radroots_core` through `radroots_geonames`. `radroots_sdk` and `radroots`
   remain owned by the standalone SDK repository.
 - Public packages have no dependency on private Radroots packages. Every
   Radroots dependency edge points downward in the approved graph.

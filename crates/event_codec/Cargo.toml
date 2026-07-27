@@ -1,5 +1,5 @@
 [package]
-name = "radroots-event-codec"
+name = "radroots_event_codec"
 publish = false
 version = "0.1.0"
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 description = "Event codec layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots-event-codec"
+documentation = "https://docs.rs/radroots_event_codec"
 readme = "README.md"
 
 [lib]

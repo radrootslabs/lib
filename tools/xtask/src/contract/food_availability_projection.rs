@@ -2640,7 +2640,7 @@ fn validate_blossom_dependency_values(
     if workspace_dependency
         .get("package")
         .and_then(toml::Value::as_str)
-        != Some("radroots-blossom")
+        != Some("radroots_blossom")
         || workspace_dependency
             .get("path")
             .and_then(toml::Value::as_str)

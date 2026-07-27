@@ -1,5 +1,5 @@
 [package]
-name = "radroots-blossom"
+name = "radroots_blossom"
 publish = false
 version = "0.1.0"
 edition.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 description = "Portable Blossom protocol primitives for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots-blossom"
+documentation = "https://docs.rs/radroots_blossom"
 readme = "README.md"
 
 [lib]

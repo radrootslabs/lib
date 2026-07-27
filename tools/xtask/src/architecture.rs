@@ -591,10 +591,9 @@ fn validate_public_dependency_table(
         } else {
             None
         };
-        let normalized_key = dependency_key.replace('_', "-");
         let dependency_name = declared_package
             .or(path_package.as_deref())
-            .unwrap_or(normalized_key.as_str());
+            .unwrap_or(dependency_key.as_str());
         if !policy.public_packages.contains(dependency_name) {
             continue;
         }
@@ -1200,7 +1199,7 @@ adr_required = false
         fs::write(
             root.join("Cargo.toml"),
             format!(
-                "{}\n[workspace.dependencies]\nradroots_core = {{ package = \"radroots-core\", path = \"crates/dependency\", version = \"=0.1.0\" }}\n",
+                "{}\n[workspace.dependencies]\nradroots_core = {{ package = \"radroots_core\", path = \"crates/dependency\", version = \"=0.1.0\" }}\n",
                 complete_workspace_manifest("\"crates/radroots\"")
             ),
         )
@@ -1212,19 +1211,19 @@ adr_required = false
         .expect("write public manifest");
         fs::write(
             root.join("crates/dependency/Cargo.toml"),
-            "[package]\nname = \"radroots-core\"\nversion = \"0.1.0\"\n",
+            "[package]\nname = \"radroots_core\"\nversion = \"0.1.0\"\n",
         )
         .expect("write dependency manifest");
         let mut architecture = architecture();
         architecture.package.push(ArchitecturePackage {
-            name: "radroots-core".to_owned(),
+            name: "radroots_core".to_owned(),
         });
         architecture
             .repositories
             .get_mut("sdk")
             .expect("sdk repository")
             .packages
-            .push("radroots-core".to_owned());
+            .push("radroots_core".to_owned());
         validate_public_dependency_versions(&root, &architecture)
             .expect("path plus exact version public dependency");
 

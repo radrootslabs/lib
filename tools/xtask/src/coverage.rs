@@ -4000,7 +4000,7 @@ test_threads = 0
         let out = temp_dir_path("run_crate_runner");
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             out.display().to_string(),
             "--test-threads".to_string(),
@@ -4033,13 +4033,13 @@ test_threads = 0
         assert!(
             rendered_commands
                 .iter()
-                .filter(|rendered| rendered.contains("report -p radroots-core"))
+                .filter(|rendered| rendered.contains("report -p radroots_core"))
                 .all(|rendered| rendered.contains("--ignore-filename-regex"))
         );
         assert!(
             rendered_commands
                 .iter()
-                .filter(|rendered| rendered.contains("report -p radroots-core"))
+                .filter(|rendered| rendered.contains("report -p radroots_core"))
                 .all(|rendered| rendered.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX))
         );
         fs::remove_dir_all(out).expect("remove run crate output dir");
@@ -4049,7 +4049,7 @@ test_threads = 0
     fn coverage_ignore_filename_regex_excludes_external_and_sibling_workspace_paths() {
         let root = workspace_root();
         let ignore_regex =
-            coverage_ignore_filename_regex(&root, "radroots-core").expect("build ignore regex");
+            coverage_ignore_filename_regex(&root, "radroots_core").expect("build ignore regex");
         assert!(ignore_regex.contains(COVERAGE_EXTERNAL_IGNORE_FILENAME_REGEX));
         assert!(ignore_regex.contains("crates/identity"));
         assert!(ignore_regex.contains("crates/core/tests"));
@@ -4341,7 +4341,7 @@ test_threads = 0
 
     #[test]
     fn run_crate_with_runner_uses_default_output_dir_when_out_is_missing() {
-        let args = vec!["--crate".to_string(), "radroots-core".to_string()];
+        let args = vec!["--crate".to_string(), "radroots_core".to_string()];
         let mut output_path_seen = false;
         let mut runner = |cmd: Command, _: &str| {
             let rendered = cmd
@@ -4371,7 +4371,7 @@ test_threads = 0
         let out = temp_dir_path("run_crate_runner_fail");
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             out.display().to_string(),
         ];
@@ -4384,7 +4384,7 @@ test_threads = 0
         write_file(&root.join("blocker"), "x");
         let args = vec![
             "--crate".to_string(),
-            "radroots-core".to_string(),
+            "radroots_core".to_string(),
             "--out".to_string(),
             root.join("blocker").join("nested").display().to_string(),
         ];

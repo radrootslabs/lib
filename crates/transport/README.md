@@ -1,4 +1,4 @@
-# radroots-transport
+# radroots_transport
 
 This is the README for `radroots_transport`, which provides transport-neutral
 delivery models for the `radroots` core libraries.

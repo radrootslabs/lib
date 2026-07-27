@@ -1,4 +1,4 @@
-# radroots-geonames
+# radroots_geonames
 
 GeoNames-backed geocoding for Radroots.
 

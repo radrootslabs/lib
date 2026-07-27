@@ -1,5 +1,5 @@
 [package]
-name = "radroots-transport-nostr"
+name = "radroots_transport_nostr"
 publish = false
 version = "0.1.0"
 edition.workspace = true

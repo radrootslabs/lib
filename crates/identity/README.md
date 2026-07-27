@@ -1,4 +1,4 @@
-# radroots-identity
+# radroots_identity
 
 This is the README for `radroots_identity`, which provides public identity,
 account, and profile value types for the Radroots package family.

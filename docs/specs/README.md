@@ -3,9 +3,9 @@
 This directory carries the coordinated `radroots.crates.release.v1` contract
 for the two existing standalone Rust repositories.
 
-The `radrootslabs/lib` repository owns packages 1-17, from `radroots-core`
-through `radroots-geonames`. The `radrootslabs/sdk` repository owns packages
-18-19, `radroots-sdk` and `radroots`. No third Rust repository is part of this
+The `radrootslabs/lib` repository owns packages 1-17, from `radroots_core`
+through `radroots_geonames`. The `radrootslabs/sdk` repository owns packages
+18-19, `radroots_sdk` and `radroots`. No third Rust repository is part of this
 release architecture.
 
 ## Files
