@@ -637,6 +637,7 @@ where
 
 fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> RadrootsTransportError {
     match error {
+        RadrootsRelayTransportError::TransportContractError(error) => error,
         RadrootsRelayTransportError::TransportContract(_) => {
             RadrootsTransportError::InvalidPayloadBytes
         }
@@ -646,6 +647,10 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         RadrootsRelayTransportError::UnexpectedTransportKind { .. }
         | RadrootsRelayTransportError::DuplicateFetchTerminalRelayUrl { .. }
         | RadrootsRelayTransportError::ConflictingFetchTerminalRelayUrl { .. } => {
+            RadrootsTransportError::InvalidTransportKind
+        }
+        #[cfg(feature = "storage")]
+        RadrootsRelayTransportError::InvalidEmptyPublishableTargetSet { .. } => {
             RadrootsTransportError::InvalidTransportKind
         }
         RadrootsRelayTransportError::RelayUrlParse { .. }
@@ -687,6 +692,7 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         #[cfg(feature = "storage")]
         RadrootsRelayTransportError::EventStore(_)
         | RadrootsRelayTransportError::Outbox(_)
+        | RadrootsRelayTransportError::Phase1Publication(_)
         | RadrootsRelayTransportError::MissingSignedOutboxEvent(_)
         | RadrootsRelayTransportError::MissingPersistedFetchReceiptEventId
         | RadrootsRelayTransportError::MissingStoredEventVisibility { .. }
@@ -704,6 +710,12 @@ mod contract_tests {
 
     #[test]
     fn relay_errors_map_to_stable_transport_contract_categories() {
+        assert_eq!(
+            nostr_error_to_transport_error(
+                RadrootsTransportError::DeliveryReceiptRequestIdMismatch.into(),
+            ),
+            RadrootsTransportError::DeliveryReceiptRequestIdMismatch
+        );
         assert_eq!(
             nostr_error_to_transport_error(RadrootsRelayTransportError::TransportContract(
                 "contract".to_owned(),

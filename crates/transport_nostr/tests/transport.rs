@@ -34,15 +34,15 @@ use radroots_transport_nostr::{
     RADROOTS_RELAY_FETCH_FILTER_LIMIT_MAX, RADROOTS_RELAY_FETCH_FILTER_SET_JSON_BYTE_LIMIT_MAX,
     RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX, RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX,
     RADROOTS_RELAY_FETCH_TIMEOUT_MS_MAX, RadrootsMockRelayFetchAdapter,
-    RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsOutboxPublishPolicy,
-    RadrootsRelayFetchEventAdmission, RadrootsRelayFetchEventValidStream,
-    RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,
-    RadrootsRelayFetchFailure, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
-    RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchReceipt,
-    RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest, RadrootsRelayFetchedEvent,
-    RadrootsRelayOutcome, RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter,
-    RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, RadrootsRelayTargetSet,
-    RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
+    RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsOutboxPublishEmptyTargetState,
+    RadrootsOutboxPublishPolicy, RadrootsRelayFetchEventAdmission,
+    RadrootsRelayFetchEventValidStream, RadrootsRelayFetchEventVerification,
+    RadrootsRelayFetchEventVisibility, RadrootsRelayFetchFailure, RadrootsRelayFetchFilters,
+    RadrootsRelayFetchItem, RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind,
+    RadrootsRelayFetchReceipt, RadrootsRelayFetchRelayOutcome, RadrootsRelayFetchRequest,
+    RadrootsRelayFetchedEvent, RadrootsRelayOutcome, RadrootsRelayOutcomeKind,
+    RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    RadrootsRelayTargetSet, RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
     fetch_and_ingest_relay_events, fetch_relay_events, fetch_relay_events_blocking,
     publish_claimed_outbox_event, publish_claimed_outbox_event_with_transport,
     publish_signed_event, verified_signed_event_payload,
@@ -4479,7 +4479,7 @@ async fn outbox_transport_facade_rejects_receipts_forged_for_another_request() {
         .expect_err("forged receipt rejected");
         assert!(matches!(
             error,
-            RadrootsRelayTransportError::TransportContract(_)
+            RadrootsRelayTransportError::TransportContractError(_)
         ));
         let event = outbox
             .get_event(receipt.outbox_event_id)
@@ -4543,6 +4543,10 @@ async fn outbox_transport_facade_handles_empty_and_invalid_claim_plans() {
     assert_eq!(published.attempted_count(), 0);
     assert_eq!(published.accepted_count(), 2);
     assert!(published.quorum_met());
+    assert_eq!(
+        published.empty_target_state(),
+        Some(RadrootsOutboxPublishEmptyTargetState::AlreadySatisfied)
+    );
 
     let second_draft = generic_draft("invalid claimed plan");
     outbox

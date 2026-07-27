@@ -9,13 +9,14 @@ use crate::{
 };
 use radroots_event::draft::RadrootsVerifiedSignedEvent;
 use radroots_event_store::{
-    RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
+    RadrootsEventIngest, RadrootsEventStore, RadrootsEventStoreError, RadrootsTransportObservation,
     RadrootsTransportObservationType,
 };
 use radroots_outbox::{
-    RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryTargetRecord,
-    RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxEventStoreIngestReceipt,
-    RadrootsPhase1PublicationTargetClaim,
+    RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanStatus,
+    RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
+    RadrootsOutboxEventStoreIngestReceipt, RadrootsPhase1PublicationRecord,
+    RadrootsPhase1PublicationTargetClaim, RadrootsPhase1PublicationTargetState,
 };
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
@@ -75,8 +76,16 @@ pub struct RadrootsOutboxPublishReceipt {
     terminal_count: usize,
     quorum: usize,
     quorum_met: bool,
+    empty_target_state: Option<RadrootsOutboxPublishEmptyTargetState>,
     target_receipts: Vec<RadrootsOutboxPublishTargetReceipt>,
     relay_receipts: Vec<RadrootsRelayPublishRelayReceipt>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RadrootsOutboxPublishEmptyTargetState {
+    AlreadySatisfied,
+    Terminal,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -122,6 +131,10 @@ impl RadrootsOutboxPublishReceipt {
 
     pub const fn quorum_met(&self) -> bool {
         self.quorum_met
+    }
+
+    pub const fn empty_target_state(&self) -> Option<RadrootsOutboxPublishEmptyTargetState> {
+        self.empty_target_state
     }
 
     pub fn target_receipts(&self) -> &[RadrootsOutboxPublishTargetReceipt] {
@@ -214,6 +227,154 @@ where
     Ok(receipt)
 }
 
+pub async fn execute_claimed_phase1_publication_target_with_transport<T>(
+    outbox: &RadrootsOutbox,
+    event_store: &RadrootsEventStore,
+    transport: &T,
+    claim: &RadrootsPhase1PublicationTargetClaim,
+    next_attempt_after_ms: i64,
+    now_ms: i64,
+) -> Result<RadrootsPhase1PublicationRecord, RadrootsRelayTransportError>
+where
+    T: RadrootsTransport + ?Sized,
+{
+    ensure_nonnegative_timestamp("now_ms", now_ms)?;
+    ensure_nonnegative_timestamp("next_attempt_after_ms", next_attempt_after_ms)?;
+    let transport_kind = transport.transport_kind();
+    if transport_kind != RadrootsTransportKind::Nostr {
+        let error = RadrootsRelayTransportError::UnexpectedTransportKind {
+            expected: "nostr",
+            actual: transport_kind.canonical_label(),
+        };
+        outbox
+            .fail_phase1_target_retryable(
+                claim,
+                now_ms,
+                next_attempt_after_ms,
+                error.to_string().as_str(),
+            )
+            .await?;
+        return Err(error);
+    }
+    let request = match phase1_publication_delivery_request(claim, now_ms) {
+        Ok(request) => request,
+        Err(error) => {
+            outbox
+                .fail_phase1_target_terminal(claim, now_ms, error.to_string().as_str())
+                .await?;
+            return Err(error);
+        }
+    };
+    let receipt = match transport.deliver(request.clone()).await {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            let relay_error = transport_error_to_relay_error(error);
+            outbox
+                .mark_phase1_target_uncertain(claim, now_ms, relay_error.to_string().as_str())
+                .await?;
+            return Err(relay_error);
+        }
+    };
+    if let Err(error) = receipt.validate_for_request(&request) {
+        let relay_error = transport_error_to_relay_error(error);
+        outbox
+            .mark_phase1_target_uncertain(claim, now_ms, relay_error.to_string().as_str())
+            .await?;
+        return Err(relay_error);
+    }
+    let target_receipt = receipt
+        .target_receipts()
+        .first()
+        .ok_or(RadrootsTransportError::MissingDeliveryTargetReceipt)?;
+    let outcome = target_receipt.outcome();
+    let diagnostic = outcome.message().unwrap_or(outcome.code());
+    if target_receipt.status().counts_as_accepted_satisfaction() {
+        let pending = match outbox
+            .complete_phase1_target_accepted_pending(claim, now_ms)
+            .await
+        {
+            Ok(record) => record,
+            Err(primary) => {
+                outbox
+                    .mark_phase1_target_uncertain(
+                        claim,
+                        now_ms,
+                        "remote acceptance could not be persisted",
+                    )
+                    .await?;
+                return Err(primary.into());
+            }
+        };
+        let pending_target = pending
+            .targets()
+            .iter()
+            .find(|target| target.target_id() == claim.target_id())
+            .ok_or(
+                radroots_outbox::RadrootsPhase1PublicationError::TargetNotFound {
+                    target_id: claim.target_id(),
+                },
+            )?;
+        ingest_publish_observation(
+            event_store,
+            claim.signed_event(),
+            claim.endpoint_uri(),
+            now_ms,
+        )
+        .await?;
+        return outbox
+            .complete_phase1_observation_repair(
+                pending.publication_id(),
+                pending_target.target_id(),
+                pending_target.revision(),
+                now_ms,
+            )
+            .await
+            .map_err(Into::into);
+    }
+    if target_receipt.status().is_retryable_failure()
+        || target_receipt.status().is_deferred_until_implemented()
+    {
+        return outbox
+            .fail_phase1_target_retryable(claim, now_ms, next_attempt_after_ms, diagnostic)
+            .await
+            .map_err(Into::into);
+    }
+    outbox
+        .fail_phase1_target_terminal(claim, now_ms, diagnostic)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn repair_phase1_publication_observation(
+    outbox: &RadrootsOutbox,
+    event_store: &RadrootsEventStore,
+    publication_id: i64,
+    target_id: i64,
+    now_ms: i64,
+) -> Result<RadrootsPhase1PublicationRecord, RadrootsRelayTransportError> {
+    ensure_nonnegative_timestamp("now_ms", now_ms)?;
+    let record = outbox.load_phase1_publication(publication_id).await?;
+    let target = record
+        .targets()
+        .iter()
+        .find(|target| target.target_id() == target_id)
+        .ok_or(radroots_outbox::RadrootsPhase1PublicationError::TargetNotFound { target_id })?;
+    if target.state() == RadrootsPhase1PublicationTargetState::AcceptedObserved {
+        return Ok(record);
+    }
+    if target.state() != RadrootsPhase1PublicationTargetState::AcceptedObservationPending {
+        return Err(radroots_outbox::RadrootsPhase1PublicationError::StateConflict.into());
+    }
+    let signed_event = record
+        .signed_event()
+        .ok_or(radroots_outbox::RadrootsPhase1PublicationError::StoredAuthorityInvalid)?;
+    ingest_publish_observation(event_store, signed_event, target.endpoint_uri(), now_ms).await?;
+    outbox
+        .complete_phase1_observation_repair(publication_id, target_id, target.revision(), now_ms)
+        .await
+        .map_err(Into::into)
+}
+
 pub async fn publish_claimed_outbox_event<A>(
     outbox: &RadrootsOutbox,
     event_store: &RadrootsEventStore,
@@ -240,28 +401,16 @@ where
         .await?;
     let publishable = publishable_relays(outbox, claimed, policy.republish_accepted_relays).await?;
     if publishable.relays.is_empty() {
-        outbox
-            .complete_publish_attempt(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                "relay publish incomplete",
-                "relay publish terminal",
-                policy.next_attempt_after_ms,
-                now_ms,
-            )
-            .await?;
-        return Ok(RadrootsOutboxPublishReceipt {
+        return complete_empty_publishable_attempt(EmptyPublishEffects {
+            outbox,
+            claimed,
             local_ingest,
             event_id: signed_event.signed_event().id_str().to_owned(),
-            attempted_count: 0,
-            accepted_count: publishable.accepted_count,
-            retryable_count: 0,
-            terminal_count: 0,
-            quorum: publishable.remaining_satisfaction_count,
-            quorum_met: publishable.satisfied_count >= publishable.satisfaction_required_count,
-            target_receipts: Vec::new(),
-            relay_receipts: Vec::new(),
-        });
+            publishable: &publishable,
+            next_attempt_after_ms: policy.next_attempt_after_ms,
+            now_ms,
+        })
+        .await;
     }
     let targets = RadrootsRelayTargetSet::new(
         unique_publishable_relay_urls(&publishable),
@@ -273,7 +422,6 @@ where
         .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::no_wait())
         .try_with_idempotency_key(outbox_publish_idempotency_key(
             claimed.outbox_event_id,
-            claimed.attempt_count,
             signed_event.signed_event().id_str(),
             active_delivery_plan_id,
         ))?;
@@ -288,38 +436,18 @@ where
         Err(error) => return Err(error),
     };
     let target_receipts = target_receipts_from_relay_receipts(&publishable, publish.relays());
-
-    for target_receipt in &target_receipts {
-        complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
-    }
-
-    for relay in publish.relays() {
-        if relay
-            .outcome()
-            .kind()
-            .transport_outcome_kind()
-            .target_status()
-            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
-            && publishable
-                .targets_for_relay(relay.relay_url())
-                .next()
-                .is_some()
-        {
-            ingest_publish_observation(event_store, &signed_event, relay.relay_url(), now_ms)
-                .await?;
-        }
-    }
-
-    outbox
-        .complete_publish_attempt(
-            claimed.outbox_event_id,
-            claimed.claim_token.as_str(),
-            "relay publish incomplete",
-            "relay publish terminal",
-            policy.next_attempt_after_ms,
-            now_ms,
-        )
-        .await?;
+    persist_legacy_publish_effects(LegacyPublishEffects {
+        outbox,
+        event_store,
+        claimed,
+        signed_event: &signed_event,
+        publishable: &publishable,
+        target_receipts: &target_receipts,
+        relay_receipts: publish.relays(),
+        next_attempt_after_ms: policy.next_attempt_after_ms,
+        now_ms,
+    })
+    .await?;
 
     let (event_id, relay_receipts) = publish.into_event_id_and_relays();
     Ok(RadrootsOutboxPublishReceipt {
@@ -344,6 +472,7 @@ where
         quorum: publishable.remaining_satisfaction_count,
         quorum_met: publishable.satisfied_count_after_receipts(&target_receipts)
             >= publishable.satisfaction_required_count,
+        empty_target_state: None,
         target_receipts,
         relay_receipts,
     })
@@ -382,28 +511,16 @@ where
         .await?;
     let publishable = publishable_relays(outbox, claimed, policy.republish_accepted_relays).await?;
     if publishable.relays.is_empty() {
-        outbox
-            .complete_publish_attempt(
-                claimed.outbox_event_id,
-                claimed.claim_token.as_str(),
-                "relay publish incomplete",
-                "relay publish terminal",
-                policy.next_attempt_after_ms,
-                now_ms,
-            )
-            .await?;
-        return Ok(RadrootsOutboxPublishReceipt {
+        return complete_empty_publishable_attempt(EmptyPublishEffects {
+            outbox,
+            claimed,
             local_ingest,
             event_id: signed_event.signed_event().id_str().to_owned(),
-            attempted_count: 0,
-            accepted_count: publishable.accepted_count,
-            retryable_count: 0,
-            terminal_count: 0,
-            quorum: publishable.remaining_satisfaction_count,
-            quorum_met: publishable.satisfied_count >= publishable.satisfaction_required_count,
-            target_receipts: Vec::new(),
-            relay_receipts: Vec::new(),
-        });
+            publishable: &publishable,
+            next_attempt_after_ms: policy.next_attempt_after_ms,
+            now_ms,
+        })
+        .await;
     }
     RadrootsRelayTargetSet::new(
         unique_publishable_relay_urls(&publishable),
@@ -414,7 +531,6 @@ where
     let satisfaction_policy = transport_satisfaction_policy_for_publishable(&publishable);
     let request_id = outbox_publish_idempotency_key(
         claimed.outbox_event_id,
-        claimed.attempt_count,
         signed_event.signed_event().id_str(),
         publishable.active_delivery_plan_id,
     );
@@ -433,38 +549,18 @@ where
         .map_err(transport_error_to_relay_error)?;
     let relay_receipts = relay_receipts_from_transport_receipts(&delivery)?;
     let target_receipts = target_receipts_from_transport_receipts(&publishable, &delivery)?;
-
-    for target_receipt in &target_receipts {
-        complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
-    }
-
-    for relay in &relay_receipts {
-        if relay
-            .outcome()
-            .kind()
-            .transport_outcome_kind()
-            .target_status()
-            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
-            && publishable
-                .targets_for_relay(relay.relay_url())
-                .next()
-                .is_some()
-        {
-            ingest_publish_observation(event_store, &signed_event, relay.relay_url(), now_ms)
-                .await?;
-        }
-    }
-
-    outbox
-        .complete_publish_attempt(
-            claimed.outbox_event_id,
-            claimed.claim_token.as_str(),
-            "relay publish incomplete",
-            "relay publish terminal",
-            policy.next_attempt_after_ms,
-            now_ms,
-        )
-        .await?;
+    persist_legacy_publish_effects(LegacyPublishEffects {
+        outbox,
+        event_store,
+        claimed,
+        signed_event: &signed_event,
+        publishable: &publishable,
+        target_receipts: &target_receipts,
+        relay_receipts: &relay_receipts,
+        next_attempt_after_ms: policy.next_attempt_after_ms,
+        now_ms,
+    })
+    .await?;
 
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,
@@ -488,6 +584,7 @@ where
         quorum: publishable.remaining_satisfaction_count,
         quorum_met: publishable.satisfied_count_after_receipts(&target_receipts)
             >= publishable.satisfaction_required_count,
+        empty_target_state: None,
         target_receipts,
         relay_receipts,
     })
@@ -511,6 +608,138 @@ fn adapter_transport_failure_receipt(
     RadrootsRelayPublishReceipt::new(event_id, quorum, false, relays)
 }
 
+struct LegacyPublishEffects<'a> {
+    outbox: &'a RadrootsOutbox,
+    event_store: &'a RadrootsEventStore,
+    claimed: &'a RadrootsOutboxClaimedEvent,
+    signed_event: &'a RadrootsVerifiedSignedEvent,
+    publishable: &'a PublishableRelays,
+    target_receipts: &'a [RadrootsOutboxPublishTargetReceipt],
+    relay_receipts: &'a [RadrootsRelayPublishRelayReceipt],
+    next_attempt_after_ms: i64,
+    now_ms: i64,
+}
+
+async fn persist_legacy_publish_effects(
+    effects: LegacyPublishEffects<'_>,
+) -> Result<(), RadrootsRelayTransportError> {
+    for target_receipt in effects.target_receipts {
+        complete_outbox_delivery_target(
+            effects.outbox,
+            effects.claimed,
+            target_receipt,
+            effects.now_ms,
+        )
+        .await?;
+    }
+    for relay in effects.relay_receipts {
+        if relay
+            .outcome()
+            .kind()
+            .transport_outcome_kind()
+            .target_status()
+            .counts_as_satisfied(RadrootsTransportSatisfactionClass::Accepted)
+            && effects
+                .publishable
+                .targets_for_relay(relay.relay_url())
+                .next()
+                .is_some()
+        {
+            ingest_publish_observation(
+                effects.event_store,
+                effects.signed_event,
+                relay.relay_url(),
+                effects.now_ms,
+            )
+            .await?;
+        }
+    }
+    effects
+        .outbox
+        .complete_publish_attempt(
+            effects.claimed.outbox_event_id,
+            effects.claimed.claim_token.as_str(),
+            "relay publish incomplete",
+            "relay publish terminal",
+            effects.next_attempt_after_ms,
+            effects.now_ms,
+        )
+        .await?;
+    Ok(())
+}
+
+struct EmptyPublishEffects<'a> {
+    outbox: &'a RadrootsOutbox,
+    claimed: &'a RadrootsOutboxClaimedEvent,
+    local_ingest: RadrootsOutboxEventStoreIngestReceipt,
+    event_id: String,
+    publishable: &'a PublishableRelays,
+    next_attempt_after_ms: i64,
+    now_ms: i64,
+}
+
+async fn complete_empty_publishable_attempt(
+    effects: EmptyPublishEffects<'_>,
+) -> Result<RadrootsOutboxPublishReceipt, RadrootsRelayTransportError> {
+    let empty_target_state = effects.publishable.empty_target_state.ok_or(
+        RadrootsRelayTransportError::InvalidEmptyPublishableTargetSet {
+            delivery_plan_id: effects.publishable.active_delivery_plan_id,
+        },
+    )?;
+    match empty_target_state {
+        RadrootsOutboxPublishEmptyTargetState::AlreadySatisfied => {
+            effects
+                .outbox
+                .complete_publish_attempt(
+                    effects.claimed.outbox_event_id,
+                    effects.claimed.claim_token.as_str(),
+                    "delivery plan already satisfied",
+                    "delivery plan already satisfied",
+                    effects.next_attempt_after_ms,
+                    effects.now_ms,
+                )
+                .await?;
+        }
+        RadrootsOutboxPublishEmptyTargetState::Terminal => {
+            effects
+                .outbox
+                .complete_publish_attempt(
+                    effects.claimed.outbox_event_id,
+                    effects.claimed.claim_token.as_str(),
+                    "delivery plan has no recoverable Nostr targets",
+                    "delivery plan has no recoverable Nostr targets",
+                    effects.next_attempt_after_ms,
+                    effects.now_ms,
+                )
+                .await?;
+        }
+        RadrootsOutboxPublishEmptyTargetState::Cancelled => {
+            effects
+                .outbox
+                .cancel_claimed_event(
+                    effects.claimed.outbox_event_id,
+                    effects.claimed.claim_token.as_str(),
+                    effects.now_ms,
+                )
+                .await?;
+        }
+    }
+    Ok(RadrootsOutboxPublishReceipt {
+        local_ingest: effects.local_ingest,
+        event_id: effects.event_id,
+        attempted_count: 0,
+        accepted_count: effects.publishable.accepted_count,
+        retryable_count: 0,
+        terminal_count: 0,
+        quorum: effects.publishable.remaining_satisfaction_count,
+        quorum_met: effects.publishable.satisfied_count
+            >= effects.publishable.satisfaction_required_count,
+        empty_target_state: Some(empty_target_state),
+        target_receipts: Vec::new(),
+        relay_receipts: Vec::new(),
+    })
+}
+
 struct PublishableRelays {
     active_delivery_plan_id: i64,
     relays: Vec<PublishableRelay>,
@@ -521,6 +750,7 @@ struct PublishableRelays {
     satisfaction_class: RadrootsTransportSatisfactionClass,
     required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
     remaining_required_targets: Option<Vec<RadrootsTransportTargetFingerprint>>,
+    empty_target_state: Option<RadrootsOutboxPublishEmptyTargetState>,
 }
 
 impl PublishableRelays {
@@ -862,60 +1092,7 @@ fn transport_satisfaction_policy_for_publishable(
 }
 
 fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRelayTransportError {
-    match error {
-        RadrootsTransportError::UnsupportedOperation
-        | RadrootsTransportError::EmptyTransportKind
-        | RadrootsTransportError::InvalidTransportKind
-        | RadrootsTransportError::EmptyTargetScope
-        | RadrootsTransportError::InvalidTargetScope
-        | RadrootsTransportError::EmptyTargetLabel
-        | RadrootsTransportError::InvalidTargetLabel
-        | RadrootsTransportError::InvalidSatisfactionPolicy
-        | RadrootsTransportError::EmptyRequiredTargetSet
-        | RadrootsTransportError::DuplicateRequiredTargetFingerprint
-        | RadrootsTransportError::RequiredTargetNotRequested
-        | RadrootsTransportError::EmptyDeliveryRequestId
-        | RadrootsTransportError::InvalidDeliveryRequestId
-        | RadrootsTransportError::EmptyFetchRequestId
-        | RadrootsTransportError::InvalidFetchRequestId
-        | RadrootsTransportError::InvalidPayloadSignature
-        | RadrootsTransportError::InvalidDeliveryTimestamp => {
-            RadrootsRelayTransportError::Transport(error.to_string())
-        }
-        RadrootsTransportError::EmptyTargetUri
-        | RadrootsTransportError::InvalidTargetUri
-        | RadrootsTransportError::ResourceLimitExceeded { .. }
-        | RadrootsTransportError::EmptyTargetSet
-        | RadrootsTransportError::DuplicateTargetFingerprint
-        | RadrootsTransportError::InvalidTargetFingerprint
-        | RadrootsTransportError::UnexpectedDeliveryTargetReceipt
-        | RadrootsTransportError::DuplicateDeliveryTargetReceipt
-        | RadrootsTransportError::MissingDeliveryTargetReceipt
-        | RadrootsTransportError::DeliveryTargetReceiptStatusMismatch
-        | RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
-        | RadrootsTransportError::TransportOutcomeStatusMismatch
-        | RadrootsTransportError::TransportOutcomeCodeMismatch
-        | RadrootsTransportError::TransportOutcomeRetryClassMismatch
-        | RadrootsTransportError::DeliveryReceiptRequestIdMismatch
-        | RadrootsTransportError::DeliveryReceiptTargetSetMismatch
-        | RadrootsTransportError::UnexpectedFetchTargetReceipt
-        | RadrootsTransportError::DuplicateFetchTargetReceipt
-        | RadrootsTransportError::MissingFetchTargetReceipt
-        | RadrootsTransportError::FetchReceiptRequestIdMismatch
-        | RadrootsTransportError::FetchReceiptTargetSetMismatch => {
-            RadrootsRelayTransportError::TransportContract(error.to_string())
-        }
-        RadrootsTransportError::EmptyPayloadId
-        | RadrootsTransportError::InvalidPayloadId
-        | RadrootsTransportError::EmptyPayloadLabel
-        | RadrootsTransportError::InvalidPayloadLabel
-        | RadrootsTransportError::EmptyPayloadBytes
-        | RadrootsTransportError::InvalidPayloadBytes
-        | RadrootsTransportError::InvalidPayloadDigest
-        | RadrootsTransportError::PayloadDigestMismatch => {
-            RadrootsRelayTransportError::NostrEventJson(error.to_string())
-        }
-    }
+    error.into()
 }
 
 async fn publishable_relays(
@@ -1049,6 +1226,16 @@ async fn publishable_relays(
             });
         }
     }
+    let empty_target_state = if relays.is_empty() {
+        Some(classify_empty_publishable_target_set(
+            plan.status,
+            remaining_satisfaction_count,
+            active_targets.iter().map(|target| target.status),
+            active_delivery_plan_id,
+        )?)
+    } else {
+        None
+    };
     Ok(PublishableRelays {
         active_delivery_plan_id,
         relays,
@@ -1059,18 +1246,58 @@ async fn publishable_relays(
         satisfaction_class,
         required_targets,
         remaining_required_targets,
+        empty_target_state,
     })
+}
+
+fn classify_empty_publishable_target_set(
+    plan_status: RadrootsOutboxDeliveryPlanStatus,
+    remaining_satisfaction_count: usize,
+    target_statuses: impl IntoIterator<Item = RadrootsOutboxDeliveryTargetStatus>,
+    delivery_plan_id: i64,
+) -> Result<RadrootsOutboxPublishEmptyTargetState, RadrootsRelayTransportError> {
+    let mut target_statuses = target_statuses.into_iter();
+    let terminal_targets_only = target_statuses
+        .next()
+        .is_some_and(is_terminal_empty_target_status)
+        && target_statuses.all(is_terminal_empty_target_status);
+    match plan_status {
+        RadrootsOutboxDeliveryPlanStatus::Complete => {
+            Ok(RadrootsOutboxPublishEmptyTargetState::AlreadySatisfied)
+        }
+        RadrootsOutboxDeliveryPlanStatus::FailedTerminal => {
+            Ok(RadrootsOutboxPublishEmptyTargetState::Terminal)
+        }
+        RadrootsOutboxDeliveryPlanStatus::Cancelled => {
+            Ok(RadrootsOutboxPublishEmptyTargetState::Cancelled)
+        }
+        RadrootsOutboxDeliveryPlanStatus::Queued if remaining_satisfaction_count == 0 => {
+            Ok(RadrootsOutboxPublishEmptyTargetState::AlreadySatisfied)
+        }
+        RadrootsOutboxDeliveryPlanStatus::Queued if terminal_targets_only => {
+            Ok(RadrootsOutboxPublishEmptyTargetState::Terminal)
+        }
+        RadrootsOutboxDeliveryPlanStatus::Queued => {
+            Err(RadrootsRelayTransportError::InvalidEmptyPublishableTargetSet { delivery_plan_id })
+        }
+    }
+}
+
+fn is_terminal_empty_target_status(status: RadrootsOutboxDeliveryTargetStatus) -> bool {
+    matches!(
+        status,
+        RadrootsOutboxDeliveryTargetStatus::FailedTerminal
+            | RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied
+            | RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented
+    )
 }
 
 fn outbox_publish_idempotency_key(
     outbox_event_id: i64,
-    attempt_count: i64,
     event_id: &str,
     active_delivery_plan_id: i64,
 ) -> String {
-    format!(
-        "radroots-nostr-outbox-{outbox_event_id}-{attempt_count}-{event_id}-{active_delivery_plan_id}"
-    )
+    format!("radroots-nostr-outbox-{outbox_event_id}-{event_id}-{active_delivery_plan_id}")
 }
 
 fn counts_as_accepted_for_plan(
@@ -1135,21 +1362,52 @@ async fn ingest_publish_observation(
         RadrootsTransportObservationType::PublishAck,
         observed_at_ms,
     )?;
+    let event_id = signed_event.signed_event().id_str().to_owned();
+    let transport_kind = observation.transport_kind().canonical_label();
+    let endpoint_fingerprint = observation.endpoint_fingerprint().as_str().to_owned();
+    let observation_type = observation.observation_type().as_str();
     let ingest = RadrootsEventIngest::from_signed_event(
         signed_event.signed_event().clone(),
         observed_at_ms,
     )?
     .with_observation(observation);
-    event_store.ingest_event(ingest).await?;
+    let mut transaction = event_store.begin_write_transaction().await?;
+    let already_present = sqlx::query_scalar::<_, i64>(
+        "SELECT 1 FROM event_transport_observation
+         WHERE event_id = ? AND transport_kind = ?
+           AND endpoint_fingerprint = ? AND observation_type = ?",
+    )
+    .bind(event_id)
+    .bind(transport_kind)
+    .bind(endpoint_fingerprint)
+    .bind(observation_type)
+    .fetch_optional(&mut *transaction)
+    .await
+    .map_err(RadrootsEventStoreError::from)?
+    .is_some();
+    if !already_present
+        && let Err(error) = event_store
+            .ingest_event_in_transaction(&mut transaction, ingest)
+            .await
+    {
+        let _ = transaction.rollback().await;
+        return Err(error.into());
+    }
+    transaction
+        .commit()
+        .await
+        .map_err(RadrootsEventStoreError::from)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        PublishableRelay, PublishableRelays, RadrootsOutboxDeliveryTargetStatus,
-        adapter_transport_failure_receipt, counts_as_accepted_for_plan,
-        is_publishable_delivery_status, publishable_transport_targets,
+        PublishableRelay, PublishableRelays, RadrootsOutboxDeliveryPlanStatus,
+        RadrootsOutboxDeliveryTargetStatus, RadrootsOutboxPublishEmptyTargetState,
+        adapter_transport_failure_receipt, classify_empty_publishable_target_set,
+        counts_as_accepted_for_plan, is_publishable_delivery_status,
+        outbox_publish_idempotency_key, publishable_transport_targets,
         relay_outcome_from_transport_outcome, relay_outcome_kind_from_transport_outcome,
         relay_receipts_from_transport_receipts, satisfaction_policy_for_remaining_count,
         target_receipts_from_relay_receipts, target_receipts_from_transport_receipts,
@@ -1169,6 +1427,10 @@ mod tests {
 
     #[test]
     fn internal_outbox_publish_helpers_cover_policy_edges() {
+        assert_eq!(
+            outbox_publish_idempotency_key(7, "event-id", 11),
+            "radroots-nostr-outbox-7-event-id-11"
+        );
         assert_eq!(
             satisfaction_policy_for_remaining_count(
                 RadrootsTransportSatisfactionClass::Accepted,
@@ -1229,6 +1491,63 @@ mod tests {
             ),
             RadrootsTransportSatisfactionPolicy::no_wait()
         );
+
+        let empty_target_cases = [
+            (
+                RadrootsOutboxDeliveryPlanStatus::Complete,
+                1,
+                Vec::new(),
+                RadrootsOutboxPublishEmptyTargetState::AlreadySatisfied,
+            ),
+            (
+                RadrootsOutboxDeliveryPlanStatus::Queued,
+                0,
+                vec![RadrootsOutboxDeliveryTargetStatus::Accepted],
+                RadrootsOutboxPublishEmptyTargetState::AlreadySatisfied,
+            ),
+            (
+                RadrootsOutboxDeliveryPlanStatus::FailedTerminal,
+                1,
+                vec![RadrootsOutboxDeliveryTargetStatus::Pending],
+                RadrootsOutboxPublishEmptyTargetState::Terminal,
+            ),
+            (
+                RadrootsOutboxDeliveryPlanStatus::Queued,
+                1,
+                vec![
+                    RadrootsOutboxDeliveryTargetStatus::FailedTerminal,
+                    RadrootsOutboxDeliveryTargetStatus::SkippedPolicyDenied,
+                    RadrootsOutboxDeliveryTargetStatus::DeferredUntilImplemented,
+                ],
+                RadrootsOutboxPublishEmptyTargetState::Terminal,
+            ),
+            (
+                RadrootsOutboxDeliveryPlanStatus::Cancelled,
+                1,
+                vec![RadrootsOutboxDeliveryTargetStatus::Pending],
+                RadrootsOutboxPublishEmptyTargetState::Cancelled,
+            ),
+        ];
+        for (status, remaining, target_statuses, expected) in empty_target_cases {
+            assert_eq!(
+                classify_empty_publishable_target_set(status, remaining, target_statuses, 7)
+                    .expect("classified empty target state"),
+                expected
+            );
+        }
+        assert!(matches!(
+            classify_empty_publishable_target_set(
+                RadrootsOutboxDeliveryPlanStatus::Queued,
+                1,
+                [RadrootsOutboxDeliveryTargetStatus::Accepted],
+                7,
+            ),
+            Err(
+                RadrootsRelayTransportError::InvalidEmptyPublishableTargetSet {
+                    delivery_plan_id: 7
+                }
+            )
+        ));
 
         assert!(counts_as_accepted_for_plan(
             RadrootsOutboxDeliveryTargetStatus::Accepted,
@@ -1292,6 +1611,7 @@ mod tests {
             satisfaction_class: RadrootsTransportSatisfactionClass::Delivered,
             required_targets: None,
             remaining_required_targets: None,
+            empty_target_state: None,
         };
 
         let accepted_relay_receipts = target_receipts_from_relay_receipts(
@@ -1465,6 +1785,7 @@ mod tests {
             satisfaction_class: RadrootsTransportSatisfactionClass::Accepted,
             required_targets: None,
             remaining_required_targets: None,
+            empty_target_state: None,
         };
         let targets = publishable_transport_targets(&publishable).expect("transport targets");
         assert_eq!(targets.len(), 1);
@@ -1479,19 +1800,19 @@ mod tests {
         invalid.relays[0].target_scope = Some("bad scope".to_owned());
         assert!(matches!(
             publishable_transport_targets(&invalid),
-            Err(RadrootsRelayTransportError::Transport(_))
+            Err(RadrootsRelayTransportError::TransportContractError(_))
         ));
         invalid.relays[0].target_scope = Some("foodshed.west".to_owned());
         invalid.relays[0].target_label = Some("bad\0label".to_owned());
         assert!(matches!(
             publishable_transport_targets(&invalid),
-            Err(RadrootsRelayTransportError::Transport(_))
+            Err(RadrootsRelayTransportError::TransportContractError(_))
         ));
         invalid.relays[0].target_label = Some("primary relay".to_owned());
         invalid.relays[0].relay_url = "not-a-relay".to_owned();
         assert!(matches!(
             publishable_transport_targets(&invalid),
-            Err(RadrootsRelayTransportError::TransportContract(_))
+            Err(RadrootsRelayTransportError::TransportContractError(_))
         ));
 
         let generic_errors = [
@@ -1509,7 +1830,7 @@ mod tests {
         for error in generic_errors {
             assert!(matches!(
                 transport_error_to_relay_error(error),
-                RadrootsRelayTransportError::Transport(_)
+                RadrootsRelayTransportError::TransportContractError(_)
             ));
         }
         let target_errors = [
@@ -1522,7 +1843,7 @@ mod tests {
         for error in target_errors {
             assert!(matches!(
                 transport_error_to_relay_error(error),
-                RadrootsRelayTransportError::TransportContract(_)
+                RadrootsRelayTransportError::TransportContractError(_)
             ));
         }
         assert!(matches!(
@@ -1531,7 +1852,7 @@ mod tests {
                 max: 1,
                 actual: 2,
             }),
-            RadrootsRelayTransportError::TransportContract(_)
+            RadrootsRelayTransportError::TransportContractError(_)
         ));
         let payload_errors = [
             RadrootsTransportError::EmptyPayloadId,
@@ -1546,7 +1867,7 @@ mod tests {
         for error in payload_errors {
             assert!(matches!(
                 transport_error_to_relay_error(error),
-                RadrootsRelayTransportError::NostrEventJson(_)
+                RadrootsRelayTransportError::TransportContractError(_)
             ));
         }
 

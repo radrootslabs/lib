@@ -421,6 +421,39 @@ pub const RADROOTS_PHASE1_PUBLICATION_TRANSITIONS: &[RadrootsPhase1PublicationTr
         true
     ),
     transition!(
+        "recover-expired-dispatch-waiting",
+        Event,
+        "dispatching",
+        "signed-ready",
+        "expired-target-lease",
+        "persist-uncertain-intent",
+        Repair,
+        true,
+        false
+    ),
+    transition!(
+        "recover-expired-dispatch-published",
+        Event,
+        "published",
+        "published",
+        "expired-target-lease",
+        "persist-uncertain-intent",
+        Repair,
+        true,
+        true
+    ),
+    transition!(
+        "complete-published-target-result",
+        Event,
+        "published",
+        "published",
+        "target-matching-live-token",
+        "persist-target-result",
+        None,
+        false,
+        true
+    ),
+    transition!(
         "claim-target",
         Target,
         "pending",
@@ -504,6 +537,17 @@ pub const RADROOTS_PHASE1_PUBLICATION_TRANSITIONS: &[RadrootsPhase1PublicationTr
         "uncertain",
         "matching-live-token",
         "persist-bounded-error",
+        Repair,
+        true,
+        false
+    ),
+    transition!(
+        "expire-target-dispatch",
+        Target,
+        "in-flight",
+        "uncertain",
+        "expired",
+        "persist-uncertain-intent",
         Repair,
         true,
         false
@@ -1287,6 +1331,8 @@ impl RadrootsOutbox {
         publication_id: i64,
         now_ms: i64,
     ) -> Result<RadrootsPhase1PublicationRecord, RadrootsPhase1PublicationError> {
+        self.recover_expired_phase1_dispatches(publication_id, now_ms)
+            .await?;
         match self.load_phase1_publication(publication_id).await {
             Ok(record) => Ok(record),
             Err(error) if is_persisted_authority_error(&error) => {
@@ -1320,6 +1366,99 @@ impl RadrootsOutbox {
             }
             Err(error) => Err(error),
         }
+    }
+
+    async fn recover_expired_phase1_dispatches(
+        &self,
+        publication_id: i64,
+        now_ms: i64,
+    ) -> Result<(), RadrootsPhase1PublicationError> {
+        validate_time(now_ms)?;
+        let mut transaction = self.pool.begin().await?;
+        let expired = sqlx::query(
+            "SELECT target_id, dispatch_digest
+             FROM outbox_phase1_delivery_target
+             WHERE publication_id = ? AND state = 'in-flight'
+               AND claim_expires_at_ms <= ?
+             ORDER BY target_id",
+        )
+        .bind(publication_id)
+        .bind(now_ms)
+        .fetch_all(&mut *transaction)
+        .await?;
+        if expired.is_empty() {
+            transaction.commit().await?;
+            return Ok(());
+        }
+
+        for row in expired {
+            let target_id: i64 = row.try_get("target_id")?;
+            let dispatch_digest = blob32(&row, "dispatch_digest")?;
+            let intent_affected = sqlx::query(
+                "UPDATE outbox_phase1_dispatch_intent
+                 SET state = 'uncertain', state_revision = state_revision + 1,
+                     updated_at_ms = ?
+                 WHERE intent_digest = ? AND target_id = ? AND state = 'in-flight'",
+            )
+            .bind(now_ms)
+            .bind(dispatch_digest.as_slice())
+            .bind(target_id)
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+            let target_affected = sqlx::query(
+                "UPDATE outbox_phase1_delivery_target
+                 SET state = 'uncertain', state_revision = state_revision + 1,
+                     claim_token = NULL, claim_expires_at_ms = NULL,
+                     last_error = 'dispatch lease expired before durable completion',
+                     next_attempt_after_ms = ?, updated_at_ms = ?
+                 WHERE target_id = ? AND publication_id = ? AND state = 'in-flight'
+                   AND claim_expires_at_ms <= ? AND dispatch_digest = ?",
+            )
+            .bind(now_ms)
+            .bind(now_ms)
+            .bind(target_id)
+            .bind(publication_id)
+            .bind(now_ms)
+            .bind(dispatch_digest.as_slice())
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+            if intent_affected != 1 || target_affected != 1 {
+                return Err(RadrootsPhase1PublicationError::StoredAuthorityInvalid);
+            }
+        }
+
+        let required_target_count = usize_from_i64(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT required_target_count FROM outbox_phase1_publication
+                 WHERE publication_id = ? AND state IN ('dispatching', 'published')",
+            )
+            .bind(publication_id)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or(RadrootsPhase1PublicationError::StoredAuthorityInvalid)?,
+            "required_target_count",
+        )?;
+        let destination =
+            aggregate_publication_state(&mut transaction, publication_id, required_target_count)
+                .await?;
+        let publication_affected = sqlx::query(
+            "UPDATE outbox_phase1_publication
+             SET state = ?, state_revision = state_revision + 1, updated_at_ms = ?
+             WHERE publication_id = ? AND state IN ('dispatching', 'published')",
+        )
+        .bind(destination.as_str())
+        .bind(now_ms)
+        .bind(publication_id)
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected();
+        if publication_affected != 1 {
+            return Err(RadrootsPhase1PublicationError::StoredAuthorityInvalid);
+        }
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub async fn claim_phase1_publication_for_signing(
@@ -1811,6 +1950,30 @@ impl RadrootsOutbox {
             .iter()
             .find(|target| target.target_id == target_id)
             .ok_or(RadrootsPhase1PublicationError::TargetNotFound { target_id })?;
+        if target.state == RadrootsPhase1PublicationTargetState::AcceptedObserved
+            && target.revision == observed_target_revision.saturating_add(1)
+        {
+            let repair_digest = repair_digest(&target.dispatch_digest);
+            let receipt_digest = receipt_digest(&target.dispatch_digest, "accepted-observed");
+            let authority: Option<(String, i64)> = sqlx::query_as(
+                "SELECT repair.state,
+                        (SELECT COUNT(*) FROM outbox_phase1_target_receipt
+                         WHERE receipt_digest = ? AND target_id = ?
+                           AND observation_kind = 'accepted-observed')
+                 FROM outbox_phase1_observation_repair AS repair
+                 WHERE repair.repair_digest = ? AND repair.target_id = ?",
+            )
+            .bind(receipt_digest.as_slice())
+            .bind(target_id)
+            .bind(repair_digest.as_slice())
+            .bind(target_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            if authority == Some(("complete".to_owned(), 1)) {
+                return Ok(record);
+            }
+            return Err(RadrootsPhase1PublicationError::StoredAuthorityInvalid);
+        }
         if target.revision != observed_target_revision
             || target.state != RadrootsPhase1PublicationTargetState::AcceptedObservationPending
         {
@@ -1901,7 +2064,13 @@ async fn complete_target(
 ) -> Result<RadrootsPhase1PublicationRecord, RadrootsPhase1PublicationError> {
     validate_time(now_ms)?;
     let record = outbox.load_phase1_publication(claim.publication_id).await?;
-    if record.revision != claim.publication_revision {
+    if record.revision < claim.publication_revision
+        || !matches!(
+            record.state,
+            RadrootsPhase1PublicationEventState::Dispatching
+                | RadrootsPhase1PublicationEventState::Published
+        )
+    {
         return Err(RadrootsPhase1PublicationError::RevisionConflict);
     }
     let target = record
@@ -2019,13 +2188,13 @@ async fn complete_target(
     )
     .await?;
     let publication_affected = sqlx::query(
-        "UPDATE outbox_phase1_publication SET state = ?, state_revision = state_revision + 1, updated_at_ms = ? WHERE publication_id = ? AND state_revision = ? AND state = 'dispatching'",
+        "UPDATE outbox_phase1_publication SET state = ?, state_revision = state_revision + 1, updated_at_ms = ? WHERE publication_id = ? AND state_revision = ? AND state IN ('dispatching', 'published')",
     )
     .bind(destination_event.as_str())
     .bind(now_ms)
     .bind(claim.publication_id)
     .bind(i64_from_u64(
-        claim.publication_revision,
+        record.revision,
         "publication_revision",
     )?)
     .execute(&mut *transaction)
@@ -2553,7 +2722,7 @@ mod tests {
             assert!(!transition.lease_predicate.is_empty());
             assert!(!transition.durable_side_effect.is_empty());
         }
-        assert_eq!(ids.len(), 28);
+        assert_eq!(ids.len(), 32);
     }
 
     #[test]
@@ -3228,6 +3397,282 @@ mod tests {
                 .await
                 .unwrap(),
             2
+        );
+    }
+
+    #[tokio::test]
+    async fn phase1_publication_partial_effect_boundaries_roll_back_and_recover() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("partial-effect.sqlite");
+        let outbox = RadrootsOutbox::open_file(&path).await.unwrap();
+        let ready = ready_update();
+        let receipt = outbox
+            .enqueue_phase1_publication(
+                &ready,
+                &RadrootsPhase1PublicationTargetPolicy::new(["wss://relay.example"], 1).unwrap(),
+                100,
+            )
+            .await
+            .unwrap();
+        let signing_claim = outbox
+            .claim_phase1_publication_for_signing(
+                receipt.record().publication_id(),
+                receipt.record().revision(),
+                101,
+                100,
+            )
+            .await
+            .unwrap();
+        let preflight = outbox
+            .preflight_phase1_publication_signing(&signing_claim, 102)
+            .await
+            .unwrap();
+        let signed = outbox
+            .complete_phase1_publication_signing(&preflight, &signed_update(&ready), 103)
+            .await
+            .unwrap();
+        let target = &signed.targets()[0];
+        let expired_claim = outbox
+            .claim_phase1_publication_target(
+                signed.publication_id(),
+                signed.revision(),
+                target.target_id(),
+                target.revision(),
+                104,
+                10,
+            )
+            .await
+            .unwrap();
+        outbox.close().await;
+        let outbox = RadrootsOutbox::open_file(&path).await.unwrap();
+        assert_eq!(
+            outbox
+                .claim_phase1_publication_target(
+                    signed.publication_id(),
+                    expired_claim.publication_revision(),
+                    target.target_id(),
+                    expired_claim.target_revision(),
+                    114,
+                    10,
+                )
+                .await
+                .unwrap_err()
+                .code(),
+            "phase1_publication_revision_conflict"
+        );
+        let recovered = outbox
+            .load_phase1_publication(signed.publication_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            recovered.targets()[0].state(),
+            RadrootsPhase1PublicationTargetState::Uncertain
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT state FROM outbox_phase1_dispatch_intent WHERE target_id = ?",
+            )
+            .bind(target.target_id())
+            .fetch_one(outbox.pool())
+            .await
+            .unwrap(),
+            "uncertain"
+        );
+        let retry_claim = outbox
+            .claim_phase1_publication_target(
+                recovered.publication_id(),
+                recovered.revision(),
+                recovered.targets()[0].target_id(),
+                recovered.targets()[0].revision(),
+                115,
+                100,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            retry_claim.dispatch_digest(),
+            expired_claim.dispatch_digest()
+        );
+
+        sqlx::query(
+            "CREATE TEMP TRIGGER fail_phase1_pending_receipt
+             BEFORE INSERT ON outbox_phase1_target_receipt
+             BEGIN SELECT RAISE(ABORT, 'injected pending receipt failure'); END",
+        )
+        .execute(outbox.pool())
+        .await
+        .unwrap();
+        assert!(matches!(
+            outbox
+                .complete_phase1_target_accepted_pending(&retry_claim, 116)
+                .await,
+            Err(RadrootsPhase1PublicationError::Sqlite(_))
+        ));
+        let still_in_flight = outbox
+            .load_phase1_publication(recovered.publication_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            still_in_flight.targets()[0].state(),
+            RadrootsPhase1PublicationTargetState::InFlight
+        );
+        sqlx::query("DROP TRIGGER fail_phase1_pending_receipt")
+            .execute(outbox.pool())
+            .await
+            .unwrap();
+
+        let pending = outbox
+            .complete_phase1_target_accepted_pending(&retry_claim, 117)
+            .await
+            .unwrap();
+        let pending_target = &pending.targets()[0];
+        sqlx::query(
+            "CREATE TEMP TRIGGER fail_phase1_observed_receipt
+             BEFORE INSERT ON outbox_phase1_target_receipt
+             WHEN NEW.observation_kind = 'accepted-observed'
+             BEGIN SELECT RAISE(ABORT, 'injected observed receipt failure'); END",
+        )
+        .execute(outbox.pool())
+        .await
+        .unwrap();
+        assert!(matches!(
+            outbox
+                .complete_phase1_observation_repair(
+                    pending.publication_id(),
+                    pending_target.target_id(),
+                    pending_target.revision(),
+                    118,
+                )
+                .await,
+            Err(RadrootsPhase1PublicationError::Sqlite(_))
+        ));
+        let repair_still_pending = outbox
+            .load_phase1_publication(pending.publication_id())
+            .await
+            .unwrap();
+        assert_eq!(
+            repair_still_pending.targets()[0].state(),
+            RadrootsPhase1PublicationTargetState::AcceptedObservationPending
+        );
+        sqlx::query("DROP TRIGGER fail_phase1_observed_receipt")
+            .execute(outbox.pool())
+            .await
+            .unwrap();
+
+        let completed = outbox
+            .complete_phase1_observation_repair(
+                pending.publication_id(),
+                pending_target.target_id(),
+                pending_target.revision(),
+                119,
+            )
+            .await
+            .unwrap();
+        let replayed = outbox
+            .complete_phase1_observation_repair(
+                pending.publication_id(),
+                pending_target.target_id(),
+                pending_target.revision(),
+                120,
+            )
+            .await
+            .unwrap();
+        assert_eq!(replayed.targets(), completed.targets());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM outbox_phase1_target_receipt WHERE target_id = ?",
+            )
+            .bind(pending_target.target_id())
+            .fetch_one(outbox.pool())
+            .await
+            .unwrap(),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn phase1_publication_partial_effect_concurrent_target_claims_complete_independently() {
+        let outbox = RadrootsOutbox::open_memory().await.unwrap();
+        let ready = ready_update();
+        let receipt = outbox
+            .enqueue_phase1_publication(
+                &ready,
+                &RadrootsPhase1PublicationTargetPolicy::new(
+                    ["wss://relay-a.example", "wss://relay-b.example"],
+                    1,
+                )
+                .unwrap(),
+                100,
+            )
+            .await
+            .unwrap();
+        let signing_claim = outbox
+            .claim_phase1_publication_for_signing(
+                receipt.record().publication_id(),
+                receipt.record().revision(),
+                101,
+                100,
+            )
+            .await
+            .unwrap();
+        let preflight = outbox
+            .preflight_phase1_publication_signing(&signing_claim, 102)
+            .await
+            .unwrap();
+        let signed = outbox
+            .complete_phase1_publication_signing(&preflight, &signed_update(&ready), 103)
+            .await
+            .unwrap();
+        let first = outbox
+            .claim_phase1_publication_target(
+                signed.publication_id(),
+                signed.revision(),
+                signed.targets()[0].target_id(),
+                signed.targets()[0].revision(),
+                104,
+                100,
+            )
+            .await
+            .unwrap();
+        let after_first_claim = outbox
+            .load_phase1_publication(signed.publication_id())
+            .await
+            .unwrap();
+        let second = outbox
+            .claim_phase1_publication_target(
+                after_first_claim.publication_id(),
+                after_first_claim.revision(),
+                after_first_claim.targets()[1].target_id(),
+                after_first_claim.targets()[1].revision(),
+                105,
+                100,
+            )
+            .await
+            .unwrap();
+
+        let published = outbox
+            .complete_phase1_target_accepted_pending(&first, 106)
+            .await
+            .unwrap();
+        assert_eq!(
+            published.state(),
+            RadrootsPhase1PublicationEventState::Published
+        );
+        let completed = outbox
+            .fail_phase1_target_retryable(&second, 107, 108, "relay unavailable")
+            .await
+            .unwrap();
+        assert_eq!(
+            completed.state(),
+            RadrootsPhase1PublicationEventState::Published
+        );
+        assert_eq!(
+            completed.targets()[0].state(),
+            RadrootsPhase1PublicationTargetState::AcceptedObservationPending
+        );
+        assert_eq!(
+            completed.targets()[1].state(),
+            RadrootsPhase1PublicationTargetState::FailedRetryable
         );
     }
 

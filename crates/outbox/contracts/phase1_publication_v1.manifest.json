@@ -1,14 +1,14 @@
 {
   "contract_id": "radroots_outbox.phase1_publication.v1",
   "descriptor": {
-    "byte_length": 11023,
+    "byte_length": 12212,
     "path": "crates/outbox/contracts/phase1_publication_v1.descriptor.json",
-    "sha256": "7c8f1a99e4c7001af5238d164c04acfd70afc6e7133a447602ae5b5d2a1f6622"
+    "sha256": "5e74ebeb6bfeb33286a5cdfe4e89413d0554fa476761faeca39f7398dd122bbf"
   },
   "manifest_schema": {
     "byte_length": 3806,
     "path": "crates/outbox/contracts/phase1_publication_v1.manifest.schema.json",
-    "sha256": "05a810c798676197608cdfd2bc081fb003e4b878c285a338eed6abe636c0817d"
+    "sha256": "f1182af3c11f8f8f3fed48d91b48e4ffc99507a380a7cae3f7e88ce740043aa2"
   },
   "migration": {
     "down": {
@@ -64,9 +64,9 @@
     },
     {
       "file": {
-        "byte_length": 118318,
+        "byte_length": 133841,
         "path": "crates/outbox/src/phase1_publication.rs",
-        "sha256": "5ee6745c8eb36fdc18e8578880ca246cc1579e24ae7e7b89559ceaf1ffcbbc73"
+        "sha256": "41489c91ca667b8c1b7306925d254c43a0e7a498bd0b40c20b542c26a6e46417"
       },
       "role": "phase1_publication_runtime"
     },
@@ -106,7 +106,7 @@
       "file": {
         "byte_length": 24248,
         "path": "tools/xtask/src/contract/outbox_phase1_publication.rs",
-        "sha256": "8a2a09944d78bd67b76a7e1857e6815af2c4ebe712bb14ed48eb66e4cb156dd3"
+        "sha256": "8088984cf3b478852125cd865f1689daccd768feb8e66f637cf385fb1187cc46"
       },
       "role": "contract_governance"
     },
@@ -147,6 +147,6 @@
     "event_state_count": 9,
     "stable_error_count": 25,
     "target_state_count": 8,
-    "transition_count": 28
+    "transition_count": 32
   }
 }

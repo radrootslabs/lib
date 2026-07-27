@@ -29,10 +29,12 @@ pub use fetch::{
 };
 #[cfg(feature = "storage")]
 pub use outbox::{
-    RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
-    phase1_publication_delivery_request, publish_claimed_outbox_event,
-    publish_claimed_outbox_event_with_transport,
+    RadrootsOutboxPublishEmptyTargetState, RadrootsOutboxPublishPolicy,
+    RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
+    execute_claimed_phase1_publication_target_with_transport, phase1_publication_delivery_request,
+    publish_claimed_outbox_event, publish_claimed_outbox_event_with_transport,
     publish_claimed_phase1_publication_target_with_transport,
+    repair_phase1_publication_observation,
 };
 pub use outcome::{RadrootsRelayOutcome, RadrootsRelayOutcomeKind};
 #[cfg(feature = "client")]

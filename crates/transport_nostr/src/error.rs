@@ -41,6 +41,10 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay target set contains duplicate URL `{url}`")]
     DuplicateRelayUrl { url: String },
 
+    #[cfg(feature = "storage")]
+    #[error("Outbox delivery plan {delivery_plan_id} has no valid publishable Nostr targets")]
+    InvalidEmptyPublishableTargetSet { delivery_plan_id: i64 },
+
     #[error("Relay fetch item contains invalid relay URL `{url}`: {reason}")]
     InvalidFetchItemRelayUrl { url: String, reason: String },
 
@@ -124,6 +128,9 @@ pub enum RadrootsRelayTransportError {
     #[error("Transport contract error: {0}")]
     TransportContract(String),
 
+    #[error("Transport contract error: {0}")]
+    TransportContractError(radroots_transport::RadrootsTransportError),
+
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
@@ -151,6 +158,10 @@ pub enum RadrootsRelayTransportError {
     Outbox(#[from] radroots_outbox::RadrootsOutboxError),
 
     #[cfg(feature = "storage")]
+    #[error("Phase 1 publication error: {0}")]
+    Phase1Publication(#[from] radroots_outbox::RadrootsPhase1PublicationError),
+
+    #[cfg(feature = "storage")]
     #[error("Outbox claim {0} does not contain a signed event")]
     MissingSignedOutboxEvent(i64),
 
@@ -170,6 +181,6 @@ pub(crate) fn ensure_nonnegative_timestamp(
 
 impl From<radroots_transport::RadrootsTransportError> for RadrootsRelayTransportError {
     fn from(value: radroots_transport::RadrootsTransportError) -> Self {
-        Self::TransportContract(value.to_string())
+        Self::TransportContractError(value)
     }
 }

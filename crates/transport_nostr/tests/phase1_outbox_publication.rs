@@ -36,15 +36,27 @@ use radroots_event_codec::wire::publication::{
     RadrootsPhase1PublicationDraft, RadrootsPhase1PublicationMediaReference,
     allowlist::allow_phase1_publication_artifact, bind_phase1_publication_media_readiness,
 };
+use radroots_event_store::RadrootsEventStore;
 use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
-use radroots_outbox::{RadrootsOutbox, RadrootsPhase1PublicationTargetPolicy};
-use radroots_transport::{RadrootsTransportDeliveryTargetStatus, RadrootsTransportPayload};
+use radroots_outbox::{
+    RadrootsOutbox, RadrootsPhase1PublicationTargetPolicy, RadrootsPhase1PublicationTargetState,
+};
+use radroots_transport::{
+    RadrootsTransport, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
+    RadrootsTransportStatus, RadrootsTransportTargetReceipt,
+};
 use radroots_transport_nostr::{
     RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsRelayOutcome,
-    phase1_publication_delivery_request, publish_claimed_phase1_publication_target_with_transport,
+    RadrootsRelayTransportError, execute_claimed_phase1_publication_target_with_transport,
+    phase1_publication_delivery_request, repair_phase1_publication_observation,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const SECRET_KEY: &str = "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
 const PUBLIC_KEY: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
@@ -97,9 +109,105 @@ impl RadrootsPhase1PublicationSigner for CountingPhase1Signer {
     }
 }
 
+struct ForgedPhase1ReceiptTransport;
+
+impl RadrootsTransport for ForgedPhase1ReceiptTransport {
+    fn transport_kind(&self) -> RadrootsTransportKind {
+        RadrootsTransportKind::Nostr
+    }
+
+    fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        Box::pin(async {
+            RadrootsTransportStatus::new(
+                RadrootsTransportKind::Nostr,
+                true,
+                RadrootsTransportImplementationState::Real,
+                true,
+                "forged Phase 1 receipt fixture",
+            )
+        })
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        request: RadrootsTransportDeliveryRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        Box::pin(async move {
+            let target = request.target_set().targets()[0].clone();
+            RadrootsTransportDeliveryReceipt::new(
+                "forged-phase1-request",
+                request.target_set().clone(),
+                vec![RadrootsTransportTargetReceipt::new(
+                    target,
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Accepted),
+                )],
+            )
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        _request: RadrootsTransportFetchRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        Box::pin(async { Err(RadrootsTransportError::UnsupportedOperation) })
+    }
+}
+
+#[derive(Default)]
+struct DuplicateAcceptedPhase1Transport {
+    invocations: AtomicUsize,
+}
+
+impl DuplicateAcceptedPhase1Transport {
+    fn invocations(&self) -> usize {
+        self.invocations.load(Ordering::SeqCst)
+    }
+}
+
+impl RadrootsTransport for DuplicateAcceptedPhase1Transport {
+    fn transport_kind(&self) -> RadrootsTransportKind {
+        RadrootsTransportKind::Nostr
+    }
+
+    fn status<'a>(&'a self) -> RadrootsTransportFuture<'a, RadrootsTransportStatus> {
+        Box::pin(async {
+            RadrootsTransportStatus::new(
+                RadrootsTransportKind::Nostr,
+                true,
+                RadrootsTransportImplementationState::Real,
+                true,
+                "duplicate accepted Phase 1 fixture",
+            )
+        })
+    }
+
+    fn deliver<'a>(
+        &'a self,
+        request: RadrootsTransportDeliveryRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportDeliveryReceipt> {
+        Box::pin(async move {
+            self.invocations.fetch_add(1, Ordering::SeqCst);
+            let target = request.target_set().targets()[0].clone();
+            let receipt = RadrootsTransportTargetReceipt::skipped(
+                target,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::DuplicateAccepted),
+            )?;
+            RadrootsTransportDeliveryReceipt::for_request(&request, vec![receipt])
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        _request: RadrootsTransportFetchRequest,
+    ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
+        Box::pin(async { Err(RadrootsTransportError::UnsupportedOperation) })
+    }
+}
+
 #[tokio::test]
 async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_identity() {
     let outbox = RadrootsOutbox::open_memory().await.unwrap();
+    let event_store = RadrootsEventStore::open_memory().await.unwrap();
     let signer = CountingPhase1Signer::fixture();
     let policy = RadrootsPhase1PublicationTargetPolicy::new([RELAY], 1).unwrap();
     let ready_artifacts = all_ready_artifacts();
@@ -179,26 +287,24 @@ async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_iden
                 .expect("bounded relay outcome"),
         );
         let first_transport = RadrootsNostrTransport::new(first_adapter.clone());
-        let first_receipt = publish_claimed_phase1_publication_target_with_transport(
+        let retryable = execute_claimed_phase1_publication_target_with_transport(
+            &outbox,
+            &event_store,
             &first_transport,
             &first_claim,
+            base + 7,
             base + 5,
         )
         .await
         .unwrap();
         assert_eq!(
-            first_receipt.target_receipts()[0].status(),
-            RadrootsTransportDeliveryTargetStatus::FailedRetryable
+            retryable.targets()[0].state(),
+            RadrootsPhase1PublicationTargetState::FailedRetryable
         );
         assert_eq!(
             first_adapter.captured_raw_events().as_slice(),
             core::slice::from_ref(&exact_raw)
         );
-
-        let retryable = outbox
-            .fail_phase1_target_retryable(&first_claim, base + 6, base + 7, "relay unavailable")
-            .await
-            .unwrap();
         let retry_target = retryable
             .targets()
             .iter()
@@ -222,27 +328,244 @@ async fn outbox_publication_all_seven_leaves_reuse_exact_bytes_and_dispatch_iden
 
         let retry_adapter = RadrootsMockRelayPublishAdapter::new();
         let retry_transport = RadrootsNostrTransport::new(retry_adapter.clone());
-        let retry_receipt = publish_claimed_phase1_publication_target_with_transport(
+        let accepted = execute_claimed_phase1_publication_target_with_transport(
+            &outbox,
+            &event_store,
             &retry_transport,
             &retry_claim,
+            base + 10,
             base + 8,
         )
         .await
         .unwrap();
         assert_eq!(
-            retry_receipt.target_receipts()[0].status(),
-            RadrootsTransportDeliveryTargetStatus::Accepted
+            accepted.targets()[0].state(),
+            RadrootsPhase1PublicationTargetState::AcceptedObserved
         );
         assert_eq!(
             retry_adapter.captured_raw_events().as_slice(),
             core::slice::from_ref(&exact_raw)
         );
-        outbox
-            .complete_phase1_target_accepted_observed(&retry_claim, base + 9)
+        let observations = event_store
+            .observations_for_event(verified.signed_event().id_str())
             .await
             .unwrap();
+        assert_eq!(observations.len(), 1);
+        assert_eq!(observations[0].observation_count, 1);
         assert_eq!(signer.invocations(), index + 1, "retry must not re-sign");
     }
+}
+
+#[tokio::test]
+async fn outbox_publication_partial_effect_repairs_observation_without_republish() {
+    let temp = tempfile::tempdir().unwrap();
+    let outbox_path = temp.path().join("phase1-partial-effect.sqlite");
+    let outbox = RadrootsOutbox::open_file(&outbox_path).await.unwrap();
+    let injection_pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(SqliteConnectOptions::new().filename(&outbox_path))
+        .await
+        .unwrap();
+    let event_store = RadrootsEventStore::open_memory().await.unwrap();
+    let signer = CountingPhase1Signer::fixture();
+    let ready = all_ready_artifacts().remove(0);
+    let enqueue = outbox
+        .enqueue_phase1_publication(
+            &ready,
+            &RadrootsPhase1PublicationTargetPolicy::new([RELAY], 1).unwrap(),
+            1_000,
+        )
+        .await
+        .unwrap();
+    let signing_claim = outbox
+        .claim_phase1_publication_for_signing(
+            enqueue.record().publication_id(),
+            enqueue.record().revision(),
+            1_001,
+            100,
+        )
+        .await
+        .unwrap();
+    let preflight = outbox
+        .preflight_phase1_publication_signing(&signing_claim, 1_002)
+        .await
+        .unwrap();
+    let contract = event_contract(ready.artifact().event_contract_id()).unwrap();
+    let actor = RadrootsActorContext::test(PUBLIC_KEY, [contract.author_role]).unwrap();
+    let verified = sign_authorized_phase1_publication(&actor, &signer, &ready).unwrap();
+    let signed = outbox
+        .complete_phase1_publication_signing(&preflight, &verified, 1_003)
+        .await
+        .unwrap();
+    let target = &signed.targets()[0];
+    let claim = outbox
+        .claim_phase1_publication_target(
+            signed.publication_id(),
+            signed.revision(),
+            target.target_id(),
+            target.revision(),
+            1_004,
+            100,
+        )
+        .await
+        .unwrap();
+    let forged_error = execute_claimed_phase1_publication_target_with_transport(
+        &outbox,
+        &event_store,
+        &ForgedPhase1ReceiptTransport,
+        &claim,
+        1_010,
+        1_005,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        forged_error,
+        RadrootsRelayTransportError::TransportContractError(
+            RadrootsTransportError::DeliveryReceiptRequestIdMismatch
+        )
+    ));
+    let uncertain = outbox
+        .load_phase1_publication(signed.publication_id())
+        .await
+        .unwrap();
+    assert_eq!(
+        uncertain.targets()[0].state(),
+        RadrootsPhase1PublicationTargetState::Uncertain
+    );
+    let retry_claim = outbox
+        .claim_phase1_publication_target(
+            uncertain.publication_id(),
+            uncertain.revision(),
+            uncertain.targets()[0].target_id(),
+            uncertain.targets()[0].revision(),
+            1_006,
+            100,
+        )
+        .await
+        .unwrap();
+    assert_eq!(retry_claim.dispatch_digest(), claim.dispatch_digest());
+    sqlx::query(
+        "CREATE TRIGGER fail_phase1_accepted_receipt
+         BEFORE INSERT ON outbox_phase1_target_receipt
+         BEGIN SELECT RAISE(ABORT, 'injected accepted receipt failure'); END",
+    )
+    .execute(&injection_pool)
+    .await
+    .unwrap();
+    let accepted_adapter = RadrootsMockRelayPublishAdapter::new();
+    let accepted_transport = RadrootsNostrTransport::new(accepted_adapter.clone());
+    let persistence_failure = execute_claimed_phase1_publication_target_with_transport(
+        &outbox,
+        &event_store,
+        &accepted_transport,
+        &retry_claim,
+        1_010,
+        1_007,
+    )
+    .await;
+    assert!(
+        matches!(
+            persistence_failure,
+            Err(RadrootsRelayTransportError::Phase1Publication(_))
+        ),
+        "unexpected persistence result: {persistence_failure:?}"
+    );
+    assert_eq!(accepted_adapter.captured_raw_events().len(), 1);
+    sqlx::query("DROP TRIGGER fail_phase1_accepted_receipt")
+        .execute(&injection_pool)
+        .await
+        .unwrap();
+    let uncertain_after_acceptance = outbox
+        .load_phase1_publication(signed.publication_id())
+        .await
+        .unwrap();
+    assert_eq!(
+        uncertain_after_acceptance.targets()[0].state(),
+        RadrootsPhase1PublicationTargetState::Uncertain
+    );
+    let duplicate_claim = outbox
+        .claim_phase1_publication_target(
+            uncertain_after_acceptance.publication_id(),
+            uncertain_after_acceptance.revision(),
+            uncertain_after_acceptance.targets()[0].target_id(),
+            uncertain_after_acceptance.targets()[0].revision(),
+            1_008,
+            100,
+        )
+        .await
+        .unwrap();
+    assert_eq!(duplicate_claim.dispatch_digest(), claim.dispatch_digest());
+    sqlx::query(
+        "CREATE TEMP TRIGGER fail_phase1_publish_observation
+         BEFORE INSERT ON event_transport_observation
+         BEGIN SELECT RAISE(ABORT, 'injected observation failure'); END",
+    )
+    .execute(event_store.pool())
+    .await
+    .unwrap();
+    let duplicate_transport = DuplicateAcceptedPhase1Transport::default();
+    let observation_failure = execute_claimed_phase1_publication_target_with_transport(
+        &outbox,
+        &event_store,
+        &duplicate_transport,
+        &duplicate_claim,
+        1_010,
+        1_009,
+    )
+    .await;
+    assert!(
+        matches!(
+            observation_failure,
+            Err(RadrootsRelayTransportError::EventStore(_))
+        ),
+        "unexpected observation result: {observation_failure:?}"
+    );
+    let pending = outbox
+        .load_phase1_publication(signed.publication_id())
+        .await
+        .unwrap();
+    assert_eq!(
+        pending.targets()[0].state(),
+        RadrootsPhase1PublicationTargetState::AcceptedObservationPending
+    );
+    assert_eq!(duplicate_transport.invocations(), 1);
+
+    sqlx::query("DROP TRIGGER fail_phase1_publish_observation")
+        .execute(event_store.pool())
+        .await
+        .unwrap();
+    let repaired = repair_phase1_publication_observation(
+        &outbox,
+        &event_store,
+        pending.publication_id(),
+        pending.targets()[0].target_id(),
+        1_010,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        repaired.targets()[0].state(),
+        RadrootsPhase1PublicationTargetState::AcceptedObserved
+    );
+    let replayed = repair_phase1_publication_observation(
+        &outbox,
+        &event_store,
+        repaired.publication_id(),
+        repaired.targets()[0].target_id(),
+        1_011,
+    )
+    .await
+    .unwrap();
+    assert_eq!(replayed.targets(), repaired.targets());
+    assert_eq!(accepted_adapter.captured_raw_events().len(), 1);
+    assert_eq!(duplicate_transport.invocations(), 1);
+    let observations = event_store
+        .observations_for_event(verified.signed_event().id_str())
+        .await
+        .unwrap();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].observation_count, 1);
 }
 
 fn assert_payload_exact(payload: &RadrootsTransportPayload, expected_raw: &str) {

@@ -23,6 +23,7 @@ client = [
 storage = [
   "dep:radroots_event_store",
   "dep:radroots_outbox",
+  "dep:sqlx",
   "radroots_outbox/event-store-adapter",
   "client",
 ]
@@ -58,6 +59,7 @@ hex = { workspace = true }
 nostr = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
+sqlx = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["rt"] }
 url = { workspace = true }
@@ -67,6 +69,7 @@ radroots_authority = { workspace = true, features = ["local_signer"] }
 radroots_blossom = { workspace = true, features = ["serde", "std"] }
 radroots_event_codec = { workspace = true, features = ["serde_json"] }
 sha2 = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 
 [[test]]
