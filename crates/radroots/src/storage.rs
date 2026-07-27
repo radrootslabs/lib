@@ -1,0 +1,1 @@
+//! Curated storage entry points.

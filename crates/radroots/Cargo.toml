@@ -1,0 +1,26 @@
+[package]
+name = "radroots"
+description = "Curated ordinary-user Rust facade for Radroots"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+name = "radroots"
+path = "src/lib.rs"
+
+[features]
+default = ["client"]
+client = []
+native = ["client"]
+nostr = ["client"]
+nip46 = ["nostr"]
+radrootsd = ["client"]
+geonames = ["client"]
+knowledge = ["client"]
+full = ["native", "nostr", "nip46", "radrootsd", "geonames", "knowledge"]

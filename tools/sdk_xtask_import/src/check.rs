@@ -30,6 +30,30 @@ const PACKAGE_HOMEPAGE: &str = "https://radroots.org";
 const PACKAGE_REPOSITORY_URL: &str = "git+https://github.com/radrootslabs/sdk.git";
 const PUBLISH_ACCESS: &str = "public";
 const ALLOWED_RETICULUM_PREVIEW_PACKAGE: &str = "radroots-transport-reticulum";
+const RADROOTS_FACADE_MODULES: [&str; 11] = [
+    "client",
+    "event",
+    "farm",
+    "identity",
+    "knowledge",
+    "listing",
+    "signing",
+    "storage",
+    "sync",
+    "trade",
+    "transport",
+];
+const RADROOTS_FACADE_FEATURES: [&str; 9] = [
+    "client",
+    "default",
+    "full",
+    "geonames",
+    "knowledge",
+    "native",
+    "nip46",
+    "nostr",
+    "radrootsd",
+];
 
 #[derive(Debug, Deserialize)]
 struct PnpmPackEntry {
@@ -119,6 +143,7 @@ pub fn check() -> Result<(), String> {
     let root = workspace_root()?;
     crate::architecture::validate(&root)?;
     check_publication_policy(&root)?;
+    check_radroots_facade_scaffold(&root)?;
     validate_sdk_contracts(&root)?;
     check_sdk_feature_matrix(&root)?;
     check_forbidden_packages(&root)?;
@@ -128,6 +153,138 @@ pub fn check() -> Result<(), String> {
     cli_host::check_cli_host()?;
     check_package_build_artifacts(&root)?;
     check_npm_pack_payloads(&root)?;
+    Ok(())
+}
+
+fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
+    let manifest_path = root.join("crates/radroots/Cargo.toml");
+    let manifest_raw = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("failed to read {}: {error}", manifest_path.display()))?;
+    let manifest = manifest_raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("failed to parse {}: {error}", manifest_path.display()))?;
+    let package = manifest
+        .get("package")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| "crates/radroots/Cargo.toml must define [package]".to_owned())?;
+    for (field, expected) in [
+        ("name", "radroots"),
+        (
+            "description",
+            "Curated ordinary-user Rust facade for Radroots",
+        ),
+        ("readme", "README.md"),
+    ] {
+        if package.get(field).and_then(toml::Value::as_str) != Some(expected) {
+            return Err(format!(
+                "crates/radroots/Cargo.toml package.{field} must be {expected}"
+            ));
+        }
+    }
+    if package.get("publish").and_then(toml::Value::as_bool) != Some(false) {
+        return Err("radroots facade must remain publish = false during the scaffold".to_owned());
+    }
+    for field in [
+        "version",
+        "edition",
+        "rust-version",
+        "license",
+        "repository",
+        "homepage",
+    ] {
+        let inherited = package
+            .get(field)
+            .and_then(toml::Value::as_table)
+            .and_then(|value| value.get("workspace"))
+            .and_then(toml::Value::as_bool);
+        if inherited != Some(true) {
+            return Err(format!(
+                "crates/radroots/Cargo.toml package.{field} must inherit workspace metadata"
+            ));
+        }
+    }
+    let library = manifest
+        .get("lib")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| "crates/radroots/Cargo.toml must define [lib]".to_owned())?;
+    if library.get("name").and_then(toml::Value::as_str) != Some("radroots")
+        || library.get("path").and_then(toml::Value::as_str) != Some("src/lib.rs")
+    {
+        return Err("radroots facade [lib] must use name radroots and path src/lib.rs".to_owned());
+    }
+    for dependency_table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        if manifest
+            .get(dependency_table)
+            .and_then(toml::Value::as_table)
+            .is_some_and(|dependencies| !dependencies.is_empty())
+        {
+            return Err(format!(
+                "radroots scaffold must not depend on private migration packages through [{dependency_table}]"
+            ));
+        }
+    }
+
+    let features = manifest
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .ok_or_else(|| "crates/radroots/Cargo.toml must define [features]".to_owned())?;
+    let actual_features = features.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    let expected_features = RADROOTS_FACADE_FEATURES
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if actual_features != expected_features {
+        return Err(format!(
+            "radroots facade features must be exactly {}; found {}",
+            expected_features.into_iter().collect::<Vec<_>>().join(", "),
+            actual_features.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    let defaults = features
+        .get("default")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "radroots facade default feature must be an array".to_owned())?;
+    if defaults.len() != 1 || defaults[0].as_str() != Some("client") {
+        return Err("radroots facade default feature must be exactly client".to_owned());
+    }
+
+    let source_path = root.join("crates/radroots/src/lib.rs");
+    let source = fs::read_to_string(&source_path)
+        .map_err(|error| format!("failed to read {}: {error}", source_path.display()))?;
+    let actual_modules = source
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("pub mod ")
+                .and_then(|module| module.strip_suffix(';'))
+        })
+        .collect::<BTreeSet<_>>();
+    let expected_modules = RADROOTS_FACADE_MODULES.into_iter().collect::<BTreeSet<_>>();
+    if actual_modules != expected_modules {
+        return Err(format!(
+            "radroots facade modules must be exactly {}; found {}",
+            expected_modules.into_iter().collect::<Vec<_>>().join(", "),
+            actual_modules.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if source.contains("pub mod sdk") || source.contains("pub use radroots_sdk") {
+        return Err(
+            "radroots facade must not expose an sdk namespace or broad SDK re-export".to_owned(),
+        );
+    }
+    for module in RADROOTS_FACADE_MODULES {
+        if !root
+            .join("crates/radroots/src")
+            .join(format!("{module}.rs"))
+            .is_file()
+        {
+            return Err(format!(
+                "radroots facade module file {module}.rs is missing"
+            ));
+        }
+    }
+    if !root.join("crates/radroots/README.md").is_file() {
+        return Err("radroots facade README.md is missing".to_owned());
+    }
     Ok(())
 }
 

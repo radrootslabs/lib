@@ -1,0 +1,1 @@
+//! Curated signing entry points.
