@@ -1,10 +1,5 @@
 use thiserror::Error;
 
-#[cfg(all(feature = "std", feature = "json-file"))]
-use radroots_runtime::RuntimeJsonError;
-#[cfg(feature = "std")]
-use std::{io, path::PathBuf};
-
 /// Errors produced while validating public identity values.
 #[non_exhaustive]
 #[derive(Debug, Error)]
@@ -38,31 +33,4 @@ pub enum Error {
 
     #[error("username dots cannot be leading, trailing, or consecutive")]
     InvalidUsernameDotPlacement,
-}
-
-/// Transitional errors from the legacy filesystem identity API.
-#[cfg(feature = "std")]
-#[derive(Debug, Error)]
-pub enum IdentityError {
-    #[error("identity file missing at {0}")]
-    NotFound(PathBuf),
-
-    #[error("failed to read identity file at {0}: {1}")]
-    Read(PathBuf, #[source] io::Error),
-
-    #[error("failed to create identity directory {0}: {1}")]
-    CreateDir(PathBuf, #[source] io::Error),
-
-    #[error("failed to write identity file at {0}: {1}")]
-    Write(PathBuf, #[source] io::Error),
-
-    #[error("invalid identity JSON: {0}")]
-    InvalidJson(#[from] serde_json::Error),
-
-    #[cfg(feature = "json-file")]
-    #[error(transparent)]
-    Store(#[from] RuntimeJsonError),
-
-    #[error(transparent)]
-    Paths(#[from] radroots_runtime_paths::RadrootsRuntimePathsError),
 }

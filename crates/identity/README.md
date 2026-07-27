@@ -8,8 +8,7 @@ account, and profile value types for the Radroots package family.
  * validated canonical public keys, identity IDs, and account IDs;
  * public identity profiles and normalized usernames;
  * no raw secret keys, key generation, nsec/NIP-49 helpers, or secret export;
- * transitional public-profile JSON file helpers pending their extraction to
-   the host storage layer.
+ * no filesystem, runtime-path, protected-store, or secret-vault behavior.
 
 See `docs/migration/identity.md` in the repository for the approved signing,
 Nostr-key, secrets, and storage ownership boundaries.

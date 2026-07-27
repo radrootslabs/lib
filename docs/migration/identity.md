@@ -19,6 +19,7 @@ The approved destination boundaries are:
   `radroots_storage_sqlite` for durable secret persistence.
 
 Those destination APIs are introduced by their ordered release checkpoints.
-Until then, callers must not recreate secret ownership in `radroots_identity`
-or add a compatibility shim. Public identity profile file helpers remain only
-for the immediately following filesystem-extraction checkpoint.
+Until then, callers must not recreate secret ownership or persistence in
+`radroots_identity` or add a compatibility shim. The former identity/profile
+file helpers, default paths, runtime-path resolution, and encrypted storage
+APIs have been removed from this package.
