@@ -1,0 +1,47 @@
+schema_version = 1
+architecture_id = "radroots.crates.release.v1"
+
+[[deviation]]
+id = "RCRV1-DEV-001"
+date = "2026-07-27"
+status = "active"
+approval = "Explicit user correction dated 2026-07-27."
+affected_steps = ["015", "016", "017", "018", "019", "020", "021", "022", "023"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#repository-ownership",
+  "docs/specs/radroots_crates_release_v1.toml#repository_policy",
+]
+source_evidence = [
+  "The final v1 specification allocates 17 public packages to radrootslabs/lib and 2 to radrootslabs/sdk.",
+  "Both existing repositories have independent histories, workspaces, lockfiles, remotes, and standalone release boundaries.",
+]
+replacement_action = "Retain the two existing standalone repositories; replace import and monorepo-unification work with independent workspace, lockfile, metadata, dependency, and release qualification."
+verification = [
+  "Both repository-local architecture validators resolve every spec anchor.",
+  "The synchronized architecture catalog enforces the exact 17/2 ownership partition.",
+]
+unresolved_risk = "Parent gitlinks cannot advance until the new standalone commits are public-remote reachable under separate authorization."
+normative_architecture_change = false
+adr_required = false
+[[deviation]]
+id = "RCRV1-DEV-002"
+date = "2026-07-27"
+status = "active"
+approval = "Explicit user correction dated 2026-07-27."
+affected_steps = ["249"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#radroots",
+  "docs/specs/radroots_crates_release_v1.toml#repositories.sdk",
+]
+source_evidence = [
+  "The final v1 specification assigns the radroots facade to the existing sdk repository.",
+  "The approved sequence requires radroots to be the first crate-surface mutation after architecture controls are green.",
+]
+replacement_action = "Scaffold radroots in the sdk repository immediately after Step 014, then execute Steps 250-260 in their original order without repeating the scaffold portion of Step 249."
+verification = [
+  "The sdk release policy reserves radroots as an approved local package while publication remains frozen.",
+  "The facade scaffold checkpoint must add radroots only to the sdk workspace and architecture policy.",
+]
+unresolved_risk = "The facade remains non-publishable until the package-realistic Step 305 enablement gate."
+normative_architecture_change = false
+adr_required = false

@@ -23,7 +23,9 @@ This file exists for compatibility with tools that look for AGENTS.md.
 - Current source and tests are implementation evidence. They do not silently
   override `radroots.crates.release.v1`.
 - Record any evidence-based plan deviation in
-  `docs/implementation/DEVIATIONS.md` before proceeding.
+  `docs/implementation/deviations.toml`, following
+  `docs/implementation/DEVIATIONS.md`, before proceeding. Validate it with
+  `cargo xtask architecture`.
 
 ## 3. Repository operating model
 
@@ -54,6 +56,8 @@ Before editing code:
 - `nix flake check`
 - `nix run .#contract`
 - `nix run .#release-preflight`
+- `cargo xtask architecture` for controlled deviation records and local spec
+  anchors
 - targeted `cargo check -p <crate>` and `cargo test -p <crate>` only inside the Nix shell
 - `cargo xtask dto-roots --write` after changing configured DTO exports and
   `cargo xtask dto-roots --check` for exact generated-root freshness
@@ -111,6 +115,7 @@ trusted-publisher configuration without explicit authorization.
 - Split unrelated changes into separate commits.
 - If repository evidence proves a planned step obsolete or unsafe, record the
   evidence, affected specification anchor, disposition, and validation in
+  `docs/implementation/deviations.toml`, following
   `docs/implementation/DEVIATIONS.md`. A normative architecture change also
   requires an approved decision record. Never silently skip or reorder work.
 

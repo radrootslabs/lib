@@ -3,6 +3,8 @@
 #![recursion_limit = "256"]
 
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod architecture;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -16,6 +18,7 @@ use std::process::ExitCode;
 
 fn usage() {
     eprintln!("usage:");
+    eprintln!("  cargo xtask architecture");
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
     eprintln!("  cargo xtask contract nip09-reconciliation-manifest [--write]");
@@ -141,6 +144,7 @@ fn run_contract(args: &[String]) -> Result<(), String> {
 
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
+        Some("architecture") if args.len() == 1 => architecture::validate(&workspace_root()),
         Some("contract") => run_contract(&args[1..]),
         Some("coverage") => coverage::run(&args[1..]),
         Some("dto-roots") => dto_roots::run(&args[1..], &workspace_root()),
@@ -251,6 +255,8 @@ mod tests {
 
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
+
+        run(&["architecture".to_string()]).expect("architecture ledger validates");
 
         let invalid_dto_roots =
             run(&["dto-roots".to_string()]).expect_err("dto-roots requires an explicit mode");

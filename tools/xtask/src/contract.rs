@@ -8789,6 +8789,12 @@ fn validate_contract_bundle_with_release_policy_override_and_profile(
     validate_core_unit_dimension_variant_order(workspace_root)?;
     validate_coverage_policy_parity(workspace_root, &bundle.root)?;
     validate_version_governance(bundle, workspace_root)?;
+    if matches!(
+        authority_profile,
+        OperationAuthorityProfile::CapsuleCanonical
+    ) {
+        crate::architecture::validate(workspace_root)?;
+    }
     validate_release_publish_policy_with_override_and_control(
         workspace_root,
         &bundle.root,

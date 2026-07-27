@@ -43,5 +43,9 @@ private checkout. Do not publish, tag, merge, or change registry ownership
 without explicit authorization.
 
 When current evidence proves a planned step obsolete or unsafe, follow
-`docs/implementation/DEVIATIONS.md`. Record the evidence and affected spec
-anchor before changing the plan; do not silently redefine the architecture.
+`docs/implementation/DEVIATIONS.md` and validate the machine-readable ledger
+with `cargo xtask architecture`. Complete
+`docs/implementation/STEP_REPORT_TEMPLATE.md`, and keep
+`docs/implementation/TRACEABILITY.md` aligned with durable requirements.
+Record the evidence and affected spec anchor before changing the plan; do not
+silently redefine the architecture.
