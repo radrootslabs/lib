@@ -19,6 +19,7 @@ mod wasm_declarations;
 
 enum CommandAction<'a> {
     Architecture,
+    ArchitectureCi,
     CheckApiBoundaries,
     CheckDependencyBoundaries,
     GenerateAll,
@@ -41,6 +42,11 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
     let args = args.into_iter().collect::<Vec<_>>();
     match command_action(&args)? {
         CommandAction::Architecture => architecture::validate(&fs::workspace_root()?),
+        CommandAction::ArchitectureCi => {
+            let root = fs::workspace_root()?;
+            architecture::validate_ci(&root)?;
+            check::architecture_ci(&root)
+        }
         CommandAction::CheckApiBoundaries => {
             architecture::validate_api_boundaries(&fs::workspace_root()?)
         }
@@ -60,6 +66,7 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
 fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
     match args {
         [command] if command == "architecture" => Ok(CommandAction::Architecture),
+        [command] if command == "architecture-ci" => Ok(CommandAction::ArchitectureCi),
         [command] if command == "check-api-boundaries" => Ok(CommandAction::CheckApiBoundaries),
         [command] if command == "check-dependency-boundaries" => {
             Ok(CommandAction::CheckDependencyBoundaries)
@@ -83,7 +90,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask architecture | cargo xtask architecture-ci | cargo xtask check-api-boundaries | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -97,6 +104,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::Architecture
+        ));
+    }
+
+    #[test]
+    fn accepts_architecture_ci() {
+        let args = ["architecture-ci".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::ArchitectureCi
         ));
     }
 

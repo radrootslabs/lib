@@ -182,6 +182,12 @@ pub fn validate_api_boundaries(workspace_root: &Path) -> Result<(), String> {
     api_leakage::validate_public_api(workspace_root)
 }
 
+pub fn validate_ci(workspace_root: &Path) -> Result<(), String> {
+    validate(workspace_root)?;
+    dependency_boundary::validate_resolved_boundaries(workspace_root)?;
+    api_leakage::validate_public_api(workspace_root)
+}
+
 fn validate_workspace_toolchain(
     workspace_root: &Path,
     architecture: &ArchitectureIdentity,

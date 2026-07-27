@@ -156,6 +156,18 @@ pub fn check() -> Result<(), String> {
     Ok(())
 }
 
+pub fn architecture_ci(root: &Path) -> Result<(), String> {
+    validate_package_matrix()?;
+    check_publication_policy(root)?;
+    check_radroots_facade_scaffold(root)?;
+    validate_sdk_contracts(root)?;
+    check_sdk_feature_matrix(root)?;
+    check_forbidden_packages(root)?;
+    check_binding_crate_sources(root)?;
+    check_package_source_metadata(root)?;
+    check_generated_outputs(root)
+}
+
 fn check_radroots_facade_scaffold(root: &Path) -> Result<(), String> {
     let manifest_path = root.join("crates/radroots/Cargo.toml");
     let manifest_raw = fs::read_to_string(&manifest_path)
