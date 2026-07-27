@@ -266,7 +266,7 @@ where
             let publish_request =
                 RadrootsRelayPublishRequest::new(signed_event, targets, request.now_ms())
                     .map_err(nostr_error_to_transport_error)?
-                    .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::NoWait)
+                    .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::no_wait())
                     .try_with_idempotency_key(request.request_id())
                     .map_err(nostr_error_to_transport_error)?;
             let relay_receipts = match publish_signed_event(&self.adapter, publish_request).await {
@@ -757,45 +757,41 @@ fn relay_publish_satisfies_policy(
     target_count: usize,
     relays: &[RadrootsRelayPublishRelayReceipt],
 ) -> Result<bool, RadrootsRelayTransportError> {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::NoWait => Ok(true),
-        RadrootsTransportSatisfactionPolicy::Any { class }
-        | RadrootsTransportSatisfactionPolicy::All { class }
-        | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => {
-            let satisfied_count = relays
-                .iter()
-                .filter(|receipt| {
-                    relay_receipt_counts_toward_quorum(receipt)
-                        && receipt
-                            .outcome
-                            .to_transport_outcome()
-                            .status
-                            .counts_as_satisfied(*class)
-                })
-                .count();
-            Ok(policy.is_satisfied_by(target_count, satisfied_count)?)
-        }
-        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
-            policy.required_target_count(target_count)?;
-            let mut satisfied_required_targets = BTreeSet::new();
-            for receipt in relays {
-                let target = RadrootsTransportTarget::nostr_relay(&receipt.relay_url)?;
-                if targets.contains(target.fingerprint())
-                    && relay_receipt_counts_toward_quorum(receipt)
+    let Some(class) = policy.target_satisfaction_class() else {
+        return Ok(true);
+    };
+    let Some(targets) = policy.required_target_fingerprints() else {
+        let satisfied_count = relays
+            .iter()
+            .filter(|receipt| {
+                relay_receipt_counts_toward_quorum(receipt)
                     && receipt
                         .outcome
                         .to_transport_outcome()
                         .status
-                        .counts_as_satisfied(*class)
-                {
-                    satisfied_required_targets.insert(target.fingerprint().clone());
-                }
-            }
-            Ok(targets
-                .iter()
-                .all(|target| satisfied_required_targets.contains(target)))
+                        .counts_as_satisfied(class)
+            })
+            .count();
+        return Ok(policy.is_satisfied_by(target_count, satisfied_count)?);
+    };
+    policy.required_target_count(target_count)?;
+    let mut satisfied_required_targets = BTreeSet::new();
+    for receipt in relays {
+        let target = RadrootsTransportTarget::nostr_relay(&receipt.relay_url)?;
+        if targets.contains(target.fingerprint())
+            && relay_receipt_counts_toward_quorum(receipt)
+            && receipt
+                .outcome
+                .to_transport_outcome()
+                .status
+                .counts_as_satisfied(class)
+        {
+            satisfied_required_targets.insert(target.fingerprint().clone());
         }
     }
+    Ok(targets
+        .iter()
+        .all(|target| satisfied_required_targets.contains(target)))
 }
 
 fn relay_receipt_matches_target(

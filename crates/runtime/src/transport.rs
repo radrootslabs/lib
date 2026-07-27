@@ -382,20 +382,20 @@ fn satisfied_target_count_for_policy(
     policy: &RadrootsTransportSatisfactionPolicy,
     target_states: &[RadrootsRuntimeDeliveryTargetState],
 ) -> usize {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::NoWait => 0,
-        RadrootsTransportSatisfactionPolicy::Any { class }
-        | RadrootsTransportSatisfactionPolicy::All { class }
-        | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => target_states
+    let Some(class) = policy.target_satisfaction_class() else {
+        return 0;
+    };
+    match policy.required_target_fingerprints() {
+        None => target_states
             .iter()
-            .filter(|state| state.status.counts_as_satisfied(*class))
+            .filter(|state| state.status.counts_as_satisfied(class))
             .count(),
-        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => targets
+        Some(targets) => targets
             .iter()
             .filter(|required| {
                 target_states.iter().any(|state| {
                     state.target.fingerprint() == *required
-                        && state.status.counts_as_satisfied(*class)
+                        && state.status.counts_as_satisfied(class)
                 })
             })
             .count(),
@@ -407,15 +407,15 @@ fn target_states_satisfy_policy(
     policy: &RadrootsTransportSatisfactionPolicy,
     target_states: &[RadrootsRuntimeDeliveryTargetState],
 ) -> Result<bool, RadrootsRuntimeTransportError> {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::NoWait => Ok(true),
-        RadrootsTransportSatisfactionPolicy::Any { .. }
-        | RadrootsTransportSatisfactionPolicy::All { .. }
-        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => Ok(policy.is_satisfied_by(
+    if policy.target_satisfaction_class().is_none() {
+        return Ok(true);
+    }
+    match policy.required_target_fingerprints() {
+        None => Ok(policy.is_satisfied_by(
             target_states.len(),
             satisfied_target_count_for_policy(policy, target_states),
         )?),
-        RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } => {
+        Some(targets) => {
             policy.required_target_count(target_states.len())?;
             Ok(satisfied_target_count_for_policy(policy, target_states) == targets.len())
         }
@@ -427,8 +427,8 @@ fn dispatch_satisfaction_policy(
     policy: &RadrootsTransportSatisfactionPolicy,
 ) -> RadrootsTransportSatisfactionPolicy {
     match policy.target_satisfaction_class() {
-        Some(class) => RadrootsTransportSatisfactionPolicy::All { class },
-        None => RadrootsTransportSatisfactionPolicy::NoWait,
+        Some(class) => RadrootsTransportSatisfactionPolicy::all(class),
+        None => RadrootsTransportSatisfactionPolicy::no_wait(),
     }
 }
 
@@ -1403,7 +1403,8 @@ mod tests {
                 payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
-                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2)
+                        .expect("valid quorum"),
                     targets: vec![
                         RadrootsRuntimeDeliveryTarget::ready(
                             1,
@@ -1459,7 +1460,8 @@ mod tests {
                 payload: opaque_payload(),
                 plans: vec![RadrootsRuntimeDeliveryPlan {
                     delivery_plan_id: 7,
-                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+                    satisfaction_policy: RadrootsTransportSatisfactionPolicy::quorum_accepted(2)
+                        .expect("valid quorum"),
                     targets: vec![
                         RadrootsRuntimeDeliveryTarget::ready(
                             1,

@@ -1124,7 +1124,9 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
             1_000,
         )
         .expect("publish request")
-        .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::quorum_accepted(2)),
+        .with_satisfaction_policy(
+            RadrootsTransportSatisfactionPolicy::quorum_accepted(2).expect("valid quorum"),
+        ),
     )
     .await
     .expect("publish");
@@ -1662,7 +1664,7 @@ async fn publish_all_policy_uses_requested_target_count() {
         &PartialPublishAdapter,
         RadrootsRelayPublishRequest::new(verified_signed_event(signed), targets, 1_081)
             .expect("publish request")
-            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::NoWait),
+            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::no_wait()),
     )
     .await
     .expect("no-wait publish");
@@ -4790,7 +4792,7 @@ async fn outbox_publish_marks_published_when_delivery_plan_satisfaction_is_met_w
                 RELAY_SECONDARY_WSS.to_owned(),
                 RELAY_TERTIARY_WSS.to_owned(),
             ],
-            RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+            RadrootsTransportSatisfactionPolicy::quorum_accepted(2).expect("valid quorum"),
         ))
         .await
         .expect("enqueue");

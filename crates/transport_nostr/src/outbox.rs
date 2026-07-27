@@ -181,7 +181,7 @@ where
     let target_strings = targets.relay_strings();
     let active_delivery_plan_id = publishable.active_delivery_plan_id;
     let request = RadrootsRelayPublishRequest::new(signed_event.clone(), targets, now_ms)?
-        .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::NoWait)
+        .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::no_wait())
         .try_with_idempotency_key(outbox_publish_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
@@ -885,15 +885,10 @@ async fn publishable_relays(
             ))
         })?;
     let satisfaction_required_count = plan.required_success_count as usize;
-    let required_targets = match &plan.satisfaction_policy {
-        RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } => {
-            Some(targets.clone())
-        }
-        RadrootsTransportSatisfactionPolicy::NoWait
-        | RadrootsTransportSatisfactionPolicy::Any { .. }
-        | RadrootsTransportSatisfactionPolicy::All { .. }
-        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => None,
-    };
+    let required_targets = plan
+        .satisfaction_policy
+        .required_target_fingerprints()
+        .map(<[_]>::to_vec);
     let active_targets = targets
         .iter()
         .filter(|target| target.delivery_plan_id == active_delivery_plan_id)
@@ -1050,33 +1045,26 @@ fn satisfaction_policy_for_remaining_count(
     exact_required_targets: Option<&[RadrootsTransportTargetFingerprint]>,
 ) -> RadrootsTransportSatisfactionPolicy {
     if let Some(targets) = exact_required_targets {
-        return RadrootsTransportSatisfactionPolicy::RequiredTargets {
-            class: satisfaction_class,
-            targets: targets.to_vec(),
-        };
+        return RadrootsTransportSatisfactionPolicy::required_targets(
+            satisfaction_class,
+            targets.to_vec(),
+        )
+        .expect("remaining required targets retain a validated nonempty unique set");
     }
     if remaining_satisfaction_count >= target_count {
-        return RadrootsTransportSatisfactionPolicy::All {
-            class: satisfaction_class,
-        };
+        return RadrootsTransportSatisfactionPolicy::all(satisfaction_class);
     }
     if remaining_satisfaction_count == 0 {
-        return RadrootsTransportSatisfactionPolicy::NoWait;
+        return RadrootsTransportSatisfactionPolicy::no_wait();
     }
     if remaining_satisfaction_count == 1 {
-        return RadrootsTransportSatisfactionPolicy::Any {
-            class: satisfaction_class,
-        };
+        return RadrootsTransportSatisfactionPolicy::any(satisfaction_class);
     }
     let Ok(count) = u16::try_from(remaining_satisfaction_count) else {
-        return RadrootsTransportSatisfactionPolicy::All {
-            class: satisfaction_class,
-        };
+        return RadrootsTransportSatisfactionPolicy::all(satisfaction_class);
     };
-    RadrootsTransportSatisfactionPolicy::Quorum {
-        class: satisfaction_class,
-        threshold: count,
-    }
+    RadrootsTransportSatisfactionPolicy::quorum(satisfaction_class, count)
+        .expect("remaining quorum is bounded by the validated target set")
 }
 
 async fn ingest_publish_observation(
@@ -1151,7 +1139,7 @@ mod tests {
                 3,
                 None
             ),
-            RadrootsTransportSatisfactionPolicy::quorum_delivered(2)
+            RadrootsTransportSatisfactionPolicy::quorum_delivered(2).expect("valid quorum")
         );
         let required_target =
             RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("required target");
@@ -1175,9 +1163,7 @@ mod tests {
                 usize::from(u16::MAX) + 2,
                 None,
             ),
-            RadrootsTransportSatisfactionPolicy::All {
-                class: RadrootsTransportSatisfactionClass::Accepted,
-            }
+            RadrootsTransportSatisfactionPolicy::all(RadrootsTransportSatisfactionClass::Accepted,)
         );
         assert_eq!(
             satisfaction_policy_for_remaining_count(
@@ -1186,7 +1172,7 @@ mod tests {
                 3,
                 None,
             ),
-            RadrootsTransportSatisfactionPolicy::NoWait
+            RadrootsTransportSatisfactionPolicy::no_wait()
         );
 
         assert!(counts_as_accepted_for_plan(

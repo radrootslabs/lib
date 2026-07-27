@@ -22,9 +22,23 @@ pub enum RadrootsTransportSatisfactionClass {
     DurableOrObserved,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RadrootsTransportSatisfactionPolicyKind {
+    NoWait,
+    Any,
+    All,
+    Quorum,
+    RequiredTargets,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RadrootsTransportSatisfactionPolicy {
+    body: RadrootsTransportSatisfactionPolicyBody,
+}
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTransportSatisfactionPolicy {
+enum RadrootsTransportSatisfactionPolicyBody {
     NoWait,
     Any {
         class: RadrootsTransportSatisfactionClass,
@@ -44,121 +58,108 @@ pub enum RadrootsTransportSatisfactionPolicy {
 
 impl RadrootsTransportSatisfactionPolicy {
     pub fn no_wait() -> Self {
-        Self::NoWait
+        Self {
+            body: RadrootsTransportSatisfactionPolicyBody::NoWait,
+        }
+    }
+
+    pub fn any(class: RadrootsTransportSatisfactionClass) -> Self {
+        Self {
+            body: RadrootsTransportSatisfactionPolicyBody::Any { class },
+        }
+    }
+
+    pub fn all(class: RadrootsTransportSatisfactionClass) -> Self {
+        Self {
+            body: RadrootsTransportSatisfactionPolicyBody::All { class },
+        }
+    }
+
+    pub fn quorum(
+        class: RadrootsTransportSatisfactionClass,
+        threshold: u16,
+    ) -> Result<Self, RadrootsTransportError> {
+        if threshold == 0 || usize::from(threshold) > RADROOTS_TRANSPORT_TARGET_MAX_COUNT {
+            return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
+        }
+        Ok(Self {
+            body: RadrootsTransportSatisfactionPolicyBody::Quorum { class, threshold },
+        })
     }
 
     pub fn any_accepted() -> Self {
-        Self::Any {
-            class: RadrootsTransportSatisfactionClass::Accepted,
-        }
+        Self::any(RadrootsTransportSatisfactionClass::Accepted)
     }
 
     pub fn all_accepted() -> Self {
-        Self::All {
-            class: RadrootsTransportSatisfactionClass::Accepted,
-        }
+        Self::all(RadrootsTransportSatisfactionClass::Accepted)
     }
 
-    pub fn quorum_accepted(threshold: u16) -> Self {
-        Self::Quorum {
-            class: RadrootsTransportSatisfactionClass::Accepted,
-            threshold,
-        }
+    pub fn quorum_accepted(threshold: u16) -> Result<Self, RadrootsTransportError> {
+        Self::quorum(RadrootsTransportSatisfactionClass::Accepted, threshold)
     }
 
     pub fn any_forwarded() -> Self {
-        Self::Any {
-            class: RadrootsTransportSatisfactionClass::Forwarded,
-        }
+        Self::any(RadrootsTransportSatisfactionClass::Forwarded)
     }
 
     pub fn all_forwarded() -> Self {
-        Self::All {
-            class: RadrootsTransportSatisfactionClass::Forwarded,
-        }
+        Self::all(RadrootsTransportSatisfactionClass::Forwarded)
     }
 
-    pub fn quorum_forwarded(threshold: u16) -> Self {
-        Self::Quorum {
-            class: RadrootsTransportSatisfactionClass::Forwarded,
-            threshold,
-        }
+    pub fn quorum_forwarded(threshold: u16) -> Result<Self, RadrootsTransportError> {
+        Self::quorum(RadrootsTransportSatisfactionClass::Forwarded, threshold)
     }
 
     pub fn any_stored() -> Self {
-        Self::Any {
-            class: RadrootsTransportSatisfactionClass::Stored,
-        }
+        Self::any(RadrootsTransportSatisfactionClass::Stored)
     }
 
     pub fn all_stored() -> Self {
-        Self::All {
-            class: RadrootsTransportSatisfactionClass::Stored,
-        }
+        Self::all(RadrootsTransportSatisfactionClass::Stored)
     }
 
-    pub fn quorum_stored(threshold: u16) -> Self {
-        Self::Quorum {
-            class: RadrootsTransportSatisfactionClass::Stored,
-            threshold,
-        }
+    pub fn quorum_stored(threshold: u16) -> Result<Self, RadrootsTransportError> {
+        Self::quorum(RadrootsTransportSatisfactionClass::Stored, threshold)
     }
 
     pub fn any_seen() -> Self {
-        Self::Any {
-            class: RadrootsTransportSatisfactionClass::Seen,
-        }
+        Self::any(RadrootsTransportSatisfactionClass::Seen)
     }
 
     pub fn all_seen() -> Self {
-        Self::All {
-            class: RadrootsTransportSatisfactionClass::Seen,
-        }
+        Self::all(RadrootsTransportSatisfactionClass::Seen)
     }
 
-    pub fn quorum_seen(threshold: u16) -> Self {
-        Self::Quorum {
-            class: RadrootsTransportSatisfactionClass::Seen,
-            threshold,
-        }
+    pub fn quorum_seen(threshold: u16) -> Result<Self, RadrootsTransportError> {
+        Self::quorum(RadrootsTransportSatisfactionClass::Seen, threshold)
     }
 
     pub fn any_delivered() -> Self {
-        Self::Any {
-            class: RadrootsTransportSatisfactionClass::Delivered,
-        }
+        Self::any(RadrootsTransportSatisfactionClass::Delivered)
     }
 
     pub fn all_delivered() -> Self {
-        Self::All {
-            class: RadrootsTransportSatisfactionClass::Delivered,
-        }
+        Self::all(RadrootsTransportSatisfactionClass::Delivered)
     }
 
-    pub fn quorum_delivered(threshold: u16) -> Self {
-        Self::Quorum {
-            class: RadrootsTransportSatisfactionClass::Delivered,
-            threshold,
-        }
+    pub fn quorum_delivered(threshold: u16) -> Result<Self, RadrootsTransportError> {
+        Self::quorum(RadrootsTransportSatisfactionClass::Delivered, threshold)
     }
 
     pub fn any_durable_or_observed() -> Self {
-        Self::Any {
-            class: RadrootsTransportSatisfactionClass::DurableOrObserved,
-        }
+        Self::any(RadrootsTransportSatisfactionClass::DurableOrObserved)
     }
 
     pub fn all_durable_or_observed() -> Self {
-        Self::All {
-            class: RadrootsTransportSatisfactionClass::DurableOrObserved,
-        }
+        Self::all(RadrootsTransportSatisfactionClass::DurableOrObserved)
     }
 
-    pub fn quorum_durable_or_observed(threshold: u16) -> Self {
-        Self::Quorum {
-            class: RadrootsTransportSatisfactionClass::DurableOrObserved,
+    pub fn quorum_durable_or_observed(threshold: u16) -> Result<Self, RadrootsTransportError> {
+        Self::quorum(
+            RadrootsTransportSatisfactionClass::DurableOrObserved,
             threshold,
-        }
+        )
     }
 
     pub fn required_targets(
@@ -167,23 +168,62 @@ impl RadrootsTransportSatisfactionPolicy {
     ) -> Result<Self, RadrootsTransportError> {
         validate_required_targets(&targets)?;
         targets.sort();
-        Ok(Self::RequiredTargets { class, targets })
+        Ok(Self {
+            body: RadrootsTransportSatisfactionPolicyBody::RequiredTargets { class, targets },
+        })
+    }
+
+    pub fn kind(&self) -> RadrootsTransportSatisfactionPolicyKind {
+        match &self.body {
+            RadrootsTransportSatisfactionPolicyBody::NoWait => {
+                RadrootsTransportSatisfactionPolicyKind::NoWait
+            }
+            RadrootsTransportSatisfactionPolicyBody::Any { .. } => {
+                RadrootsTransportSatisfactionPolicyKind::Any
+            }
+            RadrootsTransportSatisfactionPolicyBody::All { .. } => {
+                RadrootsTransportSatisfactionPolicyKind::All
+            }
+            RadrootsTransportSatisfactionPolicyBody::Quorum { .. } => {
+                RadrootsTransportSatisfactionPolicyKind::Quorum
+            }
+            RadrootsTransportSatisfactionPolicyBody::RequiredTargets { .. } => {
+                RadrootsTransportSatisfactionPolicyKind::RequiredTargets
+            }
+        }
+    }
+
+    pub fn quorum_threshold(&self) -> Option<u16> {
+        match &self.body {
+            RadrootsTransportSatisfactionPolicyBody::Quorum { threshold, .. } => Some(*threshold),
+            RadrootsTransportSatisfactionPolicyBody::NoWait
+            | RadrootsTransportSatisfactionPolicyBody::Any { .. }
+            | RadrootsTransportSatisfactionPolicyBody::All { .. }
+            | RadrootsTransportSatisfactionPolicyBody::RequiredTargets { .. } => None,
+        }
     }
 
     pub fn target_satisfaction_class(&self) -> Option<RadrootsTransportSatisfactionClass> {
-        match self {
-            Self::NoWait => None,
-            Self::Any { class }
-            | Self::All { class }
-            | Self::Quorum { class, .. }
-            | Self::RequiredTargets { class, .. } => Some(*class),
+        match &self.body {
+            RadrootsTransportSatisfactionPolicyBody::NoWait => None,
+            RadrootsTransportSatisfactionPolicyBody::Any { class }
+            | RadrootsTransportSatisfactionPolicyBody::All { class }
+            | RadrootsTransportSatisfactionPolicyBody::Quorum { class, .. }
+            | RadrootsTransportSatisfactionPolicyBody::RequiredTargets { class, .. } => {
+                Some(*class)
+            }
         }
     }
 
     pub fn required_target_fingerprints(&self) -> Option<&[RadrootsTransportTargetFingerprint]> {
-        match self {
-            Self::RequiredTargets { targets, .. } => Some(targets),
-            Self::NoWait | Self::Any { .. } | Self::All { .. } | Self::Quorum { .. } => None,
+        match &self.body {
+            RadrootsTransportSatisfactionPolicyBody::RequiredTargets { targets, .. } => {
+                Some(targets)
+            }
+            RadrootsTransportSatisfactionPolicyBody::NoWait
+            | RadrootsTransportSatisfactionPolicyBody::Any { .. }
+            | RadrootsTransportSatisfactionPolicyBody::All { .. }
+            | RadrootsTransportSatisfactionPolicyBody::Quorum { .. } => None,
         }
     }
 
@@ -191,20 +231,22 @@ impl RadrootsTransportSatisfactionPolicy {
         &self,
         total_targets: usize,
     ) -> Result<usize, RadrootsTransportError> {
-        if total_targets == 0 && !matches!(self, Self::NoWait) {
+        if total_targets == 0 && self.kind() != RadrootsTransportSatisfactionPolicyKind::NoWait {
             return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
         }
-        match self {
-            Self::NoWait => Ok(0),
-            Self::All { .. } => Ok(total_targets),
-            Self::Any { .. } => Ok(1),
-            Self::Quorum { threshold, .. }
+        match &self.body {
+            RadrootsTransportSatisfactionPolicyBody::NoWait => Ok(0),
+            RadrootsTransportSatisfactionPolicyBody::All { .. } => Ok(total_targets),
+            RadrootsTransportSatisfactionPolicyBody::Any { .. } => Ok(1),
+            RadrootsTransportSatisfactionPolicyBody::Quorum { threshold, .. }
                 if *threshold > 0 && usize::from(*threshold) <= total_targets =>
             {
                 Ok(usize::from(*threshold))
             }
-            Self::Quorum { .. } => Err(RadrootsTransportError::InvalidSatisfactionPolicy),
-            Self::RequiredTargets { targets, .. } => {
+            RadrootsTransportSatisfactionPolicyBody::Quorum { .. } => {
+                Err(RadrootsTransportError::InvalidSatisfactionPolicy)
+            }
+            RadrootsTransportSatisfactionPolicyBody::RequiredTargets { targets, .. } => {
                 validate_required_targets(targets)?;
                 if targets.len() > total_targets {
                     return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
@@ -219,7 +261,7 @@ impl RadrootsTransportSatisfactionPolicy {
         total_targets: usize,
         satisfied_targets: usize,
     ) -> Result<bool, RadrootsTransportError> {
-        if matches!(self, Self::RequiredTargets { .. }) {
+        if self.kind() == RadrootsTransportSatisfactionPolicyKind::RequiredTargets {
             return Err(RadrootsTransportError::InvalidSatisfactionPolicy);
         }
         let required = self.required_target_count(total_targets)?;
@@ -231,7 +273,8 @@ impl RadrootsTransportSatisfactionPolicy {
         target_set: &RadrootsTransportTargetSet,
     ) -> Result<(), RadrootsTransportError> {
         self.required_target_count(target_set.len())?;
-        if let Self::RequiredTargets { targets, .. } = self {
+        if let RadrootsTransportSatisfactionPolicyBody::RequiredTargets { targets, .. } = &self.body
+        {
             for required in targets {
                 if !target_set
                     .targets()
@@ -247,7 +290,18 @@ impl RadrootsTransportSatisfactionPolicy {
 }
 
 #[cfg(feature = "serde")]
+impl serde::Serialize for RadrootsTransportSatisfactionPolicy {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.body.serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
 #[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 enum RadrootsTransportSatisfactionPolicyWire {
     NoWait,
     Any {
@@ -262,6 +316,7 @@ enum RadrootsTransportSatisfactionPolicyWire {
     },
     RequiredTargets {
         class: RadrootsTransportSatisfactionClass,
+        #[serde(deserialize_with = "deserialize_required_target_fingerprints")]
         targets: Vec<RadrootsTransportTargetFingerprint>,
     },
 }
@@ -273,22 +328,31 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportSatisfactionPolicy {
         D: serde::Deserializer<'de>,
     {
         match RadrootsTransportSatisfactionPolicyWire::deserialize(deserializer)? {
-            RadrootsTransportSatisfactionPolicyWire::NoWait => Ok(Self::NoWait),
-            RadrootsTransportSatisfactionPolicyWire::Any { class } => Ok(Self::Any { class }),
-            RadrootsTransportSatisfactionPolicyWire::All { class } => Ok(Self::All { class }),
-            RadrootsTransportSatisfactionPolicyWire::Quorum { class, threshold }
-                if threshold > 0 =>
-            {
-                Ok(Self::Quorum { class, threshold })
+            RadrootsTransportSatisfactionPolicyWire::NoWait => Ok(Self::no_wait()),
+            RadrootsTransportSatisfactionPolicyWire::Any { class } => Ok(Self::any(class)),
+            RadrootsTransportSatisfactionPolicyWire::All { class } => Ok(Self::all(class)),
+            RadrootsTransportSatisfactionPolicyWire::Quorum { class, threshold } => {
+                Self::quorum(class, threshold).map_err(serde::de::Error::custom)
             }
-            RadrootsTransportSatisfactionPolicyWire::Quorum { .. } => Err(
-                serde::de::Error::custom(RadrootsTransportError::InvalidSatisfactionPolicy),
-            ),
             RadrootsTransportSatisfactionPolicyWire::RequiredTargets { class, targets } => {
                 Self::required_targets(class, targets).map_err(serde::de::Error::custom)
             }
         }
     }
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_required_target_fingerprints<'de, D>(
+    deserializer: D,
+) -> Result<Vec<RadrootsTransportTargetFingerprint>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_vec(
+        deserializer,
+        "required_target_count",
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    )
 }
 
 fn validate_required_targets(
@@ -604,23 +668,23 @@ impl RadrootsTransportDeliveryReceipt {
         policy: &RadrootsTransportSatisfactionPolicy,
     ) -> Result<bool, RadrootsTransportError> {
         policy.validate_for_target_set(&self.target_set)?;
-        match policy {
-            RadrootsTransportSatisfactionPolicy::NoWait => Ok(true),
-            RadrootsTransportSatisfactionPolicy::Any { class }
-            | RadrootsTransportSatisfactionPolicy::All { class }
-            | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => {
-                policy.is_satisfied_by(self.target_set.len(), self.satisfied_target_count(*class))
-            }
-            RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
-                validate_required_targets(targets)?;
-                Ok(targets.iter().all(|required| {
-                    self.target_receipts.iter().any(|receipt| {
-                        receipt.target.fingerprint() == required
-                            && receipt.status.counts_as_satisfied(*class)
-                    })
-                }))
-            }
+        if policy.kind() == RadrootsTransportSatisfactionPolicyKind::NoWait {
+            return Ok(true);
         }
+        let class = policy
+            .target_satisfaction_class()
+            .ok_or(RadrootsTransportError::InvalidSatisfactionPolicy)?;
+        let Some(targets) = policy.required_target_fingerprints() else {
+            return policy
+                .is_satisfied_by(self.target_set.len(), self.satisfied_target_count(class));
+        };
+        validate_required_targets(targets)?;
+        Ok(targets.iter().all(|required| {
+            self.target_receipts.iter().any(|receipt| {
+                receipt.target.fingerprint() == required
+                    && receipt.status.counts_as_satisfied(class)
+            })
+        }))
     }
 }
 

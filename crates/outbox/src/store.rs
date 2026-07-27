@@ -34,9 +34,10 @@ use radroots_event_store::{
     RadrootsTransportObservationType,
 };
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RadrootsTransportError,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
+    RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportSatisfactionPolicyKind, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
 };
 use serde::Serialize;
@@ -1886,22 +1887,15 @@ fn prepare_delivery_plan(
 fn canonical_satisfaction_policy(
     policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<RadrootsTransportSatisfactionPolicy, RadrootsOutboxError> {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => Ok(
-            RadrootsTransportSatisfactionPolicy::required_targets(*class, targets.clone())?,
-        ),
-        RadrootsTransportSatisfactionPolicy::NoWait
-        | RadrootsTransportSatisfactionPolicy::Any { .. }
-        | RadrootsTransportSatisfactionPolicy::All { .. }
-        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => Ok(policy.clone()),
-    }
+    policy.required_target_count(RADROOTS_TRANSPORT_TARGET_MAX_COUNT)?;
+    Ok(policy.clone())
 }
 
 fn validate_required_targets_belong_to_plan(
     policy: &RadrootsTransportSatisfactionPolicy,
     prepared_targets: &[PreparedDeliveryTarget],
 ) -> Result<(), RadrootsOutboxError> {
-    let RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } = policy else {
+    let Some(targets) = policy.required_target_fingerprints() else {
         return Ok(());
     };
     if targets.iter().all(|required| {
@@ -2570,18 +2564,12 @@ fn delivery_plan_status_targets<'a>(
     policy: &RadrootsTransportSatisfactionPolicy,
     targets: &'a [RadrootsOutboxDeliveryTargetRecord],
 ) -> Vec<&'a RadrootsOutboxDeliveryTargetRecord> {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::RequiredTargets {
-            targets: required_targets,
-            ..
-        } => targets
+    match policy.required_target_fingerprints() {
+        Some(required_targets) => targets
             .iter()
             .filter(|target| required_targets.contains(&target.endpoint_fingerprint))
             .collect(),
-        RadrootsTransportSatisfactionPolicy::NoWait
-        | RadrootsTransportSatisfactionPolicy::Any { .. }
-        | RadrootsTransportSatisfactionPolicy::All { .. }
-        | RadrootsTransportSatisfactionPolicy::Quorum { .. } => targets.iter().collect(),
+        None => targets.iter().collect(),
     }
 }
 
@@ -2589,23 +2577,20 @@ fn outbox_satisfied_target_count(
     policy: &RadrootsTransportSatisfactionPolicy,
     targets: &[RadrootsOutboxDeliveryTargetRecord],
 ) -> i64 {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::NoWait => 0,
-        RadrootsTransportSatisfactionPolicy::Any { class }
-        | RadrootsTransportSatisfactionPolicy::All { class }
-        | RadrootsTransportSatisfactionPolicy::Quorum { class, .. } => targets
+    let Some(class) = policy.target_satisfaction_class() else {
+        return 0;
+    };
+    match policy.required_target_fingerprints() {
+        None => targets
             .iter()
-            .filter(|target| target.status.counts_as_transport_satisfaction(*class))
+            .filter(|target| target.status.counts_as_transport_satisfaction(class))
             .count() as i64,
-        RadrootsTransportSatisfactionPolicy::RequiredTargets {
-            class,
-            targets: required_targets,
-        } => required_targets
+        Some(required_targets) => required_targets
             .iter()
             .filter(|required| {
                 targets.iter().any(|target| {
                     target.endpoint_fingerprint == **required
-                        && target.status.counts_as_transport_satisfaction(*class)
+                        && target.status.counts_as_transport_satisfaction(class)
                 })
             })
             .count() as i64,
@@ -3176,22 +3161,32 @@ fn parse_optional_stored_mutation_id(
 }
 
 fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolicy) -> String {
-    match policy {
-        RadrootsTransportSatisfactionPolicy::NoWait => "no_wait".to_owned(),
-        RadrootsTransportSatisfactionPolicy::All { class } => {
-            format!("all_{}", satisfaction_class_storage_value(*class))
-        }
-        RadrootsTransportSatisfactionPolicy::Any { class } => {
-            format!("any_{}", satisfaction_class_storage_value(*class))
-        }
-        RadrootsTransportSatisfactionPolicy::Quorum { class, threshold } => {
+    let class = policy.target_satisfaction_class();
+    match policy.kind() {
+        RadrootsTransportSatisfactionPolicyKind::NoWait => "no_wait".to_owned(),
+        RadrootsTransportSatisfactionPolicyKind::All => {
             format!(
-                "quorum_{}:{threshold}",
-                satisfaction_class_storage_value(*class)
+                "all_{}",
+                satisfaction_class_storage_value(class.expect("all policy class"))
             )
         }
-        RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } => {
-            let mut fingerprints = targets
+        RadrootsTransportSatisfactionPolicyKind::Any => {
+            format!(
+                "any_{}",
+                satisfaction_class_storage_value(class.expect("any policy class"))
+            )
+        }
+        RadrootsTransportSatisfactionPolicyKind::Quorum => {
+            format!(
+                "quorum_{}:{}",
+                satisfaction_class_storage_value(class.expect("quorum policy class")),
+                policy.quorum_threshold().expect("quorum threshold")
+            )
+        }
+        RadrootsTransportSatisfactionPolicyKind::RequiredTargets => {
+            let mut fingerprints = policy
+                .required_target_fingerprints()
+                .expect("required-target policy fingerprints")
                 .iter()
                 .map(RadrootsTransportTargetFingerprint::as_str)
                 .collect::<Vec<_>>();
@@ -3199,7 +3194,7 @@ fn satisfaction_policy_storage_value(policy: &RadrootsTransportSatisfactionPolic
             let fingerprints = fingerprints.join(",");
             format!(
                 "required_{}:{fingerprints}",
-                satisfaction_class_storage_value(*class)
+                satisfaction_class_storage_value(class.expect("required-target policy class"))
             )
         }
     }
@@ -3241,13 +3236,13 @@ fn parse_satisfaction_policy(
         .strip_prefix("all_")
         .and_then(parse_satisfaction_class_storage_value)
     {
-        return Ok(RadrootsTransportSatisfactionPolicy::All { class });
+        return Ok(RadrootsTransportSatisfactionPolicy::all(class));
     }
     if let Some(class) = value
         .strip_prefix("any_")
         .and_then(parse_satisfaction_class_storage_value)
     {
-        return Ok(RadrootsTransportSatisfactionPolicy::Any { class });
+        return Ok(RadrootsTransportSatisfactionPolicy::any(class));
     }
     if let Some((class_label, threshold)) = value
         .strip_prefix("quorum_")
@@ -3255,10 +3250,10 @@ fn parse_satisfaction_policy(
         && threshold == required_success_count.to_string()
         && let Some(class) = parse_satisfaction_class_storage_value(class_label)
     {
-        return Ok(RadrootsTransportSatisfactionPolicy::Quorum {
+        return Ok(RadrootsTransportSatisfactionPolicy::quorum(
             class,
-            threshold: required_count_u16(required_success_count)?,
-        });
+            required_count_u16(required_success_count)?,
+        )?);
     }
     if let Some((class_label, fingerprints)) = value
         .strip_prefix("required_")
@@ -3594,7 +3589,7 @@ mod tests {
                 2,
             ),
             (
-                RadrootsTransportSatisfactionPolicy::quorum_seen(2),
+                RadrootsTransportSatisfactionPolicy::quorum_seen(2).expect("valid quorum"),
                 "quorum_seen:2",
                 2,
             ),
@@ -3604,7 +3599,7 @@ mod tests {
                 1,
             ),
             (
-                RadrootsTransportSatisfactionPolicy::quorum_delivered(2),
+                RadrootsTransportSatisfactionPolicy::quorum_delivered(2).expect("valid quorum"),
                 "quorum_delivered:2",
                 2,
             ),
@@ -3621,14 +3616,16 @@ mod tests {
     fn required_target_policy_idempotency_is_order_independent() {
         let first = nostr_target("wss://required-one.example");
         let second = nostr_target("wss://required-two.example");
-        let first_policy = RadrootsTransportSatisfactionPolicy::RequiredTargets {
-            class: RadrootsTransportSatisfactionClass::Accepted,
-            targets: vec![second.fingerprint().clone(), first.fingerprint().clone()],
-        };
-        let second_policy = RadrootsTransportSatisfactionPolicy::RequiredTargets {
-            class: RadrootsTransportSatisfactionClass::Accepted,
-            targets: vec![first.fingerprint().clone(), second.fingerprint().clone()],
-        };
+        let first_policy = RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            vec![second.fingerprint().clone(), first.fingerprint().clone()],
+        )
+        .expect("first required-target policy");
+        let second_policy = RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            vec![first.fingerprint().clone(), second.fingerprint().clone()],
+        )
+        .expect("second required-target policy");
         let targets = vec![first, second];
 
         let first_prepared = prepare_delivery_plan(
@@ -6805,7 +6802,7 @@ mod tests {
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.nostr.local",
                     7,
-                    RadrootsTransportSatisfactionPolicy::quorum_accepted(1),
+                    RadrootsTransportSatisfactionPolicy::quorum_accepted(1).expect("valid quorum"),
                     vec![
                         nostr_target(NOSTR_PRIMARY_WSS),
                         nostr_target(NOSTR_SECONDARY_WSS),
@@ -6825,7 +6822,7 @@ mod tests {
         assert_eq!(plans.len(), 1);
         assert_eq!(
             plans[0].satisfaction_policy,
-            RadrootsTransportSatisfactionPolicy::quorum_accepted(1)
+            RadrootsTransportSatisfactionPolicy::quorum_accepted(1).expect("valid quorum")
         );
         assert_eq!(plans[0].required_success_count, 1);
         assert_eq!(plans[0].target_policy_version, 7);
@@ -7449,7 +7446,7 @@ mod tests {
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.explicit.multi_target",
                     1,
-                    RadrootsTransportSatisfactionPolicy::quorum_accepted(2),
+                    RadrootsTransportSatisfactionPolicy::quorum_accepted(2).expect("valid quorum"),
                     vec![
                         nostr_target(NOSTR_PRIMARY_WSS),
                         reticulum_target("reticulum:local"),

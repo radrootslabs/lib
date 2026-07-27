@@ -725,11 +725,11 @@ fn required_target_semantics_stay_fingerprint_exact() {
     let nostr_publish_source =
         read_source(crates_root.join("transport_nostr/src/publish.rs").as_path());
     for required in [
-        "RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } =>",
+        "let Some(targets) = policy.required_target_fingerprints() else",
         "let mut satisfied_required_targets = BTreeSet::new();",
         "targets.contains(target.fingerprint())",
-        "counts_as_satisfied(*class)",
-        "targets\n                .iter()\n                .all(|target| satisfied_required_targets.contains(target))",
+        "counts_as_satisfied(class)",
+        "targets\n        .iter()\n        .all(|target| satisfied_required_targets.contains(target))",
     ] {
         assert!(
             nostr_publish_source.contains(required),
@@ -741,11 +741,11 @@ fn required_target_semantics_stay_fingerprint_exact() {
         read_source(crates_root.join("transport_nostr/src/outbox.rs").as_path());
     let publishable_relays_source = source_between(
         nostr_outbox_source.as_str(),
-        "let required_targets = match &plan.satisfaction_policy",
+        "let required_targets = plan",
         "Ok(PublishableRelays {",
     );
     for required in [
-        "RadrootsTransportSatisfactionPolicy::RequiredTargets { targets, .. } =>",
+        ".required_target_fingerprints()",
         ".is_none_or(|required| required.contains(&target.endpoint_fingerprint))",
         ".is_some_and(|required| required.contains(&target.endpoint_fingerprint))",
         "required_targets.is_none() || required_for_satisfaction",

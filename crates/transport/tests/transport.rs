@@ -11,8 +11,9 @@ use radroots_transport::{
     RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportSatisfactionPolicyKind,
+    RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
+    RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
     ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
     ReticulumFragmentIntegrityV1, ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1,
@@ -314,14 +315,20 @@ fn satisfaction_policy_counts_target_statuses() {
     let no_wait = RadrootsTransportSatisfactionPolicy::no_wait();
     let all = RadrootsTransportSatisfactionPolicy::all_accepted();
     let any = RadrootsTransportSatisfactionPolicy::any_accepted();
-    let two = RadrootsTransportSatisfactionPolicy::quorum_accepted(2);
-    let delivered = RadrootsTransportSatisfactionPolicy::quorum_delivered(2);
+    let two = RadrootsTransportSatisfactionPolicy::quorum_accepted(2).expect("valid quorum");
+    let delivered = RadrootsTransportSatisfactionPolicy::quorum_delivered(2).expect("valid quorum");
     let forwarded = RadrootsTransportSatisfactionPolicy::any_forwarded();
     let stored = RadrootsTransportSatisfactionPolicy::all_stored();
-    let seen = RadrootsTransportSatisfactionPolicy::quorum_seen(2);
+    let seen = RadrootsTransportSatisfactionPolicy::quorum_seen(2).expect("valid quorum");
     let durable_or_observed = RadrootsTransportSatisfactionPolicy::any_durable_or_observed();
 
     assert_eq!(no_wait.required_target_count(0).expect("no wait"), 0);
+    assert_eq!(
+        no_wait.kind(),
+        RadrootsTransportSatisfactionPolicyKind::NoWait
+    );
+    assert_eq!(two.kind(), RadrootsTransportSatisfactionPolicyKind::Quorum);
+    assert_eq!(two.quorum_threshold(), Some(2));
     assert_eq!(no_wait.required_target_count(3).expect("no wait"), 0);
     assert!(no_wait.is_satisfied_by(0, 0).expect("no wait"));
     assert_ne!(no_wait, all);
@@ -360,7 +367,7 @@ fn satisfaction_policy_counts_target_statuses() {
             RadrootsTransportSatisfactionClass::Forwarded,
         ),
         (
-            RadrootsTransportSatisfactionPolicy::quorum_forwarded(2),
+            RadrootsTransportSatisfactionPolicy::quorum_forwarded(2).expect("valid quorum"),
             RadrootsTransportSatisfactionClass::Forwarded,
         ),
         (
@@ -368,7 +375,7 @@ fn satisfaction_policy_counts_target_statuses() {
             RadrootsTransportSatisfactionClass::Stored,
         ),
         (
-            RadrootsTransportSatisfactionPolicy::quorum_stored(2),
+            RadrootsTransportSatisfactionPolicy::quorum_stored(2).expect("valid quorum"),
             RadrootsTransportSatisfactionClass::Stored,
         ),
         (
@@ -384,7 +391,8 @@ fn satisfaction_policy_counts_target_statuses() {
             RadrootsTransportSatisfactionClass::DurableOrObserved,
         ),
         (
-            RadrootsTransportSatisfactionPolicy::quorum_durable_or_observed(2),
+            RadrootsTransportSatisfactionPolicy::quorum_durable_or_observed(2)
+                .expect("valid quorum"),
             RadrootsTransportSatisfactionClass::DurableOrObserved,
         ),
     ] {
@@ -395,9 +403,7 @@ fn satisfaction_policy_counts_target_statuses() {
         RadrootsTransportError::InvalidSatisfactionPolicy
     );
     assert_eq!(
-        RadrootsTransportSatisfactionPolicy::quorum_accepted(0)
-            .is_satisfied_by(3, 0)
-            .expect_err("zero required targets"),
+        RadrootsTransportSatisfactionPolicy::quorum_accepted(0).expect_err("zero required targets"),
         RadrootsTransportError::InvalidSatisfactionPolicy
     );
 }
@@ -890,6 +896,7 @@ fn satisfaction_and_target_status_cover_all_contract_states() {
     );
     assert_eq!(
         RadrootsTransportSatisfactionPolicy::quorum_accepted(4)
+            .expect("bounded quorum")
             .required_target_count(3)
             .expect_err("at least too high"),
         RadrootsTransportError::InvalidSatisfactionPolicy
@@ -1346,7 +1353,8 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
             RadrootsTransportSatisfactionClass::Delivered,
         ),
         (
-            RadrootsTransportSatisfactionPolicy::quorum_durable_or_observed(2),
+            RadrootsTransportSatisfactionPolicy::quorum_durable_or_observed(2)
+                .expect("valid quorum"),
             RadrootsTransportSatisfactionClass::DurableOrObserved,
         ),
     ] {
@@ -1356,7 +1364,7 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
         RadrootsTransportSatisfactionPolicy::no_wait(),
         RadrootsTransportSatisfactionPolicy::any_accepted(),
         RadrootsTransportSatisfactionPolicy::all_accepted(),
-        RadrootsTransportSatisfactionPolicy::quorum_accepted(1),
+        RadrootsTransportSatisfactionPolicy::quorum_accepted(1).expect("valid quorum"),
     ] {
         assert!(policy.required_target_fingerprints().is_none());
     }
@@ -1402,38 +1410,25 @@ fn delivery_contract_covers_every_policy_and_receipt_path() {
             .is_satisfied_by(&RadrootsTransportSatisfactionPolicy::all_accepted())
             .expect("all")
     );
-    assert!(
-        receipt
-            .is_satisfied_by(&RadrootsTransportSatisfactionPolicy::quorum_accepted(1))
-            .expect("quorum")
-    );
+    let quorum = RadrootsTransportSatisfactionPolicy::quorum_accepted(1).expect("valid quorum");
+    assert!(receipt.is_satisfied_by(&quorum).expect("quorum"));
     assert!(!receipt.is_satisfied_by(&required).expect("required"));
 
-    let invalid_empty = RadrootsTransportSatisfactionPolicy::RequiredTargets {
-        class: RadrootsTransportSatisfactionClass::Accepted,
-        targets: Vec::new(),
-    };
     assert_eq!(
-        invalid_empty
-            .required_target_count(2)
-            .expect_err("empty required set"),
-        RadrootsTransportError::EmptyRequiredTargetSet
-    );
-    assert_eq!(
-        receipt
-            .is_satisfied_by(&invalid_empty)
-            .expect_err("empty required receipt policy"),
+        RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            Vec::new(),
+        )
+        .expect_err("empty required set"),
         RadrootsTransportError::EmptyRequiredTargetSet
     );
 
-    let duplicate = RadrootsTransportSatisfactionPolicy::RequiredTargets {
-        class: RadrootsTransportSatisfactionClass::Accepted,
-        targets: vec![one.fingerprint().clone(), one.fingerprint().clone()],
-    };
     assert_eq!(
-        duplicate
-            .required_target_count(2)
-            .expect_err("duplicate required set"),
+        RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            vec![one.fingerprint().clone(), one.fingerprint().clone()],
+        )
+        .expect_err("duplicate required set"),
         RadrootsTransportError::DuplicateRequiredTargetFingerprint
     );
 }
@@ -1707,6 +1702,47 @@ fn delivery_request_and_receipt_deserialization_revalidates_invariants() {
             "Quorum": {
                 "class": "Accepted",
                 "threshold": 0,
+            }
+        }))
+        .is_err()
+    );
+    let exact_required = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| format!("{index:064x}"))
+        .collect::<Vec<_>>();
+    let exact_required_wire = serde_json::json!({
+        "RequiredTargets": {
+            "class": "Accepted",
+            "targets": exact_required,
+        }
+    });
+    assert_eq!(
+        serde_json::from_value::<RadrootsTransportSatisfactionPolicy>(exact_required_wire)
+            .expect("decode exact required-target policy")
+            .required_target_fingerprints()
+            .expect("required targets")
+            .len(),
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+    );
+    let one_over_required = (0..=RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| format!("{index:064x}"))
+        .collect::<Vec<_>>();
+    let one_over_required_wire = serde_json::json!({
+        "RequiredTargets": {
+            "class": "Accepted",
+            "targets": one_over_required,
+        }
+    });
+    assert!(
+        serde_json::from_value::<RadrootsTransportSatisfactionPolicy>(one_over_required_wire)
+            .expect_err("reject one-over required-target wire")
+            .to_string()
+            .contains("required_target_count")
+    );
+    assert!(
+        serde_json::from_value::<RadrootsTransportSatisfactionPolicy>(serde_json::json!({
+            "Any": {
+                "class": "Accepted",
+                "unknown": true,
             }
         }))
         .is_err()

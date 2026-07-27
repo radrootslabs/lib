@@ -20,7 +20,8 @@ mod transport;
 pub use delivery::{
     RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportSatisfactionClass,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetReceipt,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportSatisfactionPolicyKind,
+    RadrootsTransportTargetReceipt,
 };
 pub use error::RadrootsTransportError;
 pub use kind::{
