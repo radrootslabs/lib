@@ -69,6 +69,17 @@ version = "0.1.0"
 authors = ["Tyson Lupul <tyson@radroots.org>"]
 readme = "README.md"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
 [workspace.dependencies]
 dto_bindgen = { version = "0.1.0" }
 dto_bindgen_core = { version = "0.1.0" }

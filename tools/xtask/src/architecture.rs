@@ -85,6 +85,31 @@ struct WorkspaceMembers {
     resolver: String,
     package: WorkspacePackage,
     metadata: WorkspaceMetadata,
+    lints: WorkspaceLints,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceLints {
+    rust: WorkspaceRustLints,
+    rustdoc: WorkspaceRustdocLints,
+    clippy: WorkspaceClippyLints,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceRustLints {
+    unsafe_code: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceRustdocLints {
+    broken_intra_doc_links: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceClippyLints {
+    dbg_macro: String,
+    todo: String,
+    unimplemented: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,6 +200,18 @@ fn validate_workspace_toolchain(
         return Err(format!(
             "public package readme source must be {PUBLIC_README}"
         ));
+    }
+    let lints = &manifest.workspace.lints;
+    if lints.rust.unsafe_code != "forbid"
+        || lints.rustdoc.broken_intra_doc_links != "deny"
+        || lints.clippy.dbg_macro != "deny"
+        || lints.clippy.todo != "deny"
+        || lints.clippy.unimplemented != "deny"
+    {
+        return Err(
+            "workspace lints must forbid unsafe code and deny the approved rustdoc/Clippy baseline"
+                .to_owned(),
+        );
     }
     if workspace_package.edition != architecture.edition || architecture.edition != "2024" {
         return Err(format!(
@@ -339,6 +376,18 @@ fn validate_public_package_metadata(
         if package.get("publish").and_then(toml::Value::as_bool) != Some(false) {
             return Err(format!(
                 "public package {name} must remain publish = false during migration"
+            ));
+        }
+        let inherits_lints = manifest
+            .get("lints")
+            .and_then(toml::Value::as_table)
+            .is_some_and(|lints| {
+                lints.len() == 1
+                    && lints.get("workspace").and_then(toml::Value::as_bool) == Some(true)
+            });
+        if !inherits_lints {
+            return Err(format!(
+                "public package {name} must inherit the workspace lint policy"
             ));
         }
     }
@@ -659,7 +708,7 @@ adr_required = false
 
     fn complete_workspace_manifest(members: &str) -> String {
         format!(
-            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n"
+            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"forbid\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
         )
     }
 
@@ -748,7 +797,7 @@ adr_required = false
             complete_workspace_manifest("\"crates/radroots\""),
         )
         .expect("write workspace manifest");
-        let manifest = "[package]\nname = \"radroots\"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\nrepository.workspace = true\nhomepage.workspace = true\nauthors.workspace = true\nreadme = \"README.md\"\npublish = false\n";
+        let manifest = "[package]\nname = \"radroots\"\nversion.workspace = true\nedition.workspace = true\nrust-version.workspace = true\nlicense.workspace = true\nrepository.workspace = true\nhomepage.workspace = true\nauthors.workspace = true\nreadme = \"README.md\"\npublish = false\n\n[lints]\nworkspace = true\n";
         fs::write(root.join("crates/radroots/Cargo.toml"), manifest)
             .expect("write public manifest");
         fs::write(root.join("crates/radroots/README.md"), "fixture\n")
@@ -757,12 +806,12 @@ adr_required = false
 
         fs::write(
             root.join("crates/radroots/Cargo.toml"),
-            manifest.replace("authors.workspace = true\n", ""),
+            manifest.replace("[lints]\nworkspace = true\n", ""),
         )
         .expect("write incomplete public manifest");
         let error = validate_public_package_metadata(&root, &architecture())
-            .expect_err("missing authors must fail");
-        assert!(error.contains("must declare authors"));
+            .expect_err("missing lint inheritance must fail");
+        assert!(error.contains("must inherit the workspace lint policy"));
         let _ = fs::remove_dir_all(root);
     }
 }
