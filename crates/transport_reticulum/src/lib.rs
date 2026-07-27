@@ -330,21 +330,17 @@ impl RadrootsTransport for RadrootsReticulumTransport {
         request: RadrootsTransportFetchRequest,
     ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
         Box::pin(async move {
-            ensure_reticulum_targets(request.target_set.targets())
+            ensure_reticulum_targets(request.target_set().targets())
                 .map_err(reticulum_error_to_transport_error)?;
             let outcome = reticulum_outcome(self.profile.behavior);
             let target_receipts = request
-                .target_set
+                .target_set()
                 .targets()
                 .iter()
                 .cloned()
                 .map(|target| RadrootsTransportTargetReceipt::skipped(target, outcome.clone()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(RadrootsTransportFetchReceipt::new(
-                request.request_id,
-                target_receipts,
-                0,
-            ))
+            RadrootsTransportFetchReceipt::for_request(&request, target_receipts, 0)
         })
     }
 }
@@ -618,7 +614,8 @@ mod tests {
         let core_fetch = RadrootsTransportFetchRequest::new(
             "core-fetch",
             RadrootsTransportTargetSet::new(vec![reticulum_target()]).expect("target set"),
-        );
+        )
+        .expect("fetch request");
         assert!(block_on(RadrootsTransport::fetch(&rejecting, core_fetch)).is_ok());
 
         let deferring = RadrootsReticulumTransport::new(

@@ -1,18 +1,21 @@
+#[cfg(feature = "serde")]
+use radroots_transport::RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES;
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
     RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
-    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
+    RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
     RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
     RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES, RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
     RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
-    RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
-    RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES, RadrootsTransport, RadrootsTransportCapabilities,
-    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
-    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
-    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
+    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
+    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
+    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
+    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
+    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportSatisfactionPolicyKind,
     RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
@@ -20,8 +23,6 @@ use radroots_transport::{
     ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
     ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
 };
-#[cfg(feature = "serde")]
-use radroots_transport::RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES;
 use serde_json::Value;
 use std::borrow::ToOwned;
 use std::boxed::Box;
@@ -503,11 +504,11 @@ fn deferred_transport_outcomes_are_terminal_but_not_satisfied() {
 #[cfg(feature = "serde")]
 fn request_models_round_trip_with_serde() {
     let target = RadrootsTransportTarget::nostr_relay("wss://relay.example").expect("target");
-    let target_set = RadrootsTransportTargetSet::new(vec![target]).expect("target set");
+    let target_set = RadrootsTransportTargetSet::new(vec![target.clone()]).expect("target set");
     let request = RadrootsTransportDeliveryRequest::new(
         "req-1",
         opaque_payload(),
-        target_set,
+        target_set.clone(),
         RadrootsTransportSatisfactionPolicy::any_accepted(),
     )
     .expect("request");
@@ -517,6 +518,32 @@ fn request_models_round_trip_with_serde() {
         serde_json::from_str(&json).expect("decode request");
 
     assert_eq!(decoded, request);
+
+    let fetch_request =
+        RadrootsTransportFetchRequest::new("fetch-1", target_set).expect("fetch request");
+    let fetch_receipt = RadrootsTransportFetchReceipt::for_request(
+        &fetch_request,
+        vec![RadrootsTransportTargetReceipt::new(
+            target,
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+        )],
+        1,
+    )
+    .expect("fetch receipt");
+    let fetch_request_json =
+        serde_json::to_string(&fetch_request).expect("serialize fetch request");
+    let fetch_receipt_json =
+        serde_json::to_string(&fetch_receipt).expect("serialize fetch receipt");
+    assert_eq!(
+        serde_json::from_str::<RadrootsTransportFetchRequest>(&fetch_request_json)
+            .expect("decode fetch request"),
+        fetch_request
+    );
+    assert_eq!(
+        serde_json::from_str::<RadrootsTransportFetchReceipt>(&fetch_receipt_json)
+            .expect("decode fetch receipt"),
+        fetch_receipt
+    );
 }
 
 #[test]
@@ -1288,14 +1315,14 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
             request: RadrootsTransportFetchRequest,
         ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
             Box::pin(async move {
-                Ok(RadrootsTransportFetchReceipt::new(
-                    request.request_id,
+                RadrootsTransportFetchReceipt::for_request(
+                    &request,
                     vec![RadrootsTransportTargetReceipt::new(
                         self.target.clone(),
                         RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
                     )],
                     1,
-                ))
+                )
             })
         }
     }
@@ -1326,13 +1353,14 @@ fn neutral_transport_trait_covers_status_delivery_and_fetch() {
         delivery.target_receipts()[0].outcome().kind(),
         RadrootsTransportOutcomeKind::Delivered
     );
-    let fetch = futures::executor::block_on(
-        transport.fetch(RadrootsTransportFetchRequest::new("fetch-1", target_set)),
-    )
-    .expect("fetch");
-    assert_eq!(fetch.fetched_count, 1);
+    let fetch =
+        futures::executor::block_on(transport.fetch(
+            RadrootsTransportFetchRequest::new("fetch-1", target_set).expect("fetch request"),
+        ))
+        .expect("fetch");
+    assert_eq!(fetch.fetched_count(), 1);
     assert_eq!(
-        fetch.target_receipts[0].outcome().kind(),
+        fetch.target_receipts()[0].outcome().kind(),
         RadrootsTransportOutcomeKind::Seen
     );
 }
@@ -2416,6 +2444,278 @@ fn transport_bounds_outcomes_and_receipts_enforce_exact_and_one_over() {
 }
 
 #[test]
+fn transport_bounds_fetch_requests_and_receipts_bind_limits_and_targets() {
+    let targets = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| {
+            RadrootsTransportTarget::local(format!("local:fetch-{index}"))
+                .expect("bounded fetch target")
+        })
+        .collect::<Vec<_>>();
+    let target_set = RadrootsTransportTargetSet::new(targets.clone()).expect("target set");
+    let request = RadrootsTransportFetchRequest::new(
+        "r".repeat(RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES),
+        target_set.clone(),
+    )
+    .expect("exact fetch request id");
+    assert_eq!(
+        request.request_id().len(),
+        RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES
+    );
+    assert_eq!(request.target_set(), &target_set);
+    for (request_id, expected) in [
+        (String::new(), RadrootsTransportError::EmptyFetchRequestId),
+        (
+            " fetch".to_owned(),
+            RadrootsTransportError::InvalidFetchRequestId,
+        ),
+        (
+            "r".repeat(RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES + 1),
+            RadrootsTransportError::ResourceLimitExceeded {
+                field: "fetch_request_id",
+                max: RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES,
+                actual: RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES + 1,
+            },
+        ),
+    ] {
+        assert_eq!(
+            RadrootsTransportFetchRequest::new(request_id, target_set.clone())
+                .expect_err("invalid fetch request id"),
+            expected
+        );
+    }
+
+    let reversed_receipts = targets
+        .iter()
+        .rev()
+        .cloned()
+        .map(|target| {
+            RadrootsTransportTargetReceipt::new(
+                target,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+            )
+        })
+        .collect::<Vec<_>>();
+    let receipt = RadrootsTransportFetchReceipt::for_request(
+        &request,
+        reversed_receipts,
+        RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
+    )
+    .expect("exact fetch receipt bounds");
+    assert_eq!(receipt.request_id(), request.request_id());
+    assert_eq!(receipt.target_set(), request.target_set());
+    assert_eq!(
+        receipt.fetched_count(),
+        RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT
+    );
+    assert!(
+        receipt
+            .target_receipts()
+            .iter()
+            .zip(targets.iter())
+            .all(|(receipt, target)| receipt.target() == target)
+    );
+    receipt
+        .validate_for_request(&request)
+        .expect("bound fetch request");
+    let wrong_id_receipt = RadrootsTransportFetchReceipt::new(
+        "other-request",
+        request.target_set().clone(),
+        receipt.target_receipts().to_vec(),
+        0,
+    )
+    .expect("wrong-id receipt");
+    assert_eq!(
+        wrong_id_receipt
+            .validate_for_request(&request)
+            .expect_err("fetch request id mismatch"),
+        RadrootsTransportError::FetchReceiptRequestIdMismatch
+    );
+    let other_target = RadrootsTransportTarget::local("local:other-fetch").expect("other target");
+    let other_set = RadrootsTransportTargetSet::new(vec![other_target.clone()]).expect("other set");
+    let wrong_target_receipt = RadrootsTransportFetchReceipt::new(
+        request.request_id(),
+        other_set,
+        vec![RadrootsTransportTargetReceipt::new(
+            other_target.clone(),
+            RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+        )],
+        0,
+    )
+    .expect("wrong-target receipt");
+    assert_eq!(
+        wrong_target_receipt
+            .validate_for_request(&request)
+            .expect_err("fetch target set mismatch"),
+        RadrootsTransportError::FetchReceiptTargetSetMismatch
+    );
+
+    assert_eq!(
+        RadrootsTransportFetchReceipt::for_request(
+            &request,
+            receipt.target_receipts().to_vec(),
+            RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT + 1,
+        )
+        .expect_err("one-over admitted fetch count"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "fetch_admitted_event_count",
+            max: RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
+            actual: RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT + 1,
+        }
+    );
+    assert_eq!(
+        RadrootsTransportFetchReceipt::for_request(
+            &request,
+            receipt.target_receipts()[..RADROOTS_TRANSPORT_TARGET_MAX_COUNT - 1].to_vec(),
+            0,
+        )
+        .expect_err("missing fetch target receipt"),
+        RadrootsTransportError::MissingFetchTargetReceipt
+    );
+    let mut duplicate_receipts = receipt.target_receipts().to_vec();
+    duplicate_receipts[RADROOTS_TRANSPORT_TARGET_MAX_COUNT - 1] = duplicate_receipts[0].clone();
+    assert_eq!(
+        RadrootsTransportFetchReceipt::for_request(&request, duplicate_receipts, 0)
+            .expect_err("duplicate fetch target receipt"),
+        RadrootsTransportError::DuplicateFetchTargetReceipt
+    );
+
+    assert_eq!(
+        RadrootsTransportFetchReceipt::new(
+            "fetch",
+            RadrootsTransportTargetSet::new(vec![targets[0].clone()]).expect("one target"),
+            vec![RadrootsTransportTargetReceipt::new(
+                other_target,
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+            )],
+            0,
+        )
+        .expect_err("unexpected fetch target receipt"),
+        RadrootsTransportError::UnexpectedFetchTargetReceipt
+    );
+
+    let first = RadrootsTransportTarget::local("local:fetch-diagnostic-one").expect("first");
+    let second = RadrootsTransportTarget::local("local:fetch-diagnostic-two").expect("second");
+    let diagnostic_set =
+        RadrootsTransportTargetSet::new(vec![first.clone(), second.clone()]).expect("target set");
+    let diagnostic_request =
+        RadrootsTransportFetchRequest::new("fetch-diagnostics", diagnostic_set)
+            .expect("diagnostic request");
+    let half = RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES / 2;
+    let diagnostic_receipts = |second_len| {
+        vec![
+            RadrootsTransportTargetReceipt::new(
+                first.clone(),
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen)
+                    .try_with_message("a".repeat(half))
+                    .expect("first diagnostic"),
+            ),
+            RadrootsTransportTargetReceipt::new(
+                second.clone(),
+                RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen)
+                    .try_with_message("b".repeat(second_len))
+                    .expect("second diagnostic"),
+            ),
+        ]
+    };
+    RadrootsTransportFetchReceipt::for_request(&diagnostic_request, diagnostic_receipts(half), 0)
+        .expect("exact fetch diagnostic budget");
+    assert_eq!(
+        RadrootsTransportFetchReceipt::for_request(
+            &diagnostic_request,
+            diagnostic_receipts(half + 1),
+            0,
+        )
+        .expect_err("one-over fetch diagnostic budget"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "fetch_diagnostic_bytes",
+            max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1,
+        }
+    );
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_bounds_fetch_wire_is_strict_bounded_and_request_bound() {
+    let targets = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| {
+            RadrootsTransportTarget::local(format!("local:fetch-wire-{index}"))
+                .expect("fetch target")
+        })
+        .collect::<Vec<_>>();
+    let request = RadrootsTransportFetchRequest::new(
+        "r".repeat(RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES),
+        RadrootsTransportTargetSet::new(targets.clone()).expect("target set"),
+    )
+    .expect("fetch request");
+    let receipt = RadrootsTransportFetchReceipt::for_request(
+        &request,
+        targets
+            .into_iter()
+            .map(|target| {
+                RadrootsTransportTargetReceipt::new(
+                    target,
+                    RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::Seen),
+                )
+            })
+            .collect(),
+        RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT,
+    )
+    .expect("fetch receipt");
+    let request_wire = serde_json::to_value(&request).expect("request wire");
+    let receipt_wire = serde_json::to_value(&receipt).expect("receipt wire");
+    serde_json::from_value::<RadrootsTransportFetchRequest>(request_wire.clone())
+        .expect("exact request wire");
+    serde_json::from_value::<RadrootsTransportFetchReceipt>(receipt_wire.clone())
+        .expect("exact receipt wire");
+
+    let mut one_over_request_id = request_wire.clone();
+    one_over_request_id["request_id"] =
+        Value::String("r".repeat(RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES + 1));
+    assert!(
+        serde_json::from_value::<RadrootsTransportFetchRequest>(one_over_request_id)
+            .expect_err("one-over fetch request id")
+            .to_string()
+            .contains("fetch_request_id")
+    );
+    let mut unknown_request = request_wire;
+    unknown_request["unknown"] = Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsTransportFetchRequest>(unknown_request).is_err());
+
+    let mut one_over_receipts = receipt_wire.clone();
+    let extra = one_over_receipts["target_receipts"][0].clone();
+    one_over_receipts["target_receipts"]
+        .as_array_mut()
+        .expect("receipt array")
+        .push(extra);
+    assert!(
+        serde_json::from_value::<RadrootsTransportFetchReceipt>(one_over_receipts)
+            .expect_err("one-over fetch target receipt count")
+            .to_string()
+            .contains("fetch_target_receipt_count")
+    );
+    let mut one_over_events = receipt_wire.clone();
+    one_over_events["fetched_count"] =
+        Value::from(RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT + 1);
+    assert!(
+        serde_json::from_value::<RadrootsTransportFetchReceipt>(one_over_events)
+            .expect_err("one-over admitted fetch count")
+            .to_string()
+            .contains("fetch_admitted_event_count")
+    );
+    let mut mismatched_target_set = receipt_wire.clone();
+    mismatched_target_set["target_set"] = serde_json::json!({
+        "targets": [RadrootsTransportTarget::local("local:mismatch").expect("target")],
+    });
+    assert!(
+        serde_json::from_value::<RadrootsTransportFetchReceipt>(mismatched_target_set).is_err()
+    );
+    let mut unknown_receipt = receipt_wire;
+    unknown_receipt["unknown"] = Value::Bool(true);
+    assert!(serde_json::from_value::<RadrootsTransportFetchReceipt>(unknown_receipt).is_err());
+}
+
+#[test]
 fn transport_bounds_payloads_enforce_exact_and_one_over_before_copying() {
     let exact_json = format!(
         "{{{}}}",
@@ -2634,6 +2934,13 @@ fn every_transport_error_has_a_stable_display_message() {
         RadrootsTransportError::TransportOutcomeStatusMismatch,
         RadrootsTransportError::DeliveryReceiptRequestIdMismatch,
         RadrootsTransportError::DeliveryReceiptTargetSetMismatch,
+        RadrootsTransportError::EmptyFetchRequestId,
+        RadrootsTransportError::InvalidFetchRequestId,
+        RadrootsTransportError::UnexpectedFetchTargetReceipt,
+        RadrootsTransportError::DuplicateFetchTargetReceipt,
+        RadrootsTransportError::MissingFetchTargetReceipt,
+        RadrootsTransportError::FetchReceiptRequestIdMismatch,
+        RadrootsTransportError::FetchReceiptTargetSetMismatch,
         RadrootsTransportError::EmptyPayloadId,
         RadrootsTransportError::InvalidPayloadId,
         RadrootsTransportError::EmptyPayloadLabel,

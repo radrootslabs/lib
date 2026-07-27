@@ -759,6 +759,50 @@ fn required_target_semantics_stay_fingerprint_exact() {
 }
 
 #[test]
+fn core_fetch_contract_keeps_validated_state_sealed_and_request_bound() {
+    let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("transport crate parent");
+    let transport_source = read_source(crates_root.join("transport/src/transport.rs").as_path());
+    for (start, end) in [
+        (
+            "pub struct RadrootsTransportFetchRequest {",
+            "impl RadrootsTransportFetchRequest {",
+        ),
+        (
+            "pub struct RadrootsTransportFetchReceipt {",
+            "impl RadrootsTransportFetchReceipt {",
+        ),
+    ] {
+        let model = source_between(transport_source.as_str(), start, end);
+        for forbidden in [
+            "pub request_id:",
+            "pub target_set:",
+            "pub target_receipts:",
+            "pub fetched_count:",
+        ] {
+            assert!(
+                !model.contains(forbidden),
+                "generic fetch validated state must remain sealed: `{forbidden}`"
+            );
+        }
+    }
+    for required in [
+        "impl<'de> serde::Deserialize<'de> for RadrootsTransportFetchRequest",
+        "impl<'de> serde::Deserialize<'de> for RadrootsTransportFetchReceipt",
+        "deserialize_fetch_request_id",
+        "deserialize_fetch_target_receipts",
+        "canonicalize_fetch_target_receipts",
+        "validate_for_request",
+    ] {
+        assert!(
+            transport_source.contains(required),
+            "generic fetch source must retain bounded request binding witness `{required}`"
+        );
+    }
+}
+
+#[test]
 fn transport_hardening_sources_reject_removed_execution_kind_and_keep_reticulum_contracts() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()

@@ -1245,10 +1245,10 @@ async fn nostr_transport_facade_reports_fetch_as_unsupported_operation() {
     let target_set =
         RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)]).expect("targets");
     let error = transport
-        .fetch(RadrootsTransportFetchRequest::new(
-            "facade-fetch-unsupported",
-            target_set,
-        ))
+        .fetch(
+            RadrootsTransportFetchRequest::new("facade-fetch-unsupported", target_set)
+                .expect("fetch request"),
+        )
         .await
         .expect_err("fetch unsupported");
 

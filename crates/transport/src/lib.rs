@@ -60,8 +60,8 @@ pub use target::{
     RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
 pub use transport::{
-    RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-    RadrootsTransportFuture,
+    RADROOTS_TRANSPORT_FETCH_REQUEST_ID_MAX_BYTES, RadrootsTransport,
+    RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest, RadrootsTransportFuture,
 };
 
 #[cfg(test)]

@@ -376,12 +376,12 @@ fn core_transport_trait_reports_reticulum_status_delivery_and_fetch() {
 
     let fetch = futures::executor::block_on(RadrootsTransport::fetch(
         &transport,
-        RadrootsTransportFetchRequest::new("core-fetch", target_set),
+        RadrootsTransportFetchRequest::new("core-fetch", target_set).expect("fetch request"),
     ))
     .expect("fetch receipt");
-    assert_eq!(fetch.fetched_count, 0);
+    assert_eq!(fetch.fetched_count(), 0);
     assert_eq!(
-        fetch.target_receipts[0].status(),
+        fetch.target_receipts()[0].status(),
         RadrootsTransportDeliveryTargetStatus::DeferredUntilImplemented
     );
 }

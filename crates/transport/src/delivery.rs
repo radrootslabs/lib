@@ -538,7 +538,7 @@ impl RadrootsTransportTargetReceipt {
         &self.outcome
     }
 
-    fn validate(&self) -> Result<(), RadrootsTransportError> {
+    pub(crate) fn validate(&self) -> Result<(), RadrootsTransportError> {
         self.outcome.validate()?;
         if self.status != self.outcome.status() {
             return Err(RadrootsTransportError::DeliveryTargetReceiptStatusMismatch);

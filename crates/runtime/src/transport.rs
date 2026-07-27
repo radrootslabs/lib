@@ -780,10 +780,10 @@ mod tests {
             request: RadrootsTransportFetchRequest,
         ) -> RadrootsTransportFuture<'a, RadrootsTransportFetchReceipt> {
             Box::pin(async move {
-                Ok(RadrootsTransportFetchReceipt::new(
-                    request.request_id,
+                RadrootsTransportFetchReceipt::for_request(
+                    &request,
                     request
-                        .target_set
+                        .target_set()
                         .targets()
                         .iter()
                         .cloned()
@@ -795,7 +795,7 @@ mod tests {
                         })
                         .collect(),
                     0,
-                ))
+                )
             })
         }
     }
@@ -988,17 +988,20 @@ mod tests {
             RadrootsTransportCapabilities::deliver_and_fetch()
         );
         let fetch = transport
-            .fetch(RadrootsTransportFetchRequest::new(
-                "nostr-fetch",
-                RadrootsTransportTargetSet::new(vec![target(
-                    RadrootsTransportKind::Nostr,
-                    "wss://relay.example",
-                )])
-                .expect("target set"),
-            ))
+            .fetch(
+                RadrootsTransportFetchRequest::new(
+                    "nostr-fetch",
+                    RadrootsTransportTargetSet::new(vec![target(
+                        RadrootsTransportKind::Nostr,
+                        "wss://relay.example",
+                    )])
+                    .expect("target set"),
+                )
+                .expect("fetch request"),
+            )
             .await
             .expect("fetch");
-        assert_eq!(fetch.fetched_count, 0);
+        assert_eq!(fetch.fetched_count(), 0);
 
         assert_eq!(
             receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
@@ -1070,17 +1073,20 @@ mod tests {
         assert!(!status.capabilities.deliver);
         assert!(!status.capabilities.fetch);
         let fetch = transport
-            .fetch(RadrootsTransportFetchRequest::new(
-                "reticulum-fetch",
-                RadrootsTransportTargetSet::new(vec![target(
-                    RadrootsTransportKind::Reticulum,
-                    "reticulum:local",
-                )])
-                .expect("target set"),
-            ))
+            .fetch(
+                RadrootsTransportFetchRequest::new(
+                    "reticulum-fetch",
+                    RadrootsTransportTargetSet::new(vec![target(
+                        RadrootsTransportKind::Reticulum,
+                        "reticulum:local",
+                    )])
+                    .expect("target set"),
+                )
+                .expect("fetch request"),
+            )
             .await
             .expect("fetch");
-        assert_eq!(fetch.fetched_count, 0);
+        assert_eq!(fetch.fetched_count(), 0);
 
         assert_eq!(
             receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),

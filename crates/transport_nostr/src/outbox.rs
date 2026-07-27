@@ -834,6 +834,8 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::RequiredTargetNotRequested
         | RadrootsTransportError::EmptyDeliveryRequestId
         | RadrootsTransportError::InvalidDeliveryRequestId
+        | RadrootsTransportError::EmptyFetchRequestId
+        | RadrootsTransportError::InvalidFetchRequestId
         | RadrootsTransportError::InvalidPayloadSignature
         | RadrootsTransportError::InvalidDeliveryTimestamp => {
             RadrootsRelayTransportError::Transport(error.to_string())
@@ -851,7 +853,12 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::DeliveryTargetReceiptAttemptMismatch
         | RadrootsTransportError::TransportOutcomeStatusMismatch
         | RadrootsTransportError::DeliveryReceiptRequestIdMismatch
-        | RadrootsTransportError::DeliveryReceiptTargetSetMismatch => {
+        | RadrootsTransportError::DeliveryReceiptTargetSetMismatch
+        | RadrootsTransportError::UnexpectedFetchTargetReceipt
+        | RadrootsTransportError::DuplicateFetchTargetReceipt
+        | RadrootsTransportError::MissingFetchTargetReceipt
+        | RadrootsTransportError::FetchReceiptRequestIdMismatch
+        | RadrootsTransportError::FetchReceiptTargetSetMismatch => {
             RadrootsRelayTransportError::TransportContract(error.to_string())
         }
         RadrootsTransportError::EmptyPayloadId

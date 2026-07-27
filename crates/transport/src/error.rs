@@ -29,6 +29,13 @@ pub enum RadrootsTransportError {
     TransportOutcomeStatusMismatch,
     DeliveryReceiptRequestIdMismatch,
     DeliveryReceiptTargetSetMismatch,
+    EmptyFetchRequestId,
+    InvalidFetchRequestId,
+    UnexpectedFetchTargetReceipt,
+    DuplicateFetchTargetReceipt,
+    MissingFetchTargetReceipt,
+    FetchReceiptRequestIdMismatch,
+    FetchReceiptTargetSetMismatch,
     EmptyPayloadId,
     InvalidPayloadId,
     EmptyPayloadLabel,
@@ -104,6 +111,23 @@ impl fmt::Display for RadrootsTransportError {
             }
             Self::DeliveryReceiptTargetSetMismatch => {
                 f.write_str("transport delivery receipt target set does not match its request")
+            }
+            Self::EmptyFetchRequestId => f.write_str("transport fetch request id is empty"),
+            Self::InvalidFetchRequestId => f.write_str("transport fetch request id is invalid"),
+            Self::UnexpectedFetchTargetReceipt => {
+                f.write_str("transport fetch receipt contains an unexpected target")
+            }
+            Self::DuplicateFetchTargetReceipt => {
+                f.write_str("transport fetch receipt contains a duplicate target")
+            }
+            Self::MissingFetchTargetReceipt => {
+                f.write_str("transport fetch receipt is missing a requested target")
+            }
+            Self::FetchReceiptRequestIdMismatch => {
+                f.write_str("transport fetch receipt request id does not match its request")
+            }
+            Self::FetchReceiptTargetSetMismatch => {
+                f.write_str("transport fetch receipt target set does not match its request")
             }
             Self::EmptyPayloadId => f.write_str("transport payload id is empty"),
             Self::InvalidPayloadId => f.write_str("transport payload id is invalid"),
