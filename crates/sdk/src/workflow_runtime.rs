@@ -395,7 +395,7 @@ fn reticulum_behavior_for_targets(
 ) -> RadrootsOutboxReticulumBehavior {
     if targets
         .iter()
-        .any(|target| target.kind == RadrootsTransportKind::Reticulum)
+        .any(|target| target.kind() == &RadrootsTransportKind::Reticulum)
     {
         outbox_reticulum_behavior(transport_profile)
     } else {
@@ -998,11 +998,11 @@ fn runtime_request_digest(
         .iter()
         .map(|target| {
             serde_json::json!({
-                "kind": target.kind.canonical_label(),
-                "uri": target.uri.as_str(),
-                "scope": target.scope.as_ref().map(|scope| scope.as_str()),
-                "label": target.label.as_ref().map(|label| label.as_str()),
-                "fingerprint": target.fingerprint.as_str()
+                "kind": target.kind().canonical_label(),
+                "uri": target.uri().as_str(),
+                "scope": target.scope().map(|scope| scope.as_str()),
+                "label": target.label().map(|label| label.as_str()),
+                "fingerprint": target.fingerprint().as_str()
             })
         })
         .collect::<Vec<_>>();
