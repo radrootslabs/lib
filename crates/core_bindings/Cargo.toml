@@ -10,4 +10,6 @@ homepage.workspace = true
 publish = false
 
 [dependencies]
-radroots_core = { workspace = true }
+dto_bindgen = { workspace = true }
+dto_bindgen_core = { workspace = true }
+radroots_core = { workspace = true, features = ["serde", "std"] }

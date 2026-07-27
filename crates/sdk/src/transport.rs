@@ -297,8 +297,8 @@ impl TargetSet {
     pub fn nostr_relay_urls(&self) -> Vec<String> {
         self.targets
             .iter()
-            .filter(|target| target.kind == RadrootsTransportKind::Nostr)
-            .map(|target| target.uri.as_str().to_owned())
+            .filter(|target| target.kind() == &RadrootsTransportKind::Nostr)
+            .map(|target| target.uri().as_str().to_owned())
             .collect()
     }
 
@@ -329,8 +329,8 @@ impl TargetSet {
             ));
         }
         for target in &targets {
-            if target.kind == RadrootsTransportKind::Reticulum
-                && target.uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
+            if target.kind() == &RadrootsTransportKind::Reticulum
+                && target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
             {
                 return Err(RadrootsSdkError::InvalidRequest {
                     message: format!(
@@ -342,7 +342,7 @@ impl TargetSet {
         RadrootsTransportTargetSet::new(targets.clone())?;
         let canonical_targets = targets
             .iter()
-            .map(|target| target.fingerprint.to_string())
+            .map(|target| target.fingerprint().to_string())
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -714,19 +714,33 @@ fn reticulum_transport_status(profile_id: &str, endpoint_uri: &str) -> RadrootsT
 impl From<RadrootsTransportDeliveryReceipt> for TransportReceipt {
     fn from(value: RadrootsTransportDeliveryReceipt) -> Self {
         Self {
-            request_id: value.request_id,
-            target_receipts: value.target_receipts,
+            request_id: value.request_id().to_owned(),
+            target_set: value.target_set().clone(),
+            target_receipts: value.target_receipts().to_vec(),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TransportReceipt {
-    pub request_id: String,
-    pub target_receipts: Vec<RadrootsTransportTargetReceipt>,
+    request_id: String,
+    target_set: RadrootsTransportTargetSet,
+    target_receipts: Vec<RadrootsTransportTargetReceipt>,
 }
 
 impl TransportReceipt {
+    pub fn request_id(&self) -> &str {
+        self.request_id.as_str()
+    }
+
+    pub fn target_set(&self) -> &RadrootsTransportTargetSet {
+        &self.target_set
+    }
+
+    pub fn target_receipts(&self) -> &[RadrootsTransportTargetReceipt] {
+        self.target_receipts.as_slice()
+    }
+
     pub fn satisfied_target_count(
         &self,
         satisfaction_class: RadrootsTransportSatisfactionClass,
@@ -738,11 +752,12 @@ impl TransportReceipt {
     }
 
     pub fn is_satisfied_by(&self, policy: &SatisfactionPolicy) -> Result<bool, RadrootsSdkError> {
-        Ok(RadrootsTransportDeliveryReceipt {
-            request_id: self.request_id.clone(),
-            target_receipts: self.target_receipts.clone(),
-        }
-        .is_satisfied_by(&policy.transport_satisfaction_policy()?)?)
+        let receipt = RadrootsTransportDeliveryReceipt::new(
+            self.request_id.clone(),
+            self.target_set.clone(),
+            self.target_receipts.clone(),
+        )?;
+        Ok(receipt.is_satisfied_by(&policy.transport_satisfaction_policy()?)?)
     }
 }
 

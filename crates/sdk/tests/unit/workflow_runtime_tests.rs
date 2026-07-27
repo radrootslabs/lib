@@ -226,7 +226,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     );
     assert_eq!(input.operation_kind, "workflow.test.v1");
     assert_eq!(
-        input.delivery_plan.targets[0].uri.as_str(),
+        input.delivery_plan.targets[0].uri().as_str(),
         "wss://relay.example.com"
     );
     assert!(input.event_store_inserted);

@@ -774,7 +774,7 @@ fn sqlite_wal_checkpoint_receipt_mapping_covers_edge_states() {
 }
 
 #[tokio::test]
-async fn read_only_event_store_status_enforces_valid_stream_invariants() {
+async fn read_only_event_store_status_respects_immutable_stream_invariants() {
     let sdk = RadrootsClient::builder().build().await.expect("sdk");
     let pool = sdk._event_store.pool();
     let valid_event_id = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -805,48 +805,49 @@ async fn read_only_event_store_status_enforces_valid_stream_invariants() {
     assert_eq!(summary.total_events, 2);
     assert_eq!(summary.valid_stream_events, 1);
 
-    sqlx::query(
+    let legacy_mutation = sqlx::query(
         "UPDATE event_envelopes SET contract_status = 'supported', contract_id = 'radroots.legacy.supported.v0', projection_eligible = 1 WHERE event_id = ?",
     )
         .bind(unsupported_event_id)
         .execute(pool)
         .await
-        .expect("legacy status");
-    let legacy_summary = event_store_status_summary_from_pool(pool)
-        .await
-        .expect("legacy status summary");
-    assert_eq!(legacy_summary.total_events, 2);
-    assert_eq!(legacy_summary.valid_stream_events, 1);
-    sqlx::query(
-        "UPDATE event_envelopes SET contract_status = 'unsupported', contract_id = NULL, projection_eligible = 0 WHERE event_id = ?",
-    )
-        .bind(unsupported_event_id)
-        .execute(pool)
-        .await
-        .expect("restore admission status");
+        .expect_err("derived admission classification must be immutable");
+    assert!(
+        legacy_mutation
+            .to_string()
+            .contains("immutable after reconciliation")
+    );
 
-    sqlx::query(
+    let verification_mutation = sqlx::query(
         "UPDATE event_envelopes SET verification_status = 'signature_invalid' WHERE event_id = ?",
     )
     .bind(valid_event_id)
     .execute(pool)
     .await
-    .expect("invalid verification");
-    assert_event_store_error(event_store_status_summary_from_pool(pool).await);
-    sqlx::query("UPDATE event_envelopes SET verification_status = 'verified' WHERE event_id = ?")
-        .bind(valid_event_id)
-        .execute(pool)
-        .await
-        .expect("restore verification");
+    .expect_err("derived verification classification must be immutable");
+    assert!(
+        verification_mutation
+            .to_string()
+            .contains("immutable after reconciliation")
+    );
 
-    sqlx::query(
+    let class_mutation = sqlx::query(
         "UPDATE event_envelopes SET kind = 20000, event_class = 'ephemeral', projection_eligible = 0 WHERE event_id = ?",
     )
     .bind(valid_event_id)
     .execute(pool)
     .await
-    .expect("ephemeral stored row");
-    assert_event_store_error(event_store_status_summary_from_pool(pool).await);
+    .expect_err("raw and derived event classification must be immutable");
+    assert!(
+        class_mutation
+            .to_string()
+            .contains("immutable after reconciliation")
+    );
+
+    let unchanged = event_store_status_summary_from_pool(pool)
+        .await
+        .expect("unchanged valid stream summary");
+    assert_eq!(unchanged, summary);
 }
 
 #[tokio::test]

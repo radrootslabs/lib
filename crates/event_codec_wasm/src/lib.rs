@@ -833,10 +833,7 @@ pub fn group_roles_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::farm::RadrootsFarmRef;
     use radroots_event::farm_crdt::{
         RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtDocumentKind,
@@ -887,10 +884,9 @@ mod tests {
     };
 
     fn sample_listing() -> RadrootsOperationalListing {
-        let quantity =
-            RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
-        let price = RadrootsCoreQuantityPrice::new(
-            RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
+        let quantity = Quantity::new(Decimal::from(1u32), Unit::Each);
+        let price = QuantityPrice::new(
+            Money::new(Decimal::from(10u32), Currency::USD),
             quantity.clone(),
         );
 

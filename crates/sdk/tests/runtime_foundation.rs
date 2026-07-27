@@ -45,7 +45,7 @@ async fn sdk_builder_validates_configured_relay_targets() {
     let sdk = RadrootsClient::builder()
         .transport_profile(
             nostr_profile(
-                [" wss://relay-b.example.com/ ", "wss://relay-a.example.com"],
+                ["WSS://RELAY-B.EXAMPLE.COM/", "wss://relay-a.example.com"],
                 NostrRelayUrlPolicy::Public,
             )
             .expect("profile"),
@@ -620,7 +620,7 @@ fn sdk_error_contract_methods_cover_all_variants() {
 #[test]
 fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
     let targets = TargetSet::nostr_relays(
-        [" wss://relay-b.example.com/ ", "wss://relay-a.example.com"],
+        ["WSS://RELAY-B.EXAMPLE.COM/", "wss://relay-a.example.com"],
         NostrRelayUrlPolicy::Public,
     )
     .expect("targets");
@@ -666,6 +666,11 @@ fn relay_target_set_validates_normalizes_preserves_order_and_caps() {
             ]
         })
     );
+
+    assert!(matches!(
+        TargetSet::nostr_relays([" wss://relay-a.example.com "], NostrRelayUrlPolicy::Public,),
+        Err(RadrootsSdkError::InvalidRelayUrl { .. })
+    ));
 
     assert!(matches!(
         TargetSet::nostr_relays(

@@ -16,7 +16,7 @@ path = "src/main.rs"
 [dependencies]
 dto_bindgen_backend_ts = { workspace = true }
 dto_bindgen_core = { workspace = true }
-radroots_core = { workspace = true, features = ["dto-bindgen"] }
+radroots_core_bindings = { path = "../../crates/core_bindings" }
 radroots_event = { workspace = true, features = ["dto-bindgen"] }
 radroots_event_bindings = { path = "../../crates/event_bindings" }
 radroots_event_index = { workspace = true, features = ["dto-bindgen"] }

@@ -2,10 +2,7 @@
 
 use futures::future::BoxFuture;
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
-use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     contract::RadrootsActorRole,
     farm::RadrootsFarmRef,
@@ -359,21 +356,21 @@ impl RadrootsRelayPublishAdapter for RecordingPublishAdapter {
             self.raw_events
                 .lock()
                 .expect("raw event lock")
-                .push(request.signed_event.raw_json().to_owned());
+                .push(request.signed_event().raw_json().to_owned());
             self.request_times_ms
                 .lock()
                 .expect("request time lock")
-                .push(request.now_ms);
+                .push(request.now_ms());
             self.idempotency_keys
                 .lock()
                 .expect("idempotency key lock")
-                .push(request.idempotency_key.clone());
+                .push(request.idempotency_key().map(str::to_owned));
             self.relay_batches
                 .lock()
                 .expect("relay batch lock")
-                .push(request.targets.relay_strings());
+                .push(request.targets().relay_strings());
             Ok(request
-                .targets
+                .targets()
                 .relays()
                 .iter()
                 .map(|relay| {
@@ -413,19 +410,10 @@ fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            quantity: RadrootsCoreQuantity::new(
-                RadrootsCoreDecimal::from(1000u32),
-                RadrootsCoreUnit::MassG,
-            ),
-            price_per_canonical_unit: RadrootsCoreQuantityPrice {
-                amount: RadrootsCoreMoney::new(
-                    RadrootsCoreDecimal::from(20u32),
-                    RadrootsCoreCurrency::USD,
-                ),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1u32),
-                    RadrootsCoreUnit::MassG,
-                ),
+            quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+            price_per_canonical_unit: QuantityPrice {
+                amount: Money::new(Decimal::from(20u32), Currency::USD),
+                quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
             },
             display_amount: None,
             display_unit: None,
@@ -436,7 +424,7 @@ fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
         resource_area: None,
         plot: None,
         discounts: None,
-        inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+        inventory_available: Some(Decimal::from(5u32)),
         availability: Some(RadrootsOperationalListingAvailability::Status {
             status: RadrootsOperationalListingStatus::Active,
         }),

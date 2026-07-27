@@ -6,7 +6,7 @@ use super::{
 use crate::{RadrootsSdkError, SDK_TRANSPORT_TARGET_MAX_COUNT};
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetUri,
+    RadrootsTransportTarget,
 };
 
 use crate::serializer_failure::assert_struct_serialize_error_paths;
@@ -311,23 +311,6 @@ fn explicit_target_sets_reject_noncanonical_reticulum_endpoints() {
             RadrootsTransportError::InvalidTargetUri
         );
     }
-
-    let uri = RadrootsTransportTargetUri::parse("reticulum:local-alt").expect("target uri");
-    let fingerprint = RadrootsTransportTargetFingerprint::from_target(
-        &RadrootsTransportKind::Reticulum,
-        &uri,
-        None,
-    );
-    let err = TargetSet::transport_targets(vec![RadrootsTransportTarget {
-        kind: RadrootsTransportKind::Reticulum,
-        uri,
-        scope: None,
-        label: None,
-        fingerprint,
-    }])
-    .expect_err("noncanonical Reticulum endpoint");
-
-    assert!(matches!(err, RadrootsSdkError::InvalidRequest { .. }));
 }
 
 #[test]

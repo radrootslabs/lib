@@ -1,8 +1,5 @@
 use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
-use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::contract::RadrootsActorRole;
 use radroots_event::farm::RadrootsFarmRef;
 use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
@@ -91,19 +88,10 @@ fn sample_listing(seller: &str) -> RadrootsOperationalListing {
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            quantity: RadrootsCoreQuantity::new(
-                RadrootsCoreDecimal::from(1000u32),
-                RadrootsCoreUnit::MassG,
-            ),
-            price_per_canonical_unit: RadrootsCoreQuantityPrice {
-                amount: RadrootsCoreMoney::new(
-                    RadrootsCoreDecimal::from(20u32),
-                    RadrootsCoreCurrency::USD,
-                ),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1u32),
-                    RadrootsCoreUnit::MassG,
-                ),
+            quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+            price_per_canonical_unit: QuantityPrice {
+                amount: Money::new(Decimal::from(20u32), Currency::USD),
+                quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
             },
             display_amount: None,
             display_unit: None,
@@ -114,7 +102,7 @@ fn sample_listing(seller: &str) -> RadrootsOperationalListing {
         resource_area: None,
         plot: None,
         discounts: None,
-        inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+        inventory_available: Some(Decimal::from(5u32)),
         availability: Some(RadrootsOperationalListingAvailability::Status {
             status: RadrootsOperationalListingStatus::Active,
         }),

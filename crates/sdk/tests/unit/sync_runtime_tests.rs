@@ -309,11 +309,11 @@ fn delivery_target_record(
     RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id,
         delivery_plan_id,
-        transport_kind: target.kind.clone(),
-        endpoint_uri: target.uri.clone(),
-        target_scope: target.scope.clone(),
-        target_label: target.label.clone(),
-        endpoint_fingerprint: target.fingerprint.clone(),
+        transport_kind: target.kind().clone(),
+        endpoint_uri: target.uri().clone(),
+        target_scope: target.scope().cloned(),
+        target_label: target.label().cloned(),
+        endpoint_fingerprint: target.fingerprint().clone(),
         status: RadrootsOutboxDeliveryTargetStatus::Pending,
         last_outcome_kind: None,
         attempt_count: 0,
@@ -869,8 +869,8 @@ async fn radrootsd_push_empty_queue_and_private_helpers_are_deterministic() {
     let policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
         vec![
-            first_required.fingerprint.clone(),
-            second_required.fingerprint.clone(),
+            first_required.fingerprint().clone(),
+            second_required.fingerprint().clone(),
         ],
     )
     .expect("required target policy");
@@ -883,7 +883,7 @@ async fn radrootsd_push_empty_queue_and_private_helpers_are_deterministic() {
     let remaining = radrootsd_required_remaining_targets(&policy, &active_targets)
         .expect("required remaining targets")
         .expect("required target policy");
-    assert_eq!(remaining, vec![second_required.fingerprint]);
+    assert_eq!(remaining, vec![second_required.fingerprint().clone()]);
     assert_eq!(
         radrootsd_delivery_policy_from_remaining(2, remaining.len(), Some(&remaining), &policy)
             .expect("required target radrootsd policy"),
@@ -997,11 +997,11 @@ fn radrootsd_outbox_target_conversion_rejects_reticulum_targets_before_behavior_
     let record = RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id: 1,
         delivery_plan_id: 1,
-        transport_kind: target.kind.clone(),
-        endpoint_uri: target.uri.clone(),
-        target_scope: target.scope.clone(),
-        target_label: target.label.clone(),
-        endpoint_fingerprint: target.fingerprint.clone(),
+        transport_kind: target.kind().clone(),
+        endpoint_uri: target.uri().clone(),
+        target_scope: target.scope().cloned(),
+        target_label: target.label().cloned(),
+        endpoint_fingerprint: target.fingerprint().clone(),
         status: RadrootsOutboxDeliveryTargetStatus::Pending,
         last_outcome_kind: None,
         attempt_count: 0,
@@ -1174,9 +1174,9 @@ async fn radrootsd_local_validation_errors_release_claim_before_daemon_publish()
     assert!(!stored_before.event_store_ingested);
     assert_eq!(stored_before.event_store_ingested_at_ms, None);
     let reticulum_target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    claimed.delivery_targets[0].transport_kind = reticulum_target.kind;
-    claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
-    claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
+    claimed.delivery_targets[0].transport_kind = reticulum_target.kind().clone();
+    claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri().clone();
+    claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint().clone();
     let sync = sdk.sync();
     let adapter = RadrootsdPublishAdapter::new(
         RadrootsdPublishConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
@@ -1304,9 +1304,9 @@ async fn radrootsd_local_validation_failure_keeps_sibling_plan_ready_and_claimab
     let ingested_before = stored_before.event_store_ingested;
     let ingested_at_before = stored_before.event_store_ingested_at_ms;
     let reticulum_target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    claimed.delivery_targets[0].transport_kind = reticulum_target.kind;
-    claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri;
-    claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint;
+    claimed.delivery_targets[0].transport_kind = reticulum_target.kind().clone();
+    claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri().clone();
+    claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint().clone();
     let sync = sdk.sync();
     let adapter = RadrootsdPublishAdapter::new(
         RadrootsdPublishConfig::new(endpoint).with_timeout(Duration::from_millis(50)),
@@ -1723,7 +1723,8 @@ impl OutboxPublishReceiptFixture for RadrootsOutboxPublishReceipt {
                     Some(RadrootsTransportTargetLabel::parse("Farm relay").expect("label")),
                 )
                 .expect("target")
-                .fingerprint,
+                .fingerprint()
+                .clone(),
                 target_scope: Some("farm.local".to_owned()),
                 target_label: Some("Farm relay".to_owned()),
                 attempted: true,

@@ -1,3 +1,6 @@
+mod dto;
+
+pub use dto::dto_roots;
 pub use radroots_core as upstream;
 
 #[cfg(test)]
@@ -7,10 +10,11 @@ mod tests {
 
     #[test]
     fn generated_core_types_are_source_rendered() {
-        assert!(GENERATED_TYPES_TS.contains("export type RadrootsCoreMoney"));
-        assert!(GENERATED_TYPES_TS.contains("export type RadrootsCoreQuantityPrice"));
-        assert!(GENERATED_TYPES_TS.contains("export type RadrootsCoreUnitDimension"));
+        assert!(GENERATED_TYPES_TS.contains("export type Money"));
+        assert!(GENERATED_TYPES_TS.contains("export type QuantityPrice"));
+        assert!(GENERATED_TYPES_TS.contains("export type UnitDimension"));
         assert!(GENERATED_TYPES_TS.contains("label?: string | null"));
         assert!(!GENERATED_TYPES_TS.contains("label: string | null"));
+        assert!(!GENERATED_TYPES_TS.contains("RadrootsCore"));
     }
 }

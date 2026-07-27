@@ -45,12 +45,12 @@ macro_rules! imported_ts_type {
     };
 }
 
-imported_ts_type!(RadrootsCoreDecimalImport, "RadrootsCoreDecimal");
-imported_ts_type!(RadrootsCoreDiscountImport, "RadrootsCoreDiscount");
-imported_ts_type!(RadrootsCoreMoneyImport, "RadrootsCoreMoney");
-imported_ts_type!(RadrootsCoreQuantityImport, "RadrootsCoreQuantity");
-imported_ts_type!(RadrootsCoreQuantityPriceImport, "RadrootsCoreQuantityPrice");
-imported_ts_type!(RadrootsCoreUnitImport, "RadrootsCoreUnit");
+imported_ts_type!(DecimalImport, "Decimal");
+imported_ts_type!(DiscountImport, "Discount");
+imported_ts_type!(MoneyImport, "Money");
+imported_ts_type!(QuantityImport, "Quantity");
+imported_ts_type!(QuantityPriceImport, "QuantityPrice");
+imported_ts_type!(UnitImport, "Unit");
 imported_ts_type!(RadrootsFarmRefImport, "RadrootsFarmRef");
 imported_ts_type!(
     RadrootsOperationalListingAvailabilityImport,
@@ -191,8 +191,8 @@ pub struct RadrootsTradeListingProjection {
     pub bins: Vec<RadrootsTradeListingBinProjection>,
     pub resource_area: Option<RadrootsResourceAreaRefImport>,
     pub plot: Option<RadrootsPlotRefImport>,
-    pub discounts: Option<Vec<RadrootsCoreDiscountImport>>,
-    pub inventory_available: Option<RadrootsCoreDecimalImport>,
+    pub discounts: Option<Vec<DiscountImport>>,
+    pub inventory_available: Option<DecimalImport>,
     pub availability: Option<RadrootsOperationalListingAvailabilityImport>,
     pub delivery_method: Option<RadrootsOperationalListingDeliveryMethodImport>,
     pub location: Option<RadrootsOperationalListingPublicLocationImport>,
@@ -248,7 +248,7 @@ pub struct RadrootsTradeMarketplaceListingSummary {
     pub product_summary: Option<String>,
     pub listing_status: RadrootsTradeListingMarketStatus,
     pub location_primary: Option<String>,
-    pub inventory_available: Option<RadrootsCoreDecimalImport>,
+    pub inventory_available: Option<DecimalImport>,
     pub primary_bin_id: String,
     pub primary_bin_label: Option<String>,
     pub primary_bin_total: RadrootsOperationalListingTotal,
