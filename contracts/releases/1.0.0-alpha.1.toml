@@ -511,6 +511,17 @@ semver_impacts = ["change_exported_constant_value", "fix_packaging_metadata"]
 summary = "Regenerate the remote SP1 Core proof fixture for the validator-set witness identity, exercise real cryptographic verification, and allow the SP1-pinned guest compiler to trail the workspace Rust version during locked guest builds."
 
 [[changes]]
+id = "blossom-raster-decoder-security"
+classification = "breaking"
+semver_impacts = [
+  "change_exported_constant_value",
+  "change_exported_algorithm_behavior",
+  "add_enum_variant",
+  "add_conformance_vector",
+]
+summary = "Tighten the publication raster decoder security boundary: cap decoded output at 80,000,000 bytes, restrict PNG and WebP to approved static 8-bit processes with palette, ordering, critical-chunk, and container-record rules, bound sequential JPEG scans, blocks, coefficient steps, and entropy bit reads, and add the raster decoder security conformance vector with independent-decoder differential, peak-RSS, and fuzz gates."
+
+[[changes]]
 id = "blossom-publication-readiness-evidence"
 classification = "feature"
 semver_impacts = [

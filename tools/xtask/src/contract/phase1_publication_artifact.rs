@@ -127,6 +127,8 @@ const BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "tools/xtask/src/contract/food_availability_projection.rs",
     "tools/xtask/src/contract/source_maintenance.rs",
 ];
+const RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] =
+    &["build/nix/apps.nix", "build/nix/toolchains.nix"];
 
 const PUBLIC_TYPES: &[&str] = &[
     "RadrootsPhase1PublicationEventVariant",
@@ -1409,10 +1411,16 @@ fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Resul
                 .iter()
                 .copied(),
         )
+        .chain(
+            RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS
+                .iter()
+                .copied(),
+        )
         .collect::<BTreeSet<_>>();
     if superseded.len()
         != RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
             + BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
+            + RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
     {
         return Err("raw predecessor supersession paths must be unique".to_owned());
     }

@@ -1,0 +1,25 @@
+{
+  "contract_id": "radroots_blossom.raster_decoder_security_v1",
+  "manifest": {
+    "byte_length": 31555,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.json",
+    "sha256": "4a3c4acd9f2e3b0447465e5a1f744186d4823f0c6beb0665cb951b8dd82139c2"
+  },
+  "manifest_schema": {
+    "byte_length": 19177,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.schema.json",
+    "sha256": "8efaeddcfd209deaa0d60732cfe094a915e6ba1569cb3b09c8c1af9de66fe16e"
+  },
+  "manifest_sidecar": {
+    "byte_length": 65,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.sha256",
+    "sha256": "eb24f1c678c26092b85ffcf9c0ae51f72100018472d63774eb8abd4b00864c6d"
+  },
+  "predecessor_contract_ids": [
+    "radroots_blossom.publication_readiness_v1"
+  ],
+  "schema_version": 1
+}

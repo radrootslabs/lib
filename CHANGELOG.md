@@ -210,6 +210,22 @@ publish policy both pass for the same source revision.
   noncanonical, or digest-mutated state before signing. The artifact boundary
   now admits only nonempty, at-most-10-MiB JPEG, PNG, or still-WebP references
   whose canonical URLs are at most 4,096 bytes.
+<!-- release-change: blossom-raster-decoder-security -->
+- Blossom publication raster decoding is now governed as a dedicated security
+  and cost boundary. Decoded output is capped at `80,000,000` bytes before
+  allocation, down from the previous `160,000,000` byte ceiling. PNG is
+  restricted to static 8-bit images with approved color types, one ordered
+  palette, no critical unknown chunks, and bounded container records; WebP is
+  restricted to static images whose extended header carries no reserved flags
+  and exactly one primary chunk. Sequential JPEG decoding now charges bounded
+  scan, block, coefficient-step, marker-record, and entropy bit-read budgets
+  so no input can loop or allocate beyond its declared ceiling. Unsupported
+  PNG and WebP raster processes fail with the new stable
+  `publication_raster_process_forbidden` error. An exact 30-case regression
+  corpus, a Nix-pinned independent-decoder differential, an isolated
+  twelve-process maximum-resource matrix with a 128 MiB peak-RSS gate, and
+  deterministic libFuzzer smoke targets with one raw seed per case now execute
+  through the real public readiness API in the governed decoder-security lane.
 <!-- release-change: blossom-publication-readiness-evidence -->
 - Blossom publication media now advances beyond local byte verification only
   after typed BUD-02 status and descriptor agreement, an independent BUD-01
@@ -221,7 +237,7 @@ publish policy both pass for the same source revision.
   sequential SOF0/SOF1 and combines exact entropy accounting with pinned
   strict `zune-jpeg` and `zune-core` RGB decoding; PNG and WebP use a
   separately pinned two-format `image` build.
-  Decoded output is bounded to 160,000,000 bytes before allocation; callers
+  Decoded output is bounded to 80,000,000 bytes before allocation; callers
   cannot provide decode claims.
   Deterministic per-URL evidence remains transport-neutral and contains no
   HTTP credentials, BUD-11 material, entitlement decision, or private service

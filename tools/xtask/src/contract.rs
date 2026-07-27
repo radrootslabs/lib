@@ -4,7 +4,6 @@ mod admission_authority;
 mod artifact_bundle;
 #[allow(dead_code)]
 mod blossom_publication_readiness;
-#[allow(dead_code)]
 mod blossom_raster_decoder_security;
 mod comment_authority;
 mod deletion_authority;
@@ -25,6 +24,10 @@ mod registry_v7;
 mod release_provenance;
 mod source_maintenance;
 
+pub(crate) use blossom_raster_decoder_security::{
+    validate_blossom_raster_decoder_security_manifest,
+    write_blossom_raster_decoder_security_manifest,
+};
 pub(crate) use food_availability_projection::{
     validate_food_availability_projection_manifest, write_food_availability_projection_manifest,
 };
@@ -78,6 +81,7 @@ pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), S
     validate_immutable_phase1_publication_artifact_predecessor(workspace_root)?;
     validate_release_provenance_schema(workspace_root)?;
     validate_phase1_publication_media_readiness_manifest(workspace_root)?;
+    validate_blossom_raster_decoder_security_manifest(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
 
@@ -165,7 +169,7 @@ const REPLICA_CONTRACT_RELATIVE: &str = "contracts/replica.toml";
 const REPLICA_CONTRACT_NAME: &str = "radroots_replica_contract";
 const REPLICA_TRANSFER_CONSTANT: &str = "RADROOTS_REPLICA_TRANSFER_VERSION";
 const REPLICA_TRANSFER_VERSION: u32 = 2;
-const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 28] = [
+const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 29] = [
     (
         "contracts/conformance/vectors/blossom/bud11_claims.v1.json",
         "crates/blossom/tests/fixtures/bud11_claims.v1.json",
@@ -181,6 +185,10 @@ const CONFORMANCE_VECTOR_MIRRORS: [(&str, &str); 28] = [
     (
         "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json",
         "crates/blossom/tests/fixtures/publication_readiness_persistence.v1.json",
+    ),
+    (
+        "contracts/conformance/vectors/blossom/raster_decoder_security.v1.json",
+        "crates/blossom/tests/fixtures/raster_decoder_security.v1.json",
     ),
     (
         "contracts/conformance/vectors/blossom/bud11_nostr_adapter.v1.json",

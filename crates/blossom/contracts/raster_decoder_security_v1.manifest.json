@@ -1,0 +1,905 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_blossom.raster_decoder_security_v1",
+  "authority_id": "blossom_raster_decoder_security_v1",
+  "manifest_schema": {
+    "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.schema.json",
+    "byte_length": 19177,
+    "sha256": "8efaeddcfd209deaa0d60732cfe094a915e6ba1569cb3b09c8c1af9de66fe16e",
+    "hash_algorithm": "sha256_bytes_v1"
+  },
+  "predecessors": [
+    {
+      "contract_id": "radroots_blossom.publication_readiness_v1",
+      "immutable_artifacts": [
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.manifest.json",
+          "byte_length": 13038,
+          "sha256": "9359c5531548778b4a03e1a603a4048f17ba498b16dad50f7c62cca0ddb6240b",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.manifest.schema.json",
+          "byte_length": 11884,
+          "sha256": "e62ecf4b43bd03831f7e36e9cb4c98e2ed7e3a12d02cbca48a49e402b3feaa7d",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.manifest.sha256",
+          "byte_length": 65,
+          "sha256": "e8c2be84eef68e965ac0e119016d6840cb9503e58d5d9c40e13a6512e1ec74b7",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_v1.descriptor.json",
+          "byte_length": 1410,
+          "sha256": "4a3b33eb2b04b5a56a99b7b5bed45988a0697cb28736bfd899e012f37fc02d93",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/contracts/publication_readiness_evidence_v1.schema.json",
+          "byte_length": 1890,
+          "sha256": "c8f5f3488dd91a660f8eaa018d9aba63d03c882dc3ff22b47ac192b7189b0ce2",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+          "byte_length": 16423,
+          "sha256": "6408e3b5bc4a376c7411e304833431af918a4072f196e8a8da55c3f0ef8610c9",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/fixtures/publication_readiness.v1.json",
+          "byte_length": 16423,
+          "sha256": "6408e3b5bc4a376c7411e304833431af918a4072f196e8a8da55c3f0ef8610c9",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/publication_readiness.rs",
+          "byte_length": 33431,
+          "sha256": "17abd5491bcfe0c717f7f67202c8c2d85912a042167d027727c07d9f07306641",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json",
+          "byte_length": 9264,
+          "sha256": "e892ff6353afe8997a151a9aff4db2fd82c96d94db7bff31bc2269333adc2512",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/fixtures/publication_readiness_persistence.v1.json",
+          "byte_length": 9264,
+          "sha256": "e892ff6353afe8997a151a9aff4db2fd82c96d94db7bff31bc2269333adc2512",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/publication_readiness_persistence.rs",
+          "byte_length": 11567,
+          "sha256": "aa14d20ee5747fcc979907b4b59a67687a3a02852850e33aede65e2ab0e0ca8d",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      ],
+      "source_supersessions": [
+        "CHANGELOG.md",
+        "contracts/releases/1.0.0-alpha.1.toml",
+        "crates/blossom/Cargo.toml",
+        "crates/blossom/src/error.rs",
+        "crates/blossom/src/publication_readiness.rs",
+        "crates/blossom/src/publication_readiness/sequential_jpeg.rs",
+        "tools/xtask/src/contract.rs",
+        "tools/xtask/src/main.rs"
+      ]
+    }
+  ],
+  "protocol_sources": [
+    {
+      "id": "nostr_nips",
+      "repository": "https://github.com/nostr-protocol/nips",
+      "revision": "bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91"
+    },
+    {
+      "id": "blossom",
+      "repository": "https://github.com/hzrd149/blossom",
+      "revision": "b5bd2801d1763aa635fc8fea7a76597e0eb18990"
+    }
+  ],
+  "resource_limits": {
+    "max_raster_bytes": 10485760,
+    "max_decoded_bytes": 80000000,
+    "max_dimension": 16384,
+    "max_pixels": 20000000,
+    "max_container_records": 65536,
+    "jpeg_max_scans": 4,
+    "jpeg_max_blocks": 3200000,
+    "jpeg_max_coefficient_steps": 204800000,
+    "jpeg_entropy_bit_reads_per_byte": 8,
+    "peak_rss_kib_limit": 131072
+  },
+  "decoder_profile": {
+    "accepted_formats": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ],
+    "accepted_jpeg_processes": [
+      "sof0_baseline_8bit",
+      "sof1_extended_sequential_8bit"
+    ],
+    "accepted_png_color_types": [
+      0,
+      2,
+      3,
+      4,
+      6
+    ],
+    "normative_error_codes": [
+      "publication_raster_empty",
+      "publication_raster_byte_limit_exceeded",
+      "unsupported_publication_raster_media_type",
+      "invalid_publication_raster",
+      "publication_jpeg_process_forbidden",
+      "publication_raster_animation_forbidden",
+      "publication_raster_container_dimension_mismatch",
+      "publication_raster_decode_allocation_failed",
+      "publication_raster_decoded_byte_limit_exceeded",
+      "publication_raster_decode_failed",
+      "publication_raster_dimensions_out_of_range",
+      "publication_raster_pixel_limit_exceeded",
+      "publication_raster_process_forbidden"
+    ],
+    "observed_rejection_error_codes": [
+      "invalid_publication_raster",
+      "publication_jpeg_process_forbidden",
+      "publication_raster_animation_forbidden",
+      "publication_raster_decode_failed",
+      "publication_raster_dimensions_out_of_range",
+      "publication_raster_pixel_limit_exceeded",
+      "publication_raster_process_forbidden"
+    ],
+    "required_accepted_mutations": [
+      "jpeg_sof1",
+      "none"
+    ],
+    "required_rejected_mutations": [
+      "jpeg_entropy_truncated",
+      "jpeg_huffman_overfull",
+      "jpeg_precision_12",
+      "jpeg_progressive",
+      "jpeg_wrong_restart",
+      "png_16_bit",
+      "png_animation",
+      "png_corrupt_crc",
+      "png_corrupt_deflate",
+      "png_dimension_over",
+      "png_pixel_over",
+      "truncate_half",
+      "webp_animation",
+      "webp_duplicate_primary"
+    ]
+  },
+  "resource_probes": [
+    {
+      "id": "jpeg_grayscale",
+      "format": "jpeg",
+      "process": "sof0_grayscale_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 60000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_grayscale",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "jpeg_rgb",
+      "format": "jpeg",
+      "process": "sof0_rgb_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 60000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_rgb",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "jpeg_cmyk",
+      "format": "jpeg",
+      "process": "sof0_cmyk_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 60000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_cmyk",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "jpeg_sof1",
+      "format": "jpeg",
+      "process": "sof1_extended_sequential_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 60000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_rgb_sof1_marker",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "png_rgb",
+      "format": "png",
+      "process": "rgb_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 60000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_png24",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "png_palette",
+      "format": "png",
+      "process": "palette_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 60000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_palette",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "png_rgba",
+      "format": "png",
+      "process": "rgba_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 80000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_png32",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "png_adam7",
+      "format": "png",
+      "process": "adam7_rgba_8bit",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 80000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_adam7",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "webp_vp8_rgb",
+      "format": "webp",
+      "process": "vp8_rgb",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 80000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_webp_lossy_rgb",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "webp_vp8_alpha",
+      "format": "webp",
+      "process": "vp8_alpha",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 80000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_webp_lossy_alpha",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "webp_vp8l_rgb",
+      "format": "webp",
+      "process": "vp8l_rgb",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 80000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_webp_lossless_rgb",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    },
+    {
+      "id": "webp_vp8l_alpha",
+      "format": "webp",
+      "process": "vp8l_alpha",
+      "width": 5000,
+      "height": 4000,
+      "max_encoded_bytes": 10485760,
+      "max_decoded_bytes": 80000000,
+      "executor_test": "maximum_resource_probe",
+      "fixture_authority": "imagemagick_webp_lossless_alpha",
+      "repetitions": 3,
+      "peak_rss_kib_limit": 131072
+    }
+  ],
+  "fuzz_campaign": {
+    "project_manifest": {
+      "path": "fuzz/Cargo.toml",
+      "byte_length": 628,
+      "sha256": "d73bb44034df2f083fa2f1f6d437639fa7d1fede4c563fc0864d9859a03d01cb",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "project_lockfile": {
+      "path": "fuzz/Cargo.lock",
+      "byte_length": 19013,
+      "sha256": "05add36124173589e21d1e9706b77dc9622542bd5072346b3a355ada65e39e64",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "toolchain": {
+      "path": "rust-toolchain-fuzz.toml",
+      "byte_length": 89,
+      "sha256": "844804fc214567a8b3151848dbb141f11310be956cf797554ffaef58d380c063",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "toolchain_channel": "nightly-2026-07-15",
+    "toolchain_components": [
+      "rust-src"
+    ],
+    "toolchain_profile": "minimal",
+    "engine": "libfuzzer",
+    "sanitizer": "address",
+    "common_harness": {
+      "path": "fuzz/fuzz_targets/common.rs",
+      "byte_length": 2024,
+      "sha256": "bde259afbc894af9cf60f160e6664350430e4b0af90b293112b6e768c0127d2d",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "targets": [
+      {
+        "name": "publication_jpeg",
+        "format": "jpeg",
+        "media_type": "image/jpeg",
+        "extension": "jpg",
+        "binary": {
+          "path": "fuzz/fuzz_targets/publication_jpeg.rs",
+          "byte_length": 141,
+          "sha256": "ed3e20c5e3f0521061f0b4ced734bf3b0a5581472312812ccb00b7742380a287",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "name": "publication_png",
+        "format": "png",
+        "media_type": "image/png",
+        "extension": "png",
+        "binary": {
+          "path": "fuzz/fuzz_targets/publication_png.rs",
+          "byte_length": 140,
+          "sha256": "ae3e94d747e37384e3badf250ba0cebedcea86d8512afa61c6053f2c45d9ccb5",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "name": "publication_webp",
+        "format": "webp",
+        "media_type": "image/webp",
+        "extension": "webp",
+        "binary": {
+          "path": "fuzz/fuzz_targets/publication_webp.rs",
+          "byte_length": 142,
+          "sha256": "f2835f2bfe44a8cf5e18c932b8cb5b31248a1e13e189c4d84972685d2e7caa56",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      }
+    ],
+    "corpus_seeds": [
+      {
+        "vector_id": "jpeg_baseline_gray_8bit",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_baseline_gray_8bit.bin",
+          "byte_length": 159,
+          "sha256": "7fa92b6a273d259a2e9bc88d573f41d17a888460065662f2d9e622bfc8e155ce",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_baseline_rgb_8bit",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_baseline_rgb_8bit.bin",
+          "byte_length": 285,
+          "sha256": "c2be04cb3f623b7f9397c8819a01355588fdbbe53ec3cacc6acb6dcdbfc80eb6",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_baseline_cmyk_8bit",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_baseline_cmyk_8bit.bin",
+          "byte_length": 291,
+          "sha256": "b8cd844b0568f5c609fc4278eca92fa7610d587814e0e899f38e0c31fdc9f802",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_extended_sequential_sof1",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "jpeg_sof1",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_extended_sequential_sof1.bin",
+          "byte_length": 285,
+          "sha256": "15eaf062217a767d41ee1fbc597a5d6b8bc710a6a6c01025cfe0ad18d6c8f52d",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_gray_8bit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_gray_8bit.bin",
+          "byte_length": 68,
+          "sha256": "461a58191e32992a3801fd933d60741e530f4d10e8af510b48db8ddb3232d93e",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_rgb_8bit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_rgb_8bit.bin",
+          "byte_length": 72,
+          "sha256": "00b1038ca37dcc47d85bbefb5e7396617af18476cea682e650772c51fa66c417",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_indexed_8bit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_indexed_8bit.bin",
+          "byte_length": 86,
+          "sha256": "355eaeb8ecb24c8309f3be89fb79ef1f0a031b93d332db6ef447686e9bc96f7c",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_gray_alpha_8bit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_gray_alpha_8bit.bin",
+          "byte_length": 70,
+          "sha256": "7ea9058a2e5506cd365a327e552679cd3d7acb497b54e514fd8f116272c42ff7",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_rgba_8bit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_rgba_8bit.bin",
+          "byte_length": 74,
+          "sha256": "fe64867950903ef8bba758eabe81300c166ff3acc5c7abb37b06bb1ee8cdea74",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_adam7_rgba_8bit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_adam7_rgba_8bit.bin",
+          "byte_length": 130,
+          "sha256": "c49d6e3270b829579b95922180303d4af4961cd4f45d629fe2a812e92e207921",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_lossless_8bit",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_lossless_8bit.bin",
+          "byte_length": 38,
+          "sha256": "316448507d8dbacadfe50321bdef964692500eebef47c420a961c95bdf5d00fe",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_lossy_8bit",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_lossy_8bit.bin",
+          "byte_length": 54,
+          "sha256": "7d14a4235af773378b15bf0762eaf0ca1cdf28abe88428dadc48d656c52beeb4",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_lossless_alpha_8bit",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_lossless_alpha_8bit.bin",
+          "byte_length": 38,
+          "sha256": "6a0857f2bc3478d81be7cd54f444334a02f043c5955f6651167a43c1d0fb8c07",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_lossy_alpha_8bit",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "none",
+        "expected_accepted": true,
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_lossy_alpha_8bit.bin",
+          "byte_length": 88,
+          "sha256": "c633a9964d32e414e171d03ab8f8dc46e11df33562450d52d36b40ffea757895",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_progressive_forbidden",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "jpeg_progressive",
+        "expected_accepted": false,
+        "expected_error": "publication_jpeg_process_forbidden",
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_progressive_forbidden.bin",
+          "byte_length": 285,
+          "sha256": "a3d8da301ab0ce07e89da6ff5c0599c994d0c230acf19c0f2bc4d9f17ba3e588",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_twelve_bit_forbidden",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "jpeg_precision_12",
+        "expected_accepted": false,
+        "expected_error": "publication_jpeg_process_forbidden",
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_twelve_bit_forbidden.bin",
+          "byte_length": 285,
+          "sha256": "8f1486d27c1ff6a2f5077137dcc83ecf11aaa68cb083c26ada87baecc94f2d8b",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_entropy_truncated",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "jpeg_entropy_truncated",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_decode_failed",
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_entropy_truncated.bin",
+          "byte_length": 283,
+          "sha256": "69c773c027f963e9520039d6e959b3da747c1cb3171d3f39227670f950571c17",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_huffman_overfull",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "jpeg_huffman_overfull",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_decode_failed",
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_huffman_overfull.bin",
+          "byte_length": 285,
+          "sha256": "9d588613faf5a5fc3e3e2b8faae8ce9dbaf18874a465e3dfbea2ebd4ac83e389",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_wrong_restart_marker",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "jpeg_wrong_restart",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_decode_failed",
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_wrong_restart_marker.bin",
+          "byte_length": 77,
+          "sha256": "9956c9a8a03324f181c41dfe7fcf751bd8c9e339d49637ddf16f6570bbeb21f2",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_sixteen_bit_forbidden",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "png_16_bit",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_process_forbidden",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_sixteen_bit_forbidden.bin",
+          "byte_length": 70,
+          "sha256": "cc5c6ee874284c68dc695044048c7315e54b19447940602902f3e94aa5433ce6",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_animation_forbidden",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "png_animation",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_animation_forbidden",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_animation_forbidden.bin",
+          "byte_length": 128,
+          "sha256": "bbfb514b688df5a77a5ad37c0da8670983eea80aa03dee3d32a517d851eae426",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_corrupt_crc",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "png_corrupt_crc",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_decode_failed",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_corrupt_crc.bin",
+          "byte_length": 70,
+          "sha256": "49c97a97da4b5eafcf09ee91178af6a873affacedbf67ee379e96918626c4e83",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_corrupt_deflate",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "png_corrupt_deflate",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_decode_failed",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_corrupt_deflate.bin",
+          "byte_length": 70,
+          "sha256": "1719868f92b7cfd4e4f11f6345a32cde86e19fd6d482c3c0deee7bdabe665cd4",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_dimension_over_limit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "png_dimension_over",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_dimensions_out_of_range",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_dimension_over_limit.bin",
+          "byte_length": 70,
+          "sha256": "ab7addacea8c08de725e33723ff2b9445be77a8d50e949962a24886d81ef0203",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_pixel_limit",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "png_pixel_over",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_pixel_limit_exceeded",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_pixel_limit.bin",
+          "byte_length": 70,
+          "sha256": "fbd966761eed339f5a8fdb44fe6050e2fffe05415428802c8db068bd9b15cfed",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "png_truncated",
+        "target": "publication_png",
+        "format": "png",
+        "provenance_mutation": "truncate_half",
+        "expected_accepted": false,
+        "expected_error": "invalid_publication_raster",
+        "file": {
+          "path": "fuzz/corpus/publication_png/png_truncated.bin",
+          "byte_length": 35,
+          "sha256": "a4ec7382dbf2d70d7764f8c854e52ead90b5455749ad1a0feb5ae1f25479dae5",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_animation_forbidden",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "webp_animation",
+        "expected_accepted": false,
+        "expected_error": "publication_raster_animation_forbidden",
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_animation_forbidden.bin",
+          "byte_length": 94,
+          "sha256": "f53e7f7baeca695b8958f50a8eb4883ebad4fe18eb54976563d9c6a56b35b85b",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_duplicate_primary",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "webp_duplicate_primary",
+        "expected_accepted": false,
+        "expected_error": "invalid_publication_raster",
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_duplicate_primary.bin",
+          "byte_length": 64,
+          "sha256": "58875ddbef1b6eba0581259f36ee35a659373ceb524c9eba08585fedb320cf2e",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "webp_truncated",
+        "target": "publication_webp",
+        "format": "webp",
+        "provenance_mutation": "truncate_half",
+        "expected_accepted": false,
+        "expected_error": "invalid_publication_raster",
+        "file": {
+          "path": "fuzz/corpus/publication_webp/webp_truncated.bin",
+          "byte_length": 19,
+          "sha256": "ae50569b401bc226004c9bddc9199e5928ecd2a58c1662281df2f5342682d69c",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      },
+      {
+        "vector_id": "jpeg_truncated",
+        "target": "publication_jpeg",
+        "format": "jpeg",
+        "provenance_mutation": "truncate_half",
+        "expected_accepted": false,
+        "expected_error": "invalid_publication_raster",
+        "file": {
+          "path": "fuzz/corpus/publication_jpeg/jpeg_truncated.bin",
+          "byte_length": 79,
+          "sha256": "d4d4a33838e0dc6535b97cd2b5f775e418c23f502554e029c6e0346b5e17eb65",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      }
+    ],
+    "smoke_runs": 256,
+    "smoke_seed": 424242,
+    "smoke_max_input_bytes": 65536,
+    "smoke_timeout_seconds": 5,
+    "engine_rss_limit_mb": 2048,
+    "extended_campaign_document": {
+      "path": "docs/blossom-raster-decoder-security.md",
+      "byte_length": 7764,
+      "sha256": "18e7971504f0228d81e028e5845e9ca47e9b3bdcbaeb2cf1b953aaba8484146d",
+      "hash_algorithm": "sha256_bytes_v1"
+    }
+  },
+  "nix_lanes": {
+    "app": "decoder-security",
+    "devshell": "decoder-security",
+    "stable_check": "blossom-raster-decode-test",
+    "fuzz_check": "blossom-decoder-fuzz-smoke"
+  },
+  "operation": {
+    "key": "blossom_verify_publication_readiness",
+    "id": "blossom.verify_publication_readiness",
+    "primary_vector": "contracts/conformance/vectors/blossom/publication_readiness.v1.json",
+    "primary_case_kinds": [
+      "blossom.verify_publication_readiness.valid",
+      "blossom.verify_publication_readiness.invalid"
+    ],
+    "security_case_kinds": [
+      "blossom.verify_publication_readiness.decoder_security.accepted",
+      "blossom.verify_publication_readiness.decoder_security.rejected"
+    ]
+  },
+  "release_change_id": "blossom-raster-decoder-security",
+  "result_vector": {
+    "canonical": {
+      "path": "contracts/conformance/vectors/blossom/raster_decoder_security.v1.json",
+      "byte_length": 17754,
+      "sha256": "b50fae1c8abd18e9915072df07461ea4cd02a13d9579d51fab8b3666cbd50ec9",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "mirror": {
+      "path": "crates/blossom/tests/fixtures/raster_decoder_security.v1.json",
+      "byte_length": 17754,
+      "sha256": "b50fae1c8abd18e9915072df07461ea4cd02a13d9579d51fab8b3666cbd50ec9",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "executor": {
+      "path": "crates/blossom/tests/decoder_security.rs",
+      "byte_length": 19240,
+      "sha256": "fe940ca7d26280d7bcc1f1c4dd0b1b36d8ab60dcdbfe54413ceed837bbbe4b71",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    "executor_tests": [
+      "decoder_regression_corpus_executes_every_case",
+      "decoder_differential_matches_independent_backend",
+      "maximum_resource_probe"
+    ],
+    "case_ids": [
+      "jpeg_baseline_gray_8bit",
+      "jpeg_baseline_rgb_8bit",
+      "jpeg_baseline_cmyk_8bit",
+      "jpeg_extended_sequential_sof1",
+      "png_gray_8bit",
+      "png_rgb_8bit",
+      "png_indexed_8bit",
+      "png_gray_alpha_8bit",
+      "png_rgba_8bit",
+      "png_adam7_rgba_8bit",
+      "webp_lossless_8bit",
+      "webp_lossy_8bit",
+      "webp_lossless_alpha_8bit",
+      "webp_lossy_alpha_8bit",
+      "jpeg_progressive_forbidden",
+      "jpeg_twelve_bit_forbidden",
+      "jpeg_entropy_truncated",
+      "jpeg_huffman_overfull",
+      "jpeg_wrong_restart_marker",
+      "png_sixteen_bit_forbidden",
+      "png_animation_forbidden",
+      "png_corrupt_crc",
+      "png_corrupt_deflate",
+      "png_dimension_over_limit",
+      "png_pixel_limit",
+      "png_truncated",
+      "webp_animation_forbidden",
+      "webp_duplicate_primary",
+      "webp_truncated",
+      "jpeg_truncated"
+    ]
+  }
+}

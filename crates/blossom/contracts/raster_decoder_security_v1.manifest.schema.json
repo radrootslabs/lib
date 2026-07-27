@@ -1,0 +1,763 @@
+{
+  "$defs": {
+    "corpus_seed": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_accepted": {
+          "type": "boolean"
+        },
+        "expected_error": {
+          "enum": [
+            "invalid_publication_raster",
+            "publication_jpeg_process_forbidden",
+            "publication_raster_animation_forbidden",
+            "publication_raster_decode_failed",
+            "publication_raster_dimensions_out_of_range",
+            "publication_raster_pixel_limit_exceeded",
+            "publication_raster_process_forbidden"
+          ],
+          "type": "string"
+        },
+        "file": {
+          "$ref": "#/$defs/file"
+        },
+        "format": {
+          "enum": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        "provenance_mutation": {
+          "enum": [
+            "jpeg_sof1",
+            "jpeg_entropy_truncated",
+            "jpeg_huffman_overfull",
+            "jpeg_precision_12",
+            "jpeg_progressive",
+            "jpeg_wrong_restart",
+            "none",
+            "png_16_bit",
+            "png_animation",
+            "png_corrupt_crc",
+            "png_corrupt_deflate",
+            "png_dimension_over",
+            "png_pixel_over",
+            "truncate_half",
+            "webp_animation",
+            "webp_duplicate_primary"
+          ],
+          "type": "string"
+        },
+        "target": {
+          "enum": [
+            "publication_jpeg",
+            "publication_png",
+            "publication_webp"
+          ],
+          "type": "string"
+        },
+        "vector_id": {
+          "enum": [
+            "jpeg_baseline_gray_8bit",
+            "jpeg_baseline_rgb_8bit",
+            "jpeg_baseline_cmyk_8bit",
+            "jpeg_extended_sequential_sof1",
+            "png_gray_8bit",
+            "png_rgb_8bit",
+            "png_indexed_8bit",
+            "png_gray_alpha_8bit",
+            "png_rgba_8bit",
+            "png_adam7_rgba_8bit",
+            "webp_lossless_8bit",
+            "webp_lossy_8bit",
+            "webp_lossless_alpha_8bit",
+            "webp_lossy_alpha_8bit",
+            "jpeg_progressive_forbidden",
+            "jpeg_twelve_bit_forbidden",
+            "jpeg_entropy_truncated",
+            "jpeg_huffman_overfull",
+            "jpeg_wrong_restart_marker",
+            "png_sixteen_bit_forbidden",
+            "png_animation_forbidden",
+            "png_corrupt_crc",
+            "png_corrupt_deflate",
+            "png_dimension_over_limit",
+            "png_pixel_limit",
+            "png_truncated",
+            "webp_animation_forbidden",
+            "webp_duplicate_primary",
+            "webp_truncated",
+            "jpeg_truncated"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "vector_id",
+        "target",
+        "format",
+        "provenance_mutation",
+        "expected_accepted",
+        "file"
+      ],
+      "type": "object"
+    },
+    "decoder_profile": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_formats": {
+          "const": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "accepted_jpeg_processes": {
+          "const": [
+            "sof0_baseline_8bit",
+            "sof1_extended_sequential_8bit"
+          ]
+        },
+        "accepted_png_color_types": {
+          "const": [
+            0,
+            2,
+            3,
+            4,
+            6
+          ]
+        },
+        "normative_error_codes": {
+          "items": {
+            "enum": [
+              "publication_raster_empty",
+              "publication_raster_byte_limit_exceeded",
+              "unsupported_publication_raster_media_type",
+              "invalid_publication_raster",
+              "publication_jpeg_process_forbidden",
+              "publication_raster_animation_forbidden",
+              "publication_raster_container_dimension_mismatch",
+              "publication_raster_decode_allocation_failed",
+              "publication_raster_decoded_byte_limit_exceeded",
+              "publication_raster_decode_failed",
+              "publication_raster_dimensions_out_of_range",
+              "publication_raster_pixel_limit_exceeded",
+              "publication_raster_process_forbidden"
+            ],
+            "type": "string"
+          },
+          "maxItems": 13,
+          "minItems": 13,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "observed_rejection_error_codes": {
+          "items": {
+            "enum": [
+              "invalid_publication_raster",
+              "publication_jpeg_process_forbidden",
+              "publication_raster_animation_forbidden",
+              "publication_raster_decode_failed",
+              "publication_raster_dimensions_out_of_range",
+              "publication_raster_pixel_limit_exceeded",
+              "publication_raster_process_forbidden"
+            ],
+            "type": "string"
+          },
+          "maxItems": 7,
+          "minItems": 7,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "required_accepted_mutations": {
+          "items": {
+            "enum": [
+              "jpeg_sof1",
+              "none"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "required_rejected_mutations": {
+          "items": {
+            "enum": [
+              "jpeg_entropy_truncated",
+              "jpeg_huffman_overfull",
+              "jpeg_precision_12",
+              "jpeg_progressive",
+              "jpeg_wrong_restart",
+              "png_16_bit",
+              "png_animation",
+              "png_corrupt_crc",
+              "png_corrupt_deflate",
+              "png_dimension_over",
+              "png_pixel_over",
+              "truncate_half",
+              "webp_animation",
+              "webp_duplicate_primary"
+            ],
+            "type": "string"
+          },
+          "maxItems": 14,
+          "minItems": 14,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "accepted_formats",
+        "accepted_jpeg_processes",
+        "accepted_png_color_types",
+        "normative_error_codes",
+        "observed_rejection_error_codes",
+        "required_accepted_mutations",
+        "required_rejected_mutations"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "fuzz_campaign": {
+      "additionalProperties": false,
+      "properties": {
+        "common_harness": {
+          "$ref": "#/$defs/file"
+        },
+        "corpus_seeds": {
+          "items": {
+            "$ref": "#/$defs/corpus_seed"
+          },
+          "maxItems": 30,
+          "minItems": 30,
+          "type": "array"
+        },
+        "engine": {
+          "const": "libfuzzer"
+        },
+        "engine_rss_limit_mb": {
+          "const": 2048
+        },
+        "extended_campaign_document": {
+          "$ref": "#/$defs/file"
+        },
+        "project_lockfile": {
+          "$ref": "#/$defs/file"
+        },
+        "project_manifest": {
+          "$ref": "#/$defs/file"
+        },
+        "sanitizer": {
+          "const": "address"
+        },
+        "smoke_max_input_bytes": {
+          "const": 65536
+        },
+        "smoke_runs": {
+          "const": 256
+        },
+        "smoke_seed": {
+          "const": 424242
+        },
+        "smoke_timeout_seconds": {
+          "const": 5
+        },
+        "targets": {
+          "items": {
+            "$ref": "#/$defs/fuzz_target"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "toolchain": {
+          "$ref": "#/$defs/file"
+        },
+        "toolchain_channel": {
+          "const": "nightly-2026-07-15"
+        },
+        "toolchain_components": {
+          "const": [
+            "rust-src"
+          ]
+        },
+        "toolchain_profile": {
+          "const": "minimal"
+        }
+      },
+      "required": [
+        "project_manifest",
+        "project_lockfile",
+        "toolchain",
+        "toolchain_channel",
+        "toolchain_components",
+        "toolchain_profile",
+        "engine",
+        "sanitizer",
+        "common_harness",
+        "targets",
+        "corpus_seeds",
+        "smoke_runs",
+        "smoke_seed",
+        "smoke_max_input_bytes",
+        "smoke_timeout_seconds",
+        "engine_rss_limit_mb",
+        "extended_campaign_document"
+      ],
+      "type": "object"
+    },
+    "fuzz_target": {
+      "additionalProperties": false,
+      "properties": {
+        "binary": {
+          "$ref": "#/$defs/file"
+        },
+        "extension": {
+          "enum": [
+            "jpg",
+            "png",
+            "webp"
+          ]
+        },
+        "format": {
+          "enum": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        "media_type": {
+          "enum": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ]
+        },
+        "name": {
+          "enum": [
+            "publication_jpeg",
+            "publication_png",
+            "publication_webp"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "format",
+        "media_type",
+        "extension",
+        "binary"
+      ],
+      "type": "object"
+    },
+    "nix_lanes": {
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "const": "decoder-security"
+        },
+        "devshell": {
+          "const": "decoder-security"
+        },
+        "fuzz_check": {
+          "const": "blossom-decoder-fuzz-smoke"
+        },
+        "stable_check": {
+          "const": "blossom-raster-decode-test"
+        }
+      },
+      "required": [
+        "app",
+        "devshell",
+        "stable_check",
+        "fuzz_check"
+      ],
+      "type": "object"
+    },
+    "operation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "const": "blossom.verify_publication_readiness"
+        },
+        "key": {
+          "const": "blossom_verify_publication_readiness"
+        },
+        "primary_case_kinds": {
+          "const": [
+            "blossom.verify_publication_readiness.valid",
+            "blossom.verify_publication_readiness.invalid"
+          ]
+        },
+        "primary_vector": {
+          "const": "contracts/conformance/vectors/blossom/publication_readiness.v1.json"
+        },
+        "security_case_kinds": {
+          "const": [
+            "blossom.verify_publication_readiness.decoder_security.accepted",
+            "blossom.verify_publication_readiness.decoder_security.rejected"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "id",
+        "primary_vector",
+        "primary_case_kinds",
+        "security_case_kinds"
+      ],
+      "type": "object"
+    },
+    "predecessor": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "const": "radroots_blossom.publication_readiness_v1"
+        },
+        "immutable_artifacts": {
+          "items": {
+            "$ref": "#/$defs/file"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "source_supersessions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "contract_id",
+        "immutable_artifacts",
+        "source_supersessions"
+      ],
+      "type": "object"
+    },
+    "protocol_source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "nostr_nips",
+            "blossom"
+          ]
+        },
+        "repository": {
+          "enum": [
+            "https://github.com/nostr-protocol/nips",
+            "https://github.com/hzrd149/blossom"
+          ]
+        },
+        "revision": {
+          "pattern": "^[0-9a-f]{40}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "repository",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "resource_limits": {
+      "additionalProperties": false,
+      "properties": {
+        "jpeg_entropy_bit_reads_per_byte": {
+          "const": 8
+        },
+        "jpeg_max_blocks": {
+          "const": 3200000
+        },
+        "jpeg_max_coefficient_steps": {
+          "const": 204800000
+        },
+        "jpeg_max_scans": {
+          "const": 4
+        },
+        "max_container_records": {
+          "const": 65536
+        },
+        "max_decoded_bytes": {
+          "const": 80000000
+        },
+        "max_dimension": {
+          "const": 16384
+        },
+        "max_pixels": {
+          "const": 20000000
+        },
+        "max_raster_bytes": {
+          "const": 10485760
+        },
+        "peak_rss_kib_limit": {
+          "const": 131072
+        }
+      },
+      "required": [
+        "max_raster_bytes",
+        "max_decoded_bytes",
+        "max_dimension",
+        "max_pixels",
+        "max_container_records",
+        "jpeg_max_scans",
+        "jpeg_max_blocks",
+        "jpeg_max_coefficient_steps",
+        "jpeg_entropy_bit_reads_per_byte",
+        "peak_rss_kib_limit"
+      ],
+      "type": "object"
+    },
+    "resource_probe": {
+      "additionalProperties": false,
+      "properties": {
+        "executor_test": {
+          "const": "maximum_resource_probe"
+        },
+        "fixture_authority": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "jpeg",
+            "png",
+            "webp"
+          ]
+        },
+        "height": {
+          "const": 4000
+        },
+        "id": {
+          "enum": [
+            "jpeg_grayscale",
+            "jpeg_rgb",
+            "jpeg_cmyk",
+            "jpeg_sof1",
+            "png_rgb",
+            "png_palette",
+            "png_rgba",
+            "png_adam7",
+            "webp_vp8_rgb",
+            "webp_vp8_alpha",
+            "webp_vp8l_rgb",
+            "webp_vp8l_alpha"
+          ]
+        },
+        "max_decoded_bytes": {
+          "enum": [
+            60000000,
+            80000000
+          ]
+        },
+        "max_encoded_bytes": {
+          "const": 10485760
+        },
+        "peak_rss_kib_limit": {
+          "const": 131072
+        },
+        "process": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "repetitions": {
+          "const": 3
+        },
+        "width": {
+          "const": 5000
+        }
+      },
+      "required": [
+        "id",
+        "format",
+        "process",
+        "width",
+        "height",
+        "max_encoded_bytes",
+        "max_decoded_bytes",
+        "executor_test",
+        "fixture_authority",
+        "repetitions",
+        "peak_rss_kib_limit"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "$ref": "#/$defs/file"
+        },
+        "case_ids": {
+          "const": [
+            "jpeg_baseline_gray_8bit",
+            "jpeg_baseline_rgb_8bit",
+            "jpeg_baseline_cmyk_8bit",
+            "jpeg_extended_sequential_sof1",
+            "png_gray_8bit",
+            "png_rgb_8bit",
+            "png_indexed_8bit",
+            "png_gray_alpha_8bit",
+            "png_rgba_8bit",
+            "png_adam7_rgba_8bit",
+            "webp_lossless_8bit",
+            "webp_lossy_8bit",
+            "webp_lossless_alpha_8bit",
+            "webp_lossy_alpha_8bit",
+            "jpeg_progressive_forbidden",
+            "jpeg_twelve_bit_forbidden",
+            "jpeg_entropy_truncated",
+            "jpeg_huffman_overfull",
+            "jpeg_wrong_restart_marker",
+            "png_sixteen_bit_forbidden",
+            "png_animation_forbidden",
+            "png_corrupt_crc",
+            "png_corrupt_deflate",
+            "png_dimension_over_limit",
+            "png_pixel_limit",
+            "png_truncated",
+            "webp_animation_forbidden",
+            "webp_duplicate_primary",
+            "webp_truncated",
+            "jpeg_truncated"
+          ]
+        },
+        "executor": {
+          "$ref": "#/$defs/file"
+        },
+        "executor_tests": {
+          "const": [
+            "decoder_regression_corpus_executes_every_case",
+            "decoder_differential_matches_independent_backend",
+            "maximum_resource_probe"
+          ]
+        },
+        "mirror": {
+          "$ref": "#/$defs/file"
+        }
+      },
+      "required": [
+        "canonical",
+        "mirror",
+        "executor",
+        "executor_tests",
+        "case_ids"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://radroots.org/schemas/blossom/raster-decoder-security-manifest-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "const": "blossom_raster_decoder_security_v1"
+    },
+    "contract_id": {
+      "const": "radroots_blossom.raster_decoder_security_v1"
+    },
+    "decoder_profile": {
+      "$ref": "#/$defs/decoder_profile"
+    },
+    "fuzz_campaign": {
+      "$ref": "#/$defs/fuzz_campaign"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "nix_lanes": {
+      "$ref": "#/$defs/nix_lanes"
+    },
+    "operation": {
+      "$ref": "#/$defs/operation"
+    },
+    "predecessors": {
+      "items": {
+        "$ref": "#/$defs/predecessor"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array"
+    },
+    "protocol_sources": {
+      "items": {
+        "$ref": "#/$defs/protocol_source"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "release_change_id": {
+      "const": "blossom-raster-decoder-security"
+    },
+    "resource_limits": {
+      "$ref": "#/$defs/resource_limits"
+    },
+    "resource_probes": {
+      "items": {
+        "$ref": "#/$defs/resource_probe"
+      },
+      "maxItems": 12,
+      "minItems": 12,
+      "type": "array"
+    },
+    "result_vector": {
+      "$ref": "#/$defs/result_vector"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "predecessors",
+    "protocol_sources",
+    "resource_limits",
+    "decoder_profile",
+    "resource_probes",
+    "fuzz_campaign",
+    "nix_lanes",
+    "operation",
+    "release_change_id",
+    "result_vector"
+  ],
+  "title": "Radroots Blossom raster decoder security semantic contract",
+  "type": "object"
+}

@@ -17397,6 +17397,7 @@ mod tests {
             [
                 Some("std"),
                 Some("dep:image"),
+                Some("dep:libwebp"),
                 Some("dep:zune-core"),
                 Some("dep:zune-jpeg")
             ],
@@ -17406,7 +17407,7 @@ mod tests {
             .get_mut("dependencies")
             .and_then(toml::Value::as_table_mut)
             .expect("Blossom dependencies");
-        for dependency in ["image", "zune-core", "zune-jpeg"] {
+        for dependency in ["image", "libwebp", "zune-core", "zune-jpeg"] {
             let removed = blossom_dependencies
                 .remove(dependency)
                 .unwrap_or_else(|| panic!("successor dependency {dependency} must be present"));

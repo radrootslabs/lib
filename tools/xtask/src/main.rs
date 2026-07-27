@@ -25,6 +25,7 @@ fn usage() {
     eprintln!("  cargo xtask contract phase1-publication-artifact-manifest [--write]");
     eprintln!("  cargo xtask contract phase1-publication-allowlist-manifest [--write]");
     eprintln!("  cargo xtask contract blossom-publication-readiness-manifest [--write]");
+    eprintln!("  cargo xtask contract blossom-raster-decoder-security-manifest [--write]");
     eprintln!("  cargo xtask contract phase1-publication-media-readiness-manifest [--write]");
     eprintln!("  cargo xtask contract release-provenance-schema [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
@@ -206,6 +207,16 @@ fn run_contract(args: &[String]) -> Result<(), String> {
                     .to_string(),
             ),
         },
+        Some("blossom-raster-decoder-security-manifest") => match &args[1..] {
+            [] => contract::validate_blossom_raster_decoder_security_manifest(&workspace_root()),
+            [flag] if flag == "--write" => {
+                contract::write_blossom_raster_decoder_security_manifest(&workspace_root())
+            }
+            _ => Err(
+                "blossom-raster-decoder-security-manifest accepts no arguments or exactly --write"
+                    .to_string(),
+            ),
+        },
         Some("phase1-publication-media-readiness-manifest") => match &args[1..] {
             [] => contract::validate_phase1_publication_media_readiness_manifest(&workspace_root()),
             [flag] if flag == "--write" => {
@@ -369,6 +380,12 @@ mod tests {
         ])
         .expect_err("invalid Phase 1 publication media-readiness manifest mode");
         assert!(invalid_publication_media_readiness.contains("exactly --write"));
+        let invalid_raster_decoder_security = run_contract(&[
+            "blossom-raster-decoder-security-manifest".to_string(),
+            "--invalid".to_string(),
+        ])
+        .expect_err("invalid Blossom raster decoder security manifest mode");
+        assert!(invalid_raster_decoder_security.contains("exactly --write"));
         let invalid_release_provenance_schema = run_contract(&[
             "release-provenance-schema".to_string(),
             "--invalid".to_string(),
@@ -490,6 +507,8 @@ mod tests {
             .expect("contract Phase 1 publication allowlist manifest");
         run_contract(&["blossom-publication-readiness-manifest".to_string()])
             .expect("contract Blossom publication-readiness manifest");
+        run_contract(&["blossom-raster-decoder-security-manifest".to_string()])
+            .expect("contract Blossom raster decoder security manifest");
         run_contract(&["phase1-publication-media-readiness-manifest".to_string()])
             .expect("contract Phase 1 publication media-readiness manifest");
         run_contract(&["release-provenance-schema".to_string()])

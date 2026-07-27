@@ -898,8 +898,11 @@ const BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS: &[&str] = &[
     "crates/blossom/src/url.rs",
 ];
 #[cfg(test)]
-const BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS: &[&str] =
-    &[CONTRACT_LANE_SOURCE_RELATIVE];
+const RASTER_DECODER_SECURITY_SUCCESSOR_DELEGATED_COMPILER_PATHS: &[&str] = &[
+    CONTRACT_APP_SOURCE_RELATIVE,
+    CONTRACT_LANE_SOURCE_RELATIVE,
+    TOOLCHAIN_ROUTING_SOURCE_RELATIVE,
+];
 
 const GENERATED_ARTIFACT_PATHS: &[&str] = &[
     MANIFEST_RELATIVE,
@@ -6588,9 +6591,9 @@ mod tests {
             .expect("complete event-store compiler-input authority");
         validate_delegated_compiler_source_pins_with_supersessions(
             &root,
-            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+            RASTER_DECODER_SECURITY_SUCCESSOR_DELEGATED_COMPILER_PATHS,
         )
-        .expect("delegated compiler source pins outside the active Blossom successor");
+        .expect("delegated compiler source pins outside the active Blossom raster decoder security successor");
         validate_xtask_manifest_authority(&root).expect("xtask compiler authority");
     }
 
@@ -6606,14 +6609,14 @@ mod tests {
         }
         validate_delegated_compiler_source_pins_with_supersessions(
             pinned_workspace.path(),
-            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+            RASTER_DECODER_SECURITY_SUCCESSOR_DELEGATED_COMPILER_PATHS,
         )
-        .expect("current compiler source pins outside the active Blossom successor");
+        .expect("current compiler source pins outside the active Blossom raster decoder security successor");
         fs::write(pinned_workspace.path().join(FLAKE_LOCK_RELATIVE), "{}\n")
             .expect("mutate pinned flake lock");
         validate_delegated_compiler_source_pins_with_supersessions(
             pinned_workspace.path(),
-            BLOSSOM_READINESS_SUCCESSOR_DELEGATED_COMPILER_PATHS,
+            RASTER_DECODER_SECURITY_SUCCESSOR_DELEGATED_COMPILER_PATHS,
         )
         .expect_err("compiler source mutation must fail closed");
 

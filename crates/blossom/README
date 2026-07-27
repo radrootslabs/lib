@@ -42,11 +42,15 @@ carries no reserved flags and exactly one primary chunk under the same record
 budget. Sequential JPEG validation charges bounded scan, block,
 coefficient-step, marker-record, and entropy bit-read budgets, and
 unsupported PNG or WebP processes fail with the stable
-`publication_raster_process_forbidden` error. The decoder boundary is exercised by an isolated twelve-process
-maximum-resource matrix held under a 128 MiB peak-RSS gate and an
-`aarch64-apple-ios` static compile/link lane. It checks complete-byte, URL, hash, MIME, length,
-container, animation, and dimension agreement before emitting deterministic per-URL
-evidence. The crate performs no HTTP: an owning runtime supplies only the
+`publication_raster_process_forbidden` error. The decoder boundary is exercised
+by a checked-in regression corpus, a Nix-pinned independent-decoder
+differential, an isolated twelve-process maximum-resource matrix held under a
+128 MiB peak-RSS gate, an `aarch64-apple-ios` static compile/link lane, and
+deterministic libFuzzer smoke targets; see
+`docs/blossom-raster-decoder-security.md` for the governed lanes and the
+extended-campaign record. It checks complete-byte, URL, hash, MIME, length,
+container, animation, and dimension agreement before emitting deterministic
+per-URL evidence. The crate performs no HTTP: an owning runtime supplies only the
 transport observations and exact complete body. The portable `no_std` core
 remains available without `raster-decode`, but cannot construct readiness
 evidence. Policy v1 has no serialized or caller-supplied decode-observation
