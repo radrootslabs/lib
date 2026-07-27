@@ -28,8 +28,9 @@ config = { workspace = true }
 getrandom = { workspace = true }
 radroots_log = { workspace = true, features = ["std"] }
 radroots_event = { workspace = true, optional = true, default-features = false, features = [
-  "std",
   "serde",
+  "signature",
+  "std",
 ] }
 radroots_protected_store = { workspace = true, features = ["std"] }
 radroots_runtime_paths = { workspace = true }

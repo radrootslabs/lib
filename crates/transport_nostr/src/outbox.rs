@@ -7,7 +7,7 @@ use crate::{
     RadrootsRelayTransportError, RadrootsRelayUrlPolicy, publish_signed_event,
     verified_signed_event_payload,
 };
-use radroots_event::draft::RadrootsSignedEvent;
+use radroots_event::draft::RadrootsVerifiedSignedEvent;
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
@@ -115,7 +115,7 @@ where
             .await?;
         return Ok(RadrootsOutboxPublishReceipt {
             local_ingest,
-            event_id: signed_event.id_str().to_owned(),
+            event_id: signed_event.signed_event().id_str().to_owned(),
             attempted_count: 0,
             accepted_count: publishable.accepted_count,
             retryable_count: 0,
@@ -137,13 +137,13 @@ where
         .try_with_idempotency_key(outbox_publish_idempotency_key(
             claimed.outbox_event_id,
             claimed.attempt_count,
-            signed_event.id_str(),
+            signed_event.signed_event().id_str(),
             active_delivery_plan_id,
         ))?;
     let publish = match publish_signed_event(adapter, request).await {
         Ok(receipt) => receipt,
         Err(RadrootsRelayTransportError::Transport(message)) => adapter_transport_failure_receipt(
-            signed_event.id_str().to_owned(),
+            signed_event.signed_event().id_str().to_owned(),
             target_strings,
             0,
             message,
@@ -260,7 +260,7 @@ where
             .await?;
         return Ok(RadrootsOutboxPublishReceipt {
             local_ingest,
-            event_id: signed_event.id_str().to_owned(),
+            event_id: signed_event.signed_event().id_str().to_owned(),
             attempted_count: 0,
             accepted_count: publishable.accepted_count,
             retryable_count: 0,
@@ -281,7 +281,7 @@ where
     let request_id = outbox_publish_idempotency_key(
         claimed.outbox_event_id,
         claimed.attempt_count,
-        signed_event.id_str(),
+        signed_event.signed_event().id_str(),
         publishable.active_delivery_plan_id,
     );
     let payload =
@@ -338,7 +338,7 @@ where
 
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,
-        event_id: signed_event.id_str().to_owned(),
+        event_id: signed_event.signed_event().id_str().to_owned(),
         attempted_count: target_receipts
             .iter()
             .filter(|receipt| receipt.attempted)
@@ -781,6 +781,7 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::RequiredTargetNotRequested
         | RadrootsTransportError::EmptyDeliveryRequestId
         | RadrootsTransportError::InvalidDeliveryRequestId
+        | RadrootsTransportError::InvalidPayloadSignature
         | RadrootsTransportError::InvalidDeliveryTimestamp => {
             RadrootsRelayTransportError::Transport(error.to_string())
         }
@@ -1031,7 +1032,7 @@ fn satisfaction_policy_for_remaining_count(
 
 async fn ingest_publish_observation(
     event_store: &RadrootsEventStore,
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &RadrootsVerifiedSignedEvent,
     relay_url: &str,
     observed_at_ms: i64,
 ) -> Result<(), RadrootsRelayTransportError> {
@@ -1041,8 +1042,11 @@ async fn ingest_publish_observation(
         RadrootsTransportObservationType::PublishAck,
         observed_at_ms,
     )?;
-    let ingest = RadrootsEventIngest::from_signed_event(signed_event.clone(), observed_at_ms)?
-        .with_observation(observation);
+    let ingest = RadrootsEventIngest::from_signed_event(
+        signed_event.signed_event().clone(),
+        observed_at_ms,
+    )?
+    .with_observation(observation);
     event_store.ingest_event(ingest).await?;
     Ok(())
 }

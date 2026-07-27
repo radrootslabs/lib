@@ -35,6 +35,7 @@ pub enum RadrootsTransportError {
     InvalidPayloadLabel,
     EmptyPayloadBytes,
     InvalidPayloadBytes,
+    InvalidPayloadSignature,
     InvalidPayloadDigest,
     PayloadDigestMismatch,
 }
@@ -105,6 +106,7 @@ impl fmt::Display for RadrootsTransportError {
             Self::InvalidPayloadLabel => f.write_str("transport payload label is invalid"),
             Self::EmptyPayloadBytes => f.write_str("transport payload bytes are empty"),
             Self::InvalidPayloadBytes => f.write_str("transport payload bytes are invalid"),
+            Self::InvalidPayloadSignature => f.write_str("transport payload signature is invalid"),
             Self::InvalidPayloadDigest => f.write_str("transport payload digest is invalid"),
             Self::PayloadDigestMismatch => {
                 f.write_str("transport payload digest does not match payload bytes")

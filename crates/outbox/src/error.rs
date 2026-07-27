@@ -30,6 +30,9 @@ pub enum RadrootsOutboxError {
     #[error("Signed event error: {0}")]
     SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
 
+    #[error("Signed event signature verification failed: {0}")]
+    SignedEventSignature(#[from] radroots_event::draft::RadrootsSignatureVerificationError),
+
     #[error("delivery targets cannot be empty")]
     EmptyDeliveryTargets,
 

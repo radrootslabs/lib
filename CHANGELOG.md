@@ -39,6 +39,12 @@ publish policy both pass for the same source revision.
   signed-event bytes are immutable, while dispatch intent, uncertain results,
   receipts, and accepted-observation repair identities remain durable without
   performing network publication.
+<!-- release-change: verified-signed-publication-boundaries -->
+- Authority signing now verifies BIP340 signatures before returning trusted
+  results. Outbox inputs, persisted reloads, runtime dispatch and inbound
+  observations, and direct Nostr publication require the verified signed-event
+  typestate; invalid or corrupted signatures fail before durable, event-store,
+  or relay-adapter mutation.
 - Event-store schema initialization now uses a transactional, checksummed
   migration authority with exact legacy-baseline adoption, shared-database
   catalog scoping, tamper-evident fail-closed managed history, exact catalog

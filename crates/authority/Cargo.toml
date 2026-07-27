@@ -21,10 +21,16 @@ local_signer = [
 ]
 
 [dependencies]
-radroots_event = { workspace = true, default-features = false }
+radroots_event = { workspace = true, default-features = false, features = [
+  "signature",
+] }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
 
 [dev-dependencies]
+radroots_nostr = { workspace = true, default-features = false, features = [
+  "events",
+  "std",
+] }
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }

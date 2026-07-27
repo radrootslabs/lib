@@ -8,7 +8,6 @@ sqlite = [
   "dep:radroots_event_codec",
   "dep:sqlx",
   "dep:url",
-  "radroots_event/signature",
   "sqlx/sqlite-bundled",
 ]
 runtime-tokio = ["sqlite", "sqlx/runtime-tokio", "dep:tokio"]

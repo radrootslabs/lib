@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsOutboxError;
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{RadrootsEventDraft, RadrootsVerifiedSignedEvent};
 use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
@@ -309,7 +309,7 @@ impl RadrootsOutboxOperationInput {
 pub struct RadrootsOutboxSignedOperationInput {
     pub operation_kind: String,
     pub draft: RadrootsEventDraft,
-    pub signed_event: RadrootsSignedEvent,
+    pub signed_event: RadrootsVerifiedSignedEvent,
     pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
     pub event_store_inserted: bool,
@@ -321,7 +321,7 @@ impl RadrootsOutboxSignedOperationInput {
     pub fn new(
         operation_kind: impl Into<String>,
         draft: RadrootsEventDraft,
-        signed_event: RadrootsSignedEvent,
+        signed_event: RadrootsVerifiedSignedEvent,
         delivery_plan: RadrootsOutboxDeliveryPlanInput,
         event_store_inserted: bool,
         event_store_ingested_at_ms: i64,
@@ -392,7 +392,7 @@ pub struct RadrootsOutboxSignedTradeMutationInput {
     pub mutation_id: RadrootsTradeMutationId,
     pub canonical_payload_sha256: String,
     pub draft: RadrootsEventDraft,
-    pub signed_event: RadrootsSignedEvent,
+    pub signed_event: RadrootsVerifiedSignedEvent,
     pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
     pub event_store_inserted: bool,
@@ -408,7 +408,7 @@ impl RadrootsOutboxSignedTradeMutationInput {
         mutation_id: RadrootsTradeMutationId,
         canonical_payload_sha256: impl Into<String>,
         draft: RadrootsEventDraft,
-        signed_event: RadrootsSignedEvent,
+        signed_event: RadrootsVerifiedSignedEvent,
         delivery_plan: RadrootsOutboxDeliveryPlanInput,
         event_store_inserted: bool,
         event_store_ingested_at_ms: i64,
@@ -481,7 +481,7 @@ pub struct RadrootsOutboxEventRecord {
     pub event_id: String,
     pub expected_pubkey: String,
     pub draft: RadrootsEventDraft,
-    pub signed_event: Option<RadrootsSignedEvent>,
+    pub signed_event: Option<RadrootsVerifiedSignedEvent>,
     pub raw_event_json: Option<String>,
     pub state: RadrootsOutboxEventState,
     pub attempt_count: i64,
@@ -558,7 +558,7 @@ pub struct RadrootsOutboxClaimedEvent {
     pub claim_token: String,
     pub active_delivery_plan_id: Option<i64>,
     pub draft: RadrootsEventDraft,
-    pub signed_event: Option<RadrootsSignedEvent>,
+    pub signed_event: Option<RadrootsVerifiedSignedEvent>,
     pub delivery_targets: Vec<RadrootsOutboxDeliveryTargetRecord>,
 }
 

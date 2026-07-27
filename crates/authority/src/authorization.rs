@@ -3,7 +3,7 @@
 use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
 use radroots_event::contract::{RadrootsEventContract, event_contract};
 use radroots_event::draft::{
-    RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent,
+    RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent, RadrootsVerifiedSignedEvent,
     validate_signed_nostr_event_matches_draft,
 };
 #[cfg(test)]
@@ -75,7 +75,7 @@ pub fn sign_authorized_draft<S>(
     actor: &RadrootsActorContext,
     signer: &S,
     draft: &RadrootsEventDraft,
-) -> Result<RadrootsSignedEvent, RadrootsAuthorityError>
+) -> Result<RadrootsVerifiedSignedEvent, RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
 {
@@ -87,7 +87,7 @@ fn sign_authorized_draft_with_validator<S, V>(
     signer: &S,
     draft: &RadrootsEventDraft,
     validate_draft: V,
-) -> Result<RadrootsSignedEvent, RadrootsAuthorityError>
+) -> Result<RadrootsVerifiedSignedEvent, RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
     V: FnOnce(&RadrootsEventDraft) -> Result<(), RadrootsDraftError>,
@@ -97,7 +97,9 @@ where
     validate_draft(draft).map_err(RadrootsAuthorityError::DraftValidation)?;
     let signed_event = signer.sign_frozen_draft(draft)?;
     validate_signed_event_matches_draft(&signed_event, draft)?;
-    Ok(signed_event)
+    signed_event
+        .verify_signature()
+        .map_err(RadrootsAuthorityError::SignedEventSignatureVerification)
 }
 
 pub fn validate_signed_event_matches_draft(
@@ -175,6 +177,14 @@ mod tests {
     };
     use radroots_event::ids::RadrootsPublicKey;
     use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
+    use radroots_nostr::prelude::{
+        RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
+    };
+
+    const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
+        "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
+    const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
+        "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()
@@ -342,6 +352,40 @@ mod tests {
             self.sign_invocations
                 .set(self.sign_invocations.get().saturating_add(1));
             Err(RadrootsSignerError::Rejected)
+        }
+    }
+
+    struct ValidSigner {
+        keys: RadrootsNostrKeys,
+        pubkey: RadrootsPublicKey,
+    }
+
+    impl ValidSigner {
+        fn fixture() -> Self {
+            let secret_key = RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX)
+                .expect("fixture secret key");
+            Self {
+                keys: RadrootsNostrKeys::new(secret_key),
+                pubkey: RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX)
+                    .expect("fixture public key"),
+            }
+        }
+    }
+
+    impl RadrootsEventSigner for ValidSigner {
+        fn pubkey(&self) -> &RadrootsPublicKey {
+            &self.pubkey
+        }
+
+        fn sign_frozen_draft(
+            &self,
+            draft: &RadrootsEventDraft,
+        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+            radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
+                RadrootsSignerError::SigningFailed {
+                    message: error.to_string(),
+                }
+            })
         }
     }
 
@@ -632,17 +676,35 @@ mod tests {
     }
 
     #[test]
-    fn authorized_actor_and_signer_return_signed_event() {
+    fn authorized_actor_and_signer_return_verified_signed_event() {
+        let draft = operational_listing_event_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX);
+        let actor = seller_actor(FIXTURE_ALICE_PUBLIC_KEY_HEX);
+        let signer = ValidSigner::fixture();
+
+        let signed = sign_authorized_draft(&actor, &signer, &draft).expect("signed");
+
+        assert_eq!(
+            signed.signed_event().id_str(),
+            draft.expected_event_id_str()
+        );
+        assert_eq!(
+            signed.signed_event().pubkey_str(),
+            draft.expected_pubkey_str()
+        );
+        assert_eq!(signed.signed_event().kind(), KIND_CLASSIFIED_LISTING);
+    }
+
+    #[test]
+    fn matching_id_with_invalid_signature_is_rejected() {
         let pubkey = hex_64('a');
         let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = StaticSigner::new(pubkey.as_str());
 
-        let signed = sign_authorized_draft(&actor, &signer, &draft).expect("signed");
-
-        assert_eq!(signed.id_str(), draft.expected_event_id_str());
-        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
-        assert_eq!(signed.kind(), KIND_CLASSIFIED_LISTING);
+        assert!(matches!(
+            sign_authorized_draft(&actor, &signer, &draft),
+            Err(RadrootsAuthorityError::SignedEventSignatureVerification(_))
+        ));
     }
 
     #[test]

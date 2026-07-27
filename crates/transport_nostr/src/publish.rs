@@ -5,7 +5,10 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 #[cfg(feature = "client")]
 use core::time::Duration;
 use futures::future::BoxFuture;
-use radroots_event::{draft::RadrootsSignedEvent, wire::RadrootsNip01EventWire};
+use radroots_event::{
+    draft::{RadrootsSignedEvent, RadrootsVerifiedSignedEvent},
+    wire::RadrootsNip01EventWire,
+};
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
@@ -30,7 +33,7 @@ pub const RADROOTS_RELAY_PUBLISH_IDEMPOTENCY_KEY_MAX_BYTES: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayPublishRequest {
-    signed_event: RadrootsSignedEvent,
+    signed_event: RadrootsVerifiedSignedEvent,
     targets: RadrootsRelayTargetSet,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     idempotency_key: Option<String>,
@@ -39,7 +42,7 @@ pub struct RadrootsRelayPublishRequest {
 
 impl RadrootsRelayPublishRequest {
     pub fn new(
-        signed_event: RadrootsSignedEvent,
+        signed_event: RadrootsVerifiedSignedEvent,
         targets: RadrootsRelayTargetSet,
         now_ms: i64,
     ) -> Result<Self, RadrootsRelayTransportError> {
@@ -71,7 +74,7 @@ impl RadrootsRelayPublishRequest {
         Ok(self)
     }
 
-    pub fn signed_event(&self) -> &RadrootsSignedEvent {
+    pub fn signed_event(&self) -> &RadrootsVerifiedSignedEvent {
         &self.signed_event
     }
 
@@ -188,8 +191,9 @@ pub trait RadrootsRelayPublishAdapter: Send + Sync {
 }
 
 pub fn verified_signed_event_payload(
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &RadrootsVerifiedSignedEvent,
 ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
+    let signed_event = signed_event.signed_event();
     RadrootsTransportPayload::unchecked_signed_event_json(
         signed_event.id_str(),
         signed_event.raw_json(),
@@ -565,7 +569,7 @@ mod contract_tests {
 
 fn signed_event_from_transport_payload(
     payload: &RadrootsTransportPayload,
-) -> Result<RadrootsSignedEvent, RadrootsTransportError> {
+) -> Result<RadrootsVerifiedSignedEvent, RadrootsTransportError> {
     let RadrootsTransportPayload::SignedEventJson {
         event_id, raw_json, ..
     } = payload
@@ -578,7 +582,9 @@ fn signed_event_from_transport_payload(
         return Err(RadrootsTransportError::InvalidPayloadId);
     }
     RadrootsSignedEvent::from_wire_verified_id(wire, raw_json.clone())
-        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)
+        .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?
+        .verify_signature()
+        .map_err(|_| RadrootsTransportError::InvalidPayloadSignature)
 }
 
 fn relay_targets_from_transport_targets(
@@ -658,7 +664,7 @@ where
     A: RadrootsRelayPublishAdapter,
 {
     request.validate()?;
-    let event_id = request.signed_event.id_str().to_owned();
+    let event_id = request.signed_event.signed_event().id_str().to_owned();
     let satisfaction_policy = request.satisfaction_policy.clone();
     let requested_relays = request.targets.relay_strings();
     let target_count = request.targets.len();
@@ -841,7 +847,7 @@ impl RadrootsRelayPublishAdapter for RadrootsMockRelayPublishAdapter {
             self.captured_raw_events
                 .lock()
                 .map_err(captured_raw_event_lock_error)?
-                .push(request.signed_event.raw_json().to_owned());
+                .push(request.signed_event.signed_event().raw_json().to_owned());
             Ok(request
                 .targets
                 .relays()
@@ -887,9 +893,12 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
     ) -> BoxFuture<'a, Result<Vec<RadrootsRelayPublishRelayReceipt>, RadrootsRelayTransportError>>
     {
         Box::pin(async move {
-            let event = RadrootsNostrEvent::from_json(request.signed_event.raw_json())
-                .map_err(|error| RadrootsRelayTransportError::NostrEventJson(error.to_string()))?;
-            ensure_raw_event_matches_signed_event(&event, &request.signed_event)?;
+            let event =
+                RadrootsNostrEvent::from_json(request.signed_event.signed_event().raw_json())
+                    .map_err(|error| {
+                        RadrootsRelayTransportError::NostrEventJson(error.to_string())
+                    })?;
+            ensure_raw_event_matches_signed_event(&event, request.signed_event.signed_event())?;
             let target_strings = request.targets.relay_strings();
             for relay_url in &target_strings {
                 self.client

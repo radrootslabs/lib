@@ -21,7 +21,8 @@ use crate::sqlite_lifecycle::{
 };
 use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
-    RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
+    RadrootsEventDraft, RadrootsSignedEvent, RadrootsVerifiedSignedEvent,
+    validate_signed_nostr_event_matches_draft,
 };
 use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS;
@@ -164,7 +165,7 @@ impl RadrootsOutbox {
         input: &RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
-        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        validate_signed_nostr_event_matches_draft(input.signed_event.signed_event(), &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
@@ -202,7 +203,7 @@ impl RadrootsOutbox {
         &self,
         input: &RadrootsOutboxSignedTradeMutationInput,
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
-        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        validate_signed_nostr_event_matches_draft(input.signed_event.signed_event(), &input.draft)?;
         let semantic = validate_trade_mutation_input(
             input.trade_id.as_str(),
             input.mutation_id.as_str(),
@@ -363,7 +364,7 @@ impl RadrootsOutbox {
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
-        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        validate_signed_nostr_event_matches_draft(input.signed_event.signed_event(), &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
@@ -443,7 +444,7 @@ impl RadrootsOutbox {
         .bind(input.draft.expected_pubkey_str())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
-        .bind(input.signed_event.raw_json())
+        .bind(input.signed_event.signed_event().raw_json())
         .bind(RadrootsOutboxEventState::Signed.as_str())
         .bind(input.created_at_ms)
         .bind(bool_i64(input.event_store_inserted))
@@ -619,7 +620,7 @@ impl RadrootsOutbox {
         &self,
         input: RadrootsOutboxSignedTradeMutationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
-        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        validate_signed_nostr_event_matches_draft(input.signed_event.signed_event(), &input.draft)?;
         let semantic = validate_trade_mutation_input(
             input.trade_id.as_str(),
             input.mutation_id.as_str(),
@@ -754,7 +755,7 @@ impl RadrootsOutbox {
         .bind(input.draft.expected_pubkey_str())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
-        .bind(input.signed_event.raw_json())
+        .bind(input.signed_event.signed_event().raw_json())
         .bind(RadrootsOutboxEventState::Signed.as_str())
         .bind(input.created_at_ms)
         .bind(bool_i64(input.event_store_inserted))
@@ -786,7 +787,7 @@ impl RadrootsOutbox {
         input: RadrootsOutboxSignedOperationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
-        validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
+        validate_signed_nostr_event_matches_draft(input.signed_event.signed_event(), &input.draft)?;
         let prepared =
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
@@ -863,7 +864,7 @@ impl RadrootsOutbox {
         .bind(input.draft.expected_pubkey_str())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
-        .bind(input.signed_event.raw_json())
+        .bind(input.signed_event.signed_event().raw_json())
         .bind(RadrootsOutboxEventState::Signed.as_str())
         .bind(input.created_at_ms)
         .bind(bool_i64(input.event_store_inserted))
@@ -1125,19 +1126,19 @@ impl RadrootsOutbox {
         &self,
         outbox_event_id: i64,
         claim_token: &str,
-        signed_event: RadrootsSignedEvent,
+        signed_event: RadrootsVerifiedSignedEvent,
         now_ms: i64,
-    ) -> Result<RadrootsSignedEvent, RadrootsOutboxError> {
+    ) -> Result<RadrootsVerifiedSignedEvent, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
         let stored = record.claim_token.as_deref();
         if stored != Some(claim_token) {
             return Err(RadrootsOutboxError::ClaimTokenMismatch { outbox_event_id });
         }
-        if signed_event.id_str() != record.event_id {
+        if signed_event.signed_event().id_str() != record.event_id {
             return Err(RadrootsOutboxError::SignedEventIdMismatch {
                 expected_event_id: record.event_id,
-                actual_event_id: signed_event.id_str().to_owned(),
+                actual_event_id: signed_event.signed_event().id_str().to_owned(),
             });
         }
         let signed_event_json = signed_event_wire_json(&signed_event)?;
@@ -1145,7 +1146,7 @@ impl RadrootsOutbox {
             "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = ?, claim_token = NULL, claim_owner = NULL, claim_expires_at_ms = NULL, active_delivery_plan_id = NULL, last_error = NULL, updated_at_ms = ? WHERE outbox_event_id = ? AND claim_token = ?",
         )
         .bind(signed_event_json.as_str())
-        .bind(signed_event.raw_json())
+        .bind(signed_event.signed_event().raw_json())
         .bind(RadrootsOutboxEventState::Signed.as_str())
         .bind(now_ms)
         .bind(outbox_event_id)
@@ -1243,8 +1244,11 @@ impl RadrootsOutbox {
             RadrootsTransportObservationType::LocalImport,
             observed_at_ms,
         )?;
-        let ingest = RadrootsEventIngest::from_signed_event(signed_event.clone(), observed_at_ms)?
-            .with_observation(observation);
+        let ingest = RadrootsEventIngest::from_signed_event(
+            signed_event.signed_event().clone(),
+            observed_at_ms,
+        )?
+        .with_observation(observation);
         let receipt = event_store.ingest_event(ingest).await?;
         let event_store_inserted = receipt.persistence.is_inserted();
         let changed = sqlx::query(
@@ -2217,7 +2221,7 @@ async fn signed_event_lifecycle_for_plans(
 async fn ensure_event_signed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     outbox_event_id: i64,
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &RadrootsVerifiedSignedEvent,
     event_store_inserted: bool,
     event_store_ingested_at_ms: i64,
 ) -> Result<(), RadrootsOutboxError> {
@@ -2226,7 +2230,7 @@ async fn ensure_event_signed(
         "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ?, state = CASE WHEN state IN ('draft_queued', 'sign_retryable', 'signing') THEN ? ELSE state END, event_store_ingested = 1, event_store_inserted = ?, event_store_ingested_at_ms = ? WHERE outbox_event_id = ? AND signed_event_json IS NULL",
     )
     .bind(signed_event_json.as_str())
-    .bind(signed_event.raw_json())
+    .bind(signed_event.signed_event().raw_json())
     .bind(RadrootsOutboxEventState::Signed.as_str())
     .bind(bool_i64(event_store_inserted))
     .bind(event_store_ingested_at_ms)
@@ -2658,11 +2662,11 @@ fn event_from_row(
         row.try_get("raw_event_json")?,
     )?;
     if let Some(signed_event) = signed_event.as_ref()
-        && signed_event.id_str() != event_id
+        && signed_event.signed_event().id_str() != event_id
     {
         return Err(RadrootsOutboxError::SignedEventIdMismatch {
             expected_event_id: event_id,
-            actual_event_id: signed_event.id_str().to_owned(),
+            actual_event_id: signed_event.signed_event().id_str().to_owned(),
         });
     }
     let state = RadrootsOutboxEventState::parse(row.try_get::<String, _>("state")?.as_str())?;
@@ -2710,7 +2714,7 @@ fn signed_event_from_storage(
     outbox_event_id: i64,
     signed_event_json: Option<String>,
     raw_event_json: Option<String>,
-) -> Result<Option<RadrootsSignedEvent>, RadrootsOutboxError> {
+) -> Result<Option<RadrootsVerifiedSignedEvent>, RadrootsOutboxError> {
     match (signed_event_json, raw_event_json) {
         (None, None) => Ok(None),
         (Some(_), None) => Err(RadrootsOutboxError::StoredSignedEventMissingRawJson(
@@ -2722,6 +2726,8 @@ fn signed_event_from_storage(
         (Some(signed_json), Some(raw_json)) => {
             let wire = RadrootsNip01EventWire::parse_json(signed_json.as_str())?;
             RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
+                .map_err(RadrootsOutboxError::from)?
+                .verify_signature()
                 .map(Some)
                 .map_err(Into::into)
         }
@@ -2729,9 +2735,9 @@ fn signed_event_from_storage(
 }
 
 fn signed_event_wire_json(
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &RadrootsVerifiedSignedEvent,
 ) -> Result<String, RadrootsOutboxError> {
-    serde_json::to_string(signed_event.wire()).map_err(Into::into)
+    serde_json::to_string(signed_event.signed_event().wire()).map_err(Into::into)
 }
 
 fn delivery_plan_from_row(
@@ -3945,7 +3951,7 @@ mod tests {
         RadrootsOutboxSignedOperationInput::new(
             "publish_post",
             draft,
-            signed_event,
+            verified_signed_event(signed_event),
             delivery_plan(vec![
                 nostr_target(NOSTR_PRIMARY_WSS),
                 nostr_target(NOSTR_SECONDARY_WSS),
@@ -3969,7 +3975,7 @@ mod tests {
             canonical.mutation_id.clone(),
             sha256_hex(canonical.content.as_bytes()),
             draft,
-            signed_event,
+            verified_signed_event(signed_event),
             delivery_plan(targets),
             true,
             created_at_ms + 7,
@@ -3998,6 +4004,12 @@ mod tests {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
         RadrootsNostrKeys::new(secret_key)
+    }
+
+    fn verified_signed_event(signed_event: RadrootsSignedEvent) -> RadrootsVerifiedSignedEvent {
+        signed_event
+            .verify_signature()
+            .expect("fixture signature must verify")
     }
 
     async fn table_count(outbox: &RadrootsOutbox, table_name: &str) -> i64 {
@@ -4500,7 +4512,10 @@ mod tests {
         sqlx::query(
             "UPDATE outbox_event SET signed_event_json = ?, event_id = ? WHERE outbox_event_id = ?",
         )
-        .bind(signed_event_wire_json(&signed_event).expect("signed wire JSON"))
+        .bind(
+            signed_event_wire_json(&verified_signed_event(signed_event.clone()))
+                .expect("signed wire JSON"),
+        )
         .bind(hex_64('0'))
         .bind(signed_receipt.outbox_event_id)
         .execute(outbox.pool())
@@ -4713,7 +4728,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft.clone(),
-                    signed_event.clone(),
+                    verified_signed_event(signed_event.clone()),
                     delivery_plan(vec![nostr_target("wss://plan-one.example")]),
                     true,
                     1_007,
@@ -4728,7 +4743,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     delivery_plan(vec![nostr_target("wss://plan-two.example")]),
                     true,
                     1_107,
@@ -4893,7 +4908,7 @@ mod tests {
                 .complete_signing(
                     receipt.outbox_event_id,
                     "wrong-claim",
-                    signed.clone(),
+                    verified_signed_event(signed.clone()),
                     1_010,
                 )
                 .await,
@@ -4905,7 +4920,12 @@ mod tests {
             .expect("sign different event");
         assert!(matches!(
             outbox
-                .complete_signing(receipt.outbox_event_id, "sign-claim", other_signed, 1_020,)
+                .complete_signing(
+                    receipt.outbox_event_id,
+                    "sign-claim",
+                    verified_signed_event(other_signed),
+                    1_020,
+                )
                 .await,
             Err(RadrootsOutboxError::SignedEventIdMismatch { .. })
         ));
@@ -4918,7 +4938,12 @@ mod tests {
         .expect("complete signing trigger");
         assert!(matches!(
             outbox
-                .complete_signing(receipt.outbox_event_id, "sign-claim", signed.clone(), 1_030,)
+                .complete_signing(
+                    receipt.outbox_event_id,
+                    "sign-claim",
+                    verified_signed_event(signed.clone()),
+                    1_030,
+                )
                 .await,
             Err(RadrootsOutboxError::ClaimTokenMismatch { .. })
         ));
@@ -4944,7 +4969,12 @@ mod tests {
             .expect("reclaimed unsigned");
         assert_eq!(reclaimed.state, RadrootsOutboxEventState::Signing);
         outbox
-            .complete_signing(receipt.outbox_event_id, "sign-claim-two", signed, 1_050)
+            .complete_signing(
+                receipt.outbox_event_id,
+                "sign-claim-two",
+                verified_signed_event(signed),
+                1_050,
+            )
             .await
             .expect("complete signing");
 
@@ -5292,7 +5322,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_trade_mutation",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 delivery_plan(vec![nostr_target(NOSTR_PRIMARY_WSS)]),
                 true,
                 1_007,
@@ -5425,14 +5455,20 @@ mod tests {
             .expect("event")
             .expect("event");
         assert_eq!(event.state, RadrootsOutboxEventState::Signed);
-        assert_eq!(event.signed_event, Some(signed_event));
+        assert_eq!(
+            event.signed_event,
+            Some(verified_signed_event(signed_event))
+        );
 
         let second = outbox
             .enqueue_signed_trade_mutation_operation(
                 signed_trade_mutation_input(
                     &canonical,
                     draft,
-                    event.signed_event.expect("stored signed event"),
+                    event
+                        .signed_event
+                        .expect("stored signed event")
+                        .into_signed_event(),
                     vec![nostr_target("wss://relay-3.example.com")],
                     1_100,
                 )
@@ -5624,7 +5660,7 @@ mod tests {
                 canonical.mutation_id,
                 "0".repeat(64),
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 delivery_plan(vec![nostr_target(NOSTR_PRIMARY_WSS)]),
                 true,
                 1_007,
@@ -5674,7 +5710,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.no_wait.local",
                     11,
@@ -5946,7 +5982,10 @@ mod tests {
             .expect("event")
             .expect("event");
         assert_eq!(event.state, RadrootsOutboxEventState::Signed);
-        assert_eq!(event.signed_event, Some(signed_event));
+        assert_eq!(
+            event.signed_event,
+            Some(verified_signed_event(signed_event))
+        );
 
         let claimed = outbox
             .claim_next_ready_signed_event("publisher", "claim-a", 2_000, 1_000)
@@ -6044,7 +6083,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.nostr.local",
                     1,
@@ -6155,7 +6194,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.nostr.local",
                     1,
@@ -6286,7 +6325,7 @@ mod tests {
                 .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.local",
                         1,
@@ -6393,7 +6432,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft.clone(),
-                    signed_event.clone(),
+                    verified_signed_event(signed_event.clone()),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.primary-plan",
                         1,
@@ -6413,7 +6452,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.secondary-plan",
                         1,
@@ -6536,7 +6575,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft.clone(),
-                    signed_event.clone(),
+                    verified_signed_event(signed_event.clone()),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.invalid_plan",
                         1,
@@ -6556,7 +6595,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.sibling",
                         1,
@@ -6679,7 +6718,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft.clone(),
-                    signed_event.clone(),
+                    verified_signed_event(signed_event.clone()),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.cancel",
                         1,
@@ -6699,7 +6738,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.cancel.sibling",
                         1,
@@ -6762,7 +6801,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.nostr.local",
                     7,
@@ -6872,7 +6911,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.reticulum.default",
                     1,
@@ -6942,7 +6981,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.reticulum.default",
                     1,
@@ -7010,7 +7049,7 @@ mod tests {
             .preflight_signed_operation_idempotency(&RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 default_behavior_draft,
-                default_behavior_signed_event,
+                verified_signed_event(default_behavior_signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.reticulum.default",
                     1,
@@ -7040,7 +7079,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft.clone(),
-                    signed_event.clone(),
+                    verified_signed_event(signed_event.clone()),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.reticulum.default",
                         1,
@@ -7060,7 +7099,7 @@ mod tests {
                 RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.reticulum.default",
                         1,
@@ -7108,7 +7147,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 reject_draft,
-                reject_signed_event,
+                verified_signed_event(reject_signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.reticulum.default",
                     1,
@@ -7130,7 +7169,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 deferred_draft,
-                deferred_signed_event,
+                verified_signed_event(deferred_signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.reticulum.default",
                     1,
@@ -7260,7 +7299,12 @@ mod tests {
             radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
 
         outbox
-            .complete_signing(receipt.outbox_event_id, "claim-a", signed, 1_100)
+            .complete_signing(
+                receipt.outbox_event_id,
+                "claim-a",
+                verified_signed_event(signed),
+                1_100,
+            )
             .await
             .expect("complete signing");
 
@@ -7299,7 +7343,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.explicit.multi_target",
                     1,
@@ -7401,7 +7445,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.explicit.multi_target",
                     1,
@@ -7438,7 +7482,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.explicit.multi_target",
                     1,
@@ -7495,7 +7539,7 @@ mod tests {
             .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                 "publish_post",
                 draft,
-                signed_event,
+                verified_signed_event(signed_event),
                 RadrootsOutboxDeliveryPlanInput::new(
                     "transport.nostr.local",
                     1,
@@ -7603,7 +7647,7 @@ mod tests {
                 .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.local",
                         1,
@@ -7747,7 +7791,7 @@ mod tests {
                 .enqueue_signed_operation(RadrootsOutboxSignedOperationInput::new(
                     "publish_post",
                     draft,
-                    signed_event,
+                    verified_signed_event(signed_event),
                     RadrootsOutboxDeliveryPlanInput::new(
                         "transport.nostr.local",
                         1,
@@ -7882,7 +7926,7 @@ mod tests {
             .complete_signing(
                 receipt.outbox_event_id,
                 claimed.claim_token.as_str(),
-                signed.clone(),
+                verified_signed_event(signed.clone()),
                 1_100,
             )
             .await
@@ -7954,7 +7998,7 @@ mod tests {
             .complete_signing(
                 receipt.outbox_event_id,
                 claimed.claim_token.as_str(),
-                signed,
+                verified_signed_event(signed),
                 1_100,
             )
             .await
@@ -7995,7 +8039,7 @@ mod tests {
 
     #[cfg(feature = "event-store-adapter")]
     #[tokio::test]
-    async fn local_ingest_rejects_an_invalid_signature_without_marking_the_outbox_or_store() {
+    async fn corrupt_stored_signature_is_rejected_before_local_ingest() {
         let outbox = RadrootsOutbox::open_memory().await.expect("open");
         let event_store = RadrootsEventStore::open_memory()
             .await
@@ -8012,38 +8056,45 @@ mod tests {
             .expect("claimed");
         let signed =
             radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed");
-        let mut wire = signed.wire().clone();
-        wire.sig = "0".repeat(128);
-        let raw_json = serde_json::to_string(&wire).expect("invalid-signature wire JSON");
-        let invalid_signed = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
-            .expect("event id remains valid when only the signature changes");
         outbox
             .complete_signing(
                 receipt.outbox_event_id,
                 claimed.claim_token.as_str(),
-                invalid_signed,
+                verified_signed_event(signed.clone()),
                 1_100,
             )
             .await
             .expect("complete signing");
-        outbox
-            .claim_next_ready_event("publisher", "claim-b", 3_000, 1_100)
-            .await
-            .expect("claim")
-            .expect("publish claim");
+        let mut wire = signed.wire().clone();
+        wire.sig = "0".repeat(128);
+        let invalid_wire_json = serde_json::to_string(&wire).expect("invalid-signature wire JSON");
+        sqlx::query(
+            "UPDATE outbox_event SET signed_event_json = ?, raw_event_json = ? WHERE outbox_event_id = ?",
+        )
+        .bind(invalid_wire_json.as_str())
+        .bind(invalid_wire_json.as_str())
+        .bind(receipt.outbox_event_id)
+        .execute(outbox.pool())
+        .await
+        .expect("corrupt stored signature");
 
         let error = outbox
-            .ingest_signed_event_local(&event_store, receipt.outbox_event_id, "claim-b", 2_200)
+            .claim_next_ready_event("publisher", "claim-b", 3_000, 1_100)
             .await
-            .expect_err("invalid signature must fail before local storage");
-        assert!(matches!(error, RadrootsOutboxError::EventStore(_)));
+            .expect_err("invalid signature must fail while loading publish authority");
+        assert!(matches!(
+            error,
+            RadrootsOutboxError::SignedEventSignature(_)
+        ));
 
-        let stored_outbox = outbox
-            .get_event(receipt.outbox_event_id)
-            .await
-            .expect("outbox lookup")
-            .expect("outbox event");
-        assert!(!stored_outbox.event_store_ingested);
+        let event_store_ingested: i64 = sqlx::query_scalar(
+            "SELECT event_store_ingested FROM outbox_event WHERE outbox_event_id = ?",
+        )
+        .bind(receipt.outbox_event_id)
+        .fetch_one(outbox.pool())
+        .await
+        .expect("stored event-store state");
+        assert_eq!(event_store_ingested, 0);
         assert_eq!(
             event_store
                 .status_summary()

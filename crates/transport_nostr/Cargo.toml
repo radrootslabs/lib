@@ -20,7 +20,12 @@ client = [
   "radroots_nostr/client",
   "radroots_nostr/events",
 ]
-storage = ["dep:radroots_event_store", "dep:radroots_outbox", "client"]
+storage = [
+  "dep:radroots_event_store",
+  "dep:radroots_outbox",
+  "radroots_outbox/event-store-adapter",
+  "client",
+]
 runtime-tokio = [
   "dep:tokio",
   "storage",
@@ -30,8 +35,9 @@ runtime-tokio = [
 
 [dependencies]
 radroots_event = { workspace = true, default-features = false, features = [
-  "std",
   "serde",
+  "signature",
+  "std",
 ] }
 radroots_event_store = { workspace = true, optional = true, default-features = false, features = [
   "sqlite",

@@ -48,9 +48,9 @@
   "source_files": [
     {
       "file": {
-        "byte_length": 1873,
+        "byte_length": 1858,
         "path": "crates/outbox/Cargo.toml",
-        "sha256": "95364a40f818d5d7aa4589a42774e650b590e1e1e7d4c3ed4dc8220cc8cadcbf"
+        "sha256": "0c1df46ac2450865c4fca94d6426395a8e4505a028d4507f9addd0400852d78e"
       },
       "role": "outbox_package_manifest"
     },
@@ -128,17 +128,17 @@
     },
     {
       "file": {
-        "byte_length": 25965,
+        "byte_length": 26484,
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "a23dae6f24e7d4202826970b2f8c6a7d942d79e068c3ab1f17e5fc96e0ca1603"
+        "sha256": "331a32e5ca7ba615a04e5837a1a06173f9d1d5ba663103255206d9dd39097dd8"
       },
       "role": "release_record"
     },
     {
       "file": {
-        "byte_length": 36955,
+        "byte_length": 37356,
         "path": "CHANGELOG.md",
-        "sha256": "68e74a02a28a5c24643befca7038d143c5f5e6f941e314e98b1d6dfc1094e28d"
+        "sha256": "bb26037e84cfb120ba372320dc15b5e1e865f49a8835b8635847df3bf9ab25f5"
       },
       "role": "release_notes"
     }

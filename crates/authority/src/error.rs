@@ -89,6 +89,8 @@ pub enum RadrootsAuthorityError {
         computed_event_id: String,
     },
 
+    SignedEventSignatureVerification(radroots_event::draft::RadrootsSignatureVerificationError),
+
     Signer(RadrootsSignerError),
 }
 
@@ -201,6 +203,9 @@ impl fmt::Display for RadrootsAuthorityError {
                 f,
                 "signed event computed id mismatch: expected {expected_event_id}, computed {computed_event_id}"
             ),
+            Self::SignedEventSignatureVerification(error) => {
+                write!(f, "signed event signature verification failed: {error}")
+            }
             Self::Signer(error) => write!(f, "signer error: {error}"),
         }
     }
@@ -211,6 +216,7 @@ impl std::error::Error for RadrootsAuthorityError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::DraftValidation(error) => Some(error),
+            Self::SignedEventSignatureVerification(error) => Some(error),
             Self::Signer(error) => Some(error),
             _ => None,
         }
@@ -403,6 +409,21 @@ mod tests {
         assert_eq!(
             authority_error.source().expect("signer source").to_string(),
             "signing failed: deterministic failure"
+        );
+
+        let signature_error = RadrootsAuthorityError::SignedEventSignatureVerification(
+            radroots_event::draft::RadrootsSignatureVerificationError::VerificationFailed,
+        );
+        assert_eq!(
+            signature_error.to_string(),
+            "signed event signature verification failed: signed event signature verification failed"
+        );
+        assert_eq!(
+            signature_error
+                .source()
+                .expect("signature verification source")
+                .to_string(),
+            "signed event signature verification failed"
         );
     }
 

@@ -1,6 +1,6 @@
 use futures::future::BoxFuture;
 use nostr::{EventBuilder, JsonUtil};
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsVerifiedSignedEvent};
 use radroots_event::kinds::{
     KIND_DELETION_REQUEST, KIND_FOLLOW, KIND_GEOCHAT, KIND_POST, KIND_PROFILE,
 };
@@ -466,6 +466,12 @@ fn signed_event_with_kind_and_hashtag(
     RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
+fn verified_signed_event(signed_event: RadrootsSignedEvent) -> RadrootsVerifiedSignedEvent {
+    signed_event
+        .verify_signature()
+        .expect("fixture signature must verify")
+}
+
 fn signed_raw_event_with_kind_and_hashtag(content: &str, kind: u32, hashtag: &str) -> nostr::Event {
     test_event_builder(
         kind,
@@ -483,7 +489,7 @@ async fn complete_claimed_signing(
     now_ms: i64,
 ) -> RadrootsSignedEvent {
     if let Some(signed_event) = claimed.signed_event.clone() {
-        return signed_event;
+        return signed_event.into_signed_event();
     }
     let signed_event =
         radroots_nostr_sign_frozen_draft(&fixture_keys(), &claimed.draft).expect("signed event");
@@ -491,11 +497,12 @@ async fn complete_claimed_signing(
         .complete_signing(
             claimed.outbox_event_id,
             claimed.claim_token.as_str(),
-            signed_event,
+            verified_signed_event(signed_event),
             now_ms,
         )
         .await
         .expect("complete signing")
+        .into_signed_event()
 }
 
 fn nostr_target(relay_url: &str) -> RadrootsTransportTarget {
@@ -1111,9 +1118,13 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
 
     let receipt = publish_signed_event(
         &adapter,
-        radroots_transport_nostr::RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_000)
-            .expect("publish request")
-            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::quorum_accepted(2)),
+        radroots_transport_nostr::RadrootsRelayPublishRequest::new(
+            verified_signed_event(signed.clone()),
+            targets,
+            1_000,
+        )
+        .expect("publish request")
+        .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::quorum_accepted(2)),
     )
     .await
     .expect("publish");
@@ -1175,10 +1186,38 @@ async fn nostr_transport_facade_delivers_signed_event_payloads() {
     );
 }
 
+#[tokio::test]
+async fn nostr_transport_facade_rejects_invalid_signature_before_adapter_publish() {
+    let signed = signed_post("invalid facade signature");
+    let mut wire: serde_json::Value =
+        serde_json::from_str(signed.raw_json()).expect("signed event JSON");
+    wire["sig"] = serde_json::Value::String("0".repeat(128));
+    let invalid_raw_json = serde_json::to_string(&wire).expect("invalid signature JSON");
+    let adapter = RadrootsMockRelayPublishAdapter::new();
+    let transport = RadrootsNostrTransport::new(&adapter);
+    let request = RadrootsTransportDeliveryRequest::new(
+        "facade-invalid-signature",
+        RadrootsTransportPayload::unchecked_signed_event_json(signed.id_str(), invalid_raw_json)
+            .expect("transport payload"),
+        RadrootsTransportTargetSet::new(vec![nostr_target(RELAY_PRIMARY_WSS)]).expect("targets"),
+        RadrootsTransportSatisfactionPolicy::all_accepted(),
+    )
+    .expect("delivery request");
+
+    let error = transport
+        .deliver(request)
+        .await
+        .expect_err("invalid signature must fail before publish");
+
+    assert_eq!(error, RadrootsTransportError::InvalidPayloadSignature);
+    assert!(adapter.captured_raw_events().is_empty());
+}
+
 #[test]
 fn verified_signed_event_payload_preserves_transport_payload_identity() {
     let signed = signed_post("verified payload");
-    let payload = verified_signed_event_payload(&signed).expect("verified payload");
+    let payload = verified_signed_event_payload(&verified_signed_event(signed.clone()))
+        .expect("verified payload");
     let RadrootsTransportPayload::SignedEventJson {
         event_id,
         raw_json,
@@ -1457,7 +1496,7 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
     let relay_receipt = publish_signed_event(
         &SlashSpelledRelayReceiptPublishAdapter,
         RadrootsRelayPublishRequest::new(
-            signed,
+            verified_signed_event(signed),
             RadrootsRelayTargetSet::new(vec![RELAY_PRIMARY_WSS], RadrootsRelayUrlPolicy::Public)
                 .expect("targets"),
             1_070,
@@ -1515,7 +1554,7 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
 
     let receipt = publish_signed_event(
         &adapter,
-        RadrootsRelayPublishRequest::new(signed.clone(), targets, 1_050)
+        RadrootsRelayPublishRequest::new(verified_signed_event(signed.clone()), targets, 1_050)
             .expect("publish request")
             .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
     )
@@ -1541,7 +1580,7 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     let error = publish_signed_event(
         &TransportFailurePublishAdapter,
         RadrootsRelayPublishRequest::new(
-            signed,
+            verified_signed_event(signed),
             RadrootsRelayTargetSet::new(vec![RELAY_PRIMARY_WSS], RadrootsRelayUrlPolicy::Public)
                 .expect("targets"),
             1_060,
@@ -1572,7 +1611,7 @@ async fn publish_required_target_policy_uses_relay_fingerprints() {
 
     let receipt = publish_signed_event(
         &adapter,
-        RadrootsRelayPublishRequest::new(signed, targets, 1_070)
+        RadrootsRelayPublishRequest::new(verified_signed_event(signed), targets, 1_070)
             .expect("publish request")
             .with_satisfaction_policy(
                 RadrootsTransportSatisfactionPolicy::required_targets(
@@ -1601,9 +1640,13 @@ async fn publish_all_policy_uses_requested_target_count() {
 
     let receipt = publish_signed_event(
         &PartialPublishAdapter,
-        RadrootsRelayPublishRequest::new(signed.clone(), targets.clone(), 1_080)
-            .expect("publish request")
-            .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
+        RadrootsRelayPublishRequest::new(
+            verified_signed_event(signed.clone()),
+            targets.clone(),
+            1_080,
+        )
+        .expect("publish request")
+        .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::all_accepted()),
     )
     .await
     .expect("publish");
@@ -1622,7 +1665,7 @@ async fn publish_all_policy_uses_requested_target_count() {
 
     let no_wait = publish_signed_event(
         &PartialPublishAdapter,
-        RadrootsRelayPublishRequest::new(signed, targets, 1_081)
+        RadrootsRelayPublishRequest::new(verified_signed_event(signed), targets, 1_081)
             .expect("publish request")
             .with_satisfaction_policy(RadrootsTransportSatisfactionPolicy::NoWait),
     )
@@ -1636,8 +1679,12 @@ async fn publish_all_policy_uses_requested_target_count() {
 async fn publish_rejects_untrusted_adapter_receipt_provenance() {
     let signed = signed_post("adapter provenance");
     let request = || {
-        RadrootsRelayPublishRequest::new(signed.clone(), primary_relay_target(), 1_090)
-            .expect("publish request")
+        RadrootsRelayPublishRequest::new(
+            verified_signed_event(signed.clone()),
+            primary_relay_target(),
+            1_090,
+        )
+        .expect("publish request")
     };
 
     assert!(matches!(
@@ -1672,7 +1719,7 @@ fn relay_publish_request_rejects_negative_time() {
     let signed = signed_post("negative publish time");
 
     assert!(matches!(
-        RadrootsRelayPublishRequest::new(signed, primary_relay_target(), -1),
+        RadrootsRelayPublishRequest::new(verified_signed_event(signed), primary_relay_target(), -1,),
         Err(RadrootsRelayTransportError::InvalidTimestamp {
             field: "now_ms",
             value: -1,
@@ -1683,9 +1730,13 @@ fn relay_publish_request_rejects_negative_time() {
 #[test]
 fn relay_publish_request_seals_fields_and_validates_idempotency_keys() {
     let signed = signed_post("sealed publish request");
-    let request = RadrootsRelayPublishRequest::new(signed.clone(), primary_relay_target(), 7)
-        .expect("publish request");
-    assert_eq!(request.signed_event(), &signed);
+    let request = RadrootsRelayPublishRequest::new(
+        verified_signed_event(signed.clone()),
+        primary_relay_target(),
+        7,
+    )
+    .expect("publish request");
+    assert_eq!(request.signed_event().signed_event(), &signed);
     assert_eq!(request.targets().len(), 1);
     assert_eq!(
         request.satisfaction_policy(),
@@ -1719,15 +1770,16 @@ async fn relay_publish_request_rejects_unrequested_required_target_before_adapte
         .expect("required target")
         .fingerprint()
         .clone();
-    let request = RadrootsRelayPublishRequest::new(signed, primary_relay_target(), 8)
-        .expect("publish request")
-        .with_satisfaction_policy(
-            RadrootsTransportSatisfactionPolicy::required_targets(
-                RadrootsTransportSatisfactionClass::Accepted,
-                vec![required.clone()],
-            )
-            .expect("required policy"),
-        );
+    let request =
+        RadrootsRelayPublishRequest::new(verified_signed_event(signed), primary_relay_target(), 8)
+            .expect("publish request")
+            .with_satisfaction_policy(
+                RadrootsTransportSatisfactionPolicy::required_targets(
+                    RadrootsTransportSatisfactionClass::Accepted,
+                    vec![required.clone()],
+                )
+                .expect("required policy"),
+            );
     let adapter = RadrootsMockRelayPublishAdapter::new();
 
     assert!(matches!(

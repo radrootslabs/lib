@@ -3,7 +3,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use radroots_event::{draft::RadrootsSignedEvent, wire::RadrootsNip01EventWire};
+use radroots_event::{draft::RadrootsVerifiedSignedEvent, wire::RadrootsNip01EventWire};
 #[cfg(feature = "transport-workers")]
 use radroots_transport::RadrootsTransportTargetReceipt;
 use radroots_transport::{
@@ -56,20 +56,24 @@ impl From<RadrootsTransportError> for RadrootsRuntimeTransportError {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsRuntimeTransportPayload {
-    SignedEvent(Box<RadrootsSignedEvent>),
+    SignedEvent(Box<RadrootsVerifiedSignedEvent>),
     OpaqueBytes { label: String, bytes: Vec<u8> },
 }
 
 impl RadrootsRuntimeTransportPayload {
-    pub fn signed_event(event: RadrootsSignedEvent) -> Self {
+    pub fn signed_event(event: RadrootsVerifiedSignedEvent) -> Self {
         Self::SignedEvent(Box::new(event))
     }
 
     pub fn verified_signed_event_json(
-        event: &RadrootsSignedEvent,
+        event: &RadrootsVerifiedSignedEvent,
     ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
         verify_signed_event_raw_json_matches_event(event)?;
-        RadrootsTransportPayload::unchecked_signed_event_json(event.id_str(), event.raw_json())
+        let signed_event = event.signed_event();
+        RadrootsTransportPayload::unchecked_signed_event_json(
+            signed_event.id_str(),
+            signed_event.raw_json(),
+        )
     }
 
     pub fn transport_payload(&self) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
@@ -83,14 +87,15 @@ impl RadrootsRuntimeTransportPayload {
 }
 
 fn verify_signed_event_raw_json_matches_event(
-    event: &RadrootsSignedEvent,
+    event: &RadrootsVerifiedSignedEvent,
 ) -> Result<(), RadrootsTransportError> {
-    let wire = RadrootsNip01EventWire::parse_json(event.raw_json())
+    let signed_event = event.signed_event();
+    let wire = RadrootsNip01EventWire::parse_json(signed_event.raw_json())
         .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
-    if wire.id.as_str() != event.id_str() {
+    if wire.id.as_str() != signed_event.id_str() {
         return Err(RadrootsTransportError::InvalidPayloadId);
     }
-    (wire == *event.wire())
+    (wire == *signed_event.wire())
         .then_some(())
         .ok_or(RadrootsTransportError::InvalidPayloadBytes)
 }
@@ -594,13 +599,13 @@ pub struct RadrootsRuntimeInboundObservation {
 #[cfg(feature = "transport-workers")]
 impl RadrootsRuntimeInboundObservation {
     pub fn verified_signed_event(
-        event: &RadrootsSignedEvent,
+        event: &RadrootsVerifiedSignedEvent,
         transport_kind: RadrootsTransportKind,
         endpoint_uri: impl Into<String>,
         observed_at_ms: i64,
     ) -> Self {
         Self {
-            event_id: event.id_str().to_owned(),
+            event_id: event.signed_event().id_str().to_owned(),
             verified: true,
             transport_kind,
             endpoint_uri: endpoint_uri.into(),
@@ -610,7 +615,7 @@ impl RadrootsRuntimeInboundObservation {
 
     pub fn require_verified_for_signed_event(
         &self,
-        event: &RadrootsSignedEvent,
+        event: &RadrootsVerifiedSignedEvent,
     ) -> Result<(), RadrootsRuntimeTransportError> {
         if !self.verified {
             return Err(
@@ -619,11 +624,11 @@ impl RadrootsRuntimeInboundObservation {
                 },
             );
         }
-        if self.event_id != event.id_str() {
+        if self.event_id != event.signed_event().id_str() {
             return Err(
                 RadrootsRuntimeTransportError::InboundObservationEventMismatch {
                     observation_event_id: self.event_id.clone(),
-                    signed_event_id: event.id_str().to_owned(),
+                    signed_event_id: event.signed_event().id_str().to_owned(),
                 },
             );
         }
@@ -635,7 +640,7 @@ impl RadrootsRuntimeInboundObservation {
 pub trait RadrootsRuntimeInboundObservationSink: Send + Sync {
     fn record_verified_observation<'a>(
         &'a self,
-        event: RadrootsSignedEvent,
+        event: RadrootsVerifiedSignedEvent,
         observation: RadrootsRuntimeInboundObservation,
     ) -> RadrootsRuntimeTransportFuture<'a, ()>;
 }
@@ -643,7 +648,7 @@ pub trait RadrootsRuntimeInboundObservationSink: Send + Sync {
 #[cfg(feature = "transport-workers")]
 pub fn record_verified_inbound_observation<'a, S>(
     sink: &'a S,
-    event: RadrootsSignedEvent,
+    event: RadrootsVerifiedSignedEvent,
     observation: RadrootsRuntimeInboundObservation,
 ) -> RadrootsRuntimeTransportFuture<'a, ()>
 where
@@ -671,7 +676,10 @@ mod tests {
         RadrootsRuntimeLeaseRecord, record_verified_inbound_observation, recover_expired_leases,
     };
     #[cfg(feature = "transport-workers")]
-    use radroots_event::{draft::RadrootsSignedEvent, wire::RadrootsNip01EventWire};
+    use radroots_event::{
+        draft::{RadrootsSignedEvent, RadrootsVerifiedSignedEvent},
+        wire::RadrootsNip01EventWire,
+    };
     use radroots_transport::{
         RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
         RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
@@ -885,28 +893,14 @@ mod tests {
     }
 
     #[cfg(feature = "transport-workers")]
-    fn signed_event() -> RadrootsSignedEvent {
-        let pubkey = "e".repeat(64);
-        let sig = "f".repeat(128);
-        let mut wire = RadrootsNip01EventWire {
-            id: String::new(),
-            pubkey: pubkey.clone(),
-            created_at: 10,
-            kind: 1,
-            tags: Vec::new(),
-            content: "hello".to_owned(),
-            sig: sig.clone(),
-            extra: Default::default(),
-        };
-        wire.id = wire
-            .computed_event_id()
-            .expect("computed event id")
-            .into_string();
-        let raw_json = format!(
-            "{{\"id\":\"{id}\",\"pubkey\":\"{pubkey}\",\"created_at\":10,\"kind\":1,\"tags\":[],\"content\":\"hello\",\"sig\":\"{sig}\"}}",
-            id = wire.id.as_str()
-        );
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    fn signed_event() -> RadrootsVerifiedSignedEvent {
+        let raw_json = r#"{"id":"fb3f42caf9db337a7f1c0d49cd8ba5191f08dc1c419ed0640f7ea48a924e3bf3","pubkey":"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798","created_at":1781632860,"kind":1,"tags":[],"content":"The first strawberries are ready.","sig":"dba0a86fee54304c2b419742f186e74d7edca5fc7234c8aa294651de9bc2f16bf829d46f36ec759a767c4ccd1841a73243eae89afd5f6c89b2243491bfbb5f50"}"#.to_owned();
+        let wire =
+            RadrootsNip01EventWire::parse_json(raw_json.as_str()).expect("signed event wire");
+        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
+            .expect("signed event identity")
+            .verify_signature()
+            .expect("signed event signature")
     }
 
     #[cfg(feature = "transport-workers")]
@@ -926,8 +920,8 @@ mod tests {
         };
 
         assert_eq!(payload, via_variant);
-        assert_eq!(event_id, event.id_str());
-        assert_eq!(raw_json, event.raw_json());
+        assert_eq!(event_id, event.signed_event().id_str());
+        assert_eq!(raw_json, event.signed_event().raw_json());
     }
 
     #[cfg(feature = "transport-workers")]
@@ -939,11 +933,11 @@ mod tests {
     impl RadrootsRuntimeInboundObservationSink for RecordingInboundSink {
         fn record_verified_observation<'a>(
             &'a self,
-            event: RadrootsSignedEvent,
+            event: RadrootsVerifiedSignedEvent,
             observation: RadrootsRuntimeInboundObservation,
         ) -> RadrootsRuntimeTransportFuture<'a, ()> {
             Box::pin(async move {
-                assert_eq!(event.id_str(), self.expected_event_id);
+                assert_eq!(event.signed_event().id_str(), self.expected_event_id);
                 assert_eq!(observation.event_id, self.expected_event_id);
                 assert!(observation.verified);
                 Ok(())
@@ -1564,7 +1558,7 @@ mod tests {
     async fn inbound_observation_sink_requires_verified_signed_events() {
         let event = signed_event();
         let sink = RecordingInboundSink {
-            expected_event_id: event.id_str().to_owned(),
+            expected_event_id: event.signed_event().id_str().to_owned(),
         };
 
         let observation = RadrootsRuntimeInboundObservation::verified_signed_event(
@@ -1578,7 +1572,7 @@ mod tests {
             .expect("record observation");
 
         let unverified = RadrootsRuntimeInboundObservation {
-            event_id: event.id_str().to_owned(),
+            event_id: event.signed_event().id_str().to_owned(),
             verified: false,
             transport_kind: RadrootsTransportKind::Nostr,
             endpoint_uri: "wss://relay.example".to_owned(),

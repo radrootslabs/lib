@@ -573,3 +573,14 @@ semver_impacts = [
   "change_exported_algorithm_behavior",
 ]
 summary = "Add authenticated schema version 2 and a sealed Phase 1 publication state machine that persists exact artifact, readiness, signed-event, target-policy, dispatch-intent, receipt, and observation-repair authority under bounded canonical targets, stable raw fixed-width identities, revision compare-and-swap, and opaque expiring claims without performing network publication."
+
+[[changes]]
+id = "verified-signed-publication-boundaries"
+classification = "breaking"
+semver_impacts = [
+  "change_exported_field_type",
+  "change_exported_function_signature",
+  "add_enum_variant",
+  "change_exported_algorithm_behavior",
+]
+summary = "Require BIP340-verified signed-event typestate at authority, outbox, runtime, inbound-observation, and direct Nostr publication boundaries; reject invalid signatures before durable, event-store, or adapter mutation, including corrupted stored signatures on reload."

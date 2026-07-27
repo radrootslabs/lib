@@ -32,7 +32,6 @@
           "dep:radroots_event_codec",
           "dep:sqlx",
           "dep:url",
-          "radroots_event/signature",
           "sqlx/sqlite-bundled"
         ],
         "feature": "sqlite"
@@ -83,10 +82,10 @@
       }
     ],
     "source": {
-      "byte_length": 1001,
+      "byte_length": 971,
       "hash_algorithm": "sha256_bytes_v1",
       "path": "contracts/outbox_feature_matrix.toml",
-      "sha256": "bc6578853c07f8901019e007e1cd9d7e87c41e0ef92425ad17781e528bcd15a1"
+      "sha256": "a668160e547ac00b6ff9bb8d64277190fc62eb45a63ec343b6b1771440c398cb"
     }
   },
   "generated_runtime": {
@@ -216,10 +215,10 @@
   "source_files": [
     {
       "file": {
-        "byte_length": 1873,
+        "byte_length": 1858,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/Cargo.toml",
-        "sha256": "95364a40f818d5d7aa4589a42774e650b590e1e1e7d4c3ed4dc8220cc8cadcbf"
+        "sha256": "0c1df46ac2450865c4fca94d6426395a8e4505a028d4507f9addd0400852d78e"
       },
       "role": "outbox_package_manifest"
     },
@@ -234,10 +233,10 @@
     },
     {
       "file": {
-        "byte_length": 11111,
+        "byte_length": 11269,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/error.rs",
-        "sha256": "6f7a918670700696c6e853e45c2b722a1f68551334ca709e77c148f4617809a9"
+        "sha256": "496eca49b17431890251224b9d1818370a8174056f2dab57002f224dbfdb917d"
       },
       "role": "outbox_error_surface"
     },
@@ -279,10 +278,10 @@
     },
     {
       "file": {
-        "byte_length": 318698,
+        "byte_length": 320981,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/store.rs",
-        "sha256": "7f324a44658eb670ab82d30eaa80fe290a93f1cc3203e94ec62517ab015182c9"
+        "sha256": "6c983dc2854dbb62de093cf748e0b761965f37c32bcf5d2f9bcaee56eb2f2d99"
       },
       "role": "store_integration"
     },
@@ -351,19 +350,19 @@
     },
     {
       "file": {
-        "byte_length": 25965,
+        "byte_length": 26484,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "a23dae6f24e7d4202826970b2f8c6a7d942d79e068c3ab1f17e5fc96e0ca1603"
+        "sha256": "331a32e5ca7ba615a04e5837a1a06173f9d1d5ba663103255206d9dd39097dd8"
       },
       "role": "release_record"
     },
     {
       "file": {
-        "byte_length": 36955,
+        "byte_length": 37356,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "CHANGELOG.md",
-        "sha256": "68e74a02a28a5c24643befca7038d143c5f5e6f941e314e98b1d6dfc1094e28d"
+        "sha256": "bb26037e84cfb120ba372320dc15b5e1e865f49a8835b8635847df3bf9ab25f5"
       },
       "role": "release_notes"
     }
