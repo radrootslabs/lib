@@ -1504,6 +1504,27 @@ mod tests {
         output
     }
 
+    fn webp_with_record_count(record_count: usize) -> Vec<u8> {
+        assert!(record_count >= 1);
+        let mut output = b"RIFF\0\0\0\0WEBP".to_vec();
+        for _ in 1..record_count {
+            output.extend_from_slice(b"JUNK\0\0\0\0");
+        }
+        output.extend_from_slice(b"VP8L\x05\0\0\0\x2f\0\0\0\0\0");
+        let riff_size = (output.len() as u32) - 8;
+        output[4..8].copy_from_slice(&riff_size.to_le_bytes());
+        output
+    }
+
+    fn jpeg_with_app_record_count(record_count: usize) -> Vec<u8> {
+        let mut output = b"\xff\xd8".to_vec();
+        for _ in 0..record_count {
+            output.extend_from_slice(b"\xff\xe0\0\x02");
+        }
+        output.extend_from_slice(b"\xff\xd9");
+        output
+    }
+
     fn descriptor(bytes: &[u8], media_type: &str, origin: &str) -> RadrootsBlossomBlobDescriptor {
         let hash = RadrootsBlossomSha256::digest(bytes);
         RadrootsBlossomBlobDescriptor::new(
@@ -1968,6 +1989,49 @@ mod tests {
     }
 
     #[test]
+    fn png_container_rejects_every_palette_and_unknown_chunk_boundary() {
+        let ihdr = &PNG[16..29];
+        let idat = &PNG[41..54];
+        let oversized_palette = [0_u8; 771];
+
+        for palette in [&[][..], &[0, 0][..], &oversized_palette[..]] {
+            let malformed = png_with_chunks(&[
+                (*b"IHDR", ihdr),
+                (*b"PLTE", palette),
+                (*b"IDAT", idat),
+                (*b"IEND", &[]),
+            ]);
+            assert_eq!(
+                validate_png_container(&malformed).unwrap_err().code(),
+                "invalid_publication_raster"
+            );
+        }
+
+        for malformed in [
+            png_with_chunks(&[(*b"PLTE", &[0, 0, 0]), (*b"IHDR", ihdr)]),
+            png_with_chunks(&[
+                (*b"IHDR", ihdr),
+                (*b"PLTE", &[0, 0, 0]),
+                (*b"PLTE", &[0, 0, 0]),
+            ]),
+            png_with_chunks(&[(*b"IHDR", ihdr), (*b"IDAT", idat), (*b"PLTE", &[0, 0, 0])]),
+            png_with_chunks(&[(*b"tEXt", &[]), (*b"IHDR", ihdr)]),
+            png_with_chunks(&[(*b"IHDR", ihdr), (*b"ABCD", &[])]),
+            png_with_chunks(&[
+                (*b"IHDR", ihdr),
+                (*b"IDAT", idat),
+                (*b"tEXt", &[]),
+                (*b"IDAT", idat),
+            ]),
+        ] {
+            assert_eq!(
+                validate_png_container(&malformed).unwrap_err().code(),
+                "invalid_publication_raster"
+            );
+        }
+    }
+
+    #[test]
     fn webp_container_covers_extended_lossless_and_lossy_boundaries() {
         let vp8x_1x1 = [0_u8; 10];
         let mut vp8x_2x1 = vp8x_1x1;
@@ -2104,6 +2168,54 @@ mod tests {
                 .code(),
             "publication_raster_pixel_limit_exceeded"
         );
+
+        let mut vp8x_reserved_bytes = vp8x_1x1;
+        vp8x_reserved_bytes[1] = 1;
+        for malformed in [
+            webp_with_chunks(&[(*b"VP8L", &vp8l_1x1), (*b"VP8X", &vp8x_1x1)]),
+            webp_with_chunks(&[(*b"VP8X", &vp8x_reserved_bytes)]),
+        ] {
+            assert!(validate_webp_container(&malformed).is_err());
+        }
+    }
+
+    #[test]
+    fn container_record_limits_reject_one_over_for_webp_and_jpeg() {
+        assert!(
+            validate_webp_container(&webp_with_record_count(
+                PUBLICATION_RASTER_MAX_CONTAINER_RECORDS
+            ))
+            .is_ok()
+        );
+        assert_eq!(
+            validate_webp_container(&webp_with_record_count(
+                PUBLICATION_RASTER_MAX_CONTAINER_RECORDS + 1
+            ))
+            .unwrap_err()
+            .code(),
+            "invalid_publication_raster"
+        );
+
+        let one_over = jpeg_with_app_record_count(PUBLICATION_RASTER_MAX_CONTAINER_RECORDS);
+        assert_eq!(
+            validate_jpeg_container(&one_over).unwrap_err().code(),
+            "invalid_publication_raster"
+        );
+        #[cfg(feature = "raster-decode")]
+        {
+            assert_eq!(
+                sequential_jpeg::validate(
+                    &one_over,
+                    JpegContainerInspection {
+                        dimensions: RadrootsBlossomRasterDimensions::new(1, 1).unwrap(),
+                        components: 1,
+                    },
+                )
+                .unwrap_err()
+                .code(),
+                "publication_raster_decode_failed"
+            );
+        }
     }
 
     #[test]
