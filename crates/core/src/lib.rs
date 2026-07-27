@@ -10,6 +10,7 @@ pub mod discount;
 pub mod dto;
 pub mod money;
 pub mod percent;
+pub mod pricing;
 pub mod quantity;
 pub mod quantity_price;
 #[cfg(feature = "serde")]
