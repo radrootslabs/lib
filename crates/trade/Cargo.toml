@@ -23,20 +23,10 @@ dto-bindgen = [
   "radroots_event/dto-bindgen",
 ]
 std = [
-  "radroots_authority/std",
   "radroots_core/std",
   "radroots_event/std",
   "radroots_event_codec/std",
   "radroots_event_codec/nostr",
-]
-event_store = [
-  "std",
-  "serde_json",
-  "dep:radroots_event_store",
-  "dep:sqlx",
-  "radroots_event_store/sqlite",
-  "radroots_event_store/runtime-tokio",
-  "sqlx/sqlite-bundled",
 ]
 serde = [
   "dep:serde",
@@ -54,11 +44,9 @@ serde_json = [
 ]
 
 [dependencies]
-radroots_authority = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
-radroots_event_store = { workspace = true, optional = true, default-features = false }
 base64 = { workspace = true, optional = true }
 dto_bindgen = { workspace = true, optional = true }
 dto_bindgen_core = { workspace = true, optional = true }
@@ -71,9 +59,6 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }
-sqlx = { workspace = true, default-features = false, features = [
-  "derive",
-], optional = true }
 
 [dev-dependencies]
 nostr = { workspace = true }

@@ -10,9 +10,7 @@ use alloc::{format, string::ToString, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::ToString, vec::Vec};
 
-use radroots_authority::RadrootsActorContext;
 use radroots_event::{
-    contract::RadrootsActorRole,
     ids::{
         RadrootsClassifiedListingAddress, RadrootsIdParseError, RadrootsInventoryBinId,
         RadrootsPublicKey,
@@ -94,9 +92,6 @@ pub enum RadrootsOperationalListingEditError {
     InvalidFarmPubkey(RadrootsIdParseError),
     InvalidClassifiedListingAddress(RadrootsIdParseError),
     InvalidModel(RadrootsOperationalListingValidationError),
-    ActorRoleUnsatisfied {
-        required_role: RadrootsActorRole,
-    },
     FarmPubkeyMismatch {
         expected_pubkey: RadrootsPublicKey,
         actual_pubkey: RadrootsPublicKey,
@@ -121,10 +116,6 @@ impl fmt::Display for RadrootsOperationalListingEditError {
             Self::InvalidModel(error) => {
                 write!(f, "invalid listing edit model: {error}")
             }
-            Self::ActorRoleUnsatisfied { required_role } => write!(
-                f,
-                "listing edit actor does not satisfy required role {required_role:?}"
-            ),
             Self::FarmPubkeyMismatch { .. } => {
                 f.write_str("listing edit farm pubkey does not match seller")
             }
@@ -172,17 +163,13 @@ fn listing_addr(
         .expect("typed listing identity must form a listing address")
 }
 
+/// Canonicalizes an operational listing edit after the caller has authorized
+/// `authorized_seller_pubkey` for the seller-owned listing boundary.
 pub fn canonicalize_operational_listing_edit(
-    actor: &RadrootsActorContext,
+    authorized_seller_pubkey: &RadrootsPublicKey,
     mut document: RadrootsOperationalListingEditDocumentV1,
 ) -> Result<RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditError> {
-    if !actor.satisfies(RadrootsActorRole::Seller) {
-        return Err(RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
-            required_role: RadrootsActorRole::Seller,
-        });
-    }
-
-    let seller_pubkey = actor.pubkey().clone();
+    let seller_pubkey = authorized_seller_pubkey.clone();
     let farm_pubkey = document.listing.farm.pubkey.as_str();
     if farm_pubkey.is_empty() {
         document.listing.farm.pubkey = seller_pubkey.as_str().to_string();
@@ -193,13 +180,11 @@ pub fn canonicalize_operational_listing_edit(
 
 #[cfg(test)]
 mod tests {
-    use radroots_authority::RadrootsActorContext;
     use radroots_core::{
         RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
         RadrootsCoreQuantityPrice, RadrootsCoreUnit,
     };
     use radroots_event::{
-        contract::RadrootsActorRole,
         farm::RadrootsFarmRef,
         ids::{
             RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId,
@@ -292,12 +277,8 @@ mod tests {
         }
     }
 
-    fn seller_actor() -> RadrootsActorContext {
-        RadrootsActorContext::explicit_pubkey(SELLER, [RadrootsActorRole::Seller]).expect("actor")
-    }
-
-    fn buyer_actor() -> RadrootsActorContext {
-        RadrootsActorContext::explicit_pubkey(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
+    fn seller_pubkey() -> RadrootsPublicKey {
+        RadrootsPublicKey::parse(SELLER).expect("seller")
     }
 
     #[test]
@@ -316,7 +297,7 @@ mod tests {
 
         let document: RadrootsOperationalListingEditDocumentV1 =
             serde_json::from_str(&json).expect("deserialize document");
-        let canonical = canonicalize_operational_listing_edit(&seller_actor(), document)
+        let canonical = canonicalize_operational_listing_edit(&seller_pubkey(), document)
             .expect("canonical draft");
 
         assert_eq!(canonical.seller_pubkey().as_str(), SELLER);
@@ -362,7 +343,7 @@ mod tests {
         listing.farm.pubkey.clear();
         let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let canonical = canonicalize_operational_listing_edit(&seller_actor(), document)
+        let canonical = canonicalize_operational_listing_edit(&seller_pubkey(), document)
             .expect("canonical draft");
 
         assert_eq!(canonical.seller_pubkey().as_str(), SELLER);
@@ -374,26 +355,12 @@ mod tests {
     }
 
     #[test]
-    fn canonicalize_operational_listing_edit_rejects_non_seller_actor() {
-        let document = RadrootsOperationalListingEditDocumentV1::new(listing());
-
-        let error = canonicalize_operational_listing_edit(&buyer_actor(), document).unwrap_err();
-
-        assert_eq!(
-            error,
-            RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
-                required_role: RadrootsActorRole::Seller
-            }
-        );
-    }
-
-    #[test]
     fn canonicalize_operational_listing_edit_rejects_mismatched_farm_pubkey() {
         let mut listing = listing();
         listing.farm.pubkey = OTHER.to_string();
         let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_pubkey(), document).unwrap_err();
 
         assert!(matches!(
             error,
@@ -407,7 +374,7 @@ mod tests {
         listing.farm.pubkey = "bad".to_string();
         let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_pubkey(), document).unwrap_err();
 
         assert!(matches!(
             error,
@@ -472,7 +439,7 @@ mod tests {
         listing.primary_bin_id = bin_id("bin-2");
         let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_pubkey(), document).unwrap_err();
 
         assert_eq!(
             error,
@@ -507,7 +474,7 @@ mod tests {
         listing.bins.push(listing.bins[0].clone());
         let document = RadrootsOperationalListingEditDocumentV1::new(listing);
 
-        let error = canonicalize_operational_listing_edit(&seller_actor(), document).unwrap_err();
+        let error = canonicalize_operational_listing_edit(&seller_pubkey(), document).unwrap_err();
 
         assert_eq!(
             error,

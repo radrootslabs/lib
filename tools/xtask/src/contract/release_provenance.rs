@@ -11,6 +11,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 const SCHEMA_VERSION: u32 = 1;
+const PUBLISH_POLICY_SCHEMA_VERSION: u32 = 1;
 const CONTRACT_ID: &str = "radroots.release.phase1_publication_provenance.v1";
 const AUTHORITY: &str = "candidate_release_evidence_not_protocol_authority_v1";
 const HASH_ALGORITHM: &str = "sha256_bytes_v1";
@@ -173,9 +174,16 @@ struct TestProfiles {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PublishPolicy {
+    schema: PublishPolicySchema,
     release: ReleaseVersion,
     classification: ReleaseClassification,
     publish_order: PublishOrder,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublishPolicySchema {
+    version: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -414,6 +422,11 @@ fn validate_test_profile(label: &str, profile: &TestProfile) -> Result<(), Strin
 }
 
 fn validate_publish_policy(policy: &PublishPolicy) -> Result<(), String> {
+    if policy.schema.version != PUBLISH_POLICY_SCHEMA_VERSION {
+        return Err(format!(
+            "release publish policy schema version must be {PUBLISH_POLICY_SCHEMA_VERSION}"
+        ));
+    }
     if policy.release.version.trim().is_empty() {
         return Err("release.version must not be empty".to_owned());
     }
@@ -1288,6 +1301,9 @@ mod tests {
 
     fn test_policy() -> PublishPolicy {
         PublishPolicy {
+            schema: PublishPolicySchema {
+                version: PUBLISH_POLICY_SCHEMA_VERSION,
+            },
             release: ReleaseVersion {
                 version: "1.2.3".to_owned(),
             },

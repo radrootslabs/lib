@@ -1,3 +1,6 @@
+[schema]
+version = 1
+
 [release]
 version = "1.0.0-alpha.1"
 
@@ -28,6 +31,7 @@ public = [
   "radroots_secret_vault",
   "radroots_sql_core",
   "radroots_trade",
+  "radroots_transport",
 ]
 internal = [
   "radroots_authority",
@@ -51,7 +55,6 @@ internal = [
   "radroots_test_fixtures",
   "radroots_trade_sp1_guest",
   "radroots_trade_sp1_host",
-  "radroots_transport",
   "radroots_transport_nostr",
   "radroots_transport_publish_protocol",
   "radroots_transport_reticulum",
@@ -63,6 +66,7 @@ yank_only = []
 
 [publish_order]
 crates = [
+  "radroots_transport",
   "radroots_runtime_distribution",
   "radroots_replica_schema",
   "radroots_protocol_contract_v1",

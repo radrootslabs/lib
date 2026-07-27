@@ -1339,10 +1339,6 @@ mod tests {
         RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
         RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
     };
-    #[cfg(feature = "transport-reticulum")]
-    use radroots_transport::{
-        RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    };
     #[cfg(feature = "transport-workers")]
     use std::sync::{Arc, Mutex};
 
@@ -1774,73 +1770,6 @@ mod tests {
             .expect("delivery request");
 
         assert_eq!(delivery_request.now_ms(), 123_456);
-    }
-
-    #[cfg(feature = "transport-reticulum")]
-    #[tokio::test]
-    async fn registry_preserves_default_reticulum_reject_behavior() {
-        let mut registry = RadrootsRuntimeTransportRegistry::new();
-        registry
-            .register(radroots_transport_reticulum::RadrootsReticulumTransport::default())
-            .expect("register");
-        let transport = registry
-            .transport(&RadrootsTransportKind::Reticulum)
-            .expect("reticulum transport");
-        let request = RadrootsRuntimeTransportDispatchRequest::new(
-            "reticulum-delivery",
-            opaque_payload(),
-            vec![target(RadrootsTransportKind::Reticulum, "reticulum:local")],
-            RadrootsTransportSatisfactionPolicy::any_accepted(),
-            1_000,
-        )
-        .expect("request");
-        let receipt = transport
-            .deliver(
-                request
-                    .transport_delivery_request()
-                    .expect("delivery request"),
-            )
-            .await
-            .expect("receipt");
-        let status = transport.status().await.expect("status");
-        assert_eq!(
-            status.implementation(),
-            RadrootsTransportImplementationState::Real
-        );
-        assert_eq!(
-            status.maturity(),
-            RadrootsTransportCapabilityMaturity::Preview
-        );
-        assert_eq!(
-            status.availability(),
-            RadrootsTransportCapabilityAvailability::Unavailable
-        );
-        assert!(!status.capabilities().can_deliver());
-        assert!(!status.capabilities().can_fetch());
-        let fetch = transport
-            .fetch(
-                RadrootsTransportFetchRequest::new(
-                    "reticulum-fetch",
-                    RadrootsTransportTargetSet::new(vec![target(
-                        RadrootsTransportKind::Reticulum,
-                        "reticulum:local",
-                    )])
-                    .expect("target set"),
-                )
-                .expect("fetch request"),
-            )
-            .await
-            .expect("fetch");
-        assert_eq!(fetch.fetched_count(), 0);
-
-        assert_eq!(
-            receipt.satisfied_target_count(RadrootsTransportSatisfactionClass::Accepted),
-            0
-        );
-        assert_eq!(
-            receipt.target_receipts()[0].status(),
-            RadrootsTransportDeliveryTargetStatus::FailedRetryable
-        );
     }
 
     #[test]

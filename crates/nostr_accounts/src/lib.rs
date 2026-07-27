@@ -6,8 +6,6 @@ pub mod error;
 pub mod manager;
 #[cfg(feature = "std")]
 pub mod model;
-#[cfg(feature = "nostrdb-bridge")]
-pub mod nostrdb_bridge;
 #[cfg(feature = "std")]
 pub mod store;
 #[cfg(feature = "std")]
@@ -22,8 +20,6 @@ pub mod prelude {
         RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION, RadrootsNostrAccountRecord,
         RadrootsNostrAccountStatus, RadrootsNostrAccountStoreState,
     };
-    #[cfg(feature = "nostrdb-bridge")]
-    pub use crate::nostrdb_bridge::radroots_nostr_accounts_register_default_secret_with_nostrdb;
     #[cfg(feature = "std")]
     pub use crate::store::{
         RadrootsNostrAccountStore, RadrootsNostrFileAccountStore, RadrootsNostrMemoryAccountStore,

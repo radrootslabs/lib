@@ -17,7 +17,6 @@ default = []
 cli = ["dep:clap"]
 transport = ["dep:radroots_event", "dep:radroots_transport"]
 transport-nostr = ["transport"]
-transport-reticulum = ["transport", "dep:radroots_transport_reticulum"]
 transport-workers = ["transport"]
 
 [dependencies]
@@ -38,7 +37,6 @@ radroots_secret_vault = { workspace = true, features = ["std"] }
 radroots_transport = { workspace = true, optional = true, default-features = false, features = [
   "serde",
 ] }
-radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
