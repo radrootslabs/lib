@@ -1,15 +1,18 @@
 [package]
-name = "radroots_sdk"
+name = "radroots-sdk"
 publish = false
 version.workspace = true
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Public Rust SDK for Radroots"
 repository.workspace = true
 homepage.workspace = true
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_sdk"
 
 [features]
 default = ["std", "serde", "serde_json", "identity-models"]
@@ -223,3 +226,6 @@ radroots_nostr = { workspace = true, default-features = false, features = [
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tokio-tungstenite = "0.26.2"
+
+[lints]
+workspace = true

@@ -286,12 +286,13 @@ fn validate_public_package_metadata(
         .values()
         .find(|repository| repository.url == workspace.workspace.package.repository)
         .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
-    let local_packages = repository.packages.iter().collect::<BTreeSet<_>>();
+    let local_packages = repository.packages.iter().cloned().collect::<BTreeSet<_>>();
     let all_packages = architecture
         .package
         .iter()
         .map(|package| package.name.as_str())
         .collect::<BTreeSet<_>>();
+    let mut found_local_packages = BTreeSet::new();
 
     for member in &workspace.workspace.members {
         let manifest_path = workspace_root.join(member).join("Cargo.toml");
@@ -311,11 +312,12 @@ fn validate_public_package_metadata(
         if !all_packages.contains(name) {
             continue;
         }
-        if !local_packages.contains(&name.to_owned()) {
+        if !local_packages.contains(name) {
             return Err(format!(
                 "public package {name} belongs to a different canonical repository"
             ));
         }
+        found_local_packages.insert(name.to_owned());
         validate_public_manifest_field(
             package,
             "version",
@@ -390,6 +392,21 @@ fn validate_public_package_metadata(
                 "public package {name} must inherit the workspace lint policy"
             ));
         }
+    }
+    if found_local_packages != local_packages {
+        let missing = local_packages
+            .difference(&found_local_packages)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        let extra = found_local_packages
+            .difference(&local_packages)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "workspace public package inventory is missing: {missing}; workspace public package inventory has unallocated packages: {extra}"
+        ));
     }
     Ok(())
 }
@@ -812,6 +829,17 @@ adr_required = false
         let error = validate_public_package_metadata(&root, &architecture())
             .expect_err("missing lint inheritance must fail");
         assert!(error.contains("must inherit the workspace lint policy"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn public_package_inventory_requires_every_local_package() {
+        let root = test_root("public_package_inventory");
+        fs::write(root.join("Cargo.toml"), complete_workspace_manifest(""))
+            .expect("write workspace manifest");
+        let error = validate_public_package_metadata(&root, &architecture())
+            .expect_err("missing local public package must fail");
+        assert!(error.contains("workspace public package inventory is missing: radroots"));
         let _ = fs::remove_dir_all(root);
     }
 }
