@@ -20,7 +20,7 @@ default = []
 native = ["radroots_sql_core/native"]
 
 [dependencies]
-radroots_sql_core = { workspace = true }
+radroots_sql_core = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
