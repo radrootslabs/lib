@@ -75,8 +75,8 @@ ordinary-user façade
 
 The final review makes the following deliberate changes:
 
-1. **`radroots-contracts` becomes `radroots_protocol`.** The package is a durable, versioned wire/operation protocol boundary rather than a general-purpose “contracts” bucket.
-2. **`radroots-store` and `radroots-store-sqlite` become `radroots_storage` and `radroots_storage_sqlite`.** “Storage” is unambiguous in an agricultural marketplace and describes the package family more accurately than “store.”
+1. **`radroots_contracts` becomes `radroots_protocol`.** The package is a durable, versioned wire/operation protocol boundary rather than a general-purpose “contracts” bucket.
+2. **`radroots_store` and `radroots_store_sqlite` become `radroots_storage` and `radroots_storage_sqlite`.** “Storage” is unambiguous in an agricultural marketplace and describes the package family more accurately than “store.”
 3. **`radroots_nostr_connect` remains independent.** It is a bidirectional security protocol with URIs, permissions, client/server state, and independent SDK/Myc consumers. It is not merely a convenience NIP module.
 4. **Actor ownership is refined.** Public keys/accounts live in identity; event author roles live in the event contract model; actor provenance, authorization, and signer behavior live in signing.
 5. **Trade identity is made singular.** The conflicting `TradeId`/`OrderId` definitions MUST be replaced by one canonical protocol `TradeId` and a separately named business `OrderId`.
@@ -1194,7 +1194,7 @@ Private preview code remains tested. It may become public only after passing the
 
 ## 19. New-package admission rule
 
-After release V1, a new `radroots-*` package requires an ADR proving:
+After release V1, a new `radroots_*` package requires an ADR proving:
 
 1. a durable domain/protocol/SPI/backend boundary;
 2. at least two meaningful direct consumers, or one unavoidable platform/backend isolation boundary;
@@ -1229,7 +1229,7 @@ Names containing `common`, `utils`, `types`, `models`, `preview`, `unstable`, `v
 | `radroots_nostr_accounts` | `radroots_identity + radroots_secrets + radroots_storage + radroots_sdk` | Split mixed account, vault, persistence, and manager responsibilities. |
 | `radroots_nostr_signer` | `radroots_signing + radroots_nostr_connect + Myc-private state` | Do not publish current service-state package. |
 | `radroots_nostr_runtime` | `radroots_transport_nostr + radroots_sync` | Merge live relay runtime into adapter/orchestration layers. |
-| `radroots_nostrdb` | `private; possible future radroots-storage-nostrdb` | Withhold until the storage SPI and external consumers justify a backend package. |
+| `radroots_nostrdb` | `private; possible future radroots_storage_nostrdb` | Withhold until the storage SPI and external consumers justify a backend package. |
 | `radroots_event_store` | `radroots_storage + radroots_storage_sqlite` | Split backend-neutral contracts from SQLite implementation. |
 | `radroots_outbox` | `radroots_storage + radroots_storage_sqlite` | Merge as one persistence capability with atomic operation commits. |
 | `radroots_runtime_store` | `radroots_storage or host-private state` | Retire broad name and classify each table by owner. |
@@ -1280,7 +1280,7 @@ Every public package MUST define:
 
 ```toml
 [package]
-name = "radroots-..."
+name = "radroots_..."
 version = "0.1.0"
 publish = ["crates-io"]
 edition.workspace = true
@@ -1289,7 +1289,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 readme = "README.md"
-documentation = "https://docs.rs/radroots-..."
+documentation = "https://docs.rs/radroots_..."
 ```
 
 Additional rules:
@@ -1467,7 +1467,7 @@ Rejected because temporary implementation boundaries would become permanent pack
 
 Rejected because domain, protocol, SPI, backend, and adapter packages have independent consumers and semver responsibilities.
 
-### One `radroots-runtime` package
+### One `radroots_runtime` package
 
 Rejected because runtime configuration, process lifecycle, paths, logging, queues, storage, and networking are not one coherent library boundary.
 
