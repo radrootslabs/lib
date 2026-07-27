@@ -42,7 +42,18 @@ struct ArchitectureIdentity {
     spec_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct WorkspaceManifest {
+    workspace: WorkspaceMembers,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceMembers {
+    members: Vec<String>,
+}
+
 pub fn validate(workspace_root: &Path) -> Result<(), String> {
+    validate_workspace_members(workspace_root)?;
     let architecture_path = workspace_root.join(ARCHITECTURE_RELATIVE);
     let architecture_raw = fs::read_to_string(&architecture_path)
         .map_err(|error| format!("read {}: {error}", architecture_path.display()))?;
@@ -53,6 +64,53 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     let ledger_raw = fs::read_to_string(&ledger_path)
         .map_err(|error| format!("read {}: {error}", ledger_path.display()))?;
     validate_ledger(workspace_root, &architecture.spec_id, &ledger_raw)
+}
+
+fn validate_workspace_members(workspace_root: &Path) -> Result<(), String> {
+    let manifest_path = workspace_root.join("Cargo.toml");
+    let manifest_raw = fs::read_to_string(&manifest_path)
+        .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
+    let manifest = toml::from_str::<WorkspaceManifest>(&manifest_raw)
+        .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+    let declared = manifest
+        .workspace
+        .members
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let mut discovered = BTreeSet::new();
+    for root in ["crates", "tools"] {
+        let directory = workspace_root.join(root);
+        for entry in fs::read_dir(&directory)
+            .map_err(|error| format!("read {}: {error}", directory.display()))?
+        {
+            let entry =
+                entry.map_err(|error| format!("read {} entry: {error}", directory.display()))?;
+            if entry
+                .file_type()
+                .map_err(|error| format!("read {} type: {error}", entry.path().display()))?
+                .is_dir()
+                && entry.path().join("Cargo.toml").is_file()
+            {
+                discovered.insert(format!("{root}/{}", entry.file_name().to_string_lossy()));
+            }
+        }
+    }
+    if declared != discovered {
+        let missing = discovered
+            .difference(&declared)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        let unknown = declared
+            .difference(&discovered)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "workspace membership is missing local package roots: {missing}; workspace membership has unknown package roots: {unknown}"
+        ));
+    }
+    Ok(())
 }
 
 fn validate_ledger(
@@ -209,7 +267,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::validate_ledger;
+    use super::{validate_ledger, validate_workspace_members};
 
     fn test_root(label: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -264,6 +322,34 @@ adr_required = false
         let error = validate_ledger(&root, "radroots.crates.release.v1", &incomplete)
             .expect_err("missing anchor must fail");
         assert!(error.contains("field spec_anchors must contain non-empty values"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn workspace_membership_requires_every_local_package_root() {
+        let root = test_root("workspace_members");
+        for path in ["crates/a", "tools/xtask"] {
+            fs::create_dir_all(root.join(path)).expect("create package root");
+            fs::write(
+                root.join(path).join("Cargo.toml"),
+                "[package]\nname = \"fixture\"\n",
+            )
+            .expect("write package manifest");
+        }
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/a\", \"tools/xtask\"]\n",
+        )
+        .expect("write complete workspace");
+        validate_workspace_members(&root).expect("complete membership");
+
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"tools/xtask\"]\n",
+        )
+        .expect("write incomplete workspace");
+        let error = validate_workspace_members(&root).expect_err("missing member must fail");
+        assert!(error.contains("missing local package roots: crates/a"));
         let _ = fs::remove_dir_all(root);
     }
 }
