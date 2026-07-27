@@ -153,6 +153,7 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
 
     validate_workspace_toolchain(workspace_root, &architecture)?;
     validate_public_package_metadata(workspace_root, &architecture)?;
+    validate_no_production_sibling_paths(workspace_root)?;
     validate_public_dependency_versions(workspace_root, &architecture)?;
 
     let ledger_path = workspace_root.join(DEVIATIONS_RELATIVE);
@@ -434,7 +435,11 @@ fn validate_public_dependency_versions(
         .values()
         .find(|repository| repository.url == workspace.workspace.package.repository)
         .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
-    let local_packages = repository.packages.iter().collect::<BTreeSet<_>>();
+    let local_packages = repository
+        .packages
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
     let public_packages = architecture
         .package
         .iter()
@@ -454,46 +459,41 @@ fn validate_public_dependency_versions(
             .and_then(|package| package.get("name"))
             .and_then(toml::Value::as_str)
             .ok_or_else(|| format!("{} is missing package.name", manifest_path.display()))?;
-        if !local_packages.contains(&package_name.to_owned()) {
+        if !local_packages.contains(package_name) {
             continue;
         }
-        validate_public_dependency_sections(
+        let policy = PublicDependencyPolicy {
             workspace_root,
-            member,
-            package_name,
-            &manifest,
             workspace_dependencies,
-            &public_packages,
-            &architecture.initial_version,
-        )?;
+            public_packages: &public_packages,
+            local_packages: &local_packages,
+            initial_version: &architecture.initial_version,
+        };
+        validate_public_dependency_sections(member, package_name, &manifest, &policy)?;
     }
     Ok(())
 }
 
+struct PublicDependencyPolicy<'a> {
+    workspace_root: &'a Path,
+    workspace_dependencies: Option<&'a toml::value::Table>,
+    public_packages: &'a BTreeSet<&'a str>,
+    local_packages: &'a BTreeSet<&'a str>,
+    initial_version: &'a str,
+}
+
 fn validate_public_dependency_sections(
-    workspace_root: &Path,
     member: &str,
     owner: &str,
     manifest: &toml::Value,
-    workspace_dependencies: Option<&toml::value::Table>,
-    public_packages: &BTreeSet<&str>,
-    initial_version: &str,
+    policy: &PublicDependencyPolicy<'_>,
 ) -> Result<(), String> {
     let manifest_table = manifest
         .as_table()
         .ok_or_else(|| format!("{member}/Cargo.toml must be a TOML table"))?;
     for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
         if let Some(dependencies) = manifest_table.get(section).and_then(toml::Value::as_table) {
-            validate_public_dependency_table(
-                workspace_root,
-                member,
-                owner,
-                section,
-                dependencies,
-                workspace_dependencies,
-                public_packages,
-                initial_version,
-            )?;
+            validate_public_dependency_table(member, owner, section, dependencies, policy)?;
         }
     }
     if let Some(targets) = manifest_table.get("target").and_then(toml::Value::as_table) {
@@ -506,14 +506,11 @@ fn validate_public_dependency_sections(
                     target_table.get(section).and_then(toml::Value::as_table)
                 {
                     validate_public_dependency_table(
-                        workspace_root,
                         member,
                         owner,
                         &format!("target.{target}.{section}"),
                         dependencies,
-                        workspace_dependencies,
-                        public_packages,
-                        initial_version,
+                        policy,
                     )?;
                 }
             }
@@ -522,16 +519,12 @@ fn validate_public_dependency_sections(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn validate_public_dependency_table(
-    workspace_root: &Path,
     member: &str,
     owner: &str,
     section: &str,
     dependencies: &toml::value::Table,
-    workspace_dependencies: Option<&toml::value::Table>,
-    public_packages: &BTreeSet<&str>,
-    initial_version: &str,
+    policy: &PublicDependencyPolicy<'_>,
 ) -> Result<(), String> {
     for (dependency_key, declaration) in dependencies {
         let inherits_workspace = declaration
@@ -540,7 +533,8 @@ fn validate_public_dependency_table(
             .and_then(toml::Value::as_bool)
             == Some(true);
         let resolved = if inherits_workspace {
-            workspace_dependencies
+            policy
+                .workspace_dependencies
                 .and_then(|dependencies| dependencies.get(dependency_key))
                 .ok_or_else(|| {
                     format!(
@@ -558,18 +552,22 @@ fn validate_public_dependency_table(
             .and_then(|table| table.get("package"))
             .and_then(toml::Value::as_str);
         let path_base = if inherits_workspace {
-            workspace_root.to_path_buf()
+            policy.workspace_root.to_path_buf()
         } else {
-            workspace_root.join(member)
+            policy.workspace_root.join(member)
         };
-        let path_package = dependency_path
-            .map(|path| dependency_package_name(&path_base.join(path)))
-            .transpose()?;
+        let path_package = if declared_package.is_none() {
+            dependency_path
+                .map(|path| dependency_package_name(&path_base.join(path)))
+                .transpose()?
+        } else {
+            None
+        };
         let normalized_key = dependency_key.replace('_', "-");
         let dependency_name = declared_package
             .or(path_package.as_deref())
             .unwrap_or(normalized_key.as_str());
-        if !public_packages.contains(dependency_name) {
+        if !policy.public_packages.contains(dependency_name) {
             continue;
         }
         let version = match resolved {
@@ -577,10 +575,133 @@ fn validate_public_dependency_table(
             toml::Value::Table(table) => table.get("version").and_then(toml::Value::as_str),
             _ => None,
         };
-        let exact_version = format!("={initial_version}");
-        if dependency_path.is_none() || version != Some(exact_version.as_str()) {
+        let exact_version = format!("={}", policy.initial_version);
+        if policy.local_packages.contains(dependency_name)
+            && (dependency_path.is_none() || version != Some(exact_version.as_str()))
+        {
             return Err(format!(
                 "public package {owner} {section}.{dependency_key} dependency on {dependency_name} must declare path and exact version {exact_version}"
+            ));
+        }
+        if !policy.local_packages.contains(dependency_name)
+            && (dependency_path.is_some() || version != Some(exact_version.as_str()))
+        {
+            return Err(format!(
+                "public package {owner} {section}.{dependency_key} cross-repository dependency on {dependency_name} must declare exact registry version {exact_version} without a path"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_no_production_sibling_paths(workspace_root: &Path) -> Result<(), String> {
+    let canonical_root = fs::canonicalize(workspace_root)
+        .map_err(|error| format!("canonicalize {}: {error}", workspace_root.display()))?;
+    let workspace_path = workspace_root.join("Cargo.toml");
+    let workspace_raw = fs::read_to_string(&workspace_path)
+        .map_err(|error| format!("read {}: {error}", workspace_path.display()))?;
+    let workspace = toml::from_str::<WorkspaceManifest>(&workspace_raw)
+        .map_err(|error| format!("parse {}: {error}", workspace_path.display()))?;
+    let workspace_value = workspace_raw
+        .parse::<toml::Value>()
+        .map_err(|error| format!("parse {}: {error}", workspace_path.display()))?;
+    if let Some(dependencies) = workspace_value
+        .get("workspace")
+        .and_then(toml::Value::as_table)
+        .and_then(|workspace| workspace.get("dependencies"))
+        .and_then(toml::Value::as_table)
+    {
+        validate_dependency_path_table(
+            &canonical_root,
+            &canonical_root,
+            "workspace",
+            "workspace.dependencies",
+            dependencies,
+        )?;
+    }
+    for member in &workspace.workspace.members {
+        let manifest_path = workspace_root.join(member).join("Cargo.toml");
+        let raw = fs::read_to_string(&manifest_path)
+            .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
+        let manifest = raw
+            .parse::<toml::Value>()
+            .map_err(|error| format!("parse {}: {error}", manifest_path.display()))?;
+        validate_manifest_dependency_paths(
+            &canonical_root,
+            &canonical_root.join(member),
+            member,
+            &manifest,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_manifest_dependency_paths(
+    workspace_root: &Path,
+    package_root: &Path,
+    owner: &str,
+    manifest: &toml::Value,
+) -> Result<(), String> {
+    let Some(manifest_table) = manifest.as_table() else {
+        return Err(format!("{owner}/Cargo.toml must be a TOML table"));
+    };
+    for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+        if let Some(dependencies) = manifest_table.get(section).and_then(toml::Value::as_table) {
+            validate_dependency_path_table(
+                workspace_root,
+                package_root,
+                owner,
+                section,
+                dependencies,
+            )?;
+        }
+    }
+    if let Some(targets) = manifest_table.get("target").and_then(toml::Value::as_table) {
+        for (target, target_value) in targets {
+            let Some(target_table) = target_value.as_table() else {
+                continue;
+            };
+            for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                if let Some(dependencies) =
+                    target_table.get(section).and_then(toml::Value::as_table)
+                {
+                    validate_dependency_path_table(
+                        workspace_root,
+                        package_root,
+                        owner,
+                        &format!("target.{target}.{section}"),
+                        dependencies,
+                    )?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_dependency_path_table(
+    workspace_root: &Path,
+    path_base: &Path,
+    owner: &str,
+    section: &str,
+    dependencies: &toml::value::Table,
+) -> Result<(), String> {
+    for (dependency, declaration) in dependencies {
+        let Some(path) = declaration
+            .as_table()
+            .and_then(|table| table.get("path"))
+            .and_then(toml::Value::as_str)
+        else {
+            continue;
+        };
+        let resolved = fs::canonicalize(path_base.join(path)).map_err(|error| {
+            format!(
+                "resolve production dependency {owner} {section}.{dependency} path {path}: {error}"
+            )
+        })?;
+        if !resolved.starts_with(workspace_root) {
+            return Err(format!(
+                "production dependency {owner} {section}.{dependency} path {path} escapes the repository; use a registry version or an external local-development override"
             ));
         }
     }
@@ -862,8 +983,8 @@ mod tests {
 
     use super::{
         ArchitectureIdentity, ArchitecturePackage, ArchitectureRepository, validate_ledger,
-        validate_public_dependency_versions, validate_public_package_metadata,
-        validate_workspace_members, validate_workspace_toolchain,
+        validate_no_production_sibling_paths, validate_public_dependency_versions,
+        validate_public_package_metadata, validate_workspace_members, validate_workspace_toolchain,
     };
 
     fn test_root(label: &str) -> PathBuf {
@@ -1070,6 +1191,12 @@ adr_required = false
         architecture.package.push(ArchitecturePackage {
             name: "radroots-core".to_owned(),
         });
+        architecture
+            .repositories
+            .get_mut("sdk")
+            .expect("sdk repository")
+            .packages
+            .push("radroots-core".to_owned());
         validate_public_dependency_versions(&root, &architecture)
             .expect("path plus exact version public dependency");
 
@@ -1084,5 +1211,45 @@ adr_required = false
             .expect_err("path-only public dependency must fail");
         assert!(error.contains("must declare path and exact version =0.1.0"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn production_dependencies_reject_sibling_paths() {
+        let root = test_root("production_sibling_path");
+        let sibling = root.with_extension("sibling");
+        fs::create_dir_all(root.join("crates/radroots")).expect("create public package");
+        fs::create_dir_all(root.join("crates/dependency")).expect("create local dependency");
+        fs::create_dir_all(&sibling).expect("create sibling dependency");
+        fs::write(
+            root.join("Cargo.toml"),
+            complete_workspace_manifest("\"crates/radroots\""),
+        )
+        .expect("write workspace manifest");
+        let sibling_path = sibling.to_string_lossy();
+        fs::write(
+            root.join("crates/radroots/Cargo.toml"),
+            format!(
+                "[package]\nname = \"radroots\"\nversion = \"0.1.0\"\n\n[dependencies]\nprobe = {{ path = \"{sibling_path}\" }}\n"
+            ),
+        )
+        .expect("write sibling dependency");
+        let error = validate_no_production_sibling_paths(&root)
+            .expect_err("sibling production path must fail");
+        assert!(error.contains("escapes the repository"));
+
+        fs::write(
+            root.join("crates/radroots/Cargo.toml"),
+            "[package]\nname = \"radroots\"\nversion = \"0.1.0\"\n\n[dependencies]\nprobe = { path = \"../dependency\" }\n",
+        )
+        .expect("write local dependency");
+        fs::create_dir_all(root.join(".cargo")).expect("create cargo config directory");
+        fs::write(
+            root.join(".cargo/config.toml"),
+            format!("[patch.crates-io]\nprobe = {{ path = \"{sibling_path}\" }}\n"),
+        )
+        .expect("write development override");
+        validate_no_production_sibling_paths(&root).expect("in-repository path");
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(sibling);
     }
 }
