@@ -673,6 +673,7 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         RadrootsRelayTransportError::EmptyFetchFilters
         | RadrootsRelayTransportError::InvalidFetchLimit { .. }
         | RadrootsRelayTransportError::FetchLimitTooLarge { .. }
+        | RadrootsRelayTransportError::InvalidFetchReceipt { .. }
         | RadrootsRelayTransportError::InvalidPublishReceipt { .. }
         | RadrootsRelayTransportError::InvalidTimestamp { .. }
         | RadrootsRelayTransportError::InvalidIdempotencyKey { .. }

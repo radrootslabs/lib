@@ -37,14 +37,14 @@ use radroots_transport_nostr::{
     RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsOutboxPublishPolicy,
     RadrootsRelayFetchEventAdmission, RadrootsRelayFetchEventValidStream,
     RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,
-    RadrootsRelayFetchFilters, RadrootsRelayFetchItem, RadrootsRelayFetchMode,
-    RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest, RadrootsRelayOutcome,
-    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
-    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayTransportError,
-    RadrootsRelayUrl, RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, fetch_relay_events,
-    fetch_relay_events_blocking, publish_claimed_outbox_event,
-    publish_claimed_outbox_event_with_transport, publish_signed_event,
-    verified_signed_event_payload,
+    RadrootsRelayFetchFailure, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
+    RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRelayOutcome,
+    RadrootsRelayFetchRequest, RadrootsRelayOutcome, RadrootsRelayOutcomeKind,
+    RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
+    RadrootsRelayTargetSet, RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
+    fetch_and_ingest_relay_events, fetch_relay_events, fetch_relay_events_blocking,
+    publish_claimed_outbox_event, publish_claimed_outbox_event_with_transport,
+    publish_signed_event, verified_signed_event_payload,
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -2499,7 +2499,7 @@ async fn fetch_reports_local_truncation_without_claiming_eose() {
     assert_eq!(receipt.truncated_count, 1);
     assert_eq!(receipt.relay_outcomes.len(), 1);
     assert_eq!(
-        receipt.relay_outcomes[0].kind,
+        receipt.relay_outcomes[0].kind(),
         RadrootsRelayFetchOutcomeKind::Truncated
     );
 }
@@ -2675,35 +2675,33 @@ async fn fetch_ingests_events_and_records_transport_observations() {
                 || event.verification == RadrootsRelayFetchEventVerification::NotEvaluated)
     }));
     assert_eq!(receipt.relay_outcomes.len(), 4);
-    assert_eq!(receipt.relay_outcomes[0].relay_url, RELAY_PRIMARY_WSS);
+    assert_eq!(receipt.relay_outcomes[0].relay_url(), RELAY_PRIMARY_WSS);
     assert_eq!(
-        receipt.relay_outcomes[0].kind,
+        receipt.relay_outcomes[0].kind(),
         RadrootsRelayFetchOutcomeKind::Eose
     );
-    assert!(receipt.relay_outcomes[0].relay_outcome.is_none());
-    assert_eq!(receipt.relay_outcomes[1].relay_url, RELAY_SECONDARY_WSS);
+    assert!(receipt.relay_outcomes[0].relay_outcome().is_none());
+    assert_eq!(receipt.relay_outcomes[1].relay_url(), RELAY_SECONDARY_WSS);
     assert_eq!(
         receipt.relay_outcomes[1]
-            .relay_outcome
-            .as_ref()
+            .relay_outcome()
             .expect("auth outcome")
             .kind(),
         RadrootsRelayOutcomeKind::AuthRequired
     );
-    assert_eq!(receipt.relay_outcomes[2].relay_url, RELAY_TERTIARY_WSS);
+    assert_eq!(receipt.relay_outcomes[2].relay_url(), RELAY_TERTIARY_WSS);
     assert_eq!(
         receipt.relay_outcomes[2]
-            .relay_outcome
-            .as_ref()
+            .relay_outcome()
             .expect("restricted outcome")
             .kind(),
         RadrootsRelayOutcomeKind::Restricted
     );
     assert_eq!(
-        receipt.relay_outcomes[3].kind,
+        receipt.relay_outcomes[3].kind(),
         RadrootsRelayFetchOutcomeKind::Notice
     );
-    assert!(receipt.relay_outcomes[3].relay_outcome.is_none());
+    assert!(receipt.relay_outcomes[3].relay_outcome().is_none());
     assert_eq!(
         receipt.events[0].admission,
         RadrootsRelayFetchEventAdmission::Admitted
@@ -3223,19 +3221,18 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
     assert_eq!(receipt.notice_count, 1);
     assert_eq!(receipt.relay_outcomes.len(), 3);
     assert_eq!(
-        receipt.relay_outcomes[0].kind,
+        receipt.relay_outcomes[0].kind(),
         RadrootsRelayFetchOutcomeKind::Eose
     );
     assert_eq!(
         receipt.relay_outcomes[1]
-            .relay_outcome
-            .as_ref()
+            .relay_outcome()
             .expect("closed outcome")
             .kind(),
         RadrootsRelayOutcomeKind::AuthRequired
     );
     assert_eq!(
-        receipt.relay_outcomes[2].kind,
+        receipt.relay_outcomes[2].kind(),
         RadrootsRelayFetchOutcomeKind::Notice
     );
     assert!(
@@ -3311,7 +3308,7 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
     );
     assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
     assert_eq!(receipt.failed_relays.len(), 1);
-    assert_eq!(receipt.failed_relays[0].relay_url, RELAY_SECONDARY_WSS);
+    assert_eq!(receipt.failed_relays[0].relay_url(), RELAY_SECONDARY_WSS);
     assert_eq!(receipt.events.len(), 1);
     assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
     assert_eq!(receipt.malformed_count, 1);
@@ -3603,6 +3600,125 @@ fn fetch_items_reject_invalid_endpoints_and_oversized_diagnostics() {
             }) if actual == RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1
         ));
     }
+}
+
+#[test]
+fn fetch_relay_outcomes_and_failures_seal_state_and_strict_wire() {
+    let eose =
+        RadrootsRelayFetchRelayOutcome::eose(RELAY_PRIMARY_WSS).expect("bounded EOSE outcome");
+    assert_eq!(eose.relay_url(), RELAY_PRIMARY_WSS);
+    assert_eq!(eose.kind(), RadrootsRelayFetchOutcomeKind::Eose);
+    assert!(eose.relay_outcome().is_none());
+    assert!(eose.message().is_none());
+
+    let exact = "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES);
+    let closed = RadrootsRelayFetchRelayOutcome::closed(RELAY_SECONDARY_WSS, exact.clone())
+        .expect("exact-limit closed outcome");
+    assert_eq!(closed.message(), Some(exact.as_str()));
+    assert_eq!(
+        closed.relay_outcome().map(RadrootsRelayOutcome::kind),
+        Some(RadrootsRelayOutcomeKind::Unknown)
+    );
+    assert_eq!(
+        closed
+            .relay_outcome()
+            .and_then(RadrootsRelayOutcome::message),
+        None
+    );
+    let closed_wire = serde_json::to_value(&closed).expect("closed outcome wire");
+    assert_eq!(
+        serde_json::from_value::<RadrootsRelayFetchRelayOutcome>(closed_wire.clone())
+            .expect("strict closed outcome reload"),
+        closed
+    );
+
+    for outcome in [
+        RadrootsRelayFetchRelayOutcome::truncated(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        ),
+        RadrootsRelayFetchRelayOutcome::closed(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        ),
+        RadrootsRelayFetchRelayOutcome::notice(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        ),
+    ] {
+        assert!(matches!(
+            outcome,
+            Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+                actual,
+                ..
+            }) if actual == RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1
+        ));
+    }
+    assert!(matches!(
+        RadrootsRelayFetchRelayOutcome::eose(" "),
+        Err(RadrootsRelayTransportError::InvalidFetchReceipt {
+            field: "relay_url",
+            ..
+        })
+    ));
+    let prefix = "wss://relay.example.com/";
+    let exact_url = format!(
+        "{prefix}{}",
+        "x".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES - prefix.len())
+    );
+    assert!(RadrootsRelayFetchRelayOutcome::eose(exact_url.clone()).is_ok());
+    assert!(matches!(
+        RadrootsRelayFetchFailure::new(format!("{exact_url}x"), "failed"),
+        Err(RadrootsRelayTransportError::InvalidFetchReceipt {
+            field: "relay_url",
+            ..
+        })
+    ));
+
+    let mut incoherent_eose = serde_json::to_value(&eose).expect("EOSE outcome wire");
+    incoherent_eose["message"] = serde_json::json!("unexpected");
+    assert!(serde_json::from_value::<RadrootsRelayFetchRelayOutcome>(incoherent_eose).is_err());
+    let mut incoherent_closed = closed_wire.clone();
+    incoherent_closed["relay_outcome"] = serde_json::json!(null);
+    assert!(serde_json::from_value::<RadrootsRelayFetchRelayOutcome>(incoherent_closed).is_err());
+    let mut mismatched_closed = closed_wire;
+    mismatched_closed["relay_outcome"] = serde_json::json!({
+        "kind": "Accepted",
+        "message": null
+    });
+    assert!(serde_json::from_value::<RadrootsRelayFetchRelayOutcome>(mismatched_closed).is_err());
+    let mut duplicated_closed = serde_json::to_value(&closed).expect("closed outcome wire");
+    duplicated_closed["relay_outcome"]["message"] = serde_json::json!(exact);
+    assert!(serde_json::from_value::<RadrootsRelayFetchRelayOutcome>(duplicated_closed).is_err());
+    let mut unknown_outcome = serde_json::to_value(&eose).expect("EOSE outcome wire");
+    unknown_outcome["extra"] = serde_json::json!(true);
+    assert!(serde_json::from_value::<RadrootsRelayFetchRelayOutcome>(unknown_outcome).is_err());
+
+    let failure = RadrootsRelayFetchFailure::new(RELAY_PRIMARY_WSS, exact.clone())
+        .expect("exact-limit fetch failure");
+    assert_eq!(failure.relay_url(), RELAY_PRIMARY_WSS);
+    assert_eq!(failure.reason(), exact);
+    let failure_wire = serde_json::to_value(&failure).expect("fetch failure wire");
+    assert_eq!(
+        serde_json::from_value::<RadrootsRelayFetchFailure>(failure_wire.clone())
+            .expect("strict fetch failure reload"),
+        failure
+    );
+    assert!(matches!(
+        RadrootsRelayFetchFailure::new(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1)
+        ),
+        Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+            field: "relay_failure_reason",
+            max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            actual,
+        }) if actual == RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1
+    ));
+    let mut unknown_failure = failure_wire;
+    unknown_failure["extra"] = serde_json::json!(true);
+    assert!(serde_json::from_value::<RadrootsRelayFetchFailure>(unknown_failure).is_err());
 }
 
 #[tokio::test]

@@ -44,6 +44,9 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay fetch item contains invalid relay URL `{url}`: {reason}")]
     InvalidFetchItemRelayUrl { url: String, reason: String },
 
+    #[error("Relay fetch receipt has invalid {field}: {reason}")]
+    InvalidFetchReceipt { field: &'static str, reason: String },
+
     #[error("Relay fetch item came from unrequested relay URL `{url}`")]
     UnexpectedFetchItemRelayUrl { url: String },
 

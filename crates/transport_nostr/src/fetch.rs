@@ -18,7 +18,7 @@ use radroots_transport::{
     RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT, RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES,
     RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS, RadrootsTransportKind, RadrootsTransportTarget,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -425,7 +425,7 @@ fn validate_fetch_item_relay_url(relay_url: String) -> Result<String, RadrootsRe
     Ok(relay_url)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RadrootsRelayFetchOutcomeKind {
     Eose,
     Truncated,
@@ -433,12 +433,154 @@ pub enum RadrootsRelayFetchOutcomeKind {
     Notice,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RadrootsRelayFetchRelayOutcome {
-    pub relay_url: String,
-    pub kind: RadrootsRelayFetchOutcomeKind,
-    pub relay_outcome: Option<RadrootsRelayOutcome>,
-    pub message: Option<String>,
+    relay_url: String,
+    kind: RadrootsRelayFetchOutcomeKind,
+    relay_outcome: Option<RadrootsRelayOutcome>,
+    message: Option<String>,
+}
+
+impl RadrootsRelayFetchRelayOutcome {
+    pub fn eose(relay_url: impl Into<String>) -> Result<Self, RadrootsRelayTransportError> {
+        Self::try_new(
+            relay_url.into(),
+            RadrootsRelayFetchOutcomeKind::Eose,
+            None,
+            None,
+        )
+    }
+
+    pub fn truncated(
+        relay_url: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::try_new(
+            relay_url.into(),
+            RadrootsRelayFetchOutcomeKind::Truncated,
+            None,
+            Some(message.into()),
+        )
+    }
+
+    pub fn closed(
+        relay_url: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let message = message.into();
+        let classified = RadrootsRelayOutcome::classify(message.as_str())?;
+        let relay_outcome = RadrootsRelayOutcome::try_new(classified.kind(), None)?;
+        Self::try_new(
+            relay_url.into(),
+            RadrootsRelayFetchOutcomeKind::Closed,
+            Some(relay_outcome),
+            Some(message),
+        )
+    }
+
+    pub fn notice(
+        relay_url: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::try_new(
+            relay_url.into(),
+            RadrootsRelayFetchOutcomeKind::Notice,
+            None,
+            Some(message.into()),
+        )
+    }
+
+    fn try_new(
+        relay_url: String,
+        kind: RadrootsRelayFetchOutcomeKind,
+        relay_outcome: Option<RadrootsRelayOutcome>,
+        message: Option<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let relay_url = canonical_fetch_receipt_relay_url(relay_url.as_str())?;
+        if let Some(message) = message.as_deref() {
+            validate_fetch_receipt_diagnostic("relay_outcome_message", message)?;
+        }
+        match kind {
+            RadrootsRelayFetchOutcomeKind::Eose => {
+                if relay_outcome.is_some() || message.is_some() {
+                    return Err(invalid_fetch_receipt(
+                        "relay_outcome",
+                        "EOSE cannot carry an outcome or message",
+                    ));
+                }
+            }
+            RadrootsRelayFetchOutcomeKind::Truncated | RadrootsRelayFetchOutcomeKind::Notice => {
+                if relay_outcome.is_some() || message.is_none() {
+                    return Err(invalid_fetch_receipt(
+                        "relay_outcome",
+                        "truncated and notice outcomes require a message and no relay outcome",
+                    ));
+                }
+            }
+            RadrootsRelayFetchOutcomeKind::Closed => {
+                let Some(message) = message.as_deref() else {
+                    return Err(invalid_fetch_receipt(
+                        "relay_outcome",
+                        "closed outcomes require a message and classified relay outcome",
+                    ));
+                };
+                let expected = RadrootsRelayOutcome::classify(message)?;
+                if relay_outcome.as_ref().map(RadrootsRelayOutcome::kind) != Some(expected.kind())
+                    || relay_outcome
+                        .as_ref()
+                        .and_then(RadrootsRelayOutcome::message)
+                        .is_some()
+                {
+                    return Err(invalid_fetch_receipt(
+                        "relay_outcome",
+                        "closed outcome classification must match its message without duplicating it",
+                    ));
+                }
+            }
+        }
+        Ok(Self {
+            relay_url,
+            kind,
+            relay_outcome,
+            message,
+        })
+    }
+
+    pub fn relay_url(&self) -> &str {
+        self.relay_url.as_str()
+    }
+
+    pub fn kind(&self) -> RadrootsRelayFetchOutcomeKind {
+        self.kind
+    }
+
+    pub fn relay_outcome(&self) -> Option<&RadrootsRelayOutcome> {
+        self.relay_outcome.as_ref()
+    }
+
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsRelayFetchRelayOutcomeWire {
+    relay_url: String,
+    kind: RadrootsRelayFetchOutcomeKind,
+    relay_outcome: Option<RadrootsRelayOutcome>,
+    message: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for RadrootsRelayFetchRelayOutcome {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = RadrootsRelayFetchRelayOutcomeWire::deserialize(deserializer)?;
+        Self::try_new(wire.relay_url, wire.kind, wire.relay_outcome, wire.message)
+            .map_err(de::Error::custom)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -503,10 +645,80 @@ pub struct RadrootsRelayFetchedEvent {
     pub observed_at_ms: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RadrootsRelayFetchFailure {
-    pub relay_url: String,
-    pub reason: String,
+    relay_url: String,
+    reason: String,
+}
+
+impl RadrootsRelayFetchFailure {
+    pub fn new(
+        relay_url: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let relay_url = relay_url.into();
+        let reason = reason.into();
+        let relay_url = canonical_fetch_receipt_relay_url(relay_url.as_str())?;
+        validate_fetch_receipt_diagnostic("relay_failure_reason", reason.as_str())?;
+        Ok(Self { relay_url, reason })
+    }
+
+    pub fn relay_url(&self) -> &str {
+        self.relay_url.as_str()
+    }
+
+    pub fn reason(&self) -> &str {
+        self.reason.as_str()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsRelayFetchFailureWire {
+    relay_url: String,
+    reason: String,
+}
+
+impl<'de> Deserialize<'de> for RadrootsRelayFetchFailure {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = RadrootsRelayFetchFailureWire::deserialize(deserializer)?;
+        Self::new(wire.relay_url, wire.reason).map_err(de::Error::custom)
+    }
+}
+
+fn canonical_fetch_receipt_relay_url(
+    relay_url: &str,
+) -> Result<String, RadrootsRelayTransportError> {
+    RadrootsTransportTarget::nostr_relay(relay_url)
+        .map(|target| target.uri().as_str().to_owned())
+        .map_err(|error| invalid_fetch_receipt("relay_url", error.to_string()))
+}
+
+fn validate_fetch_receipt_diagnostic(
+    field: &'static str,
+    value: &str,
+) -> Result<(), RadrootsRelayTransportError> {
+    if value.len() > radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES {
+        return Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+            field,
+            max: radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+            actual: value.len(),
+        });
+    }
+    Ok(())
+}
+
+fn invalid_fetch_receipt(
+    field: &'static str,
+    reason: impl Into<String>,
+) -> RadrootsRelayTransportError {
+    RadrootsRelayTransportError::InvalidFetchReceipt {
+        field,
+        reason: reason.into(),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -808,13 +1020,13 @@ impl RadrootsRelayProcessedFetch {
         let connected_relays = self
             .relay_outcomes
             .iter()
-            .filter(|outcome| outcome.kind == RadrootsRelayFetchOutcomeKind::Eose)
-            .map(|outcome| outcome.relay_url.clone())
+            .filter(|outcome| outcome.kind() == RadrootsRelayFetchOutcomeKind::Eose)
+            .map(|outcome| outcome.relay_url().to_owned())
             .collect();
         let failed_relays = self
             .relay_outcomes
             .iter()
-            .filter(|outcome| outcome.kind == RadrootsRelayFetchOutcomeKind::Closed)
+            .filter(|outcome| outcome.kind() == RadrootsRelayFetchOutcomeKind::Closed)
             .map(|outcome| RadrootsRelayFetchFailure {
                 relay_url: outcome.relay_url.clone(),
                 reason: outcome.message.clone().unwrap_or_default(),
@@ -1229,45 +1441,27 @@ fn process_relay_fetch_items(
                 processed.eose_count += 1;
                 processed
                     .relay_outcomes
-                    .push(RadrootsRelayFetchRelayOutcome {
-                        relay_url,
-                        kind: RadrootsRelayFetchOutcomeKind::Eose,
-                        relay_outcome: None,
-                        message: None,
-                    });
+                    .push(RadrootsRelayFetchRelayOutcome::eose(relay_url)?);
             }
             RadrootsRelayFetchItemBody::Truncated { message, .. } => {
                 processed.truncated_count += 1;
                 processed
                     .relay_outcomes
-                    .push(RadrootsRelayFetchRelayOutcome {
-                        relay_url,
-                        kind: RadrootsRelayFetchOutcomeKind::Truncated,
-                        relay_outcome: None,
-                        message: Some(message),
-                    });
+                    .push(RadrootsRelayFetchRelayOutcome::truncated(
+                        relay_url, message,
+                    )?);
             }
             RadrootsRelayFetchItemBody::Closed { message, .. } => {
                 processed.closed_count += 1;
                 processed
                     .relay_outcomes
-                    .push(RadrootsRelayFetchRelayOutcome {
-                        relay_url,
-                        kind: RadrootsRelayFetchOutcomeKind::Closed,
-                        relay_outcome: Some(RadrootsRelayOutcome::classify(message.as_str())?),
-                        message: Some(message),
-                    });
+                    .push(RadrootsRelayFetchRelayOutcome::closed(relay_url, message)?);
             }
             RadrootsRelayFetchItemBody::Notice { message, .. } => {
                 processed.notice_count += 1;
                 processed
                     .relay_outcomes
-                    .push(RadrootsRelayFetchRelayOutcome {
-                        relay_url,
-                        kind: RadrootsRelayFetchOutcomeKind::Notice,
-                        relay_outcome: None,
-                        message: Some(message),
-                    });
+                    .push(RadrootsRelayFetchRelayOutcome::notice(relay_url, message)?);
             }
         }
     }
