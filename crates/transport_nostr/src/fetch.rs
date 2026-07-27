@@ -669,11 +669,7 @@ impl RadrootsRelayFetchEventReceipt {
                 "event receipt dispositions are mutually exclusive",
             ));
         }
-        if (self.inserted
-            || self.duplicate
-            || self.not_persisted
-            || self.out_of_filter
-            || self.skipped_over_limit)
+        if (self.inserted || self.duplicate || self.not_persisted || self.out_of_filter)
             && self.event_id.is_none()
         {
             return Err(invalid_fetch_receipt(
@@ -690,11 +686,7 @@ impl RadrootsRelayFetchEventReceipt {
                 "malformed receipts cannot identify or verify an event",
             ));
         }
-        if (self.inserted
-            || self.duplicate
-            || self.not_persisted
-            || self.out_of_filter
-            || self.skipped_over_limit)
+        if (self.inserted || self.duplicate || self.not_persisted || self.out_of_filter)
             && self.verification != RadrootsRelayFetchEventVerification::Verified
         {
             return Err(invalid_fetch_receipt(
@@ -1031,28 +1023,91 @@ pub struct RadrootsRelayFetchedEventsReceipt {
     pub relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+impl RadrootsRelayFetchedEventsReceipt {
+    pub fn target_relays(&self) -> &[String] {
+        &self.target_relays
+    }
+
+    pub fn connected_relays(&self) -> &[String] {
+        &self.connected_relays
+    }
+
+    pub fn failed_relays(&self) -> &[RadrootsRelayFetchFailure] {
+        &self.failed_relays
+    }
+
+    pub fn events(&self) -> &[RadrootsRelayFetchedEvent] {
+        &self.events
+    }
+
+    pub fn event_receipts(&self) -> &[RadrootsRelayFetchEventReceipt] {
+        &self.event_receipts
+    }
+
+    pub fn duplicate_count(&self) -> usize {
+        self.duplicate_count
+    }
+
+    pub fn verification_failed_count(&self) -> usize {
+        self.verification_failed_count
+    }
+
+    pub fn malformed_count(&self) -> usize {
+        self.malformed_count
+    }
+
+    pub fn out_of_filter_count(&self) -> usize {
+        self.out_of_filter_count
+    }
+
+    pub fn skipped_over_limit_count(&self) -> usize {
+        self.skipped_over_limit_count
+    }
+
+    pub fn eose_count(&self) -> usize {
+        self.eose_count
+    }
+
+    pub fn truncated_count(&self) -> usize {
+        self.truncated_count
+    }
+
+    pub fn closed_count(&self) -> usize {
+        self.closed_count
+    }
+
+    pub fn notice_count(&self) -> usize {
+        self.notice_count
+    }
+
+    pub fn relay_outcomes(&self) -> &[RadrootsRelayFetchRelayOutcome] {
+        &self.relay_outcomes
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RadrootsRelayFetchReceipt {
-    pub inserted_count: usize,
-    pub duplicate_count: usize,
-    pub not_persisted_count: usize,
-    pub malformed_count: usize,
-    pub out_of_filter_count: usize,
-    pub skipped_over_limit_count: usize,
-    pub verification_failed_count: usize,
-    pub admission_unsupported_count: usize,
-    pub admission_invalid_count: usize,
-    pub valid_stream_eligible_count: usize,
-    pub visible_count: usize,
-    pub not_admitted_count: usize,
-    pub not_current_count: usize,
-    pub suppressed_count: usize,
-    pub eose_count: usize,
-    pub truncated_count: usize,
-    pub closed_count: usize,
-    pub notice_count: usize,
-    pub events: Vec<RadrootsRelayFetchEventReceipt>,
-    pub relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
+    target_relays: Vec<String>,
+    inserted_count: usize,
+    duplicate_count: usize,
+    not_persisted_count: usize,
+    malformed_count: usize,
+    out_of_filter_count: usize,
+    skipped_over_limit_count: usize,
+    verification_failed_count: usize,
+    admission_unsupported_count: usize,
+    admission_invalid_count: usize,
+    valid_stream_eligible_count: usize,
+    visible_count: usize,
+    not_admitted_count: usize,
+    not_current_count: usize,
+    suppressed_count: usize,
+    eose_count: usize,
+    truncated_count: usize,
+    closed_count: usize,
+    notice_count: usize,
+    events: Vec<RadrootsRelayFetchEventReceipt>,
+    relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
 }
 
 pub trait RadrootsRelayFetchAdapter: Send + Sync {
@@ -1227,7 +1282,7 @@ where
     for event in &receipt.events {
         event.clone().checked()?;
     }
-    Ok(receipt)
+    receipt.checked()
 }
 
 fn relay_fetch_admission(
@@ -1344,8 +1399,266 @@ impl RadrootsRelayProcessedFetch {
 }
 
 impl RadrootsRelayFetchReceipt {
+    fn checked(mut self) -> Result<Self, RadrootsRelayTransportError> {
+        self.target_relays = canonical_fetch_receipt_targets(self.target_relays)?;
+        let raw_receipt_count = self
+            .events
+            .len()
+            .checked_add(self.relay_outcomes.len())
+            .ok_or_else(|| {
+                invalid_fetch_receipt("raw_receipt_count", "raw receipt count overflowed")
+            })?;
+        if raw_receipt_count > RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX {
+            return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                field: "raw_receipt_count",
+                max: RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX,
+                actual: raw_receipt_count,
+            });
+        }
+        for event in &self.events {
+            event.clone().checked()?;
+            ensure_fetch_receipt_relay_requested(&self.target_relays, event.relay_url())?;
+        }
+        validate_fetch_relay_outcomes(&self.target_relays, &self.relay_outcomes)?;
+        validate_fetch_diagnostic_budget(&self.events, &self.relay_outcomes)?;
+
+        ensure_fetch_receipt_count(
+            "inserted_count",
+            self.inserted_count,
+            self.events
+                .iter()
+                .filter(|event| event.was_inserted())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "duplicate_count",
+            self.duplicate_count,
+            self.events
+                .iter()
+                .filter(|event| event.was_duplicate())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "not_persisted_count",
+            self.not_persisted_count,
+            self.events
+                .iter()
+                .filter(|event| event.was_not_persisted())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "malformed_count",
+            self.malformed_count,
+            self.events
+                .iter()
+                .filter(|event| event.is_malformed())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "out_of_filter_count",
+            self.out_of_filter_count,
+            self.events
+                .iter()
+                .filter(|event| event.is_out_of_filter())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "skipped_over_limit_count",
+            self.skipped_over_limit_count,
+            self.events
+                .iter()
+                .filter(|event| event.was_skipped_over_limit())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "verification_failed_count",
+            self.verification_failed_count,
+            self.events
+                .iter()
+                .filter(|event| event.verification() == RadrootsRelayFetchEventVerification::Failed)
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "admission_unsupported_count",
+            self.admission_unsupported_count,
+            self.events
+                .iter()
+                .filter(|event| event.admission() == RadrootsRelayFetchEventAdmission::Unsupported)
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "admission_invalid_count",
+            self.admission_invalid_count,
+            self.events
+                .iter()
+                .filter(|event| event.admission() == RadrootsRelayFetchEventAdmission::Invalid)
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "valid_stream_eligible_count",
+            self.valid_stream_eligible_count,
+            self.events
+                .iter()
+                .filter(|event| {
+                    event.valid_stream() == RadrootsRelayFetchEventValidStream::Eligible
+                })
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "visible_count",
+            self.visible_count,
+            self.events
+                .iter()
+                .filter(|event| event.visibility() == RadrootsRelayFetchEventVisibility::Visible)
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "not_admitted_count",
+            self.not_admitted_count,
+            self.events
+                .iter()
+                .filter(|event| {
+                    event.visibility() == RadrootsRelayFetchEventVisibility::NotAdmitted
+                })
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "not_current_count",
+            self.not_current_count,
+            self.events
+                .iter()
+                .filter(|event| event.visibility() == RadrootsRelayFetchEventVisibility::NotCurrent)
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "suppressed_count",
+            self.suppressed_count,
+            self.events
+                .iter()
+                .filter(|event| event.visibility() == RadrootsRelayFetchEventVisibility::Suppressed)
+                .count(),
+        )?;
+        for (field, supplied, kind) in [
+            (
+                "eose_count",
+                self.eose_count,
+                RadrootsRelayFetchOutcomeKind::Eose,
+            ),
+            (
+                "truncated_count",
+                self.truncated_count,
+                RadrootsRelayFetchOutcomeKind::Truncated,
+            ),
+            (
+                "closed_count",
+                self.closed_count,
+                RadrootsRelayFetchOutcomeKind::Closed,
+            ),
+            (
+                "notice_count",
+                self.notice_count,
+                RadrootsRelayFetchOutcomeKind::Notice,
+            ),
+        ] {
+            ensure_fetch_receipt_count(
+                field,
+                supplied,
+                self.relay_outcomes
+                    .iter()
+                    .filter(|outcome| outcome.kind() == kind)
+                    .count(),
+            )?;
+        }
+        Ok(self)
+    }
+
+    pub fn target_relays(&self) -> &[String] {
+        &self.target_relays
+    }
+
+    pub fn inserted_count(&self) -> usize {
+        self.inserted_count
+    }
+
+    pub fn duplicate_count(&self) -> usize {
+        self.duplicate_count
+    }
+
+    pub fn not_persisted_count(&self) -> usize {
+        self.not_persisted_count
+    }
+
+    pub fn malformed_count(&self) -> usize {
+        self.malformed_count
+    }
+
+    pub fn out_of_filter_count(&self) -> usize {
+        self.out_of_filter_count
+    }
+
+    pub fn skipped_over_limit_count(&self) -> usize {
+        self.skipped_over_limit_count
+    }
+
+    pub fn verification_failed_count(&self) -> usize {
+        self.verification_failed_count
+    }
+
+    pub fn admission_unsupported_count(&self) -> usize {
+        self.admission_unsupported_count
+    }
+
+    pub fn admission_invalid_count(&self) -> usize {
+        self.admission_invalid_count
+    }
+
+    pub fn valid_stream_eligible_count(&self) -> usize {
+        self.valid_stream_eligible_count
+    }
+
+    pub fn visible_count(&self) -> usize {
+        self.visible_count
+    }
+
+    pub fn not_admitted_count(&self) -> usize {
+        self.not_admitted_count
+    }
+
+    pub fn not_current_count(&self) -> usize {
+        self.not_current_count
+    }
+
+    pub fn suppressed_count(&self) -> usize {
+        self.suppressed_count
+    }
+
+    pub fn eose_count(&self) -> usize {
+        self.eose_count
+    }
+
+    pub fn truncated_count(&self) -> usize {
+        self.truncated_count
+    }
+
+    pub fn closed_count(&self) -> usize {
+        self.closed_count
+    }
+
+    pub fn notice_count(&self) -> usize {
+        self.notice_count
+    }
+
+    pub fn events(&self) -> &[RadrootsRelayFetchEventReceipt] {
+        &self.events
+    }
+
+    pub fn relay_outcomes(&self) -> &[RadrootsRelayFetchRelayOutcome] {
+        &self.relay_outcomes
+    }
+
     fn from_processed_counts(processed: &RadrootsRelayProcessedFetch) -> Self {
         Self {
+            target_relays: processed.target_relays.clone(),
             inserted_count: 0,
             duplicate_count: 0,
             not_persisted_count: 0,
@@ -1441,6 +1754,175 @@ impl RadrootsRelayFetchReceipt {
     }
 }
 
+fn canonical_fetch_receipt_targets(
+    target_relays: Vec<String>,
+) -> Result<Vec<String>, RadrootsRelayTransportError> {
+    if target_relays.is_empty() {
+        return Err(RadrootsRelayTransportError::EmptyTargetSet);
+    }
+    if target_relays.len() > radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT {
+        return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "target_relay_count",
+            max: radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+            actual: target_relays.len(),
+        });
+    }
+    let mut canonical = Vec::with_capacity(target_relays.len());
+    let mut seen = BTreeSet::new();
+    for relay_url in target_relays {
+        let relay_url = canonical_fetch_receipt_relay_url(relay_url.as_str())?;
+        if !seen.insert(relay_url.clone()) {
+            return Err(invalid_fetch_receipt(
+                "target_relays",
+                format!("duplicate relay URL `{relay_url}`"),
+            ));
+        }
+        canonical.push(relay_url);
+    }
+    Ok(canonical)
+}
+
+fn ensure_fetch_receipt_relay_requested(
+    target_relays: &[String],
+    relay_url: &str,
+) -> Result<(), RadrootsRelayTransportError> {
+    if !target_relays.iter().any(|target| target == relay_url) {
+        return Err(invalid_fetch_receipt(
+            "relay_url",
+            format!("relay URL `{relay_url}` was not requested"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_fetch_relay_outcomes(
+    target_relays: &[String],
+    relay_outcomes: &[RadrootsRelayFetchRelayOutcome],
+) -> Result<(), RadrootsRelayTransportError> {
+    let mut terminal_relays = BTreeSet::new();
+    for outcome in relay_outcomes {
+        ensure_fetch_receipt_relay_requested(target_relays, outcome.relay_url())?;
+        if outcome.kind() != RadrootsRelayFetchOutcomeKind::Notice
+            && !terminal_relays.insert(outcome.relay_url())
+        {
+            return Err(invalid_fetch_receipt(
+                "relay_outcomes",
+                format!(
+                    "duplicate or conflicting terminal outcome for `{}`",
+                    outcome.relay_url()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_fetch_diagnostic_budget(
+    events: &[RadrootsRelayFetchEventReceipt],
+    relay_outcomes: &[RadrootsRelayFetchRelayOutcome],
+) -> Result<(), RadrootsRelayTransportError> {
+    let mut diagnostic_bytes = 0usize;
+    for message in events
+        .iter()
+        .filter_map(RadrootsRelayFetchEventReceipt::message)
+        .chain(
+            relay_outcomes
+                .iter()
+                .filter_map(RadrootsRelayFetchRelayOutcome::message),
+        )
+    {
+        diagnostic_bytes = diagnostic_bytes.checked_add(message.len()).ok_or(
+            RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                field: "fetch_request_diagnostics",
+                max: radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+                actual: usize::MAX,
+            },
+        )?;
+        if diagnostic_bytes > radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES {
+            return Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                field: "fetch_request_diagnostics",
+                max: radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+                actual: diagnostic_bytes,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn ensure_fetch_receipt_count(
+    field: &'static str,
+    supplied: usize,
+    actual: usize,
+) -> Result<(), RadrootsRelayTransportError> {
+    if supplied != actual {
+        return Err(invalid_fetch_receipt(
+            field,
+            format!("supplied count {supplied} does not match derived count {actual}"),
+        ));
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsRelayFetchReceiptWire {
+    target_relays: Vec<String>,
+    inserted_count: usize,
+    duplicate_count: usize,
+    not_persisted_count: usize,
+    malformed_count: usize,
+    out_of_filter_count: usize,
+    skipped_over_limit_count: usize,
+    verification_failed_count: usize,
+    admission_unsupported_count: usize,
+    admission_invalid_count: usize,
+    valid_stream_eligible_count: usize,
+    visible_count: usize,
+    not_admitted_count: usize,
+    not_current_count: usize,
+    suppressed_count: usize,
+    eose_count: usize,
+    truncated_count: usize,
+    closed_count: usize,
+    notice_count: usize,
+    events: Vec<RadrootsRelayFetchEventReceipt>,
+    relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
+}
+
+impl<'de> Deserialize<'de> for RadrootsRelayFetchReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = RadrootsRelayFetchReceiptWire::deserialize(deserializer)?;
+        Self {
+            target_relays: wire.target_relays,
+            inserted_count: wire.inserted_count,
+            duplicate_count: wire.duplicate_count,
+            not_persisted_count: wire.not_persisted_count,
+            malformed_count: wire.malformed_count,
+            out_of_filter_count: wire.out_of_filter_count,
+            skipped_over_limit_count: wire.skipped_over_limit_count,
+            verification_failed_count: wire.verification_failed_count,
+            admission_unsupported_count: wire.admission_unsupported_count,
+            admission_invalid_count: wire.admission_invalid_count,
+            valid_stream_eligible_count: wire.valid_stream_eligible_count,
+            visible_count: wire.visible_count,
+            not_admitted_count: wire.not_admitted_count,
+            not_current_count: wire.not_current_count,
+            suppressed_count: wire.suppressed_count,
+            eose_count: wire.eose_count,
+            truncated_count: wire.truncated_count,
+            closed_count: wire.closed_count,
+            notice_count: wire.notice_count,
+            events: wire.events,
+            relay_outcomes: wire.relay_outcomes,
+        }
+        .checked()
+        .map_err(de::Error::custom)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RadrootsRelayFetchRawBudgetExhaustion {
     RawEvents,
@@ -1528,6 +2010,13 @@ fn process_relay_fetch_items(
     if target_relays.is_empty() {
         return Err(RadrootsRelayTransportError::EmptyTargetSet);
     }
+    if items.len() > RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX {
+        return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "raw_item_count",
+            max: RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX,
+            actual: items.len(),
+        });
+    }
     let mut processed = RadrootsRelayProcessedFetch {
         target_relays,
         items: Vec::new(),
@@ -1572,6 +2061,27 @@ fn process_relay_fetch_items(
             RadrootsRelayFetchItemBody::Event { raw_json, .. } => {
                 if raw_budget.charge(raw_json.len()).is_err() {
                     processed.skipped_over_limit_count += 1;
+                    processed
+                        .items
+                        .push(RadrootsRelayProcessedFetchItem::Receipt(
+                            RadrootsRelayFetchEventReceipt {
+                                relay_url,
+                                event_id: None,
+                                inserted: false,
+                                duplicate: false,
+                                not_persisted: false,
+                                malformed: false,
+                                out_of_filter: false,
+                                skipped_over_limit: true,
+                                verification: RadrootsRelayFetchEventVerification::NotEvaluated,
+                                admission: RadrootsRelayFetchEventAdmission::NotEvaluated,
+                                admission_code: None,
+                                valid_stream: RadrootsRelayFetchEventValidStream::NotEvaluated,
+                                visibility: RadrootsRelayFetchEventVisibility::NotEvaluated,
+                                message: None,
+                            }
+                            .checked()?,
+                        ));
                     continue;
                 }
                 if raw_json.len() > DEFAULT_RAW_JSON_MAX_BYTES {
@@ -1621,7 +2131,7 @@ fn process_relay_fetch_items(
                                 admission_code: None,
                                 valid_stream: RadrootsRelayFetchEventValidStream::NotEvaluated,
                                 visibility: RadrootsRelayFetchEventVisibility::NotEvaluated,
-                                message: Some("event JSON parse failed".to_owned()),
+                                message: None,
                             }
                             .checked()?,
                         ));
@@ -1673,7 +2183,7 @@ fn process_relay_fetch_items(
                                 admission_code: None,
                                 valid_stream: RadrootsRelayFetchEventValidStream::NotEvaluated,
                                 visibility: RadrootsRelayFetchEventVisibility::NotEvaluated,
-                                message: Some("event did not match relay fetch filters".to_owned()),
+                                message: None,
                             }
                             .checked()?,
                         ));
@@ -1713,9 +2223,7 @@ fn process_relay_fetch_items(
                                 admission_code: None,
                                 valid_stream: RadrootsRelayFetchEventValidStream::NotEvaluated,
                                 visibility: RadrootsRelayFetchEventVisibility::NotEvaluated,
-                                message: Some(
-                                    "accepted relay fetch event limit reached".to_owned(),
-                                ),
+                                message: None,
                             }
                             .checked()?,
                         ));
@@ -1800,7 +2308,7 @@ fn accepted_fetch_event_receipt(
         admission_code: None,
         valid_stream: RadrootsRelayFetchEventValidStream::NotEvaluated,
         visibility: RadrootsRelayFetchEventVisibility::NotEvaluated,
-        message: Some("event accepted by relay fetch filters".to_owned()),
+        message: None,
     }
     .checked()
 }
@@ -1822,7 +2330,7 @@ fn duplicate_fetch_event_receipt(
         admission_code: None,
         valid_stream: RadrootsRelayFetchEventValidStream::NotEvaluated,
         visibility: RadrootsRelayFetchEventVisibility::NotEvaluated,
-        message: Some("event ID was already observed in this relay fetch".to_owned()),
+        message: None,
     }
     .checked()
 }
