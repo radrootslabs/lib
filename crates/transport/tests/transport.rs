@@ -5,14 +5,14 @@ use radroots_transport::{
     RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_OUTCOME_CODE_MAX_BYTES,
     RADROOTS_TRANSPORT_OUTCOME_MESSAGE_MAX_BYTES, RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
     RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
-    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
-    RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
-    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES, RadrootsTransport, RadrootsTransportCapabilities,
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
+    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportSatisfactionPolicyKind,
     RadrootsTransportStatus, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetLabel, RadrootsTransportTargetReceipt, RadrootsTransportTargetSet,
@@ -20,6 +20,8 @@ use radroots_transport::{
     ReticulumDuplicateFragmentBehaviorV1, ReticulumFragmentIntegrityV1,
     ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1, ReticulumPrivacySemanticsV1,
 };
+#[cfg(feature = "serde")]
+use radroots_transport::RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES;
 use serde_json::Value;
 use std::borrow::ToOwned;
 use std::boxed::Box;
@@ -2010,10 +2012,106 @@ fn transport_target_set_deserialization_revalidates_nonempty_unique_targets() {
     );
     assert!(
         serde_json::from_value::<RadrootsTransportTargetSet>(
-            serde_json::json!({ "targets": [target, target] })
+            serde_json::json!({ "targets": [target.clone(), target.clone()] })
         )
         .is_err()
     );
+    let one_over = vec![target; RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1];
+    assert!(
+        serde_json::from_value::<RadrootsTransportTargetSet>(
+            serde_json::json!({ "targets": one_over })
+        )
+        .expect_err("reject one-over target set before duplicate validation")
+        .to_string()
+        .contains("target_count")
+    );
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_bounds_target_wire_strings_fail_before_canonical_validation() {
+    let target = RadrootsTransportTarget::nostr_relay_with_metadata(
+        "wss://relay.example",
+        Some(RadrootsTransportMeshScopeId::parse("scope").expect("scope")),
+        Some(RadrootsTransportTargetLabel::parse("label").expect("label")),
+    )
+    .expect("target");
+    let canonical = serde_json::to_value(&target).expect("target wire");
+    for (field, value, expected_limit) in [
+        (
+            "uri",
+            "u".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES + 1),
+            "target_uri",
+        ),
+        (
+            "scope",
+            "s".repeat(RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES + 1),
+            "target_scope",
+        ),
+        (
+            "label",
+            "l".repeat(RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES + 1),
+            "target_label",
+        ),
+        (
+            "fingerprint",
+            "f".repeat(RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES + 1),
+            "target_fingerprint",
+        ),
+    ] {
+        let mut one_over = canonical.clone();
+        one_over[field] = Value::String(value);
+        let encoded = serde_json::to_string(&one_over).expect("one-over target JSON");
+        assert!(
+            serde_json::from_str::<RadrootsTransportTarget>(&encoded)
+                .expect_err("reject one-over target wire")
+                .to_string()
+                .contains(expected_limit),
+            "{field}"
+        );
+    }
+
+    for (encoded, expected_limit) in [
+        (
+            serde_json::to_string(&"u".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES + 1))
+                .expect("URI JSON"),
+            "target_uri",
+        ),
+        (
+            serde_json::to_string(&"s".repeat(RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES + 1))
+                .expect("scope JSON"),
+            "target_scope",
+        ),
+        (
+            serde_json::to_string(&"l".repeat(RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES + 1))
+                .expect("label JSON"),
+            "target_label",
+        ),
+        (
+            serde_json::to_string(&"f".repeat(RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES + 1))
+                .expect("fingerprint JSON"),
+            "target_fingerprint",
+        ),
+    ] {
+        let error = match expected_limit {
+            "target_uri" => serde_json::from_str::<RadrootsTransportTargetUri>(&encoded)
+                .expect_err("reject URI")
+                .to_string(),
+            "target_scope" => serde_json::from_str::<RadrootsTransportMeshScopeId>(&encoded)
+                .expect_err("reject scope")
+                .to_string(),
+            "target_label" => serde_json::from_str::<RadrootsTransportTargetLabel>(&encoded)
+                .expect_err("reject label")
+                .to_string(),
+            "target_fingerprint" => {
+                serde_json::from_str::<RadrootsTransportTargetFingerprint>(&encoded)
+                    .expect_err("reject fingerprint")
+                    .to_string()
+            }
+            _ => unreachable!("closed target wire field"),
+        };
+        assert!(error.contains(expected_limit));
+    }
 }
 
 #[test]

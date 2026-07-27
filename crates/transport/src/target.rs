@@ -11,6 +11,8 @@ use alloc::vec::Vec;
 use core::net::Ipv6Addr;
 use sha2::{Digest, Sha256};
 
+pub const RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES: usize = 64;
+
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsTransportTargetUri(String);
@@ -53,7 +55,11 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetUri {
     where
         D: serde::Deserializer<'de>,
     {
-        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let raw = crate::serde_bounds::deserialize_string(
+            deserializer,
+            "target_uri",
+            RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+        )?;
         let parsed = Self::parse(raw.as_str()).map_err(serde::de::Error::custom)?;
         if parsed.as_str() != raw {
             return Err(serde::de::Error::custom(
@@ -110,7 +116,11 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportMeshScopeId {
     where
         D: serde::Deserializer<'de>,
     {
-        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let raw = crate::serde_bounds::deserialize_string(
+            deserializer,
+            "target_scope",
+            RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+        )?;
         Self::parse(raw).map_err(serde::de::Error::custom)
     }
 }
@@ -154,7 +164,11 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetLabel {
     where
         D: serde::Deserializer<'de>,
     {
-        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let raw = crate::serde_bounds::deserialize_string(
+            deserializer,
+            "target_label",
+            RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
+        )?;
         let parsed = Self::parse(raw.as_str()).map_err(serde::de::Error::custom)?;
         if parsed.as_str() != raw {
             return Err(serde::de::Error::custom(
@@ -189,7 +203,9 @@ impl RadrootsTransportTargetFingerprint {
 
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
         let raw = raw.as_ref();
-        if raw.len() != 64 || !raw.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        if raw.len() != RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES
+            || !raw.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
             return Err(RadrootsTransportError::InvalidTargetFingerprint);
         }
         Ok(Self(raw.to_ascii_lowercase()))
@@ -222,7 +238,11 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetFingerprint {
     where
         D: serde::Deserializer<'de>,
     {
-        let raw = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let raw = crate::serde_bounds::deserialize_string(
+            deserializer,
+            "target_fingerprint",
+            RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES,
+        )?;
         let parsed = Self::parse(raw.as_str()).map_err(serde::de::Error::custom)?;
         if parsed.as_str() != raw {
             return Err(serde::de::Error::custom(
@@ -339,10 +359,62 @@ impl RadrootsTransportTarget {
 #[serde(deny_unknown_fields)]
 struct RadrootsTransportTargetWire {
     kind: RadrootsTransportKind,
+    #[serde(deserialize_with = "deserialize_target_uri")]
     uri: String,
+    #[serde(deserialize_with = "deserialize_target_scope")]
     scope: Option<String>,
+    #[serde(deserialize_with = "deserialize_target_label")]
     label: Option<String>,
+    #[serde(deserialize_with = "deserialize_target_fingerprint")]
     fingerprint: String,
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_target_uri<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(
+        deserializer,
+        "target_uri",
+        RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_target_scope<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_option_string(
+        deserializer,
+        "target_scope",
+        RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_target_label<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_option_string(
+        deserializer,
+        "target_label",
+        RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
+    )
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_target_fingerprint<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_string(
+        deserializer,
+        "target_fingerprint",
+        RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES,
+    )
 }
 
 #[cfg(feature = "serde")]
@@ -437,7 +509,20 @@ impl RadrootsTransportTargetSet {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RadrootsTransportTargetSetWire {
+    #[serde(deserialize_with = "deserialize_targets")]
     targets: Vec<RadrootsTransportTarget>,
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_targets<'de, D>(deserializer: D) -> Result<Vec<RadrootsTransportTarget>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    crate::serde_bounds::deserialize_vec(
+        deserializer,
+        "target_count",
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    )
 }
 
 #[cfg(feature = "serde")]

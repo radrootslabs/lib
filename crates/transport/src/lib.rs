@@ -55,8 +55,9 @@ pub use status::{
     RadrootsTransportOutcomeKind, RadrootsTransportStatus,
 };
 pub use target::{
-    RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
-    RadrootsTransportTargetLabel, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+    RADROOTS_TRANSPORT_TARGET_FINGERPRINT_BYTES, RadrootsTransportMeshScopeId,
+    RadrootsTransportTarget, RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
+    RadrootsTransportTargetSet, RadrootsTransportTargetUri,
 };
 pub use transport::{
     RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
