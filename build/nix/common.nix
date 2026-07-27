@@ -201,16 +201,37 @@ let
     cargo run -q -p xtask -- contract validate
 
     required_file="$(mktemp)"
-    trap 'rm -f "$required_file"' EXIT
+    coverage_target_root="''${CARGO_TARGET_DIR:-$PWD/target}"
+    case "$coverage_target_root" in
+      /*) ;;
+      *) coverage_target_root="$PWD/$coverage_target_root" ;;
+    esac
+    coverage_root="$coverage_target_root/coverage"
+    coverage_compat_link=""
+    cleanup_release_preflight() {
+      rm -f "$required_file"
+      if [ -n "$coverage_compat_link" ]; then
+        rm -f "$coverage_compat_link"
+        rmdir "$PWD/target" 2>/dev/null || true
+      fi
+    }
+    trap cleanup_release_preflight EXIT
     cargo run -q -p xtask -- coverage required-crates > "$required_file"
 
-    rm -rf target/coverage
-    mkdir -p target/coverage
+    rm -rf "$coverage_root"
+    mkdir -p "$coverage_root"
+
+    if [ "$coverage_root" != "$PWD/target/coverage" ]; then
+      mkdir -p "$PWD/target"
+      coverage_compat_link="$PWD/target/coverage"
+      rm -rf "$coverage_compat_link"
+      ln -s "$coverage_root" "$coverage_compat_link"
+    fi
 
     while IFS= read -r crate; do
       [ -n "$crate" ] || continue
       safe_crate="''${crate//-/_}"
-      out_dir="target/coverage/''${safe_crate}"
+      out_dir="$coverage_root/''${safe_crate}"
       mkdir -p "$out_dir"
 
       cargo run -q -p xtask -- coverage run-crate --crate "$crate" --out "$out_dir"
@@ -223,17 +244,23 @@ let
     done < "$required_file"
 
     cargo run -q -p xtask -- coverage refresh-summary \
-      --reports-root target/coverage \
-      --out target/coverage/coverage-refresh.tsv \
-      --status-out target/coverage/coverage-refresh-status.tsv
+      --reports-root "$coverage_root" \
+      --out "$coverage_root/coverage-refresh.tsv" \
+      --status-out "$coverage_root/coverage-refresh-status.tsv"
 
     cargo run -q -p xtask -- release preflight
     echo "release preflight complete"
   '';
   coverageReportCommand = ''
-        rm -rf target/coverage-report
-        mkdir -p target/coverage-report
-        : > target/coverage-report/coverage-report-status.txt
+        coverage_target_root="''${CARGO_TARGET_DIR:-$PWD/target}"
+        case "$coverage_target_root" in
+          /*) ;;
+          *) coverage_target_root="$PWD/$coverage_target_root" ;;
+        esac
+        coverage_report_root="$coverage_target_root/coverage-report"
+        rm -rf "$coverage_report_root"
+        mkdir -p "$coverage_report_root"
+        : > "$coverage_report_root/coverage-report-status.txt"
 
         workspace_crates_file="$(mktemp)"
         required_crates_file="$(mktemp)"
@@ -243,7 +270,7 @@ let
         while IFS= read -r crate; do
           [ -n "''${crate}" ] || continue
           safe_crate="''${crate//-/_}"
-          run_dir="target/coverage-report/''${safe_crate}"
+          run_dir="$coverage_report_root/''${safe_crate}"
           mkdir -p "''${run_dir}"
           status="ok"
 
@@ -303,15 +330,15 @@ let
     EOF
           fi
 
-          echo "''${crate}:''${status}" >> target/coverage-report/coverage-report-status.txt
+          echo "''${crate}:''${status}" >> "$coverage_report_root/coverage-report-status.txt"
         done < "$workspace_crates_file"
 
         cargo run -q -p xtask -- coverage required-crates > "$required_crates_file"
         while IFS= read -r crate; do
           [ -n "''${crate}" ] || continue
           safe_crate="''${crate//-/_}"
-          crate_dir="target/coverage-report/''${safe_crate}"
-          crate_status="$(awk -F: -v crate="''${crate}" '$1 == crate { status = $2 } END { print status }' target/coverage-report/coverage-report-status.txt)"
+          crate_dir="$coverage_report_root/''${safe_crate}"
+          crate_status="$(awk -F: -v crate="''${crate}" '$1 == crate { status = $2 } END { print status }' "$coverage_report_root/coverage-report-status.txt")"
 
           if [ ! -f "''${crate_dir}/coverage-summary.json" ] || [ ! -f "''${crate_dir}/coverage-lcov.info" ]; then
             fail_reason="missing-coverage-artifacts"
