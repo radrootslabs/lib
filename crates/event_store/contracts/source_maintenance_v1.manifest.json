@@ -153,7 +153,7 @@
       "role": "workspace_dependency_authority",
       "path": "Cargo.toml",
       "byte_length": 10725,
-      "sha256": "e1975711f349abc7651b29dd1144613865084206eba9f59c92da05ff9dabb6b5",
+      "sha256": "989e98dbf6e0ae7d2c6c3af2ccc866fdc53180c8d35d8a573d399def0f884c1b",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
