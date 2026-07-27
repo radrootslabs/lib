@@ -239,15 +239,16 @@ where
     build_media_readiness_binding(allowlisted_artifact, bounded)
 }
 
-/// Revalidates an in-memory media-ready typestate through canonical reload.
+/// Revalidates an in-memory media-ready typestate without cloning the
+/// allowlisted artifact or reparsing the binding bytes.
 pub fn validate_phase1_publication_media_readiness(
     ready: &RadrootsPhase1MediaReadyPublicationArtifact,
 ) -> Result<(), RadrootsPhase1PublicationMediaReadinessError> {
-    let reloaded = RadrootsPhase1MediaReadyPublicationArtifact::from_canonical_json(
-        ready.allowlisted_artifact.clone(),
-        &ready.canonical_json,
-    )?;
-    if &reloaded != ready {
+    let artifact = ready.allowlisted_artifact.artifact();
+    validate_evidence_parity(artifact, &ready.evidence)?;
+    let binding_digest = compute_binding_digest(artifact, &ready.evidence);
+    let canonical_json = serialize_binding(artifact, &ready.evidence, binding_digest)?;
+    if binding_digest != ready.binding_digest || canonical_json != ready.canonical_json {
         return Err(RadrootsPhase1PublicationMediaReadinessError::StateMismatch);
     }
     Ok(())

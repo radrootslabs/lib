@@ -30,7 +30,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use core::fmt;
+use core::{cmp::Ordering, fmt};
 
 use radroots_blossom::{
     RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
@@ -62,7 +62,7 @@ use radroots_event::{
         compute_canonical_nip01_event_id,
     },
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeSeq};
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -272,7 +272,9 @@ impl RadrootsPhase1PublicationMediaReference {
         }
     }
 
-    fn from_wire(wire: MediaReferenceWire) -> Result<Self, RadrootsPhase1PublicationArtifactError> {
+    fn from_wire(
+        wire: &MediaReferenceWire,
+    ) -> Result<Self, RadrootsPhase1PublicationArtifactError> {
         let parsed_url = RadrootsBlossomBlobUrl::parse(&wire.url)
             .and_then(RadrootsBlossomBlobUrl::approve)
             .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidMediaReference)?;
@@ -299,15 +301,6 @@ impl RadrootsPhase1PublicationMediaReference {
             validate_media_reference_envelope(&reference)?;
             Ok(reference)
         })
-    }
-
-    fn to_wire(&self) -> MediaReferenceWire {
-        MediaReferenceWire {
-            url: self.url.as_str().to_string(),
-            sha256: self.sha256.to_hex(),
-            size: self.size,
-            media_type: self.media_type.as_str().to_string(),
-        }
     }
 }
 
@@ -584,25 +577,12 @@ impl RadrootsPhase1PublicationArtifact {
                 },
             );
         }
-        let original_media_wire = wire.media_references;
-        let mut media_references = original_media_wire
-            .iter()
-            .cloned()
-            .map(RadrootsPhase1PublicationMediaReference::from_wire)
-            .collect::<Result<Vec<_>, _>>()?;
-        canonicalize_media_references(&mut media_references)?;
-        if media_references
-            .iter()
-            .map(RadrootsPhase1PublicationMediaReference::to_wire)
-            .ne(original_media_wire.iter().cloned())
-        {
-            return Err(RadrootsPhase1PublicationArtifactError::NonCanonicalMediaInventory);
-        }
+        let media_references = parse_canonical_media_references(&wire.media_references)?;
         validate_phase1_publication_profile(variant, &draft, &media_references)?;
 
         let artifact_digest =
             RadrootsPhase1PublicationArtifactDigest::parse(&wire.artifact_digest)?;
-        let computed = compute_artifact_digest(
+        let (computed, canonical_json) = build_canonical_artifact(
             variant,
             &expected_author,
             &draft,
@@ -612,14 +592,6 @@ impl RadrootsPhase1PublicationArtifact {
         if computed != artifact_digest {
             return Err(RadrootsPhase1PublicationArtifactError::DigestMismatch);
         }
-        let canonical_json = serialize_artifact(
-            variant,
-            &expected_author,
-            &draft,
-            &expected_event_id,
-            &media_references,
-            artifact_digest,
-        )?;
         if canonical_json != bytes {
             return Err(RadrootsPhase1PublicationArtifactError::NonCanonicalJson);
         }
@@ -677,20 +649,12 @@ impl RadrootsPhase1PublicationArtifact {
         };
         validate_signed_event_wire_size(&expected_author, &draft, &expected_event_id)?;
         validate_phase1_publication_profile(variant, &draft, &media_references)?;
-        let artifact_digest = compute_artifact_digest(
+        let (artifact_digest, canonical_json) = build_canonical_artifact(
             variant,
             &expected_author,
             &draft,
             &expected_event_id,
             &media_references,
-        )?;
-        let canonical_json = serialize_artifact(
-            variant,
-            &expected_author,
-            &draft,
-            &expected_event_id,
-            &media_references,
-            artifact_digest,
         )?;
         if canonical_json.len() > RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES {
             return Err(RadrootsPhase1PublicationArtifactError::ArtifactTooLarge {
@@ -710,14 +674,38 @@ impl RadrootsPhase1PublicationArtifact {
     }
 }
 
-/// Revalidates a sealed artifact through the same strict persisted-byte path
-/// used by later allowlist and outbox consumers.
+/// Revalidates a sealed artifact without cloning and reparsing its persisted
+/// representation.
+///
+/// All private typed fields, the digest, and the canonical serialization are
+/// recomputed before the artifact may cross a later trusted boundary.
 pub fn validate_phase1_publication_artifact(
     artifact: &RadrootsPhase1PublicationArtifact,
 ) -> Result<(), RadrootsPhase1PublicationArtifactError> {
-    let canonical_json = artifact.to_canonical_json();
-    let reloaded = RadrootsPhase1PublicationArtifact::from_canonical_json(&canonical_json)?;
-    if &reloaded != artifact {
+    validate_draft_identifier(
+        &artifact.expected_author,
+        &artifact.draft,
+        &artifact.expected_event_id,
+    )?;
+    validate_signed_event_wire_size(
+        &artifact.expected_author,
+        &artifact.draft,
+        &artifact.expected_event_id,
+    )?;
+    validate_canonical_media_references(&artifact.media_references)?;
+    validate_phase1_publication_profile(
+        artifact.semantic_variant,
+        &artifact.draft,
+        &artifact.media_references,
+    )?;
+    let (digest, canonical_json) = build_canonical_artifact(
+        artifact.semantic_variant,
+        &artifact.expected_author,
+        &artifact.draft,
+        &artifact.expected_event_id,
+        &artifact.media_references,
+    )?;
+    if digest != artifact.artifact_digest || canonical_json != artifact.canonical_json {
         return Err(RadrootsPhase1PublicationArtifactError::ArtifactStateMismatch);
     }
     Ok(())
@@ -902,7 +890,10 @@ fn signed_event_wire_size(
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
 ) -> Result<usize, RadrootsPhase1PublicationArtifactError> {
-    let signature = "0".repeat(128);
+    const ZERO_SIGNATURE_HEX: &str = concat!(
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    );
     Ok(serde_json::to_vec(&SignedEventSizeWire {
         id: expected_event_id.as_str(),
         pubkey: author.as_str(),
@@ -910,7 +901,7 @@ fn signed_event_wire_size(
         kind: draft.kind,
         tags: &draft.tags,
         content: &draft.content,
-        sig: &signature,
+        sig: ZERO_SIGNATURE_HEX,
     })
     .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?
     .len())
@@ -951,15 +942,61 @@ fn canonicalize_media_references(
     media: &mut Vec<RadrootsPhase1PublicationMediaReference>,
 ) -> Result<(), RadrootsPhase1PublicationArtifactError> {
     media.sort_by(|left, right| left.url.as_str().cmp(right.url.as_str()));
-    let mut index = 1usize;
-    while index < media.len() {
-        if media[index - 1].url.as_str() == media[index].url.as_str() {
-            if media[index - 1] != media[index] {
+    if media
+        .windows(2)
+        .any(|pair| pair[0].url.as_str() == pair[1].url.as_str() && pair[0] != pair[1])
+    {
+        return Err(RadrootsPhase1PublicationArtifactError::ConflictingMediaReference);
+    }
+    media.dedup_by(|right, left| right.url.as_str() == left.url.as_str());
+    Ok(())
+}
+
+fn parse_canonical_media_references(
+    wire: &[MediaReferenceWire],
+) -> Result<Vec<RadrootsPhase1PublicationMediaReference>, RadrootsPhase1PublicationArtifactError> {
+    let mut media = Vec::new();
+    media
+        .try_reserve_exact(wire.len())
+        .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?;
+    for item in wire {
+        let reference = RadrootsPhase1PublicationMediaReference::from_wire(item)?;
+        media.push(reference);
+    }
+    let strictly_ordered = media
+        .windows(2)
+        .all(|pair| pair[0].url.as_str() < pair[1].url.as_str());
+    let original_len = media.len();
+    canonicalize_media_references(&mut media)?;
+    if !strictly_ordered || media.len() != original_len {
+        return Err(RadrootsPhase1PublicationArtifactError::NonCanonicalMediaInventory);
+    }
+    Ok(media)
+}
+
+fn validate_canonical_media_references(
+    media: &[RadrootsPhase1PublicationMediaReference],
+) -> Result<(), RadrootsPhase1PublicationArtifactError> {
+    if media.len() > RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT {
+        return Err(
+            RadrootsPhase1PublicationArtifactError::TooManyMediaReferences {
+                max: RADROOTS_PHASE1_PUBLICATION_MEDIA_MAX_COUNT,
+                actual: media.len(),
+            },
+        );
+    }
+    for reference in media {
+        validate_media_reference_envelope(reference)?;
+    }
+    for pair in media.windows(2) {
+        match pair[0].url.as_str().cmp(pair[1].url.as_str()) {
+            Ordering::Less => {}
+            Ordering::Equal if pair[0] != pair[1] => {
                 return Err(RadrootsPhase1PublicationArtifactError::ConflictingMediaReference);
             }
-            media.remove(index);
-        } else {
-            index += 1;
+            Ordering::Equal | Ordering::Greater => {
+                return Err(RadrootsPhase1PublicationArtifactError::NonCanonicalMediaInventory);
+            }
         }
     }
     Ok(())
@@ -1449,23 +1486,59 @@ struct ArtifactWire {
 }
 
 #[derive(Serialize)]
+struct DraftPayloadWire<'a> {
+    created_at: u64,
+    kind: u32,
+    tags: &'a [Vec<String>],
+    content: &'a str,
+}
+
+#[derive(Serialize)]
 struct ArtifactPayloadWire<'a> {
     schema_version: u32,
     semantic_variant: &'a str,
     authored_operation_id: &'a str,
     event_contract_id: &'a str,
     expected_author: &'a str,
-    draft: DraftWire,
+    draft: DraftPayloadWire<'a>,
     expected_event_id: &'a str,
-    media_references: Vec<MediaReferenceWire>,
+    media_references: MediaReferencesPayloadWire<'a>,
+}
+
+#[derive(Serialize)]
+struct MediaReferencePayloadWire<'a> {
+    url: &'a str,
+    sha256: RadrootsBlossomSha256,
+    size: u64,
+    media_type: &'a str,
+}
+
+struct MediaReferencesPayloadWire<'a>(&'a [RadrootsPhase1PublicationMediaReference]);
+
+impl Serialize for MediaReferencesPayloadWire<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(self.0.len()))?;
+        for reference in self.0 {
+            sequence.serialize_element(&MediaReferencePayloadWire {
+                url: reference.url.as_str(),
+                sha256: reference.sha256,
+                size: reference.size,
+                media_type: reference.media_type.as_str(),
+            })?;
+        }
+        sequence.end()
+    }
 }
 
 fn artifact_payload_wire<'a>(
     variant: RadrootsPhase1PublicationSemanticVariant,
     author: &'a RadrootsPublicKey,
-    draft: &RadrootsPhase1PublicationDraft,
+    draft: &'a RadrootsPhase1PublicationDraft,
     expected_event_id: &'a RadrootsEventId,
-    media: &[RadrootsPhase1PublicationMediaReference],
+    media: &'a [RadrootsPhase1PublicationMediaReference],
 ) -> ArtifactPayloadWire<'a> {
     ArtifactPayloadWire {
         schema_version: RADROOTS_PHASE1_PUBLICATION_ARTIFACT_SCHEMA_VERSION,
@@ -1473,20 +1546,18 @@ fn artifact_payload_wire<'a>(
         authored_operation_id: variant.authored_operation_id(),
         event_contract_id: variant.event_contract_id(),
         expected_author: author.as_str(),
-        draft: DraftWire {
+        draft: DraftPayloadWire {
             created_at: draft.created_at,
             kind: draft.kind,
-            tags: draft.tags.clone(),
-            content: draft.content.clone(),
+            tags: &draft.tags,
+            content: &draft.content,
         },
         expected_event_id: expected_event_id.as_str(),
-        media_references: media
-            .iter()
-            .map(RadrootsPhase1PublicationMediaReference::to_wire)
-            .collect(),
+        media_references: MediaReferencesPayloadWire(media),
     }
 }
 
+#[cfg(test)]
 fn compute_artifact_digest(
     variant: RadrootsPhase1PublicationSemanticVariant,
     author: &RadrootsPublicKey,
@@ -1494,44 +1565,58 @@ fn compute_artifact_digest(
     expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
 ) -> Result<RadrootsPhase1PublicationArtifactDigest, RadrootsPhase1PublicationArtifactError> {
-    let payload = serde_json::to_vec(&artifact_payload_wire(
+    let payload = serialize_artifact_payload(variant, author, draft, expected_event_id, media)?;
+    Ok(digest_artifact_payload(&payload))
+}
+
+fn serialize_artifact_payload(
+    variant: RadrootsPhase1PublicationSemanticVariant,
+    author: &RadrootsPublicKey,
+    draft: &RadrootsPhase1PublicationDraft,
+    expected_event_id: &RadrootsEventId,
+    media: &[RadrootsPhase1PublicationMediaReference],
+) -> Result<Vec<u8>, RadrootsPhase1PublicationArtifactError> {
+    serde_json::to_vec(&artifact_payload_wire(
         variant,
         author,
         draft,
         expected_event_id,
         media,
     ))
-    .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?;
+    .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)
+}
+
+fn digest_artifact_payload(payload: &[u8]) -> RadrootsPhase1PublicationArtifactDigest {
     let mut hasher = Sha256::new();
     hasher.update(ARTIFACT_DIGEST_DOMAIN);
     hasher.update(ARTIFACT_DIGEST_DOMAIN_TERMINATOR);
     hasher.update(payload);
-    Ok(RadrootsPhase1PublicationArtifactDigest(
-        hasher.finalize().into(),
-    ))
+    RadrootsPhase1PublicationArtifactDigest(hasher.finalize().into())
 }
 
-fn serialize_artifact(
+fn build_canonical_artifact(
     variant: RadrootsPhase1PublicationSemanticVariant,
     author: &RadrootsPublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
-    digest: RadrootsPhase1PublicationArtifactDigest,
-) -> Result<Vec<u8>, RadrootsPhase1PublicationArtifactError> {
-    let payload = artifact_payload_wire(variant, author, draft, expected_event_id, media);
-    serde_json::to_vec(&ArtifactWire {
-        schema_version: payload.schema_version,
-        semantic_variant: payload.semantic_variant.to_string(),
-        authored_operation_id: payload.authored_operation_id.to_string(),
-        event_contract_id: payload.event_contract_id.to_string(),
-        expected_author: payload.expected_author.to_string(),
-        draft: payload.draft,
-        expected_event_id: payload.expected_event_id.to_string(),
-        media_references: payload.media_references,
-        artifact_digest: digest.to_hex(),
-    })
-    .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)
+) -> Result<
+    (RadrootsPhase1PublicationArtifactDigest, Vec<u8>),
+    RadrootsPhase1PublicationArtifactError,
+> {
+    let mut canonical_json =
+        serialize_artifact_payload(variant, author, draft, expected_event_id, media)?;
+    let digest = digest_artifact_payload(&canonical_json);
+    if canonical_json.pop() != Some(b'}') {
+        return Err(RadrootsPhase1PublicationArtifactError::Serialization);
+    }
+    canonical_json
+        .try_reserve_exact(86)
+        .map_err(|_| RadrootsPhase1PublicationArtifactError::Serialization)?;
+    canonical_json.extend_from_slice(br#","artifact_digest":""#);
+    canonical_json.extend_from_slice(digest.to_hex().as_bytes());
+    canonical_json.extend_from_slice(br#""}"#);
+    Ok((digest, canonical_json))
 }
 
 #[cfg(test)]
@@ -1617,6 +1702,35 @@ mod tests {
             let alternate: [u8; 32] = alternate.finalize().into();
             assert_ne!(actual.as_bytes(), &alternate);
         }
+    }
+
+    #[test]
+    fn canonical_media_reload_rejects_duplicates_and_conflicts_after_adjacent_sort() {
+        const HASH: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+        let first = MediaReferenceWire {
+            url: format!("https://a.example/{HASH}.png"),
+            sha256: HASH.to_string(),
+            size: 1,
+            media_type: "image/png".to_string(),
+        };
+        let middle = MediaReferenceWire {
+            url: format!("https://b.example/{HASH}.png"),
+            sha256: HASH.to_string(),
+            size: 1,
+            media_type: "image/png".to_string(),
+        };
+
+        assert_eq!(
+            parse_canonical_media_references(&[first.clone(), middle.clone(), first.clone()]),
+            Err(RadrootsPhase1PublicationArtifactError::NonCanonicalMediaInventory),
+        );
+
+        let mut conflicting = first.clone();
+        conflicting.size += 1;
+        assert_eq!(
+            parse_canonical_media_references(&[first, middle, conflicting]),
+            Err(RadrootsPhase1PublicationArtifactError::ConflictingMediaReference),
+        );
     }
 
     fn event_id(

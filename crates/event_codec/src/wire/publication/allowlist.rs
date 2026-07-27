@@ -151,6 +151,12 @@ pub fn allow_phase1_publication_artifact(
     validate_phase1_publication_artifact(&artifact)
         .map_err(RadrootsPhase1PublicationAllowlistError::ArtifactInvalid)?;
 
+    allow_validated_phase1_publication_artifact(artifact)
+}
+
+fn allow_validated_phase1_publication_artifact(
+    artifact: RadrootsPhase1PublicationArtifact,
+) -> Result<RadrootsPhase1AllowlistedPublicationArtifact, RadrootsPhase1PublicationAllowlistError> {
     let claimed = RadrootsPhase1PublicationLeaf::from_semantic_variant(artifact.semantic_variant());
     let projected = reproject_publication_leaf(&artifact)?;
     if claimed != projected {
@@ -177,7 +183,7 @@ pub fn allow_phase1_publication_canonical_json(
 ) -> Result<RadrootsPhase1AllowlistedPublicationArtifact, RadrootsPhase1PublicationAllowlistError> {
     let artifact = RadrootsPhase1PublicationArtifact::from_canonical_json(bytes)
         .map_err(RadrootsPhase1PublicationAllowlistError::ArtifactInvalid)?;
-    allow_phase1_publication_artifact(artifact)
+    allow_validated_phase1_publication_artifact(artifact)
 }
 
 fn reproject_publication_leaf(
