@@ -153,23 +153,20 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
         )?;
     }
 
-    write_archive_workspace(&check_root, &extracted_root, &workspace_packages, &public)?;
+    write_archive_workspace(
+        &check_root,
+        &extracted_root,
+        &selected_profiles,
+        &policy.release.version,
+    )?;
     run_cargo(
         &check_root,
         &["generate-lockfile"],
         "lock archive workspace",
     )?;
-    for (package, profile) in selected_profiles {
-        let mut args = vec!["check", "--locked", "-p", package.as_str(), "--lib"];
-        if profile.no_default_features {
-            args.push("--no-default-features");
-        }
-        let feature_argument;
-        if !profile.features.is_empty() {
-            feature_argument = profile.features.join(",");
-            args.push("--features");
-            args.push(&feature_argument);
-        }
+    for (package, _) in selected_profiles {
+        let probe = archive_probe_package_name(&package);
+        let args = ["check", "--locked", "-p", probe.as_str(), "--lib"];
         run_cargo(
             &check_root,
             &args,
@@ -859,24 +856,50 @@ fn write_source_patch_config(
 fn write_archive_workspace(
     workspace_root: &Path,
     extracted_root: &Path,
-    packages: &[PackageWorkspaceEntry],
-    public: &BTreeSet<String>,
+    profiles: &[(String, FeatureProfile)],
+    release_version: &str,
 ) -> Result<(), String> {
+    let probes_root = workspace_root.join("probes");
+    fs::create_dir_all(&probes_root)
+        .map_err(|error| format!("create {}: {error}", probes_root.display()))?;
     let mut manifest = String::from("[workspace]\nresolver = \"2\"\nmembers = [\n");
-    for package in public {
-        manifest.push_str(&format!("  {:?},\n", extracted_root.join(package)));
+    for (package, profile) in profiles {
+        let probe = archive_probe_package_name(package);
+        let probe_root = probes_root.join(&probe);
+        fs::create_dir_all(probe_root.join("src"))
+            .map_err(|error| format!("create {}: {error}", probe_root.display()))?;
+        let features = profile
+            .features
+            .iter()
+            .map(|feature| format!("{feature:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let probe_manifest = format!(
+            "[package]\nname = {probe:?}\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[dependencies.candidate]\npackage = {package:?}\nversion = \"={release_version}\"\ndefault-features = {}\nfeatures = [{features}]\n",
+            !profile.no_default_features
+        );
+        fs::write(probe_root.join("Cargo.toml"), probe_manifest)
+            .map_err(|error| format!("write archive probe manifest for {package}: {error}"))?;
+        fs::write(
+            probe_root.join("src/lib.rs"),
+            "#![forbid(unsafe_code)]\n\npub fn archive_profile_probe() {}\n",
+        )
+        .map_err(|error| format!("write archive probe source for {package}: {error}"))?;
+        manifest.push_str(&format!("  {:?},\n", PathBuf::from("probes").join(probe)));
     }
     manifest.push_str("]\n\n[patch.crates-io]\n");
-    for package in packages {
-        let path = if public.contains(&package.name) {
-            extracted_root.join(&package.name)
-        } else {
-            package.source_directory.clone()
-        };
-        manifest.push_str(&format!("{} = {{ path = {:?} }}\n", package.name, path));
+    for (package, _) in profiles {
+        manifest.push_str(&format!(
+            "{package} = {{ path = {:?} }}\n",
+            extracted_root.join(package)
+        ));
     }
     fs::write(workspace_root.join("Cargo.toml"), manifest)
         .map_err(|error| format!("write archive workspace manifest: {error}"))
+}
+
+fn archive_probe_package_name(package: &str) -> String {
+    format!("release_probe_{package}")
 }
 
 fn ensure_clean_git_worktree(workspace_root: &Path) -> Result<(), String> {
@@ -1020,6 +1043,43 @@ version = "=1.0.0-alpha.1"
         assert_eq!(
             config["patch"]["crates-io"]["radroots_fixture"]["path"].as_str(),
             packages[0].source_directory.to_str()
+        );
+    }
+
+    #[test]
+    fn archive_workspace_profiles_extracted_crates_through_dependency_probes() {
+        let root = tempfile::tempdir().expect("temporary archive workspace root");
+        let workspace = root.path().join("workspace");
+        let extracted = workspace.join("members");
+        fs::create_dir_all(&extracted).expect("create extracted root");
+        let profiles = [(
+            "radroots_fixture".to_owned(),
+            FeatureProfile {
+                no_default_features: true,
+                features: vec!["serde".to_owned()],
+                test_threads: 1,
+            },
+        )];
+        write_archive_workspace(&workspace, &extracted, &profiles, "1.0.0-alpha.1")
+            .expect("write archive workspace");
+
+        let probe = workspace
+            .join("probes")
+            .join("release_probe_radroots_fixture");
+        let manifest = fs::read_to_string(probe.join("Cargo.toml")).expect("read probe manifest");
+        assert!(manifest.contains("package = \"radroots_fixture\""));
+        assert!(manifest.contains("default-features = false"));
+        assert!(manifest.contains("features = [\"serde\"]"));
+        let workspace_manifest =
+            fs::read_to_string(workspace.join("Cargo.toml")).expect("read workspace manifest");
+        assert!(workspace_manifest.contains("probes/release_probe_radroots_fixture"));
+        assert!(
+            workspace_manifest.contains(
+                extracted
+                    .join("radroots_fixture")
+                    .to_str()
+                    .expect("UTF-8 fixture path")
+            )
         );
     }
 }
