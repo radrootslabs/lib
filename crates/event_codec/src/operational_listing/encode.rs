@@ -71,18 +71,15 @@ fn operational_listing_markdown_content(listing: &RadrootsOperationalListing) ->
 mod tests {
     use super::*;
     use core::str::FromStr;
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         farm::RadrootsFarmRef,
         ids::{RadrootsDTag, RadrootsInventoryBinId},
         operational_listing::{RadrootsOperationalListingBin, RadrootsOperationalListingProduct},
     };
 
-    fn decimal(value: &str) -> RadrootsCoreDecimal {
-        RadrootsCoreDecimal::from_str(value).expect("decimal")
+    fn decimal(value: &str) -> Decimal {
+        Decimal::from_str(value).expect("decimal")
     }
 
     fn listing_with(title: &str, summary: Option<&str>) -> RadrootsOperationalListing {
@@ -107,10 +104,10 @@ mod tests {
             primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-                quantity: RadrootsCoreQuantity::new(decimal("1"), RadrootsCoreUnit::MassG),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
-                    RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::USD),
-                    RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, RadrootsCoreUnit::MassG),
+                quantity: Quantity::new(decimal("1"), Unit::MassG),
+                price_per_canonical_unit: QuantityPrice::new(
+                    Money::new(decimal("1"), Currency::USD),
+                    Quantity::new(Decimal::ONE, Unit::MassG),
                 ),
                 display_amount: None,
                 display_unit: None,

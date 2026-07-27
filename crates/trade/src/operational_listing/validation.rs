@@ -6,9 +6,7 @@ use alloc::{
     string::{String, ToString},
 };
 
-use radroots_core::{
-    RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit,
-};
+use radroots_core::{Decimal, Money, Quantity, Unit};
 use radroots_event::{
     classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
     ids::{RadrootsClassifiedListingAddress, RadrootsPublicKey},
@@ -37,10 +35,10 @@ pub struct RadrootsOperationalListingTradeProjection {
     pub description: String,
     pub product_type: String,
     pub primary_bin_id: String,
-    pub bin_quantity: RadrootsCoreQuantity,
-    pub unit: RadrootsCoreUnit,
-    pub unit_price: RadrootsCoreMoney,
-    pub inventory_available: RadrootsCoreDecimal,
+    pub bin_quantity: Quantity,
+    pub unit: Unit,
+    pub unit_price: Money,
+    pub inventory_available: Decimal,
     pub availability: RadrootsOperationalListingAvailability,
     pub location: RadrootsOperationalListingPublicLocation,
     pub delivery_method: RadrootsOperationalListingDeliveryMethod,
@@ -239,10 +237,7 @@ mod tests {
         validate_operational_listing_model,
     };
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         farm::RadrootsFarmRef,
@@ -302,19 +297,10 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1000u32),
-                    RadrootsCoreUnit::MassG,
-                ),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice {
-                    amount: RadrootsCoreMoney::new(
-                        RadrootsCoreDecimal::from(20u32),
-                        RadrootsCoreCurrency::USD,
-                    ),
-                    quantity: RadrootsCoreQuantity::new(
-                        RadrootsCoreDecimal::from(1u32),
-                        RadrootsCoreUnit::MassG,
-                    ),
+                quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+                price_per_canonical_unit: QuantityPrice {
+                    amount: Money::new(Decimal::from(20u32), Currency::USD),
+                    quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
                 },
                 display_amount: None,
                 display_unit: None,
@@ -325,7 +311,7 @@ mod tests {
             resource_area: None,
             plot: None,
             discounts: None,
-            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            inventory_available: Some(Decimal::from(5u32)),
             availability: Some(RadrootsOperationalListingAvailability::Status {
                 status:
                     radroots_event::operational_listing::RadrootsOperationalListingStatus::Active,
@@ -624,7 +610,7 @@ mod tests {
             OperationalListingValidationError::InvalidBin,
         );
         assert_secondary_bin_model_error(
-            |bin| bin.quantity.unit = RadrootsCoreUnit::MassKg,
+            |bin| bin.quantity.unit = Unit::MassKg,
             OperationalListingValidationError::InvalidBin,
         );
     }
@@ -633,13 +619,13 @@ mod tests {
     fn model_validation_rejects_invalid_secondary_bin_prices() {
         assert_secondary_bin_model_error(
             |bin| {
-                bin.price_per_canonical_unit.quantity.amount = RadrootsCoreDecimal::from(2u32);
+                bin.price_per_canonical_unit.quantity.amount = Decimal::from(2u32);
             },
             OperationalListingValidationError::InvalidPrice,
         );
         assert_secondary_bin_model_error(
             |bin| {
-                bin.price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::MassKg;
+                bin.price_per_canonical_unit.quantity.unit = Unit::MassKg;
             },
             OperationalListingValidationError::InvalidPrice,
         );
@@ -652,7 +638,7 @@ mod tests {
         );
         assert_secondary_bin_model_error(
             |bin| {
-                bin.price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
+                bin.price_per_canonical_unit.quantity.unit = Unit::Each;
             },
             OperationalListingValidationError::InvalidPrice,
         );
@@ -847,7 +833,7 @@ mod tests {
     #[test]
     fn validate_listing_rejects_non_canonical_quantity() {
         let mut listing = base_listing();
-        listing.bins[0].quantity.unit = RadrootsCoreUnit::MassKg;
+        listing.bins[0].quantity.unit = Unit::MassKg;
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
@@ -859,7 +845,7 @@ mod tests {
     #[test]
     fn validate_listing_rejects_non_canonical_price_quantity() {
         let mut listing = base_listing();
-        listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::MassKg;
+        listing.bins[0].price_per_canonical_unit.quantity.unit = Unit::MassKg;
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
@@ -878,7 +864,7 @@ mod tests {
     #[test]
     fn validate_listing_rejects_price_unit_mismatch() {
         let mut listing = base_listing();
-        listing.bins[0].price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
+        listing.bins[0].price_per_canonical_unit.quantity.unit = Unit::Each;
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {

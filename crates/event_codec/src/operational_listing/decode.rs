@@ -4,10 +4,8 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney,
-    RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::pricing::Discount;
+use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     RadrootsEventEnvelope,
     farm::RadrootsFarmRef,
@@ -115,9 +113,9 @@ struct OperationalListingLocationDraft {
 fn parse_decimal(
     value: &str,
     field: &'static str,
-) -> Result<RadrootsCoreDecimal, OperationalListingDecodeError> {
+) -> Result<Decimal, OperationalListingDecodeError> {
     value
-        .parse::<RadrootsCoreDecimal>()
+        .parse::<Decimal>()
         .map_err(|_| OperationalListingDecodeError::InvalidNumber(field))
 }
 
@@ -160,18 +158,15 @@ fn reject_private_listing_location_content(
 fn parse_currency(
     value: &str,
     field: &'static str,
-) -> Result<RadrootsCoreCurrency, OperationalListingDecodeError> {
+) -> Result<Currency, OperationalListingDecodeError> {
     let upper = value.trim().to_ascii_uppercase();
-    RadrootsCoreCurrency::from_str_upper(&upper)
+    Currency::from_str_upper(&upper)
         .map_err(|_| OperationalListingDecodeError::InvalidCurrency(field))
 }
 
-fn parse_unit(
-    value: &str,
-    field: &'static str,
-) -> Result<RadrootsCoreUnit, OperationalListingDecodeError> {
+fn parse_unit(value: &str, field: &'static str) -> Result<Unit, OperationalListingDecodeError> {
     value
-        .parse::<RadrootsCoreUnit>()
+        .parse::<Unit>()
         .map_err(|_| OperationalListingDecodeError::InvalidUnit(field))
 }
 
@@ -391,9 +386,9 @@ fn decode_operational_listing_from_event_parts(
     let mut primary_bin_id: Option<String> = None;
     let mut bin_drafts: Vec<BinDraft> = Vec::new();
     let mut bin_order = 0usize;
-    let mut discounts: Vec<RadrootsCoreDiscount> = Vec::new();
+    let mut discounts: Vec<Discount> = Vec::new();
     let mut location: Option<OperationalListingLocationDraft> = None;
-    let mut inventory_available: Option<RadrootsCoreDecimal> = None;
+    let mut inventory_available: Option<Decimal> = None;
     let mut availability_status: Option<RadrootsOperationalListingStatus> = None;
     let mut availability_start: Option<u64> = None;
     let mut availability_end: Option<u64> = None;
@@ -477,7 +472,7 @@ fn decode_operational_listing_from_event_parts(
                 if bin.quantity.is_some() {
                     return Err(OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_BIN));
                 }
-                bin.quantity = Some(RadrootsCoreQuantity::new(amount, unit));
+                bin.quantity = Some(Quantity::new(amount, unit));
 
                 match tag.as_slice() {
                     [_, _, _, _, display_amount_raw, display_unit_raw]
@@ -509,9 +504,9 @@ fn decode_operational_listing_from_event_parts(
                 let currency = parse_currency(&tag[3], TAG_RADROOTS_PRICE)?;
                 let per_amount = parse_decimal(&tag[4], TAG_RADROOTS_PRICE)?;
                 let per_unit = parse_unit(&tag[5], TAG_RADROOTS_PRICE)?;
-                let price_per_canonical_unit = RadrootsCoreQuantityPrice::new(
-                    RadrootsCoreMoney::new(amount, currency),
-                    RadrootsCoreQuantity::new(per_amount, per_unit),
+                let price_per_canonical_unit = QuantityPrice::new(
+                    Money::new(amount, currency),
+                    Quantity::new(per_amount, per_unit),
                 );
                 if !price_per_canonical_unit.is_price_per_canonical_unit() {
                     return Err(OperationalListingDecodeError::InvalidTag(
@@ -535,7 +530,7 @@ fn decode_operational_listing_from_event_parts(
                     [_, _, _, _, _, _, display_price_raw, display_unit_raw] => {
                         let display_price = parse_decimal(display_price_raw, TAG_RADROOTS_PRICE)?;
                         let display_unit = parse_unit(display_unit_raw, TAG_RADROOTS_PRICE)?;
-                        bin.display_price = Some(RadrootsCoreMoney::new(display_price, currency));
+                        bin.display_price = Some(Money::new(display_price, currency));
                         bin.display_price_unit = Some(display_unit);
                     }
                     _ => {}
@@ -808,7 +803,7 @@ fn parse_image_size(value: &str) -> Option<RadrootsOperationalListingImageSize> 
     Some(RadrootsOperationalListingImageSize { w, h })
 }
 
-fn parse_discount(payload: &str) -> Result<RadrootsCoreDiscount, OperationalListingDecodeError> {
+fn parse_discount(payload: &str) -> Result<Discount, OperationalListingDecodeError> {
     #[cfg(feature = "serde_json")]
     {
         serde_json::from_str(payload)
@@ -825,13 +820,13 @@ fn parse_discount(payload: &str) -> Result<RadrootsCoreDiscount, OperationalList
 struct BinDraft {
     bin_id: String,
     order_index: usize,
-    quantity: Option<RadrootsCoreQuantity>,
-    display_amount: Option<RadrootsCoreDecimal>,
-    display_unit: Option<RadrootsCoreUnit>,
+    quantity: Option<Quantity>,
+    display_amount: Option<Decimal>,
+    display_unit: Option<Unit>,
     display_label: Option<String>,
-    price_per_canonical_unit: Option<RadrootsCoreQuantityPrice>,
-    display_price: Option<RadrootsCoreMoney>,
-    display_price_unit: Option<RadrootsCoreUnit>,
+    price_per_canonical_unit: Option<QuantityPrice>,
+    display_price: Option<Money>,
+    display_price_unit: Option<Unit>,
 }
 
 fn upsert_bin<'a>(

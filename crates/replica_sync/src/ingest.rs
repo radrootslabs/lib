@@ -11,7 +11,7 @@ use base64::Engine;
 #[cfg(feature = "std")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-use radroots_core::RadrootsCoreDecimal;
+use radroots_core::Decimal;
 #[cfg(test)]
 use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_event::contract::RadrootsEventClass;
@@ -770,10 +770,7 @@ fn primary_listing_bin(
         })
 }
 
-fn decimal_to_i64(
-    value: &RadrootsCoreDecimal,
-    field: &str,
-) -> Result<i64, RadrootsReplicaEventsError> {
+fn decimal_to_i64(value: &Decimal, field: &str) -> Result<i64, RadrootsReplicaEventsError> {
     let value = decimal_to_u64(value, field)?;
     match i64::try_from(value) {
         Ok(value) => Ok(value),
@@ -783,10 +780,7 @@ fn decimal_to_i64(
     }
 }
 
-fn decimal_to_f64(
-    value: &RadrootsCoreDecimal,
-    field: &str,
-) -> Result<f64, RadrootsReplicaEventsError> {
+fn decimal_to_f64(value: &Decimal, field: &str) -> Result<f64, RadrootsReplicaEventsError> {
     match value.to_f64_lossy() {
         Some(value) => Ok(value),
         None => Err(RadrootsReplicaEventsError::InvalidData(format!(
@@ -795,10 +789,7 @@ fn decimal_to_f64(
     }
 }
 
-fn decimal_to_u64(
-    value: &RadrootsCoreDecimal,
-    field: &str,
-) -> Result<u64, RadrootsReplicaEventsError> {
+fn decimal_to_u64(value: &Decimal, field: &str) -> Result<u64, RadrootsReplicaEventsError> {
     match value.to_u64_exact() {
         Some(value) => Ok(value),
         None => Err(RadrootsReplicaEventsError::InvalidData(format!(
@@ -1631,10 +1622,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
-        RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
     use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
     use radroots_event::kinds::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
@@ -2129,11 +2117,11 @@ mod tests {
         )
     }
 
-    fn listing_decimal(raw: &str) -> RadrootsCoreDecimal {
+    fn listing_decimal(raw: &str) -> Decimal {
         raw.parse().expect("decimal")
     }
 
-    fn listing_currency() -> RadrootsCoreCurrency {
+    fn listing_currency() -> Currency {
         "USD".parse().expect("currency")
     }
 
@@ -2159,11 +2147,10 @@ mod tests {
             primary_bin_id: "bin-a".parse().expect("primary bin id"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: "bin-a".parse().expect("bin id"),
-                quantity: RadrootsCoreQuantity::new(listing_decimal("12"), RadrootsCoreUnit::Each)
-                    .with_label("unit label"),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
-                    RadrootsCoreMoney::new(listing_decimal("6"), listing_currency()),
-                    RadrootsCoreQuantity::new(listing_decimal("1"), RadrootsCoreUnit::Each),
+                quantity: Quantity::new(listing_decimal("12"), Unit::Each).with_label("unit label"),
+                price_per_canonical_unit: QuantityPrice::new(
+                    Money::new(listing_decimal("6"), listing_currency()),
+                    Quantity::new(listing_decimal("1"), Unit::Each),
                 ),
                 display_amount: None,
                 display_unit: None,

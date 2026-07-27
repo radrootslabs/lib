@@ -350,9 +350,7 @@ mod tests {
         order_cancellation_event_build, order_decision_event_build, order_request_event_build,
     };
     use crate::order::tags::TAG_LISTING_EVENT;
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Unit};
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr,
         ids::{
@@ -462,12 +460,12 @@ mod tests {
         }
     }
 
-    fn decimal(raw: &str) -> RadrootsCoreDecimal {
+    fn decimal(raw: &str) -> Decimal {
         raw.parse().unwrap()
     }
 
-    fn usd(raw: &str) -> RadrootsCoreMoney {
-        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
+    fn usd(raw: &str) -> Money {
+        Money::new(decimal(raw), Currency::USD)
     }
 
     fn request_economics() -> RadrootsOrderEconomics {
@@ -475,14 +473,14 @@ mod tests {
             quote_id: quote_id("quote-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
-            currency: RadrootsCoreCurrency::USD,
+            currency: Currency::USD,
             items: vec![RadrootsOrderEconomicItem {
                 bin_id: bin_id("lb"),
                 bin_count: 3,
                 quantity_amount: decimal("1"),
-                quantity_unit: RadrootsCoreUnit::Each,
+                quantity_unit: Unit::Each,
                 unit_price_amount: decimal("5"),
-                unit_price_currency: RadrootsCoreCurrency::USD,
+                unit_price_currency: Currency::USD,
                 line_subtotal: usd("15"),
             }],
             discounts: Vec::<RadrootsOrderEconomicLine>::new(),

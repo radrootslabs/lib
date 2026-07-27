@@ -169,10 +169,7 @@ pub fn build_operational_listing_mutation_draft(
 
 #[cfg(test)]
 mod tests {
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::validate_event_contract_shape,
         farm::RadrootsFarmRef,
@@ -236,19 +233,10 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1000u32),
-                    RadrootsCoreUnit::MassG,
-                ),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice {
-                    amount: RadrootsCoreMoney::new(
-                        RadrootsCoreDecimal::from(20u32),
-                        RadrootsCoreCurrency::USD,
-                    ),
-                    quantity: RadrootsCoreQuantity::new(
-                        RadrootsCoreDecimal::from(1u32),
-                        RadrootsCoreUnit::MassG,
-                    ),
+                quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+                price_per_canonical_unit: QuantityPrice {
+                    amount: Money::new(Decimal::from(20u32), Currency::USD),
+                    quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
                 },
                 display_amount: None,
                 display_unit: None,
@@ -259,7 +247,7 @@ mod tests {
             resource_area: None,
             plot: None,
             discounts: None,
-            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            inventory_available: Some(Decimal::from(5u32)),
             availability: Some(RadrootsOperationalListingAvailability::Status {
                 status: RadrootsOperationalListingStatus::Active,
             }),

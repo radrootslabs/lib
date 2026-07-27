@@ -6,7 +6,7 @@ mod test_fixtures;
 mod common;
 
 use common::{EVENT_ID, EVENT_SIG};
-use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
+use radroots_core::{Decimal, Quantity, Unit};
 use radroots_event::coop::RadrootsCoop;
 use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
@@ -176,10 +176,7 @@ fn sample_resource_cap(d_tag: &str) -> RadrootsResourceHarvestCap {
         },
         start: 100,
         end: 200,
-        cap_quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from(1000u32),
-            RadrootsCoreUnit::MassG,
-        ),
+        cap_quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
         display_amount: None,
         display_unit: None,
         display_label: None,

@@ -641,7 +641,7 @@ fn transport_failure_target_receipts(
         .iter()
         .cloned()
         .map(|target| {
-            RadrootsTransportTargetReceipt::skipped(
+            RadrootsTransportTargetReceipt::attempted(
                 target,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::ConnectionFailed)
                     .with_message(message.to_owned()),

@@ -1382,7 +1382,8 @@ async fn nostr_transport_facade_preserves_adapter_failure_and_omission_evidence(
         .expect("failure receipts");
     assert_eq!(failed.target_receipts().len(), 2);
     assert!(failed.target_receipts().iter().all(|receipt| {
-        receipt.outcome.kind == RadrootsTransportOutcomeKind::ConnectionFailed
+        receipt.attempted
+            && receipt.outcome.kind == RadrootsTransportOutcomeKind::ConnectionFailed
             && receipt.status == RadrootsTransportDeliveryTargetStatus::FailedRetryable
     }));
 

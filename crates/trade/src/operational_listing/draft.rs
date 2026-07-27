@@ -194,10 +194,7 @@ pub fn canonicalize_operational_listing_edit(
 #[cfg(test)]
 mod tests {
     use radroots_authority::RadrootsActorContext;
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::RadrootsActorRole,
         farm::RadrootsFarmRef,
@@ -253,19 +250,10 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1000u32),
-                    RadrootsCoreUnit::MassG,
-                ),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice {
-                    amount: RadrootsCoreMoney::new(
-                        RadrootsCoreDecimal::from(20u32),
-                        RadrootsCoreCurrency::USD,
-                    ),
-                    quantity: RadrootsCoreQuantity::new(
-                        RadrootsCoreDecimal::from(1u32),
-                        RadrootsCoreUnit::MassG,
-                    ),
+                quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
+                price_per_canonical_unit: QuantityPrice {
+                    amount: Money::new(Decimal::from(20u32), Currency::USD),
+                    quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
                 },
                 display_amount: None,
                 display_unit: None,
@@ -276,7 +264,7 @@ mod tests {
             resource_area: None,
             plot: None,
             discounts: None,
-            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            inventory_available: Some(Decimal::from(5u32)),
             availability: Some(RadrootsOperationalListingAvailability::Status {
                 status: RadrootsOperationalListingStatus::Active,
             }),
@@ -560,7 +548,7 @@ mod tests {
         let mut mismatched_unit_listing = listing();
         let mut secondary_bin = mismatched_unit_listing.bins[0].clone();
         secondary_bin.bin_id = bin_id("bin-2");
-        secondary_bin.price_per_canonical_unit.quantity.unit = RadrootsCoreUnit::Each;
+        secondary_bin.price_per_canonical_unit.quantity.unit = Unit::Each;
         mismatched_unit_listing.bins.push(secondary_bin);
 
         let error = RadrootsOperationalListingCanonicalEdit::new(

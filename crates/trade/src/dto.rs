@@ -89,28 +89,28 @@ impl Dto for RadrootsOperationalListingTradeProjection {
         .with_field(field(
             "bin_quantity",
             "bin_quantity",
-            ts_ref("RadrootsCoreQuantity"),
+            ts_ref("Quantity"),
             "crates/trade/src/operational_listing/validation.rs",
             33,
         ))
         .with_field(field(
             "unit",
             "unit",
-            ts_ref("RadrootsCoreUnit"),
+            ts_ref("Unit"),
             "crates/trade/src/operational_listing/validation.rs",
             34,
         ))
         .with_field(field(
             "unit_price",
             "unit_price",
-            ts_ref("RadrootsCoreMoney"),
+            ts_ref("Money"),
             "crates/trade/src/operational_listing/validation.rs",
             35,
         ))
         .with_field(field(
             "inventory_available",
             "inventory_available",
-            ts_ref("RadrootsCoreDecimal"),
+            ts_ref("Decimal"),
             "crates/trade/src/operational_listing/validation.rs",
             36,
         ))
@@ -182,28 +182,28 @@ fn operational_listing_total_like(
         .with_field(field(
             "price_amount",
             "price_amount",
-            ts_ref("RadrootsCoreMoney"),
+            ts_ref("Money"),
             file,
             line + 1,
         ))
         .with_field(field(
             "price_currency",
             "price_currency",
-            ts_ref("RadrootsCoreCurrency"),
+            ts_ref("Currency"),
             file,
             line + 2,
         ))
         .with_field(field(
             "quantity_amount",
             "quantity_amount",
-            ts_ref("RadrootsCoreDecimal"),
+            ts_ref("Decimal"),
             file,
             line + 3,
         ))
         .with_field(field(
             "quantity_unit",
             "quantity_unit",
-            ts_ref("RadrootsCoreUnit"),
+            ts_ref("Unit"),
             file,
             line + 4,
         ));
@@ -285,7 +285,7 @@ mod tests {
 
         assert_eq!(
             typescript_override_target(field_ty(listing, "inventory_available")),
-            Some("RadrootsCoreDecimal")
+            Some("Decimal")
         );
         assert_eq!(
             typescript_override_target(field_ty(listing, "listing")),
@@ -293,7 +293,7 @@ mod tests {
         );
         assert_eq!(
             typescript_override_target(field_ty(subtotal, "price_currency")),
-            Some("RadrootsCoreCurrency")
+            Some("Currency")
         );
     }
 
