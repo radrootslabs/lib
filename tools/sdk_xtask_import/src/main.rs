@@ -19,6 +19,7 @@ mod wasm_declarations;
 
 enum CommandAction<'a> {
     Architecture,
+    CheckDependencyBoundaries,
     GenerateAll,
     GenerateTs,
     GenerateWasm(&'a [String]),
@@ -39,6 +40,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
     let args = args.into_iter().collect::<Vec<_>>();
     match command_action(&args)? {
         CommandAction::Architecture => architecture::validate(&fs::workspace_root()?),
+        CommandAction::CheckDependencyBoundaries => {
+            architecture::validate_dependency_boundaries(&fs::workspace_root()?)
+        }
         CommandAction::GenerateAll => generate::generate_all(),
         CommandAction::GenerateTs => generate::generate_ts(),
         CommandAction::GenerateWasm(rest) => wasm::generate(rest),
@@ -52,6 +56,9 @@ fn run(args: impl IntoIterator<Item = String>) -> Result<(), String> {
 fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
     match args {
         [command] if command == "architecture" => Ok(CommandAction::Architecture),
+        [command] if command == "check-dependency-boundaries" => {
+            Ok(CommandAction::CheckDependencyBoundaries)
+        }
         [command] if command == "generate" => Ok(CommandAction::GenerateAll),
         [command, target] if command == "generate" && target == "ts" => {
             Ok(CommandAction::GenerateTs)
@@ -71,7 +78,7 @@ fn command_action(args: &[String]) -> Result<CommandAction<'_>, String> {
 }
 
 fn usage() -> String {
-    "usage: cargo xtask architecture | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
+    "usage: cargo xtask architecture | cargo xtask check-dependency-boundaries | cargo xtask generate | cargo xtask generate ts | cargo xtask generate wasm [--package <key>] | cargo xtask generate package-metadata | cargo xtask check | cargo xtask smoke knowledge-rust-local | cargo xtask coverage run"
         .to_owned()
 }
 
@@ -85,6 +92,15 @@ mod tests {
         assert!(matches!(
             command_action(&args).expect("action"),
             CommandAction::Architecture
+        ));
+    }
+
+    #[test]
+    fn accepts_dependency_boundary_check() {
+        let args = ["check-dependency-boundaries".to_owned()];
+        assert!(matches!(
+            command_action(&args).expect("action"),
+            CommandAction::CheckDependencyBoundaries
         ));
     }
 

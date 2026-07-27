@@ -1,0 +1,46 @@
+{
+  "packages": [
+    {
+      "id": "fixture#radroots-sync@0.1.0",
+      "name": "radroots-sync",
+      "dependencies": [
+        {
+          "name": "radroots-sdk",
+          "rename": "client_engine",
+          "kind": null,
+          "features": ["memory"],
+          "target": null,
+          "uses_default_features": false
+        }
+      ]
+    },
+    {
+      "id": "fixture#radroots-sdk@0.1.0",
+      "name": "radroots-sdk",
+      "dependencies": []
+    }
+  ],
+  "resolve": {
+    "nodes": [
+      {
+        "id": "fixture#radroots-sync@0.1.0",
+        "deps": [
+          {
+            "name": "client_engine",
+            "pkg": "fixture#radroots-sdk@0.1.0",
+            "dep_kinds": [
+              {
+                "kind": null,
+                "target": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "fixture#radroots-sdk@0.1.0",
+        "deps": []
+      }
+    ]
+  }
+}

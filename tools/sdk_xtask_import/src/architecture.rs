@@ -6,6 +6,8 @@ use std::{
 
 use serde::Deserialize;
 
+mod dependency_boundary;
+
 const DEVIATIONS_RELATIVE: &str = "docs/implementation/deviations.toml";
 const ARCHITECTURE_RELATIVE: &str = "docs/specs/radroots_crates_release_v1.toml";
 const ARCHITECTURE_ID: &str = "radroots.crates.release.v1";
@@ -151,6 +153,12 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     let architecture = toml::from_str::<ArchitectureIdentity>(&architecture_raw)
         .map_err(|error| format!("parse {}: {error}", architecture_path.display()))?;
 
+    let architecture_packages = architecture
+        .package
+        .iter()
+        .map(|package| package.name.clone())
+        .collect::<BTreeSet<_>>();
+    dependency_boundary::validate_policy_catalog(workspace_root, &architecture_packages)?;
     validate_workspace_toolchain(workspace_root, &architecture)?;
     validate_public_package_metadata(workspace_root, &architecture)?;
     validate_no_production_sibling_paths(workspace_root)?;
@@ -160,6 +168,11 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     let ledger_raw = fs::read_to_string(&ledger_path)
         .map_err(|error| format!("read {}: {error}", ledger_path.display()))?;
     validate_ledger(workspace_root, &architecture.spec_id, &ledger_raw)
+}
+
+pub fn validate_dependency_boundaries(workspace_root: &Path) -> Result<(), String> {
+    validate(workspace_root)?;
+    dependency_boundary::validate_resolved_boundaries(workspace_root)
 }
 
 fn validate_workspace_toolchain(
