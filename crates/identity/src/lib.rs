@@ -8,11 +8,17 @@
 //! ```compile_fail
 //! use radroots_identity::{storage, IdentityError};
 //! ```
+//!
+//! Secret-bearing and upstream Nostr event APIs are intentionally absent:
+//!
+//! ```compile_fail
+//! use radroots_identity::{NostrEvent, SecretKey};
+//! ```
 
 extern crate alloc;
 
 pub mod account;
-pub mod error;
+mod error;
 pub mod key;
 pub mod profile;
 pub mod username;

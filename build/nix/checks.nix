@@ -47,6 +47,33 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
+  identityConformance = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-identity-conformance";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo check -p radroots_identity --all-targets --no-default-features --locked
+        cargo check -p radroots_identity --all-targets --no-default-features --features std --locked
+        cargo check -p radroots_identity --all-targets --no-default-features --features serde --locked
+        cargo check -p radroots_identity --all-targets --locked
+        cargo check -p radroots_identity --all-targets --all-features --locked
+        cargo clippy -p radroots_identity --all-targets --no-default-features --locked -- -D warnings
+        cargo clippy -p radroots_identity --all-targets --no-default-features --features serde --locked -- -D warnings
+        cargo clippy -p radroots_identity --all-targets --all-features --locked -- -D warnings
+        cargo test -p radroots_identity --all-targets --no-default-features --locked
+        cargo test -p radroots_identity --all-targets --no-default-features --features std --locked
+        cargo test -p radroots_identity --all-targets --no-default-features --features serde --locked
+        cargo test -p radroots_identity --all-targets --all-features --locked
+        cargo check -p radroots_identity --no-default-features --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_identity --no-default-features --features serde --target wasm32-unknown-unknown --locked
+        RUSTDOCFLAGS="-D warnings" cargo doc -p radroots_identity --all-features --no-deps --locked
+        cargo test -p radroots_identity --all-features --doc --locked
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
   mkReplicaSyncLane =
     {
       pname,
@@ -84,6 +111,7 @@ in
   cargo-check = cargoCheck;
   cargo-test = cargoTest;
   core-conformance = coreConformance;
+  identity-conformance = identityConformance;
   replica-sync-default-check = replicaSyncDefaultCheck;
   replica-sync-default-test = replicaSyncDefaultTest;
   replica-sync-legacy-ingest-check = replicaSyncLegacyCheck;
