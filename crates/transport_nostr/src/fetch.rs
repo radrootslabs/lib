@@ -801,6 +801,21 @@ impl RadrootsRelayFetchEventReceipt {
     pub fn message(&self) -> Option<&str> {
         self.message.as_deref()
     }
+
+    fn is_fetch_accepted(&self) -> bool {
+        self.event_id.is_some()
+            && !self.inserted
+            && !self.duplicate
+            && !self.not_persisted
+            && !self.malformed
+            && !self.out_of_filter
+            && !self.skipped_over_limit
+            && self.verification == RadrootsRelayFetchEventVerification::Verified
+            && self.admission == RadrootsRelayFetchEventAdmission::NotEvaluated
+            && self.admission_code.is_none()
+            && self.valid_stream == RadrootsRelayFetchEventValidStream::NotEvaluated
+            && self.visibility == RadrootsRelayFetchEventVisibility::NotEvaluated
+    }
 }
 
 #[derive(Deserialize)]
@@ -1006,24 +1021,198 @@ fn invalid_fetch_receipt(
 
 #[derive(Clone, Debug)]
 pub struct RadrootsRelayFetchedEventsReceipt {
-    pub target_relays: Vec<String>,
-    pub connected_relays: Vec<String>,
-    pub failed_relays: Vec<RadrootsRelayFetchFailure>,
-    pub events: Vec<RadrootsRelayFetchedEvent>,
-    pub event_receipts: Vec<RadrootsRelayFetchEventReceipt>,
-    pub duplicate_count: usize,
-    pub verification_failed_count: usize,
-    pub malformed_count: usize,
-    pub out_of_filter_count: usize,
-    pub skipped_over_limit_count: usize,
-    pub eose_count: usize,
-    pub truncated_count: usize,
-    pub closed_count: usize,
-    pub notice_count: usize,
-    pub relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
+    target_relays: Vec<String>,
+    connected_relays: Vec<String>,
+    failed_relays: Vec<RadrootsRelayFetchFailure>,
+    events: Vec<RadrootsRelayFetchedEvent>,
+    event_receipts: Vec<RadrootsRelayFetchEventReceipt>,
+    duplicate_count: usize,
+    verification_failed_count: usize,
+    malformed_count: usize,
+    out_of_filter_count: usize,
+    skipped_over_limit_count: usize,
+    eose_count: usize,
+    truncated_count: usize,
+    closed_count: usize,
+    notice_count: usize,
+    relay_outcomes: Vec<RadrootsRelayFetchRelayOutcome>,
 }
 
 impl RadrootsRelayFetchedEventsReceipt {
+    fn checked(mut self) -> Result<Self, RadrootsRelayTransportError> {
+        self.target_relays = canonical_fetch_receipt_targets(self.target_relays)?;
+        if self.events.len() > RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX {
+            return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                field: "fetched_event_count",
+                max: RADROOTS_RELAY_FETCH_EVENT_LIMIT_MAX,
+                actual: self.events.len(),
+            });
+        }
+        let raw_receipt_count = self
+            .event_receipts
+            .len()
+            .checked_add(self.relay_outcomes.len())
+            .ok_or_else(|| {
+                invalid_fetch_receipt("raw_receipt_count", "raw receipt count overflowed")
+            })?;
+        if raw_receipt_count > RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX {
+            return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                field: "raw_receipt_count",
+                max: RADROOTS_RELAY_FETCH_RAW_EVENT_LIMIT_MAX,
+                actual: raw_receipt_count,
+            });
+        }
+
+        let mut aggregate_raw_json_bytes = 0usize;
+        let mut fetched_event_ids = Vec::with_capacity(self.events.len());
+        let mut seen_event_ids = BTreeSet::new();
+        for event in &self.events {
+            ensure_fetch_receipt_relay_requested(&self.target_relays, event.relay_url())?;
+            aggregate_raw_json_bytes = aggregate_raw_json_bytes
+                .checked_add(event.raw_json().len())
+                .ok_or_else(|| {
+                    invalid_fetch_receipt("aggregate_raw_json_bytes", "byte count overflowed")
+                })?;
+            if aggregate_raw_json_bytes > RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX {
+                return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                    field: "aggregate_raw_json_bytes",
+                    max: RADROOTS_RELAY_FETCH_RAW_JSON_BYTE_LIMIT_MAX,
+                    actual: aggregate_raw_json_bytes,
+                });
+            }
+            let event_id = event.event().id.to_hex();
+            if !seen_event_ids.insert(event_id.clone()) {
+                return Err(invalid_fetch_receipt(
+                    "events",
+                    format!("duplicate fetched event id `{event_id}`"),
+                ));
+            }
+            fetched_event_ids.push(event_id);
+        }
+        for event_receipt in &self.event_receipts {
+            event_receipt.clone().checked()?;
+            ensure_fetch_receipt_relay_requested(&self.target_relays, event_receipt.relay_url())?;
+        }
+        let accepted_receipt_ids = self
+            .event_receipts
+            .iter()
+            .filter(|receipt| receipt.is_fetch_accepted())
+            .filter_map(RadrootsRelayFetchEventReceipt::event_id)
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        if accepted_receipt_ids != fetched_event_ids {
+            return Err(invalid_fetch_receipt(
+                "events",
+                "accepted event receipts do not bind the exact fetched event sequence",
+            ));
+        }
+
+        validate_fetch_relay_outcomes(&self.target_relays, &self.relay_outcomes)?;
+        validate_fetch_diagnostic_budget(&self.event_receipts, &self.relay_outcomes)?;
+        let expected_connected = self
+            .relay_outcomes
+            .iter()
+            .filter(|outcome| outcome.kind() == RadrootsRelayFetchOutcomeKind::Eose)
+            .map(|outcome| outcome.relay_url().to_owned())
+            .collect::<Vec<_>>();
+        if self.connected_relays != expected_connected {
+            return Err(invalid_fetch_receipt(
+                "connected_relays",
+                "connected relays must exactly match EOSE outcomes in wire order",
+            ));
+        }
+        let expected_failed = self
+            .relay_outcomes
+            .iter()
+            .filter(|outcome| outcome.kind() == RadrootsRelayFetchOutcomeKind::Closed)
+            .map(|outcome| RadrootsRelayFetchFailure {
+                relay_url: outcome.relay_url().to_owned(),
+                reason: outcome.message().unwrap_or_default().to_owned(),
+            })
+            .collect::<Vec<_>>();
+        if self.failed_relays != expected_failed {
+            return Err(invalid_fetch_receipt(
+                "failed_relays",
+                "failed relays must exactly match closed outcomes in wire order",
+            ));
+        }
+
+        ensure_fetch_receipt_count(
+            "duplicate_count",
+            self.duplicate_count,
+            self.event_receipts
+                .iter()
+                .filter(|receipt| receipt.was_duplicate())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "verification_failed_count",
+            self.verification_failed_count,
+            self.event_receipts
+                .iter()
+                .filter(|receipt| {
+                    receipt.verification() == RadrootsRelayFetchEventVerification::Failed
+                })
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "malformed_count",
+            self.malformed_count,
+            self.event_receipts
+                .iter()
+                .filter(|receipt| receipt.is_malformed())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "out_of_filter_count",
+            self.out_of_filter_count,
+            self.event_receipts
+                .iter()
+                .filter(|receipt| receipt.is_out_of_filter())
+                .count(),
+        )?;
+        ensure_fetch_receipt_count(
+            "skipped_over_limit_count",
+            self.skipped_over_limit_count,
+            self.event_receipts
+                .iter()
+                .filter(|receipt| receipt.was_skipped_over_limit())
+                .count(),
+        )?;
+        for (field, supplied, kind) in [
+            (
+                "eose_count",
+                self.eose_count,
+                RadrootsRelayFetchOutcomeKind::Eose,
+            ),
+            (
+                "truncated_count",
+                self.truncated_count,
+                RadrootsRelayFetchOutcomeKind::Truncated,
+            ),
+            (
+                "closed_count",
+                self.closed_count,
+                RadrootsRelayFetchOutcomeKind::Closed,
+            ),
+            (
+                "notice_count",
+                self.notice_count,
+                RadrootsRelayFetchOutcomeKind::Notice,
+            ),
+        ] {
+            ensure_fetch_receipt_count(
+                field,
+                supplied,
+                self.relay_outcomes
+                    .iter()
+                    .filter(|outcome| outcome.kind() == kind)
+                    .count(),
+            )?;
+        }
+        Ok(self)
+    }
+
     pub fn target_relays(&self) -> &[String] {
         &self.target_relays
     }
@@ -1378,7 +1567,7 @@ impl RadrootsRelayProcessedFetch {
                 reason: outcome.message.clone().unwrap_or_default(),
             })
             .collect();
-        Ok(RadrootsRelayFetchedEventsReceipt {
+        RadrootsRelayFetchedEventsReceipt {
             target_relays: self.target_relays,
             connected_relays,
             failed_relays,
@@ -1394,7 +1583,8 @@ impl RadrootsRelayProcessedFetch {
             closed_count: self.closed_count,
             notice_count: self.notice_count,
             relay_outcomes: self.relay_outcomes,
-        })
+        }
+        .checked()
     }
 }
 
