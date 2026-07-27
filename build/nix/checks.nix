@@ -40,6 +40,18 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
+  nostrBareCheck = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-nostr-bare-check";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo check -p radroots_nostr --lib --no-default-features
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
   outboxFeatureMatrixCheck = common.craneLib.mkCargoDerivation (
     common.commonCraneArgs
     // {
@@ -107,6 +119,7 @@ in
   cargo-check = cargoCheck;
   cargo-test = cargoTest;
   blossom-no-default-check = blossomNoDefaultCheck;
+  nostr-bare-check = nostrBareCheck;
   blossom-raster-decode-test = blossomRasterDecodeTest;
   outbox-feature-matrix = outboxFeatureMatrixCheck;
   blossom-decoder-fuzz-smoke = common.mkRepoCheck {

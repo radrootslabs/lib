@@ -112,9 +112,9 @@
     },
     {
       "file": {
-        "byte_length": 494829,
+        "byte_length": 494914,
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "487946ba039f8d72b5ed1d372c42d49337d009d161aa31495fc7b232da4c03e8"
+        "sha256": "d01a9e90f179f6bd4bd01edfb0e8fc87e9a92fa555f9ea53364518cac286863a"
       },
       "role": "contract_dispatch"
     },

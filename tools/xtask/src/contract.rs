@@ -7,6 +7,7 @@ mod blossom_publication_readiness;
 mod blossom_raster_decoder_security;
 mod comment_authority;
 mod deletion_authority;
+mod feature_support;
 mod food_availability_projection;
 mod nip09_reconciliation;
 mod outbox_migration;
@@ -87,6 +88,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), String> {
+    feature_support::validate_feature_support(workspace_root)?;
     validate_event_contract_registry_v7_inventory(workspace_root)?;
     validate_nip09_reconciliation_manifest(workspace_root)?;
     validate_food_availability_projection_manifest(workspace_root)?;
