@@ -337,13 +337,14 @@ pub(super) fn validate(
                     .as_ref()
                     .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
                 let (payload, entropy_start) = strict_segment(bytes, after_marker)?;
-                let scan = parse_scan(
+                let scan_result = parse_scan(
                     payload,
                     current_frame,
                     &seen_components,
                     &dc_tables,
                     &ac_tables,
-                )?;
+                );
+                let scan = scan_result?;
                 position = validate_scan_entropy(
                     bytes,
                     entropy_start,

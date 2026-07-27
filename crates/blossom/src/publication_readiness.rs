@@ -595,11 +595,10 @@ fn decode_complete_webp(
     let dimensions = RadrootsBlossomRasterDimensions::new(width, height)?;
     require_matching_dimensions(dimensions, container_dimensions)?;
 
-    let decoded_bytes = bounded_decoded_byte_length(
-        u64::from(width)
-            .checked_mul(u64::from(height))
-            .and_then(|pixels| pixels.checked_mul(4)),
-    )?;
+    let decoded_length = u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|pixels| pixels.checked_mul(4));
+    let decoded_bytes = bounded_decoded_byte_length(decoded_length)?;
     let stride = width
         .checked_mul(4)
         .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
@@ -1613,6 +1612,42 @@ mod tests {
             evidence.evidence_digest().as_sha256().to_string(),
             evidence.evidence_digest().to_string()
         );
+    }
+
+    #[cfg(all(feature = "raster-decode", feature = "serde"))]
+    #[test]
+    fn readiness_evidence_serializer_rejects_oversized_internal_state() {
+        let expected = verified(PNG);
+        let (upload, head, get) = observations(PNG);
+        let mut evidence = verify_publication_readiness(
+            &expected,
+            PNG,
+            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            &upload,
+            &head,
+            &get,
+        )
+        .unwrap();
+        let oversized_url = format!(
+            "https://cdn.example/{}.{}",
+            evidence.sha256(),
+            "p".repeat(RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES),
+        );
+        evidence.url = RadrootsBlossomBlobUrl::parse(&oversized_url)
+            .unwrap()
+            .approve()
+            .unwrap();
+
+        match evidence.to_canonical_json().unwrap_err() {
+            RadrootsBlossomError::PublicationReadinessEvidenceTooLarge { max, actual } => {
+                assert_eq!(
+                    max,
+                    RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES
+                );
+                assert!(actual > max);
+            }
+            error => panic!("unexpected evidence serialization error: {error}"),
+        }
     }
 
     #[test]
