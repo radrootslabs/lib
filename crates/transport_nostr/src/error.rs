@@ -62,6 +62,9 @@ pub enum RadrootsRelayTransportError {
     #[error("Relay publish receipt contains invalid relay URL `{url}`: {reason}")]
     InvalidPublishReceiptRelayUrl { url: String, reason: String },
 
+    #[error("Relay publish receipt has invalid {field}: {reason}")]
+    InvalidPublishReceipt { field: &'static str, reason: String },
+
     #[error("Relay publish receipt came from unrequested relay URL `{url}`")]
     UnexpectedPublishReceiptRelayUrl { url: String },
 

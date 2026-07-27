@@ -1347,11 +1347,93 @@ async fn mock_publish_preserves_exact_raw_json_and_counts_outcomes() {
         adapter.captured_raw_events(),
         vec![signed.raw_json().to_owned()]
     );
-    assert_eq!(receipt.attempted_count, 3);
-    assert_eq!(receipt.accepted_count, 2);
-    assert_eq!(receipt.retryable_count, 1);
-    assert!(receipt.quorum_met);
+    assert_eq!(receipt.attempted_count(), 3);
+    assert_eq!(receipt.accepted_count(), 2);
+    assert_eq!(receipt.retryable_count(), 1);
+    assert!(receipt.quorum_met());
     serde_json::to_string(&receipt).expect("receipt json");
+}
+
+#[tokio::test]
+async fn aggregate_publish_receipts_enforce_counts_cardinality_and_strict_wire() {
+    let signed = signed_post("maximum aggregate publish receipt");
+    let relay_urls = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| format!("wss://relay-{index}.example.com"))
+        .collect::<Vec<_>>();
+    let targets = RadrootsRelayTargetSet::new(
+        relay_urls.iter().map(String::as_str),
+        RadrootsRelayUrlPolicy::Public,
+    )
+    .expect("maximum relay target set");
+    let receipt = publish_signed_event(
+        &RadrootsMockRelayPublishAdapter::new(),
+        RadrootsRelayPublishRequest::new(verified_signed_event(signed), targets, 1_001)
+            .expect("maximum publish request"),
+    )
+    .await
+    .expect("maximum aggregate publish receipt");
+    assert_eq!(receipt.relays().len(), RADROOTS_TRANSPORT_TARGET_MAX_COUNT);
+    assert_eq!(
+        receipt.attempted_count(),
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+    );
+
+    let wire = serde_json::to_value(&receipt).expect("aggregate publish receipt JSON");
+    let decoded = serde_json::from_value::<radroots_transport_nostr::RadrootsRelayPublishReceipt>(
+        wire.clone(),
+    )
+    .expect("strict aggregate publish receipt reload");
+    assert_eq!(decoded, receipt);
+
+    let mut wrong_count = wire.clone();
+    wrong_count["attempted_count"] = serde_json::json!(RADROOTS_TRANSPORT_TARGET_MAX_COUNT - 1);
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayPublishReceipt>(
+            wrong_count
+        )
+        .is_err()
+    );
+
+    let mut duplicate = wire.clone();
+    duplicate["relays"][1] = duplicate["relays"][0].clone();
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayPublishReceipt>(duplicate)
+            .is_err()
+    );
+
+    let mut empty = wire.clone();
+    empty["relays"] = serde_json::json!([]);
+    empty["attempted_count"] = serde_json::json!(0);
+    empty["accepted_count"] = serde_json::json!(0);
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayPublishReceipt>(empty)
+            .is_err()
+    );
+
+    let relay_template = wire["relays"][0].clone();
+    let mut one_over = wire.clone();
+    one_over["relays"] = serde_json::Value::Array(
+        (0..=RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+            .map(|index| {
+                let mut relay = relay_template.clone();
+                relay["relay_url"] = serde_json::json!(format!("wss://wire-{index}.example.com"));
+                relay
+            })
+            .collect(),
+    );
+    one_over["attempted_count"] = serde_json::json!(RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1);
+    one_over["accepted_count"] = serde_json::json!(RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1);
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayPublishReceipt>(one_over)
+            .is_err()
+    );
+
+    let mut unknown = wire;
+    unknown["extra"] = serde_json::json!(true);
+    assert!(
+        serde_json::from_value::<radroots_transport_nostr::RadrootsRelayPublishReceipt>(unknown)
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -1715,7 +1797,7 @@ async fn nostr_transport_facade_matches_canonical_equivalent_relay_receipts() {
     )
     .await
     .expect("relay publish");
-    assert!(relay_receipt.quorum_met);
+    assert!(relay_receipt.quorum_met());
 }
 
 #[tokio::test]
@@ -1772,13 +1854,13 @@ async fn publish_receipts_track_terminal_skipped_and_adapter_errors() {
     .await
     .expect("publish");
 
-    assert_eq!(receipt.event_id, signed.id_str());
-    assert_eq!(receipt.attempted_count, 2);
-    assert_eq!(receipt.accepted_count, 1);
-    assert_eq!(receipt.retryable_count, 0);
-    assert_eq!(receipt.terminal_count, 1);
-    assert_eq!(receipt.quorum, 2);
-    assert!(!receipt.quorum_met);
+    assert_eq!(receipt.event_id(), signed.id_str());
+    assert_eq!(receipt.attempted_count(), 2);
+    assert_eq!(receipt.accepted_count(), 1);
+    assert_eq!(receipt.retryable_count(), 0);
+    assert_eq!(receipt.terminal_count(), 1);
+    assert_eq!(receipt.quorum(), 2);
+    assert!(!receipt.quorum_met());
 
     let skipped = bounded_publish_relay_receipt(RadrootsRelayPublishRelayReceipt::skipped(
         RELAY_TERTIARY_WSS,
@@ -1837,9 +1919,9 @@ async fn publish_required_target_policy_uses_relay_fingerprints() {
     .await
     .expect("publish");
 
-    assert_eq!(receipt.accepted_count, 1);
-    assert_eq!(receipt.quorum, 1);
-    assert!(!receipt.quorum_met);
+    assert_eq!(receipt.accepted_count(), 1);
+    assert_eq!(receipt.quorum(), 1);
+    assert!(!receipt.quorum_met());
 }
 
 #[tokio::test]
@@ -1864,15 +1946,15 @@ async fn publish_all_policy_uses_requested_target_count() {
     .await
     .expect("publish");
 
-    assert_eq!(receipt.attempted_count, 1);
-    assert_eq!(receipt.accepted_count, 1);
-    assert_eq!(receipt.retryable_count, 1);
-    assert_eq!(receipt.quorum, 2);
-    assert!(!receipt.quorum_met);
-    assert_eq!(receipt.relays.len(), 2);
-    assert!(!receipt.relays[1].was_attempted());
+    assert_eq!(receipt.attempted_count(), 1);
+    assert_eq!(receipt.accepted_count(), 1);
+    assert_eq!(receipt.retryable_count(), 1);
+    assert_eq!(receipt.quorum(), 2);
+    assert!(!receipt.quorum_met());
+    assert_eq!(receipt.relays().len(), 2);
+    assert!(!receipt.relays()[1].was_attempted());
     assert_eq!(
-        receipt.relays[1].outcome().kind(),
+        receipt.relays()[1].outcome().kind(),
         RadrootsRelayOutcomeKind::Unknown
     );
 
@@ -1884,8 +1966,8 @@ async fn publish_all_policy_uses_requested_target_count() {
     )
     .await
     .expect("no-wait publish");
-    assert_eq!(no_wait.quorum, 0);
-    assert!(no_wait.quorum_met);
+    assert_eq!(no_wait.quorum(), 0);
+    assert!(no_wait.quorum_met());
 }
 
 #[tokio::test]

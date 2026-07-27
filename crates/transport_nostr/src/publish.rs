@@ -7,6 +7,7 @@ use core::time::Duration;
 use futures::future::BoxFuture;
 use radroots_event::{
     draft::{RadrootsSignedEvent, RadrootsVerifiedSignedEvent},
+    ids::RadrootsEventId,
     wire::RadrootsNip01EventWire,
 };
 use radroots_transport::{
@@ -275,16 +276,245 @@ impl<'de> Deserialize<'de> for RadrootsRelayPublishRelayReceipt {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RadrootsRelayPublishReceipt {
-    pub event_id: String,
-    pub attempted_count: usize,
-    pub accepted_count: usize,
-    pub retryable_count: usize,
-    pub terminal_count: usize,
-    pub quorum: usize,
-    pub quorum_met: bool,
-    pub relays: Vec<RadrootsRelayPublishRelayReceipt>,
+    event_id: RadrootsEventId,
+    attempted_count: usize,
+    accepted_count: usize,
+    retryable_count: usize,
+    terminal_count: usize,
+    quorum: usize,
+    quorum_met: bool,
+    relays: Vec<RadrootsRelayPublishRelayReceipt>,
+}
+
+impl RadrootsRelayPublishReceipt {
+    pub(crate) fn new(
+        event_id: impl AsRef<str>,
+        quorum: usize,
+        quorum_met: bool,
+        relays: Vec<RadrootsRelayPublishRelayReceipt>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let event_id = RadrootsEventId::parse(event_id).map_err(|error| {
+            RadrootsRelayTransportError::InvalidPublishReceipt {
+                field: "event_id",
+                reason: error.to_string(),
+            }
+        })?;
+        Self::from_validated_event_id(event_id, quorum, quorum_met, relays)
+    }
+
+    fn from_validated_event_id(
+        event_id: RadrootsEventId,
+        quorum: usize,
+        quorum_met: bool,
+        relays: Vec<RadrootsRelayPublishRelayReceipt>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        if relays.is_empty() {
+            return Err(RadrootsRelayTransportError::InvalidPublishReceipt {
+                field: "relays",
+                reason: "relay receipts must not be empty".to_owned(),
+            });
+        }
+        if relays.len() > radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT {
+            return Err(RadrootsRelayTransportError::InvalidPublishReceipt {
+                field: "relays",
+                reason: format!(
+                    "relay receipt count {} exceeds maximum {}",
+                    relays.len(),
+                    radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+                ),
+            });
+        }
+        let mut canonical_relays = Vec::with_capacity(relays.len());
+        for receipt in &relays {
+            let canonical = RadrootsTransportTarget::nostr_relay(receipt.relay_url())?
+                .uri()
+                .as_str()
+                .to_owned();
+            if canonical_relays.contains(&canonical) {
+                return Err(
+                    RadrootsRelayTransportError::DuplicatePublishReceiptRelayUrl { url: canonical },
+                );
+            }
+            canonical_relays.push(canonical);
+        }
+        if quorum > relays.len() {
+            return Err(RadrootsRelayTransportError::InvalidPublishReceipt {
+                field: "quorum",
+                reason: format!(
+                    "quorum {quorum} exceeds relay receipt count {}",
+                    relays.len()
+                ),
+            });
+        }
+        let attempted_count = relays
+            .iter()
+            .filter(|receipt| receipt.was_attempted())
+            .count();
+        let accepted_count = relays
+            .iter()
+            .filter(|receipt| relay_receipt_counts_toward_quorum(receipt))
+            .count();
+        let retryable_count = relays
+            .iter()
+            .filter(|receipt| receipt.outcome().is_retryable())
+            .count();
+        let terminal_count = relays
+            .iter()
+            .filter(|receipt| receipt.outcome().is_terminal_failure())
+            .count();
+        if quorum_met && accepted_count < quorum {
+            return Err(RadrootsRelayTransportError::InvalidPublishReceipt {
+                field: "quorum_met",
+                reason: format!("accepted count {accepted_count} cannot satisfy quorum {quorum}"),
+            });
+        }
+        Ok(Self {
+            event_id,
+            attempted_count,
+            accepted_count,
+            retryable_count,
+            terminal_count,
+            quorum,
+            quorum_met,
+            relays,
+        })
+    }
+
+    pub fn event_id(&self) -> &str {
+        self.event_id.as_str()
+    }
+
+    pub fn attempted_count(&self) -> usize {
+        self.attempted_count
+    }
+
+    pub fn accepted_count(&self) -> usize {
+        self.accepted_count
+    }
+
+    pub fn retryable_count(&self) -> usize {
+        self.retryable_count
+    }
+
+    pub fn terminal_count(&self) -> usize {
+        self.terminal_count
+    }
+
+    pub fn quorum(&self) -> usize {
+        self.quorum
+    }
+
+    pub fn quorum_met(&self) -> bool {
+        self.quorum_met
+    }
+
+    pub fn relays(&self) -> &[RadrootsRelayPublishRelayReceipt] {
+        &self.relays
+    }
+
+    #[cfg(feature = "storage")]
+    pub(crate) fn into_event_id_and_relays(
+        self,
+    ) -> (String, Vec<RadrootsRelayPublishRelayReceipt>) {
+        (self.event_id.into_string(), self.relays)
+    }
+}
+
+struct BoundedPublishRelayReceipts;
+
+impl<'de> de::Visitor<'de> for BoundedPublishRelayReceipts {
+    type Value = Vec<RadrootsRelayPublishRelayReceipt>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "one to {} relay publish receipts",
+            radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+        )
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut relays = Vec::new();
+        while let Some(receipt) = sequence.next_element()? {
+            if relays.len() == radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT {
+                return Err(de::Error::custom(format!(
+                    "relay receipt count exceeds maximum {}",
+                    radroots_transport::RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+                )));
+            }
+            relays.push(receipt);
+        }
+        Ok(relays)
+    }
+}
+
+fn deserialize_publish_relay_receipts<'de, D>(
+    deserializer: D,
+) -> Result<Vec<RadrootsRelayPublishRelayReceipt>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_seq(BoundedPublishRelayReceipts)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RadrootsRelayPublishReceiptWire {
+    event_id: RadrootsEventId,
+    attempted_count: usize,
+    accepted_count: usize,
+    retryable_count: usize,
+    terminal_count: usize,
+    quorum: usize,
+    quorum_met: bool,
+    #[serde(deserialize_with = "deserialize_publish_relay_receipts")]
+    relays: Vec<RadrootsRelayPublishRelayReceipt>,
+}
+
+impl<'de> Deserialize<'de> for RadrootsRelayPublishReceipt {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = RadrootsRelayPublishReceiptWire::deserialize(deserializer)?;
+        let receipt =
+            Self::from_validated_event_id(wire.event_id, wire.quorum, wire.quorum_met, wire.relays)
+                .map_err(de::Error::custom)?;
+        for (field, expected, actual) in [
+            (
+                "attempted_count",
+                receipt.attempted_count,
+                wire.attempted_count,
+            ),
+            (
+                "accepted_count",
+                receipt.accepted_count,
+                wire.accepted_count,
+            ),
+            (
+                "retryable_count",
+                receipt.retryable_count,
+                wire.retryable_count,
+            ),
+            (
+                "terminal_count",
+                receipt.terminal_count,
+                wire.terminal_count,
+            ),
+        ] {
+            if expected != actual {
+                return Err(de::Error::custom(format!(
+                    "relay publish receipt {field} {actual} does not match derived count {expected}"
+                )));
+            }
+        }
+        Ok(receipt)
+    }
 }
 
 pub trait RadrootsRelayPublishAdapter: Send + Sync {
@@ -443,6 +673,7 @@ fn nostr_error_to_transport_error(error: RadrootsRelayTransportError) -> Radroot
         RadrootsRelayTransportError::EmptyFetchFilters
         | RadrootsRelayTransportError::InvalidFetchLimit { .. }
         | RadrootsRelayTransportError::FetchLimitTooLarge { .. }
+        | RadrootsRelayTransportError::InvalidPublishReceipt { .. }
         | RadrootsRelayTransportError::InvalidTimestamp { .. }
         | RadrootsRelayTransportError::InvalidIdempotencyKey { .. }
         | RadrootsRelayTransportError::RequiredTargetNotRequested { .. } => {
@@ -776,30 +1007,8 @@ where
     let quorum = satisfaction_policy.required_target_count(target_count)?;
     let relays =
         normalize_publish_receipts(requested_relays.as_slice(), adapter.publish(request).await?)?;
-    let attempted_count = relays.iter().filter(|receipt| receipt.attempted).count();
-    let accepted_count = relays
-        .iter()
-        .filter(|receipt| relay_receipt_counts_toward_quorum(receipt))
-        .count();
-    let retryable_count = relays
-        .iter()
-        .filter(|receipt| receipt.outcome.is_retryable())
-        .count();
-    let terminal_count = relays
-        .iter()
-        .filter(|receipt| receipt.outcome.is_terminal_failure())
-        .count();
     let quorum_met = relay_publish_satisfies_policy(&satisfaction_policy, target_count, &relays)?;
-    Ok(RadrootsRelayPublishReceipt {
-        event_id,
-        attempted_count,
-        accepted_count,
-        retryable_count,
-        terminal_count,
-        quorum,
-        quorum_met,
-        relays,
-    })
+    RadrootsRelayPublishReceipt::new(event_id, quorum, quorum_met, relays)
 }
 
 fn normalize_publish_receipts(

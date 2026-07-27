@@ -198,13 +198,13 @@ where
         )?,
         Err(error) => return Err(error),
     };
-    let target_receipts = target_receipts_from_relay_receipts(&publishable, &publish.relays);
+    let target_receipts = target_receipts_from_relay_receipts(&publishable, publish.relays());
 
     for target_receipt in &target_receipts {
         complete_outbox_delivery_target(outbox, claimed, target_receipt, now_ms).await?;
     }
 
-    for relay in &publish.relays {
+    for relay in publish.relays() {
         if relay
             .outcome()
             .kind()
@@ -232,9 +232,10 @@ where
         )
         .await?;
 
+    let (event_id, relay_receipts) = publish.into_event_id_and_relays();
     Ok(RadrootsOutboxPublishReceipt {
         local_ingest,
-        event_id: publish.event_id,
+        event_id,
         attempted_count: target_receipts
             .iter()
             .filter(|receipt| receipt.attempted)
@@ -255,7 +256,7 @@ where
         quorum_met: publishable.satisfied_count_after_receipts(&target_receipts)
             >= publishable.satisfaction_required_count,
         target_receipts,
-        relay_receipts: publish.relays,
+        relay_receipts,
     })
 }
 
@@ -418,16 +419,7 @@ fn adapter_transport_failure_receipt(
             )
         })
         .collect::<Result<Vec<_>, RadrootsRelayTransportError>>()?;
-    Ok(RadrootsRelayPublishReceipt {
-        event_id,
-        attempted_count: relays.len(),
-        accepted_count: 0,
-        retryable_count: relays.len(),
-        terminal_count: 0,
-        quorum,
-        quorum_met: false,
-        relays,
-    })
+    RadrootsRelayPublishReceipt::new(event_id, quorum, false, relays)
 }
 
 struct PublishableRelays {
@@ -1276,8 +1268,9 @@ mod tests {
 
     #[test]
     fn adapter_transport_failure_receipts_preserve_each_target() {
+        let event_id = "a".repeat(64);
         let receipt = adapter_transport_failure_receipt(
-            "event-1".to_owned(),
+            event_id.clone(),
             vec![
                 "wss://relay-a.example".to_owned(),
                 "wss://relay-b.example".to_owned(),
@@ -1287,13 +1280,13 @@ mod tests {
         )
         .expect("bounded adapter failure receipt");
 
-        assert_eq!(receipt.event_id, "event-1");
-        assert_eq!(receipt.attempted_count, 2);
-        assert_eq!(receipt.retryable_count, 2);
-        assert_eq!(receipt.terminal_count, 0);
-        assert_eq!(receipt.quorum, 2);
-        assert!(!receipt.quorum_met);
-        assert!(receipt.relays.iter().all(|relay| relay.was_attempted()));
+        assert_eq!(receipt.event_id(), event_id);
+        assert_eq!(receipt.attempted_count(), 2);
+        assert_eq!(receipt.retryable_count(), 2);
+        assert_eq!(receipt.terminal_count(), 0);
+        assert_eq!(receipt.quorum(), 2);
+        assert!(!receipt.quorum_met());
+        assert!(receipt.relays().iter().all(|relay| relay.was_attempted()));
     }
 
     #[test]
