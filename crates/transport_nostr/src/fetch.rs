@@ -859,10 +859,81 @@ impl<'de> Deserialize<'de> for RadrootsRelayFetchEventReceipt {
 
 #[derive(Clone, Debug)]
 pub struct RadrootsRelayFetchedEvent {
-    pub relay_url: String,
-    pub event: RadrootsNostrEvent,
-    pub raw_json: String,
-    pub observed_at_ms: i64,
+    relay_url: String,
+    event: RadrootsNostrEvent,
+    raw_json: String,
+    observed_at_ms: i64,
+}
+
+impl RadrootsRelayFetchedEvent {
+    pub fn new(
+        relay_url: impl Into<String>,
+        event: RadrootsNostrEvent,
+        raw_json: impl Into<String>,
+        observed_at_ms: i64,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let relay_url = relay_url.into();
+        let raw_json = raw_json.into();
+        let fetched = Self::from_verified(relay_url, event, raw_json, observed_at_ms)?;
+        RadrootsEventIngest::from_raw_json(fetched.raw_json.clone(), observed_at_ms)?;
+        Ok(fetched)
+    }
+
+    fn from_verified(
+        relay_url: String,
+        event: RadrootsNostrEvent,
+        raw_json: String,
+        observed_at_ms: i64,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let relay_url = canonical_fetch_receipt_relay_url(relay_url.as_str())?;
+        ensure_nonnegative_timestamp("observed_at_ms", observed_at_ms)?;
+        if raw_json.len() > DEFAULT_RAW_JSON_MAX_BYTES {
+            return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                field: "fetched_event_raw_json_bytes",
+                max: DEFAULT_RAW_JSON_MAX_BYTES,
+                actual: raw_json.len(),
+            });
+        }
+        let decoded = RadrootsNostrEvent::from_json(raw_json.as_str())
+            .map_err(|error| RadrootsRelayTransportError::NostrEventJson(error.to_string()))?;
+        if decoded != event {
+            return Err(invalid_fetch_receipt(
+                "fetched_event",
+                "event object does not match its raw JSON bytes",
+            ));
+        }
+        Ok(Self {
+            relay_url,
+            event,
+            raw_json,
+            observed_at_ms,
+        })
+    }
+
+    pub fn relay_url(&self) -> &str {
+        self.relay_url.as_str()
+    }
+
+    pub fn event(&self) -> &RadrootsNostrEvent {
+        &self.event
+    }
+
+    pub fn raw_json(&self) -> &str {
+        self.raw_json.as_str()
+    }
+
+    pub fn observed_at_ms(&self) -> i64 {
+        self.observed_at_ms
+    }
+
+    fn into_parts(self) -> (String, RadrootsNostrEvent, String, i64) {
+        (
+            self.relay_url,
+            self.event,
+            self.raw_json,
+            self.observed_at_ms,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -1064,18 +1135,9 @@ where
             RadrootsRelayProcessedFetchItem::Receipt(event_receipt) => {
                 receipt.events.push(event_receipt);
             }
-            RadrootsRelayProcessedFetchItem::Accepted(RadrootsRelayFetchedEvent {
-                relay_url,
-                event: raw_event,
-                raw_json,
-                observed_at_ms,
-            })
-            | RadrootsRelayProcessedFetchItem::Duplicate(RadrootsRelayFetchedEvent {
-                relay_url,
-                event: raw_event,
-                raw_json,
-                observed_at_ms,
-            }) => {
+            RadrootsRelayProcessedFetchItem::Accepted(event)
+            | RadrootsRelayProcessedFetchItem::Duplicate(event) => {
+                let (relay_url, raw_event, raw_json, observed_at_ms) = event.into_parts();
                 let observation_type = match mode {
                     RadrootsRelayFetchMode::Fetch => RadrootsTransportObservationType::Fetch,
                     RadrootsRelayFetchMode::Subscription => {
@@ -1623,12 +1685,12 @@ fn process_relay_fetch_items(
                     processed
                         .items
                         .push(RadrootsRelayProcessedFetchItem::Duplicate(
-                            RadrootsRelayFetchedEvent {
+                            RadrootsRelayFetchedEvent::from_verified(
                                 relay_url,
-                                event: raw_event,
+                                raw_event,
                                 raw_json,
                                 observed_at_ms,
-                            },
+                            )?,
                         ));
                     continue;
                 }
@@ -1663,12 +1725,12 @@ fn process_relay_fetch_items(
                 processed
                     .items
                     .push(RadrootsRelayProcessedFetchItem::Accepted(
-                        RadrootsRelayFetchedEvent {
+                        RadrootsRelayFetchedEvent::from_verified(
                             relay_url,
-                            event: raw_event,
+                            raw_event,
                             raw_json,
                             observed_at_ms,
-                        },
+                        )?,
                     ));
             }
             RadrootsRelayFetchItemBody::Eose { .. } => {
@@ -1725,8 +1787,8 @@ fn accepted_fetch_event_receipt(
     event: &RadrootsRelayFetchedEvent,
 ) -> Result<RadrootsRelayFetchEventReceipt, RadrootsRelayTransportError> {
     RadrootsRelayFetchEventReceipt {
-        relay_url: event.relay_url.clone(),
-        event_id: Some(event.event.id.to_hex()),
+        relay_url: event.relay_url().to_owned(),
+        event_id: Some(event.event().id.to_hex()),
         inserted: false,
         duplicate: false,
         not_persisted: false,
@@ -1747,8 +1809,8 @@ fn duplicate_fetch_event_receipt(
     event: &RadrootsRelayFetchedEvent,
 ) -> Result<RadrootsRelayFetchEventReceipt, RadrootsRelayTransportError> {
     RadrootsRelayFetchEventReceipt {
-        relay_url: event.relay_url.clone(),
-        event_id: Some(event.event.id.to_hex()),
+        relay_url: event.relay_url().to_owned(),
+        event_id: Some(event.event().id.to_hex()),
         inserted: false,
         duplicate: true,
         not_persisted: false,

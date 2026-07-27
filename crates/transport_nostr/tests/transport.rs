@@ -9,9 +9,9 @@ use radroots_event_store::{
     RadrootsEventStore, RadrootsTransportObservationRow, RadrootsTransportObservationType,
 };
 use radroots_nostr::prelude::{
-    RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind, RadrootsNostrSecretKey,
-    RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTimestamp, radroots_nostr_filter_tag,
-    radroots_nostr_sign_frozen_draft,
+    RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrKeys, RadrootsNostrKind,
+    RadrootsNostrSecretKey, RadrootsNostrTag, RadrootsNostrTagKind, RadrootsNostrTimestamp,
+    radroots_nostr_filter_tag, radroots_nostr_sign_frozen_draft,
 };
 use radroots_outbox::{
     RadrootsOutbox, RadrootsOutboxClaimedEvent, RadrootsOutboxDeliveryPlanInput,
@@ -39,12 +39,13 @@ use radroots_transport_nostr::{
     RadrootsRelayFetchEventVerification, RadrootsRelayFetchEventVisibility,
     RadrootsRelayFetchFailure, RadrootsRelayFetchFilters, RadrootsRelayFetchItem,
     RadrootsRelayFetchMode, RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRelayOutcome,
-    RadrootsRelayFetchRequest, RadrootsRelayOutcome, RadrootsRelayOutcomeKind,
-    RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
-    RadrootsRelayTargetSet, RadrootsRelayTransportError, RadrootsRelayUrl, RadrootsRelayUrlPolicy,
-    fetch_and_ingest_relay_events, fetch_relay_events, fetch_relay_events_blocking,
-    publish_claimed_outbox_event, publish_claimed_outbox_event_with_transport,
-    publish_signed_event, verified_signed_event_payload,
+    RadrootsRelayFetchRequest, RadrootsRelayFetchedEvent, RadrootsRelayOutcome,
+    RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
+    RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayTransportError,
+    RadrootsRelayUrl, RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, fetch_relay_events,
+    fetch_relay_events_blocking, publish_claimed_outbox_event,
+    publish_claimed_outbox_event_with_transport, publish_signed_event,
+    verified_signed_event_payload,
 };
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -2395,8 +2396,8 @@ fn fetch_blocking_facade_runs_mock_adapter() {
         .expect("blocking fetch");
 
     assert_eq!(receipt.events.len(), 1);
-    assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
-    assert_eq!(receipt.events[0].observed_at_ms, 1_090);
+    assert_eq!(receipt.events[0].event().id.to_hex(), accepted_id);
+    assert_eq!(receipt.events[0].observed_at_ms(), 1_090);
     assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
 }
 
@@ -2416,8 +2417,8 @@ async fn fetch_canonicalizes_adapter_relay_spelling_and_uses_request_observation
         .expect("canonical fetch");
 
     assert_eq!(receipt.events.len(), 1);
-    assert_eq!(receipt.events[0].relay_url, RELAY_PRIMARY_WSS);
-    assert_eq!(receipt.events[0].observed_at_ms, 1_091);
+    assert_eq!(receipt.events[0].relay_url(), RELAY_PRIMARY_WSS);
+    assert_eq!(receipt.events[0].observed_at_ms(), 1_091);
     assert_eq!(receipt.connected_relays, vec![RELAY_PRIMARY_WSS]);
 }
 
@@ -2435,7 +2436,7 @@ async fn fetch_verifies_events_before_acceptance_budgeting() {
         .expect("verified fetch");
 
     assert_eq!(receipt.events.len(), 1);
-    assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
+    assert_eq!(receipt.events[0].event().id.to_hex(), accepted_id);
     assert_eq!(receipt.verification_failed_count, 1);
     assert_eq!(receipt.skipped_over_limit_count, 0);
     assert_eq!(
@@ -2468,7 +2469,7 @@ async fn fetch_deduplicates_event_ids_without_starving_unique_events() {
         receipt
             .events
             .iter()
-            .map(|event| event.event.id.to_hex())
+            .map(|event| event.event().id.to_hex())
             .collect::<Vec<_>>(),
         vec![first_id.clone(), second_id]
     );
@@ -3311,7 +3312,7 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
     assert_eq!(receipt.failed_relays.len(), 1);
     assert_eq!(receipt.failed_relays[0].relay_url(), RELAY_SECONDARY_WSS);
     assert_eq!(receipt.events.len(), 1);
-    assert_eq!(receipt.events[0].event.id.to_hex(), accepted_id);
+    assert_eq!(receipt.events[0].event().id.to_hex(), accepted_id);
     assert_eq!(receipt.malformed_count, 1);
     assert_eq!(receipt.out_of_filter_count, 1);
     assert_eq!(receipt.skipped_over_limit_count, 1);
@@ -3832,6 +3833,56 @@ fn fetch_event_receipts_reject_oversized_and_incoherent_wire_state() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn fetched_events_bind_raw_bytes_identity_endpoint_and_observation_time() {
+    let signed = signed_post("fetched event envelope");
+    let event = RadrootsNostrEvent::from_json(signed.raw_json()).expect("signed Nostr event");
+    let fetched =
+        RadrootsRelayFetchedEvent::new(RELAY_PRIMARY_WSS, event.clone(), signed.raw_json(), 1_500)
+            .expect("bounded fetched event");
+    assert_eq!(fetched.relay_url(), RELAY_PRIMARY_WSS);
+    assert_eq!(fetched.event(), &event);
+    assert_eq!(fetched.raw_json(), signed.raw_json());
+    assert_eq!(fetched.observed_at_ms(), 1_500);
+
+    assert!(matches!(
+        RadrootsRelayFetchedEvent::new(" ", event.clone(), signed.raw_json(), 1_500),
+        Err(RadrootsRelayTransportError::InvalidFetchReceipt {
+            field: "relay_url",
+            ..
+        })
+    ));
+    assert!(matches!(
+        RadrootsRelayFetchedEvent::new(RELAY_PRIMARY_WSS, event.clone(), signed.raw_json(), -1,),
+        Err(RadrootsRelayTransportError::InvalidTimestamp {
+            field: "observed_at_ms",
+            value: -1,
+        })
+    ));
+    assert!(matches!(
+        RadrootsRelayFetchedEvent::new(
+            RELAY_PRIMARY_WSS,
+            event.clone(),
+            "x".repeat(DEFAULT_RAW_JSON_MAX_BYTES + 1),
+            1_500,
+        ),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "fetched_event_raw_json_bytes",
+            max: DEFAULT_RAW_JSON_MAX_BYTES,
+            actual,
+        }) if actual == DEFAULT_RAW_JSON_MAX_BYTES + 1
+    ));
+
+    let other = signed_post("different fetched event envelope");
+    assert!(matches!(
+        RadrootsRelayFetchedEvent::new(RELAY_PRIMARY_WSS, event, other.raw_json(), 1_500,),
+        Err(RadrootsRelayTransportError::InvalidFetchReceipt {
+            field: "fetched_event",
+            ..
+        })
+    ));
 }
 
 #[tokio::test]
