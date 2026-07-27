@@ -1,0 +1,337 @@
+{
+  "$defs": {
+    "feature_edge": {
+      "additionalProperties": false,
+      "properties": {
+        "enables": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "feature": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature",
+        "enables"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "byte_length": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "hash_algorithm": {
+          "const": "sha256_bytes_v1"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "sha256",
+        "hash_algorithm"
+      ],
+      "type": "object"
+    },
+    "migration": {
+      "additionalProperties": false,
+      "properties": {
+        "down": {
+          "$ref": "#/$defs/file"
+        },
+        "name": {
+          "pattern": "^[a-z0-9_]+$",
+          "type": "string"
+        },
+        "owned_objects": {
+          "items": {
+            "pattern": "^outbox_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "owned_tables": {
+          "items": {
+            "pattern": "^outbox_[a-z0-9_]+$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "schema_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "up": {
+          "$ref": "#/$defs/file"
+        },
+        "version": {
+          "maximum": 9999,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version",
+        "name",
+        "up",
+        "down",
+        "schema_sha256",
+        "owned_objects",
+        "owned_tables"
+      ],
+      "type": "object"
+    },
+    "profile": {
+      "additionalProperties": false,
+      "properties": {
+        "cargo_args": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "cargo_args"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "source_file": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/file"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "file"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://radroots.org/contracts/outbox/migration_authority_v1.manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "authority_id": {
+      "const": "versioned_outbox_migration_authority_v1"
+    },
+    "contract_id": {
+      "const": "radroots_outbox.migration_authority.v1"
+    },
+    "feature_matrix": {
+      "additionalProperties": false,
+      "properties": {
+        "feature_edges": {
+          "items": {
+            "$ref": "#/$defs/feature_edge"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "package": {
+          "const": "radroots_outbox"
+        },
+        "profiles": {
+          "items": {
+            "$ref": "#/$defs/profile"
+          },
+          "maxItems": 5,
+          "minItems": 5,
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/file"
+        }
+      },
+      "required": [
+        "source",
+        "package",
+        "feature_edges",
+        "profiles"
+      ],
+      "type": "object"
+    },
+    "generated_runtime": {
+      "$ref": "#/$defs/file"
+    },
+    "ledger": {
+      "additionalProperties": false,
+      "properties": {
+        "adoption": {
+          "const": "exact_unledgered_0001_catalog_only_v1"
+        },
+        "catalog_fingerprint": {
+          "const": "sha256_type_nul_name_nul_table_name_nul_sql_nul_sorted_v1"
+        },
+        "migration_transaction": {
+          "const": "begin_immediate_v1"
+        },
+        "name": {
+          "const": "radroots_outbox_schema_migrations"
+        },
+        "reserved_prefix": {
+          "const": "outbox_"
+        },
+        "rollback_transaction": {
+          "const": "begin_exclusive_test_executor_v1"
+        }
+      },
+      "required": [
+        "name",
+        "reserved_prefix",
+        "catalog_fingerprint",
+        "migration_transaction",
+        "rollback_transaction",
+        "adoption"
+      ],
+      "type": "object"
+    },
+    "manifest_schema": {
+      "$ref": "#/$defs/file"
+    },
+    "migrations": {
+      "items": {
+        "$ref": "#/$defs/migration"
+      },
+      "maxItems": 9999,
+      "minItems": 1,
+      "type": "array"
+    },
+    "registry_source": {
+      "$ref": "#/$defs/file"
+    },
+    "release": {
+      "additionalProperties": false,
+      "properties": {
+        "change_id": {
+          "const": "outbox-versioned-migration-authority"
+        },
+        "changelog": {
+          "const": "CHANGELOG.md"
+        },
+        "record": {
+          "const": "contracts/releases/1.0.0-alpha.1.toml"
+        }
+      },
+      "required": [
+        "change_id",
+        "record",
+        "changelog"
+      ],
+      "type": "object"
+    },
+    "result_vector": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical": {
+          "$ref": "#/$defs/file"
+        },
+        "executor": {
+          "$ref": "#/$defs/file"
+        },
+        "executor_id": {
+          "const": "radroots_outbox.migration_authority_v1.result_vector_executor.v1"
+        },
+        "executor_test": {
+          "const": "migration_authority_v1_result_vector"
+        },
+        "mirror_path": {
+          "const": "crates/outbox/tests/fixtures/migration_authority.v1.json"
+        }
+      },
+      "required": [
+        "canonical",
+        "mirror_path",
+        "executor",
+        "executor_id",
+        "executor_test"
+      ],
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_files": {
+      "items": {
+        "$ref": "#/$defs/source_file"
+      },
+      "maxItems": 16,
+      "minItems": 16,
+      "type": "array"
+    },
+    "version_bounds": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "derivation": {
+          "const": "first_and_last_ordered_registry_entries_v1"
+        },
+        "minimum": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "minimum",
+        "current",
+        "derivation"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority_id",
+    "manifest_schema",
+    "registry_source",
+    "version_bounds",
+    "ledger",
+    "migrations",
+    "feature_matrix",
+    "generated_runtime",
+    "result_vector",
+    "source_files",
+    "release"
+  ],
+  "type": "object"
+}

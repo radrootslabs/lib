@@ -1,0 +1,33 @@
+schema_version = 1
+package = "radroots_outbox"
+
+[feature_edges]
+default = ["event-store-adapter"]
+sqlite = ["dep:sqlx", "sqlx/sqlite-bundled"]
+runtime-tokio = ["sqlite", "sqlx/runtime-tokio"]
+event-store-adapter = [
+  "runtime-tokio",
+  "dep:radroots_event_store",
+  "radroots_event_store/sqlite",
+  "radroots_event_store/runtime-tokio",
+]
+
+[[profiles]]
+id = "no-default"
+cargo_args = ["--no-default-features", "--all-targets"]
+
+[[profiles]]
+id = "sqlite"
+cargo_args = ["--no-default-features", "--features", "sqlite", "--all-targets"]
+
+[[profiles]]
+id = "sqlite-runtime-tokio"
+cargo_args = ["--no-default-features", "--features", "sqlite,runtime-tokio", "--all-targets"]
+
+[[profiles]]
+id = "event-store-adapter"
+cargo_args = ["--no-default-features", "--features", "event-store-adapter", "--all-targets"]
+
+[[profiles]]
+id = "all-features"
+cargo_args = ["--all-features", "--all-targets"]

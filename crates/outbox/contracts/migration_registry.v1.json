@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_outbox.migration_authority.v1",
+  "migrations": [
+    {
+      "version": 1,
+      "name": "outbox",
+      "up_path": "crates/outbox/migrations/0001_outbox.up.sql",
+      "down_path": "crates/outbox/migrations/0001_outbox.down.sql",
+      "up_byte_length": 5470,
+      "down_byte_length": 159,
+      "up_sha256": "a7ee775d32c2b9f845961425362e1b1e558ce0d025f7d22dd58f118ba4dab4fa",
+      "down_sha256": "5d56f978f9172dc5ecbc5043a6c286c75926974d8a2a9e44fffa7c134829af61",
+      "schema_sha256": "e7eeba00de78ec6d990c620e7c056018166e8a00bb703e472ef6f67a00870293",
+      "owned_objects": [
+        "outbox_delivery_attempt",
+        "outbox_delivery_attempt_target_idx",
+        "outbox_delivery_plan",
+        "outbox_delivery_plan_event_idx",
+        "outbox_delivery_target",
+        "outbox_delivery_target_ready_idx",
+        "outbox_event",
+        "outbox_event_event_id_idx",
+        "outbox_event_ready_idx",
+        "outbox_operation_idempotency_idx",
+        "outbox_operation_status_idx",
+        "outbox_operation_trade_mutation_idx",
+        "outbox_operations"
+      ],
+      "owned_tables": [
+        "outbox_delivery_attempt",
+        "outbox_delivery_plan",
+        "outbox_delivery_target",
+        "outbox_event",
+        "outbox_operations"
+      ]
+    }
+  ]
+}

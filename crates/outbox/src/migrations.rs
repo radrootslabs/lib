@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsOutboxError;
+pub(crate) use crate::generated::outbox_migration_registry::OUTBOX_MIGRATIONS;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -30,30 +31,6 @@ pub(crate) const OUTBOX_LEDGER_CREATE_DDL: &str =
   schema_sha256 TEXT NOT NULL CHECK (length(schema_sha256) = 64 AND schema_sha256 NOT GLOB '*[^0-9a-f]*')
 ) STRICT, WITHOUT ROWID";
 
-pub(crate) const OUTBOX_BASELINE_OBJECT_NAMES: &[&str] = &[
-    "outbox_delivery_attempt",
-    "outbox_delivery_attempt_target_idx",
-    "outbox_delivery_plan",
-    "outbox_delivery_plan_event_idx",
-    "outbox_delivery_target",
-    "outbox_delivery_target_ready_idx",
-    "outbox_event",
-    "outbox_event_event_id_idx",
-    "outbox_event_ready_idx",
-    "outbox_operation_idempotency_idx",
-    "outbox_operation_status_idx",
-    "outbox_operation_trade_mutation_idx",
-    "outbox_operations",
-];
-
-pub(crate) const OUTBOX_BASELINE_TABLE_NAMES: &[&str] = &[
-    "outbox_delivery_attempt",
-    "outbox_delivery_plan",
-    "outbox_delivery_target",
-    "outbox_event",
-    "outbox_operations",
-];
-
 #[derive(Clone, Copy)]
 pub(crate) struct OutboxMigration {
     pub(crate) version: u32,
@@ -68,20 +45,6 @@ pub(crate) struct OutboxMigration {
     pub(crate) owned_object_names: &'static [&'static str],
     pub(crate) owned_table_names: &'static [&'static str],
 }
-
-pub(crate) const OUTBOX_MIGRATIONS: &[OutboxMigration] = &[OutboxMigration {
-    version: 1,
-    name: "outbox",
-    up_sql: include_str!("../migrations/0001_outbox.up.sql"),
-    down_sql: include_str!("../migrations/0001_outbox.down.sql"),
-    up_len: 5_470,
-    down_len: 159,
-    up_sha256: "a7ee775d32c2b9f845961425362e1b1e558ce0d025f7d22dd58f118ba4dab4fa",
-    down_sha256: "5d56f978f9172dc5ecbc5043a6c286c75926974d8a2a9e44fffa7c134829af61",
-    schema_sha256: "e7eeba00de78ec6d990c620e7c056018166e8a00bb703e472ef6f67a00870293",
-    owned_object_names: OUTBOX_BASELINE_OBJECT_NAMES,
-    owned_table_names: OUTBOX_BASELINE_TABLE_NAMES,
-}];
 
 pub(crate) fn migration_for_version(
     registry: &[OutboxMigration],
@@ -391,16 +354,18 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let discovered = discover(root).expect("canonical migration discovery");
         assert_eq!(discovered.len(), OUTBOX_MIGRATIONS.len());
-        assert_eq!(discovered[0].version, 1);
-        assert_eq!(discovered[0].name, "outbox");
-        assert_eq!(
-            fs::read(&discovered[0].up).expect("up bytes"),
-            OUTBOX_MIGRATIONS[0].up_sql.as_bytes()
-        );
-        assert_eq!(
-            fs::read(&discovered[0].down).expect("down bytes"),
-            OUTBOX_MIGRATIONS[0].down_sql.as_bytes()
-        );
+        for (discovered, embedded) in discovered.iter().zip(OUTBOX_MIGRATIONS) {
+            assert_eq!(discovered.version, embedded.version);
+            assert_eq!(discovered.name, embedded.name);
+            assert_eq!(
+                fs::read(&discovered.up).expect("up bytes"),
+                embedded.up_sql.as_bytes()
+            );
+            assert_eq!(
+                fs::read(&discovered.down).expect("down bytes"),
+                embedded.down_sql.as_bytes()
+            );
+        }
 
         let temp = tempfile::tempdir().expect("tempdir");
         fs::create_dir(temp.path().join("migrations")).expect("migrations");
@@ -445,8 +410,8 @@ mod tests {
             OUTBOX_MIGRATIONS[0].down_sha256,
             "5d56f978f9172dc5ecbc5043a6c286c75926974d8a2a9e44fffa7c134829af61"
         );
-        assert_eq!(OUTBOX_BASELINE_OBJECT_NAMES.len(), 13);
-        assert_eq!(OUTBOX_BASELINE_TABLE_NAMES.len(), 5);
+        assert_eq!(OUTBOX_MIGRATIONS[0].owned_object_names.len(), 13);
+        assert_eq!(OUTBOX_MIGRATIONS[0].owned_table_names.len(), 5);
     }
 
     fn assert_registry_defect(result: Result<(), RadrootsOutboxError>) -> String {

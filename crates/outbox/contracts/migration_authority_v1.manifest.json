@@ -1,0 +1,328 @@
+{
+  "authority_id": "versioned_outbox_migration_authority_v1",
+  "contract_id": "radroots_outbox.migration_authority.v1",
+  "feature_matrix": {
+    "feature_edges": [
+      {
+        "enables": [
+          "event-store-adapter"
+        ],
+        "feature": "default"
+      },
+      {
+        "enables": [
+          "runtime-tokio",
+          "dep:radroots_event_store",
+          "radroots_event_store/sqlite",
+          "radroots_event_store/runtime-tokio"
+        ],
+        "feature": "event-store-adapter"
+      },
+      {
+        "enables": [
+          "sqlite",
+          "sqlx/runtime-tokio"
+        ],
+        "feature": "runtime-tokio"
+      },
+      {
+        "enables": [
+          "dep:sqlx",
+          "sqlx/sqlite-bundled"
+        ],
+        "feature": "sqlite"
+      }
+    ],
+    "package": "radroots_outbox",
+    "profiles": [
+      {
+        "cargo_args": [
+          "--no-default-features",
+          "--all-targets"
+        ],
+        "id": "no-default"
+      },
+      {
+        "cargo_args": [
+          "--no-default-features",
+          "--features",
+          "sqlite",
+          "--all-targets"
+        ],
+        "id": "sqlite"
+      },
+      {
+        "cargo_args": [
+          "--no-default-features",
+          "--features",
+          "sqlite,runtime-tokio",
+          "--all-targets"
+        ],
+        "id": "sqlite-runtime-tokio"
+      },
+      {
+        "cargo_args": [
+          "--no-default-features",
+          "--features",
+          "event-store-adapter",
+          "--all-targets"
+        ],
+        "id": "event-store-adapter"
+      },
+      {
+        "cargo_args": [
+          "--all-features",
+          "--all-targets"
+        ],
+        "id": "all-features"
+      }
+    ],
+    "source": {
+      "byte_length": 889,
+      "hash_algorithm": "sha256_bytes_v1",
+      "path": "contracts/outbox_feature_matrix.toml",
+      "sha256": "c18b8f1b3c17e732def304dd8273a006bef061ee8cf40223e6d65ddfa5ab8084"
+    }
+  },
+  "generated_runtime": {
+    "byte_length": 1452,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/outbox/src/generated/outbox_migration_registry.rs",
+    "sha256": "616be98c5ba8054e08a6109357a713a39a0086040272a1f6165f54530b469a91"
+  },
+  "ledger": {
+    "adoption": "exact_unledgered_0001_catalog_only_v1",
+    "catalog_fingerprint": "sha256_type_nul_name_nul_table_name_nul_sql_nul_sorted_v1",
+    "migration_transaction": "begin_immediate_v1",
+    "name": "radroots_outbox_schema_migrations",
+    "reserved_prefix": "outbox_",
+    "rollback_transaction": "begin_exclusive_test_executor_v1"
+  },
+  "manifest_schema": {
+    "byte_length": 7461,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/outbox/contracts/migration_authority_v1.manifest.schema.json",
+    "sha256": "65e6a2e5309d7f31b05b5c80d6e1b548aea82f32fa95488a79a0660f73b866ac"
+  },
+  "migrations": [
+    {
+      "down": {
+        "byte_length": 159,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/migrations/0001_outbox.down.sql",
+        "sha256": "5d56f978f9172dc5ecbc5043a6c286c75926974d8a2a9e44fffa7c134829af61"
+      },
+      "name": "outbox",
+      "owned_objects": [
+        "outbox_delivery_attempt",
+        "outbox_delivery_attempt_target_idx",
+        "outbox_delivery_plan",
+        "outbox_delivery_plan_event_idx",
+        "outbox_delivery_target",
+        "outbox_delivery_target_ready_idx",
+        "outbox_event",
+        "outbox_event_event_id_idx",
+        "outbox_event_ready_idx",
+        "outbox_operation_idempotency_idx",
+        "outbox_operation_status_idx",
+        "outbox_operation_trade_mutation_idx",
+        "outbox_operations"
+      ],
+      "owned_tables": [
+        "outbox_delivery_attempt",
+        "outbox_delivery_plan",
+        "outbox_delivery_target",
+        "outbox_event",
+        "outbox_operations"
+      ],
+      "schema_sha256": "e7eeba00de78ec6d990c620e7c056018166e8a00bb703e472ef6f67a00870293",
+      "up": {
+        "byte_length": 5470,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/migrations/0001_outbox.up.sql",
+        "sha256": "a7ee775d32c2b9f845961425362e1b1e558ce0d025f7d22dd58f118ba4dab4fa"
+      },
+      "version": 1
+    }
+  ],
+  "registry_source": {
+    "byte_length": 1329,
+    "hash_algorithm": "sha256_bytes_v1",
+    "path": "crates/outbox/contracts/migration_registry.v1.json",
+    "sha256": "c46e65d7274ea58d0574efaa6694e6f65702f9cf2cc49000af1278ae7c123e0e"
+  },
+  "release": {
+    "change_id": "outbox-versioned-migration-authority",
+    "changelog": "CHANGELOG.md",
+    "record": "contracts/releases/1.0.0-alpha.1.toml"
+  },
+  "result_vector": {
+    "canonical": {
+      "byte_length": 3778,
+      "hash_algorithm": "sha256_bytes_v1",
+      "path": "contracts/conformance/vectors/outbox/migration_authority.v1.json",
+      "sha256": "5240770a1298045de82c080a5d85d3222b5ff27d10ce6f8a8e901853daed0d16"
+    },
+    "executor": {
+      "byte_length": 11241,
+      "hash_algorithm": "sha256_bytes_v1",
+      "path": "crates/outbox/tests/migration_authority_v1_result_vector.rs",
+      "sha256": "0767730a83695b3145b59bdb8b8297db4b44a5a6634cb216231d8d24a5de1022"
+    },
+    "executor_id": "radroots_outbox.migration_authority_v1.result_vector_executor.v1",
+    "executor_test": "migration_authority_v1_result_vector",
+    "mirror_path": "crates/outbox/tests/fixtures/migration_authority.v1.json"
+  },
+  "schema_version": 1,
+  "source_files": [
+    {
+      "file": {
+        "byte_length": 1444,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/Cargo.toml",
+        "sha256": "77f3c8e51aa2f3676c679803b4d7388dba67987a146169ba05c8d715b713d67d"
+      },
+      "role": "outbox_package_manifest"
+    },
+    {
+      "file": {
+        "byte_length": 1377,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/lib.rs",
+        "sha256": "ad57e5979036ba29daad640acf898af7544aa06320112a063ffbc642ad886130"
+      },
+      "role": "outbox_public_surface"
+    },
+    {
+      "file": {
+        "byte_length": 8502,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/error.rs",
+        "sha256": "7d10bfbf43dfbccf2433a3e67faac1cbab1fae530b6acb5d5ec06e161d6efe5b"
+      },
+      "role": "outbox_error_surface"
+    },
+    {
+      "file": {
+        "byte_length": 67,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/generated.rs",
+        "sha256": "e26a394f0b554f564f2b4213aa55f9f6c17e5b33930307aaae29db0c85277344"
+      },
+      "role": "generated_module"
+    },
+    {
+      "file": {
+        "byte_length": 22852,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/migrations.rs",
+        "sha256": "70614a806a7443e7077ba585f638483f44137a6ba3a1ade8e5571e10dc2c9da5"
+      },
+      "role": "migration_registry_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 51902,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/schema.rs",
+        "sha256": "f2cb9a8f0f9416aa02b18eeb966d5dae54373c92ae621173e299a98c79b57191"
+      },
+      "role": "schema_runtime"
+    },
+    {
+      "file": {
+        "byte_length": 326431,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/src/store.rs",
+        "sha256": "47824d14cea2d00f0310f0676f3cd0b5825d642bea668b99c8194c53b0d76107"
+      },
+      "role": "store_integration"
+    },
+    {
+      "file": {
+        "byte_length": 11241,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/tests/migration_authority_v1_result_vector.rs",
+        "sha256": "0767730a83695b3145b59bdb8b8297db4b44a5a6634cb216231d8d24a5de1022"
+      },
+      "role": "vector_executor"
+    },
+    {
+      "file": {
+        "byte_length": 46017,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "tools/xtask/src/contract/outbox_migration.rs",
+        "sha256": "f41a2ac2486210e9cd6733149378d89cb32278730e8c7188207e63bc2d949faa"
+      },
+      "role": "contract_governance"
+    },
+    {
+      "file": {
+        "byte_length": 485783,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "tools/xtask/src/contract.rs",
+        "sha256": "cb3cbb45378551db7a3b1309dbc742d81f90af0c8a067065bb4e8698b744c5ef"
+      },
+      "role": "contract_dispatch"
+    },
+    {
+      "file": {
+        "byte_length": 23735,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "tools/xtask/src/main.rs",
+        "sha256": "5f08b60c2d35a0a2a2b2743c9906538963282a5ed93a03a76087a9bfd282c07d"
+      },
+      "role": "xtask_dispatch"
+    },
+    {
+      "file": {
+        "byte_length": 21097,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "build/nix/common.nix",
+        "sha256": "1018f1b95b91ad18f0664b2d44f0694a67e00253a3e93f7b9da4b3b75caa3a86"
+      },
+      "role": "nix_feature_executor"
+    },
+    {
+      "file": {
+        "byte_length": 4588,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "build/nix/checks.nix",
+        "sha256": "830e46d81576372b3a7dd63c911948051defb6327db8212be8d134404544ef5e"
+      },
+      "role": "nix_feature_check"
+    },
+    {
+      "file": {
+        "byte_length": 1663,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "crates/outbox/README",
+        "sha256": "4bcb2c1860e3c6b75436a6dce722e91ddcb4de70c624f3141cb8167f79dca822"
+      },
+      "role": "outbox_readme"
+    },
+    {
+      "file": {
+        "byte_length": 24634,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "contracts/releases/1.0.0-alpha.1.toml",
+        "sha256": "755db4ea8775c1ad4c7faa223ebb3c06b127d00ccff3b51034fc6bb42d13d272"
+      },
+      "role": "release_record"
+    },
+    {
+      "file": {
+        "byte_length": 35643,
+        "hash_algorithm": "sha256_bytes_v1",
+        "path": "CHANGELOG.md",
+        "sha256": "0581d0f0e95a8a4f81b78b2810a231a9061bb4057ca699201355b3ae3257ff4f"
+      },
+      "role": "release_notes"
+    }
+  ],
+  "version_bounds": {
+    "current": 1,
+    "derivation": "first_and_last_ordered_registry_entries_v1",
+    "minimum": 1
+  }
+}

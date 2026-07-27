@@ -40,6 +40,16 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
+  outboxFeatureMatrixCheck = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-outbox-feature-matrix-check";
+      doCheck = false;
+      buildPhaseCargoCommand = common.outboxFeatureMatrixCommand;
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
   blossomRasterDecodeTest = common.craneLib.mkCargoDerivation (
     common.commonCraneArgs
     // {
@@ -98,6 +108,7 @@ in
   cargo-test = cargoTest;
   blossom-no-default-check = blossomNoDefaultCheck;
   blossom-raster-decode-test = blossomRasterDecodeTest;
+  outbox-feature-matrix = outboxFeatureMatrixCheck;
   blossom-decoder-fuzz-smoke = common.mkRepoCheck {
     name = "radroots-blossom-decoder-fuzz-smoke";
     runtimeInputs = common.runtimeInputs.decoderSecurityFuzz;

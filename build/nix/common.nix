@@ -7,6 +7,7 @@
 let
   root = ../..;
   cargoToml = builtins.fromTOML (builtins.readFile ../../Cargo.toml);
+  outboxFeatureMatrix = builtins.fromTOML (builtins.readFile ../../contracts/outbox_feature_matrix.toml);
   version = cargoToml.workspace.package.version;
   darwinBuildInputs = lib.optionals pkgs.stdenv.isDarwin [
     pkgs.libiconv
@@ -132,6 +133,7 @@ let
     "radroots_nostr"
     "radroots_nostr_connect"
     "radroots_nostr_signer"
+    "radroots_outbox"
   ];
   coreContractCargoArgs =
     lib.concatStringsSep " " (map (crate: "-p ${crate}") coreContractCrates)
@@ -225,6 +227,10 @@ let
   checkCommand = ''
     cargo check --workspace --all-targets
   '';
+  outboxFeatureMatrixCommand = lib.concatMapStringsSep "\n" (
+    profile:
+    "cargo check -q -p ${lib.escapeShellArg outboxFeatureMatrix.package} ${lib.escapeShellArgs profile.cargo_args}"
+  ) outboxFeatureMatrix.profiles;
   contractCommand = ''
     cargo run -q -p xtask -- hygiene forbidden-identifiers
     cargo check -q ${coreContractCargoArgs}
@@ -576,6 +582,7 @@ in
     decoderSecurityStableCommand
     fuzzCargoDeps
     mkRepoCheck
+    outboxFeatureMatrixCommand
     releasePreflightCommand
     coreContractCargoArgs
     sharedEnv

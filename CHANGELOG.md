@@ -9,6 +9,17 @@ publish policy both pass for the same source revision.
 
 ### Changed
 
+<!-- release-change: outbox-versioned-migration-authority -->
+- Outbox schema initialization now uses an ordered, generated migration
+  registry with immutable source checksums, authenticated catalog fingerprints,
+  and a tamper-evident schema ledger. Existing unledgered databases are adopted
+  only when their complete governed catalog matches the frozen `0001_outbox`
+  identity; partial, changed, counterfeit, gapped, newer, or unknown outbox
+  state fails before governed mutation while unrelated caller tables remain
+  untouched. Raw migration SQL exports and live `migrate_down` were replaced by
+  authenticated schema status and migrate-to-current APIs. A machine-readable
+  matrix now governs no-default, SQLite, Tokio, event-store-adapter, and
+  all-feature builds.
 - Event-store schema initialization now uses a transactional, checksummed
   migration authority with exact legacy-baseline adoption, shared-database
   catalog scoping, tamper-evident fail-closed managed history, exact catalog

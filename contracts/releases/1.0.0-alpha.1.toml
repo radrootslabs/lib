@@ -532,3 +532,18 @@ semver_impacts = [
   "add_conformance_vector",
 ]
 summary = "Add transport-neutral BUD-02 plus BUD-01 publication-readiness evidence with bounded complete-byte verification, canonical persisted reload, exact sequential JPEG entropy accounting plus pinned strict zune-jpeg decoding, and internally authoritative full decoding for static JPEG, PNG, and WebP rasters."
+
+[[changes]]
+id = "outbox-versioned-migration-authority"
+classification = "breaking"
+semver_impacts = [
+  "add_exported_type",
+  "add_exported_function",
+  "add_exported_constant",
+  "add_enum_variant",
+  "add_conformance_vector",
+  "remove_exported_constant",
+  "remove_exported_function",
+  "change_exported_algorithm_behavior",
+]
+summary = "Replace raw outbox migration SQL and live migrate-down with an append-only generated registry, immutable checksums, exact unledgered-0001 adoption, a tamper-evident ledger and catalog fingerprint, registry-derived version bounds, governed feature profiles, and an executable conformance contract while freezing the 0001 migration bytes."

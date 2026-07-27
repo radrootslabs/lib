@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots_outbox.migration_authority.v1",
+  "executor": {
+    "id": "radroots_outbox.migration_authority_v1.result_vector_executor.v1",
+    "path": "crates/outbox/tests/migration_authority_v1_result_vector.rs",
+    "test": "migration_authority_v1_result_vector"
+  },
+  "delegated_suite": {
+    "lane": "nix run .#contract",
+    "package": "radroots_outbox",
+    "authorities": [
+      {
+        "authority": "migration_source_discovery_is_exact_and_fail_closed",
+        "authority_path": "crates/outbox/src/migrations.rs"
+      },
+      {
+        "authority": "embedded_registry_and_frozen_baseline_are_exact",
+        "authority_path": "crates/outbox/src/migrations.rs"
+      },
+      {
+        "authority": "registry_shape_validation_rejects_every_structural_defect",
+        "authority_path": "crates/outbox/src/migrations.rs"
+      },
+      {
+        "authority": "additive_future_migration_advances_and_rolls_back_to_an_explicit_target",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_exact_unledgered_baseline_is_adopted_without_replaying_or_losing_caller_state",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_partial_changed_and_unknown_unledgered_catalogs_fail_before_adoption",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_counterfeit_ledger_shape_fails_before_any_schema_mutation",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_ledger_name_checksum_and_catalog_mutations_fail_closed",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_newer_history_and_governed_catalog_overflow_are_bounded_and_rejected",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_history_validation_rejects_gaps_and_unknown_versions",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_current_schema_reopen_is_idempotent_and_does_not_rewrite_history",
+        "authority_path": "crates/outbox/src/schema.rs"
+      },
+      {
+        "authority": "migration_rollback_wrapper_rejects_exactly_below_the_registry_floor",
+        "authority_path": "crates/outbox/src/schema.rs"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "fresh_initialization",
+      "execution": "direct_executor",
+      "expected_outcome": "managed_current",
+      "expected_error": null
+    },
+    {
+      "id": "exact_unledgered_adoption",
+      "execution": "direct_executor",
+      "expected_outcome": "managed_current_without_replaying_0001",
+      "expected_error": null
+    },
+    {
+      "id": "partial_unledgered_rejected",
+      "execution": "direct_executor",
+      "expected_outcome": "rejected_before_ledger_mutation",
+      "expected_error": "UnmanagedSchema"
+    },
+    {
+      "id": "ledger_checksum_tamper_rejected",
+      "execution": "direct_executor",
+      "expected_outcome": "rejected_before_schema_mutation",
+      "expected_error": "MigrationHistoryChecksumDrift"
+    },
+    {
+      "id": "newer_history_rejected",
+      "execution": "direct_executor",
+      "expected_outcome": "rejected_before_schema_mutation",
+      "expected_error": "SchemaTooNew"
+    },
+    {
+      "id": "caller_state_preserved",
+      "execution": "direct_executor",
+      "expected_outcome": "managed_current_with_caller_state_preserved",
+      "expected_error": null
+    },
+    {
+      "id": "current_reopen_no_history_write",
+      "execution": "direct_executor",
+      "expected_outcome": "managed_current_without_history_rewrite",
+      "expected_error": null
+    }
+  ]
+}

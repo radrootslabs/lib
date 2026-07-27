@@ -3,6 +3,8 @@
 
 mod error;
 #[cfg(feature = "sqlite")]
+mod generated;
+#[cfg(feature = "sqlite")]
 mod migrations;
 mod model;
 #[cfg(feature = "sqlite")]
