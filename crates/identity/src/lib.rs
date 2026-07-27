@@ -28,6 +28,7 @@ pub use identity::{
     RadrootsIdentityEncryptedSecretKeyOptions, RadrootsIdentityEncryptedSecretKeySecurity,
 };
 pub use key::{IdentityId, PublicKey};
+pub use profile::{Profile, PublicIdentity};
 #[cfg(all(feature = "std", feature = "serde"))]
 pub use storage::{
     RADROOTS_ENCRYPTED_IDENTITY_DEFAULT_KEY_SLOT, RADROOTS_ENCRYPTED_IDENTITY_KEY_SUFFIX,
@@ -36,7 +37,4 @@ pub use storage::{
     rotate_encrypted_identity_with_key_slot, store_encrypted_identity,
     store_encrypted_identity_with_key_slot, store_identity_profile,
 };
-pub use username::{
-    RADROOTS_USERNAME_MAX_LEN, RADROOTS_USERNAME_MIN_LEN, RADROOTS_USERNAME_REGEX,
-    radroots_username_is_valid, radroots_username_normalize,
-};
+pub use username::Username;

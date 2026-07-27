@@ -276,6 +276,10 @@ impl From<PublicKey> for IdentityId {
 
 #[cfg(test)]
 mod tests {
+    use alloc::{
+        format,
+        string::{String, ToString},
+    };
     use core::str::FromStr;
 
     use super::*;

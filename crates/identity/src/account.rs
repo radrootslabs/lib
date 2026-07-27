@@ -23,6 +23,7 @@ impl From<IdentityId> for AccountId {
 
 #[cfg(test)]
 mod tests {
+    use alloc::format;
     use core::str::FromStr;
 
     use super::*;

@@ -22,6 +22,22 @@ pub enum Error {
 
     #[error("public key bytes are not a valid secp256k1 x-only public key")]
     InvalidPublicKeyBytes,
+
+    #[error("public identity identifier does not match its public key")]
+    IdentityIdMismatch,
+
+    #[error("username length must be between {min} and {max} ASCII bytes, but was {actual}")]
+    InvalidUsernameLength {
+        min: usize,
+        max: usize,
+        actual: usize,
+    },
+
+    #[error("username contains an invalid character at byte {index}")]
+    InvalidUsernameCharacter { index: usize },
+
+    #[error("username dots cannot be leading, trailing, or consecutive")]
+    InvalidUsernameDotPlacement,
 }
 
 /// Transitional errors from the legacy secret and filesystem identity API.
