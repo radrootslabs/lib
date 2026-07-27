@@ -835,6 +835,7 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         }
         RadrootsTransportError::EmptyTargetUri
         | RadrootsTransportError::InvalidTargetUri
+        | RadrootsTransportError::ResourceLimitExceeded { .. }
         | RadrootsTransportError::EmptyTargetSet
         | RadrootsTransportError::DuplicateTargetFingerprint
         | RadrootsTransportError::InvalidTargetFingerprint
@@ -1528,6 +1529,14 @@ mod tests {
                 RadrootsRelayTransportError::TransportContract(_)
             ));
         }
+        assert!(matches!(
+            transport_error_to_relay_error(RadrootsTransportError::ResourceLimitExceeded {
+                field: "fixture",
+                max: 1,
+                actual: 2,
+            }),
+            RadrootsRelayTransportError::TransportContract(_)
+        ));
         let payload_errors = [
             RadrootsTransportError::EmptyPayloadId,
             RadrootsTransportError::InvalidPayloadId,

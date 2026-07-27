@@ -1,13 +1,16 @@
 use radroots_transport::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
-    RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RadrootsTransport,
-    RadrootsTransportCapabilities, RadrootsTransportCapabilityAvailability,
-    RadrootsTransportCapabilityMaturity, RadrootsTransportDeliveryReceipt,
-    RadrootsTransportDeliveryRequest, RadrootsTransportDeliveryTargetStatus,
-    RadrootsTransportError, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,
-    RadrootsTransportFuture, RadrootsTransportImplementationState, RadrootsTransportKind,
-    RadrootsTransportMeshScopeId, RadrootsTransportOutcome, RadrootsTransportOutcomeKind,
-    RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
+    RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES, RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
+    RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
+    RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES, RadrootsTransport, RadrootsTransportCapabilities,
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
+    RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportFetchReceipt,
+    RadrootsTransportFetchRequest, RadrootsTransportFuture, RadrootsTransportImplementationState,
+    RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcome,
+    RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetLabel,
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
@@ -18,6 +21,7 @@ use radroots_transport::{
 use serde_json::Value;
 use std::borrow::ToOwned;
 use std::boxed::Box;
+use std::format;
 use std::string::{String, ToString};
 use std::vec;
 use std::vec::Vec;
@@ -1734,7 +1738,7 @@ fn payload_contract_covers_all_validation_boundaries() {
     let signed = RadrootsTransportPayload::unchecked_signed_event_json("a".repeat(64), "{}")
         .expect("signed");
     let mesh = RadrootsTransportPayload::mesh_frame_cbor("mesh", [1]).expect("mesh");
-    let opaque = RadrootsTransportPayload::opaque_bytes(" label ", [2]).expect("opaque");
+    let opaque = RadrootsTransportPayload::opaque_bytes("label", [2]).expect("opaque");
     assert_eq!(signed.payload_kind(), "signed_event_json");
     assert_eq!(mesh.payload_kind(), "mesh_frame_cbor");
     assert_eq!(opaque.payload_kind(), "opaque_bytes");
@@ -1979,9 +1983,13 @@ fn target_contract_covers_parser_and_authority_boundaries() {
         );
     }
 
-    let label = RadrootsTransportTargetLabel::parse(" Relay One ").expect("label");
+    let label = RadrootsTransportTargetLabel::parse("Relay One").expect("label");
     assert_eq!(label.as_str(), "Relay One");
     assert_eq!(label.to_string(), "Relay One");
+    assert_eq!(
+        RadrootsTransportTargetLabel::parse(" Relay One ").expect_err("noncanonical label"),
+        RadrootsTransportError::InvalidTargetLabel
+    );
     assert_eq!(
         RadrootsTransportTargetLabel::parse("\u{7f}").expect_err("control label"),
         RadrootsTransportError::InvalidTargetLabel
@@ -2065,6 +2073,232 @@ fn target_contract_covers_parser_and_authority_boundaries() {
 }
 
 #[test]
+fn transport_bounds_targets_enforce_exact_and_one_over_before_set_work() {
+    let exact_uri = "a".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES);
+    assert_eq!(
+        RadrootsTransportTargetUri::parse(exact_uri)
+            .expect("exact URI")
+            .as_str()
+            .len(),
+        RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
+    );
+    assert_eq!(
+        RadrootsTransportTargetUri::parse(
+            "a".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES + 1)
+        )
+        .expect_err("one-over URI"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "target_uri",
+            max: RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES + 1,
+        }
+    );
+
+    assert_eq!(
+        RadrootsTransportMeshScopeId::parse("a".repeat(RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES))
+            .expect("exact scope")
+            .as_str()
+            .len(),
+        RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES
+    );
+    assert_eq!(
+        RadrootsTransportMeshScopeId::parse(
+            "a".repeat(RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES + 1)
+        )
+        .expect_err("one-over scope"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "target_scope",
+            max: RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES + 1,
+        }
+    );
+
+    assert_eq!(
+        RadrootsTransportTargetLabel::parse("a".repeat(RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES))
+            .expect("exact label")
+            .as_str()
+            .len(),
+        RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES
+    );
+    assert_eq!(
+        RadrootsTransportTargetLabel::parse(
+            "a".repeat(RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES + 1)
+        )
+        .expect_err("one-over label"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "target_label",
+            max: RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES + 1,
+        }
+    );
+
+    let exact_targets = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| {
+            RadrootsTransportTarget::local(format!("local:target-{index}")).expect("bounded target")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        RadrootsTransportTargetSet::new(exact_targets.clone())
+            .expect("exact target set")
+            .len(),
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+    );
+    let mut one_over_targets = exact_targets;
+    one_over_targets
+        .push(RadrootsTransportTarget::local("local:target-one-over").expect("one-over target"));
+    assert_eq!(
+        RadrootsTransportTargetSet::new(one_over_targets).expect_err("one-over target set"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "target_count",
+            max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+            actual: RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1,
+        }
+    );
+
+    let required_targets = (0..RADROOTS_TRANSPORT_TARGET_MAX_COUNT)
+        .map(|index| {
+            RadrootsTransportTargetFingerprint::parse(format!("{index:064x}"))
+                .expect("bounded fingerprint")
+        })
+        .collect::<Vec<_>>();
+    RadrootsTransportSatisfactionPolicy::required_targets(
+        RadrootsTransportSatisfactionClass::Accepted,
+        required_targets.clone(),
+    )
+    .expect("exact required-target set");
+    let mut one_over_required_targets = required_targets;
+    one_over_required_targets.push(
+        RadrootsTransportTargetFingerprint::parse(format!(
+            "{:064x}",
+            RADROOTS_TRANSPORT_TARGET_MAX_COUNT
+        ))
+        .expect("one-over fingerprint"),
+    );
+    assert_eq!(
+        RadrootsTransportSatisfactionPolicy::required_targets(
+            RadrootsTransportSatisfactionClass::Accepted,
+            one_over_required_targets,
+        )
+        .expect_err("one-over required-target set"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "required_target_count",
+            max: RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+            actual: RADROOTS_TRANSPORT_TARGET_MAX_COUNT + 1,
+        }
+    );
+}
+
+#[test]
+fn transport_bounds_payloads_enforce_exact_and_one_over_before_copying() {
+    let exact_json = format!(
+        "{{{}}}",
+        "a".repeat(RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES - 2)
+    );
+    RadrootsTransportPayload::unchecked_signed_event_json("a".repeat(64), &exact_json)
+        .expect("exact signed event JSON");
+    let one_over_json = format!(
+        "{{{}}}",
+        "a".repeat(RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES - 1)
+    );
+    assert_eq!(
+        RadrootsTransportPayload::unchecked_signed_event_json("a".repeat(64), &one_over_json)
+            .expect_err("one-over signed event JSON"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "signed_event_json_bytes",
+            max: RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES + 1,
+        }
+    );
+
+    RadrootsTransportPayload::mesh_frame_cbor(
+        "a".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES),
+        vec![0; RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES],
+    )
+    .expect("exact mesh payload");
+    assert_eq!(
+        RadrootsTransportPayload::mesh_frame_cbor(
+            "mesh",
+            vec![0; RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES + 1],
+        )
+        .expect_err("one-over mesh payload"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "mesh_frame_cbor_bytes",
+            max: RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES + 1,
+        }
+    );
+    assert_eq!(
+        RadrootsTransportPayload::mesh_frame_cbor(
+            "a".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1),
+            [1],
+        )
+        .expect_err("one-over payload id"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "payload_id",
+            max: RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1,
+        }
+    );
+
+    RadrootsTransportPayload::opaque_bytes(
+        "a".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES),
+        vec![0; RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES],
+    )
+    .expect("exact opaque payload");
+    assert_eq!(
+        RadrootsTransportPayload::opaque_bytes(
+            "a".repeat(RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1),
+            [1],
+        )
+        .expect_err("one-over payload label"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "payload_label",
+            max: RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES + 1,
+        }
+    );
+    assert_eq!(
+        RadrootsTransportPayload::opaque_bytes(
+            "label",
+            vec![0; RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES + 1],
+        )
+        .expect_err("one-over opaque payload"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "opaque_payload_bytes",
+            max: RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES + 1,
+        }
+    );
+
+    let target_set = RadrootsTransportTargetSet::new(vec![
+        RadrootsTransportTarget::local("local:bounded-request").expect("request target"),
+    ])
+    .expect("request target set");
+    let payload = RadrootsTransportPayload::opaque_bytes("bounded", [1]).expect("request payload");
+    RadrootsTransportDeliveryRequest::new(
+        "a".repeat(RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES),
+        payload.clone(),
+        target_set.clone(),
+        RadrootsTransportSatisfactionPolicy::no_wait(),
+    )
+    .expect("exact request id");
+    assert_eq!(
+        RadrootsTransportDeliveryRequest::new(
+            "a".repeat(RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES + 1),
+            payload,
+            target_set,
+            RadrootsTransportSatisfactionPolicy::no_wait(),
+        )
+        .expect_err("one-over request id"),
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "delivery_request_id",
+            max: RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES,
+            actual: RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES + 1,
+        }
+    );
+}
+
+#[test]
 fn every_transport_error_has_a_stable_display_message() {
     let remaining = [
         RadrootsTransportError::RequiredTargetNotRequested,
@@ -2087,6 +2321,11 @@ fn every_transport_error_has_a_stable_display_message() {
         RadrootsTransportError::InvalidPayloadBytes,
         RadrootsTransportError::InvalidPayloadDigest,
         RadrootsTransportError::PayloadDigestMismatch,
+        RadrootsTransportError::ResourceLimitExceeded {
+            field: "fixture",
+            max: 1,
+            actual: 2,
+        },
     ];
     for error in remaining {
         assert!(!error.to_string().is_empty());

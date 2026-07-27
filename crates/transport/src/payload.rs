@@ -1,4 +1,8 @@
-use crate::RadrootsTransportError;
+use crate::{
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
+    RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES, RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
+    RadrootsTransportError, limits::ensure_resource_limit,
+};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use sha2::{Digest, Sha256};
@@ -72,7 +76,11 @@ impl RadrootsTransportPayload {
         bytes: &[u8],
     ) -> Result<Self, RadrootsTransportError> {
         let message_id = validate_token_id(message_id)?;
-        let bytes = validate_bytes(bytes)?;
+        let bytes = validate_bytes(
+            "mesh_frame_cbor_bytes",
+            bytes,
+            RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES,
+        )?;
         let digest = sha256_hex(bytes.as_slice());
         Ok(Self::MeshFrameCbor {
             message_id,
@@ -112,7 +120,11 @@ impl RadrootsTransportPayload {
 
     fn validated_opaque_bytes(label: &str, bytes: &[u8]) -> Result<Self, RadrootsTransportError> {
         let label = validate_label(label)?;
-        let bytes = validate_bytes(bytes)?;
+        let bytes = validate_bytes(
+            "opaque_payload_bytes",
+            bytes,
+            RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES,
+        )?;
         let digest = sha256_hex(bytes.as_slice());
         Ok(Self::OpaqueBytes {
             label,
@@ -256,6 +268,11 @@ fn validate_token_id(raw: &str) -> Result<String, RadrootsTransportError> {
     if raw.is_empty() {
         return Err(RadrootsTransportError::EmptyPayloadId);
     }
+    ensure_resource_limit(
+        "payload_id",
+        raw.len(),
+        RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    )?;
     if raw != raw.trim()
         || raw
             .chars()
@@ -271,7 +288,12 @@ fn validate_label(raw: &str) -> Result<String, RadrootsTransportError> {
     if trimmed.is_empty() {
         return Err(RadrootsTransportError::EmptyPayloadLabel);
     }
-    if trimmed.chars().any(char::is_control) {
+    ensure_resource_limit(
+        "payload_label",
+        raw.len(),
+        RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES,
+    )?;
+    if raw != trimmed || trimmed.chars().any(char::is_control) {
         return Err(RadrootsTransportError::InvalidPayloadLabel);
     }
     Ok(trimmed.to_string())
@@ -281,6 +303,11 @@ fn validate_raw_json(raw: &str) -> Result<String, RadrootsTransportError> {
     if raw.is_empty() {
         return Err(RadrootsTransportError::EmptyPayloadBytes);
     }
+    ensure_resource_limit(
+        "signed_event_json_bytes",
+        raw.len(),
+        RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES,
+    )?;
     if raw != raw.trim()
         || raw.chars().any(char::is_control)
         || !raw.starts_with('{')
@@ -291,10 +318,15 @@ fn validate_raw_json(raw: &str) -> Result<String, RadrootsTransportError> {
     Ok(raw.to_string())
 }
 
-fn validate_bytes(raw: &[u8]) -> Result<Vec<u8>, RadrootsTransportError> {
+fn validate_bytes(
+    field: &'static str,
+    raw: &[u8],
+    max: usize,
+) -> Result<Vec<u8>, RadrootsTransportError> {
     if raw.is_empty() {
         return Err(RadrootsTransportError::EmptyPayloadBytes);
     }
+    ensure_resource_limit(field, raw.len(), max)?;
     Ok(raw.to_vec())
 }
 

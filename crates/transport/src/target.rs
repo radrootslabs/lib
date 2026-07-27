@@ -1,6 +1,8 @@
 use crate::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransportError,
-    RadrootsTransportKind,
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
+    RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
+    RADROOTS_TRANSPORT_TARGET_MAX_COUNT, RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+    RadrootsTransportError, RadrootsTransportKind, limits::ensure_resource_limit,
 };
 use alloc::collections::BTreeSet;
 use alloc::format;
@@ -15,11 +17,21 @@ pub struct RadrootsTransportTargetUri(String);
 
 impl RadrootsTransportTargetUri {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        ensure_resource_limit(
+            "target_uri",
+            raw.as_ref().len(),
+            RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+        )?;
         let canonical = canonicalize_uri(raw.as_ref())?;
         Ok(Self(canonical))
     }
 
     fn parse_nostr_relay(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
+        ensure_resource_limit(
+            "target_uri",
+            raw.as_ref().len(),
+            RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES,
+        )?;
         let canonical = canonicalize_nostr_relay_uri(raw.as_ref())?;
         Ok(Self(canonical))
     }
@@ -62,6 +74,11 @@ impl RadrootsTransportMeshScopeId {
         if value.is_empty() {
             return Err(RadrootsTransportError::EmptyTargetScope);
         }
+        ensure_resource_limit(
+            "target_scope",
+            value.len(),
+            RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES,
+        )?;
         if value != value.trim()
             || value
                 .chars()
@@ -104,11 +121,17 @@ pub struct RadrootsTransportTargetLabel(String);
 
 impl RadrootsTransportTargetLabel {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
-        let trimmed = raw.as_ref().trim();
+        let raw = raw.as_ref();
+        let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Err(RadrootsTransportError::EmptyTargetLabel);
         }
-        if trimmed.chars().any(char::is_control) {
+        ensure_resource_limit(
+            "target_label",
+            raw.len(),
+            RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES,
+        )?;
+        if raw != trimmed || trimmed.chars().any(char::is_control) {
             return Err(RadrootsTransportError::InvalidTargetLabel);
         }
         Ok(Self(trimmed.to_string()))
@@ -383,6 +406,11 @@ impl RadrootsTransportTargetSet {
         if targets.is_empty() {
             return Err(RadrootsTransportError::EmptyTargetSet);
         }
+        ensure_resource_limit(
+            "target_count",
+            targets.len(),
+            RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+        )?;
         let mut fingerprints = BTreeSet::new();
         for target in &targets {
             if !fingerprints.insert(target.fingerprint.as_str().to_string()) {

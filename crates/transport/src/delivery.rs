@@ -1,4 +1,5 @@
 use crate::{
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES, RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportError, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportPayload, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
@@ -7,7 +8,8 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec::Vec;
 
-pub const RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES: usize = 256;
+pub const RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES: usize =
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -295,6 +297,11 @@ fn validate_required_targets(
     if targets.is_empty() {
         return Err(RadrootsTransportError::EmptyRequiredTargetSet);
     }
+    crate::limits::ensure_resource_limit(
+        "required_target_count",
+        targets.len(),
+        RADROOTS_TRANSPORT_TARGET_MAX_COUNT,
+    )?;
     let mut fingerprints = BTreeSet::new();
     for target in targets {
         if !fingerprints.insert(target.as_str()) {
@@ -365,10 +372,12 @@ fn validate_delivery_request_id(value: &str) -> Result<(), RadrootsTransportErro
     if value.is_empty() {
         return Err(RadrootsTransportError::EmptyDeliveryRequestId);
     }
-    if value != value.trim()
-        || value.chars().any(char::is_control)
-        || value.len() > RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES
-    {
+    crate::limits::ensure_resource_limit(
+        "delivery_request_id",
+        value.len(),
+        RADROOTS_TRANSPORT_DELIVERY_REQUEST_ID_MAX_BYTES,
+    )?;
+    if value != value.trim() || value.chars().any(char::is_control) {
         return Err(RadrootsTransportError::InvalidDeliveryRequestId);
     }
     Ok(())

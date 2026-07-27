@@ -1,0 +1,30 @@
+pub const RADROOTS_TRANSPORT_SIGNED_EVENT_JSON_MAX_BYTES: usize = 256 * 1024;
+pub const RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES: usize = 64 * 1024;
+pub const RADROOTS_TRANSPORT_OPAQUE_PAYLOAD_MAX_BYTES: usize =
+    RADROOTS_TRANSPORT_RETICULUM_PAYLOAD_MAX_BYTES;
+pub const RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES: usize = 2_048;
+pub const RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES: usize = 256;
+pub const RADROOTS_TRANSPORT_TARGET_SCOPE_MAX_BYTES: usize =
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES;
+pub const RADROOTS_TRANSPORT_TARGET_LABEL_MAX_BYTES: usize =
+    RADROOTS_TRANSPORT_IDENTIFIER_MAX_BYTES;
+pub const RADROOTS_TRANSPORT_TARGET_MAX_COUNT: usize = 16;
+pub const RADROOTS_TRANSPORT_FETCH_FILTER_MAX_COUNT: usize = 16;
+pub const RADROOTS_TRANSPORT_FETCH_FILTER_MAX_BYTES: usize = 64 * 1024;
+pub const RADROOTS_TRANSPORT_FETCH_FILTERS_MAX_BYTES: usize = 1024 * 1024;
+pub const RADROOTS_TRANSPORT_FETCH_ADMITTED_EVENT_MAX_COUNT: usize = 1_000;
+pub const RADROOTS_TRANSPORT_FETCH_RAW_ITEM_MAX_COUNT: usize = 4_096;
+pub const RADROOTS_TRANSPORT_FETCH_RAW_JSON_MAX_BYTES: usize = 64 * 1024 * 1024;
+pub const RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES: usize = 4_096;
+pub const RADROOTS_TRANSPORT_TOTAL_DEADLINE_MAX_MS: u64 = 30_000;
+
+pub(crate) fn ensure_resource_limit(
+    field: &'static str,
+    actual: usize,
+    max: usize,
+) -> Result<(), crate::RadrootsTransportError> {
+    if actual > max {
+        return Err(crate::RadrootsTransportError::ResourceLimitExceeded { field, max, actual });
+    }
+    Ok(())
+}

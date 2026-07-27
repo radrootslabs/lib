@@ -38,6 +38,11 @@ pub enum RadrootsTransportError {
     InvalidPayloadSignature,
     InvalidPayloadDigest,
     PayloadDigestMismatch,
+    ResourceLimitExceeded {
+        field: &'static str,
+        max: usize,
+        actual: usize,
+    },
 }
 
 impl fmt::Display for RadrootsTransportError {
@@ -111,6 +116,10 @@ impl fmt::Display for RadrootsTransportError {
             Self::PayloadDigestMismatch => {
                 f.write_str("transport payload digest does not match payload bytes")
             }
+            Self::ResourceLimitExceeded { field, max, actual } => write!(
+                f,
+                "transport resource `{field}` exceeds maximum {max}: observed {actual}"
+            ),
         }
     }
 }
