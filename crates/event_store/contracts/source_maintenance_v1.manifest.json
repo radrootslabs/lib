@@ -152,57 +152,57 @@
     {
       "role": "workspace_dependency_authority",
       "path": "Cargo.toml",
-      "byte_length": 11546,
-      "sha256": "0378afe281a46e02e83e128324efefc3da950abf3e1d3d06c75b628f69810bd2",
+      "byte_length": 11506,
+      "sha256": "af871d7567594f75da8385691297a5ce170f51ae54c4c318db10b99d458a3335",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_currency_value_authority",
       "path": "crates/core/src/currency.rs",
-      "byte_length": 4306,
-      "sha256": "c298f121cdf42cfa28d1446968e026e62a34f19a185365c96ab1effcc3e65146",
+      "byte_length": 4268,
+      "sha256": "a4a7cc26cfda954b878ba6b6065d5ff063bcecc8aa799582b16295fba2db328f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_decimal_value_authority",
       "path": "crates/core/src/decimal.rs",
-      "byte_length": 8223,
-      "sha256": "00af637869f0833f12323fffb133d832b24c9e1f72663cb98f09f09df8b92d59",
+      "byte_length": 8356,
+      "sha256": "edc5bb46c540a0a6040bd568e6108e816e3af0235c45d55ddd33d0d4a6dccbb8",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_money_value_authority",
       "path": "crates/core/src/money.rs",
-      "byte_length": 9141,
-      "sha256": "3dd85dbd42c2c3c097c64b516e9b79848c542ccf39ac957e0ca03916e74c92bc",
+      "byte_length": 9103,
+      "sha256": "d2cf3d8e13e4989841cffe6794870911ca34356e7777e26a4d998be5eb21c299",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_percent_value_authority",
       "path": "crates/core/src/percent.rs",
-      "byte_length": 3259,
-      "sha256": "432f43bd22bdf5b2114d85d3818cae9246172dfb0e02ead23820f3f632164fe1",
+      "byte_length": 3202,
+      "sha256": "7908f8ed4c30349cd67fff6f1da95d275194357fe3d742183dabb0daef47561d",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_quantity_value_authority",
       "path": "crates/core/src/quantity.rs",
-      "byte_length": 8026,
-      "sha256": "ce63e41aee3c48d23ecf7a9b1b9f64d74c7d45b302884f1a44e8e618fb3f2b24",
+      "byte_length": 7969,
+      "sha256": "789fb647dfdbbd92dab3b03c6556c9280078cfc79df33eddcb345a5c575acb63",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_quantity_price_value_authority",
       "path": "crates/core/src/quantity_price.rs",
-      "byte_length": 8304,
-      "sha256": "a6b3d8956798979c2e9e32e4cd694c4fb3eddcd7f39cc4f343ebb21d937a4e23",
+      "byte_length": 8266,
+      "sha256": "0bfa11f76a27e92d007c71c38cf2b43f6dc40707a62d44fa753b59c9407ad39d",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "core_unit_value_authority",
       "path": "crates/core/src/unit.rs",
-      "byte_length": 10306,
-      "sha256": "698dbe66e848b3aa92237a549690c7f6ae598be860eabbb754d2c6375a379dc8",
+      "byte_length": 10084,
+      "sha256": "e3b28d3132d9317c2cb07b867866f760cd742510faa0e4db40e52f7f1f05bd3a",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -292,8 +292,8 @@
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 835585,
-      "sha256": "51d524cb00d2d96dc0da35fc9133c54f2e5328a830d56b8d5e83a7f1e9654ddc",
+      "byte_length": 835558,
+      "sha256": "51a01360e2c32c83056cb36e22b850e6b09d2ad4e4a749097564b4a100709a16",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

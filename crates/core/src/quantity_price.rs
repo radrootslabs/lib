@@ -3,8 +3,8 @@ use core::fmt;
 use crate::{Decimal, Money, Quantity, Unit};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuantityPrice {
     pub amount: Money,

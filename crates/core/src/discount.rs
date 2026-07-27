@@ -4,8 +4,8 @@ use alloc::string::String;
 use std::string::String;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub enum DiscountScope {
@@ -14,8 +14,8 @@ pub enum DiscountScope {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
@@ -27,8 +27,8 @@ pub enum DiscountThreshold {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
@@ -40,8 +40,8 @@ pub enum DiscountValue {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 pub struct Discount {

@@ -12,8 +12,8 @@ use alloc::{format, string::ToString};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(as = "string"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Decimal(pub RustDecimal);
 
@@ -74,6 +74,11 @@ impl Decimal {
     pub const MAX: Self = Self(RustDecimal::MAX);
     pub const MIN: Self = Self(RustDecimal::MIN);
     pub const MAX_SCALE: u32 = RustDecimal::MAX_SCALE;
+
+    #[inline]
+    pub(crate) const fn from_parts(lo: u32, mid: u32, hi: u32, scale: u32) -> Self {
+        Self(RustDecimal::from_parts(lo, mid, hi, false, scale))
+    }
 
     #[inline]
     pub fn is_zero(&self) -> bool {

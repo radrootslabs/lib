@@ -213,7 +213,6 @@ rustls = { version = "0.23", default-features = false, features = [
   "std",
 ] }
 rust_decimal = { version = "1", default-features = false }
-rust_decimal_macros = { version = "1" }
 x25519-dalek = { version = "2", default-features = false, features = [
   "static_secrets",
 ] }

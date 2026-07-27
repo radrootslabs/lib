@@ -184,7 +184,7 @@ const CORE_CARGO_MANIFEST_RELATIVE: &str = "crates/core/Cargo.toml";
 const BLOSSOM_CARGO_MANIFEST_RELATIVE: &str = "crates/blossom/Cargo.toml";
 const TRANSPORT_CARGO_MANIFEST_RELATIVE: &str = "crates/transport/Cargo.toml";
 const CARGO_CONFIG_RELATIVE: &str = ".cargo/config.toml";
-const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 23] = [
+const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 22] = [
     "dto_bindgen",
     "getrandom",
     "hex",
@@ -197,7 +197,6 @@ const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 23] = [
     "radroots_event_codec",
     "radroots_transport",
     "rust_decimal",
-    "rust_decimal_macros",
     "secp256k1",
     "serde",
     "serde_json",
@@ -212,11 +211,11 @@ const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 23] = [
 const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     (
         CORE_CARGO_MANIFEST_RELATIVE,
-        "36ec909334f7bf1d8353753bcc0651f66f808307e30f4d7441595c7bd51f7d3d",
+        "79f6cee54c1a4f7ca0d029c6cc6ef1493ee9d441e231634a04885ac85d793759",
     ),
     (
         EVENT_CARGO_MANIFEST_RELATIVE,
-        "46f1af7d20b6a040ed3fd9fcad8c151d1edfb6eb1558ff0042b3bf9bea9bfddf",
+        "6e21eb3a0e276ed96ee42d557794097c87e51c928c5ba78e63986cea4f704105",
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
@@ -236,7 +235,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "2a5e34872160a39daf03ffd15f32fc824e91b2c0253b4bca84c6610b0238ca32",
+        "2652382f63714f1f9fb6518c051c16b9b0ee775634b2c7b7b066e5e56ed60dd5",
     ),
 ];
 

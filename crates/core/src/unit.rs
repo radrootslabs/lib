@@ -1,6 +1,5 @@
 use core::fmt;
 use core::str::FromStr;
-use rust_decimal_macros::dec;
 
 #[cfg(all(feature = "serde", not(feature = "std")))]
 use alloc::string::String;
@@ -13,37 +12,40 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeErr
 
 use crate::Decimal;
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
+const GRAMS_PER_OUNCE: Decimal = Decimal::from_parts(2_579_719_349, 6, 0, 9);
+const GRAMS_PER_POUND: Decimal = Decimal::from_parts(45_359_237, 0, 0, 5);
+
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
+#[cfg_attr(test, dto(as = "string_enum"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnitDimension {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "count"))]
+    #[cfg_attr(test, dto(rename = "count"))]
     Count,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "mass"))]
+    #[cfg_attr(test, dto(rename = "mass"))]
     Mass,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "volume"))]
+    #[cfg_attr(test, dto(rename = "volume"))]
     Volume,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
+#[cfg_attr(test, derive(dto_bindgen::Dto))]
+#[cfg_attr(test, dto(export))]
+#[cfg_attr(test, dto(as = "string_enum"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Unit {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "each"))]
+    #[cfg_attr(test, dto(rename = "each"))]
     Each,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "kg"))]
+    #[cfg_attr(test, dto(rename = "kg"))]
     MassKg,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "g"))]
+    #[cfg_attr(test, dto(rename = "g"))]
     MassG,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "oz"))]
+    #[cfg_attr(test, dto(rename = "oz"))]
     MassOz,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "lb"))]
+    #[cfg_attr(test, dto(rename = "lb"))]
     MassLb,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "l"))]
+    #[cfg_attr(test, dto(rename = "l"))]
     VolumeL,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "ml"))]
+    #[cfg_attr(test, dto(rename = "ml"))]
     VolumeMl,
 }
 
@@ -246,10 +248,10 @@ pub fn convert_mass_decimal(
             .checked_mul(Decimal::from(1000u32))
             .map_err(|_| arithmetic_error())?,
         Unit::MassOz => amount
-            .checked_mul(Decimal(dec!(28.349523125)))
+            .checked_mul(GRAMS_PER_OUNCE)
             .map_err(|_| arithmetic_error())?,
         Unit::MassLb => amount
-            .checked_mul(Decimal(dec!(453.59237)))
+            .checked_mul(GRAMS_PER_POUND)
             .map_err(|_| arithmetic_error())?,
         _ => {
             return Err(ConvertError::NotMassUnit { from, to });
@@ -259,8 +261,8 @@ pub fn convert_mass_decimal(
     let to_factor = match to {
         Unit::MassG => Decimal::ONE,
         Unit::MassKg => Decimal::from(1000u32),
-        Unit::MassOz => Decimal(dec!(28.349523125)),
-        Unit::MassLb => Decimal(dec!(453.59237)),
+        Unit::MassOz => GRAMS_PER_OUNCE,
+        Unit::MassLb => GRAMS_PER_POUND,
         _ => {
             return Err(ConvertError::NotMassUnit { from, to });
         }
