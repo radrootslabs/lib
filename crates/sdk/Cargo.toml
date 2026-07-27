@@ -214,7 +214,7 @@ radroots_replica_store = { workspace = true, default-features = false, features 
   "native",
 ] }
 radroots_replica_schema = { workspace = true }
-radroots_replica_sync = { workspace = true, features = ["std"] }
+radroots_replica_sync = { workspace = true, features = ["std", "legacy-ingest"] }
 radroots_sql_core = { workspace = true, features = ["native"] }
 radroots_nostr = { workspace = true, default-features = false, features = [
   "std",

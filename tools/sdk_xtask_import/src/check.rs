@@ -326,24 +326,15 @@ fn check_publication_policy(root: &Path) -> Result<(), String> {
             policy.spec_id, architecture.spec_id
         ));
     }
-    let approved = policy_set(
-        policy.approved_packages.into_iter(),
-        "publication.approved_packages",
-    )?;
-    let local = policy_set(
-        policy.local_packages.into_iter(),
-        "publication.local_packages",
-    )?;
-    let external = policy_set(
-        policy.external_packages.into_iter(),
-        "publication.external_packages",
-    )?;
+    let approved = policy_set(policy.approved_packages, "publication.approved_packages")?;
+    let local = policy_set(policy.local_packages, "publication.local_packages")?;
+    let external = policy_set(policy.external_packages, "publication.external_packages")?;
     let expected_local = policy_set(
-        architecture.repositories.sdk.packages.into_iter(),
+        architecture.repositories.sdk.packages,
         "architecture.repositories.sdk.packages",
     )?;
     let expected_external = policy_set(
-        architecture.repositories.lib.packages.into_iter(),
+        architecture.repositories.lib.packages,
         "architecture.repositories.lib.packages",
     )?;
     for (field, actual, expected) in [
@@ -437,26 +428,17 @@ fn check_publication_policy(root: &Path) -> Result<(), String> {
         ));
     }
     let classification = policy_file.workspace_classification;
-    let private = policy_set(
-        classification.private.into_iter(),
-        "workspace_classification.private",
-    )?;
+    let private = policy_set(classification.private, "workspace_classification.private")?;
     let build_codegen = policy_set(
-        classification.build_codegen.into_iter(),
+        classification.build_codegen,
         "workspace_classification.build_codegen",
     )?;
     let test_support = policy_set(
-        classification.test_support.into_iter(),
+        classification.test_support,
         "workspace_classification.test_support",
     )?;
-    let preview = policy_set(
-        classification.preview.into_iter(),
-        "workspace_classification.preview",
-    )?;
-    let retired = policy_set(
-        classification.retired.into_iter(),
-        "workspace_classification.retired",
-    )?;
+    let preview = policy_set(classification.preview, "workspace_classification.preview")?;
+    let retired = policy_set(classification.retired, "workspace_classification.retired")?;
     let classes = [
         ("private", &private),
         ("build-codegen", &build_codegen),

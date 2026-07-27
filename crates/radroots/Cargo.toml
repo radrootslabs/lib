@@ -11,6 +11,9 @@ authors.workspace = true
 readme = "README.md"
 publish = false
 
+[lints]
+workspace = true
+
 [lib]
 name = "radroots"
 path = "src/lib.rs"

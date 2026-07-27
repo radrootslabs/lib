@@ -20,7 +20,7 @@ radroots_event = { workspace = true, default-features = false, features = [
   "serde",
 ] }
 radroots_sdk_sql_wasm_runtime = { workspace = true }
-radroots_replica_sync = { workspace = true, features = ["std"] }
+radroots_replica_sync = { workspace = true, features = ["std", "legacy-ingest"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde-wasm-bindgen = { workspace = true }
