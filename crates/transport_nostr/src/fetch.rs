@@ -301,12 +301,128 @@ fn ensure_positive_timeout(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsRelayFetchItem {
+pub struct RadrootsRelayFetchItem {
+    body: RadrootsRelayFetchItemBody,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RadrootsRelayFetchItemBody {
     Event { relay_url: String, raw_json: String },
     Eose { relay_url: String },
     Truncated { relay_url: String, message: String },
     Closed { relay_url: String, message: String },
     Notice { relay_url: String, message: String },
+}
+
+impl RadrootsRelayFetchItem {
+    pub fn event(
+        relay_url: impl Into<String>,
+        raw_json: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let relay_url = validate_fetch_item_relay_url(relay_url.into())?;
+        let raw_json = raw_json.into();
+        if raw_json.len() > DEFAULT_RAW_JSON_MAX_BYTES {
+            return Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+                field: "event_raw_json_bytes",
+                max: DEFAULT_RAW_JSON_MAX_BYTES,
+                actual: raw_json.len(),
+            });
+        }
+        Ok(Self {
+            body: RadrootsRelayFetchItemBody::Event {
+                relay_url,
+                raw_json,
+            },
+        })
+    }
+
+    pub fn eose(relay_url: impl Into<String>) -> Result<Self, RadrootsRelayTransportError> {
+        Ok(Self {
+            body: RadrootsRelayFetchItemBody::Eose {
+                relay_url: validate_fetch_item_relay_url(relay_url.into())?,
+            },
+        })
+    }
+
+    pub fn truncated(
+        relay_url: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::diagnostic(relay_url.into(), message.into(), |relay_url, message| {
+            RadrootsRelayFetchItemBody::Truncated { relay_url, message }
+        })
+    }
+
+    pub fn closed(
+        relay_url: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::diagnostic(relay_url.into(), message.into(), |relay_url, message| {
+            RadrootsRelayFetchItemBody::Closed { relay_url, message }
+        })
+    }
+
+    pub fn notice(
+        relay_url: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        Self::diagnostic(relay_url.into(), message.into(), |relay_url, message| {
+            RadrootsRelayFetchItemBody::Notice { relay_url, message }
+        })
+    }
+
+    fn diagnostic(
+        relay_url: String,
+        message: String,
+        body: fn(String, String) -> RadrootsRelayFetchItemBody,
+    ) -> Result<Self, RadrootsRelayTransportError> {
+        let relay_url = validate_fetch_item_relay_url(relay_url)?;
+        if message.len() > radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES {
+            return Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                field: "relay_fetch_item_message",
+                max: radroots_transport::RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+                actual: message.len(),
+            });
+        }
+        Ok(Self {
+            body: body(relay_url, message),
+        })
+    }
+
+    pub fn relay_url(&self) -> &str {
+        match &self.body {
+            RadrootsRelayFetchItemBody::Event { relay_url, .. }
+            | RadrootsRelayFetchItemBody::Eose { relay_url }
+            | RadrootsRelayFetchItemBody::Truncated { relay_url, .. }
+            | RadrootsRelayFetchItemBody::Closed { relay_url, .. }
+            | RadrootsRelayFetchItemBody::Notice { relay_url, .. } => relay_url,
+        }
+    }
+
+    fn terminal_outcome_label(&self) -> Option<&'static str> {
+        match &self.body {
+            RadrootsRelayFetchItemBody::Eose { .. } => Some("eose"),
+            RadrootsRelayFetchItemBody::Truncated { .. } => Some("truncated"),
+            RadrootsRelayFetchItemBody::Closed { .. } => Some("closed"),
+            RadrootsRelayFetchItemBody::Event { .. }
+            | RadrootsRelayFetchItemBody::Notice { .. } => None,
+        }
+    }
+}
+
+fn validate_fetch_item_relay_url(relay_url: String) -> Result<String, RadrootsRelayTransportError> {
+    RadrootsTransportTarget::nostr_relay(relay_url.as_str()).map_err(|error| {
+        RadrootsRelayTransportError::InvalidFetchItemRelayUrl {
+            url: if relay_url.len() <= radroots_transport::RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES
+            {
+                relay_url.clone()
+            } else {
+                "<oversized>".to_owned()
+            },
+            reason: error.to_string(),
+        }
+    })?;
+    Ok(relay_url)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -928,18 +1044,9 @@ fn process_relay_fetch_items(
     let mut seen_event_ids = BTreeSet::new();
     let mut terminal_outcomes = BTreeMap::new();
     for item in items {
-        let item_relay_url = match &item {
-            RadrootsRelayFetchItem::Event { relay_url, .. }
-            | RadrootsRelayFetchItem::Eose { relay_url }
-            | RadrootsRelayFetchItem::Truncated { relay_url, .. }
-            | RadrootsRelayFetchItem::Closed { relay_url, .. }
-            | RadrootsRelayFetchItem::Notice { relay_url, .. } => relay_url,
-        };
-        let relay_url = canonical_requested_fetch_relay(
-            processed.target_relays.as_slice(),
-            item_relay_url.as_str(),
-        )?;
-        if let Some(next) = fetch_terminal_outcome_label(&item) {
+        let relay_url =
+            canonical_requested_fetch_relay(processed.target_relays.as_slice(), item.relay_url())?;
+        if let Some(next) = item.terminal_outcome_label() {
             if let Some(first) = terminal_outcomes.get(relay_url.as_str()).copied() {
                 if first == next {
                     return Err(
@@ -958,8 +1065,8 @@ fn process_relay_fetch_items(
             }
             terminal_outcomes.insert(relay_url.clone(), next);
         }
-        match item {
-            RadrootsRelayFetchItem::Event { raw_json, .. } => {
+        match item.body {
+            RadrootsRelayFetchItemBody::Event { raw_json, .. } => {
                 if raw_budget.charge(raw_json.len()).is_err() {
                     processed.skipped_over_limit_count += 1;
                     continue;
@@ -1118,7 +1225,7 @@ fn process_relay_fetch_items(
                         },
                     ));
             }
-            RadrootsRelayFetchItem::Eose { .. } => {
+            RadrootsRelayFetchItemBody::Eose { .. } => {
                 processed.eose_count += 1;
                 processed
                     .relay_outcomes
@@ -1129,7 +1236,7 @@ fn process_relay_fetch_items(
                         message: None,
                     });
             }
-            RadrootsRelayFetchItem::Truncated { message, .. } => {
+            RadrootsRelayFetchItemBody::Truncated { message, .. } => {
                 processed.truncated_count += 1;
                 processed
                     .relay_outcomes
@@ -1140,7 +1247,7 @@ fn process_relay_fetch_items(
                         message: Some(message),
                     });
             }
-            RadrootsRelayFetchItem::Closed { message, .. } => {
+            RadrootsRelayFetchItemBody::Closed { message, .. } => {
                 processed.closed_count += 1;
                 processed
                     .relay_outcomes
@@ -1151,7 +1258,7 @@ fn process_relay_fetch_items(
                         message: Some(message),
                     });
             }
-            RadrootsRelayFetchItem::Notice { message, .. } => {
+            RadrootsRelayFetchItemBody::Notice { message, .. } => {
                 processed.notice_count += 1;
                 processed
                     .relay_outcomes
@@ -1165,15 +1272,6 @@ fn process_relay_fetch_items(
         }
     }
     Ok(processed)
-}
-
-fn fetch_terminal_outcome_label(item: &RadrootsRelayFetchItem) -> Option<&'static str> {
-    match item {
-        RadrootsRelayFetchItem::Eose { .. } => Some("eose"),
-        RadrootsRelayFetchItem::Truncated { .. } => Some("truncated"),
-        RadrootsRelayFetchItem::Closed { .. } => Some("closed"),
-        RadrootsRelayFetchItem::Event { .. } | RadrootsRelayFetchItem::Notice { .. } => None,
-    }
 }
 
 fn canonical_requested_fetch_relay(
@@ -1276,28 +1374,28 @@ async fn fetch_from_nostr_relays(
     let relay_urls = request.relay_targets.relay_strings();
     for (relay_index, relay_url) in relay_urls.iter().cloned().enumerate() {
         if let Some(reason) = raw_budget.exhaustion_reason() {
-            items.extend(relay_urls[relay_index..].iter().cloned().map(|relay_url| {
-                RadrootsRelayFetchItem::Truncated {
+            for relay_url in relay_urls[relay_index..].iter().cloned() {
+                items.push(RadrootsRelayFetchItem::truncated(
                     relay_url,
-                    message: reason.unqueried_relay_message().to_owned(),
-                }
-            }));
+                    reason.unqueried_relay_message(),
+                )?);
+            }
             break;
         }
         let client = RadrootsNostrClient::new_signerless();
         if let Err(error) = client.add_read_relay(relay_url.as_str()).await {
-            items.push(RadrootsRelayFetchItem::Closed {
+            items.push(RadrootsRelayFetchItem::closed(
                 relay_url,
-                message: error.to_string(),
-            });
+                error.to_string(),
+            )?);
             continue;
         }
         let connection_output = client.try_connect(timeout).await;
         if connection_output.success.is_empty() {
-            items.push(RadrootsRelayFetchItem::Closed {
+            items.push(RadrootsRelayFetchItem::closed(
                 relay_url,
-                message: summarize_nostr_output_failures(&connection_output.failed),
-            });
+                summarize_nostr_output_failures(&connection_output.failed),
+            )?);
             continue;
         }
         let mut closed = false;
@@ -1335,39 +1433,38 @@ async fn fetch_from_nostr_relays(
                             ));
                             break;
                         }
-                        items.push(RadrootsRelayFetchItem::Event {
-                            relay_url: relay_url.clone(),
-                            raw_json,
-                        });
+                        items.push(RadrootsRelayFetchItem::event(relay_url.clone(), raw_json)?);
                     }
                     if truncated_message.is_some() {
                         break;
                     }
                 }
                 Err(error) => {
-                    items.push(RadrootsRelayFetchItem::Closed {
-                        relay_url: relay_url.clone(),
-                        message: error.to_string(),
-                    });
+                    items.push(RadrootsRelayFetchItem::closed(
+                        relay_url.clone(),
+                        error.to_string(),
+                    )?);
                     closed = true;
                     break;
                 }
             }
         }
         if let Some(message) = truncated_message {
-            items.push(RadrootsRelayFetchItem::Truncated { relay_url, message });
+            items.push(RadrootsRelayFetchItem::truncated(relay_url, message)?);
         } else if !closed {
-            items.push(unproven_relay_stream_completion(relay_url));
+            items.push(unproven_relay_stream_completion(relay_url)?);
         }
     }
     Ok(items)
 }
 
-fn unproven_relay_stream_completion(relay_url: String) -> RadrootsRelayFetchItem {
-    RadrootsRelayFetchItem::Closed {
+fn unproven_relay_stream_completion(
+    relay_url: String,
+) -> Result<RadrootsRelayFetchItem, RadrootsRelayTransportError> {
+    RadrootsRelayFetchItem::closed(
         relay_url,
-        message: "relay stream ended before EOSE could be observed".to_owned(),
-    }
+        "relay stream ended before EOSE could be observed",
+    )
 }
 
 fn summarize_nostr_output_failures<K, E>(failed: &std::collections::HashMap<K, E>) -> String
@@ -1473,11 +1570,13 @@ mod tests {
     #[test]
     fn unproven_sdk_stream_completion_never_claims_eose() {
         assert_eq!(
-            unproven_relay_stream_completion("wss://relay.example".to_owned()),
-            RadrootsRelayFetchItem::Closed {
-                relay_url: "wss://relay.example".to_owned(),
-                message: "relay stream ended before EOSE could be observed".to_owned(),
-            }
+            unproven_relay_stream_completion("wss://relay.example".to_owned())
+                .expect("bounded completion item"),
+            RadrootsRelayFetchItem::closed(
+                "wss://relay.example",
+                "relay stream ended before EOSE could be observed",
+            )
+            .expect("bounded completion item")
         );
     }
 

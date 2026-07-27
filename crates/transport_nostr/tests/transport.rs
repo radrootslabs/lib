@@ -68,6 +68,39 @@ fn bounded_publish_relay_receipt(
     receipt.expect("bounded relay publish receipt")
 }
 
+fn bounded_fetch_event(
+    relay_url: impl Into<String>,
+    raw_json: impl Into<String>,
+) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::event(relay_url, raw_json).expect("bounded relay fetch event")
+}
+
+fn bounded_fetch_eose(relay_url: impl Into<String>) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::eose(relay_url).expect("bounded relay fetch EOSE")
+}
+
+fn bounded_fetch_truncated(
+    relay_url: impl Into<String>,
+    message: impl Into<String>,
+) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::truncated(relay_url, message)
+        .expect("bounded truncated relay fetch item")
+}
+
+fn bounded_fetch_closed(
+    relay_url: impl Into<String>,
+    message: impl Into<String>,
+) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::closed(relay_url, message).expect("bounded closed relay fetch item")
+}
+
+fn bounded_fetch_notice(
+    relay_url: impl Into<String>,
+    message: impl Into<String>,
+) -> RadrootsRelayFetchItem {
+    RadrootsRelayFetchItem::notice(relay_url, message).expect("bounded relay fetch notice")
+}
+
 struct TransportFailurePublishAdapter;
 
 impl RadrootsRelayPublishAdapter for TransportFailurePublishAdapter {
@@ -2354,13 +2387,8 @@ fn fetch_blocking_facade_runs_mock_adapter() {
     let signed = signed_post("blocking fetch");
     let accepted_id = signed.id_str().to_owned();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), signed.raw_json().to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
     ]);
 
     let receipt = fetch_relay_events_blocking(&adapter, post_relay_fetch_request(1_090, 10))
@@ -2376,13 +2404,11 @@ fn fetch_blocking_facade_runs_mock_adapter() {
 async fn fetch_canonicalizes_adapter_relay_spelling_and_uses_request_observation_time() {
     let signed = signed_post("canonical fetch relay");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: "wss://RELAY.EXAMPLE.COM/".to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: "wss://RELAY.EXAMPLE.COM/".to_owned(),
-        },
+        bounded_fetch_event(
+            "wss://RELAY.EXAMPLE.COM/".to_owned(),
+            signed.raw_json().to_owned(),
+        ),
+        bounded_fetch_eose("wss://RELAY.EXAMPLE.COM/".to_owned()),
     ]);
 
     let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 10))
@@ -2400,14 +2426,8 @@ async fn fetch_verifies_events_before_acceptance_budgeting() {
     let accepted = signed_post("verified after tampered");
     let accepted_id = accepted.id_str().to_owned();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: tampered_raw_event(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), tampered_raw_event()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), accepted.raw_json().to_owned()),
     ]);
 
     let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 1))
@@ -2435,18 +2455,9 @@ async fn fetch_deduplicates_event_ids_without_starving_unique_events() {
     let first_id = first.id_str().to_owned();
     let second_id = second.id_str().to_owned();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: first.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: first.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: second.raw_json().to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), first.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_SECONDARY_WSS.to_owned(), first.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_SECONDARY_WSS.to_owned(), second.raw_json().to_owned()),
     ]);
 
     let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 2))
@@ -2473,10 +2484,10 @@ async fn fetch_deduplicates_event_ids_without_starving_unique_events() {
 
 #[tokio::test]
 async fn fetch_reports_local_truncation_without_claiming_eose() {
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Truncated {
-        relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        message: "local budget reached".to_owned(),
-    }]);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![bounded_fetch_truncated(
+        RELAY_PRIMARY_WSS.to_owned(),
+        "local budget reached".to_owned(),
+    )]);
 
     let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_091, 1))
         .await
@@ -2496,12 +2507,8 @@ async fn fetch_reports_local_truncation_without_claiming_eose() {
 #[tokio::test]
 async fn fetch_rejects_duplicate_and_conflicting_terminal_outcomes() {
     let duplicate = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
     ]);
     assert!(matches!(
         fetch_relay_events(&duplicate, post_relay_fetch_request(1_091, 1)).await,
@@ -2510,13 +2517,8 @@ async fn fetch_rejects_duplicate_and_conflicting_terminal_outcomes() {
     ));
 
     let conflicting = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Closed {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            message: "closed after EOSE".to_owned(),
-        },
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_closed(RELAY_PRIMARY_WSS.to_owned(), "closed after EOSE".to_owned()),
     ]);
     assert!(matches!(
         fetch_relay_events(&conflicting, post_relay_fetch_request(1_091, 1)).await,
@@ -2533,34 +2535,17 @@ async fn fetch_rejects_unrequested_adapter_relay_for_every_item_before_store_mut
     let signed = signed_post("forged fetch relay");
     let unexpected_relay = "wss://unexpected.example.com";
     let forged_items = [
-        RadrootsRelayFetchItem::Event {
-            relay_url: unexpected_relay.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: unexpected_relay.to_owned(),
-        },
-        RadrootsRelayFetchItem::Truncated {
-            relay_url: unexpected_relay.to_owned(),
-            message: "truncated".to_owned(),
-        },
-        RadrootsRelayFetchItem::Closed {
-            relay_url: unexpected_relay.to_owned(),
-            message: "closed".to_owned(),
-        },
-        RadrootsRelayFetchItem::Notice {
-            relay_url: unexpected_relay.to_owned(),
-            message: "notice".to_owned(),
-        },
+        bounded_fetch_event(unexpected_relay.to_owned(), signed.raw_json().to_owned()),
+        bounded_fetch_eose(unexpected_relay.to_owned()),
+        bounded_fetch_truncated(unexpected_relay.to_owned(), "truncated".to_owned()),
+        bounded_fetch_closed(unexpected_relay.to_owned(), "closed".to_owned()),
+        bounded_fetch_notice(unexpected_relay.to_owned(), "notice".to_owned()),
     ];
 
     for forged_item in forged_items {
         let store = RadrootsEventStore::open_memory().await.expect("store");
         let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-            RadrootsRelayFetchItem::Event {
-                relay_url: RELAY_PRIMARY_WSS.to_owned(),
-                raw_json: signed.raw_json().to_owned(),
-            },
+            bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), signed.raw_json().to_owned()),
             forged_item,
         ]);
         let error =
@@ -2588,45 +2573,25 @@ async fn fetch_ingests_events_and_records_transport_observations() {
     let signed = signed_post("hello");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: unsupported_raw_event(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: invalid_contract_shape_raw_event(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            raw_json: tampered_raw_event(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            raw_json: "{not json".to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Closed {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            message: "auth-required: challenge".to_owned(),
-        },
-        RadrootsRelayFetchItem::Closed {
-            relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            message: "restricted: group write denied".to_owned(),
-        },
-        RadrootsRelayFetchItem::Notice {
-            relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            message: "notice: test".to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), signed.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), signed.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_SECONDARY_WSS.to_owned(), unsupported_raw_event()),
+        bounded_fetch_event(
+            RELAY_SECONDARY_WSS.to_owned(),
+            invalid_contract_shape_raw_event(),
+        ),
+        bounded_fetch_event(RELAY_TERTIARY_WSS.to_owned(), tampered_raw_event()),
+        bounded_fetch_event(RELAY_TERTIARY_WSS.to_owned(), "{not json".to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_closed(
+            RELAY_SECONDARY_WSS.to_owned(),
+            "auth-required: challenge".to_owned(),
+        ),
+        bounded_fetch_closed(
+            RELAY_TERTIARY_WSS.to_owned(),
+            "restricted: group write denied".to_owned(),
+        ),
+        bounded_fetch_notice(RELAY_TERTIARY_WSS.to_owned(), "notice: test".to_owned()),
     ]);
 
     let receipt =
@@ -2872,14 +2837,8 @@ async fn fetch_reports_final_replaceable_visibility_when_newer_arrives_first() {
         .expect("signed older profile");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: newer.as_json(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: older.as_json(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), newer.as_json()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), older.as_json()),
     ]);
     let filter = RadrootsNostrFilter::new()
         .kind(RadrootsNostrKind::Custom(
@@ -2927,14 +2886,8 @@ async fn fetch_reports_final_replaceable_visibility_when_older_arrives_first() {
         .expect("signed newer profile");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: older.as_json(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: newer.as_json(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), older.as_json()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), newer.as_json()),
     ]);
     let filter = RadrootsNostrFilter::new()
         .kind(RadrootsNostrKind::Custom(
@@ -2976,18 +2929,9 @@ async fn fetch_maps_one_final_visibility_snapshot_back_to_duplicate_receipts() {
     let newer_id = newer.id.to_hex();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: older.as_json(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: newer.as_json(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: older.as_json(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), older.as_json()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), newer.as_json()),
+        bounded_fetch_event(RELAY_SECONDARY_WSS.to_owned(), older.as_json()),
     ]);
     let filter = RadrootsNostrFilter::new()
         .kind(RadrootsNostrKind::Custom(
@@ -3055,14 +2999,8 @@ async fn fetch_reports_store_suppression_when_deletion_precedes_target_replay() 
     .expect("signed deletion");
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: deletion.as_json(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: target.as_json(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), deletion.as_json()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), target.as_json()),
     ]);
     let deletion_filter = RadrootsNostrFilter::new().kind(RadrootsNostrKind::Custom(
         u16::try_from(KIND_DELETION_REQUEST).expect("deletion kind must fit NIP-01"),
@@ -3115,14 +3053,8 @@ async fn fetch_reports_ephemeral_events_as_not_persisted_without_duplicate_or_st
     let event_id = signed.id_str().to_owned();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), signed.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), signed.raw_json().to_owned()),
     ]);
     let filter = RadrootsNostrFilter::new()
         .kind(RadrootsNostrKind::Custom(
@@ -3183,21 +3115,13 @@ async fn fetch_rejects_out_of_filter_events_before_store_mutation() {
     let wrong_kind_event_id = wrong_kind.id.to_hex();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: wrong_kind.as_json(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
+        bounded_fetch_event(
+            RELAY_PRIMARY_WSS.to_owned(),
+            wrong_tag.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), accepted.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_SECONDARY_WSS.to_owned(), wrong_kind.as_json()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
     ]);
     let filter = radroots_nostr_filter_tag(
         RadrootsNostrFilter::new()
@@ -3260,33 +3184,22 @@ async fn fetch_event_cap_counts_accepted_in_filter_events_and_preserves_later_co
     let wrong_tag_id = wrong_tag.id_str().to_owned();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: "{not json".to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: skipped.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Closed {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            message: "auth-required: challenge".to_owned(),
-        },
-        RadrootsRelayFetchItem::Notice {
-            relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            message: "notice: still visible".to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), "{not json".to_owned()),
+        bounded_fetch_event(
+            RELAY_PRIMARY_WSS.to_owned(),
+            wrong_tag.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), accepted.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), skipped.raw_json().to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_closed(
+            RELAY_SECONDARY_WSS.to_owned(),
+            "auth-required: challenge".to_owned(),
+        ),
+        bounded_fetch_notice(
+            RELAY_TERTIARY_WSS.to_owned(),
+            "notice: still visible".to_owned(),
+        ),
     ]);
 
     let receipt =
@@ -3366,33 +3279,22 @@ async fn fetch_relay_events_applies_shared_filter_limit_and_outcome_evidence() {
     .expect("filter");
     let accepted_id = accepted.id_str().to_owned();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: "{not json".to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: skipped.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Closed {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            message: "auth-required: challenge".to_owned(),
-        },
-        RadrootsRelayFetchItem::Notice {
-            relay_url: RELAY_TERTIARY_WSS.to_owned(),
-            message: "notice: still visible".to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), "{not json".to_owned()),
+        bounded_fetch_event(
+            RELAY_PRIMARY_WSS.to_owned(),
+            wrong_tag.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), accepted.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), skipped.raw_json().to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_closed(
+            RELAY_SECONDARY_WSS.to_owned(),
+            "auth-required: challenge".to_owned(),
+        ),
+        bounded_fetch_notice(
+            RELAY_TERTIARY_WSS.to_owned(),
+            "notice: still visible".to_owned(),
+        ),
     ]);
 
     let receipt = fetch_relay_events(
@@ -3432,21 +3334,13 @@ async fn fetch_raw_scan_limit_bounds_noisy_adapter_output() {
     let accepted_id = accepted.id_str().to_owned();
     let store = RadrootsEventStore::open_memory().await.expect("store");
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: "{not json".to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), "{not json".to_owned()),
+        bounded_fetch_event(
+            RELAY_PRIMARY_WSS.to_owned(),
+            wrong_tag.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), accepted.raw_json().to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
     ]);
 
     let receipt = fetch_and_ingest_relay_events(
@@ -3486,24 +3380,11 @@ async fn fetch_raw_json_byte_limit_is_exact_global_and_sticky() {
     )
     .expect("relay targets");
     let items = vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: first.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: second.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: third.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), first.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_SECONDARY_WSS.to_owned(), second.raw_json().to_owned()),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), third.raw_json().to_owned()),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_eose(RELAY_SECONDARY_WSS.to_owned()),
     ];
 
     let exact_receipt = fetch_relay_events(
@@ -3545,36 +3426,26 @@ async fn fetch_raw_json_budget_charges_every_preparse_event_class() {
         + accepted.raw_json().len() * 2
         + over_accepted_limit.raw_json().len();
     let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: malformed,
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: wrong_tag.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: over_accepted_limit.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-            raw_json: sticky_skip.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_SECONDARY_WSS.to_owned(),
-        },
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), malformed),
+        bounded_fetch_event(
+            RELAY_PRIMARY_WSS.to_owned(),
+            wrong_tag.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(RELAY_PRIMARY_WSS.to_owned(), accepted.raw_json().to_owned()),
+        bounded_fetch_event(
+            RELAY_SECONDARY_WSS.to_owned(),
+            accepted.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(
+            RELAY_SECONDARY_WSS.to_owned(),
+            over_accepted_limit.raw_json().to_owned(),
+        ),
+        bounded_fetch_event(
+            RELAY_SECONDARY_WSS.to_owned(),
+            sticky_skip.raw_json().to_owned(),
+        ),
+        bounded_fetch_eose(RELAY_PRIMARY_WSS.to_owned()),
+        bounded_fetch_eose(RELAY_SECONDARY_WSS.to_owned()),
     ]);
     let targets = RadrootsRelayTargetSet::new(
         [RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS],
@@ -3604,47 +3475,34 @@ async fn fetch_raw_json_budget_charges_every_preparse_event_class() {
     assert_eq!(receipt.eose_count, 2);
 }
 
-#[tokio::test]
-async fn fetch_rejects_oversized_raw_json_before_radroots_adapter_parsing() {
-    let accepted = signed_post("after oversized raw event");
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: "x".repeat(DEFAULT_RAW_JSON_MAX_BYTES + 1),
-        },
-        RadrootsRelayFetchItem::Event {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-            raw_json: accepted.raw_json().to_owned(),
-        },
-        RadrootsRelayFetchItem::Eose {
-            relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        },
-    ]);
+#[test]
+fn fetch_items_reject_oversized_raw_json_before_adapter_collection() {
+    let exact =
+        RadrootsRelayFetchItem::event(RELAY_PRIMARY_WSS, "x".repeat(DEFAULT_RAW_JSON_MAX_BYTES))
+            .expect("maximum raw fetch item");
+    assert_eq!(exact.relay_url(), RELAY_PRIMARY_WSS);
 
-    let receipt = fetch_relay_events(&adapter, post_relay_fetch_request(1_134, 1))
-        .await
-        .expect("fetch events");
-
-    assert_eq!(receipt.events.len(), 1);
-    assert_eq!(receipt.verification_failed_count, 1);
-    assert_eq!(receipt.malformed_count, 0);
-    assert_eq!(receipt.event_receipts.len(), 2);
-    assert_eq!(receipt.event_receipts[0].event_id, None);
-    assert_eq!(
-        receipt.event_receipts[0].verification,
-        RadrootsRelayFetchEventVerification::Failed
-    );
-    assert_eq!(receipt.eose_count, 1);
+    assert!(matches!(
+        RadrootsRelayFetchItem::event(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(DEFAULT_RAW_JSON_MAX_BYTES + 1),
+        ),
+        Err(RadrootsRelayTransportError::FetchLimitTooLarge {
+            field: "event_raw_json_bytes",
+            max: DEFAULT_RAW_JSON_MAX_BYTES,
+            actual,
+        }) if actual == DEFAULT_RAW_JSON_MAX_BYTES + 1
+    ));
 }
 
 #[tokio::test]
 async fn fetch_subscription_mode_and_store_errors_are_propagated() {
     let signed = signed_post("subscription");
     let store = RadrootsEventStore::open_memory().await.expect("store");
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
-        relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        raw_json: signed.raw_json().to_owned(),
-    }]);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![bounded_fetch_event(
+        RELAY_PRIMARY_WSS.to_owned(),
+        signed.raw_json().to_owned(),
+    )]);
 
     let receipt = fetch_and_ingest_relay_events(
         &adapter,
@@ -3673,10 +3531,10 @@ async fn fetch_subscription_mode_and_store_errors_are_propagated() {
 
     let closed_store = RadrootsEventStore::open_memory().await.expect("store");
     closed_store.pool().close().await;
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
-        relay_url: RELAY_PRIMARY_WSS.to_owned(),
-        raw_json: signed.raw_json().to_owned(),
-    }]);
+    let adapter = RadrootsMockRelayFetchAdapter::new(vec![bounded_fetch_event(
+        RELAY_PRIMARY_WSS.to_owned(),
+        signed.raw_json().to_owned(),
+    )]);
     let error =
         fetch_and_ingest_relay_events(&adapter, &closed_store, post_relay_fetch_request(1_210, 10))
             .await
@@ -3685,24 +3543,66 @@ async fn fetch_subscription_mode_and_store_errors_are_propagated() {
     assert!(matches!(error, RadrootsRelayTransportError::EventStore(_)));
 }
 
-#[tokio::test]
-async fn fetch_ingest_rejects_invalid_observation_endpoint() {
-    let signed = signed_post("invalid observation endpoint");
-    let store = RadrootsEventStore::open_memory().await.expect("store");
-    let adapter = RadrootsMockRelayFetchAdapter::new(vec![RadrootsRelayFetchItem::Event {
-        relay_url: " ".to_owned(),
-        raw_json: signed.raw_json().to_owned(),
-    }]);
-
-    let error =
-        fetch_and_ingest_relay_events(&adapter, &store, post_relay_fetch_request(1_300, 10))
-            .await
-            .expect_err("invalid observation endpoint");
-
+#[test]
+fn fetch_items_reject_invalid_endpoints_and_oversized_diagnostics() {
     assert!(matches!(
-        error,
-        RadrootsRelayTransportError::InvalidFetchItemRelayUrl { .. }
+        RadrootsRelayFetchItem::event(" ", "{}"),
+        Err(RadrootsRelayTransportError::InvalidFetchItemRelayUrl { .. })
     ));
+    assert!(matches!(
+        RadrootsRelayFetchItem::eose(" "),
+        Err(RadrootsRelayTransportError::InvalidFetchItemRelayUrl { .. })
+    ));
+    for item in [
+        RadrootsRelayFetchItem::truncated(" ", "message"),
+        RadrootsRelayFetchItem::closed(" ", "message"),
+        RadrootsRelayFetchItem::notice(" ", "message"),
+    ] {
+        assert!(matches!(
+            item,
+            Err(RadrootsRelayTransportError::InvalidFetchItemRelayUrl { .. })
+        ));
+    }
+
+    let prefix = "wss://relay.example.com/";
+    let exact_url = format!(
+        "{prefix}{}",
+        "x".repeat(RADROOTS_TRANSPORT_ENDPOINT_URI_MAX_BYTES - prefix.len())
+    );
+    assert!(RadrootsRelayFetchItem::eose(exact_url.clone()).is_ok());
+    assert!(matches!(
+        RadrootsRelayFetchItem::eose(format!("{exact_url}x")),
+        Err(RadrootsRelayTransportError::InvalidFetchItemRelayUrl { url, .. })
+            if url == "<oversized>"
+    ));
+
+    let exact = "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES);
+    assert!(RadrootsRelayFetchItem::truncated(RELAY_PRIMARY_WSS, exact.clone()).is_ok());
+    assert!(RadrootsRelayFetchItem::closed(RELAY_PRIMARY_WSS, exact.clone()).is_ok());
+    assert!(RadrootsRelayFetchItem::notice(RELAY_PRIMARY_WSS, exact).is_ok());
+    for item in [
+        RadrootsRelayFetchItem::truncated(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        ),
+        RadrootsRelayFetchItem::closed(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        ),
+        RadrootsRelayFetchItem::notice(
+            RELAY_PRIMARY_WSS,
+            "x".repeat(RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1),
+        ),
+    ] {
+        assert!(matches!(
+            item,
+            Err(RadrootsRelayTransportError::DiagnosticLimitExceeded {
+                field: "relay_fetch_item_message",
+                max: RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES,
+                actual,
+            }) if actual == RADROOTS_TRANSPORT_DIAGNOSTIC_MAX_BYTES + 1
+        ));
+    }
 }
 
 #[tokio::test]
@@ -5520,10 +5420,10 @@ async fn smoke_relay_fetch_processes_one_thousand_event_receipts() {
             1 => RELAY_SECONDARY_WSS,
             _ => RELAY_TERTIARY_WSS,
         };
-        items.push(RadrootsRelayFetchItem::Event {
-            relay_url: relay_url.to_owned(),
-            raw_json: signed.raw_json().to_owned(),
-        });
+        items.push(bounded_fetch_event(
+            relay_url.to_owned(),
+            signed.raw_json().to_owned(),
+        ));
     }
     let adapter = RadrootsMockRelayFetchAdapter::new(items);
     let receipt =
