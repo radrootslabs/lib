@@ -75,7 +75,7 @@ const FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "7c47d54d757bb413be1326d1a0a366e1edd2863e644146552faa50a46c235c6d";
+    "2ca483ff5e44f1d21ed588bf22ede6e8b8ec72e3b75eb542dd5b0a2ce4b50f4e";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",
@@ -1345,10 +1345,35 @@ fn validate_contract_command_reachability_sources(
         (
             XTASK_MAIN_SOURCE_RELATIVE,
             &main,
+            "validate_protocol_contracts",
+            r#"fn validate_protocol_contracts() -> Result<(), String> {
+                radroots_protocol::capability::v1::validate_catalog(
+                    radroots_protocol::capability::v1::CATALOG
+                )
+                .map_err(|error| error.to_string())?;
+                radroots_protocol::event::v1::validate_catalog(
+                    radroots_protocol::event::v1::CATALOG
+                )
+                .map_err(|error| error.to_string())?;
+                radroots_protocol::event::v1::validate_trade_state_vocabulary(
+                    radroots_protocol::event::v1::TRADE_STATE_VOCABULARY,
+                )
+                .map_err(|error| error.to_string())?;
+                radroots_protocol::runtime::v1::validate_catalog(
+                    radroots_protocol::runtime::v1::CATALOG
+                )
+                .map_err(|error| error.to_string())?;
+                radroots_protocol::schema::protocol_v1_registry()
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            }"#,
+        ),
+        (
+            XTASK_MAIN_SOURCE_RELATIVE,
+            &main,
             "validate_contract",
             r#"fn validate_contract() -> Result<(), String> {
-                radroots_protocol_contract_v1::validate_protocol_contract_v1()
-                    .map_err(|error| error.to_string())?;
+                validate_protocol_contracts()?;
                 let root = workspace_root();
                 dto_roots::check(&root)?;
                 generate::protocol::check(&root)?;

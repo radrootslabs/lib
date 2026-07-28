@@ -66,9 +66,24 @@ fn workspace_root() -> PathBuf {
     workspace_root_with_override(override_root.as_deref())
 }
 
-fn validate_contract() -> Result<(), String> {
-    radroots_protocol_contract_v1::validate_protocol_contract_v1()
+fn validate_protocol_contracts() -> Result<(), String> {
+    radroots_protocol::capability::v1::validate_catalog(radroots_protocol::capability::v1::CATALOG)
         .map_err(|error| error.to_string())?;
+    radroots_protocol::event::v1::validate_catalog(radroots_protocol::event::v1::CATALOG)
+        .map_err(|error| error.to_string())?;
+    radroots_protocol::event::v1::validate_trade_state_vocabulary(
+        radroots_protocol::event::v1::TRADE_STATE_VOCABULARY,
+    )
+    .map_err(|error| error.to_string())?;
+    radroots_protocol::runtime::v1::validate_catalog(radroots_protocol::runtime::v1::CATALOG)
+        .map_err(|error| error.to_string())?;
+    radroots_protocol::schema::protocol_v1_registry()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn validate_contract() -> Result<(), String> {
+    validate_protocol_contracts()?;
     let root = workspace_root();
     dto_roots::check(&root)?;
     generate::protocol::check(&root)?;
@@ -314,6 +329,7 @@ mod tests {
         let out_dir = unique_temp_dir("coverage_dispatch");
         fs::create_dir_all(&out_dir).expect("create out dir");
 
+        validate_protocol_contracts().expect("validate final protocol contracts");
         run_contract(&["validate".to_string()]).expect("validate contract");
         run(&["dto-roots".to_string(), "--check".to_string()])
             .expect("validate DTO root freshness");
