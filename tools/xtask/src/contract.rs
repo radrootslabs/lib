@@ -3140,7 +3140,6 @@ struct WorkspaceReleaseClassification {
 struct CratesReleaseArchitecture {
     spec_id: String,
     package_count: usize,
-    initial_version: String,
     repositories: CratesReleaseRepositories,
     package: Vec<CratesReleasePackage>,
 }
@@ -3153,6 +3152,7 @@ struct CratesReleaseRepositories {
 
 #[derive(Debug, Deserialize)]
 struct CratesReleaseRepository {
+    version: String,
     packages: Vec<String>,
 }
 
@@ -3860,33 +3860,26 @@ fn validate_workspace_version_lockstep(
 ) -> Result<(), String> {
     let workspace_manifest =
         parse_toml::<WorkspaceVersionCargoManifest>(&workspace_root.join("Cargo.toml"))?;
-    if workspace_manifest.workspace.package.version != contract_version {
-        return Err(format!(
-            "workspace.package.version {} must match contract version {}",
-            workspace_manifest.workspace.package.version, contract_version
-        ));
-    }
-
     let architecture_path = workspace_root.join("docs/specs/radroots_crates_release_v1.toml");
-    let public_versions = if architecture_path.is_file() {
-        let architecture = parse_toml::<CratesReleaseArchitecture>(&architecture_path)?;
-        architecture
+    let governed_version = if architecture_path.is_file() {
+        parse_toml::<CratesReleaseArchitecture>(&architecture_path)?
             .repositories
             .lib
-            .packages
-            .into_iter()
-            .map(|name| (name, architecture.initial_version.clone()))
-            .collect::<BTreeMap<_, _>>()
+            .version
     } else {
-        BTreeMap::new()
+        contract_version.to_owned()
     };
+    if workspace_manifest.workspace.package.version != governed_version {
+        return Err(format!(
+            "workspace.package.version {} must match library repository version {}",
+            workspace_manifest.workspace.package.version, governed_version
+        ));
+    }
     let mut governed_packages = BTreeMap::new();
     for member in &workspace_manifest.workspace.members {
         let package_path = workspace_root.join(member).join("Cargo.toml");
         let package = parse_toml::<VersionedPackageCargoManifest>(&package_path)?;
-        let expected_version = public_versions
-            .get(&package.package.name)
-            .map_or(contract_version, String::as_str);
+        let expected_version = governed_version.as_str();
         match package.package.version {
             PackageVersionSource::Literal(ref version) if version == expected_version => {}
             PackageVersionSource::Literal(version) => {
@@ -9391,6 +9384,26 @@ mod tests {
     fn create_synthetic_workspace(prefix: &str) -> PathBuf {
         let root = temp_root(prefix);
         write_file(
+            &root.join("docs/specs/radroots_crates_release_v1.toml"),
+            r#"spec_id = "radroots.crates.release.v1"
+package_count = 2
+
+[repositories.lib]
+version = "1.0.0"
+packages = ["radroots_a", "radroots_b"]
+
+[repositories.sdk]
+version = "0.1.0"
+packages = []
+
+[[package]]
+name = "radroots_a"
+
+[[package]]
+name = "radroots_b"
+"#,
+        );
+        write_file(
             &root.join("Cargo.toml"),
             r#"[workspace]
 members = ["crates/a", "crates/b"]
@@ -10753,6 +10766,24 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             .expect_err("lockfile version drift must fail");
         assert!(lock_error.contains("Cargo.lock package radroots_a version"));
 
+        write_file(
+            &root.join("docs/specs/radroots_crates_release_v1.toml"),
+            r#"spec_id = "radroots.crates.release.v1"
+package_count = 0
+
+[repositories.lib]
+version = "0.1.0-alpha"
+packages = []
+
+[repositories.sdk]
+version = "0.1.0"
+packages = []
+"#,
+        );
+        let architecture_error = validate_workspace_version_lockstep(&root, "1.0.0")
+            .expect_err("repository version authority must override protocol version");
+        assert!(architecture_error.contains("must match library repository version 0.1.0-alpha"));
+
         assert!(parse_semver_version("01.0.0").is_err());
         assert!(parse_semver_version("1.0").is_err());
         assert!(parse_semver_version("1.0.0-alpha_1").is_err());
@@ -11555,7 +11586,7 @@ edition = "2024"
         fs::create_dir_all(&policy_dir).expect("create policy dir");
         fs::write(
             policy_dir.join("coverage.toml"),
-            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_event_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 1.0.0-alpha.1 temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_event_codec\", \"radroots_log\"]\n",
+            "[gate]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = true\n\n[overrides.radroots_event_codec]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 99.946\nfail_under_branches = 100.0\ntemporary = true\nreason = \"publish 0.1.0-alpha temporary coverage override\"\n\n[overrides.radroots_log]\nfail_under_exec_lines = 100.0\nfail_under_functions = 100.0\nfail_under_regions = 100.0\nfail_under_branches = 100.0\nrequire_branches = false\ntemporary = true\nreason = \"branch coverage is not applicable while the crate has no measured branch records\"\n\n[required]\ncrates = [\"radroots_event_codec\", \"radroots_log\"]\n",
         )
         .expect("write coverage policy");
         let required = [
@@ -12581,7 +12612,7 @@ crates = ["radroots_a"]
             .collect::<Vec<_>>()
             .join(", ");
         let mut architecture = format!(
-            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\ninitial_version = \"0.1.0\"\n\n[repositories.lib]\npackages = [\"package-01\"]\n\n[repositories.sdk]\npackages = [{external_toml}]\n"
+            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\n\n[repositories.lib]\nversion = \"0.1.0-alpha\"\npackages = [\"package-01\"]\n\n[repositories.sdk]\nversion = \"0.1.0\"\npackages = [{external_toml}]\n"
         );
         for name in &approved {
             architecture.push_str(&format!("\n[[package]]\nname = \"{name}\"\n"));

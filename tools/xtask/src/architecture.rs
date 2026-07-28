@@ -47,7 +47,6 @@ struct DeviationRecord {
 #[derive(Debug, Deserialize)]
 struct ArchitectureIdentity {
     spec_id: String,
-    initial_version: String,
     edition: String,
     resolver: String,
     rust_version: String,
@@ -60,6 +59,7 @@ struct ArchitectureIdentity {
 #[derive(Debug, Deserialize)]
 struct ArchitectureRepository {
     url: String,
+    version: String,
     packages: Vec<String>,
 }
 
@@ -215,12 +215,15 @@ fn validate_workspace_toolchain(
     }
     let workspace_package = &manifest.workspace.package;
     let public_metadata = &manifest.workspace.metadata.radroots.public_package;
-    if public_metadata.version != architecture.initial_version
-        || architecture.initial_version != "0.1.0"
-    {
+    let repository = architecture
+        .repositories
+        .values()
+        .find(|repository| repository.url == workspace_package.repository)
+        .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
+    if public_metadata.version != repository.version {
         return Err(format!(
-            "public package version source {} must match architecture initial_version {}",
-            public_metadata.version, architecture.initial_version
+            "public package version source {} must match repository version {}",
+            public_metadata.version, repository.version
         ));
     }
     if public_metadata.authors != PUBLIC_AUTHORS {
@@ -352,7 +355,7 @@ fn validate_public_package_metadata(
             package,
             "version",
             &workspace.workspace.package.version,
-            &architecture.initial_version,
+            &repository.version,
             name,
         )?;
         validate_public_manifest_field(
@@ -473,6 +476,16 @@ fn validate_public_dependency_versions(
         .iter()
         .map(|package| package.name.as_str())
         .collect::<BTreeSet<_>>();
+    let package_versions = architecture
+        .repositories
+        .values()
+        .flat_map(|repository| {
+            repository
+                .packages
+                .iter()
+                .map(|package| (package.as_str(), repository.version.as_str()))
+        })
+        .collect::<BTreeMap<_, _>>();
 
     for member in &workspace.workspace.members {
         let manifest_path = workspace_root.join(member).join("Cargo.toml");
@@ -495,7 +508,7 @@ fn validate_public_dependency_versions(
             workspace_dependencies,
             public_packages: &public_packages,
             local_packages: &local_packages,
-            initial_version: &architecture.initial_version,
+            package_versions: &package_versions,
         };
         validate_public_dependency_sections(member, package_name, &manifest, &policy)?;
     }
@@ -507,7 +520,7 @@ struct PublicDependencyPolicy<'a> {
     workspace_dependencies: Option<&'a toml::value::Table>,
     public_packages: &'a BTreeSet<&'a str>,
     local_packages: &'a BTreeSet<&'a str>,
-    initial_version: &'a str,
+    package_versions: &'a BTreeMap<&'a str, &'a str>,
 }
 
 fn validate_public_dependency_sections(
@@ -602,7 +615,13 @@ fn validate_public_dependency_table(
             toml::Value::Table(table) => table.get("version").and_then(toml::Value::as_str),
             _ => None,
         };
-        let exact_version = format!("={}", policy.initial_version);
+        let governed_version = policy
+            .package_versions
+            .get(dependency_name)
+            .ok_or_else(|| {
+                format!("public dependency {dependency_name} has no repository version authority")
+            })?;
+        let exact_version = format!("={governed_version}");
         if policy.local_packages.contains(dependency_name)
             && (dependency_path.is_none() || version != Some(exact_version.as_str()))
         {
@@ -1164,7 +1183,6 @@ adr_required = false
     fn architecture() -> ArchitectureIdentity {
         ArchitectureIdentity {
             spec_id: "radroots.crates.release.v1".to_string(),
-            initial_version: "0.1.0".to_string(),
             edition: "2024".to_string(),
             resolver: "3".to_string(),
             rust_version: "1.97.1".to_string(),
@@ -1174,6 +1192,7 @@ adr_required = false
                 "sdk".to_string(),
                 ArchitectureRepository {
                     url: "https://github.com/radrootslabs/sdk".to_string(),
+                    version: "0.1.0".to_string(),
                     packages: vec!["radroots".to_string()],
                 },
             )]),

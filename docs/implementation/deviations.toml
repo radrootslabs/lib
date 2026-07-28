@@ -37,6 +37,41 @@ normative_architecture_change = false
 adr_required = false
 
 [[deviation]]
+id = "RCRV1-DEV-005"
+date = "2026-07-28"
+status = "active"
+approval = "Explicit user Rust version-policy update dated 2026-07-28 17:47 UTC."
+affected_steps = [
+  "013",
+  "019",
+  "020",
+  "021",
+  "022",
+  "023",
+  "024",
+  "025",
+  "026",
+  "305",
+]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#221-initial-versions",
+  "docs/specs/radroots_crates_release_v1.toml#repositories.lib",
+]
+source_evidence = [
+  "The prior 1.0.0 and mixed 0.1.0 prerelease crate cohorts were explicitly declared incorrect.",
+  "The user requires every Rust crate in radrootslabs/lib to remain exactly 0.1.0-alpha until further explicit notice.",
+]
+replacement_action = "Pin every workspace package, lockfile entry, and internal Radroots dependency requirement in radrootslabs/lib to 0.1.0-alpha; preserve independent protocol and sibling-repository versions; reject library cohort drift until new explicit authority is recorded."
+verification = [
+  "Repository architecture validation rejects any workspace package version other than 0.1.0-alpha.",
+  "Internal Radroots dependency requirements resolve exactly to =0.1.0-alpha.",
+  "Synchronized release specifications record the library cohort independently from the SDK repository version.",
+]
+unresolved_risk = "The prerelease cohort intentionally prevents independent library package version advancement until a future explicit policy change."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
 id = "RCRV1-DEV-002"
 date = "2026-07-27"
 status = "active"

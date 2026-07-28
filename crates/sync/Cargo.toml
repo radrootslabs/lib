@@ -1,7 +1,7 @@
 [package]
 name = "radroots_sync"
 description = "Synchronization orchestration for Radroots"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

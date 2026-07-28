@@ -235,7 +235,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "3c7294555fa6b99fe9cf4d50d3bdfd8c4709abd5a75ce80bdf2cdfb6fdc059ef",
+        "385bbd09be2e8f3a64f97d23d47a691fb48cc2f12ed87f692a36242e24f7851e",
     ),
 ];
 
@@ -14405,37 +14405,37 @@ xtask = "run -q -p xtask --"
         (
             CORE_CARGO_MANIFEST_RELATIVE,
             "radroots_core",
-            "0.1.0",
+            "0.1.0-alpha",
             Some("radroots_core"),
         ),
         (
             EVENT_CARGO_MANIFEST_RELATIVE,
             "radroots_event",
-            "0.1.0",
+            "0.1.0-alpha",
             Some("radroots_event"),
         ),
         (
             EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
             "radroots_event_codec",
-            "0.1.0",
+            "0.1.0-alpha",
             Some("radroots_event_codec"),
         ),
         (
             BLOSSOM_CARGO_MANIFEST_RELATIVE,
             "radroots_blossom",
-            "0.1.0",
+            "0.1.0-alpha",
             Some("radroots_blossom"),
         ),
         (
             EVENT_STORE_CARGO_MANIFEST_RELATIVE,
             "radroots_event_store",
-            "1.0.0-alpha.1",
+            "0.1.0-alpha",
             None,
         ),
         (
             TRANSPORT_CARGO_MANIFEST_RELATIVE,
             "radroots_transport",
-            "0.1.0",
+            "0.1.0-alpha",
             Some("radroots_transport"),
         ),
     ];
@@ -20537,7 +20537,7 @@ pub(crate) fn migration_for_version"#,
         let cargo_lock = fs::read_to_string(&cargo_lock_path).expect("Cargo.lock");
         let transport_lock_package = r#"[[package]]
 name = "radroots_transport"
-version = "0.1.0"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "serde",
@@ -20547,7 +20547,7 @@ dependencies = [
 "#;
         let future_transport_lock_package = r#"[[package]]
 name = "radroots_transport"
-version = "0.1.0"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "serde",

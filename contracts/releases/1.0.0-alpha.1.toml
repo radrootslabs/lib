@@ -87,10 +87,10 @@ semver_impacts = [
 summary = "Decouple replica backup compatibility from package SemVer and retain restore support for schema-compatible 0.1.0-alpha.2 backups."
 
 [[changes]]
-id = "workspace-version-lockstep"
+id = "library-crate-version-authority"
 classification = "fix"
 semver_impacts = ["fix_packaging_metadata"]
-summary = "Move the workspace and event contract to the 1.0.0-alpha.1 version cohort with exact internal requirements."
+summary = "Pin every library workspace crate and internal requirement to the authoritative 0.1.0-alpha Cargo cohort independently of protocol contract versions."
 
 [[changes]]
 id = "general-verified-event-boundary"

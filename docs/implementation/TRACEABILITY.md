@@ -7,6 +7,7 @@ and verification. It adds no product requirements; the synchronized
 | Durable requirement | Owning package or control | Handoff steps | Required evidence |
 | --- | --- | --- | --- |
 | Exactly 19 public packages with a 17/2 repository split | release policy and architecture catalog | 013, 015-026, 304-305 | Cargo-resolved graph report and exact allowlist validation |
+| Every `radrootslabs/lib` Rust crate remains in the frozen `0.1.0-alpha` cohort | library repository version authority and architecture validators | 013, 019-315 | exact workspace package, dependency requirement, lockfile, and synchronized-spec validation |
 | Public-only identity and separated signing/secrets | `radroots_identity`, `radroots_signing`, `radroots_secrets` | 052-054, 099-111, 147-155 | public API, feature, dependency, and redaction tests |
 | One canonical `TradeId` | `radroots_event`, `radroots_trade` | 073-098 | compile/API inventory and trade conformance |
 | Version-neutral protocol ownership | `radroots_protocol` and private generators | 055-064, 261-268 | contract vectors and generated freshness |

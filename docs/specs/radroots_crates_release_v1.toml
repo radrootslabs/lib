@@ -2,7 +2,6 @@ spec_id = "radroots.crates.release.v1"
 status = "final_architecture"
 date = "2026-07-26"
 package_count = 19
-initial_version = "0.1.0"
 edition = "2024"
 resolver = "3"
 rust_version = "1.97.1"
@@ -14,6 +13,7 @@ canonical_repositories = [
 
 [repositories.lib]
 url = "https://github.com/radrootslabs/lib"
+version = "0.1.0-alpha"
 packages = [
   "radroots_core",
   "radroots_identity",
@@ -36,6 +36,7 @@ packages = [
 
 [repositories.sdk]
 url = "https://github.com/radrootslabs/sdk"
+version = "0.1.0"
 packages = ["radroots_sdk", "radroots"]
 
 [repository_policy]

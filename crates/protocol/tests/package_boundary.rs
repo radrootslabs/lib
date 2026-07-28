@@ -19,7 +19,7 @@ const VERSIONED_SOURCES: &[&str] = &[
 #[test]
 fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_protocol\""));
-    assert!(MANIFEST.contains("version = \"0.1.0\""));
+    assert!(MANIFEST.contains("version = \"0.1.0-alpha\""));
     assert!(MANIFEST.contains("publish = false"));
     assert!(MANIFEST.contains("[lib]\nname = \"radroots_protocol\""));
     assert!(MANIFEST.contains("default = [\"std\", \"serde\"]"));

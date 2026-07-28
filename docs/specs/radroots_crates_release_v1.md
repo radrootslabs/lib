@@ -84,7 +84,11 @@ The final review makes the following deliberate changes:
 6. **Public codegen features are removed.** `dto-bindgen`, binding generation, WASM wrappers, and fixture switches remain private build/test concerns.
 7. **The workspace moves to Cargo resolver 3.** A virtual Rust 2024 workspace MUST explicitly set `resolver = "3"`.
 8. **Release V1 uses MSRV 1.97.1.** The patch release is selected rather than 1.97.0 because it contains a compiler miscompilation fix.
-9. **Lower crates do not remain permanently lockstep.** All begin at `0.1.0`, but only `radroots` and `radroots_sdk` are an exact lockstep pair; lower packages follow independent SemVer after the first release.
+9. **Lower crates do not remain permanently lockstep.** The current
+   `radrootslabs/lib` development cohort is frozen at `0.1.0-alpha`, while
+   `radroots` and `radroots_sdk` remain an exact `0.1.0` lockstep pair. Lower
+   packages may follow independent SemVer only after explicit future authority
+   ends the temporary library version freeze.
 
 ## 4. Non-negotiable architecture invariants
 
@@ -1282,7 +1286,7 @@ Every public package MUST define:
 ```toml
 [package]
 name = "radroots_..."
-version = "0.1.0"
+version = "<repository-governed exact version>"
 publish = ["crates-io"]
 edition.workspace = true
 rust-version.workspace = true
@@ -1312,7 +1316,22 @@ Additional rules:
 
 ### 22.1 Initial versions
 
-All 19 packages start at `0.1.0`. This document's “V1” is the architecture specification version, not a claim that Rust APIs are already 1.0-stable.
+Every Rust crate in `radrootslabs/lib`, including private build, test, preview,
+and support crates, is pinned to exactly `0.1.0-alpha`. Every same-repository
+dependency requirement is pinned to exactly `=0.1.0-alpha`. This temporary
+cohort is frozen until an explicit future authority changes it; neither normal
+development nor release preparation may bump it implicitly.
+
+The two `radrootslabs/sdk` public packages remain at `0.1.0` under their
+independent repository authority. Cross-repository dependencies therefore use
+the exact version assigned to the package's owning repository rather than a
+single monorepo-wide version. This document's “V1” is the architecture
+specification version, not a claim that Rust APIs are already 1.0-stable.
+
+Cargo package versions are independent from versioned wire, conformance,
+database, and operation contracts. Changing the library crate cohort MUST NOT
+rewrite authenticated historical protocol artifacts or derive Cargo SemVer
+from a protocol contract version.
 
 ### 22.2 SemVer groups
 
