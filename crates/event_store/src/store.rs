@@ -2634,6 +2634,31 @@ mod tests {
         store
     }
 
+    async fn non_admitted_retraction_corruption_store() -> RadrootsEventStore {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let malformed = signed_event(
+            30_402,
+            280,
+            vec![vec!["d".to_owned(), "non-admitted-retraction".to_owned()]],
+            "malformed FoodAvailability",
+        );
+        let admitted = food_availability_event(
+            290,
+            "non-admitted-retraction",
+            "Admitted Retraction Carrots",
+            "Admitted harvest",
+            "active",
+            Vec::new(),
+        );
+        for (observed_at_ms, event) in [(19_500, malformed), (19_501, admitted)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("non-admitted retraction fixture ingest");
+        }
+        store
+    }
+
     async fn transition_feed_error_after_trusted_corruption(
         store: &RadrootsEventStore,
         additional_guards: &[&'static str],
@@ -9572,6 +9597,73 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             let store = replacement_transition_corruption_store().await;
             let error =
                 transition_feed_error_after_trusted_corruption(&store, &[], &[mutation]).await;
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::AddressableTransitionCorruption { ref reason }
+                        if reason.contains(expected_reason)
+                ),
+                "{label}: {error}",
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_rejects_stored_event_authority_drift() {
+        for (label, store, guards, mutations, expected_reason) in [
+            (
+                "coordinate wire bound",
+                food_availability_audit_corruption_store().await,
+                &[][..],
+                &[
+                    "UPDATE radroots_event_store_addressable_head_transition SET d_tag = replace(hex(zeroblob(4097)), '00', 'x')",
+                ][..],
+                "coordinate is outside wire bounds",
+            ),
+            (
+                "negative suppression cutoff",
+                suppressed_food_visibility_store().await.0,
+                &[][..],
+                &[
+                    "UPDATE radroots_event_store_addressable_head_transition SET address_reference_cutoff = -1 WHERE transition_seq = 2",
+                ][..],
+                "address_reference_cutoff",
+            ),
+            (
+                "signed event fields",
+                food_availability_audit_corruption_store().await,
+                &["DROP TRIGGER radroots_event_store_event_envelopes_raw_update_guard"][..],
+                &["UPDATE event_envelopes SET content = 'corrupt' WHERE kind = 30402"][..],
+                "disagrees with its signed raw JSON",
+            ),
+            (
+                "registry admission",
+                food_availability_audit_corruption_store().await,
+                &["DROP TRIGGER radroots_event_store_event_envelopes_derived_update_guard"][..],
+                &[
+                    "UPDATE event_envelopes SET contract_id = 'radroots.event.invalid.v1' WHERE kind = 30402",
+                ][..],
+                "disagrees with registry-v7 admission",
+            ),
+            (
+                "coordinate authority",
+                food_availability_audit_corruption_store().await,
+                &["DROP TRIGGER radroots_event_store_event_coordinate_delete_guard"][..],
+                &["DELETE FROM radroots_event_store_event_coordinate"][..],
+                "has no matching addressable coordinate authority",
+            ),
+            (
+                "non-admitted retraction",
+                non_admitted_retraction_corruption_store().await,
+                &[][..],
+                &[
+                    "UPDATE radroots_event_store_addressable_head_transition SET retracted_event_id = (SELECT raw_head_event_id FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), retracted_event_seq = (SELECT raw_head_event_seq FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1) WHERE transition_seq = 2",
+                ][..],
+                "retracts an event that is not admitted",
+            ),
+        ] {
+            let error =
+                transition_feed_error_after_trusted_corruption(&store, guards, mutations).await;
             assert!(
                 matches!(
                     error,
