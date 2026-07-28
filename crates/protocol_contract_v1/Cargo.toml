@@ -14,12 +14,10 @@ readme = "README"
 
 [features]
 default = ["std", "serde"]
-dto-bindgen = ["std", "serde", "dep:dto_bindgen"]
 serde = ["dep:serde"]
 std = []
 
 [dependencies]
-dto_bindgen = { workspace = true, optional = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",

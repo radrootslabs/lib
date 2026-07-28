@@ -4826,7 +4826,6 @@ dependencies = [
 name = "radroots_protocol_contract_v1"
 version = "1.0.0-alpha.1"
 dependencies = [
- "dto_bindgen",
  "radroots_protocol",
  "serde",
  "serde_json",
@@ -9028,6 +9027,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "radroots_event_codec",
+ "radroots_protocol",
  "radroots_protocol_contract_v1",
  "semver",
  "serde",

@@ -9,18 +9,12 @@ use alloc::string::{String, ToString};
 pub const PROTOCOL_CONTRACT_NAME_V1: &str = "radroots.protocol";
 pub const PROTOCOL_CONTRACT_VERSION_V1: u16 = 1;
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TransportKindV1 {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "local"))]
     Local,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "nostr"))]
     Nostr,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "reticulum"))]
     Reticulum,
 }
 
@@ -45,36 +39,23 @@ impl TransportKindV1 {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CapabilityMaturityV1 {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "preview"))]
     Preview,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "stable"))]
     Stable,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CapabilityAvailabilityV1 {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "available"))]
     Available,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "degraded"))]
     Degraded,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "unavailable"))]
     Unavailable,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -101,8 +82,6 @@ impl MeshScopeIdV1 {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -129,8 +108,6 @@ impl ReticulumDestinationV1 {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -139,8 +116,6 @@ pub struct ReticulumTargetV1 {
     pub mesh_scope: Option<MeshScopeIdV1>,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -192,20 +167,13 @@ pub const TRANSPORT_CAPABILITY_CATALOG_V1: &[TransportCapabilityDescriptorV1] = 
     },
 ];
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ProtocolEventClassV1 {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "regular"))]
     Regular,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "replaceable"))]
     Replaceable,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "addressable"))]
     Addressable,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "unsigned_rumor"))]
     UnsignedRumor,
 }
 
@@ -321,28 +289,17 @@ pub const RETIRED_PROTOCOL_EVENT_NAMES_V1: &[&str] = &[
     "trade_transition_proof_result",
 ];
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string_enum"))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ProtocolTradeStateV1 {
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "missing"))]
     Missing,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "requested"))]
     Requested,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "agreed_pending_validation"))]
     AgreedPendingValidation,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "committed"))]
     Committed,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "declined"))]
     Declined,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "cancelled"))]
     Cancelled,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "validation_expired"))]
     ValidationExpired,
-    #[cfg_attr(feature = "dto-bindgen", dto(rename = "invalid"))]
     Invalid,
 }
 
@@ -557,22 +514,6 @@ fn validate_schema_metadata(
         }
     }
     Ok(())
-}
-
-#[cfg(feature = "dto-bindgen")]
-pub fn dto_roots() -> alloc::vec::Vec<dto_bindgen::export::RootDescriptor> {
-    use dto_bindgen::export::RootDescriptor;
-    alloc::vec![
-        RootDescriptor::new::<TransportKindV1>(),
-        RootDescriptor::new::<CapabilityMaturityV1>(),
-        RootDescriptor::new::<CapabilityAvailabilityV1>(),
-        RootDescriptor::new::<MeshScopeIdV1>(),
-        RootDescriptor::new::<ReticulumDestinationV1>(),
-        RootDescriptor::new::<ReticulumTargetV1>(),
-        RootDescriptor::new::<TransportCapabilityDescriptorV1>(),
-        RootDescriptor::new::<ProtocolEventClassV1>(),
-        RootDescriptor::new::<ProtocolTradeStateV1>(),
-    ]
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use radroots_protocol::{
     capability::v1 as capability,
     event::v1 as event,
-    schema::{ModuleVersion, protocol_v1_registry},
+    schema::{ModuleVersion, SchemaId, protocol_v1_registry},
 };
 use radroots_protocol_contract_v1 as predecessor;
 
@@ -89,10 +89,9 @@ fn schema_metadata_bytes_and_dispatch_are_preserved() {
     assert_eq!(successor, predecessor);
 
     let registry = protocol_v1_registry().expect("successor schema registry");
-    for descriptor in registry.descriptors() {
-        let module = registry
-            .module_for(descriptor.id())
-            .expect("registered module");
+    for schema_id in predecessor.keys() {
+        let schema_id = SchemaId::parse(*schema_id).expect("predecessor schema id");
+        let module = registry.module_for(&schema_id).expect("registered module");
         assert!(matches!(
             module,
             ModuleVersion::CapabilityV1 | ModuleVersion::EventV1

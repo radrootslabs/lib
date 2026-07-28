@@ -1,0 +1,25 @@
+schema_version = 1
+package = "radroots_protocol"
+source_hash_algorithm = "sha256_bytes_v1"
+inventory_path = "contracts/codegen/protocol_v1.inventory.json"
+inventory_sha256_path = "contracts/codegen/protocol_v1.inventory.sha256"
+
+[[source]]
+module = "capability::v1"
+path = "crates/protocol/src/capability/v1.rs"
+
+[[source]]
+module = "error::v1"
+path = "crates/protocol/src/error/v1.rs"
+
+[[source]]
+module = "event::v1"
+path = "crates/protocol/src/event/v1.rs"
+
+[[source]]
+module = "radrootsd::transport_publish::v5"
+path = "crates/protocol/src/radrootsd/transport_publish/v5.rs"
+
+[[source]]
+module = "runtime::v1"
+path = "crates/protocol/src/runtime/v1.rs"

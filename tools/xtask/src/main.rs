@@ -10,6 +10,8 @@ mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod dto_roots;
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod generate;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod hygiene;
 
 use std::env;
@@ -29,6 +31,7 @@ fn usage() {
     eprintln!("  cargo xtask contract source-maintenance-manifest [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
+    eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
     eprintln!("  cargo xtask coverage required-crates");
@@ -68,6 +71,7 @@ fn validate_contract() -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let root = workspace_root();
     dto_roots::check(&root)?;
+    generate::protocol::check(&root)?;
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
@@ -82,6 +86,7 @@ fn release_preflight() -> Result<(), String> {
 
 fn release_preflight_at(root: &Path) -> Result<(), String> {
     dto_roots::check(root)?;
+    generate::protocol::check(root)?;
     contract::validate_artifact_contracts(root)?;
     contract::validate_release_preflight(root)
 }
@@ -161,6 +166,7 @@ fn run(args: &[String]) -> Result<(), String> {
         Some("contract") => run_contract(&args[1..]),
         Some("coverage") => coverage::run(&args[1..]),
         Some("dto-roots") => dto_roots::run(&args[1..], &workspace_root()),
+        Some("generate") => generate::run(&args[1..], &workspace_root()),
         Some("hygiene") => hygiene::run(&args[1..], &workspace_root()),
         Some("release") => run_release(&args[1..]),
         _ => Err("unknown command".to_string()),
@@ -274,6 +280,9 @@ mod tests {
         let invalid_dto_roots =
             run(&["dto-roots".to_string()]).expect_err("dto-roots requires an explicit mode");
         assert!(invalid_dto_roots.contains("--check|--write"));
+        let invalid_generate =
+            run(&["generate".to_string()]).expect_err("generate requires a target and mode");
+        assert!(invalid_generate.contains("generate protocol --check|--write"));
 
         let removed_sdk = run(&["sdk".to_string(), "validate".to_string()])
             .expect_err("removed sdk command namespace");
@@ -308,6 +317,12 @@ mod tests {
         run_contract(&["validate".to_string()]).expect("validate contract");
         run(&["dto-roots".to_string(), "--check".to_string()])
             .expect("validate DTO root freshness");
+        run(&[
+            "generate".to_string(),
+            "protocol".to_string(),
+            "--check".to_string(),
+        ])
+        .expect("validate protocol DTO inventory freshness");
         coverage::run(&["help".to_string()]).expect("coverage help");
         coverage::run(&["required-crates".to_string()]).expect("coverage required crates");
         coverage::run(&["workspace-crates".to_string()]).expect("coverage workspace crates");

@@ -20,6 +20,7 @@ quote = { workspace = true }
 radroots_event_codec = { workspace = true, features = [
   "contract-manifest",
 ], default-features = false }
+radroots_protocol = { workspace = true, features = ["std"] }
 radroots_protocol_contract_v1 = { workspace = true, features = ["std"] }
 semver = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

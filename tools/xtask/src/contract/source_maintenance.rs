@@ -75,7 +75,7 @@ const FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "e9db250071c528e1483f80e973fe502b0e1e3f2cbadb86d6fa3842ad2b2f0eea";
+    "7c47d54d757bb413be1326d1a0a366e1edd2863e644146552faa50a46c235c6d";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",
@@ -1351,6 +1351,7 @@ fn validate_contract_command_reachability_sources(
                     .map_err(|error| error.to_string())?;
                 let root = workspace_root();
                 dto_roots::check(&root)?;
+                generate::protocol::check(&root)?;
                 contract::load_contract_bundle(&root)
                     .and_then(|bundle| contract::validate_contract_bundle(&bundle))
                     .and_then(|_| contract::validate_canonical_event_boundary(&root))
@@ -1363,6 +1364,7 @@ fn validate_contract_command_reachability_sources(
             "release_preflight_at",
             r#"fn release_preflight_at(root: &Path) -> Result<(), String> {
                 dto_roots::check(root)?;
+                generate::protocol::check(root)?;
                 contract::validate_artifact_contracts(root)?;
                 contract::validate_release_preflight(root)
             }"#,
@@ -4457,6 +4459,29 @@ mod tests {
                 ),
             ),
             (
+                "contract protocol freshness removal",
+                contract.clone(),
+                main.replacen("    generate::protocol::check(&root)?;\n", "", 1),
+            ),
+            (
+                "contract protocol freshness discarded result",
+                contract.clone(),
+                main.replacen(
+                    "    generate::protocol::check(&root)?;",
+                    "    let _ = generate::protocol::check(&root);",
+                    1,
+                ),
+            ),
+            (
+                "contract protocol freshness reordering",
+                contract.clone(),
+                main.replacen(
+                    "    dto_roots::check(&root)?;\n    generate::protocol::check(&root)?;",
+                    "    generate::protocol::check(&root)?;\n    dto_roots::check(&root)?;",
+                    1,
+                ),
+            ),
+            (
                 "contract validate dispatch bypass",
                 contract.clone(),
                 main.replacen(
@@ -4480,6 +4505,29 @@ mod tests {
                 main.replacen("    contract::validate_artifact_contracts(root)?;\n", "", 1),
             ),
             (
+                "release protocol freshness removal",
+                contract.clone(),
+                main.replacen("    generate::protocol::check(root)?;\n", "", 1),
+            ),
+            (
+                "release protocol freshness discarded result",
+                contract.clone(),
+                main.replacen(
+                    "    generate::protocol::check(root)?;",
+                    "    let _ = generate::protocol::check(root);",
+                    1,
+                ),
+            ),
+            (
+                "release protocol freshness reordering",
+                contract.clone(),
+                main.replacen(
+                    "    dto_roots::check(root)?;\n    generate::protocol::check(root)?;",
+                    "    generate::protocol::check(root)?;\n    dto_roots::check(root)?;",
+                    1,
+                ),
+            ),
+            (
                 "release validation discarded result",
                 contract.clone(),
                 main.replacen(
@@ -4492,8 +4540,8 @@ mod tests {
                 "release validation reordering",
                 contract.clone(),
                 main.replacen(
-                    "    dto_roots::check(root)?;\n    contract::validate_artifact_contracts(root)?;",
-                    "    contract::validate_artifact_contracts(root)?;\n    dto_roots::check(root)?;",
+                    "    generate::protocol::check(root)?;\n    contract::validate_artifact_contracts(root)?;",
+                    "    contract::validate_artifact_contracts(root)?;\n    generate::protocol::check(root)?;",
                     1,
                 ),
             ),
