@@ -277,6 +277,12 @@ pub fn protocol_v1_registry() -> Result<Registry, Error> {
             .iter()
             .cloned(),
     );
+    descriptors.extend(
+        crate::radrootsd::transport_publish::v5::schema_registry()?
+            .descriptors()
+            .iter()
+            .cloned(),
+    );
     Registry::try_new(descriptors)
 }
 
@@ -518,9 +524,13 @@ mod tests {
     #[test]
     fn protocol_v1_registry_dispatches_all_migrated_schemas() {
         let registry = protocol_v1_registry().expect("protocol V1 registry");
-        assert_eq!(registry.len(), 5 + crate::runtime::v1::CATALOG.len() * 2);
+        assert_eq!(registry.len(), 6 + crate::runtime::v1::CATALOG.len() * 2);
         for descriptor in registry.descriptors() {
-            let expected = if descriptor.id().as_str().starts_with("radroots.runtime.") {
+            let expected = if descriptor.id().as_str()
+                == crate::radrootsd::transport_publish::v5::API_VERSION
+            {
+                ModuleVersion::RadrootsdTransportPublishV5
+            } else if descriptor.id().as_str().starts_with("radroots.runtime.") {
                 ModuleVersion::RuntimeV1
             } else if descriptor.id().as_str().contains("event_descriptor")
                 || descriptor.id().as_str().contains("trade_state")
