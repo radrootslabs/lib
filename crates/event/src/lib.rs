@@ -35,6 +35,7 @@ pub(crate) fn test_valid_hex_64(character: char) -> String {
 }
 
 pub mod account;
+pub mod admission;
 pub mod app_data;
 pub mod article;
 pub mod calendar;
@@ -55,12 +56,14 @@ pub mod farm_file;
 pub mod farm_workspace;
 pub mod file_metadata;
 pub mod follow;
+pub mod food;
 pub mod food_availability;
 pub mod gcs;
 pub mod geochat;
 pub mod gift_wrap;
 pub mod group;
 pub mod http_auth;
+pub mod id;
 pub mod ids;
 pub mod job;
 pub mod job_feedback;
@@ -71,6 +74,7 @@ pub mod kinds;
 pub mod knowledge;
 pub mod list;
 pub mod list_set;
+pub mod listing;
 pub mod location;
 pub mod media;
 pub mod message;
@@ -92,6 +96,7 @@ pub mod resource_area;
 pub mod resource_cap;
 pub mod seal;
 pub mod social;
+pub mod tag;
 pub mod tags;
 pub mod trade;
 pub mod trade_validation;

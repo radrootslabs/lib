@@ -25,15 +25,22 @@ std = [
   "radroots_blossom/std",
   "radroots_core/std",
   "radroots_identity/std",
+  "radroots_protocol/std",
   "url_nostd/std",
 ]
-serde = ["dep:serde", "radroots_core/serde", "radroots_identity/serde"]
+serde = [
+  "dep:serde",
+  "radroots_core/serde",
+  "radroots_identity/serde",
+  "radroots_protocol/serde",
+]
 
 [dependencies]
 dto_bindgen = { workspace = true, optional = true }
 radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 jiff-tzdb = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
