@@ -11,21 +11,20 @@ pub(crate) const EVENT_STORE_RESERVED_PREFIX: &str = "radroots_event_store_";
 pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_MIN: u32 = 1;
 pub const RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT: u32 = 4;
 
-pub(crate) const EVENT_STORE_LEDGER_DDL: &str = "CREATE TABLE radroots_event_store_schema_migrations (
+macro_rules! event_store_ledger_ddl {
+    ($schema:literal) => {
+        concat!("CREATE TABLE ", $schema, "radroots_event_store_schema_migrations (
   version INTEGER PRIMARY KEY NOT NULL CHECK (version > 0),
   name TEXT NOT NULL UNIQUE CHECK (length(name) > 0),
   up_sha256 TEXT NOT NULL CHECK (length(up_sha256) = 64 AND up_sha256 NOT GLOB '*[^0-9a-f]*'),
   down_sha256 TEXT NOT NULL CHECK (length(down_sha256) = 64 AND down_sha256 NOT GLOB '*[^0-9a-f]*'),
   schema_sha256 TEXT NOT NULL CHECK (length(schema_sha256) = 64 AND schema_sha256 NOT GLOB '*[^0-9a-f]*')
-) STRICT, WITHOUT ROWID";
-pub(crate) const EVENT_STORE_LEDGER_CREATE_DDL: &str =
-    "CREATE TABLE main.radroots_event_store_schema_migrations (
-  version INTEGER PRIMARY KEY NOT NULL CHECK (version > 0),
-  name TEXT NOT NULL UNIQUE CHECK (length(name) > 0),
-  up_sha256 TEXT NOT NULL CHECK (length(up_sha256) = 64 AND up_sha256 NOT GLOB '*[^0-9a-f]*'),
-  down_sha256 TEXT NOT NULL CHECK (length(down_sha256) = 64 AND down_sha256 NOT GLOB '*[^0-9a-f]*'),
-  schema_sha256 TEXT NOT NULL CHECK (length(schema_sha256) = 64 AND schema_sha256 NOT GLOB '*[^0-9a-f]*')
-) STRICT, WITHOUT ROWID";
+) STRICT, WITHOUT ROWID")
+    };
+}
+
+pub(crate) const EVENT_STORE_LEDGER_DDL: &str = event_store_ledger_ddl!("");
+pub(crate) const EVENT_STORE_LEDGER_CREATE_DDL: &str = event_store_ledger_ddl!("main.");
 
 pub(crate) const EVENT_STORE_BASELINE_OBJECT_NAMES: &[&str] = &[
     "event_envelope_contract_idx",
@@ -456,14 +455,6 @@ pub(crate) fn validate_migration_registry(
     minimum: u32,
     current: u32,
 ) -> Result<(), RadrootsEventStoreError> {
-    if EVENT_STORE_LEDGER_CREATE_DDL.strip_prefix("CREATE TABLE main.")
-        != EVENT_STORE_LEDGER_DDL.strip_prefix("CREATE TABLE ")
-    {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "main-qualified ledger creation DDL does not match canonical catalog DDL"
-                .to_owned(),
-        });
-    }
     if registry
         .iter()
         .any(|migration| migration.hook == EventStoreMigrationHook::Nip09ReconciliationV1)
