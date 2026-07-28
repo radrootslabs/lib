@@ -11,6 +11,7 @@ silently change `radroots.crates.release.v1`.
 | --- | --- | --- |
 | `RCRV1-DEV-001` | 015-023 | Preserve the existing standalone `lib` and `sdk` repositories; replace repository import/unification with independent qualification. |
 | `RCRV1-DEV-002` | 249 | Pull only the facade scaffold forward to immediately after Step 014 in `sdk`; do not repeat it later. |
+| `RCRV1-DEV-004` | 098, 155, 225, 260, 268, 294, 298-299, 301-304, 314 | Enforce a temporary 90% four-dimension coverage baseline during heavy development; restore 100% only through a future explicit contract update. |
 
 ## Record template
 

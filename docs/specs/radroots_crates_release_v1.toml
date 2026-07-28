@@ -53,6 +53,16 @@ same_repository_path_and_version_required = true
 package_realistic_validation_required = true
 preview_packages_withheld = true
 
+[quality_policy.coverage]
+status = "temporary_heavy_development"
+repository = "radrootslabs/lib"
+scope = "all_required_workspace_crates"
+minimum_percent = 90.0
+metrics = ["executable_lines", "functions", "regions", "branches"]
+require_measurable_branches = true
+numeric_overrides_below_minimum_forbidden = true
+reinstatement = "future_explicit_contract_and_spec_update"
+
 [[package]]
 name = "radroots_core"
 crate = "radroots_core"

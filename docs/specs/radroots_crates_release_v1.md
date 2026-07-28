@@ -3,6 +3,7 @@
 **Normative identifier:** `radroots.crates.release.v1`
 **Document status:** Final pressure-tested architecture and publication specification
 **Date:** 2026-07-26
+**Coverage amendment:** 2026-07-28 temporary heavy-development baseline
 **Source snapshots reviewed:**
 - `radrootslabs/lib@466f3cc36739179bc17edb9db796530729ba5219`
 - `radrootslabs/sdk@fd8384aee348034e0c8ea17a868fe7f094770050`
@@ -1419,7 +1420,24 @@ For every public package:
 - secret redaction;
 - dependency audit, license policy, provenance, SBOM, and advisory checks.
 
-### 24.5 Package-realistic release validation
+### 24.5 Coverage policy
+
+During the active heavy-development refactor, every required workspace crate
+owned by `radrootslabs/lib` MUST maintain at least 90% executable-line,
+function, region, and branch coverage. Branch measurement remains required
+except for a machine-recorded temporary exception where the coverage tool emits no branch
+records. Crate-specific numeric thresholds below 90% are forbidden. The
+machine-readable authority for the active gate is `contracts/coverage.toml` in
+`radrootslabs/lib`.
+
+This amendment does not alter the independently governed `radrootslabs/sdk`
+coverage contract. The 90% baseline is temporary development policy, not
+permission to remove meaningful tests or weaken package-specific conformance
+requirements. The 100%
+threshold is deferred until this refactor stabilizes and may be reinstated only
+through an explicit future contract and specification update.
+
+### 24.6 Package-realistic release validation
 
 For every public package:
 

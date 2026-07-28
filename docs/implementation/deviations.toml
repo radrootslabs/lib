@@ -35,6 +35,7 @@ verification = [
 unresolved_risk = "Parent gitlinks cannot advance until the new standalone commits are public-remote reachable under separate authorization."
 normative_architecture_change = false
 adr_required = false
+
 [[deviation]]
 id = "RCRV1-DEV-002"
 date = "2026-07-27"
@@ -55,5 +56,29 @@ verification = [
   "The facade scaffold checkpoint must add radroots only to the sdk workspace and architecture policy.",
 ]
 unresolved_risk = "The facade remains non-publishable until the package-realistic Step 305 enablement gate."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-004"
+date = "2026-07-28"
+status = "active"
+approval = "Explicit user coverage-policy update dated 2026-07-28 17:15 UTC."
+affected_steps = ["098", "155", "225", "260", "268", "294", "298", "299", "301", "302", "303", "304", "314"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#245-coverage-policy",
+  "docs/specs/radroots_crates_release_v1.toml#quality_policy.coverage",
+]
+source_evidence = [
+  "The oss/lib codebase is under heavy development during the multi-RCLD refactor.",
+  "The user explicitly replaced the active 100% coverage requirement with a uniform 90% module requirement.",
+]
+replacement_action = "Enforce 90% executable-line, function, region, and branch coverage for every required oss/lib crate; retain only no-branch-record exceptions; defer restoration of 100% until an explicit future contract update after refactor stabilization."
+verification = [
+  "Contract validation rejects any base coverage dimension other than 90% or disabled required branches.",
+  "Coverage policy-gate tests prove values below 90% fail and values at or above 90% pass.",
+  "The required-crate inventory remains complete and crate-specific numeric thresholds below 90% remain forbidden.",
+]
+unresolved_risk = "A 90% development gate admits untested paths that a later 100% gate would reject; the final restoration remains intentionally unscheduled pending explicit authority."
 normative_architecture_change = false
 adr_required = false
