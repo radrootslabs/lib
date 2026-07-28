@@ -1294,14 +1294,7 @@ async fn prepare_raw_source_repair_connection_v1(
 ) -> Result<(), RadrootsEventStoreError> {
     let main_filename = main_database_filename(connection).await?;
     let actual = canonical_raw_source_repair_main_path_v1(Path::new(&main_filename))?;
-    if actual != canonical_path {
-        return Err(
-            RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
-                expected: canonical_path.display().to_string(),
-                actual: actual.display().to_string(),
-            },
-        );
-    }
+    validate_raw_source_repair_database_identity_v1(canonical_path, &actual)?;
     validate_main_database_encoding(connection).await?;
     crate::schema::validate_exact_managed_v4_for_raw_source_rebuild_v1(connection).await?;
     validate_file_journal_mode_is_wal(connection).await?;
@@ -1336,14 +1329,7 @@ async fn validate_raw_source_repair_canonical_lock_domain_v1(
     .await?;
     let candidate_filename = main_database_filename(&mut candidate).await?;
     let candidate_path = canonical_raw_source_repair_main_path_v1(Path::new(&candidate_filename))?;
-    if candidate_path != canonical_path {
-        return Err(
-            RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
-                expected: canonical_path.display().to_string(),
-                actual: candidate_path.display().to_string(),
-            },
-        );
-    }
+    validate_raw_source_repair_database_identity_v1(canonical_path, &candidate_path)?;
     validate_main_database_encoding(&mut candidate).await?;
     crate::schema::validate_exact_managed_v4_for_raw_source_rebuild_v1(&mut candidate).await?;
     validate_file_journal_mode_is_wal(&mut candidate).await?;
@@ -1370,6 +1356,22 @@ async fn validate_raw_source_repair_canonical_lock_domain_v1(
                 preserve_raw_source_repair_probe_failure(error.into(), rollback)
             }
         }
+    }
+}
+
+fn validate_raw_source_repair_database_identity_v1(
+    expected: &Path,
+    actual: &Path,
+) -> Result<(), RadrootsEventStoreError> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(
+            RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
+                expected: expected.display().to_string(),
+                actual: actual.display().to_string(),
+            },
+        )
     }
 }
 
@@ -1451,23 +1453,22 @@ async fn validate_file_journal_mode_is_wal(
 }
 
 fn sqlite_error_is_busy(error: &sqlx::Error) -> bool {
-    let sqlx::Error::Database(error) = error else {
-        return false;
-    };
-    error
-        .code()
-        .and_then(|code| code.parse::<i32>().ok())
-        .is_some_and(|code| code & 0xff == 5)
+    sqlite_error_primary_result_code(error) == Some(5)
 }
 
 fn sqlite_error_is_busy_or_locked(error: &sqlx::Error) -> bool {
+    matches!(sqlite_error_primary_result_code(error), Some(5 | 6))
+}
+
+fn sqlite_error_primary_result_code(error: &sqlx::Error) -> Option<i32> {
     let sqlx::Error::Database(error) = error else {
-        return false;
+        return None;
     };
-    error
-        .code()
-        .and_then(|code| code.parse::<i32>().ok())
-        .is_some_and(|code| code & 0xff == 5 || code & 0xff == 6)
+    sqlite_primary_result_code(error.code().as_deref())
+}
+
+fn sqlite_primary_result_code(code: Option<&str>) -> Option<i32> {
+    code?.parse::<i32>().ok().map(|code| code & 0xff)
 }
 
 async fn main_database_filename(
@@ -1476,12 +1477,19 @@ async fn main_database_filename(
     let rows = sqlx::query("PRAGMA database_list")
         .fetch_all(&mut *connection)
         .await?;
+    let mut filename = None;
     for row in rows {
         if row.try_get::<String, _>("name")? == "main" {
-            return Ok(row.try_get("file")?);
+            filename = Some(row.try_get("file")?);
         }
     }
-    Err(RadrootsEventStoreError::SqliteMainDatabaseUnavailable)
+    require_main_database_filename(filename)
+}
+
+fn require_main_database_filename(
+    filename: Option<String>,
+) -> Result<String, RadrootsEventStoreError> {
+    filename.ok_or(RadrootsEventStoreError::SqliteMainDatabaseUnavailable)
 }
 
 fn preserve_ingest_primary_failure<T>(
@@ -4819,6 +4827,78 @@ mod tests {
             Err(RadrootsEventStoreError::SqliteFileJournalModeNotWal { actual })
                 if actual == "delete"
         ));
+    }
+
+    #[test]
+    fn raw_source_repair_scalar_helpers_are_closed() {
+        let expected = Path::new("expected.sqlite");
+        validate_raw_source_repair_database_identity_v1(expected, expected)
+            .expect("matching repair identity");
+        assert!(matches!(
+            validate_raw_source_repair_database_identity_v1(
+                expected,
+                Path::new("actual.sqlite"),
+            ),
+            Err(RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
+                expected,
+                actual,
+            }) if expected == "expected.sqlite" && actual == "actual.sqlite"
+        ));
+
+        assert_eq!(
+            require_main_database_filename(Some("main.sqlite".to_owned())).expect("main filename"),
+            "main.sqlite"
+        );
+        assert!(matches!(
+            require_main_database_filename(None),
+            Err(RadrootsEventStoreError::SqliteMainDatabaseUnavailable)
+        ));
+
+        for (code, expected) in [
+            (None, None),
+            (Some("invalid"), None),
+            (Some("5"), Some(5)),
+            (Some("261"), Some(5)),
+            (Some("6"), Some(6)),
+            (Some("262"), Some(6)),
+            (Some("19"), Some(19)),
+        ] {
+            assert_eq!(sqlite_primary_result_code(code), expected);
+        }
+
+        let primary = RadrootsEventStoreError::RawSourceRepairCanonicalPathLockDomainMismatch {
+            canonical_path: "main.sqlite".to_owned(),
+        };
+        assert!(matches!(
+            preserve_raw_source_repair_probe_failure::<()>(primary, Ok(())),
+            Err(RadrootsEventStoreError::RawSourceRepairCanonicalPathLockDomainMismatch {
+                canonical_path,
+            }) if canonical_path == "main.sqlite"
+        ));
+
+        let primary = RadrootsEventStoreError::RawSourceRepairCanonicalPathLockDomainMismatch {
+            canonical_path: "main.sqlite".to_owned(),
+        };
+        let error = preserve_raw_source_repair_probe_failure::<()>(
+            primary,
+            Err(sqlx::Error::Protocol("rollback".to_owned())),
+        )
+        .expect_err("rollback failure must preserve both errors");
+        match error {
+            RadrootsEventStoreError::RawSourceRebuildTransactionRollbackFailed {
+                primary,
+                rollback: sqlx::Error::Protocol(rollback),
+            } => {
+                assert!(matches!(
+                    *primary,
+                    RadrootsEventStoreError::RawSourceRepairCanonicalPathLockDomainMismatch {
+                        canonical_path,
+                    } if canonical_path == "main.sqlite"
+                ));
+                assert_eq!(rollback, "rollback");
+            }
+            other => panic!("unexpected preserved repair error: {other}"),
+        }
     }
 
     #[tokio::test]
