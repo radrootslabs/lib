@@ -7315,6 +7315,63 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[tokio::test]
+    async fn food_availability_exhaustive_audit_rejects_seal_and_fts_count_drift() {
+        for (label, guard, mutation, expected_reason) in [
+            (
+                "missing projection cursor",
+                Some("DROP TRIGGER radroots_event_store_food_availability_cursor_delete_guard"),
+                "DELETE FROM radroots_event_store_food_availability_cursor",
+                "active source, feed, or projection seal is missing",
+            ),
+            (
+                "feed integrity seal",
+                None,
+                "UPDATE radroots_event_store_addressable_feed_integrity_v1 SET last_transition_seq = last_transition_seq + 1, transition_count = transition_count + 1",
+                "active addressable feed integrity seal is inconsistent",
+            ),
+            (
+                "cursor high-water",
+                Some("DROP TRIGGER radroots_event_store_food_availability_cursor_update_guard"),
+                "UPDATE radroots_event_store_food_availability_cursor SET last_transition_seq = last_transition_seq - 1",
+                "projection cursor is not at the source high-water",
+            ),
+            (
+                "FTS row count",
+                None,
+                "INSERT INTO radroots_event_store_food_availability_search_fts(rowid, event_id, pubkey, d_tag, title, summary, content, location) VALUES (999, 'extra', 'extra', 'extra', 'extra', 'extra', 'extra', 'extra')",
+                "FoodAvailability FTS row count",
+            ),
+        ] {
+            let store = food_availability_audit_corruption_store().await;
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            if let Some(guard) = guard {
+                sqlx::query(guard)
+                    .execute(&mut *connection)
+                    .await
+                    .expect("trusted FoodAvailability seal guard removal");
+            }
+            sqlx::query(mutation)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted FoodAvailability seal corruption");
+            drop(connection);
+
+            let error = store
+                .audit_food_availability_projection_v1()
+                .await
+                .expect_err("corrupt FoodAvailability seal must fail audit");
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason }
+                        if reason.contains(expected_reason)
+                ),
+                "{label}: {error}",
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn food_availability_exhaustive_audit_rejects_wrong_source_transition_authority() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         for event in [
