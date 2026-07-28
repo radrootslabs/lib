@@ -9297,6 +9297,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 "UPDATE radroots_event_store_addressable_head_transition SET visible_event_seq = NULL",
             ),
             (
+                "partial retracted identity",
+                "UPDATE radroots_event_store_addressable_head_transition SET retracted_event_id = raw_head_event_id",
+            ),
+            (
+                "partial cause identity",
+                "UPDATE radroots_event_store_addressable_head_transition SET cause_event_seq = NULL",
+            ),
+            (
                 "admission enum",
                 "UPDATE radroots_event_store_addressable_head_transition SET admission_status = 'invalid'",
             ),
@@ -9307,6 +9315,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             (
                 "suppression evidence",
                 "UPDATE radroots_event_store_addressable_head_transition SET nip09_reason = NULL",
+            ),
+            (
+                "event suppression request id",
+                "UPDATE radroots_event_store_addressable_head_transition SET event_reference_request_id = 'invalid'",
+            ),
+            (
+                "address suppression request id",
+                "UPDATE radroots_event_store_addressable_head_transition SET address_reference_request_id = 'invalid'",
             ),
             (
                 "raw-head decision enum",
@@ -9366,6 +9382,44 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 "{label}: {error}",
             );
         }
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_rejects_valid_but_wrong_coordinate_authority() {
+        let store = food_availability_audit_corruption_store().await;
+        let mut connection = store.pool().acquire().await.expect("trusted connection");
+        sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_update_guard")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted transition guard removal");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable trusted foreign-key enforcement");
+        let other_pubkey = alternate_keys().public_key().to_hex();
+        sqlx::query(
+            "UPDATE radroots_event_store_addressable_head_transition SET pubkey = ? WHERE transition_seq = 1",
+        )
+        .bind(other_pubkey)
+        .execute(&mut *connection)
+        .await
+        .expect("trusted coordinate-authority corruption");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign-key enforcement");
+        drop(connection);
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let error = store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect_err("wrong coordinate authority must fail public feed read");
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::AddressableTransitionCorruption { ref reason }
+                if reason.contains("does not match transition coordinate")
+        ));
     }
 
     #[tokio::test]
@@ -9669,6 +9723,57 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 "{label}: {error}",
             );
         }
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_rejects_corrupt_prior_reference_after_cursor() {
+        let store = replacement_transition_corruption_store().await;
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let first = store
+            .addressable_transition_page_v1(&scope, None, 1)
+            .await
+            .expect("first transition page");
+        let cursor = first.next_cursor().clone();
+        assert_eq!(cursor.last_transition_seq(), 1);
+
+        let mut connection = store.pool().acquire().await.expect("trusted connection");
+        sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_update_guard")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted transition guard removal");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable trusted foreign-key enforcement");
+        sqlx::query("PRAGMA ignore_check_constraints = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("enable trusted check-constraint bypass");
+        sqlx::query(
+            "UPDATE radroots_event_store_addressable_head_transition SET raw_head_event_seq = 0 WHERE transition_seq = 1",
+        )
+        .execute(&mut *connection)
+        .await
+        .expect("trusted prior-reference corruption");
+        sqlx::query("PRAGMA ignore_check_constraints = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("restore check-constraint enforcement");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign-key enforcement");
+        drop(connection);
+
+        let error = store
+            .addressable_transition_page_v1(&scope, Some(&cursor), 64)
+            .await
+            .expect_err("corrupt prior reference must fail the resumed public feed");
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::AddressableTransitionCorruption { ref reason }
+                if reason.contains("prior_raw_head sequence is not positive")
+        ));
     }
 
     #[tokio::test]
