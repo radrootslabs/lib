@@ -867,10 +867,13 @@ const EXPECTED_SOURCE_MAINTENANCE_DRIFT_PATHS: &[&str] = &[
     "crates/event_store/src/error.rs",
     "crates/event_store/src/generated.rs",
     "crates/event_store/src/lib.rs",
+    "crates/event_store/src/migrations.rs",
     "crates/event_store/src/model.rs",
     "crates/event_store/src/nip09/reconciliation_v1.rs",
     "crates/event_store/src/schema.rs",
+    "crates/event_store/src/source_maintenance_v1.rs",
     "crates/event_store/src/store.rs",
+    "crates/event_store/src/store/protocol_reconciliation_v1.rs",
     "tools/xtask/src/contract/food_availability_projection.rs",
     "tools/xtask/src/contract/nip09_reconciliation.rs",
     "tools/xtask/src/contract/source_maintenance.rs",
@@ -890,11 +893,18 @@ const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "crates/event_store/src/lib.rs",
     "crates/event_store/src/migrations.rs",
     "crates/event_store/src/model.rs",
+    "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/model/current_visibility_v1.rs",
+    "crates/event_store/src/model/food_availability_projection_v1.rs",
     "crates/event_store/src/nip09/reconciliation_v1.rs",
     "crates/event_store/src/schema.rs",
     "crates/event_store/src/store.rs",
+    "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/store/current_visibility_v1.rs",
     "crates/event_store/src/store/food_availability_projection_v1.rs",
+    "crates/event_store/src/store/post_core_extensions_v1.rs",
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+    "crates/event_store/src/store/protocol_storage_v1.rs",
 ];
 const BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS: &[&str] = &[
     "Cargo.toml",
@@ -2447,22 +2457,19 @@ fn validate_caller_inbound_foreign_key_model(file: &syn::File) -> Result<(), Str
         r#"
         impl core::fmt::Display for RadrootsEventStoreCallerInboundForeignKeyV1 {
             fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let (parent_column_open, parent_column, parent_column_close) =
+                    match self.parent_column.as_deref() {
+                        Some(parent_column) => ("`", parent_column, "`"),
+                        None => ("", "<implicit primary key>", ""),
+                    };
                 write!(
                     formatter,
-                    "{}:{} on `{}` (`{}` -> `{}`.",
+                    "{}:{} on `{}` (`{}` -> `{}`.{parent_column_open}{parent_column}{parent_column_close}, on update {}, on delete {}, match {})",
                     self.foreign_key_id,
                     self.foreign_key_sequence,
                     self.child_table,
                     self.child_column,
                     self.parent_table,
-                )?;
-                match self.parent_column.as_deref() {
-                    Some(parent_column) => write!(formatter, "`{parent_column}`")?,
-                    None => formatter.write_str("<implicit primary key>")?,
-                }
-                write!(
-                    formatter,
-                    ", on update {}, on delete {}, match {})",
                     self.on_update,
                     self.on_delete,
                     self.match_clause,
@@ -3489,14 +3496,7 @@ fn validate_public_entry_point_authority(file: &syn::File, relative: &str) -> Re
             ) -> Result<(), RadrootsEventStoreError> {
                 let main_filename = main_database_filename(connection).await?;
                 let actual = canonical_raw_source_repair_main_path_v1(Path::new(&main_filename))?;
-                if actual != canonical_path {
-                    return Err(
-                        RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
-                            expected: canonical_path.display().to_string(),
-                            actual: actual.display().to_string(),
-                        },
-                    );
-                }
+                validate_raw_source_repair_database_identity_v1(canonical_path, &actual)?;
                 validate_main_database_encoding(connection).await?;
                 crate::schema::validate_exact_managed_v4_for_raw_source_rebuild_v1(connection)
                     .await?;
@@ -3539,14 +3539,7 @@ fn validate_public_entry_point_authority(file: &syn::File, relative: &str) -> Re
                 let candidate_filename = main_database_filename(&mut candidate).await?;
                 let candidate_path =
                     canonical_raw_source_repair_main_path_v1(Path::new(&candidate_filename))?;
-                if candidate_path != canonical_path {
-                    return Err(
-                        RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
-                            expected: canonical_path.display().to_string(),
-                            actual: candidate_path.display().to_string(),
-                        },
-                    );
-                }
+                validate_raw_source_repair_database_identity_v1(canonical_path, &candidate_path)?;
                 validate_main_database_encoding(&mut candidate).await?;
                 crate::schema::validate_exact_managed_v4_for_raw_source_rebuild_v1(&mut candidate)
                     .await?;
@@ -3574,6 +3567,25 @@ fn validate_public_entry_point_authority(file: &syn::File, relative: &str) -> Re
                             preserve_raw_source_repair_probe_failure(error.into(), rollback)
                         }
                     }
+                }
+            }"#,
+        ),
+        (
+            "validate_raw_source_repair_database_identity_v1",
+            "cold-repair database identity comparison",
+            r#"fn validate_raw_source_repair_database_identity_v1(
+                expected: &Path,
+                actual: &Path,
+            ) -> Result<(), RadrootsEventStoreError> {
+                if actual == expected {
+                    Ok(())
+                } else {
+                    Err(
+                        RadrootsEventStoreError::RawSourceRepairDatabaseIdentityMismatch {
+                            expected: expected.display().to_string(),
+                            actual: actual.display().to_string(),
+                        },
+                    )
                 }
             }"#,
         ),
@@ -3614,13 +3626,24 @@ fn validate_public_entry_point_authority(file: &syn::File, relative: &str) -> Re
             "sqlite_error_is_busy_or_locked",
             "SQLite writer-lock error classification",
             r#"fn sqlite_error_is_busy_or_locked(error: &sqlx::Error) -> bool {
+                matches!(sqlite_error_primary_result_code(error), Some(5 | 6))
+            }"#,
+        ),
+        (
+            "sqlite_error_primary_result_code",
+            "SQLite database error primary-code projection",
+            r#"fn sqlite_error_primary_result_code(error: &sqlx::Error) -> Option<i32> {
                 let sqlx::Error::Database(error) = error else {
-                    return false;
+                    return None;
                 };
-                error
-                    .code()
-                    .and_then(|code| code.parse::<i32>().ok())
-                    .is_some_and(|code| code & 0xff == 5 || code & 0xff == 6)
+                sqlite_primary_result_code(error.code().as_deref())
+            }"#,
+        ),
+        (
+            "sqlite_primary_result_code",
+            "SQLite extended result-code normalization",
+            r#"fn sqlite_primary_result_code(code: Option<&str>) -> Option<i32> {
+                code?.parse::<i32>().ok().map(|code| code & 0xff)
             }"#,
         ),
     ];
@@ -4049,7 +4072,7 @@ fn validate_bounded_repair_schema_authority(
 
     let history = compact_tokens(exact_free_function(file, "read_repair_history_bounded_v1")?);
     for marker in [
-        "i64::from(supported_current).checked_add(1)",
+        "i64::from(supported_current)+1",
         "FROMmain.radroots_event_store_schema_migrations",
         "ORDERBYversion",
         "LIMIT?",
@@ -6752,13 +6775,22 @@ mod tests {
             .path()
             .join(EVENT_STORE_PRODUCTION_SOURCES_RELATIVE);
         let inventory = fs::read_to_string(&inventory_path).expect("read production inventory");
+        let mut inventory: toml::Value =
+            toml::from_str(&inventory).expect("parse production inventory");
+        let error_source = inventory
+            .get_mut("sources")
+            .and_then(toml::Value::as_array_mut)
+            .and_then(|sources| {
+                sources.iter_mut().find(|source| {
+                    source.get("path").and_then(toml::Value::as_str) == Some(error_relative)
+                })
+            })
+            .and_then(toml::Value::as_table_mut)
+            .expect("error source production inventory row");
+        error_source.insert("sha256".to_owned(), toml::Value::String("0".repeat(64)));
         fs::write(
             &inventory_path,
-            inventory.replacen(
-                "sha256 = \"e218754814e195a76fcdfa99c4c4abeaa3b045b4c799b56685ed8acfe5edb90b\"",
-                "sha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"",
-                1,
-            ),
+            toml::to_string(&inventory).expect("render production inventory drift"),
         )
         .expect("write production baseline drift");
         let error = validate_event_store_production_source_authority(workspace.path())
@@ -7740,8 +7772,8 @@ mod tests {
             (
                 "identity-bypass",
                 source.replacen(
-                    "    if actual != canonical_path {",
-                    "    if false && actual != canonical_path {",
+                    "    if actual == expected {",
+                    "    if true || actual == expected {",
                     1,
                 ),
             ),

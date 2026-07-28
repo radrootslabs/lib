@@ -4004,11 +4004,18 @@ mod tests {
             "crates/event_store/src/lib.rs",
             "crates/event_store/src/migrations.rs",
             "crates/event_store/src/model.rs",
+            "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+            "crates/event_store/src/model/current_visibility_v1.rs",
+            "crates/event_store/src/model/food_availability_projection_v1.rs",
             "crates/event_store/src/nip09/reconciliation_v1.rs",
             "crates/event_store/src/schema.rs",
             "crates/event_store/src/store.rs",
+            "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+            "crates/event_store/src/store/current_visibility_v1.rs",
             "crates/event_store/src/store/food_availability_projection_v1.rs",
+            "crates/event_store/src/store/post_core_extensions_v1.rs",
             "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+            "crates/event_store/src/store/protocol_storage_v1.rs",
         ];
 
         let root = repository_root();

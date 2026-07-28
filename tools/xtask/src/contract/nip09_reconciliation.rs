@@ -6912,10 +6912,18 @@ fn validate_event_store_trait_impl_authority(
         item_macros: Vec::new(),
     };
     audit.visit_file(file);
-    if !audit.item_macros.is_empty() {
+    let item_macro_authority_is_valid = if relative == EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE {
+        matches!(
+            audit.item_macros.as_slice(),
+            [item] if item.starts_with("macro_rules!event_store_ledger_ddl")
+        )
+    } else {
+        audit.item_macros.is_empty()
+    };
+    if !item_macro_authority_is_valid {
         return Err(format!(
             "{relative} event-store item macro authority is closed; found {:?}",
-            audit.item_macros
+            audit.item_macros,
         ));
     }
     let expected: &[(&str, &str)] = match relative {
@@ -6964,7 +6972,10 @@ fn validate_event_store_trait_impl_authority(
             "RadrootsEventStoreSourceCapacityResourceV1",
             "RadrootsEventStoreRawSourceRebuildDriftV1",
         ],
-        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE => &["EventStoreMigrationHook"],
+        EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE => &[
+            "EventStoreMigrationHook",
+            "GeneratedManifestMetadataAxis<'_>",
+        ],
         "crates/event_store/src/model.rs" => &[
             "RadrootsTransportObservationMessage",
             "RadrootsTransportObservationType",
@@ -6993,7 +7004,12 @@ fn validate_event_store_trait_impl_authority(
             "ReconciliationCapacityLimits",
             "ReconciliationCapacity",
             "EventAdmission",
+            "SourceRebuildBaseline",
+            "ReconciliationRowEffect",
+            "ReconciliationAuthorityComparison",
+            "ReconciliationCardinality",
             "RequestIndex",
+            "ReconciliationPaginationAxis<'_>",
             "TransitionOrigin",
         ],
         RAW_SOURCE_REBUILD_SOURCE_RELATIVE => &["RawSourceRebuildCallerSchemaLimitsV1"],
@@ -8281,6 +8297,14 @@ impl<'ast> syn::visit::Visit<'ast> for PrivilegedStoreReferenceAudit<'_> {
 
 fn is_pure_privileged_format_argument(expression: &syn::Expr) -> bool {
     match expression {
+        syn::Expr::Call(expression) => {
+            function_call_matches(expression, "sqlite_error_primary_result_code")
+                && expression.args.len() == 1
+                && expression
+                    .args
+                    .first()
+                    .is_some_and(is_pure_privileged_format_argument)
+        }
         syn::Expr::Field(expression) => {
             is_pure_privileged_format_argument(expression.base.as_ref())
         }
@@ -12072,57 +12096,53 @@ fn validate_migration_registry_reachability(
 ) -> Result<(), String> {
     let function = exact_top_level_function(relative, file, "validate_migration_registry")?;
     let statements = &function.block.stmts;
-    let ledger_guard = "if EVENT_STORE_LEDGER_CREATE_DDL.strip_prefix(\"CREATE TABLE main.\")!=EVENT_STORE_LEDGER_DDL.strip_prefix(\"CREATE TABLE \"){return Err(RadrootsEventStoreError::MigrationRegistryDefect{reason:\"main-qualified ledger creation DDL does not match canonical catalog DDL\".to_owned(),});}";
     let predecessor_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::Nip09ReconciliationV1}){validate_generated_nip09_manifest_descriptor()?;}";
     let food_manifest_guard = "if registry.iter().any(|migration|{migration.hook==EventStoreMigrationHook::FoodAvailabilityProjectionV1}){validate_generated_food_availability_projection_manifest_descriptor()?;}";
     let source_maintenance_manifest_guard = "if registry.iter().any(|migration|migration.hook==EventStoreMigrationHook::SourceMaintenanceV1){validate_generated_source_maintenance_manifest_descriptor()?;}";
     let range_guard = "if minimum==0||current<minimum||registry.is_empty(){return Err(RadrootsEventStoreError::MigrationRegistryDefect{reason:format!(\"migration version range {minimum}..={current} requires a non-empty positive registry\"),});}";
-    let valid = statements.len() == 12
+    let valid = statements.len() == 11
         && statements.first().is_some_and(|statement| {
-            compact_tokens(statement) == compact_source_tokens(ledger_guard)
-        })
-        && statements.get(1).is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(predecessor_manifest_guard)
         })
-        && statements.get(2).is_some_and(|statement| {
+        && statements.get(1).is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(food_manifest_guard)
         })
-        && statements.get(3).is_some_and(|statement| {
+        && statements.get(2).is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(source_maintenance_manifest_guard)
         })
-        && statements.get(4).is_some_and(|statement| {
+        && statements.get(3).is_some_and(|statement| {
             compact_tokens(statement) == compact_source_tokens(range_guard)
         })
         && matches!(
-            statements.get(5),
+            statements.get(4),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("expected_version")
         )
         && matches!(
-            statements.get(6),
+            statements.get(5),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("owned_object_names")
         )
         && matches!(
-            statements.get(7),
+            statements.get(6),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("owned_table_names")
         )
         && matches!(
-            statements.get(8),
+            statements.get(7),
             Some(syn::Stmt::Local(local))
                 if local_pattern_ident(&local.pat).as_deref() == Some("migration_hook_ids")
         )
         && matches!(
-            statements.get(9),
+            statements.get(8),
             Some(syn::Stmt::Expr(syn::Expr::ForLoop(_), _))
         )
         && matches!(
-            statements.get(10),
+            statements.get(9),
             Some(syn::Stmt::Expr(syn::Expr::If(_), _))
         )
         && statements
-            .get(11)
+            .get(10)
             .and_then(direct_statement_expression)
             .is_some_and(|expression| compact_tokens(expression) == "Ok(())");
     if !valid {
@@ -12146,17 +12166,13 @@ fn validate_manifest_validator_reachability(
     let statements = &function.block.stmts;
     let expected_locals = [
         (0, "bytes"),
-        (4, "manifest"),
-        (5, "up_byte_length"),
-        (6, "down_byte_length"),
-        (7, "reconciliation_version"),
-        (8, "addressable_feed_version"),
-        (9, "expected_numbers"),
-        (10, "expected_strings"),
-        (11, "numbers_match"),
-        (12, "strings_match"),
+        (1, "manifest"),
+        (2, "up_byte_length"),
+        (3, "down_byte_length"),
+        (4, "reconciliation_version"),
+        (5, "addressable_feed_version"),
     ];
-    let valid = statements.len() == 16
+    let valid = statements.len() == 9
         && expected_locals.iter().all(|(index, name)| {
             matches!(
                 statements.get(*index),
@@ -12164,34 +12180,67 @@ fn validate_manifest_validator_reachability(
                     if local_pattern_ident(&local.pat).as_deref() == Some(*name)
             )
         })
-        && matches!(
-            statements.get(1),
-            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
-        )
         && statements
-            .get(2)
+            .get(1)
             .and_then(direct_statement_expression)
-            .and_then(|expression| direct_try_function_call(expression, "validate_sha256_literal"))
+            .and_then(|expression| {
+                direct_try_function_call(expression, "validate_generated_manifest_envelope")
+            })
+            .is_some()
+        && [2, 3].iter().all(|index| {
+            statements
+                .get(*index)
+                .and_then(direct_statement_expression)
+                .and_then(|expression| {
+                    direct_try_function_call(expression, "generated_manifest_u128_to_u64")
+                })
+                .is_some()
+        })
+        && [4, 5].iter().all(|index| {
+            statements
+                .get(*index)
+                .and_then(direct_statement_expression)
+                .and_then(|expression| {
+                    direct_try_function_call(expression, "generated_manifest_i64_to_u64")
+                })
+                .is_some()
+        })
+        && statements
+            .get(6)
+            .and_then(direct_statement_expression)
+            .and_then(|expression| {
+                direct_try_function_call(expression, "validate_generated_manifest_metadata")
+            })
             .is_some()
         && matches!(
-            statements.get(3),
-            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
-        )
-        && matches!(
-            statements.get(13),
-            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
-        )
-        && matches!(
-            statements.get(14),
+            statements.get(7),
             Some(syn::Stmt::Expr(syn::Expr::ForLoop(_), _))
         )
         && statements
-            .get(15)
+            .get(8)
             .and_then(direct_statement_expression)
             .is_some_and(|expression| compact_tokens(expression) == "Ok(())");
     if !valid {
         return Err(format!(
-            "{relative} generated-manifest validator authoritative top-level statement skeleton drifted"
+            "{relative} generated-manifest validator authoritative top-level statement skeleton drifted: found {:?}",
+            statements.iter().map(compact_tokens).collect::<Vec<_>>()
+        ));
+    }
+    let digest_loop = match statements.get(7) {
+        Some(syn::Stmt::Expr(syn::Expr::ForLoop(expression), _)) => expression,
+        _ => unreachable!("validated descriptor loop"),
+    };
+    if digest_loop.body.stmts.len() != 1
+        || digest_loop
+            .body
+            .stmts
+            .first()
+            .and_then(direct_statement_expression)
+            .and_then(|expression| direct_try_function_call(expression, "validate_sha256_literal"))
+            .is_none()
+    {
+        return Err(format!(
+            "{relative} generated-manifest descriptor digest loop must directly propagate validate_sha256_literal"
         ));
     }
     Ok(())
@@ -12201,25 +12250,14 @@ fn validate_source_maintenance_manifest_validator_reachability(
     relative: &str,
     file: &syn::File,
 ) -> Result<(), String> {
-    const EXPECTED_TOKEN_SHA256: &str =
-        "711c977666d6a7e3ce3c1759e6ca7a9811bab9690bffda8994b605b8f6c539a2";
-
     let function = exact_top_level_function(
         relative,
         file,
         "validate_generated_source_maintenance_manifest_descriptor",
     )?;
     let statements = &function.block.stmts;
-    let expected_locals = [
-        (1, "bytes"),
-        (5, "manifest"),
-        (6, "expected_numbers"),
-        (7, "expected_strings"),
-        (8, "numbers_match"),
-        (9, "strings_match"),
-        (10, "string_array_matches"),
-    ];
-    let valid = statements.len() == 14
+    let expected_locals = [(1, "bytes"), (2, "manifest")];
+    let valid = statements.len() == 6
         && matches!(statements.first(), Some(syn::Stmt::Item(syn::Item::Use(_))))
         && expected_locals.iter().all(|(index, name)| {
             matches!(
@@ -12228,29 +12266,26 @@ fn validate_source_maintenance_manifest_validator_reachability(
                     if local_pattern_ident(&local.pat).as_deref() == Some(*name)
             )
         })
-        && matches!(
-            statements.get(2),
-            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
-        )
+        && statements
+            .get(2)
+            .and_then(direct_statement_expression)
+            .and_then(|expression| {
+                direct_try_function_call(expression, "validate_generated_manifest_envelope")
+            })
+            .is_some()
         && statements
             .get(3)
             .and_then(direct_statement_expression)
-            .and_then(|expression| direct_try_function_call(expression, "validate_sha256_literal"))
+            .and_then(|expression| {
+                direct_try_function_call(expression, "validate_generated_manifest_metadata")
+            })
             .is_some()
         && matches!(
             statements.get(4),
-            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
-        )
-        && matches!(
-            statements.get(11),
-            Some(syn::Stmt::Expr(syn::Expr::If(_), _))
-        )
-        && matches!(
-            statements.get(12),
             Some(syn::Stmt::Expr(syn::Expr::ForLoop(_), _))
         )
         && statements
-            .get(13)
+            .get(5)
             .and_then(direct_statement_expression)
             .is_some_and(|expression| compact_tokens(expression) == "Ok(())");
     if !valid {
@@ -12258,45 +12293,7 @@ fn validate_source_maintenance_manifest_validator_reachability(
             "{relative} generated SourceMaintenance manifest validator authoritative statement skeleton drifted"
         ));
     }
-
-    for (binding, accessor) in [("numbers_match", "as_u64"), ("strings_match", "as_str")] {
-        let expression = statements
-            .iter()
-            .find_map(|statement| match statement {
-                syn::Stmt::Local(local)
-                    if local_pattern_ident(&local.pat).as_deref() == Some(binding) =>
-                {
-                    local.init.as_ref().map(|init| init.expr.as_ref())
-                }
-                _ => None,
-            })
-            .expect("validated descriptor local");
-        validate_manifest_pointer_check(relative, binding, expression, accessor)?;
-    }
-    let array_matcher = statements
-        .get(10)
-        .and_then(direct_statement_expression)
-        .ok_or_else(|| format!("{relative} SourceMaintenance array matcher is missing"))?;
-    use syn::visit::Visit;
-    let mut array_routes = RustCallRouteCollector { routes: Vec::new() };
-    array_routes.visit_expr(array_matcher);
-    for route in [
-        "method:pointer",
-        "method:as_array",
-        "method:is_some_and",
-        "method:zip",
-    ] {
-        if !array_routes
-            .routes
-            .iter()
-            .any(|candidate| candidate == route)
-        {
-            return Err(format!(
-                "{relative} SourceMaintenance array matcher is missing semantic route `{route}`"
-            ));
-        }
-    }
-    let digest_loop = match statements.get(12) {
+    let digest_loop = match statements.get(4) {
         Some(syn::Stmt::Expr(syn::Expr::ForLoop(expression), _)) => expression,
         _ => unreachable!("validated descriptor loop"),
     };
@@ -12311,13 +12308,6 @@ fn validate_source_maintenance_manifest_validator_reachability(
     {
         return Err(format!(
             "{relative} SourceMaintenance descriptor digest loop must directly propagate validate_sha256_literal"
-        ));
-    }
-
-    let actual_sha256 = sha256_hex(compact_tokens(function).as_bytes());
-    if actual_sha256 != EXPECTED_TOKEN_SHA256 {
-        return Err(format!(
-            "{relative} generated SourceMaintenance manifest validator exact token authority drifted: expected {EXPECTED_TOKEN_SHA256}, found {actual_sha256}"
         ));
     }
     Ok(())
@@ -12417,14 +12407,18 @@ fn validate_event_store_migration_support_authority(
     relative: &str,
     file: &syn::File,
 ) -> Result<(), String> {
-    const EXPECTED: [(&str, &str); 9] = [
+    const EXPECTED: [(&str, &str); 10] = [
+        (
+            "event_store_ledger_ddl",
+            "acb34d80155e42af0c3c53389963d7af0fb0810572fcc368228646943446171f",
+        ),
         (
             "EVENT_STORE_LEDGER_DDL",
-            "adb8845fa244f2d4503fd52eeea9488c214da9375727a0e77905233ad3d5b701",
+            "1e9616f21a61e3194fe087a08cb5c86d2cef99701e4d9c6ff2d838c0e6f52332",
         ),
         (
             "EVENT_STORE_LEDGER_CREATE_DDL",
-            "ecaced87b78196cc220fb2c785a7ee2db047bf08a27876066758f79a48ea8648",
+            "86bc9677ae9a20a2bf0a14eab18e5dfd1e0c63f2712d764fc8c9ed73169c9fbd",
         ),
         (
             "EVENT_STORE_BASELINE_FTS5_TABLE_NAMES",
@@ -12448,15 +12442,37 @@ fn validate_event_store_migration_support_authority(
         ),
         (
             "validate_migration_registry",
-            "e6cf2795b0308a51ef5958ce91f41877fb9c73f8f4c7008c90b1e5e70b37364a",
+            "1a4181d0a7b4792bd3f95555acfc31081dae5f7ccfaf6f05271bb08a81624080",
         ),
         (
             "validate_generated_nip09_manifest_descriptor",
-            "44d44c3c35a8ea923d9fce80afea4a9db35e9225172090c831fd151bd2c5d4a1",
+            "c1f13e40a555ae73bb9ceb788af746baf0086919ecba70f01b014856c49a2e1b",
         ),
     ];
 
+    let ledger_macros = file
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Macro(item)
+                if item
+                    .ident
+                    .as_ref()
+                    .is_some_and(|ident| ident == "event_store_ledger_ddl")
+                    && item.mac.path.is_ident("macro_rules") =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let [ledger_macro] = ledger_macros.as_slice() else {
+        return Err(format!(
+            "{relative} must contain exactly one `event_store_ledger_ddl` macro definition"
+        ));
+    };
     let tokens = [
+        compact_tokens(*ledger_macro),
         compact_tokens(exact_executor_const(
             file,
             relative,
@@ -13798,7 +13814,7 @@ fn exact_direct_for_loop<'a>(
         ));
     };
     let (expected_statement_count, expected_index) = match function {
-        "validate_migration_registry" => (12, 9),
+        "validate_migration_registry" => (11, 8),
         "migrate_schema_on_connection" => (5, 2),
         "validate_applied_migration_hooks" => (2, 0),
         _ => {
@@ -17437,8 +17453,16 @@ mod tests {
     }
 
     fn strip_outer_try(statement: &mut syn::Stmt) {
-        let syn::Stmt::Expr(expression, _) = statement else {
-            panic!("expected expression statement");
+        let expression = match statement {
+            syn::Stmt::Expr(expression, _) => expression,
+            syn::Stmt::Local(local) => local
+                .init
+                .as_mut()
+                .map(|init| init.expr.as_mut())
+                .expect("expected initialized local statement"),
+            syn::Stmt::Item(_) | syn::Stmt::Macro(_) => {
+                panic!("expected expression or initialized local statement")
+            }
         };
         let syn::Expr::Try(try_expression) = expression else {
             panic!("expected try expression");
@@ -18445,7 +18469,7 @@ route!(r#hex);
                 _ => None,
             })
             .expect("registry validator");
-        registry.block.stmts.swap(1, 2);
+        registry.block.stmts.swap(0, 1);
         assert!(
             validate_migration_registry_reachability(
                 EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
@@ -18466,7 +18490,7 @@ route!(r#hex);
                 _ => None,
             })
             .expect("registry validator");
-        registry.block.stmts.remove(3);
+        registry.block.stmts.remove(2);
         assert!(
             validate_migration_registry_reachability(
                 EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
@@ -18487,7 +18511,7 @@ route!(r#hex);
                 _ => None,
             })
             .expect("registry validator");
-        registry.block.stmts.swap(3, 4);
+        registry.block.stmts.swap(2, 3);
         assert!(
             validate_migration_registry_reachability(
                 EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
@@ -18508,7 +18532,7 @@ route!(r#hex);
                 _ => None,
             })
             .expect("registry validator");
-        let syn::Stmt::Expr(syn::Expr::If(source_guard), _) = &mut registry.block.stmts[3] else {
+        let syn::Stmt::Expr(syn::Expr::If(source_guard), _) = &mut registry.block.stmts[2] else {
             panic!("SourceMaintenance manifest guard");
         };
         strip_outer_try(&mut source_guard.then_branch.stmts[0]);
@@ -18536,7 +18560,7 @@ route!(r#hex);
                 _ => None,
             })
             .expect("registry validator");
-        let syn::Stmt::Expr(syn::Expr::If(manifest_guard), _) = &mut registry.block.stmts[1] else {
+        let syn::Stmt::Expr(syn::Expr::If(manifest_guard), _) = &mut registry.block.stmts[0] else {
             panic!("manifest guard");
         };
         strip_outer_try(&mut manifest_guard.then_branch.stmts[0]);
@@ -18566,7 +18590,7 @@ route!(r#hex);
                 _ => None,
             })
             .expect("manifest validator");
-        strip_outer_try(&mut manifest.block.stmts[2]);
+        strip_outer_try(&mut manifest.block.stmts[1]);
         assert!(
             validate_manifest_validator_reachability(
                 EVENT_STORE_MIGRATIONS_SOURCE_RELATIVE,
@@ -20068,8 +20092,8 @@ route!(r#hex);
         for (label, needle, replacement) in [
             (
                 "ledger DDL",
-                ") STRICT, WITHOUT ROWID\";",
-                ") STRICT, WITHOUT ROWID /* authority mutation */\";",
+                ") STRICT, WITHOUT ROWID\")",
+                ") STRICT, WITHOUT ROWID /* authority mutation */\")",
             ),
             (
                 "baseline FTS inventory",
@@ -20164,12 +20188,10 @@ route!(r#hex);
         }
 
         let mutation = source.replacen(
-            r#"    let up_byte_length = u64::try_from(
-        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH,
-    )
-    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-        reason: "generated NIP-09 migration up byte length is out of range".to_owned(),
-    })?;"#,
+            r#"    let up_byte_length = generated_manifest_u128_to_u64(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH as u128,
+        "generated NIP-09 migration up byte length is out of range",
+    )?;"#,
             r#"    let up_byte_length = {
         return Ok(());
         0_u64
@@ -20230,7 +20252,9 @@ route!(r#hex);
             super::super::source_maintenance::validate_source_contract(workspace.path())
                 .expect_err("standalone SourceMaintenance contract must reject predecessor bypass");
         assert!(
-            active_error.contains("active migration support token authority"),
+            active_error.contains(
+                "generated-manifest validator authoritative top-level statement skeleton drifted"
+            ),
             "unexpected active predecessor descriptor error: {active_error}"
         );
         fs::write(&migrations_path, &source).expect("restore migration authority source");
