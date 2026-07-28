@@ -856,6 +856,42 @@ fn validate_generated_manifest_metadata(
     Ok(())
 }
 
+fn parse_generated_manifest(
+    bytes: &[u8],
+    name: &'static str,
+) -> Result<serde_json::Value, RadrootsEventStoreError> {
+    match serde_json::from_slice(bytes) {
+        Ok(manifest) => Ok(manifest),
+        Err(error) => Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: format!("generated {name} manifest JSON is invalid: {error}"),
+        }),
+    }
+}
+
+fn generated_manifest_u128_to_u64(
+    value: u128,
+    reason: &'static str,
+) -> Result<u64, RadrootsEventStoreError> {
+    match u64::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: reason.to_owned(),
+        }),
+    }
+}
+
+fn generated_manifest_i64_to_u64(
+    value: i64,
+    reason: &'static str,
+) -> Result<u64, RadrootsEventStoreError> {
+    match u64::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: reason.to_owned(),
+        }),
+    }
+}
+
 fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventStoreError> {
     let bytes = nip09_manifest::NIP09_RECONCILIATION_MANIFEST_JSON.as_bytes();
     if bytes.len() != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_BYTE_LENGTH {
@@ -873,33 +909,23 @@ fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventSto
             reason: "generated NIP-09 manifest digest is inconsistent".to_owned(),
         });
     }
-    let manifest: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
-        RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: format!("generated NIP-09 manifest JSON is invalid: {error}"),
-        }
-    })?;
-    let up_byte_length = u64::try_from(
-        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH,
-    )
-    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-        reason: "generated NIP-09 migration up byte length is out of range".to_owned(),
-    })?;
-    let down_byte_length = u64::try_from(
-        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_BYTE_LENGTH,
-    )
-    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-        reason: "generated NIP-09 migration down byte length is out of range".to_owned(),
-    })?;
-    let reconciliation_version = u64::try_from(nip09_manifest::NIP09_RECONCILIATION_VERSION)
-        .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated NIP-09 reconciliation version is out of range".to_owned(),
-        })?;
-    let addressable_feed_version = u64::try_from(
+    let manifest = parse_generated_manifest(bytes, "NIP-09")?;
+    let up_byte_length = generated_manifest_u128_to_u64(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH as u128,
+        "generated NIP-09 migration up byte length is out of range",
+    )?;
+    let down_byte_length = generated_manifest_u128_to_u64(
+        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_BYTE_LENGTH as u128,
+        "generated NIP-09 migration down byte length is out of range",
+    )?;
+    let reconciliation_version = generated_manifest_i64_to_u64(
+        nip09_manifest::NIP09_RECONCILIATION_VERSION,
+        "generated NIP-09 reconciliation version is out of range",
+    )?;
+    let addressable_feed_version = generated_manifest_i64_to_u64(
         nip09_manifest::NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
-    )
-    .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-        reason: "generated NIP-09 addressable feed version is out of range".to_owned(),
-    })?;
+        "generated NIP-09 addressable feed version is out of range",
+    )?;
     validate_generated_manifest_metadata(
         &manifest,
         &[
@@ -1030,25 +1056,15 @@ fn validate_generated_food_availability_projection_manifest_descriptor()
                 .to_owned(),
         });
     }
-    let manifest: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
-        RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: format!(
-                "generated FoodAvailability projection manifest JSON is invalid: {error}"
-            ),
-        }
-    })?;
-    let up_byte_length =
-        u64::try_from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_BYTE_LENGTH)
-            .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-                reason: "generated FoodAvailability migration up byte length is out of range"
-                    .to_owned(),
-            })?;
-    let down_byte_length =
-        u64::try_from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_BYTE_LENGTH)
-            .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
-                reason: "generated FoodAvailability migration down byte length is out of range"
-                    .to_owned(),
-            })?;
+    let manifest = parse_generated_manifest(bytes, "FoodAvailability projection")?;
+    let up_byte_length = generated_manifest_u128_to_u64(
+        food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_BYTE_LENGTH as u128,
+        "generated FoodAvailability migration up byte length is out of range",
+    )?;
+    let down_byte_length = generated_manifest_u128_to_u64(
+        food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_BYTE_LENGTH as u128,
+        "generated FoodAvailability migration down byte length is out of range",
+    )?;
     validate_generated_manifest_metadata(
         &manifest,
         &[
@@ -1246,11 +1262,7 @@ fn validate_generated_source_maintenance_manifest_descriptor() -> Result<(), Rad
             reason: "generated source-maintenance manifest digest is inconsistent".to_owned(),
         });
     }
-    let manifest: serde_json::Value = serde_json::from_slice(bytes).map_err(|error| {
-        RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: format!("generated source-maintenance manifest JSON is invalid: {error}"),
-        }
-    })?;
+    let manifest = parse_generated_manifest(bytes, "source-maintenance")?;
     validate_generated_manifest_metadata(
         &manifest,
         &[
@@ -1716,6 +1728,43 @@ mod migration_framework {
                     if reason == REASON
             ));
         }
+    }
+
+    #[test]
+    fn generated_manifest_decoding_and_ranges_are_typed() {
+        assert_eq!(
+            parse_generated_manifest(br#"{"schema_version":1}"#, "fixture")
+                .expect("valid generated manifest")["schema_version"],
+            1,
+        );
+        assert!(matches!(
+            parse_generated_manifest(b"{", "fixture"),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.starts_with("generated fixture manifest JSON is invalid:")
+        ));
+
+        assert_eq!(
+            generated_manifest_u128_to_u64(u128::from(u64::MAX), "fixture u128 range")
+                .expect("maximum u64"),
+            u64::MAX,
+        );
+        assert!(matches!(
+            generated_manifest_u128_to_u64(
+                u128::from(u64::MAX) + 1,
+                "fixture u128 range",
+            ),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason == "fixture u128 range"
+        ));
+        assert_eq!(
+            generated_manifest_i64_to_u64(i64::MAX, "fixture i64 range").expect("maximum i64"),
+            i64::MAX as u64,
+        );
+        assert!(matches!(
+            generated_manifest_i64_to_u64(-1, "fixture i64 range"),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason == "fixture i64 range"
+        ));
     }
 
     fn assert_registry_defect(
