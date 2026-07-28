@@ -7101,6 +7101,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("food lookup")
             .expect("projected carrots");
         assert_eq!(projected.event_id().as_str(), carrots.id_str());
+        assert_eq!(projected.d_tag(), &carrot_id);
         assert_eq!(projected.title().as_str(), "Nantes Carrots");
         assert_eq!(projected.summary().as_str(), "Fresh bunches");
         assert_eq!(projected.price().amount(), "3");
@@ -7254,6 +7255,68 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("replacement search");
         assert_eq!(replacement_matches.len(), 1);
         assert_eq!(replacement_matches[0].event_id().as_str(), sold.id_str());
+    }
+
+    #[test]
+    fn stored_food_projection_rejects_unrepresentable_internal_boundaries() {
+        let event = food_availability_event(
+            200,
+            "bounded-model-carrots",
+            "Bounded Model Carrots",
+            "Fresh model harvest",
+            "active",
+            vec![vec![
+                "image".to_owned(),
+                "https://media.example/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.webp"
+                    .to_owned(),
+                "800x600".to_owned(),
+            ]],
+        );
+        let ingest = RadrootsEventIngest::new(event.clone(), 10_000);
+        let projection = match radroots_event_codec::food_availability::inbound::registry_v7::project_verified_food_availability_event_registry_v7(
+            ingest.verified_event(),
+        )
+        .expect("food projection")
+        {
+            radroots_event_codec::food_availability::inbound::registry_v7::RadrootsFoodAvailabilityProjectionOutcome::Focused(projection) => projection,
+            _ => panic!("unexpected food projection outcome"),
+        };
+        let image = projection.images().first().expect("projected image");
+        assert!(matches!(
+            crate::RadrootsStoredFoodAvailabilityImageV1::from_projection_for_test(
+                usize::MAX,
+                image,
+            ),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason })
+                if reason.contains("image index exceeds")
+        ));
+
+        let author = RadrootsPublicKey::parse(event.pubkey_str()).expect("author");
+        let event_id = RadrootsEventId::parse(event.id_str()).expect("event id");
+        assert!(matches!(
+            crate::RadrootsStoredFoodAvailabilityV1::from_projection(
+                RadrootsEventStoreSourceGeneration::from_bytes([0x55; 32]),
+                author.clone(),
+                event_id.clone(),
+                1,
+                99,
+                1,
+                &projection,
+            ),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
+        ));
+
+        let stored = crate::RadrootsStoredFoodAvailabilityV1::from_projection(
+            RadrootsEventStoreSourceGeneration::from_bytes([0x55; 32]),
+            author,
+            event_id,
+            1,
+            200,
+            1,
+            &projection,
+        )
+        .expect("bounded stored projection");
+        assert_eq!(stored.d_tag().as_str(), "bounded-model-carrots");
     }
 
     #[tokio::test]

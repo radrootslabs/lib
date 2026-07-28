@@ -183,6 +183,14 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn from_projection_for_test(
+        image_index: usize,
+        image: &RadrootsInboundFoodAvailabilityImage,
+    ) -> Result<Self, RadrootsEventStoreError> {
+        Self::from_projection(image_index, image)
+    }
+
     pub const fn image_index(&self) -> u32 {
         self.image_index
     }
