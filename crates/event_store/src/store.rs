@@ -25,7 +25,7 @@ use self::post_core_extensions_v1::{
 };
 #[cfg(test)]
 use self::post_core_storage_v1::{
-    i64_from_usize_for_test as i64_from_usize,
+    PostCoreStorageV1, TradeProjectionWrite, i64_from_usize_for_test as i64_from_usize,
     register_protocol_post_extension_raw_authority_forge,
     register_protocol_post_extension_schema_forge,
     trade_mutation_kind_storage_value_for_test as trade_mutation_kind_storage_value,
@@ -6152,6 +6152,45 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("committed capacity after rollback"),
             capacity_after_prior
         );
+    }
+
+    #[tokio::test]
+    async fn trade_projection_rejects_authored_timestamps_outside_sqlite_range() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let canonical =
+            canonical_trade_mutation_content(proposal_envelope()).expect("canonical proposal");
+        let signed = signed_trade_mutation(&canonical);
+        let ingest = RadrootsEventIngest::new(signed, 2_250);
+        let mut mutation = canonical.envelope.clone();
+        mutation.authored_at_unix_s = u64::MAX;
+        let mut transaction = store
+            .begin_write_transaction()
+            .await
+            .expect("write transaction");
+        let mut storage = PostCoreStorageV1::new(&mut transaction);
+        let candidate_id = candidate_id_for_mutation(&mutation);
+        let proposal_mutation_id = proposal_mutation_id_for_mutation(&mutation);
+        let target_claim_mutation_id = target_claim_mutation_id_for_mutation(&mutation);
+        let write = TradeProjectionWrite::new(
+            ingest.event(),
+            1,
+            &mutation,
+            &canonical.mutation_id,
+            candidate_id.as_ref(),
+            proposal_mutation_id.as_ref(),
+            target_claim_mutation_id.as_ref(),
+            "fixture-sha256",
+            ingest.observed_at_ms(),
+            seller_reservation_for_mutation(&mutation),
+        );
+
+        assert!(matches!(
+            storage.persist_trade_projection(write).await,
+            Err(RadrootsEventStoreError::UnsignedIntegerRange {
+                field: "authored_at_unix_s",
+                value: u64::MAX,
+            })
+        ));
     }
 
     #[tokio::test]

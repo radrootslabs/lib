@@ -107,23 +107,22 @@ pub struct RadrootsEventStoreCallerInboundForeignKeyV1 {
 
 impl core::fmt::Display for RadrootsEventStoreCallerInboundForeignKeyV1 {
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let (parent_column_open, parent_column, parent_column_close) =
+            match self.parent_column.as_deref() {
+                Some(parent_column) => ("`", parent_column, "`"),
+                None => ("", "<implicit primary key>", ""),
+            };
         write!(
             formatter,
-            "{}:{} on `{}` (`{}` -> `{}`.",
+            "{}:{} on `{}` (`{}` -> `{}`.{parent_column_open}{parent_column}{parent_column_close}, on update {}, on delete {}, match {})",
             self.foreign_key_id,
             self.foreign_key_sequence,
             self.child_table,
             self.child_column,
             self.parent_table,
-        )?;
-        match self.parent_column.as_deref() {
-            Some(parent_column) => write!(formatter, "`{parent_column}`")?,
-            None => formatter.write_str("<implicit primary key>")?,
-        }
-        write!(
-            formatter,
-            ", on update {}, on delete {}, match {})",
-            self.on_update, self.on_delete, self.match_clause,
+            self.on_update,
+            self.on_delete,
+            self.match_clause,
         )
     }
 }

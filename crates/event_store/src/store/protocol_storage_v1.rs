@@ -430,4 +430,23 @@ mod tests {
             }) if stored_event_id == event_id
         ));
     }
+
+    #[tokio::test]
+    async fn stored_raw_head_rejects_an_unknown_coordinate_type() {
+        let store = crate::RadrootsEventStore::open_memory()
+            .await
+            .expect("open store");
+        let row = sqlx::query("SELECT 'unknown' AS raw_head_coordinate_type")
+            .fetch_one(store.pool())
+            .await
+            .expect("fixture row");
+
+        assert!(matches!(
+            stored_raw_head_from_joined_row(&row),
+            Err(RadrootsEventStoreError::InvalidStoredEnum {
+                field: "event_class",
+                value,
+            }) if value == "unknown"
+        ));
+    }
 }

@@ -18,10 +18,7 @@ pub(super) async fn apply_post_core_extensions_v1(
     if let Some(stored_event_seq) = result.inserted_seq
         && result.receipt.valid_stream_eligible
     {
-        let is_trade_mutation = match &result.receipt.contract_id {
-            Some(contract_id) => is_trade_mutation_contract_id(contract_id.as_str()),
-            None => false,
-        };
+        let is_trade_mutation = is_trade_mutation_contract(result.receipt.contract_id.as_deref());
         if is_trade_mutation {
             store_trade_mutation_event(storage, ingest, stored_event_seq).await?;
         }
@@ -36,8 +33,11 @@ pub(super) async fn apply_post_core_extensions_v1(
     Ok(())
 }
 
-fn is_trade_mutation_contract_id(contract_id: &str) -> bool {
-    RADROOTS_TRADE_MUTATION_CONTRACT_IDS.contains(&contract_id)
+fn is_trade_mutation_contract(contract_id: Option<&str>) -> bool {
+    match contract_id {
+        Some(contract_id) => RADROOTS_TRADE_MUTATION_CONTRACT_IDS.contains(&contract_id),
+        None => false,
+    }
 }
 
 async fn store_trade_mutation_event(
@@ -208,4 +208,18 @@ pub(super) fn seller_reservation_for_mutation_for_test(
 #[cfg(test)]
 pub(super) fn sha256_hex_for_test(bytes: &[u8]) -> String {
     sha256_hex(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trade_mutation_contract_classification_is_closed() {
+        assert!(!is_trade_mutation_contract(None));
+        assert!(!is_trade_mutation_contract(Some("radroots.unknown.v1")));
+        for contract_id in RADROOTS_TRADE_MUTATION_CONTRACT_IDS {
+            assert!(is_trade_mutation_contract(Some(contract_id)));
+        }
+    }
 }

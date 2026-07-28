@@ -3,7 +3,7 @@ hash_algorithm = "rust_production_ast_sha256_v1"
 
 [[sources]]
 path = "crates/event_store/src/error.rs"
-sha256 = "e218754814e195a76fcdfa99c4c4abeaa3b045b4c799b56685ed8acfe5edb90b"
+sha256 = "4cced9506c8c0c78d7826460a3aba0a0466ab739974fa26de2f78b46f19d5d6b"
 
 [[sources]]
 path = "crates/event_store/src/lib.rs"
@@ -91,7 +91,7 @@ sha256 = "1a5569a1a29849db3eeebc92316aeea26db4b2dc58b7b7f297349fcb89b0ca34"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_extensions_v1.rs"
-sha256 = "4b12d5257e425ed1e15e20dec3558d1b02455f86b95342900db7d10286d6da00"
+sha256 = "03829790c0bdbd7dea13099b24f1f0edae2361e5e5f5eaf93d763bd7d018706b"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_extensions_v2.rs"
