@@ -9092,6 +9092,101 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[tokio::test]
+    async fn addressable_transition_feed_rejects_row_authority_drift() {
+        for (label, mutation) in [
+            (
+                "origin enum",
+                "UPDATE radroots_event_store_addressable_head_transition SET origin = 'invalid'",
+            ),
+            (
+                "public key",
+                "UPDATE radroots_event_store_addressable_head_transition SET pubkey = 'invalid'",
+            ),
+            (
+                "coordinate bounds",
+                "UPDATE radroots_event_store_addressable_head_transition SET d_tag = replace(hex(zeroblob(513)), '00', 'x')",
+            ),
+            (
+                "raw-head sequence",
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_event_seq = 0",
+            ),
+            (
+                "partial visible identity",
+                "UPDATE radroots_event_store_addressable_head_transition SET visible_event_seq = NULL",
+            ),
+            (
+                "admission enum",
+                "UPDATE radroots_event_store_addressable_head_transition SET admission_status = 'invalid'",
+            ),
+            (
+                "visibility enum",
+                "UPDATE radroots_event_store_addressable_head_transition SET visibility = 'invalid'",
+            ),
+            (
+                "suppression evidence",
+                "UPDATE radroots_event_store_addressable_head_transition SET nip09_reason = NULL",
+            ),
+            (
+                "raw-head decision enum",
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_decision = 'invalid'",
+            ),
+            (
+                "admission identity",
+                "UPDATE radroots_event_store_addressable_head_transition SET contract_id = 'radroots.event.invalid.v1'",
+            ),
+            (
+                "visible identity",
+                "UPDATE radroots_event_store_addressable_head_transition SET visible_event_id = '0000000000000000000000000000000000000000000000000000000000000000'",
+            ),
+            (
+                "missing raw event",
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_event_id = '0000000000000000000000000000000000000000000000000000000000000000', visible_event_id = '0000000000000000000000000000000000000000000000000000000000000000'",
+            ),
+        ] {
+            let store = food_availability_audit_corruption_store().await;
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_update_guard")
+                .execute(&mut *connection)
+                .await
+                .expect("trusted transition guard removal");
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *connection)
+                .await
+                .expect("disable trusted foreign-key enforcement");
+            sqlx::query("PRAGMA ignore_check_constraints = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("enable trusted check-constraint bypass");
+            sqlx::query(mutation)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted transition corruption");
+            sqlx::query("PRAGMA ignore_check_constraints = OFF")
+                .execute(&mut *connection)
+                .await
+                .expect("restore check-constraint enforcement");
+            sqlx::query("PRAGMA foreign_keys = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("restore foreign-key enforcement");
+            drop(connection);
+
+            let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+            let error = store
+                .addressable_transition_page_v1(&scope, None, 64)
+                .await
+                .expect_err("corrupt transition row must fail public feed read");
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::AddressableTransitionCorruption { .. }
+                ),
+                "{label}: {error}",
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn raw_addressable_heads_use_the_first_opaque_d_value_or_empty() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let missing = signed_event(39_990, 30, Vec::new(), "missing");
