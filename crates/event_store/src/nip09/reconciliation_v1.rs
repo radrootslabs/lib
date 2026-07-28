@@ -3767,6 +3767,186 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn scalar_reconciliation_authority_rejects_every_boundary() {
+        let limits = ReconciliationCapacityLimits {
+            raw_events: 1,
+            raw_tags: 1,
+            raw_event_bytes: 1,
+            raw_tag_bytes: 1,
+        };
+        for resource in [
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+        ] {
+            let mut exact = ReconciliationCapacity::default();
+            exact
+                .checked_add(limits, resource, 1)
+                .expect("exact capacity");
+            assert_eq!(exact.value(resource), 1);
+            assert!(matches!(
+                exact.checked_add(limits, resource, 1),
+                Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: actual_resource,
+                    current: 1,
+                    requested: 1,
+                    limit: 1,
+                }) if actual_resource == resource
+            ));
+
+            let mut overflow = ReconciliationCapacity::default();
+            *overflow.value_mut(resource) = u64::MAX;
+            assert!(matches!(
+                overflow.checked_add(limits, resource, 1),
+                Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: actual_resource,
+                    current: u64::MAX,
+                    requested: 1,
+                    limit: 1,
+                }) if actual_resource == resource
+            ));
+            assert!(matches!(
+                overflow.validate(limits),
+                Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: actual_resource,
+                    current: u64::MAX,
+                    requested: 0,
+                    limit: 1,
+                }) if actual_resource == resource
+            ));
+        }
+
+        assert!(matches!(
+            reconciliation_capacity_value(
+                RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+                -1,
+            ),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift { .. })
+        ));
+        assert!(matches!(
+            EventAdmission::from_registry_v7(RadrootsRegistryV7AdmissionDecision::Defect {
+                code: "fixture_defect",
+            }),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { ref reason })
+                if reason.contains("fixture_defect")
+        ));
+
+        let deletion = signed_event(
+            REQUEST_CREATED_AT,
+            KIND_DELETION_REQUEST,
+            Vec::new(),
+            "immune",
+        );
+        let index = RequestIndex::new(&[]);
+        let indexed_decision = index.decision(&deletion).expect("deletion immunity");
+        assert_eq!(
+            indexed_decision.reason,
+            RadrootsNip09SuppressionReason::DeletionRequestImmune.code()
+        );
+
+        let pool = open_v1_test_pool().await;
+        let mut connection = pool.acquire().await.expect("connection");
+        let stored_decision = stored_suppression_decision(
+            &mut connection,
+            RadrootsEventStoreSourceGeneration::from_bytes([1; 32]),
+            &EventCoordinateFact {
+                event_id: deletion.id_str().to_owned(),
+                event_seq: 1,
+                coordinate_type: "regular".to_owned(),
+                kind: i64::from(KIND_DELETION_REQUEST),
+                pubkey: deletion.author_str().to_owned(),
+                created_at: i64::try_from(deletion.created_at_u64()).expect("created_at"),
+                inserted_at_ms: 1,
+                admission_status: "admitted".to_owned(),
+                admission_code: None,
+                contract_id: None,
+                raw_d_tag: String::new(),
+                nip09_matchable: 0,
+                nip09_d_tag: None,
+            },
+        )
+        .await
+        .expect("stored deletion immunity");
+        assert_eq!(stored_decision.reason, "deletion_request_immune");
+
+        assert_eq!(
+            reconciliation_profile(
+                NIP09_RECONCILIATION_VERSION,
+                NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
+                i64::from(NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION),
+                NIP09_HOOK_ID,
+                NIP09_RECONCILIATION_MANIFEST_SHA256,
+            )
+            .expect("supported profile"),
+            ReconciliationProfile::Nip09V1RegistryV7
+        );
+        assert!(reconciliation_profile(0, 0, 0, "invalid", "invalid").is_err());
+        assert!(generation_from_blob(vec![0; 31]).is_err());
+
+        for (decision, code) in [
+            (RadrootsRawHeadDecision::Applied, "applied"),
+            (
+                RadrootsRawHeadDecision::NotHeadSelected,
+                "not_head_selected",
+            ),
+            (RadrootsRawHeadDecision::NotPersisted, "not_head_selected"),
+            (
+                RadrootsRawHeadDecision::SkippedDuplicate,
+                "not_head_selected",
+            ),
+            (RadrootsRawHeadDecision::SkippedOlder, "skipped_older"),
+            (
+                RadrootsRawHeadDecision::SkippedSameTimestampHigherEventId,
+                "skipped_same_timestamp_higher_event_id",
+            ),
+            (
+                RadrootsRawHeadDecision::MalformedCoordinate,
+                "malformed_coordinate",
+            ),
+        ] {
+            assert_eq!(raw_head_decision_code(&decision), code);
+        }
+
+        let regular = signed_event(TARGET_CREATED_AT, KIND_POST, Vec::new(), "regular");
+        assert!(nip01_coordinate_key(&regular).is_none());
+        let tagged = signed_event(
+            TARGET_CREATED_AT,
+            KIND_DELETION_REQUEST,
+            vec![vec!["e".to_owned(), "value".to_owned()]],
+            "tagged",
+        );
+        assert_eq!(
+            request_source_tag_value(&tagged, 0, "e").expect("tag value"),
+            "value"
+        );
+        assert!(request_source_tag_value(&tagged, 0, "a").is_err());
+        assert!(request_source_tag_value(&tagged, 1, "e").is_err());
+
+        assert_eq!(
+            raw_coordinate_parts("30402:author:opaque:value").expect("coordinate parts"),
+            ("30402", "author", "opaque:value")
+        );
+        assert!(raw_coordinate_parts("invalid").is_err());
+        assert!(raw_coordinate_parts("30402:invalid").is_err());
+        require_expected_insert(1, "fixture").expect("one insert");
+        assert!(require_expected_insert(0, "fixture").is_err());
+        assert!(checked_authority_add(i64::MAX, 1, "fixture").is_err());
+        compare_raw_field(true, "fixture", "content").expect("matching field");
+        assert!(compare_raw_field(false, "fixture", "content").is_err());
+        assert!(i64_from_u64("fixture", i64::MAX as u64 + 1).is_err());
+        assert!(i64_from_usize("fixture", i64::MAX as usize + 1).is_err());
+        assert!(
+            text_payload_bytes(
+                RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+                limits,
+                [usize::MAX, 1],
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
     async fn source_rebuild_rotates_three_generations_with_deterministic_parity() {
         let pool = open_v1_test_pool().await;
         install_unrelated_foreign_key_violation(&pool).await;
