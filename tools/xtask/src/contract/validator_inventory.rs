@@ -146,6 +146,7 @@ pub(super) fn validate_semantic_validator_inventory(workspace_root: &Path) -> Re
             "{INVENTORY_RELATIVE} implementation inventory drifted; missing {missing:?}, unexpected {unexpected:?}"
         ));
     }
+    super::raw_source_rebuild::validate_event_store_production_source_authority(workspace_root)?;
     Ok(())
 }
 

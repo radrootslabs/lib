@@ -1,7 +1,8 @@
 use super::artifact_bundle::{GeneratedArtifact, read_regular_file};
 use super::food_availability_projection::validate_food_availability_projection_predecessor_production_sources_under_lock;
 use super::nip09_reconciliation::{
-    governed_regular_file_inventory, validate_current_event_store_successor_authority,
+    canonical_production_rust_bytes, governed_regular_file_inventory,
+    validate_current_event_store_successor_authority,
     validate_raw_source_rebuild_successor_compiler_inputs,
 };
 use super::source_maintenance::validate_source_maintenance_manifest_under_lock;
@@ -55,7 +56,10 @@ const EVENT_STORE_SUCCESSOR_COMPILER_TABLES_SHA256: &str =
 const SCOPED_INTEGRITY_MODE: &str = "event_store_owned_tables_and_indices_v1";
 const SQLITE_SEQUENCE_SCOPE: &str = "target_first_after_single_shared_sequence_scan_v1";
 const HASH_ALGORITHM: &str = "sha256_bytes_v1";
+const PRODUCTION_AST_HASH_ALGORITHM: &str = "rust_production_ast_sha256_v1";
 const WRITE_COMMAND: &str = "cargo xtask contract raw-source-rebuild-manifest --write";
+const EVENT_STORE_PRODUCTION_SOURCES_RELATIVE: &str =
+    "contracts/event_store_production_sources.toml";
 
 const MANIFEST_RELATIVE: &str = "crates/event_store/contracts/raw_source_rebuild_v1.manifest.json";
 const MANIFEST_SCHEMA_RELATIVE: &str =
@@ -75,6 +79,8 @@ const RESULT_VECTOR_EXECUTOR_ID: &str =
 const RESULT_VECTOR_EXECUTOR_TEST: &str = "raw_source_rebuild_v1_result_vector";
 const REBUILD_RUNTIME_SOURCE_RELATIVE: &str =
     "crates/event_store/src/nip09/reconciliation_v1/raw_source_rebuild.rs";
+const RECONCILIATION_RESULT_VECTOR_EXECUTOR_SOURCE_RELATIVE: &str =
+    "crates/event_store/src/nip09/reconciliation_v1/result_vector_executor.rs";
 const REBUILD_FAILPOINT_TEST_SOURCE_RELATIVE: &str =
     "crates/event_store/src/store/raw_source_rebuild_v1_tests.rs";
 const REBUILD_FAILPOINT_TEST: &str = "raw_source_rebuild_failpoints_roll_back_every_stage_v1";
@@ -1036,6 +1042,21 @@ struct SourceFileDescriptor {
     hash_algorithm: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct EventStoreProductionSourceInventory {
+    schema_version: u32,
+    hash_algorithm: String,
+    sources: Vec<EventStoreProductionSourceBaseline>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(deny_unknown_fields)]
+struct EventStoreProductionSourceBaseline {
+    path: String,
+    sha256: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct PublicApiDescriptor {
@@ -1116,6 +1137,16 @@ pub(crate) fn validate_raw_source_rebuild_manifest(workspace_root: &Path) -> Res
     super::blossom_publication_readiness::validate_blossom_publication_readiness(workspace_root)
 }
 
+pub(super) fn validate_event_store_production_source_authority(
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
+    let manifest: RawSourceRebuildManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
+    validate_manifest_shape(&manifest)?;
+    validate_event_store_production_source_inventory(workspace_root, &manifest).map(|_| ())
+}
+
 pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_lock(
     workspace_root: &Path,
     raw_superseded_paths: &[&str],
@@ -1125,6 +1156,8 @@ pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_l
     let manifest: RawSourceRebuildManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
     validate_manifest_shape(&manifest)?;
+    let semantic_sources =
+        validate_event_store_production_source_inventory(workspace_root, &manifest)?;
 
     let superseded = raw_superseded_paths
         .iter()
@@ -1151,6 +1184,9 @@ pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_l
         if superseded.contains(source.path.as_str()) {
             continue;
         }
+        if semantic_sources.contains(source.path.as_str()) {
+            continue;
+        }
         let current = read_regular_file(workspace_root, &source.path)?;
         if current.len() as u64 != source.byte_length || sha256_hex(&current) != source.sha256 {
             return Err(format!(
@@ -1171,6 +1207,72 @@ pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_l
         workspace_root,
         &transitive,
     )
+}
+
+fn validate_event_store_production_source_inventory(
+    workspace_root: &Path,
+    manifest: &RawSourceRebuildManifest,
+) -> Result<BTreeSet<String>, String> {
+    let source_bytes = read_regular_file(workspace_root, EVENT_STORE_PRODUCTION_SOURCES_RELATIVE)?;
+    let source = std::str::from_utf8(&source_bytes).map_err(|error| {
+        format!("{EVENT_STORE_PRODUCTION_SOURCES_RELATIVE} must be UTF-8 TOML: {error}")
+    })?;
+    let inventory: EventStoreProductionSourceInventory = toml::from_str(&source)
+        .map_err(|error| format!("parse {EVENT_STORE_PRODUCTION_SOURCES_RELATIVE}: {error}"))?;
+    if inventory.schema_version != 1 || inventory.hash_algorithm != PRODUCTION_AST_HASH_ALGORITHM {
+        return Err(format!(
+            "{EVENT_STORE_PRODUCTION_SOURCES_RELATIVE} has unsupported identity"
+        ));
+    }
+    if inventory
+        .sources
+        .windows(2)
+        .any(|pair| pair[0].path >= pair[1].path)
+    {
+        return Err(format!(
+            "{EVENT_STORE_PRODUCTION_SOURCES_RELATIVE} source paths must be strictly sorted and unique"
+        ));
+    }
+
+    let expected_paths = manifest
+        .source_files
+        .iter()
+        .filter(|source| is_semantic_event_store_production_source(&source.path))
+        .map(|source| source.path.clone())
+        .collect::<BTreeSet<_>>();
+    let actual_paths = inventory
+        .sources
+        .iter()
+        .map(|source| source.path.clone())
+        .collect::<BTreeSet<_>>();
+    if actual_paths != expected_paths {
+        return Err(format!(
+            "{EVENT_STORE_PRODUCTION_SOURCES_RELATIVE} source inventory drifted; expected {expected_paths:?}, found {actual_paths:?}"
+        ));
+    }
+
+    for baseline in &inventory.sources {
+        validate_sha256("event-store production source baseline", &baseline.sha256)?;
+        let bytes = read_regular_file(workspace_root, &baseline.path)?;
+        let canonical = canonical_production_rust_bytes(&baseline.path, &bytes)?;
+        let actual_sha256 = sha256_hex(&canonical);
+        if actual_sha256 != baseline.sha256 {
+            return Err(format!(
+                "{} production Rust authority drifted: expected {}, found {actual_sha256}",
+                baseline.path, baseline.sha256
+            ));
+        }
+    }
+    Ok(actual_paths)
+}
+
+fn is_semantic_event_store_production_source(path: &str) -> bool {
+    path.starts_with("crates/event_store/src/")
+        && path.ends_with(".rs")
+        && path != "crates/event_store/src/generated.rs"
+        && !path.starts_with("crates/event_store/src/generated/")
+        && path != RECONCILIATION_RESULT_VECTOR_EXECUTOR_SOURCE_RELATIVE
+        && path != REBUILD_FAILPOINT_TEST_SOURCE_RELATIVE
 }
 
 fn validate_raw_source_rebuild_manifest_under_lock(workspace_root: &Path) -> Result<(), String> {
@@ -6595,6 +6697,76 @@ mod tests {
         )
         .expect("delegated compiler source pins outside the active Blossom raster decoder security successor");
         validate_xtask_manifest_authority(&root).expect("xtask compiler authority");
+    }
+
+    #[test]
+    fn event_store_production_source_inventory_is_test_neutral_and_fail_closed() {
+        let root = workspace_root();
+        let workspace = tempfile::tempdir().expect("production source workspace");
+        let manifest: RawSourceRebuildManifest =
+            serde_json::from_slice(&read_regular_file(&root, MANIFEST_RELATIVE).expect("manifest"))
+                .expect("typed manifest");
+        for relative in std::iter::once(MANIFEST_RELATIVE)
+            .chain(std::iter::once(EVENT_STORE_PRODUCTION_SOURCES_RELATIVE))
+            .chain(
+                manifest
+                    .source_files
+                    .iter()
+                    .map(|source| source.path.as_str())
+                    .filter(|path| is_semantic_event_store_production_source(path)),
+            )
+        {
+            let destination = workspace.path().join(relative);
+            fs::create_dir_all(destination.parent().expect("source parent"))
+                .expect("create source parent");
+            fs::copy(root.join(relative), destination).expect("copy production source authority");
+        }
+        validate_event_store_production_source_authority(workspace.path())
+            .expect("current production source authority");
+
+        let error_relative = "crates/event_store/src/error.rs";
+        let error_path = workspace.path().join(error_relative);
+        let original = fs::read_to_string(&error_path).expect("read error source");
+        fs::write(
+            &error_path,
+            format!("{original}\n#[cfg(test)]\nfn coverage_probe() {{}}\n"),
+        )
+        .expect("write test-only source addition");
+        validate_event_store_production_source_authority(workspace.path())
+            .expect("test-only source addition must preserve production identity");
+
+        fs::write(
+            &error_path,
+            format!("{original}\nfn production_authority_drift() {{}}\n"),
+        )
+        .expect("write production source drift");
+        let error = validate_event_store_production_source_authority(workspace.path())
+            .expect_err("production source drift must fail closed");
+        assert!(
+            error.contains("production Rust authority drifted"),
+            "{error}"
+        );
+
+        fs::write(&error_path, original).expect("restore error source");
+        let inventory_path = workspace
+            .path()
+            .join(EVENT_STORE_PRODUCTION_SOURCES_RELATIVE);
+        let inventory = fs::read_to_string(&inventory_path).expect("read production inventory");
+        fs::write(
+            &inventory_path,
+            inventory.replacen(
+                "sha256 = \"e218754814e195a76fcdfa99c4c4abeaa3b045b4c799b56685ed8acfe5edb90b\"",
+                "sha256 = \"0000000000000000000000000000000000000000000000000000000000000000\"",
+                1,
+            ),
+        )
+        .expect("write production baseline drift");
+        let error = validate_event_store_production_source_authority(workspace.path())
+            .expect_err("production baseline drift must fail closed");
+        assert!(
+            error.contains("production Rust authority drifted"),
+            "{error}"
+        );
     }
 
     #[test]

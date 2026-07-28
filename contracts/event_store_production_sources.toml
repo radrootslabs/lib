@@ -1,0 +1,114 @@
+schema_version = 1
+hash_algorithm = "rust_production_ast_sha256_v1"
+
+[[sources]]
+path = "crates/event_store/src/error.rs"
+sha256 = "e218754814e195a76fcdfa99c4c4abeaa3b045b4c799b56685ed8acfe5edb90b"
+
+[[sources]]
+path = "crates/event_store/src/lib.rs"
+sha256 = "7d588cd181f42b6c8731d84f71e5a778cd6605add07dc9b7d0b8144b51a44a9f"
+
+[[sources]]
+path = "crates/event_store/src/migrations.rs"
+sha256 = "5244eaf726eaa1f81973c98ded096e78b4874dedcd869f6ab6b844962efb51d6"
+
+[[sources]]
+path = "crates/event_store/src/model.rs"
+sha256 = "14a98fe4361baa90e74c499ca96cd47822531041dfd874281b1758796b8fd22e"
+
+[[sources]]
+path = "crates/event_store/src/model/addressable_transition_feed_v1.rs"
+sha256 = "da82c889de4c131b33f40c88aced0a381b7f213b297d125327334714ab4c2511"
+
+[[sources]]
+path = "crates/event_store/src/model/current_visibility_v1.rs"
+sha256 = "f7ac71596075fe1bff6556d0eb0b63cc0fc0a20a8aca567f77fb05796f0c3d1c"
+
+[[sources]]
+path = "crates/event_store/src/model/food_availability_projection_v1.rs"
+sha256 = "ad6e31eb32bec50b61ac1810f6a62d9f693e2673e372ae12268160c2e59c6e6e"
+
+[[sources]]
+path = "crates/event_store/src/model/ingest_reconciliation_v1.rs"
+sha256 = "94e9d94f72ee9205cf8ea4af3f46aa6c6c94464032f95c555246d258ef6a3ea4"
+
+[[sources]]
+path = "crates/event_store/src/model/raw_source_rebuild_v1.rs"
+sha256 = "c5f39614b2d1d7b108fc8215675b0c1ebd121b878651890ed35ea0a6efadb9f5"
+
+[[sources]]
+path = "crates/event_store/src/model/reconciliation_v1.rs"
+sha256 = "e0f86be7735eec65d563fb5f608dcfe5cb90099510c8297c800f0ec5f2369f14"
+
+[[sources]]
+path = "crates/event_store/src/nip09.rs"
+sha256 = "fbd8a3b36d7f36e7b0d301aee0847d42c3908659f066cafcae3e247d67a75845"
+
+[[sources]]
+path = "crates/event_store/src/nip09/reconciliation_v1.rs"
+sha256 = "e532a0e1224896f94efe40aa1e6bc187853d0a919a8427b6a776d32733994e82"
+
+[[sources]]
+path = "crates/event_store/src/nip09/reconciliation_v1/raw_source_rebuild.rs"
+sha256 = "30a465f5df9a37654d15df2a92ee445037ef41c6f5a5b31e216879f4903b3d6c"
+
+[[sources]]
+path = "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
+sha256 = "b85b11baf75cc9d838c996c728d35141b7cd9d0134f5d5baae2159b7d93fa38b"
+
+[[sources]]
+path = "crates/event_store/src/schema.rs"
+sha256 = "0527f9cc7d8d0bf1a4481327f8bd9549eba1bd6bbcce87d57f8bc5fbdb990bb7"
+
+[[sources]]
+path = "crates/event_store/src/source_maintenance_v1.rs"
+sha256 = "181576a5de365cf664b8a87091c30b0389ce0be90e7d1cc16fd7170342f6c2bc"
+
+[[sources]]
+path = "crates/event_store/src/store.rs"
+sha256 = "ef277328d99ef75a978f2907dc654cbf391436b9db693c3be69655dccbe74f89"
+
+[[sources]]
+path = "crates/event_store/src/store/addressable_transition_feed_v1.rs"
+sha256 = "4d1d9b09bacbfc1bcbedcfc641a50679b6b4b51e39786ab9e321a6d78c04f744"
+
+[[sources]]
+path = "crates/event_store/src/store/current_visibility_v1.rs"
+sha256 = "56a21d2ec6a408a2dd5131db0e3c7343c67e60efc67a9c8b2f97fbb90d2d5788"
+
+[[sources]]
+path = "crates/event_store/src/store/food_availability_projection_v1.rs"
+sha256 = "72d28049b8e28b48bb268318c458928e254369d23502b934bcc98bd38bbea390"
+
+[[sources]]
+path = "crates/event_store/src/store/post_core_extension_capabilities.rs"
+sha256 = "875d622e446c2ba31d032236848315cfc7830a4d744847c5e0d5dc5859ce3057"
+
+[[sources]]
+path = "crates/event_store/src/store/post_core_extension_dispatcher.rs"
+sha256 = "1a5569a1a29849db3eeebc92316aeea26db4b2dc58b7b7f297349fcb89b0ca34"
+
+[[sources]]
+path = "crates/event_store/src/store/post_core_extensions_v1.rs"
+sha256 = "4b12d5257e425ed1e15e20dec3558d1b02455f86b95342900db7d10286d6da00"
+
+[[sources]]
+path = "crates/event_store/src/store/post_core_extensions_v2.rs"
+sha256 = "9a1e1e576c5e82a87b26a20cc95a18ee57dda200d50a7e7c51150465e28815b4"
+
+[[sources]]
+path = "crates/event_store/src/store/post_core_storage_v1.rs"
+sha256 = "3febcfc52c52e027764c29c11ab38b148328f829525b6c8cb37cd1ca5c173811"
+
+[[sources]]
+path = "crates/event_store/src/store/post_core_storage_v2.rs"
+sha256 = "5ebd237e8f475184480938472e472ff8f4a7ea7b9f46f9d6100520d1c2d643c4"
+
+[[sources]]
+path = "crates/event_store/src/store/protocol_reconciliation_v1.rs"
+sha256 = "f9d6e28251c8ecaa60ec6ea1b4c2ab2bc0b9d125e67ea4849d35e09324a20108"
+
+[[sources]]
+path = "crates/event_store/src/store/protocol_storage_v1.rs"
+sha256 = "00378eb3b038e549fc4fa1da6797d99333be6baca2bce294be4b16a2c2bfa98e"

@@ -26,6 +26,7 @@ implementation_paths = [
 ]
 governed_inputs = [
   "contracts/conformance/vectors/event_store",
+  "contracts/event_store_production_sources.toml",
   "crates/event_store/Cargo.toml",
   "crates/event_store/contracts",
   "crates/event_store/migrations",

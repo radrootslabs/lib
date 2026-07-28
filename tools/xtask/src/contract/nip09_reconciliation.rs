@@ -2855,6 +2855,13 @@ fn canonical_rust_ast(
     Ok(canonical)
 }
 
+pub(super) fn canonical_production_rust_bytes(
+    relative: &str,
+    bytes: &[u8],
+) -> Result<Vec<u8>, String> {
+    canonical_rust_ast(relative, bytes, RustAstProfile::Production)
+}
+
 fn parse_canonical_production_rust(relative: &str, bytes: &[u8]) -> Result<syn::File, String> {
     let canonical = canonical_rust_ast(relative, bytes, RustAstProfile::Production)?;
     let canonical = std::str::from_utf8(&canonical)
