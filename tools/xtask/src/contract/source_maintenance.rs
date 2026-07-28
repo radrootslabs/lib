@@ -75,7 +75,7 @@ const FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "7c47d54d757bb413be1326d1a0a366e1edd2863e644146552faa50a46c235c6d";
+    "05f85e91c9055e768e54c9638deb2be86ae7ee3e3bf074edbed5cdb8393a9218";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",
@@ -1345,10 +1345,29 @@ fn validate_contract_command_reachability_sources(
         (
             XTASK_MAIN_SOURCE_RELATIVE,
             &main,
+            "validate_protocol_contracts",
+            r#"fn validate_protocol_contracts() -> Result<(), String> {
+                use radroots_protocol::{capability, event, runtime, schema};
+
+                capability::v1::validate_catalog(capability::v1::CATALOG)
+                    .map_err(|error| error.to_string())?;
+                event::v1::validate_catalog(event::v1::CATALOG)
+                    .map_err(|error| error.to_string())?;
+                event::v1::validate_trade_state_vocabulary(event::v1::TRADE_STATE_VOCABULARY)
+                    .map_err(|error| error.to_string())?;
+                runtime::v1::validate_catalog(runtime::v1::CATALOG)
+                    .map_err(|error| error.to_string())?;
+                schema::protocol_v1_registry()
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            }"#,
+        ),
+        (
+            XTASK_MAIN_SOURCE_RELATIVE,
+            &main,
             "validate_contract",
             r#"fn validate_contract() -> Result<(), String> {
-                radroots_protocol_contract_v1::validate_protocol_contract_v1()
-                    .map_err(|error| error.to_string())?;
+                validate_protocol_contracts()?;
                 let root = workspace_root();
                 dto_roots::check(&root)?;
                 generate::protocol::check(&root)?;

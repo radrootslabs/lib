@@ -9028,7 +9028,6 @@ dependencies = [
  "quote",
  "radroots_event_codec",
  "radroots_protocol",
- "radroots_protocol_contract_v1",
  "semver",
  "serde",
  "serde_json",

@@ -66,9 +66,21 @@ fn workspace_root() -> PathBuf {
     workspace_root_with_override(override_root.as_deref())
 }
 
-fn validate_contract() -> Result<(), String> {
-    radroots_protocol_contract_v1::validate_protocol_contract_v1()
+fn validate_protocol_contracts() -> Result<(), String> {
+    use radroots_protocol::{capability, event, runtime, schema};
+
+    capability::v1::validate_catalog(capability::v1::CATALOG).map_err(|error| error.to_string())?;
+    event::v1::validate_catalog(event::v1::CATALOG).map_err(|error| error.to_string())?;
+    event::v1::validate_trade_state_vocabulary(event::v1::TRADE_STATE_VOCABULARY)
         .map_err(|error| error.to_string())?;
+    runtime::v1::validate_catalog(runtime::v1::CATALOG).map_err(|error| error.to_string())?;
+    schema::protocol_v1_registry()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn validate_contract() -> Result<(), String> {
+    validate_protocol_contracts()?;
     let root = workspace_root();
     dto_roots::check(&root)?;
     generate::protocol::check(&root)?;
@@ -372,6 +384,7 @@ mod tests {
     #[test]
     fn run_contract_dispatches_validate_command() {
         let _guard = lock_workspace();
+        validate_protocol_contracts().expect("final protocol contract catalogs");
         run_contract(&["validate".to_string()]).expect("contract validate");
         run_contract(&["event-contract-registry-v7".to_string()])
             .expect("contract registry-v7 inventory");
