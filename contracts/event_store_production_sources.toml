@@ -19,7 +19,7 @@ sha256 = "14a98fe4361baa90e74c499ca96cd47822531041dfd874281b1758796b8fd22e"
 
 [[sources]]
 path = "crates/event_store/src/model/addressable_transition_feed_v1.rs"
-sha256 = "da82c889de4c131b33f40c88aced0a381b7f213b297d125327334714ab4c2511"
+sha256 = "bf0ed43e03af0d45f9406f2ca2463b7ab740b0582191c9ba44a36cdc77de3f4e"
 
 [[sources]]
 path = "crates/event_store/src/model/current_visibility_v1.rs"
@@ -71,11 +71,11 @@ sha256 = "ef277328d99ef75a978f2907dc654cbf391436b9db693c3be69655dccbe74f89"
 
 [[sources]]
 path = "crates/event_store/src/store/addressable_transition_feed_v1.rs"
-sha256 = "4d1d9b09bacbfc1bcbedcfc641a50679b6b4b51e39786ab9e321a6d78c04f744"
+sha256 = "510f9cdeb3756b0f1ae4fcd5c85cb68ff5cb91344bc15cab0aa9c473938d2743"
 
 [[sources]]
 path = "crates/event_store/src/store/current_visibility_v1.rs"
-sha256 = "56a21d2ec6a408a2dd5131db0e3c7343c67e60efc67a9c8b2f97fbb90d2d5788"
+sha256 = "ba4f77e758d98b25f034cbcc554dda833c839f3ccb8671c0b43997aaac764806"
 
 [[sources]]
 path = "crates/event_store/src/store/food_availability_projection_v1.rs"

@@ -8803,6 +8803,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 "stored address deletion cutoff is invalid",
             ),
             (
+                "negative stored created-at",
+                true,
+                "UPDATE radroots_event_store_addressable_head_state SET raw_head_created_at = -1",
+                "stored raw-head created-at is invalid",
+            ),
+            (
                 "contract disagreement",
                 false,
                 "UPDATE radroots_event_store_addressable_head_state SET contract_id = 'radroots.event.invalid.v1'",
@@ -9287,6 +9293,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             (
                 "coordinate bounds",
                 "UPDATE radroots_event_store_addressable_head_transition SET d_tag = replace(hex(zeroblob(513)), '00', 'x')",
+            ),
+            (
+                "negative kind",
+                "UPDATE radroots_event_store_addressable_head_transition SET kind = -1",
+            ),
+            (
+                "kind above u32",
+                "UPDATE radroots_event_store_addressable_head_transition SET kind = 4294967296",
             ),
             (
                 "raw-head sequence",

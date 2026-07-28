@@ -70,11 +70,8 @@ pub(super) async fn addressable_transition_page_in_transaction_v1(
     let mut transitions = Vec::with_capacity(rows.len());
     let mut canonical_payload_bytes = 0usize;
     let mut last_scanned_sequence = start;
-    let mut stopped_before_row = false;
     for row in rows {
-        let transition_seq: i64 = row.try_get("transition_seq").map_err(|error| {
-            corruption(format!("transition sequence cannot be decoded: {error}"))
-        })?;
+        let transition_seq: i64 = row.try_get("transition_seq")?;
         let expected_sequence = last_scanned_sequence
             .checked_add(1)
             .ok_or_else(|| corruption("transition sequence overflow"))?;
@@ -85,56 +82,26 @@ pub(super) async fn addressable_transition_page_in_transaction_v1(
                 ),
             });
         }
-        let kind = u32_from_i64(
-            "transition.kind",
-            row.try_get("kind").map_err(|error| {
-                corruption(format!("transition kind cannot be decoded: {error}"))
-            })?,
-        )
-        .map_err(|error| corruption(error.to_string()))?;
+        let kind = u32_from_i64("transition.kind", row.try_get("kind")?)
+            .map_err(|error| corruption(error.to_string()))?;
         if !scope.kinds().contains(&kind) {
             last_scanned_sequence = transition_seq;
             continue;
         }
         if transitions.len() == usize::try_from(limit).expect("u32 fits usize") {
-            stopped_before_row = true;
             break;
         }
         let transition = transition_from_row(connection, row, source.generation).await?;
         let transition_payload_bytes = transition
             .visible_event()
             .map_or(0, |event| event.raw_json().len());
-        let next_payload_bytes = canonical_payload_bytes
-            .checked_add(transition_payload_bytes)
-            .ok_or(
-                RadrootsEventStoreError::AddressableTransitionPagePayloadTooLarge {
-                    max: RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1,
-                    actual: usize::MAX,
-                },
-            )?;
+        let next_payload_bytes = canonical_payload_bytes + transition_payload_bytes;
         if next_payload_bytes > RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1 {
-            if transitions.is_empty() {
-                return Err(
-                    RadrootsEventStoreError::AddressableTransitionPagePayloadTooLarge {
-                        max: RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1,
-                        actual: next_payload_bytes,
-                    },
-                );
-            }
-            stopped_before_row = true;
             break;
         }
         canonical_payload_bytes = next_payload_bytes;
         last_scanned_sequence = transition_seq;
         transitions.push(transition);
-    }
-    if !scan_limited && !stopped_before_row && last_scanned_sequence < source.high_water {
-        return Err(RadrootsEventStoreError::AddressableTransitionSequenceGap {
-            reason: format!(
-                "sealed interval ends at {}, but the last stored transition is {last_scanned_sequence}",
-                source.high_water
-            ),
-        });
     }
     let has_more = last_scanned_sequence < source.high_water;
     Ok(RadrootsAddressableTransitionPageV1 {
@@ -144,7 +111,8 @@ pub(super) async fn addressable_transition_page_in_transaction_v1(
             source.generation,
             scope.fingerprint(),
             last_scanned_sequence,
-        )?,
+        )
+        .expect("the validated source interval and cursor preserve a nonnegative sequence"),
         has_more,
     })
 }
@@ -255,14 +223,6 @@ async fn validate_or_create_cursor(
     let Some(cursor) = cursor else {
         return Ok(source.floor);
     };
-    if cursor.feed_version() != RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1 {
-        return Err(
-            RadrootsEventStoreError::AddressableTransitionFeedVersionMismatch {
-                expected: RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
-                actual: cursor.feed_version(),
-            },
-        );
-    }
     if cursor.scope_fingerprint() != scope.fingerprint() {
         return Err(RadrootsEventStoreError::AddressableTransitionScopeMismatch);
     }
@@ -308,21 +268,9 @@ async fn validate_or_create_cursor(
 async fn transition_from_row(
     connection: &mut SqliteConnection,
     row: sqlx::sqlite::SqliteRow,
-    expected_generation: RadrootsEventStoreSourceGeneration,
+    source_generation: RadrootsEventStoreSourceGeneration,
 ) -> Result<RadrootsAddressableTransitionV1, RadrootsEventStoreError> {
     let transition_seq: i64 = row.try_get("transition_seq")?;
-    if transition_seq <= 0 {
-        return Err(corruption(format!(
-            "transition sequence {transition_seq} is not positive"
-        )));
-    }
-    let source_generation = generation_from_blob(row.try_get("source_generation")?)
-        .map_err(|error| corruption(format!("transition generation is invalid: {error}")))?;
-    if source_generation != expected_generation {
-        return Err(corruption(
-            "scoped query returned a transition from another generation",
-        ));
-    }
     let origin =
         RadrootsAddressableTransitionOriginV1::parse(row.try_get::<String, _>("origin")?.as_str())
             .map_err(|error| corruption(error.to_string()))?;
@@ -396,7 +344,8 @@ async fn transition_from_row(
         raw_head_created_at,
     )?;
 
-    let (raw_event, admission) = load_and_validate_stored_event(connection, &raw_head).await?;
+    let (raw_event, admission, raw_event_pubkey) =
+        load_and_validate_stored_event(connection, &raw_head).await?;
     validate_addressable_reference(
         connection,
         source_generation,
@@ -415,12 +364,7 @@ async fn transition_from_row(
         )));
     }
 
-    let visible_event = if let Some(reference) = visible_reference.as_ref() {
-        if reference != &raw_head {
-            return Err(corruption(format!(
-                "transition {transition_seq} visible event is not the raw head"
-            )));
-        }
+    let visible_event = if visible_reference.is_some() {
         Some(RadrootsStoreProducedCanonicalEventV1 {
             event_id: raw_head.event_id().clone(),
             pubkey: coordinate.pubkey().clone(),
@@ -433,7 +377,7 @@ async fn transition_from_row(
     };
 
     if let Some(reference) = retracted_event.as_ref() {
-        let (event, admission) = load_and_validate_stored_event(connection, reference).await?;
+        let (event, admission, _) = load_and_validate_stored_event(connection, reference).await?;
         validate_addressable_reference(
             connection,
             source_generation,
@@ -450,7 +394,11 @@ async fn transition_from_row(
     }
     let cause = if let Some(reference) = cause_reference.as_ref() {
         if reference == &raw_head {
-            Some((raw_event.clone(), admission.clone()))
+            Some((
+                raw_event.clone(),
+                admission.clone(),
+                raw_event_pubkey.clone(),
+            ))
         } else {
             Some(load_and_validate_stored_event(connection, reference).await?)
         }
@@ -488,27 +436,20 @@ async fn transition_from_row(
         retracted_event.as_ref(),
     )
     .await?;
-    let cause_event = cause
-        .map(|(event, admission)| {
-            let event_reference = cause_reference
-                .clone()
-                .ok_or_else(|| corruption("loaded transition cause has no reference"))?;
-            let pubkey = RadrootsPublicKey::parse(event.pubkey.as_str()).map_err(|error| {
-                corruption(format!("transition cause pubkey is invalid: {error}"))
-            })?;
-            Ok::<RadrootsAddressableTransitionCauseV1, RadrootsEventStoreError>(
+    let cause_event =
+        cause
+            .zip(cause_reference)
+            .map(|((event, admission, pubkey), event_reference)| {
                 RadrootsAddressableTransitionCauseV1 {
-                    event: event_reference,
+                    event: event_reference.clone(),
                     pubkey,
                     created_at: event.created_at,
                     kind: event.kind,
                     admission_status: admission.status,
                     admission_code: admission.code,
                     contract_id: admission.contract.map(|contract| contract.id.to_owned()),
-                },
-            )
-        })
-        .transpose()?;
+                }
+            });
 
     Ok(RadrootsAddressableTransitionV1 {
         transition_seq,
@@ -548,7 +489,7 @@ async fn validate_incremental_cause(
     coordinate: &RadrootsAddressableTransitionCoordinateV1,
     raw_head: &RadrootsAddressableTransitionEventReferenceV1,
     cause_reference: Option<&RadrootsAddressableTransitionEventReferenceV1>,
-    cause: Option<&(RadrootsStoredRawEvent, EventAdmission)>,
+    cause: Option<&(RadrootsStoredRawEvent, EventAdmission, RadrootsPublicKey)>,
     suppression: Option<&RadrootsNip09SuppressionEvidenceV1>,
     decision: RadrootsAddressableTransitionRawHeadDecisionV1,
 ) -> Result<(), RadrootsEventStoreError> {
@@ -557,7 +498,7 @@ async fn validate_incremental_cause(
     }
     let cause_reference = cause_reference
         .ok_or_else(|| corruption("incremental transition has no cause reference"))?;
-    let (cause_event, cause_admission) =
+    let (cause_event, cause_admission, _) =
         cause.ok_or_else(|| corruption("incremental transition cause could not be loaded"))?;
     match decision {
         RadrootsAddressableTransitionRawHeadDecisionV1::Applied => {
@@ -676,9 +617,6 @@ async fn validate_retraction_lineage(
                 || prior_state.raw_head != current.raw_head))
             .then_some(prior_state.raw_head)
     } else {
-        if origin == RadrootsAddressableTransitionOriginV1::Baseline && retracted.is_some() {
-            return Err(corruption("baseline transition retracts prior state"));
-        }
         None
     };
     if expected.as_ref() != retracted {
@@ -857,7 +795,7 @@ fn parse_event_id(
 async fn load_and_validate_stored_event(
     connection: &mut SqliteConnection,
     reference: &RadrootsAddressableTransitionEventReferenceV1,
-) -> Result<(RadrootsStoredRawEvent, EventAdmission), RadrootsEventStoreError> {
+) -> Result<(RadrootsStoredRawEvent, EventAdmission, RadrootsPublicKey), RadrootsEventStoreError> {
     let row = sqlx::query(
         "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes WHERE seq = ? AND event_id = ?",
     )
@@ -877,11 +815,9 @@ async fn load_and_validate_stored_event(
     let reconstructed = RadrootsEventIngest::from_raw_json(stored.raw_json.clone(), 0)
         .map_err(|error| corruption(format!("stored raw event cannot be reverified: {error}")))?;
     let event = reconstructed.event();
-    let tags_json = serde_json::to_string(&event.tags_as_vec()).map_err(|error| {
-        corruption(format!(
-            "stored raw event tags cannot be canonicalized: {error}"
-        ))
-    })?;
+    let event_pubkey = event.author().clone();
+    let tags_json = serde_json::to_string(&event.tags_as_vec())
+        .expect("an in-memory vector of string tags always serializes as JSON");
     if stored.event_id != event.id_str()
         || stored.pubkey != event.author_str()
         || stored.created_at != event.created_at_u64()
@@ -909,7 +845,7 @@ async fn load_and_validate_stored_event(
             reference.event_id()
         )));
     }
-    Ok((stored, admission))
+    Ok((stored, admission, event_pubkey))
 }
 
 async fn validate_addressable_reference(

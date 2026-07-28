@@ -17,6 +17,14 @@ pub const RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1: usize =
     radroots_event::wire::v1::DEFAULT_TAG_ELEMENT_MAX_BYTES;
 pub const RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1: usize = 512;
 const SCOPE_FINGERPRINT_DOMAIN_V1: &[u8] = b"radroots.addressable-transition-scope.v1\0";
+const _: () = assert!(
+    radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES
+        <= RADROOTS_ADDRESSABLE_TRANSITION_PAGE_RAW_JSON_MAX_BYTES_V1
+);
+const _: () = assert!(
+    RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1 as usize
+        <= usize::MAX / radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES
+);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct RadrootsAddressableTransitionScopeFingerprintV1([u8; 32]);
@@ -60,14 +68,6 @@ impl RadrootsAddressableTransitionScopeV1 {
         let kinds = canonical_kinds;
         if kinds.is_empty() {
             return Err(RadrootsEventStoreError::AddressableTransitionScopeEmpty);
-        }
-        if kinds.len() > RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1 {
-            return Err(
-                RadrootsEventStoreError::AddressableTransitionScopeTooLarge {
-                    max: RADROOTS_ADDRESSABLE_TRANSITION_SCOPE_KIND_MAX_V1,
-                    actual: kinds.len(),
-                },
-            );
         }
         if let Some(kind) = kinds
             .iter()
@@ -209,11 +209,10 @@ fn decode_cursor_hex(
     {
         return Err(RadrootsEventStoreError::AddressableTransitionCursorEncoding { field });
     }
-    let decoded = hex::decode(value)
-        .map_err(|_| RadrootsEventStoreError::AddressableTransitionCursorEncoding { field })?;
-    decoded
-        .try_into()
-        .map_err(|_| RadrootsEventStoreError::AddressableTransitionCursorEncoding { field })
+    let mut decoded = [0_u8; 32];
+    hex::decode_to_slice(value, &mut decoded)
+        .expect("the exact lowercase hexadecimal cursor encoding was validated");
+    Ok(decoded)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

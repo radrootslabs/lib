@@ -1,5 +1,5 @@
 use super::protocol_storage_v1::stored_raw_event_from_row;
-use super::{RadrootsEventStore, bool_from_i64};
+use super::{RadrootsEventStore, bool_from_i64, u64_from_i64};
 use crate::RadrootsEventStoreError;
 use crate::model::{
     RadrootsCurrentEventVisibilityV1, RadrootsCurrentVisibilityDecisionV1,
@@ -274,6 +274,11 @@ async fn validate_addressable_head_projection(
         ));
     };
     let evidence = visibility.suppression.as_ref();
+    let stored_created_at = u64_from_i64(
+        "addressable_head_state.raw_head_created_at",
+        row.try_get("raw_head_created_at")?,
+    )
+    .map_err(|error| visibility_authority_error("stored raw-head created-at", error))?;
     let stored_cutoff = row
         .try_get::<Option<i64>, _>("address_reference_cutoff")?
         .map(|value| {
@@ -286,15 +291,7 @@ async fn validate_addressable_head_projection(
         .map_err(|error| visibility_authority_error("stored address deletion cutoff", error))?;
     if row.try_get::<String, _>("raw_head_event_id")? != visibility.event.event_id
         || row.try_get::<i64, _>("raw_head_event_seq")? != visibility.event.seq
-        || row.try_get::<i64, _>("raw_head_created_at")?
-            != i64::try_from(visibility.event.created_at).map_err(|_| {
-                RadrootsEventStoreError::CurrentVisibilityDrift {
-                    reason: format!(
-                        "addressable event `{}` timestamp is outside SQLite range",
-                        visibility.event.event_id
-                    ),
-                }
-            })?
+        || stored_created_at != visibility.event.created_at
         || row.try_get::<String, _>("admission_status")?
             != visibility.event.admission_status.as_str()
         || row.try_get::<Option<String>, _>("admission_code")?

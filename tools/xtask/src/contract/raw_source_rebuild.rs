@@ -1217,7 +1217,7 @@ fn validate_event_store_production_source_inventory(
     let source = std::str::from_utf8(&source_bytes).map_err(|error| {
         format!("{EVENT_STORE_PRODUCTION_SOURCES_RELATIVE} must be UTF-8 TOML: {error}")
     })?;
-    let inventory: EventStoreProductionSourceInventory = toml::from_str(&source)
+    let inventory: EventStoreProductionSourceInventory = toml::from_str(source)
         .map_err(|error| format!("parse {EVENT_STORE_PRODUCTION_SOURCES_RELATIVE}: {error}"))?;
     if inventory.schema_version != 1 || inventory.hash_algorithm != PRODUCTION_AST_HASH_ALGORITHM {
         return Err(format!(
@@ -1266,7 +1266,7 @@ fn validate_event_store_production_source_inventory(
     Ok(actual_paths)
 }
 
-fn is_semantic_event_store_production_source(path: &str) -> bool {
+pub(super) fn is_semantic_event_store_production_source(path: &str) -> bool {
     path.starts_with("crates/event_store/src/")
         && path.ends_with(".rs")
         && path != "crates/event_store/src/generated.rs"

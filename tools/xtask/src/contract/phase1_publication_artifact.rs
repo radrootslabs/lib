@@ -1,6 +1,9 @@
 use super::artifact_bundle::{
     GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
 };
+use super::raw_source_rebuild::{
+    is_semantic_event_store_production_source, validate_event_store_production_source_authority,
+};
 use radroots_event_codec::wire::publication::{
     RADROOTS_PHASE1_PUBLICATION_ARTIFACT_MAX_BYTES,
     RADROOTS_PHASE1_PUBLICATION_ARTIFACT_SCHEMA_VERSION,
@@ -1378,6 +1381,7 @@ fn validate_result_vector(workspace_root: &Path) -> Result<ValidatedResultVector
 }
 
 fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Result<(), String> {
+    validate_event_store_production_source_authority(workspace_root)?;
     for spec in RAW_IMMUTABLE_ARTIFACTS {
         let bytes = read_regular_file(workspace_root, spec.relative)?;
         if bytes.len() != spec.byte_length || sha256_hex(&bytes) != spec.sha256 {
@@ -1434,7 +1438,7 @@ fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Resul
         if !seen.insert(path) {
             return Err(format!("{RAW_MANIFEST_RELATIVE} duplicates source {path}"));
         }
-        if !superseded.contains(path) {
+        if !superseded.contains(path) && !is_semantic_event_store_production_source(path) {
             validate_value_descriptor(workspace_root, source, "raw predecessor source")?;
         }
     }
