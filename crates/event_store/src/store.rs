@@ -8376,6 +8376,41 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[tokio::test]
+    async fn current_visibility_rejects_missing_active_authority() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let regular = signed_event(KIND_POST, 100, Vec::new(), "missing visibility authority");
+        store
+            .ingest_event(RadrootsEventIngest::new(regular.clone(), 37_100))
+            .await
+            .expect("regular ingest");
+
+        let mut connection = store.pool().acquire().await.expect("trusted connection");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_state_delete_guard")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted source-state guard removal");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable trusted foreign-key enforcement");
+        sqlx::query("DELETE FROM radroots_event_store_source_state")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted active-authority corruption");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign-key enforcement");
+        drop(connection);
+
+        assert!(matches!(
+            store.current_event_visibility_v1(regular.id_str()).await,
+            Err(RadrootsEventStoreError::CurrentVisibilityDrift { reason })
+                if reason.contains("has no current-visibility authority")
+        ));
+    }
+
+    #[tokio::test]
     async fn addressable_transition_feed_advances_across_unrelated_kinds() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let first = food_availability_event(

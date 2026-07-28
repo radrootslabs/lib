@@ -653,6 +653,35 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn addressable_head_validator_requires_coordinate_and_state_authority() {
+        let store = RadrootsEventStore::open_memory().await.expect("open store");
+        let mut transaction = store.pool().begin().await.expect("transaction");
+        let addressable = visibility(
+            StoredEventClass::Addressable,
+            RadrootsCurrentVisibilityDecisionV1::Visible,
+            true,
+            Some("a"),
+            Some(visible_evidence()),
+        );
+
+        assert!(matches!(
+            validate_addressable_head_projection(&mut transaction, &addressable, None).await,
+            Err(RadrootsEventStoreError::CurrentVisibilityDrift { reason })
+                if reason.contains("has no raw d tag")
+        ));
+        assert!(matches!(
+            validate_addressable_head_projection(
+                &mut transaction,
+                &addressable,
+                Some("missing-coordinate"),
+            )
+            .await,
+            Err(RadrootsEventStoreError::CurrentVisibilityDrift { reason })
+                if reason.contains("addressable head state is missing")
+        ));
+    }
+
     #[test]
     fn visibility_shape_accepts_each_decision_and_rejects_each_incoherence() {
         let regular_id = "a".repeat(64);
