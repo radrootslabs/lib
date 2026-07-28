@@ -956,3 +956,381 @@ fn corruption(reason: impl Into<String>) -> RadrootsEventStoreError {
         reason: reason.into(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{RadrootsNip09SuppressionOutcome, RadrootsNip09SuppressionReason};
+
+    fn reference(byte: char, event_seq: i64) -> RadrootsAddressableTransitionEventReferenceV1 {
+        RadrootsAddressableTransitionEventReferenceV1 {
+            event_id: RadrootsEventId::parse(byte.to_string().repeat(64)).expect("event id"),
+            event_seq,
+        }
+    }
+
+    fn visible_evidence() -> RadrootsNip09SuppressionEvidenceV1 {
+        RadrootsNip09SuppressionEvidenceV1 {
+            outcome: RadrootsNip09SuppressionOutcome::Visible,
+            reason: RadrootsNip09SuppressionReason::NoAuthorizedReference,
+            event_reference_request_id: None,
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        }
+    }
+
+    fn suppressed_evidence() -> RadrootsNip09SuppressionEvidenceV1 {
+        RadrootsNip09SuppressionEvidenceV1 {
+            outcome: RadrootsNip09SuppressionOutcome::Suppressed,
+            reason: RadrootsNip09SuppressionReason::EventIdReference,
+            event_reference_request_id: Some(reference('e', 1).event_id().clone()),
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        }
+    }
+
+    #[test]
+    fn transition_page_limits_and_references_are_bounded() {
+        validate_limit(1).expect("minimum limit");
+        validate_limit(RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1).expect("maximum limit");
+        assert!(validate_limit(0).is_err());
+        assert!(validate_limit(RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1 + 1).is_err());
+
+        let required = required_reference("fixture", "a".repeat(64), 1).expect("reference");
+        assert_eq!(required.event_seq(), 1);
+        assert!(required_reference("fixture", "a".repeat(64), 0).is_err());
+        assert!(required_reference("fixture", "invalid".to_owned(), 1).is_err());
+        assert_eq!(
+            optional_reference("fixture", Some("a".repeat(64)), Some(1))
+                .expect("optional reference"),
+            Some(required)
+        );
+        assert_eq!(
+            optional_reference("fixture", None, None).expect("none"),
+            None
+        );
+        assert!(optional_reference("fixture", Some("a".repeat(64)), None).is_err());
+        assert!(optional_reference("fixture", None, Some(1)).is_err());
+        assert!(optional_event_id("fixture", None).expect("none").is_none());
+        assert!(
+            optional_event_id("fixture", Some("a".repeat(64)))
+                .expect("event id")
+                .is_some()
+        );
+        assert!(optional_event_id("fixture", Some("invalid".to_owned())).is_err());
+        assert!(matches!(
+            corruption("fixture"),
+            RadrootsEventStoreError::AddressableTransitionCorruption { reason }
+                if reason == "fixture"
+        ));
+    }
+
+    #[test]
+    fn transition_shape_accepts_each_visibility_and_origin() {
+        let raw = reference('a', 1);
+        let cause = reference('b', 2);
+        let visible = visible_evidence();
+        validate_transition_shape(
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            &raw,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible),
+            None,
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+            7,
+        )
+        .expect("baseline visible");
+        validate_transition_shape(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            &raw,
+            None,
+            None,
+            RadrootsEventAdmissionStatus::Unsupported,
+            Some("unsupported"),
+            None,
+            RadrootsAddressableTransitionVisibilityV1::NotAdmitted,
+            None,
+            Some(&cause),
+            RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected,
+            7,
+        )
+        .expect("incremental not admitted");
+        let suppressed = suppressed_evidence();
+        validate_transition_shape(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            &raw,
+            None,
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+            Some(&suppressed),
+            Some(&cause),
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied,
+            7,
+        )
+        .expect("incremental suppressed");
+    }
+
+    #[test]
+    fn transition_shape_rejects_every_incoherent_axis() {
+        let raw = reference('a', 1);
+        let other = reference('b', 2);
+        let visible = visible_evidence();
+        let suppressed = suppressed_evidence();
+
+        macro_rules! invalid {
+            (
+                $origin:expr, $visible_event:expr, $retracted:expr,
+                $admission:expr, $code:expr, $contract:expr,
+                $visibility:expr, $suppression:expr, $cause:expr, $decision:expr
+            ) => {
+                assert!(
+                    validate_transition_shape(
+                        $origin,
+                        &raw,
+                        $visible_event,
+                        $retracted,
+                        $admission,
+                        $code,
+                        $contract,
+                        $visibility,
+                        $suppression,
+                        $cause,
+                        $decision,
+                        7,
+                    )
+                    .is_err()
+                )
+            };
+        }
+
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible),
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            Some(&raw),
+            Some(&other),
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible),
+            None,
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible),
+            None,
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible),
+            None,
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            Some(&visible),
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+        );
+
+        for (admission, code, contract) in [
+            (
+                RadrootsEventAdmissionStatus::Admitted,
+                Some("bad"),
+                Some("fixture"),
+            ),
+            (RadrootsEventAdmissionStatus::Admitted, None, None),
+            (RadrootsEventAdmissionStatus::Unsupported, None, None),
+            (
+                RadrootsEventAdmissionStatus::Invalid,
+                Some("invalid"),
+                Some("fixture"),
+            ),
+        ] {
+            invalid!(
+                RadrootsAddressableTransitionOriginV1::Baseline,
+                Some(&raw),
+                None,
+                admission,
+                code,
+                contract,
+                RadrootsAddressableTransitionVisibilityV1::Visible,
+                Some(&visible),
+                None,
+                RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+            );
+        }
+
+        for (admission, visible_event, evidence) in [
+            (
+                RadrootsEventAdmissionStatus::Unsupported,
+                Some(&raw),
+                Some(&visible),
+            ),
+            (
+                RadrootsEventAdmissionStatus::Admitted,
+                Some(&other),
+                Some(&visible),
+            ),
+            (RadrootsEventAdmissionStatus::Admitted, Some(&raw), None),
+            (
+                RadrootsEventAdmissionStatus::Admitted,
+                Some(&raw),
+                Some(&suppressed),
+            ),
+        ] {
+            invalid!(
+                RadrootsAddressableTransitionOriginV1::Baseline,
+                visible_event,
+                None,
+                admission,
+                None,
+                Some("fixture"),
+                RadrootsAddressableTransitionVisibilityV1::Visible,
+                evidence,
+                None,
+                RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild
+            );
+        }
+
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Unsupported,
+            Some("unsupported"),
+            None,
+            RadrootsAddressableTransitionVisibilityV1::NotAdmitted,
+            None,
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            None,
+            None,
+            RadrootsEventAdmissionStatus::Unsupported,
+            Some("unsupported"),
+            None,
+            RadrootsAddressableTransitionVisibilityV1::NotAdmitted,
+            Some(&visible),
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected
+        );
+
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            None,
+            None,
+            RadrootsEventAdmissionStatus::Unsupported,
+            Some("unsupported"),
+            None,
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+            Some(&suppressed),
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            Some(&raw),
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+            Some(&suppressed),
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            None,
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+            None,
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied
+        );
+        invalid!(
+            RadrootsAddressableTransitionOriginV1::Incremental,
+            None,
+            None,
+            RadrootsEventAdmissionStatus::Admitted,
+            None,
+            Some("fixture"),
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+            Some(&visible),
+            Some(&other),
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied
+        );
+
+        assert!(
+            validate_transition_shape(
+                RadrootsAddressableTransitionOriginV1::Incremental,
+                &raw,
+                Some(&raw),
+                Some(&raw),
+                RadrootsEventAdmissionStatus::Admitted,
+                None,
+                Some("fixture"),
+                RadrootsAddressableTransitionVisibilityV1::Visible,
+                Some(&visible),
+                Some(&other),
+                RadrootsAddressableTransitionRawHeadDecisionV1::Applied,
+                7,
+            )
+            .is_err()
+        );
+
+        let incoherent = RadrootsNip09SuppressionEvidenceV1 {
+            outcome: RadrootsNip09SuppressionOutcome::Visible,
+            reason: RadrootsNip09SuppressionReason::EventIdReference,
+            event_reference_request_id: None,
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        };
+        assert!(validate_suppression_shape(&incoherent, 7).is_err());
+    }
+}
