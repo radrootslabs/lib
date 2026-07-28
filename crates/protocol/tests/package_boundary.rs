@@ -7,6 +7,14 @@ const ERROR: &str = include_str!("../src/error.rs");
 const EVENT: &str = include_str!("../src/event.rs");
 const RADROOTSD: &str = include_str!("../src/radrootsd.rs");
 const RUNTIME: &str = include_str!("../src/runtime.rs");
+const VERSIONED_SOURCES: &[&str] = &[
+    include_str!("../src/capability/v1.rs"),
+    include_str!("../src/error/v1.rs"),
+    include_str!("../src/event/v1.rs"),
+    include_str!("../src/radrootsd/transport_publish/v5.rs"),
+    include_str!("../src/runtime/v1.rs"),
+    include_str!("../src/schema.rs"),
+];
 
 #[test]
 fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
@@ -56,6 +64,35 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             .map(str::trim)
             .any(|line| line.starts_with("pub use "))
     );
+}
+
+#[test]
+fn public_contract_sources_exclude_runtime_dependencies_and_wrapper_traits() {
+    assert!(ROOT.contains("#![forbid(unsafe_code)]"));
+    for source in VERSIONED_SOURCES {
+        for forbidden in [
+            "dto_bindgen",
+            "wasm_bindgen",
+            "uniffi",
+            "tokio::",
+            "sqlx::",
+            "reqwest::",
+            "nostr::",
+            "std::fs",
+            "std::net",
+            "std::process",
+            "impl core::ops::Deref",
+            "impl std::ops::Deref",
+            "unsafe fn",
+            "unsafe impl",
+            "unsafe {",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "protocol contract source contains forbidden surface `{forbidden}`"
+            );
+        }
+    }
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

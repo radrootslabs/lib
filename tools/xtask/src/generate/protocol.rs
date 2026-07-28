@@ -24,6 +24,13 @@ const EXPECTED_SOURCES: &[(&str, &str)] = &[
     ),
     ("runtime::v1", "crates/protocol/src/runtime/v1.rs"),
 ];
+const EXPECTED_MACRO_GENERATED_TYPES: &[(&str, &str, &str, &str, &str)] = &[(
+    "runtime::v1",
+    "crates/protocol/src/runtime/v1.rs",
+    "operation_ids",
+    "OperationId",
+    "enum",
+)];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +41,8 @@ struct Config {
     inventory_path: String,
     inventory_sha256_path: String,
     source: Vec<SourceConfig>,
+    #[serde(default)]
+    macro_generated_type: Vec<MacroGeneratedTypeConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -41,6 +50,16 @@ struct Config {
 struct SourceConfig {
     module: String,
     path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
+#[serde(deny_unknown_fields)]
+struct MacroGeneratedTypeConfig {
+    module: String,
+    path: String,
+    macro_name: String,
+    rust_name: String,
+    kind: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -142,6 +161,26 @@ fn validate_config(config: &Config) -> Result<(), String> {
     {
         return Err("protocol codegen modules must be unique".to_owned());
     }
+
+    let mut macro_generated = config
+        .macro_generated_type
+        .iter()
+        .map(|item| {
+            (
+                item.module.as_str(),
+                item.path.as_str(),
+                item.macro_name.as_str(),
+                item.rust_name.as_str(),
+                item.kind.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    macro_generated.sort_unstable();
+    if macro_generated != EXPECTED_MACRO_GENERATED_TYPES {
+        return Err(format!(
+            "protocol macro-generated type inventory drifted: expected {EXPECTED_MACRO_GENERATED_TYPES:?}, found {macro_generated:?}"
+        ));
+    }
     Ok(())
 }
 
@@ -181,11 +220,33 @@ fn render_outputs(
                 source.path
             )
         })?;
+        let mut types = serialized_public_types(&source.module, &source.path, text)?;
+        for generated in config
+            .macro_generated_type
+            .iter()
+            .filter(|generated| generated.module == source.module && generated.path == source.path)
+        {
+            types.push(macro_generated_serialized_type(
+                generated,
+                source.path.as_str(),
+                text,
+            )?);
+        }
+        types.sort_by(|left, right| left.rust_path.cmp(&right.rust_path));
+        if types
+            .windows(2)
+            .any(|pair| pair[0].rust_path == pair[1].rust_path)
+        {
+            return Err(format!(
+                "protocol DTO source `{}` exposes duplicate serialized type inventory entries",
+                source.path
+            ));
+        }
         inventories.push(SourceInventory {
             module: source.module.clone(),
             path: source.path.clone(),
             sha256: sha256_hex(&bytes),
-            types: serialized_public_types(&source.module, &source.path, text)?,
+            types,
         });
     }
 
@@ -224,6 +285,66 @@ fn render_outputs(
             bytes: digest_bytes,
         },
     ])
+}
+
+fn macro_generated_serialized_type(
+    config: &MacroGeneratedTypeConfig,
+    source_path: &str,
+    source: &str,
+) -> Result<TypeInventory, String> {
+    let syntax = syn::parse_file(source)
+        .map_err(|error| format!("failed to parse protocol DTO source `{source_path}`: {error}"))?;
+    let definition = syntax.items.iter().find_map(|item| match item {
+        Item::Macro(item)
+            if item
+                .ident
+                .as_ref()
+                .is_some_and(|name| name == &config.macro_name) =>
+        {
+            Some(item.mac.tokens.to_string())
+        }
+        _ => None,
+    });
+    let Some(definition) = definition else {
+        return Err(format!(
+            "protocol DTO source `{source_path}` does not define configured macro `{}`",
+            config.macro_name
+        ));
+    };
+    let invoked = syntax.items.iter().any(|item| {
+        matches!(item, Item::Macro(item) if item.ident.is_none() && item.mac.path.is_ident(&config.macro_name))
+    });
+    if !invoked {
+        return Err(format!(
+            "protocol DTO source `{source_path}` does not invoke configured macro `{}`",
+            config.macro_name
+        ));
+    }
+    let compact_definition = definition.split_whitespace().collect::<String>();
+    for required in [
+        format!("pub{}{}", config.kind, config.rust_name),
+        format!("implserde::Serializefor{}", config.rust_name),
+        format!("impl<'de>serde::Deserialize<'de>for{}", config.rust_name),
+    ] {
+        if !compact_definition.contains(&required) {
+            return Err(format!(
+                "configured macro `{}` in `{source_path}` does not prove serialized public {} `{}`: missing `{required}`",
+                config.macro_name, config.kind, config.rust_name
+            ));
+        }
+    }
+    Ok(TypeInventory {
+        rust_path: format!("radroots_protocol::{}::{}", config.module, config.rust_name),
+        kind: match config.kind.as_str() {
+            "enum" => "enum",
+            "struct" => "struct",
+            other => {
+                return Err(format!(
+                    "unsupported macro-generated protocol DTO kind `{other}`"
+                ));
+            }
+        },
+    })
 }
 
 fn serialized_public_types(
@@ -463,6 +584,7 @@ struct PrivateWire;
                 module: "demo::v1".to_owned(),
                 path: "src/types.rs".to_owned(),
             }],
+            macro_generated_type: Vec::new(),
         };
         let schemas = vec![SchemaInventory {
             schema_id: "demo.message.v1".to_owned(),
@@ -486,5 +608,35 @@ struct PrivateWire;
         for path in ["", "../escape", "/absolute", "a/./b", "a\\b"] {
             assert!(safe_workspace_file(workspace.path(), path, true, "fixture").is_err());
         }
+    }
+
+    #[test]
+    fn macro_generated_serialized_type_requires_definition_invocation_and_serde() {
+        let config = MacroGeneratedTypeConfig {
+            module: "demo::v1".to_owned(),
+            path: "demo.rs".to_owned(),
+            macro_name: "generated_ids".to_owned(),
+            rust_name: "GeneratedId".to_owned(),
+            kind: "enum".to_owned(),
+        };
+        let source = r#"
+macro_rules! generated_ids {
+    () => {
+        pub enum GeneratedId { One }
+        impl serde::Serialize for GeneratedId {}
+        impl<'de> serde::Deserialize<'de> for GeneratedId {}
+    };
+}
+generated_ids!();
+"#;
+        let item = macro_generated_serialized_type(&config, "demo.rs", source)
+            .expect("macro-generated serialized type");
+        assert_eq!(item.rust_path, "radroots_protocol::demo::v1::GeneratedId");
+        assert_eq!(item.kind, "enum");
+
+        let missing_serde = source.replace("impl serde::Serialize for GeneratedId {}", "");
+        let error = macro_generated_serialized_type(&config, "demo.rs", &missing_serde)
+            .expect_err("missing serializer must fail closed");
+        assert!(error.contains("does not prove serialized public enum `GeneratedId`"));
     }
 }

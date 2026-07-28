@@ -23,3 +23,10 @@ path = "crates/protocol/src/radrootsd/transport_publish/v5.rs"
 [[source]]
 module = "runtime::v1"
 path = "crates/protocol/src/runtime/v1.rs"
+
+[[macro_generated_type]]
+module = "runtime::v1"
+path = "crates/protocol/src/runtime/v1.rs"
+macro_name = "operation_ids"
+rust_name = "OperationId"
+kind = "enum"

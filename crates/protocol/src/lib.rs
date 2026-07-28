@@ -5,6 +5,9 @@
 
 extern crate alloc;
 
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
+
 /// Versioned capability catalog contracts.
 pub mod capability;
 

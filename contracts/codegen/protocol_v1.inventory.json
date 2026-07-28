@@ -230,6 +230,10 @@
           "kind": "struct"
         },
         {
+          "rust_path": "radroots_protocol::runtime::v1::OperationId",
+          "kind": "enum"
+        },
+        {
           "rust_path": "radroots_protocol::runtime::v1::PrivacyEffect",
           "kind": "enum"
         },
