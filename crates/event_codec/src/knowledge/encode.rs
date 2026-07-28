@@ -35,6 +35,7 @@ use crate::error::EventEncodeError;
 use crate::event_ref::build_event_ref_tag;
 use crate::wire::empty_content;
 use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_identity::PublicKey;
 
 const TAG_TITLE: &str = "title";
 const TAG_SOURCE: &str = "source";
@@ -119,10 +120,13 @@ fn push_wiki_version_ref_tags(
     tags.push(marker_event_tag(version_ref, marker));
 }
 
-fn review_target_ref(target: &RadrootsKnowledgeReviewTarget) -> RadrootsEventRef {
-    RadrootsEventRef {
+fn review_target_ref(
+    target: &RadrootsKnowledgeReviewTarget,
+) -> Result<RadrootsEventRef, EventEncodeError> {
+    Ok(RadrootsEventRef {
         id: target.event_id.clone(),
-        author: target.author_pubkey.clone(),
+        author: PublicKey::from_hex(&target.author_pubkey)
+            .map_err(|_| EventEncodeError::InvalidField("review_target"))?,
         kind: target.kind,
         d_tag: target
             .address
@@ -133,7 +137,7 @@ fn review_target_ref(target: &RadrootsKnowledgeReviewTarget) -> RadrootsEventRef
         } else {
             Some(target.relays.clone())
         },
-    }
+    })
 }
 
 fn json_content<T: Serialize>(value: &T) -> Result<String, EventEncodeError> {
@@ -331,7 +335,7 @@ pub fn knowledge_review_build_tags(
     let mut tags = custom_tags(RADROOTS_KNOWLEDGE_REVIEW_SCHEMA);
     tags.push(build_event_ref_tag(
         TAG_REVIEW_TARGET,
-        &review_target_ref(&review.target),
+        &review_target_ref(&review.target)?,
     ));
     push_event_refs(&mut tags, TAG_EVIDENCE, &review.evidence_refs);
     Ok(tags)

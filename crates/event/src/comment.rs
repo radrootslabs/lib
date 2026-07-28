@@ -7,8 +7,8 @@ use core::fmt;
 
 use crate::{
     ids::{
-        PublicKey, RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts,
-        RadrootsEventId, RadrootsIdParseError, parse_public_key,
+        RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
+        RadrootsIdParseError, parse_public_key,
     },
     kinds::{
         KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
@@ -19,6 +19,7 @@ use crate::{
         DEFAULT_TAG_MAX_COUNT, DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES,
     },
 };
+use radroots_identity::PublicKey;
 
 pub const RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES: usize = DEFAULT_CONTENT_MAX_BYTES;
 pub const RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT: usize = DEFAULT_TAG_MAX_COUNT;

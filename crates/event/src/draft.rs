@@ -11,9 +11,7 @@ use crate::contract::registry_v7::{
     RadrootsEventAuthoringPolicy, RadrootsEventContract, event_contract,
     validate_event_contract_parts,
 };
-use crate::ids::{
-    PublicKey, RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key,
-};
+use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use crate::wire::v1::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsNip01EventWire,
     canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
@@ -23,6 +21,7 @@ use crate::{
     RadrootsEventTimestamp,
 };
 use core::fmt;
+use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsDraftError {

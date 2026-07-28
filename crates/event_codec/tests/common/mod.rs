@@ -3,6 +3,7 @@
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr, RadrootsEventRef,
 };
+use radroots_identity::PublicKey;
 
 pub const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 pub const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
@@ -14,7 +15,7 @@ pub const EVENT_SIG: &str = concat!(
 pub fn event_ref(id: &str, author: &str, kind: u32) -> RadrootsEventRef {
     RadrootsEventRef {
         id: id.to_string(),
-        author: author.to_string(),
+        author: PublicKey::from_hex(author).expect("valid fixture public key"),
         kind,
         d_tag: None,
         relays: None,
@@ -30,7 +31,7 @@ pub fn event_ref_with_d(
 ) -> RadrootsEventRef {
     RadrootsEventRef {
         id: id.to_string(),
-        author: author.to_string(),
+        author: PublicKey::from_hex(author).expect("valid fixture public key"),
         kind,
         d_tag: Some(d_tag.to_string()),
         relays,

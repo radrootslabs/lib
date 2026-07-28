@@ -122,7 +122,8 @@ pub use wire::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventRef {
     pub id: String,
-    pub author: String,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub author: radroots_identity::PublicKey,
     pub kind: u32,
     pub d_tag: Option<String>,
     pub relays: Option<Vec<String>>,

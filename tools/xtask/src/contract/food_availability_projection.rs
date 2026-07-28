@@ -3905,6 +3905,30 @@ mod tests {
             fs::read_to_string(&executor_path).expect("read successor FoodAvailability executor");
         let predecessor_executor = successor_executor
             .replace(
+                ".map(|projection| projection.event_id().to_hex())",
+                ".map(|projection| projection.event_id().as_str())",
+            )
+            .replace(
+                "actual.raw_head_event_id().map(|event_id| event_id.to_hex()),\n            expected.raw_head_event_id.0.clone(),",
+                "actual.raw_head_event_id().map(|event_id| event_id.as_str()),\n            expected.raw_head_event_id.0.as_deref(),",
+            )
+            .replace(
+                "historical_payload.event_id().to_hex()",
+                "historical_payload.event_id().as_str()",
+            )
+            .replace(
+                "actual.event_id().to_hex()",
+                "actual.event_id().as_str()",
+            )
+            .replace(
+                ".event_reference_request_id()\n                    .map(|event_id| event_id.to_hex()),\n                expected.event_reference_request_id.0.clone(),",
+                ".event_reference_request_id()\n                    .map(|event_id| event_id.as_str()),\n                expected.event_reference_request_id.0.as_deref(),",
+            )
+            .replace(
+                ".address_reference_request_id()\n                    .map(|event_id| event_id.to_hex()),\n                expected.address_reference_request_id.0.clone(),",
+                ".address_reference_request_id()\n                    .map(|event_id| event_id.as_str()),\n                expected.address_reference_request_id.0.as_deref(),",
+            )
+            .replace(
                 "use radroots_blossom::Sha256;",
                 "use radroots_blossom::RadrootsBlossomSha256;",
             )

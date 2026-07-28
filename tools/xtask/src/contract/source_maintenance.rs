@@ -72,6 +72,10 @@ const RESULT_VECTOR_EXECUTOR_ID: &str =
 const RESULT_VECTOR_EXECUTOR_TEST: &str = "source_maintenance_v1_result_vector";
 const FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
     "crates/event_store/tests/food_availability_projection_v1_result_vector.rs";
+const NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
+    "crates/event_store/tests/support/nip09_reconciliation_v1_result_vector_v2.rs";
+const NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_ID: &str =
+    "radroots_event_store.nip09_reconciliation_v1.result_vector_executor.v2";
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
@@ -496,6 +500,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
     SourceSpec {
         role: "source_generation_rebuild_authority",
         path: "crates/event_store/src/nip09/reconciliation_v1.rs",
+    },
+    SourceSpec {
+        role: "nip09_successor_result_vector_executor",
+        path: NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE,
     },
     SourceSpec {
         role: "schema_migration_and_reopen_authority",
@@ -1308,6 +1316,7 @@ pub(super) fn validate_source_contract(workspace_root: &Path) -> Result<(), Stri
     validate_ingest_capacity_authority(workspace_root)?;
     validate_schema_capacity_authority(workspace_root)?;
     validate_generation_rebuild_authority(workspace_root)?;
+    validate_nip09_successor_result_vector_executor(workspace_root)?;
     validate_sql_capacity_authority(workspace_root)?;
     validate_contract_command_reachability_authority(workspace_root)?;
     validate_current_event_store_successor_authority(workspace_root)
@@ -2034,6 +2043,50 @@ fn validate_generation_rebuild_authority(workspace_root: &Path) -> Result<(), St
             "usize::try_from(page_count).unwrap_or(RECONCILIATION_SNAPSHOT_BATCH_LEN)",
         ],
     )
+}
+
+fn validate_nip09_successor_result_vector_executor(workspace_root: &Path) -> Result<(), String> {
+    let module_relative = "crates/event_store/src/nip09/reconciliation_v1.rs";
+    let module = compact_rust(
+        &rust_source(workspace_root, module_relative)?,
+        module_relative,
+    )?;
+    require_ordered_markers(
+        "SourceMaintenance NIP-09 successor module selection",
+        &module,
+        &[
+            "#[path=\"../../tests/support/nip09_reconciliation_v1_result_vector_v2.rs\"]modresult_vector_executor;",
+            "include_bytes!(\"../../tests/fixtures/nip09_reconciliation.v1.json\")",
+            "include_str!(\"../../migrations/0001_event_store.up.sql\")",
+            "include_str!(\"../../migrations/0002_nip09.up.sql\")",
+            "implSourceGenerationProviderforFixedResultVectorGeneration",
+        ],
+    )?;
+
+    let relative = NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE;
+    let source = rust_source(workspace_root, relative)?;
+    let compact = compact_rust(&source, relative)?;
+    require_ordered_markers(
+        "SourceMaintenance NIP-09 successor result-vector executor",
+        &compact,
+        &[
+            &format!(
+                "constRESULT_VECTOR_EXECUTOR_ID:&str=\"{NIP09_SUCCESSOR_RESULT_VECTOR_EXECUTOR_ID}\""
+            ),
+            "sha256_hex(NIP09_RESULT_VECTOR_BYTES)",
+            "sqlx::raw_sql(NIP09_EVENT_STORE_V1_UP_SQL)",
+            ".bind(event.id_hex())",
+            ".bind(event.signature_hex())",
+            ".bind(event.id_hex())",
+            "sqlx::raw_sql(NIP09_V1_UP_SQL)",
+        ],
+    )?;
+    if compact.contains(".id_str()") || compact.contains(".sig_str()") {
+        return Err(format!(
+            "{relative} must use explicit canonical hexadecimal boundary encoders"
+        ));
+    }
+    Ok(())
 }
 
 fn validate_sql_capacity_authority(workspace_root: &Path) -> Result<(), String> {
@@ -3523,7 +3576,7 @@ struct DelegatedAuthoritySpec {
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
     "da4ba88c3cabe0e5ed6df4ca0115645c8a65d43cdea7d2dbf5e78d99256e8e15";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "14d31381f73b684c3480531acb5321c66ef04b7cb8e25aa6a06269fb4ee6601f";
+    "bd1d92cdd1e399a844f5957ef2117d6860bc309b66af24b56ad251a464b2a6dd";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {

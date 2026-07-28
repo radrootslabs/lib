@@ -91,7 +91,7 @@ const EVENT_STORE_STORE_ROOT_BASELINE_SHA256: &str =
 const EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256: &str =
     "69f3c730f8a4f3a4af0028c74f6903126def01ceb63eed8a173e696ce291dc09";
 const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
-    "ec032e602c1afaebc5a998e74cd1e70066afd9a07b82bce2d0d7307caac15cd6";
+    "dda56a8bdb3f45f19e401569ece182d1a3ad6118488f2ac591a16d2af468b5bc";
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
     "8c29ceccb06abc94279db3257d52e14ad721e2eb302e54fbf26f8856d0db0b53";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
@@ -9847,9 +9847,9 @@ fn validate_post_core_storage_method_signature(
         "quarantine_trade" => Some(
             "async fn quarantine_trade(
                 &mut self,
-                trade_id: Option<&str>,
-                mutation_id: Option<&str>,
-                transport_event_id: Option<&str>,
+                trade_id: Option<String>,
+                mutation_id: Option<String>,
+                transport_event_id: Option<String>,
                 reason: &str,
                 observed_at_ms: i64,
             ) -> Result<(), RadrootsEventStoreError>",

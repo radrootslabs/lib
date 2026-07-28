@@ -8,7 +8,7 @@ use alloc::{
 use core::{fmt, ops::RangeInclusive, str::FromStr};
 
 use crate::ids::{
-    PublicKey, RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsDTag,
+    RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsDTag,
     RadrootsEventId, RadrootsRelayUrl, parse_public_key,
 };
 use crate::media::RadrootsAuthoredImage;
@@ -17,6 +17,7 @@ use crate::wire::v1::{
     DEFAULT_TAG_TOTAL_MAX_BYTES,
 };
 use radroots_blossom::BlobUrl;
+use radroots_identity::PublicKey;
 use url_nostd::Url;
 
 pub const RADROOTS_CALENDAR_SECONDS_PER_DAY: u64 = 86_400;

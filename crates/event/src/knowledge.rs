@@ -207,7 +207,6 @@ fn validate_event_ref(
     field: &'static str,
 ) -> Result<(), RadrootsKnowledgeValidationError> {
     validate_event_id(&event_ref.id, field)?;
-    validate_pubkey(&event_ref.author, field)?;
     if let Some(d_tag) = event_ref.d_tag.as_deref() {
         RadrootsDTag::parse(d_tag)
             .map(|_| ())
@@ -925,7 +924,8 @@ mod tests {
     fn event_ref_with_kind(kind: u32) -> RadrootsEventRef {
         RadrootsEventRef {
             id: "0".repeat(64),
-            author: crate::test_valid_hex_64('1'),
+            author: radroots_identity::PublicKey::from_hex(&crate::test_valid_hex_64('1'))
+                .expect("fixture public key"),
             kind,
             d_tag: None,
             relays: None,

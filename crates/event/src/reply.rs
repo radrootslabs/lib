@@ -3,13 +3,14 @@ use alloc::string::String;
 use core::fmt;
 
 use crate::{
-    ids::{PublicKey, RadrootsEventId, RadrootsIdParseError, parse_public_key},
+    ids::{RadrootsEventId, RadrootsIdParseError, parse_public_key},
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
     relay_hint::RadrootsNostrRelayHint,
 };
+use radroots_identity::PublicKey;
 
 const RADROOTS_NIP10_REPLY_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\"".len()
     + 64

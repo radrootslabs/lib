@@ -19,6 +19,7 @@ use radroots_event::knowledge::{
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
+use radroots_identity::PublicKey;
 
 use crate::RELAY_PRIMARY_WSS;
 
@@ -143,7 +144,10 @@ pub fn hex_64(character: char) -> String {
 pub fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
     RadrootsEventRef {
         id: hex_64(character),
-        author: hex_64('a'),
+        author: PublicKey::from_hex(
+            "585591529da0bab31b3b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        )
+        .expect("fixture public key is valid"),
         kind,
         d_tag: None,
         relays: Some(vec![RELAY_PRIMARY_WSS.to_string()]),

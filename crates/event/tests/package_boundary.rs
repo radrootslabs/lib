@@ -10,6 +10,7 @@ use radroots_event::{
     id as _, listing as _, media as _, post as _, profile as _, social as _, tag as _, trade as _,
     wire as _,
 };
+use radroots_identity::PublicKey;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -88,6 +89,23 @@ fn canonical_identifier_api_owns_bytes_and_requires_explicit_text_encoding() {
     assert!(!IDENTIFIERS.contains("impl Borrow<str>"));
     assert!(!RELAY_HINT.contains("impl Deref"));
     assert!(!RELAY_HINT.contains("impl Borrow<str>"));
+}
+
+#[test]
+fn event_references_use_the_identity_owned_public_key() {
+    let author =
+        PublicKey::from_hex("585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df")
+            .expect("valid public key");
+    let reference = radroots_event::RadrootsEventRef {
+        id: "a".repeat(64),
+        author,
+        kind: 1,
+        d_tag: None,
+        relays: None,
+    };
+
+    assert_eq!(reference.author, author);
+    assert!(!IDENTIFIERS.contains("pub(crate) use radroots_identity::PublicKey"));
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

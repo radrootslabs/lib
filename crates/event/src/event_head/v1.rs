@@ -9,8 +9,9 @@ use crate::contract::registry_v7::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
 use crate::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass, RadrootsEventTag};
-use crate::ids::{PublicKey, RadrootsDTag, RadrootsEventId, RadrootsIdParseError};
+use crate::ids::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError};
 use crate::tags::TAG_D;
+use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsEventHeadCoordinate {

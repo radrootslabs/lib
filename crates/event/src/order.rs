@@ -8,9 +8,7 @@ use alloc::{
 
 #[cfg(test)]
 use crate::ids::RadrootsOrderQuoteId;
-use crate::ids::{
-    PublicKey, RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId,
-};
+use crate::ids::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId};
 use crate::kinds::*;
 #[cfg(test)]
 use crate::operational_listing::RadrootsOperationalListingParseError;
@@ -18,6 +16,7 @@ pub use crate::order_economics::*;
 #[cfg(test)]
 use crate::trade_validation::RadrootsOperationalListingValidationError;
 use radroots_core::{Currency, Decimal, Money};
+use radroots_identity::PublicKey;
 
 pub const RADROOTS_COMMERCIAL_LISTING_DOMAIN: &str = "trade:listing";
 pub const RADROOTS_ORDER_ENVELOPE_VERSION: u16 = 1;

@@ -18,7 +18,7 @@ pub fn build_event_ref_tag(tag: &str, event: &RadrootsEventRef) -> Vec<String> {
     let mut out = Vec::with_capacity(5 + relays_len);
     out.push(tag.to_string());
     out.push(event.id.clone());
-    out.push(event.author.clone());
+    out.push(event.author.to_hex());
     out.push(event.kind.to_string());
     out.push(event.d_tag.clone().unwrap_or_default());
     if let Some(relays) = &event.relays {
@@ -40,7 +40,7 @@ pub fn parse_event_ref_tag(
     let id = &tag[1];
     RadrootsEventId::parse(id).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let author = &tag[2];
-    PublicKey::from_hex(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+    let author = PublicKey::from_hex(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let kind_s = &tag[3];
     let kind: u32 = kind_s
         .parse()
@@ -68,7 +68,7 @@ pub fn parse_event_ref_tag(
 
     Ok(RadrootsEventRef {
         id: id.clone(),
-        author: author.clone(),
+        author,
         kind,
         d_tag,
         relays,
@@ -102,17 +102,18 @@ pub fn push_nip10_ref_tags(
     }
     tags.push(e_tag);
 
-    let p_tag = vec![tag_p.to_string(), event.author.clone()];
+    let author = event.author.to_hex();
+    let p_tag = vec![tag_p.to_string(), author.clone()];
     tags.push(p_tag);
 
     let k_tag = vec![tag_k.to_string(), kind_str.clone()];
     tags.push(k_tag);
 
     if let Some(d_tag) = event.d_tag.as_deref().filter(|v| !v.is_empty()) {
-        let mut addr = String::with_capacity(kind_str.len() + event.author.len() + d_tag.len() + 2);
+        let mut addr = String::with_capacity(kind_str.len() + author.len() + d_tag.len() + 2);
         addr.push_str(&kind_str);
         addr.push(':');
-        addr.push_str(&event.author);
+        addr.push_str(&author);
         addr.push(':');
         addr.push_str(d_tag);
 
@@ -146,9 +147,8 @@ pub fn parse_nip10_ref_tags(
 
     let p_tag = find_event_ref_tag(tags, tag_p).ok_or(EventParseError::MissingTag(tag_p))?;
     let author = p_tag.get(1).ok_or(EventParseError::InvalidTag(tag_p))?;
-    if author.trim().is_empty() {
-        return Err(EventParseError::InvalidTag(tag_p));
-    }
+    let author = PublicKey::from_hex(author).map_err(|_| EventParseError::InvalidTag(tag_p))?;
+    let author_hex = author.to_hex();
 
     let k_tag = find_event_ref_tag(tags, tag_k).ok_or(EventParseError::MissingTag(tag_k))?;
     let kind_key = k_tag.get(1).ok_or(EventParseError::InvalidTag(tag_k))?;
@@ -170,7 +170,7 @@ pub fn parse_nip10_ref_tags(
         let kind_part = parts.next();
         let author_part = parts.next();
         let d_part = parts.next();
-        if kind_part != Some(kind_key.as_str()) || author_part != Some(author.as_str()) {
+        if kind_part != Some(kind_key.as_str()) || author_part != Some(author_hex.as_str()) {
             continue;
         }
         if let Some(d) = d_part
@@ -188,7 +188,7 @@ pub fn parse_nip10_ref_tags(
 
     Ok(RadrootsEventRef {
         id: id.clone(),
-        author: author.clone(),
+        author,
         kind,
         d_tag,
         relays,

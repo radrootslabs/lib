@@ -12,14 +12,14 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::ids::{
-    PublicKey, RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId,
-    RadrootsIdParseError, RadrootsInventoryBinId, RadrootsTradeCandidateId, RadrootsTradeId,
-    RadrootsTradeMutationId,
+    RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
+    RadrootsInventoryBinId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
 };
 use crate::kinds::{
     KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION, KIND_TRADE_PROPOSAL,
     KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
 };
+use radroots_identity::PublicKey;
 #[cfg(feature = "serde")]
 use serde::{
     Deserialize, Deserializer, Serialize,

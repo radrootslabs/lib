@@ -528,7 +528,7 @@ pub(crate) async fn validate_food_availability_projection_hook_v1(
         actual_coordinates.push((
             projection.pubkey().to_hex(),
             projection.identifier().as_str().to_owned(),
-            projection.event_id().to_hex().to_owned(),
+            projection.event_id().to_hex(),
             projection.event_seq(),
             i64_from_u64("food.created_at", projection.created_at())?,
         ));

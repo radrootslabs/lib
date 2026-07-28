@@ -21,3 +21,4 @@ radroots_event = { workspace = true, features = [
   "knowledge",
   "knowledge-nip54",
 ] }
+radroots_identity = { workspace = true }

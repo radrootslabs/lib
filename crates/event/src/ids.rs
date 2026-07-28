@@ -10,7 +10,7 @@ use core::{
     fmt::{self, Write as _},
     str::FromStr,
 };
-pub(crate) use radroots_identity::PublicKey;
+use radroots_identity::PublicKey;
 use url_nostd::Url;
 
 use crate::kinds::KIND_CLASSIFIED_LISTING;

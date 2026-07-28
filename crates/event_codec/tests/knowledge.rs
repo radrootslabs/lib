@@ -44,7 +44,10 @@ fn hex_64(character: char) -> String {
 fn event_ref(character: char, kind: u32) -> radroots_event::RadrootsEventRef {
     radroots_event::RadrootsEventRef {
         id: hex_64(character),
-        author: hex_64('a'),
+        author: radroots_identity::PublicKey::from_hex(
+            "585591529da0bab31b3b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        )
+        .expect("fixture public key"),
         kind,
         d_tag: None,
         relays: Some(vec!["wss://relay.radroots.example".to_string()]),

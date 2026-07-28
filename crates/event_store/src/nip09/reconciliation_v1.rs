@@ -41,7 +41,27 @@ use sqlx::{Row, SqliteConnection};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
+#[path = "../../tests/support/nip09_reconciliation_v1_result_vector_v2.rs"]
 mod result_vector_executor;
+
+#[cfg(test)]
+const NIP09_RESULT_VECTOR_BYTES: &[u8] =
+    include_bytes!("../../tests/fixtures/nip09_reconciliation.v1.json");
+#[cfg(test)]
+const NIP09_EVENT_STORE_V1_UP_SQL: &str = include_str!("../../migrations/0001_event_store.up.sql");
+#[cfg(test)]
+const NIP09_V1_UP_SQL: &str = include_str!("../../migrations/0002_nip09.up.sql");
+
+#[cfg(test)]
+struct FixedResultVectorGeneration([u8; 32]);
+
+#[cfg(test)]
+impl SourceGenerationProvider for FixedResultVectorGeneration {
+    fn fill_generation(&self, generation: &mut [u8; 32]) -> Result<(), RadrootsEventStoreError> {
+        generation.copy_from_slice(&self.0);
+        Ok(())
+    }
+}
 
 const RECONCILIATION_SNAPSHOT_BATCH_SIZE: i64 = 512;
 const RECONCILIATION_SNAPSHOT_BATCH_LEN: usize = 512;

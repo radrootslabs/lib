@@ -6,14 +6,13 @@ use alloc::{string::String, vec::Vec};
 #[cfg(any(feature = "std", test))]
 use std::{string::String, vec::Vec};
 
-use crate::ids::{
-    PublicKey, RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key,
-};
+use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,
 };
 use core::fmt;
+use radroots_identity::PublicKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsEventTimestamp(u64);
