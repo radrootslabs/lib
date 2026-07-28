@@ -247,11 +247,10 @@ async fn ensure_projection_cursor(
             )
             .execute(&mut *connection)
             .await?;
-            if deleted.rows_affected() != 1 {
-                return Err(projection_drift(
-                    "generation reset did not delete exactly one projection cursor",
-                ));
-            }
+            require_single_projection_row(
+                deleted.rows_affected(),
+                "generation reset did not delete exactly one projection cursor".to_owned(),
+            )?;
         }
     }
 
@@ -272,11 +271,10 @@ async fn ensure_projection_cursor(
         .bind(floor)
         .execute(&mut *connection)
         .await?;
-        if inserted.rows_affected() != 1 {
-            return Err(projection_drift(
-                "projection cursor initialization did not insert one row",
-            ));
-        }
+        require_single_projection_row(
+            inserted.rows_affected(),
+            "projection cursor initialization did not insert one row".to_owned(),
+        )?;
     }
 
     let row = sqlx::query(
@@ -353,13 +351,14 @@ async fn advance_projection_cursor(
     .bind(expected.projected_row_count)
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return Err(projection_drift(format!(
+    require_single_projection_row(
+        updated.rows_affected(),
+        format!(
             "projection cursor compare-and-swap expected sequence {} and row count {}",
             expected.feed_cursor.last_transition_seq(),
             expected.projected_row_count,
-        )));
-    }
+        ),
+    )?;
     Ok(FoodAvailabilityProjectionCursorState {
         feed_cursor: next,
         projected_row_count: next_projected_row_count,
@@ -394,11 +393,10 @@ async fn apply_transition(
             .bind(retracted.event_id().as_str())
             .execute(&mut *connection)
             .await?;
-            if deleted.rows_affected() != 1 {
-                return Err(projection_drift(
-                    "pending FoodAvailability retraction did not delete one row",
-                ));
-            }
+            require_single_projection_row(
+                deleted.rows_affected(),
+                "pending FoodAvailability retraction did not delete one row".to_owned(),
+            )?;
             projected_row_delta = -1;
         }
         (Some(existing), None) if visible_event_id == Some(existing) => {
@@ -504,11 +502,10 @@ async fn persist_projection(
     .bind(projection.source_transition_seq())
     .execute(&mut *connection)
     .await?;
-    if inserted.rows_affected() != 1 {
-        return Err(projection_drift(
-            "FoodAvailability projection insert did not affect one row",
-        ));
-    }
+    require_single_projection_row(
+        inserted.rows_affected(),
+        "FoodAvailability projection insert did not affect one row".to_owned(),
+    )?;
     for image in projection.images() {
         persist_image(connection, projection, image).await?;
     }
@@ -539,11 +536,10 @@ async fn persist_image(
     .bind(diagnostics_json)
     .execute(&mut *connection)
     .await?;
-    if inserted.rows_affected() != 1 {
-        return Err(projection_drift(
-            "FoodAvailability image insert did not affect one row",
-        ));
-    }
+    require_single_projection_row(
+        inserted.rows_affected(),
+        "FoodAvailability image insert did not affect one row".to_owned(),
+    )?;
     Ok(())
 }
 
@@ -953,6 +949,16 @@ fn projection_drift(reason: impl Into<String>) -> RadrootsEventStoreError {
     }
 }
 
+fn require_single_projection_row(
+    rows_affected: u64,
+    reason: String,
+) -> Result<(), RadrootsEventStoreError> {
+    if rows_affected != 1 {
+        return Err(projection_drift(reason));
+    }
+    Ok(())
+}
+
 fn validate_projected_row_count(value: i64) -> Result<(), RadrootsEventStoreError> {
     if value < 0 {
         return Err(projection_drift(format!(
@@ -1170,6 +1176,13 @@ mod tests {
                 field: "food.boundary",
                 value,
             }) if value == i64::MAX as u64 + 1
+        ));
+        require_single_projection_row(1, "fixture mutation failed".to_owned())
+            .expect("one affected projection row");
+        assert!(matches!(
+            require_single_projection_row(0, "fixture mutation failed".to_owned()),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason == "fixture mutation failed"
         ));
     }
 }
