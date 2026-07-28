@@ -256,11 +256,17 @@ mod tests {
     const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     #[test]
-    fn hash_round_trips_known_digest_and_serde() {
+    fn hash_round_trips_known_digest() {
         let hash = Sha256::digest(b"");
         assert_eq!(hash.to_string(), EMPTY_SHA256);
         assert_eq!(hash.as_bytes().len(), SHA256_BYTES);
         assert_eq!(Sha256::from_str(EMPTY_SHA256), Ok(hash));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn hash_serde_round_trips() {
+        let hash = Sha256::from_str(EMPTY_SHA256).unwrap();
         let json = serde_json::to_string(&hash).unwrap();
         assert_eq!(serde_json::from_str::<Sha256>(&json).unwrap(), hash);
     }
@@ -286,7 +292,6 @@ mod tests {
         ] {
             assert_eq!(Sha256::from_hex(value), Err(Error::InvalidSha256));
         }
-        assert!(serde_json::from_str::<Sha256>("12").is_err());
     }
 
     #[test]
@@ -295,12 +300,19 @@ mod tests {
             let extension = value.parse::<FileExtension>().unwrap();
             assert_eq!(extension.as_str(), value);
             assert_eq!(extension.to_string(), value);
-            let json = serde_json::to_string(&extension).unwrap();
-            assert_eq!(
-                serde_json::from_str::<FileExtension>(&json).unwrap(),
-                extension
-            );
         }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn extension_serde_round_trips_and_revalidates() {
+        let extension = FileExtension::parse("tar.gz").unwrap();
+        let json = serde_json::to_string(&extension).unwrap();
+        assert_eq!(
+            serde_json::from_str::<FileExtension>(&json).unwrap(),
+            extension
+        );
+        assert!(serde_json::from_str::<FileExtension>("false").is_err());
     }
 
     #[test]
@@ -311,7 +323,6 @@ mod tests {
                 Err(Error::InvalidFileExtension)
             );
         }
-        assert!(serde_json::from_str::<FileExtension>("false").is_err());
     }
 
     #[test]
@@ -326,8 +337,16 @@ mod tests {
         let parsed = HashPath::from_str(&extended).unwrap();
         assert_eq!(parsed.extension().unwrap().as_str(), "webp");
         assert_eq!(parsed.to_string(), extended);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn hash_path_serde_round_trips_and_revalidates() {
+        let path = format!("/{EMPTY_SHA256}.webp");
+        let parsed = HashPath::parse(&path).unwrap();
         let json = serde_json::to_string(&parsed).unwrap();
         assert_eq!(serde_json::from_str::<HashPath>(&json).unwrap(), parsed);
+        assert!(serde_json::from_str::<HashPath>("null").is_err());
     }
 
     #[test]
@@ -346,6 +365,5 @@ mod tests {
         ] {
             assert!(HashPath::parse(path).is_err(), "{path}");
         }
-        assert!(serde_json::from_str::<HashPath>("null").is_err());
     }
 }

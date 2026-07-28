@@ -203,6 +203,25 @@ impl ApprovedDescriptor {
 /// An approved descriptor whose hash, size, and media type match supplied bytes.
 ///
 /// This state does not attest that a network upload occurred.
+/// Its private representation prevents callers from forging the typestate:
+///
+/// ```compile_fail
+/// use radroots_blossom::{ByteVerifiedDescriptor, descriptor::ApprovedDescriptor};
+///
+/// fn forge(approved: ApprovedDescriptor) -> ByteVerifiedDescriptor {
+///     ByteVerifiedDescriptor(approved)
+/// }
+/// ```
+///
+/// Construction is only available through descriptor verification:
+///
+/// ```compile_fail
+/// use radroots_blossom::{ByteVerifiedDescriptor, descriptor::ApprovedDescriptor};
+///
+/// fn bypass_verification(approved: ApprovedDescriptor) -> ByteVerifiedDescriptor {
+///     ByteVerifiedDescriptor::new(approved)
+/// }
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ByteVerifiedDescriptor(ApprovedDescriptor);
 
@@ -260,8 +279,18 @@ mod tests {
         assert_eq!(lower.as_str(), "image/svg+xml; charset=UTF-8; profile=web");
         assert_eq!(upper.as_str(), lower.as_str());
         assert_eq!(lower.to_string(), lower.as_str());
-        let json = serde_json::to_string(&lower).unwrap();
-        assert_eq!(serde_json::from_str::<MediaType>(&json).unwrap(), lower);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn media_type_serde_round_trips_and_revalidates() {
+        let media_type = MediaType::parse("image/svg+xml; charset=UTF-8").unwrap();
+        let json = serde_json::to_string(&media_type).unwrap();
+        assert_eq!(
+            serde_json::from_str::<MediaType>(&json).unwrap(),
+            media_type
+        );
+        assert!(serde_json::from_str::<MediaType>("42").is_err());
     }
 
     #[test]
@@ -279,7 +308,6 @@ mod tests {
         ] {
             assert_eq!(MediaType::parse(value), Err(Error::InvalidMediaType));
         }
-        assert!(serde_json::from_str::<MediaType>("42").is_err());
     }
 
     #[test]
@@ -300,6 +328,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn descriptor_serde_roundtrip_tolerates_extension_fields() {
         let raw = format!(
@@ -316,6 +345,7 @@ mod tests {
         assert!(encoded.get("magnet").is_none());
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn descriptor_deserialize_revalidates_invariants() {
         let wrong_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

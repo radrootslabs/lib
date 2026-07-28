@@ -222,8 +222,8 @@
     {
       "role": "blossom_descriptor_authority",
       "path": "crates/blossom/src/descriptor.rs",
-      "byte_length": 12302,
-      "sha256": "ead743e60b12e624cf40494678c14b4733dcf7930438a0d46f301c81f1f2e9a4",
+      "byte_length": 13238,
+      "sha256": "dc2ff3d9cb0a81da5ce99b14370a42b2dac7a8842a584f55156dfa7c0fa93c74",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -236,8 +236,8 @@
     {
       "role": "blossom_hash_authority",
       "path": "crates/blossom/src/hash.rs",
-      "byte_length": 10206,
-      "sha256": "b2d9eadfbd6260fc6ae2fc1a4639e901f28ca268bde3f2b10461f2f75c9880af",
+      "byte_length": 10634,
+      "sha256": "964f3217ad2f81aece1f20c40ebcd125542b77ba6a1fa01f29118cc51129f415",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -250,8 +250,8 @@
     {
       "role": "blossom_url_authority",
       "path": "crates/blossom/src/url.rs",
-      "byte_length": 14079,
-      "sha256": "a5d62d83bd123ce9f485f7c4c96981f1eb19fe8467ce91d1fbba6ce77c461df4",
+      "byte_length": 14109,
+      "sha256": "8532c827a55d6392139143de6979e2913538a58f815d1fdb0e243b02369cb465",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

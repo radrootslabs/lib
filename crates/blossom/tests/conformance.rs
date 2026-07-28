@@ -1,3 +1,5 @@
+#![cfg(feature = "serde")]
+
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256, hash::HashPath};
 use serde::Deserialize;
 use serde_json::Value;

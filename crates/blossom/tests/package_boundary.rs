@@ -119,6 +119,20 @@ fn production_types_do_not_repeat_the_crate_name() {
 }
 
 #[test]
+fn production_surface_exposes_no_public_traits() {
+    for (path, production) in production_sources() {
+        assert!(
+            !production
+                .lines()
+                .map(str::trim_start)
+                .any(|line| line.starts_with("pub trait ")),
+            "Blossom must expose concrete protocol values, not public traits: {}",
+            path.display()
+        );
+    }
+}
+
+#[test]
 fn production_surface_owns_no_io_or_application_media_policy() {
     const FORBIDDEN_MARKERS: &[&str] = &[
         "std::fs",

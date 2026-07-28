@@ -1,3 +1,5 @@
+#![cfg(feature = "serde")]
+
 use radroots_blossom::{
     Sha256,
     authorization::{

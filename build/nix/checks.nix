@@ -74,6 +74,33 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
+  blossomConformance = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-blossom-conformance";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo check -p radroots_blossom --all-targets --no-default-features --locked
+        cargo check -p radroots_blossom --all-targets --no-default-features --features std --locked
+        cargo check -p radroots_blossom --all-targets --no-default-features --features serde --locked
+        cargo check -p radroots_blossom --all-targets --locked
+        cargo check -p radroots_blossom --all-targets --all-features --locked
+        cargo clippy -p radroots_blossom --all-targets --no-default-features --locked -- -D warnings
+        cargo clippy -p radroots_blossom --all-targets --no-default-features --features serde --locked -- -D warnings
+        cargo clippy -p radroots_blossom --all-targets --all-features --locked -- -D warnings
+        cargo test -p radroots_blossom --all-targets --no-default-features --locked
+        cargo test -p radroots_blossom --all-targets --no-default-features --features std --locked
+        cargo test -p radroots_blossom --all-targets --no-default-features --features serde --locked
+        cargo test -p radroots_blossom --all-targets --all-features --locked
+        cargo check -p radroots_blossom --no-default-features --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_blossom --no-default-features --features serde --target wasm32-unknown-unknown --locked
+        RUSTDOCFLAGS="-D warnings" cargo doc -p radroots_blossom --all-features --no-deps --locked
+        cargo test -p radroots_blossom --all-features --doc --locked
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
   mkReplicaSyncLane =
     {
       pname,
@@ -112,6 +139,7 @@ in
   cargo-test = cargoTest;
   core-conformance = coreConformance;
   identity-conformance = identityConformance;
+  blossom-conformance = blossomConformance;
   replica-sync-default-check = replicaSyncDefaultCheck;
   replica-sync-default-test = replicaSyncDefaultTest;
   replica-sync-legacy-ingest-check = replicaSyncLegacyCheck;

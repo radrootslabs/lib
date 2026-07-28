@@ -348,6 +348,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn blob_url_serde_revalidates_structure() {
         let parsed = BlobUrl::parse(&url("https://cdn.example.com")).unwrap();
