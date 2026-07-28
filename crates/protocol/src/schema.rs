@@ -268,7 +268,11 @@ pub fn protocol_v1_registry() -> Result<Registry, Error> {
         .iter()
         .copied()
         .map(|metadata| (metadata, ModuleVersion::EventV1));
-    let mut descriptors = Registry::try_from_metadata(capability.chain(event))?
+    let error = crate::error::v1::SCHEMAS
+        .iter()
+        .copied()
+        .map(|metadata| (metadata, ModuleVersion::ErrorV1));
+    let mut descriptors = Registry::try_from_metadata(capability.chain(event).chain(error))?
         .descriptors()
         .to_vec();
     descriptors.extend(
@@ -524,12 +528,14 @@ mod tests {
     #[test]
     fn protocol_v1_registry_dispatches_all_migrated_schemas() {
         let registry = protocol_v1_registry().expect("protocol V1 registry");
-        assert_eq!(registry.len(), 6 + crate::runtime::v1::CATALOG.len() * 2);
+        assert_eq!(registry.len(), 7 + crate::runtime::v1::CATALOG.len() * 2);
         for descriptor in registry.descriptors() {
             let expected = if descriptor.id().as_str()
                 == crate::radrootsd::transport_publish::v5::API_VERSION
             {
                 ModuleVersion::RadrootsdTransportPublishV5
+            } else if descriptor.id().as_str() == crate::error::v1::SCHEMA_ID {
+                ModuleVersion::ErrorV1
             } else if descriptor.id().as_str().starts_with("radroots.runtime.") {
                 ModuleVersion::RuntimeV1
             } else if descriptor.id().as_str().contains("event_descriptor")
