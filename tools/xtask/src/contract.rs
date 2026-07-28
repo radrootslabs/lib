@@ -10770,6 +10770,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             &root.join("docs/specs/radroots_crates_release_v1.toml"),
             r#"spec_id = "radroots.crates.release.v1"
 package_count = 0
+package = []
 
 [repositories.lib]
 version = "0.1.0-alpha"
