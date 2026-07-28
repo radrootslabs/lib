@@ -333,6 +333,140 @@ struct SourceRebuildPlan {
     prior: Option<SourceState>,
 }
 
+#[derive(Clone, Copy)]
+enum SourceStateCardinality {
+    Absent,
+    Present,
+}
+
+#[derive(Clone, Copy)]
+struct SourceRebuildBaseline {
+    transition_floor_seq: i64,
+    raw_event_count: i64,
+    raw_tag_count: i64,
+    raw_high_water_seq: i64,
+}
+
+impl SourceRebuildBaseline {
+    fn agrees_with(self, state: &SourceState) -> bool {
+        self.transition_floor_seq == state.last_transition_seq
+            && self.raw_event_count == state.raw_event_count
+            && self.raw_tag_count == state.raw_tag_count
+            && self.raw_high_water_seq == state.raw_high_water_seq
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ReconciliationRowEffect {
+    StateRebuildTransition,
+    RebuildMarkerClose,
+    AuthorityUpdate,
+}
+
+impl ReconciliationRowEffect {
+    fn failure_reason(self, rows_affected: u64) -> String {
+        match self {
+            Self::StateRebuildTransition => {
+                format!("source state rebuild transition affected {rows_affected} rows")
+            }
+            Self::RebuildMarkerClose => {
+                format!("source rebuild marker close affected {rows_affected} rows")
+            }
+            Self::AuthorityUpdate => {
+                format!("source authority update affected {rows_affected} rows")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ReconciliationAuthorityComparison {
+    Equal {
+        observed: i64,
+        expected: i64,
+    },
+    OptionalEqual {
+        observed: Option<i64>,
+        expected: Option<i64>,
+    },
+    LessOrEqual {
+        value: i64,
+        limit: i64,
+    },
+    GreaterThan {
+        value: i64,
+        floor: i64,
+    },
+    NonNegative(i64),
+    Zero(i64),
+}
+
+impl ReconciliationAuthorityComparison {
+    fn holds(self) -> bool {
+        match self {
+            Self::Equal { observed, expected } => observed == expected,
+            Self::OptionalEqual { observed, expected } => observed == expected,
+            Self::LessOrEqual { value, limit } => value <= limit,
+            Self::GreaterThan { value, floor } => value > floor,
+            Self::NonNegative(value) => value >= 0,
+            Self::Zero(value) => value == 0,
+        }
+    }
+}
+
+fn reconciliation_authority_matches<const N: usize>(
+    comparisons: [ReconciliationAuthorityComparison; N],
+) -> bool {
+    comparisons
+        .into_iter()
+        .all(ReconciliationAuthorityComparison::holds)
+}
+
+#[derive(Clone, Copy)]
+enum ReconciliationCardinality {
+    ActiveSourceState(usize),
+    RebuildMarkerOutsideReconciliation(i64),
+    BoundActiveRebuildMarker(i64),
+}
+
+impl ReconciliationCardinality {
+    fn validate(self) -> Result<(), RadrootsEventStoreError> {
+        match self {
+            Self::ActiveSourceState(1)
+            | Self::RebuildMarkerOutsideReconciliation(0)
+            | Self::BoundActiveRebuildMarker(1) => Ok(()),
+            Self::ActiveSourceState(count) => {
+                hook_drift(format!("expected one active source state, found {count}"))
+            }
+            Self::RebuildMarkerOutsideReconciliation(count) => hook_drift(format!(
+                "source rebuild marker residue is present outside reconciliation: {count} row(s)"
+            )),
+            Self::BoundActiveRebuildMarker(_) => hook_drift(
+                "open source rebuild marker does not bind completed active authority".to_owned(),
+            ),
+        }
+    }
+}
+
+fn validate_rebuild_generation(
+    actual: RadrootsEventStoreSourceGeneration,
+    expected: RadrootsEventStoreSourceGeneration,
+) -> Result<(), RadrootsEventStoreError> {
+    if actual == expected {
+        Ok(())
+    } else {
+        hook_drift("open rebuild marker target does not match active source generation".to_owned())
+    }
+}
+
+fn validate_append_sequence_space(inserted_seq: i64) -> Result<(), RadrootsEventStoreError> {
+    if inserted_seq < i64::MAX {
+        Ok(())
+    } else {
+        hook_drift("raw source sequence space is exhausted at SQLite INTEGER maximum".to_owned())
+    }
+}
+
 struct SourceRebuildMarkerTokenV1 {
     generation: RadrootsEventStoreSourceGeneration,
 }
@@ -575,6 +709,40 @@ fn sqlite_reconciliation_count(
     }
 }
 
+fn source_state_cardinality(count: i64) -> Result<SourceStateCardinality, RadrootsEventStoreError> {
+    match count {
+        0 => Ok(SourceStateCardinality::Absent),
+        1 => Ok(SourceStateCardinality::Present),
+        count => hook_drift(format!(
+            "expected zero or one source state before rebuild, found {count}"
+        )),
+    }
+}
+
+fn validate_prior_rebuild_baseline(
+    prior: Option<&SourceState>,
+    baseline: SourceRebuildBaseline,
+) -> Result<(), RadrootsEventStoreError> {
+    match prior {
+        None => Ok(()),
+        Some(prior) if baseline.agrees_with(prior) => Ok(()),
+        Some(_) => hook_drift(
+            "prior source authority does not bind the immutable rebuild baseline".to_owned(),
+        ),
+    }
+}
+
+fn require_reconciliation_row_effect(
+    rows_affected: u64,
+    effect: ReconciliationRowEffect,
+) -> Result<(), RadrootsEventStoreError> {
+    if rows_affected == 1 {
+        Ok(())
+    } else {
+        hook_drift(effect.failure_reason(rows_affected))
+    }
+}
+
 pub(crate) async fn apply_reconciliation_hook(
     connection: &mut SqliteConnection,
     generation_provider: &dyn SourceGenerationProvider,
@@ -598,16 +766,11 @@ pub(crate) async fn apply_reconciliation_hook(
         sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_source_state")
             .fetch_one(&mut *connection)
             .await?;
-    let prior = match source_state_count {
-        0 => None,
-        1 => {
+    let prior = match source_state_cardinality(source_state_count)? {
+        SourceStateCardinality::Absent => None,
+        SourceStateCardinality::Present => {
             validate_applied_hook_state_with_events(connection, &events).await?;
             Some(read_source_state(connection).await?)
-        }
-        count => {
-            return hook_drift(format!(
-                "expected zero or one source state before rebuild, found {count}"
-            ));
         }
     };
 
@@ -638,16 +801,13 @@ pub(crate) async fn apply_reconciliation_hook(
     .await?;
     let generation_ordinal =
         checked_authority_add(prior_generation_ordinal, 1, "source generation ordinal")?;
-    if let Some(prior) = prior.as_ref()
-        && (prior.last_transition_seq != transition_floor_seq
-            || prior.raw_event_count != raw_event_count
-            || prior.raw_tag_count != raw_tag_count
-            || prior.raw_high_water_seq != raw_high_water_seq)
-    {
-        return hook_drift(
-            "prior source authority does not bind the immutable rebuild baseline".to_owned(),
-        );
-    }
+    let baseline = SourceRebuildBaseline {
+        transition_floor_seq,
+        raw_event_count,
+        raw_tag_count,
+        raw_high_water_seq,
+    };
+    validate_prior_rebuild_baseline(prior.as_ref(), baseline)?;
     let plan = SourceRebuildPlan {
         generation,
         generation_ordinal,
@@ -787,13 +947,10 @@ async fn rotate_source_state(
         .execute(&mut *connection)
         .await?
     };
-    if changed.rows_affected() != 1 {
-        return hook_drift(format!(
-            "source state rebuild transition affected {} rows",
-            changed.rows_affected()
-        ));
-    }
-    Ok(())
+    require_reconciliation_row_effect(
+        changed.rows_affected(),
+        ReconciliationRowEffect::StateRebuildTransition,
+    )
 }
 
 async fn close_source_rebuild_marker(
@@ -806,13 +963,10 @@ async fn close_source_rebuild_marker(
     .bind(marker.generation.as_bytes().as_slice())
     .execute(&mut *connection)
     .await?;
-    if deleted.rows_affected() != 1 {
-        return hook_drift(format!(
-            "source rebuild marker close affected {} rows",
-            deleted.rows_affected()
-        ));
-    }
-    Ok(())
+    require_reconciliation_row_effect(
+        deleted.rows_affected(),
+        ReconciliationRowEffect::RebuildMarkerClose,
+    )
 }
 
 async fn validate_sqlite_integrity_after_rebuild(
@@ -835,10 +989,20 @@ async fn validate_sqlite_integrity_after_rebuild(
     let integrity_rows = sqlx::query("PRAGMA integrity_check")
         .fetch_all(&mut *connection)
         .await?;
-    if integrity_rows.len() != 1 || integrity_rows[0].try_get::<String, _>(0)?.as_str() != "ok" {
+    validate_sqlite_integrity_rows(&integrity_rows)
+}
+
+fn validate_sqlite_integrity_rows(
+    rows: &[sqlx::sqlite::SqliteRow],
+) -> Result<(), RadrootsEventStoreError> {
+    let [row] = rows else {
         return hook_drift("SQLite integrity validation failed after source rebuild".to_owned());
+    };
+    if row.try_get::<String, _>(0)?.as_str() == "ok" {
+        Ok(())
+    } else {
+        hook_drift("SQLite integrity validation failed after source rebuild".to_owned())
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -866,11 +1030,7 @@ async fn validate_rebuild_hook_state_with_events(
 ) -> Result<(), RadrootsEventStoreError> {
     validate_active_rebuild_marker(connection, generation).await?;
     let state = validate_structural_source_state(connection).await?;
-    if state.generation != generation {
-        return hook_drift(
-            "open rebuild marker target does not match active source generation".to_owned(),
-        );
-    }
+    validate_rebuild_generation(state.generation, generation)?;
     validate_hook_state_with_events(connection, &state, events).await
 }
 
@@ -881,11 +1041,7 @@ async fn validate_raw_source_rebuild_core_with_events_v1(
 ) -> Result<(), RadrootsEventStoreError> {
     validate_active_rebuild_marker(connection, generation).await?;
     let state = read_source_state(connection).await?;
-    if state.generation != generation {
-        return hook_drift(
-            "open rebuild marker target does not match active source generation".to_owned(),
-        );
-    }
+    validate_rebuild_generation(state.generation, generation)?;
     validate_source_raw_authority_with_state(connection, &state).await?;
     validate_transition_interval_full(connection, &state).await?;
     validate_derived_event_storage(connection, events).await?;
@@ -947,12 +1103,7 @@ async fn validate_structural_source_state_fast(
     )
     .fetch_all(&mut *connection)
     .await?;
-    if rows.len() != 1 {
-        return hook_drift(format!(
-            "expected one active source state, found {}",
-            rows.len()
-        ));
-    }
+    ReconciliationCardinality::ActiveSourceState(rows.len()).validate()?;
     let row = &rows[0];
     let generation = generation_from_blob(row.try_get("active_generation")?)?;
     let profile = reconciliation_profile(
@@ -979,11 +1130,24 @@ async fn validate_structural_source_state_fast(
     if generation_ordinal != max_generation_ordinal {
         return hook_drift("active generation contract metadata is inconsistent".to_owned());
     }
-    if state.baseline_raw_event_count > state.raw_event_count
-        || state.baseline_raw_tag_count > state.raw_tag_count
-        || state.baseline_raw_high_water_seq > state.raw_high_water_seq
-        || state.transition_floor_seq > state.last_transition_seq
-    {
+    if !reconciliation_authority_matches([
+        ReconciliationAuthorityComparison::LessOrEqual {
+            value: state.baseline_raw_event_count,
+            limit: state.raw_event_count,
+        },
+        ReconciliationAuthorityComparison::LessOrEqual {
+            value: state.baseline_raw_tag_count,
+            limit: state.raw_tag_count,
+        },
+        ReconciliationAuthorityComparison::LessOrEqual {
+            value: state.baseline_raw_high_water_seq,
+            limit: state.raw_high_water_seq,
+        },
+        ReconciliationAuthorityComparison::LessOrEqual {
+            value: state.transition_floor_seq,
+            limit: state.last_transition_seq,
+        },
+    ]) {
         return hook_drift("active generation baseline exceeds current authority".to_owned());
     }
     let actual_high_water: i64 =
@@ -1016,10 +1180,17 @@ async fn validate_structural_source_state_fast(
         None
     };
     let expected_last = (expected_count > 0).then_some(state.last_transition_seq);
-    if expected_count < 0
-        || first_transition_seq != expected_first
-        || transition_high_water != expected_last
-    {
+    if !reconciliation_authority_matches([
+        ReconciliationAuthorityComparison::NonNegative(expected_count),
+        ReconciliationAuthorityComparison::OptionalEqual {
+            observed: first_transition_seq,
+            expected: expected_first,
+        },
+        ReconciliationAuthorityComparison::OptionalEqual {
+            observed: transition_high_water,
+            expected: expected_last,
+        },
+    ]) {
         return hook_drift(format!(
             "active transition bounds are inconsistent: floor={}, last={}, first={first_transition_seq:?}, high-water={transition_high_water:?}",
             state.transition_floor_seq, state.last_transition_seq
@@ -1036,12 +1207,7 @@ async fn validate_rebuild_marker_absent(
         sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_source_rebuild_marker")
             .fetch_one(&mut *connection)
             .await?;
-    if marker_count != 0 {
-        return hook_drift(format!(
-            "source rebuild marker residue is present outside reconciliation: {marker_count} row(s)"
-        ));
-    }
-    Ok(())
+    ReconciliationCardinality::RebuildMarkerOutsideReconciliation(marker_count).validate()
 }
 
 async fn validate_active_rebuild_marker(
@@ -1054,12 +1220,7 @@ async fn validate_active_rebuild_marker(
     .bind(generation.as_bytes().as_slice())
     .fetch_one(&mut *connection)
     .await?;
-    if valid_marker_count != 1 {
-        return hook_drift(
-            "open source rebuild marker does not bind completed active authority".to_owned(),
-        );
-    }
-    Ok(())
+    ReconciliationCardinality::BoundActiveRebuildMarker(valid_marker_count).validate()
 }
 
 async fn validate_projection_cursor_authority(
@@ -1191,11 +1352,15 @@ async fn validate_transition_interval_full(
     .bind(state.transition_floor_seq)
     .fetch_one(&mut *connection)
     .await?;
-    if expected_count < 0
-        || transition_count != expected_count
-        || foreign_transition_count != 0
-        || pre_floor_active_count != 0
-    {
+    if !reconciliation_authority_matches([
+        ReconciliationAuthorityComparison::NonNegative(expected_count),
+        ReconciliationAuthorityComparison::Equal {
+            observed: transition_count,
+            expected: expected_count,
+        },
+        ReconciliationAuthorityComparison::Zero(foreign_transition_count),
+        ReconciliationAuthorityComparison::Zero(pre_floor_active_count),
+    ]) {
         return hook_drift(format!(
             "active transition interval is not contiguous: floor={}, last={}, count={}, foreign={foreign_transition_count}, pre-floor={pre_floor_active_count}",
             state.transition_floor_seq, state.last_transition_seq, transition_count
@@ -1230,11 +1395,7 @@ pub(crate) async fn synchronize_after_insert(
     raw_head_decision: &RadrootsRawHeadDecision,
 ) -> Result<(), RadrootsEventStoreError> {
     validate_rebuild_marker_absent(connection).await?;
-    if inserted_seq == i64::MAX {
-        return hook_drift(
-            "raw source sequence space is exhausted at SQLite INTEGER maximum".to_owned(),
-        );
-    }
+    validate_append_sequence_space(inserted_seq)?;
     let prior = read_source_state(connection).await?;
     let actual_high_water: i64 =
         sqlx::query_scalar("SELECT COALESCE(MAX(seq), 0) FROM event_envelopes")
@@ -1249,10 +1410,20 @@ pub(crate) async fn synchronize_after_insert(
         inserted_tag_count as u128,
         "inserted tag count exceeds SQLite integer range",
     )?;
-    if actual_inserted_tag_count != inserted_tag_count
-        || inserted_seq <= prior.raw_high_water_seq
-        || actual_high_water != inserted_seq
-    {
+    if !reconciliation_authority_matches([
+        ReconciliationAuthorityComparison::Equal {
+            observed: actual_inserted_tag_count,
+            expected: inserted_tag_count,
+        },
+        ReconciliationAuthorityComparison::GreaterThan {
+            value: inserted_seq,
+            floor: prior.raw_high_water_seq,
+        },
+        ReconciliationAuthorityComparison::Equal {
+            observed: actual_high_water,
+            expected: inserted_seq,
+        },
+    ]) {
         let expected = SourceState {
             generation: prior.generation,
             profile: prior.profile,
@@ -1672,15 +1843,30 @@ fn compare_raw_tags(
         let expected_name = tag.first().map(String::as_str).unwrap_or("");
         let expected_value = tag.get(1).map(String::as_str);
         let expected_json = serde_json::to_string(tag)?;
-        if row.tag_index != expected_index
-            || row.tag_name != expected_name
-            || row.tag_value.as_deref() != expected_value
-            || row.tag_json != expected_json
-        {
+        if !stored_raw_tag_matches(
+            &row,
+            expected_index,
+            expected_name,
+            expected_value,
+            expected_json.as_str(),
+        ) {
             return Err(raw_mismatch(event_id, "tag_rows"));
         }
     }
     Ok(())
+}
+
+fn stored_raw_tag_matches(
+    row: &StoredRawTag,
+    expected_index: i64,
+    expected_name: &str,
+    expected_value: Option<&str>,
+    expected_json: &str,
+) -> bool {
+    row.tag_index == expected_index
+        && row.tag_name == expected_name
+        && row.tag_value.as_deref() == expected_value
+        && row.tag_json == expected_json
 }
 
 #[derive(Clone, Copy)]
@@ -2941,10 +3127,20 @@ async fn validate_baseline_authority(
     .bind(source.baseline_raw_high_water_seq)
     .fetch_one(&mut *connection)
     .await?;
-    if baseline_event_count != source.baseline_raw_event_count
-        || baseline_tag_count != source.baseline_raw_tag_count
-        || baseline_high_water != source.baseline_raw_high_water_seq
-    {
+    if !reconciliation_authority_matches([
+        ReconciliationAuthorityComparison::Equal {
+            observed: baseline_event_count,
+            expected: source.baseline_raw_event_count,
+        },
+        ReconciliationAuthorityComparison::Equal {
+            observed: baseline_tag_count,
+            expected: source.baseline_raw_tag_count,
+        },
+        ReconciliationAuthorityComparison::Equal {
+            observed: baseline_high_water,
+            expected: source.baseline_raw_high_water_seq,
+        },
+    ]) {
         return hook_drift(
             "active generation baseline raw authority disagrees with canonical replay".to_owned(),
         );
@@ -3444,12 +3640,7 @@ async fn read_source_state(
     )
     .fetch_all(&mut *connection)
     .await?;
-    if rows.len() != 1 {
-        return hook_drift(format!(
-            "expected one active source state, found {}",
-            rows.len()
-        ));
-    }
+    ReconciliationCardinality::ActiveSourceState(rows.len()).validate()?;
     let row = &rows[0];
     let generation_ordinal: i64 = row.try_get("generation_ordinal")?;
     let max_generation_ordinal: i64 = row.try_get("max_generation_ordinal")?;
@@ -3521,10 +3712,20 @@ async fn validate_source_raw_authority_with_state(
     let actual_tag_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM event_envelope_tags")
         .fetch_one(&mut *connection)
         .await?;
-    if actual_count != state.raw_event_count
-        || actual_high_water != state.raw_high_water_seq
-        || actual_tag_count != state.raw_tag_count
-    {
+    if !reconciliation_authority_matches([
+        ReconciliationAuthorityComparison::Equal {
+            observed: actual_count,
+            expected: state.raw_event_count,
+        },
+        ReconciliationAuthorityComparison::Equal {
+            observed: actual_high_water,
+            expected: state.raw_high_water_seq,
+        },
+        ReconciliationAuthorityComparison::Equal {
+            observed: actual_tag_count,
+            expected: state.raw_tag_count,
+        },
+    ]) {
         return Err(RadrootsEventStoreError::RawEventSourceDrift {
             expected_count: state.raw_event_count,
             expected_tag_count: state.raw_tag_count,
@@ -3557,13 +3758,10 @@ async fn update_source_authority(
     .bind(last_transition_seq)
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return hook_drift(format!(
-            "source authority update affected {} rows",
-            updated.rows_affected()
-        ));
-    }
-    Ok(())
+    require_reconciliation_row_effect(
+        updated.rows_affected(),
+        ReconciliationRowEffect::AuthorityUpdate,
+    )
 }
 
 pub(crate) fn generation_from_blob(
@@ -3876,6 +4074,276 @@ mod tests {
                 reason,
             }) if reason == "fixture count range"
         ));
+        assert!(matches!(
+            source_state_cardinality(0),
+            Ok(SourceStateCardinality::Absent)
+        ));
+        assert!(matches!(
+            source_state_cardinality(1),
+            Ok(SourceStateCardinality::Present)
+        ));
+        assert!(matches!(
+            source_state_cardinality(2),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: NIP09_HOOK_ID,
+                reason,
+            }) if reason == "expected zero or one source state before rebuild, found 2"
+        ));
+
+        let baseline = SourceRebuildBaseline {
+            transition_floor_seq: 1,
+            raw_event_count: 2,
+            raw_tag_count: 3,
+            raw_high_water_seq: 4,
+        };
+        let prior = SourceState {
+            generation: RadrootsEventStoreSourceGeneration::from_bytes([1; 32]),
+            profile: ReconciliationProfile::Nip09V1RegistryV7,
+            raw_event_count: 2,
+            raw_tag_count: 3,
+            raw_high_water_seq: 4,
+            last_transition_seq: 1,
+            transition_floor_seq: 0,
+            baseline_raw_event_count: 0,
+            baseline_raw_tag_count: 0,
+            baseline_raw_high_water_seq: 0,
+        };
+        validate_prior_rebuild_baseline(None, baseline).expect("no prior baseline");
+        validate_prior_rebuild_baseline(Some(&prior), baseline).expect("matching prior baseline");
+        for (mut mismatched, mutate) in [
+            (prior.clone(), 0_u8),
+            (prior.clone(), 1),
+            (prior.clone(), 2),
+            (prior.clone(), 3),
+        ] {
+            match mutate {
+                0 => mismatched.last_transition_seq += 1,
+                1 => mismatched.raw_event_count += 1,
+                2 => mismatched.raw_tag_count += 1,
+                3 => mismatched.raw_high_water_seq += 1,
+                _ => unreachable!(),
+            }
+            assert!(matches!(
+                validate_prior_rebuild_baseline(Some(&mismatched), baseline),
+                Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                    hook_id: NIP09_HOOK_ID,
+                    reason,
+                }) if reason == "prior source authority does not bind the immutable rebuild baseline"
+            ));
+        }
+        for (effect, expected_reason) in [
+            (
+                ReconciliationRowEffect::StateRebuildTransition,
+                "source state rebuild transition affected 0 rows",
+            ),
+            (
+                ReconciliationRowEffect::RebuildMarkerClose,
+                "source rebuild marker close affected 0 rows",
+            ),
+            (
+                ReconciliationRowEffect::AuthorityUpdate,
+                "source authority update affected 0 rows",
+            ),
+        ] {
+            require_reconciliation_row_effect(1, effect).expect("one row effect");
+            assert!(matches!(
+                require_reconciliation_row_effect(0, effect),
+                Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                    hook_id: NIP09_HOOK_ID,
+                    reason,
+                }) if reason == expected_reason
+            ));
+        }
+        for (matching, mismatching) in [
+            (
+                ReconciliationAuthorityComparison::Equal {
+                    observed: 1,
+                    expected: 1,
+                },
+                ReconciliationAuthorityComparison::Equal {
+                    observed: 1,
+                    expected: 2,
+                },
+            ),
+            (
+                ReconciliationAuthorityComparison::OptionalEqual {
+                    observed: Some(1),
+                    expected: Some(1),
+                },
+                ReconciliationAuthorityComparison::OptionalEqual {
+                    observed: Some(1),
+                    expected: None,
+                },
+            ),
+            (
+                ReconciliationAuthorityComparison::LessOrEqual { value: 1, limit: 1 },
+                ReconciliationAuthorityComparison::LessOrEqual { value: 2, limit: 1 },
+            ),
+            (
+                ReconciliationAuthorityComparison::GreaterThan { value: 2, floor: 1 },
+                ReconciliationAuthorityComparison::GreaterThan { value: 1, floor: 1 },
+            ),
+            (
+                ReconciliationAuthorityComparison::NonNegative(0),
+                ReconciliationAuthorityComparison::NonNegative(-1),
+            ),
+            (
+                ReconciliationAuthorityComparison::Zero(0),
+                ReconciliationAuthorityComparison::Zero(1),
+            ),
+        ] {
+            assert!(matching.holds());
+            assert!(!mismatching.holds());
+        }
+        assert!(reconciliation_authority_matches([
+            ReconciliationAuthorityComparison::Equal {
+                observed: 1,
+                expected: 1,
+            },
+            ReconciliationAuthorityComparison::Zero(0),
+        ]));
+        assert!(!reconciliation_authority_matches([
+            ReconciliationAuthorityComparison::Equal {
+                observed: 1,
+                expected: 1,
+            },
+            ReconciliationAuthorityComparison::Zero(1),
+        ]));
+        for (valid, invalid, expected_reason) in [
+            (
+                ReconciliationCardinality::ActiveSourceState(1),
+                ReconciliationCardinality::ActiveSourceState(2),
+                "expected one active source state, found 2",
+            ),
+            (
+                ReconciliationCardinality::RebuildMarkerOutsideReconciliation(0),
+                ReconciliationCardinality::RebuildMarkerOutsideReconciliation(1),
+                "source rebuild marker residue is present outside reconciliation: 1 row(s)",
+            ),
+            (
+                ReconciliationCardinality::BoundActiveRebuildMarker(1),
+                ReconciliationCardinality::BoundActiveRebuildMarker(0),
+                "open source rebuild marker does not bind completed active authority",
+            ),
+        ] {
+            valid.validate().expect("valid reconciliation cardinality");
+            assert!(matches!(
+                invalid.validate(),
+                Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                    hook_id: NIP09_HOOK_ID,
+                    reason,
+                }) if reason == expected_reason
+            ));
+        }
+        let generation = RadrootsEventStoreSourceGeneration::from_bytes([2; 32]);
+        validate_rebuild_generation(generation, generation).expect("matching rebuild generation");
+        assert!(matches!(
+            validate_rebuild_generation(
+                generation,
+                RadrootsEventStoreSourceGeneration::from_bytes([3; 32]),
+            ),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: NIP09_HOOK_ID,
+                reason,
+            }) if reason == "open rebuild marker target does not match active source generation"
+        ));
+        validate_append_sequence_space(i64::MAX - 1).expect("remaining sequence space");
+        assert!(matches!(
+            validate_append_sequence_space(i64::MAX),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: NIP09_HOOK_ID,
+                reason,
+            }) if reason == "raw source sequence space is exhausted at SQLite INTEGER maximum"
+        ));
+        for (row, expected) in [
+            (
+                StoredRawTag {
+                    tag_index: 1,
+                    tag_name: "name".to_owned(),
+                    tag_value: Some("value".to_owned()),
+                    tag_json: "json".to_owned(),
+                },
+                true,
+            ),
+            (
+                StoredRawTag {
+                    tag_index: 2,
+                    tag_name: "name".to_owned(),
+                    tag_value: Some("value".to_owned()),
+                    tag_json: "json".to_owned(),
+                },
+                false,
+            ),
+            (
+                StoredRawTag {
+                    tag_index: 1,
+                    tag_name: "other".to_owned(),
+                    tag_value: Some("value".to_owned()),
+                    tag_json: "json".to_owned(),
+                },
+                false,
+            ),
+            (
+                StoredRawTag {
+                    tag_index: 1,
+                    tag_name: "name".to_owned(),
+                    tag_value: None,
+                    tag_json: "json".to_owned(),
+                },
+                false,
+            ),
+            (
+                StoredRawTag {
+                    tag_index: 1,
+                    tag_name: "name".to_owned(),
+                    tag_value: Some("value".to_owned()),
+                    tag_json: "other".to_owned(),
+                },
+                false,
+            ),
+        ] {
+            assert_eq!(
+                stored_raw_tag_matches(&row, 1, "name", Some("value"), "json"),
+                expected,
+            );
+        }
+        compare_raw_tags(
+            "fixture-event",
+            &[Vec::new()],
+            vec![StoredRawTag {
+                tag_index: 0,
+                tag_name: String::new(),
+                tag_value: None,
+                tag_json: "[]".to_owned(),
+            }],
+        )
+        .expect("matching empty raw tag");
+        let empty_tag_rows = vec![StoredRawTag {
+            tag_index: 0,
+            tag_name: String::new(),
+            tag_value: None,
+            tag_json: "[]".to_owned(),
+        }];
+        assert!(matches!(
+            compare_raw_tags("fixture-event", &[], empty_tag_rows),
+            Err(RadrootsEventStoreError::RawEventReconciliationMismatch {
+                event_id,
+                field: "tag_rows",
+            }) if event_id == "fixture-event"
+        ));
+        assert!(
+            compare_raw_tags(
+                "fixture-event",
+                &[Vec::new()],
+                vec![StoredRawTag {
+                    tag_index: 0,
+                    tag_name: "forged".to_owned(),
+                    tag_value: None,
+                    tag_json: "[]".to_owned(),
+                }],
+            )
+            .is_err()
+        );
         assert_eq!(
             next_reconciliation_page_value(0, ReconciliationPaginationAxis::RawTagSnapshot)
                 .expect("bounded page successor"),
@@ -3951,6 +4419,33 @@ mod tests {
 
         let pool = open_v1_test_pool().await;
         let mut connection = pool.acquire().await.expect("connection");
+        let integrity_ok = sqlx::query("SELECT 'ok'")
+            .fetch_all(&mut *connection)
+            .await
+            .expect("valid integrity observation");
+        validate_sqlite_integrity_rows(&integrity_ok).expect("valid integrity result");
+        for integrity_invalid in [
+            sqlx::query("SELECT 'not ok'")
+                .fetch_all(&mut *connection)
+                .await
+                .expect("invalid integrity observation"),
+            sqlx::query("SELECT 'ok' WHERE 0")
+                .fetch_all(&mut *connection)
+                .await
+                .expect("empty integrity observation"),
+            sqlx::query("SELECT 'ok' UNION ALL SELECT 'ok'")
+                .fetch_all(&mut *connection)
+                .await
+                .expect("multiple integrity observations"),
+        ] {
+            assert!(matches!(
+                validate_sqlite_integrity_rows(&integrity_invalid),
+                Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                    hook_id: NIP09_HOOK_ID,
+                    reason,
+                }) if reason == "SQLite integrity validation failed after source rebuild"
+            ));
+        }
         let stored_decision = stored_suppression_decision(
             &mut connection,
             RadrootsEventStoreSourceGeneration::from_bytes([1; 32]),
@@ -4033,6 +4528,57 @@ mod tests {
         );
         assert!(raw_coordinate_parts("invalid").is_err());
         assert!(raw_coordinate_parts("30402:invalid").is_err());
+        let expected_tag = vec!["e".to_owned(), "value".to_owned()];
+        let expected_tag_json = serde_json::to_string(&expected_tag).expect("tag JSON");
+        compare_raw_tags(
+            "fixture-event",
+            std::slice::from_ref(&expected_tag),
+            vec![StoredRawTag {
+                tag_index: 0,
+                tag_name: "e".to_owned(),
+                tag_value: Some("value".to_owned()),
+                tag_json: expected_tag_json.clone(),
+            }],
+        )
+        .expect("matching raw tag");
+        for mismatched in [
+            StoredRawTag {
+                tag_index: 1,
+                tag_name: "e".to_owned(),
+                tag_value: Some("value".to_owned()),
+                tag_json: expected_tag_json.clone(),
+            },
+            StoredRawTag {
+                tag_index: 0,
+                tag_name: "a".to_owned(),
+                tag_value: Some("value".to_owned()),
+                tag_json: expected_tag_json.clone(),
+            },
+            StoredRawTag {
+                tag_index: 0,
+                tag_name: "e".to_owned(),
+                tag_value: None,
+                tag_json: expected_tag_json.clone(),
+            },
+            StoredRawTag {
+                tag_index: 0,
+                tag_name: "e".to_owned(),
+                tag_value: Some("value".to_owned()),
+                tag_json: "[]".to_owned(),
+            },
+        ] {
+            assert!(matches!(
+                compare_raw_tags(
+                    "fixture-event",
+                    std::slice::from_ref(&expected_tag),
+                    vec![mismatched],
+                ),
+                Err(RadrootsEventStoreError::RawEventReconciliationMismatch {
+                    ref event_id,
+                    field: "tag_rows",
+                }) if event_id == "fixture-event"
+            ));
+        }
         require_expected_insert(1, "fixture").expect("one insert");
         assert!(require_expected_insert(0, "fixture").is_err());
         assert!(checked_authority_add(i64::MAX, 1, "fixture").is_err());

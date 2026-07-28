@@ -47,7 +47,7 @@ sha256 = "fbd8a3b36d7f36e7b0d301aee0847d42c3908659f066cafcae3e247d67a75845"
 
 [[sources]]
 path = "crates/event_store/src/nip09/reconciliation_v1.rs"
-sha256 = "6e2afd00f9c3d7c9addf650b22903055c121e56044320ae8fca2c5ed8b0f0952"
+sha256 = "4b7f9fb91eb6ac0bffa97d0efa4c2c4eb7842dccb0a6209d752979d3b274c88c"
 
 [[sources]]
 path = "crates/event_store/src/nip09/reconciliation_v1/raw_source_rebuild.rs"
