@@ -680,25 +680,18 @@ async fn food_availability_projection_cursor_state_fast_v1(
     let integrity_high_water: i64 = row.try_get("integrity_high_water")?;
     let transition_count: i64 = row.try_get("transition_count")?;
     let cursor_high_water: i64 = row.try_get("last_transition_seq")?;
-    let expected_transition_count = source_high_water
-        .checked_sub(generation_floor)
-        .filter(|count| *count >= 0)
-        .ok_or_else(|| projection_drift("source high-water precedes its transition floor"))?;
-    if row.try_get::<i64, _>("addressable_feed_version")?
-        != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1)
-        || integrity_floor != generation_floor
-        || integrity_high_water != source_high_water
-        || transition_count != expected_transition_count
-    {
-        return Err(projection_drift(
-            "active addressable feed integrity seal is inconsistent",
-        ));
-    }
-    if cursor_high_water != source_high_water {
-        return Err(projection_drift(
-            "projection cursor is not at the source high-water",
-        ));
-    }
+    let expected_transition_count =
+        projection_transition_count(source_high_water, generation_floor)?;
+    validate_projection_feed_integrity_seal(
+        row.try_get("addressable_feed_version")?,
+        generation_floor,
+        integrity_floor,
+        source_high_water,
+        integrity_high_water,
+        transition_count,
+        expected_transition_count,
+    )?;
+    validate_projection_cursor_high_water(cursor_high_water, source_high_water)?;
     let projected_row_count: i64 = row.try_get("projected_row_count")?;
     validate_projected_row_count(projected_row_count)?;
     Ok(FoodAvailabilityProjectionCursorState {
@@ -986,6 +979,56 @@ fn projection_cursor_is_stationary(
     Ok(true)
 }
 
+fn projection_transition_count(
+    source_high_water: i64,
+    generation_floor: i64,
+) -> Result<i64, RadrootsEventStoreError> {
+    let Some(count) = source_high_water.checked_sub(generation_floor) else {
+        return Err(projection_drift(
+            "source high-water precedes its transition floor",
+        ));
+    };
+    if count < 0 {
+        return Err(projection_drift(
+            "source high-water precedes its transition floor",
+        ));
+    }
+    Ok(count)
+}
+
+fn validate_projection_feed_integrity_seal(
+    feed_version: i64,
+    generation_floor: i64,
+    integrity_floor: i64,
+    source_high_water: i64,
+    integrity_high_water: i64,
+    transition_count: i64,
+    expected_transition_count: i64,
+) -> Result<(), RadrootsEventStoreError> {
+    if feed_version != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1)
+        || integrity_floor != generation_floor
+        || integrity_high_water != source_high_water
+        || transition_count != expected_transition_count
+    {
+        return Err(projection_drift(
+            "active addressable feed integrity seal is inconsistent",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_projection_cursor_high_water(
+    cursor_high_water: i64,
+    source_high_water: i64,
+) -> Result<(), RadrootsEventStoreError> {
+    if cursor_high_water != source_high_water {
+        return Err(projection_drift(
+            "projection cursor is not at the source high-water",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_projected_row_count(value: i64) -> Result<(), RadrootsEventStoreError> {
     if value < 0 {
         return Err(projection_drift(format!(
@@ -1234,6 +1277,45 @@ mod tests {
             projection_cursor_is_stationary(7, 7, 1),
             Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
                 if reason == "projection row count changed without a feed transition"
+        ));
+        assert_eq!(
+            projection_transition_count(11, 4).expect("bounded transition count"),
+            7,
+        );
+        for (source_high_water, generation_floor) in [(3, 4), (i64::MAX, -1)] {
+            assert!(matches!(
+                projection_transition_count(source_high_water, generation_floor),
+                Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                    if reason == "source high-water precedes its transition floor"
+            ));
+        }
+
+        let feed_version = i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1);
+        validate_projection_feed_integrity_seal(feed_version, 4, 4, 11, 11, 7, 7)
+            .expect("consistent feed seal");
+        for (label, values) in [
+            ("feed version", (feed_version + 1, 4, 4, 11, 11, 7, 7)),
+            ("integrity floor", (feed_version, 4, 5, 11, 11, 7, 7)),
+            ("integrity high-water", (feed_version, 4, 4, 11, 12, 7, 7)),
+            ("transition count", (feed_version, 4, 4, 11, 11, 8, 7)),
+        ] {
+            assert!(
+                matches!(
+                    validate_projection_feed_integrity_seal(
+                        values.0, values.1, values.2, values.3, values.4, values.5, values.6,
+                    ),
+                    Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason })
+                        if reason == "active addressable feed integrity seal is inconsistent"
+                ),
+                "{label} drift was accepted",
+            );
+        }
+
+        validate_projection_cursor_high_water(11, 11).expect("current projection cursor");
+        assert!(matches!(
+            validate_projection_cursor_high_water(10, 11),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason == "projection cursor is not at the source high-water"
         ));
     }
 }

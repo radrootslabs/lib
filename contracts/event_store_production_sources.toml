@@ -79,7 +79,7 @@ sha256 = "93129c02bf55858aa52e538ef50bf920d35719696183d339443e5c4060d2d4a3"
 
 [[sources]]
 path = "crates/event_store/src/store/food_availability_projection_v1.rs"
-sha256 = "2a41b873a628b58969638a62fb915c8b8025875adc973679ae971480e6d24c37"
+sha256 = "f14f14605fb6843d9f99e76b67202d802d0fbc9fefae1739bfc0477a6a22c96d"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_extension_capabilities.rs"
