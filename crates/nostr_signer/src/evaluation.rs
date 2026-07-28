@@ -5,7 +5,7 @@ use crate::model::{
     RadrootsNostrSignerRequestAuditRecord, RadrootsNostrSignerRequestId,
 };
 use nostr::{PublicKey, RelayUrl};
-use radroots_identity::RadrootsIdentityPublic;
+use radroots_identity::PublicIdentity;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
     RadrootsNostrConnectPermissions, RadrootsNostrConnectRemoteSessionCapability,
@@ -69,7 +69,7 @@ pub struct RadrootsNostrSignerRequestEvaluation {
 impl RadrootsNostrSignerConnectProposal {
     pub fn into_connection_draft(
         self,
-        user_identity: RadrootsIdentityPublic,
+        user_identity: PublicIdentity,
     ) -> RadrootsNostrSignerConnectionDraft {
         let mut draft =
             RadrootsNostrSignerConnectionDraft::new(self.client_public_key, user_identity)
@@ -207,14 +207,10 @@ fn sign_event_kind_suffix(value: &str) -> &str {
     value.strip_prefix("kind:").unwrap_or(value)
 }
 
-fn identity_public_key(
-    identity: &RadrootsIdentityPublic,
-) -> Result<PublicKey, RadrootsNostrSignerError> {
-    PublicKey::parse(identity.public_key_hex.as_str())
-        .or_else(|_| PublicKey::from_hex(identity.public_key_hex.as_str()))
-        .map_err(|_| {
-            RadrootsNostrSignerError::InvalidState("user identity public key is invalid".into())
-        })
+fn identity_public_key(identity: &PublicIdentity) -> Result<PublicKey, RadrootsNostrSignerError> {
+    PublicKey::from_hex(&identity.public_key().to_hex()).map_err(|_| {
+        RadrootsNostrSignerError::InvalidState("user identity public key is invalid".into())
+    })
 }
 
 #[cfg(test)]
@@ -223,16 +219,10 @@ mod tests {
     use super::*;
     use crate::test_support::{
         api_primary_https, fixture_alice_identity, fixture_alice_public_key, fixture_bob_identity,
-        fixture_carol_public_key, fixture_diego_identity, primary_relay, synthetic_public_identity,
-        synthetic_public_key,
+        fixture_carol_public_key, fixture_diego_identity, primary_relay, synthetic_public_key,
     };
     use nostr::{PublicKey, Timestamp, UnsignedEvent};
-    use radroots_identity::RadrootsIdentityPublic;
     use serde_json::json;
-
-    fn public_identity(index: u32) -> RadrootsIdentityPublic {
-        synthetic_public_identity(index)
-    }
 
     fn public_key(index: u32) -> PublicKey {
         synthetic_public_key(index)
@@ -299,7 +289,7 @@ mod tests {
         match hint {
             RadrootsNostrSignerRequestResponseHint::RemoteSessionCapability(capability) => {
                 let expected_public_key =
-                    PublicKey::parse(fixture_diego_identity().public_key_hex.as_str())
+                    PublicKey::from_hex(&fixture_diego_identity().public_key().to_hex())
                         .expect("user public key");
                 assert_eq!(
                     capability.user_public_key.to_hex(),
@@ -559,40 +549,6 @@ mod tests {
         assert_eq!(
             response_hint_for_request(&connection, &switch_relays).expect("relay hint"),
             RadrootsNostrSignerRequestResponseHint::RelayList(vec![primary_relay()])
-        );
-    }
-
-    #[test]
-    fn invalid_identity_public_key_returns_invalid_state() {
-        let mut identity = public_identity(9);
-        identity.public_key_hex = "invalid".into();
-
-        let err = identity_public_key(&identity).expect_err("invalid identity");
-        assert!(
-            err.to_string()
-                .contains("user identity public key is invalid")
-        );
-
-        let mut invalid_connection = connection();
-        invalid_connection.user_identity.public_key_hex = "invalid".into();
-        let err = response_hint_for_request(
-            &invalid_connection,
-            &RadrootsNostrConnectRequest::GetPublicKey,
-        )
-        .expect_err("invalid get_public_key response hint");
-        assert!(
-            err.to_string()
-                .contains("user identity public key is invalid")
-        );
-
-        let err = response_hint_for_request(
-            &invalid_connection,
-            &RadrootsNostrConnectRequest::GetSessionCapability,
-        )
-        .expect_err("invalid get_session_capability response hint");
-        assert!(
-            err.to_string()
-                .contains("user identity public key is invalid")
         );
     }
 }

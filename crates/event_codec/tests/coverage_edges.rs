@@ -20,7 +20,7 @@ fn assert_invalid_kind<T>(result: Result<T, EventParseError>, expected: &'static
 fn parsed_args() -> (String, String, u64, u32, String, Vec<Vec<String>>, String) {
     (
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+        "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df".to_string(),
         1,
         KIND_POST,
         String::new(),

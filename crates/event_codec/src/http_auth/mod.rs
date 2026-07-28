@@ -10,7 +10,7 @@ mod tests {
     use crate::http_auth::encode::{http_auth_build_tags, to_wire_parts, to_wire_parts_with_kind};
 
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     const EVENT_SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

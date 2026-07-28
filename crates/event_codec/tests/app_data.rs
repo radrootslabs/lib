@@ -132,7 +132,7 @@ fn app_data_metadata_and_index_from_event_roundtrip() {
     )
     .unwrap();
     assert_eq!(index.event.id_str(), EVENT_ID);
-    assert_eq!(index.event.author_str(), AUTHOR);
+    assert_eq!(index.event.author().to_hex(), AUTHOR);
     assert_eq!(index.event.created_at_u64(), 42);
     assert_eq!(index.event.kind_u32(), KIND_APP_DATA);
     assert_eq!(index.event.content(), "payload");

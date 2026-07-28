@@ -15,8 +15,8 @@ use std::{
 
 use radroots_event::{
     ids::{
-        RadrootsDTag, RadrootsEventId, RadrootsPublicKey, RadrootsTradeCandidateId,
-        RadrootsTradeId, RadrootsTradeMutationId,
+        RadrootsDTag, RadrootsEventId, RadrootsTradeCandidateId, RadrootsTradeId,
+        RadrootsTradeMutationId,
     },
     trade::{
         RADROOTS_TRADE_SCHEMA_VERSION, RadrootsSellerReservationAssertionV1,
@@ -24,6 +24,7 @@ use radroots_event::{
         RadrootsTradeMutationEnvelopeV1,
     },
 };
+use radroots_identity::PublicKey;
 #[cfg(feature = "serde_json")]
 use sha2::{Digest, Sha256};
 
@@ -202,8 +203,10 @@ pub struct RadrootsTradeProjectionV1 {
     pub reducer_version: u16,
     pub trade_id: RadrootsTradeId,
     pub root_mutation_id: Option<RadrootsTradeMutationId>,
-    pub buyer_pubkey: Option<RadrootsPublicKey>,
-    pub seller_pubkey: Option<RadrootsPublicKey>,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: Option<PublicKey>,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: Option<PublicKey>,
     pub farm_id: Option<RadrootsDTag>,
     pub negotiation_state: RadrootsTradeNegotiationStateV1,
     pub agreement_state: RadrootsTradeAgreementStateV1,
@@ -295,8 +298,10 @@ pub struct RadrootsTradeAgreementClaimV1 {
     pub claim_mutation_id: RadrootsTradeMutationId,
     pub proposal_mutation_id: RadrootsTradeMutationId,
     pub candidate_id: RadrootsTradeCandidateId,
-    pub candidate_author_pubkey: RadrootsPublicKey,
-    pub accepted_by_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub candidate_author_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub accepted_by_pubkey: PublicKey,
     pub reservation_commitment: String,
 }
 
@@ -373,7 +378,7 @@ pub enum RadrootsTradeReducerIssueV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CandidateRecord {
     proposal_mutation_id: RadrootsTradeMutationId,
-    author_pubkey: RadrootsPublicKey,
+    author_pubkey: PublicKey,
     candidate: RadrootsTradeCandidateTermsV1,
 }
 
@@ -723,7 +728,7 @@ fn apply_decision(
 fn candidate_record_author_counterparty(
     candidate_record: &CandidateRecord,
     mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> RadrootsPublicKey {
+) -> PublicKey {
     if candidate_record.author_pubkey == mutation.buyer_pubkey {
         mutation.seller_pubkey.clone()
     } else {
@@ -1086,6 +1091,7 @@ mod tests {
             RadrootsTradePrivateTermsRefV1, canonical_trade_mutation_content,
         },
     };
+    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -1095,8 +1101,13 @@ mod tests {
         core::iter::repeat_n(character, 32).collect()
     }
 
-    fn pubkey(character: char) -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(hex_64(character)).unwrap()
+    fn pubkey(character: char) -> PublicKey {
+        let public_key_hex = match character {
+            'a' => FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            'b' => FIXTURE_BOB_PUBLIC_KEY_HEX,
+            _ => panic!("unsupported fixture public key label: {character}"),
+        };
+        PublicKey::from_hex(public_key_hex).expect("fixture pubkey")
     }
 
     fn event_id(character: char) -> RadrootsEventId {
@@ -1128,7 +1139,7 @@ mod tests {
                 line_id: dtag(&format!("line-{line_suffix}")),
                 listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-{line_suffix}",
-                    hex_64('b')
+                    FIXTURE_BOB_PUBLIC_KEY_HEX
                 ))
                 .unwrap(),
                 listing_event_id: event_id('c'),

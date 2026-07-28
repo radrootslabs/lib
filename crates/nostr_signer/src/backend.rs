@@ -15,8 +15,8 @@ use crate::model::{
     RadrootsNostrSignerPublishWorkflowRecord, RadrootsNostrSignerRequestAuditRecord,
     RadrootsNostrSignerRequestDecision, RadrootsNostrSignerWorkflowId,
 };
-use nostr::{Event, PublicKey, RelayUrl, UnsignedEvent};
-use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
+use nostr::{Event, Keys, PublicKey, RelayUrl, UnsignedEvent};
+use radroots_identity::{AccountId, PublicIdentity, PublicKey as IdentityPublicKey};
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectMethod, RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
     RadrootsNostrConnectRequestMessage,
@@ -54,11 +54,11 @@ pub enum RadrootsNostrSignerPublishTransition {
 }
 
 pub trait RadrootsNostrSignerBackend: Send + Sync {
-    fn signer_identity(&self) -> Result<Option<RadrootsIdentityPublic>, RadrootsNostrSignerError>;
+    fn signer_identity(&self) -> Result<Option<PublicIdentity>, RadrootsNostrSignerError>;
 
     fn set_signer_identity(
         &self,
-        signer_identity: RadrootsIdentityPublic,
+        signer_identity: PublicIdentity,
     ) -> Result<(), RadrootsNostrSignerError>;
 
     fn capabilities(
@@ -232,7 +232,8 @@ pub trait RadrootsNostrSignerBackend: Send + Sync {
 #[derive(Clone)]
 pub struct RadrootsNostrEmbeddedSignerBackend {
     manager: RadrootsNostrSignerManager,
-    signer_identity: RadrootsIdentity,
+    signer_keys: Keys,
+    signer_identity: PublicIdentity,
 }
 
 impl RadrootsNostrSignerBackendCapabilities {
@@ -313,44 +314,43 @@ impl RadrootsNostrSignerPublishTransition {
 impl RadrootsNostrEmbeddedSignerBackend {
     pub fn new(
         manager: RadrootsNostrSignerManager,
-        signer_identity: RadrootsIdentity,
+        signer_keys: Keys,
     ) -> Result<Self, RadrootsNostrSignerError> {
-        let public_identity = signer_identity.to_public();
+        let signer_identity = public_identity_from_keys(&signer_keys)?;
         let existing_identity = manager.signer_identity()?;
         if let Some(existing_identity) = existing_identity {
-            if !same_public_identity_key(&existing_identity, &public_identity) {
+            if !same_public_identity_key(&existing_identity, &signer_identity) {
                 return Err(RadrootsNostrSignerError::InvalidState(
                     "embedded signer identity does not match signer manager identity".into(),
                 ));
             }
         } else {
-            manager.set_signer_identity(public_identity)?;
+            manager.set_signer_identity(signer_identity.clone())?;
         }
 
         Ok(Self {
             manager,
+            signer_keys,
             signer_identity,
         })
     }
 
-    pub fn new_in_memory(
-        signer_identity: RadrootsIdentity,
-    ) -> Result<Self, RadrootsNostrSignerError> {
-        Self::new(RadrootsNostrSignerManager::new_in_memory(), signer_identity)
+    pub fn new_in_memory(signer_keys: Keys) -> Result<Self, RadrootsNostrSignerError> {
+        Self::new(RadrootsNostrSignerManager::new_in_memory(), signer_keys)
     }
 
     pub fn manager(&self) -> &RadrootsNostrSignerManager {
         &self.manager
     }
 
-    pub fn local_identity(&self) -> &RadrootsIdentity {
-        &self.signer_identity
+    pub fn local_keys(&self) -> &Keys {
+        &self.signer_keys
     }
 
     fn local_signer_capability(&self) -> RadrootsNostrLocalSignerCapability {
-        let public_identity = self.signer_identity.to_public();
+        let public_identity = self.signer_identity.clone();
         RadrootsNostrLocalSignerCapability::new(
-            public_identity.id.clone(),
+            AccountId::from_public_identity(&public_identity),
             public_identity,
             RadrootsNostrLocalSignerAvailability::SecretBacked,
         )
@@ -358,13 +358,13 @@ impl RadrootsNostrEmbeddedSignerBackend {
 }
 
 impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
-    fn signer_identity(&self) -> Result<Option<RadrootsIdentityPublic>, RadrootsNostrSignerError> {
+    fn signer_identity(&self) -> Result<Option<PublicIdentity>, RadrootsNostrSignerError> {
         self.manager.signer_identity()
     }
 
     fn set_signer_identity(
         &self,
-        signer_identity: RadrootsIdentityPublic,
+        signer_identity: PublicIdentity,
     ) -> Result<(), RadrootsNostrSignerError> {
         self.manager.set_signer_identity(signer_identity)
     }
@@ -622,7 +622,7 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
         &self,
         unsigned_event: UnsignedEvent,
     ) -> Result<RadrootsNostrSignerSignOutput, RadrootsNostrSignerError> {
-        let event = unsigned_event.sign_with_keys(self.signer_identity.keys())?;
+        let event = unsigned_event.sign_with_keys(&self.signer_keys)?;
         Ok(RadrootsNostrSignerSignOutput::new(
             RadrootsNostrSignerCapability::LocalAccount(Box::new(self.local_signer_capability())),
             event,
@@ -630,10 +630,17 @@ impl RadrootsNostrSignerBackend for RadrootsNostrEmbeddedSignerBackend {
     }
 }
 
-fn same_public_identity_key(left: &RadrootsIdentityPublic, right: &RadrootsIdentityPublic) -> bool {
-    left.id == right.id
-        && left.public_key_hex == right.public_key_hex
-        && left.public_key_npub == right.public_key_npub
+fn same_public_identity_key(left: &PublicIdentity, right: &PublicIdentity) -> bool {
+    left.id() == right.id() && left.public_key() == right.public_key()
+}
+
+fn public_identity_from_keys(keys: &Keys) -> Result<PublicIdentity, RadrootsNostrSignerError> {
+    let public_key = IdentityPublicKey::from_hex(&keys.public_key().to_hex()).map_err(|error| {
+        RadrootsNostrSignerError::InvalidState(format!(
+            "embedded signer public key is invalid: {error}"
+        ))
+    })?;
+    Ok(PublicIdentity::new(public_key))
 }
 
 #[cfg(test)]
@@ -658,11 +665,11 @@ mod tests {
     };
     use crate::store::RadrootsNostrSignerStore;
     use crate::test_support::{
-        fixture_bob_identity, primary_relay, secondary_relay, synthetic_public_identity,
-        synthetic_public_key, synthetic_secret_hex,
+        fixture_bob_identity, primary_relay, secondary_relay, synthetic_keys,
+        synthetic_public_identity, synthetic_public_key,
     };
-    use nostr::{EventBuilder, EventId, Kind};
-    use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
+    use nostr::{EventBuilder, EventId, Keys, Kind};
+    use radroots_identity::{PublicIdentity, PublicKey as IdentityPublicKey};
     use radroots_nostr_connect::prelude::{
         RadrootsNostrConnectMethod, RadrootsNostrConnectPermission, RadrootsNostrConnectRequest,
         RadrootsNostrConnectRequestMessage,
@@ -672,9 +679,14 @@ mod tests {
     use std::sync::RwLock;
     use std::sync::atomic::{AtomicU8, Ordering};
 
-    fn embedded_identity(index: u32) -> RadrootsIdentity {
-        RadrootsIdentity::from_secret_key_str(synthetic_secret_hex(index).as_str())
-            .expect("identity")
+    fn embedded_identity(index: u32) -> Keys {
+        synthetic_keys(index)
+    }
+
+    fn embedded_public_identity(keys: &Keys) -> PublicIdentity {
+        PublicIdentity::new(
+            IdentityPublicKey::from_hex(&keys.public_key().to_hex()).expect("identity public key"),
+        )
     }
 
     fn expect_registration_required(
@@ -720,7 +732,7 @@ mod tests {
     }
 
     struct StubBackend {
-        signer_identity: Option<RadrootsIdentityPublic>,
+        signer_identity: Option<PublicIdentity>,
         signer_identity_error: Option<&'static str>,
         sign_error_message: Option<&'static str>,
     }
@@ -764,9 +776,7 @@ mod tests {
     }
 
     impl RadrootsNostrSignerBackend for StubBackend {
-        fn signer_identity(
-            &self,
-        ) -> Result<Option<RadrootsIdentityPublic>, RadrootsNostrSignerError> {
+        fn signer_identity(&self) -> Result<Option<PublicIdentity>, RadrootsNostrSignerError> {
             if let Some(message) = self.signer_identity_error {
                 return Err(RadrootsNostrSignerError::InvalidState(message.into()));
             }
@@ -775,7 +785,7 @@ mod tests {
 
         fn set_signer_identity(
             &self,
-            _signer_identity: RadrootsIdentityPublic,
+            _signer_identity: PublicIdentity,
         ) -> Result<(), RadrootsNostrSignerError> {
             unreachable!("set_signer_identity not used in tests")
         }
@@ -1022,11 +1032,11 @@ mod tests {
             .signer_identity()
             .expect("signer identity")
             .expect("present");
-        assert_eq!(signer_identity.id, identity.to_public().id);
+        assert_eq!(signer_identity, embedded_public_identity(&identity));
 
         let capabilities = backend.capabilities().expect("capabilities");
         let local = capabilities.local_signer.clone().expect("local signer");
-        assert_eq!(local.public_identity.id, identity.to_public().id);
+        assert_eq!(local.public_identity, embedded_public_identity(&identity));
         assert!(local.is_secret_backed());
         assert!(capabilities.remote_sessions.is_empty());
         assert_eq!(capabilities.all_signers().len(), 1);
@@ -1037,9 +1047,9 @@ mod tests {
             .expect("stored signer identity");
         assert!(same_public_identity_key(
             &manager_identity,
-            &identity.to_public()
+            &embedded_public_identity(&identity)
         ));
-        assert_eq!(backend.local_identity().public_key(), identity.public_key());
+        assert_eq!(backend.local_keys().public_key(), identity.public_key());
     }
 
     #[test]
@@ -1065,7 +1075,7 @@ mod tests {
     fn embedded_backend_accepts_matching_manager_identity_and_setter_delegate() {
         let identity = embedded_identity(0x97);
         let manager = RadrootsNostrSignerManager::new_in_memory();
-        let public_identity = identity.to_public();
+        let public_identity = embedded_public_identity(&identity);
         manager
             .set_signer_identity(public_identity.clone())
             .expect("prime manager identity");
@@ -1074,7 +1084,7 @@ mod tests {
             .expect("matching embedded backend");
         let backend_trait: &dyn RadrootsNostrSignerBackend = &backend;
 
-        assert_eq!(backend.local_identity().public_key(), identity.public_key());
+        assert_eq!(backend.local_keys().public_key(), identity.public_key());
         assert!(same_public_identity_key(
             backend_trait
                 .signer_identity()
@@ -1638,7 +1648,7 @@ mod tests {
 
         assert_eq!(output.event.pubkey, identity.public_key());
         let local = output.signer.local_account().expect("local signer");
-        assert_eq!(local.public_identity.id, identity.to_public().id);
+        assert_eq!(local.public_identity, embedded_public_identity(&identity));
         assert!(local.is_secret_backed());
     }
 
@@ -1712,9 +1722,7 @@ mod tests {
 
         let valid_identity = synthetic_public_identity(0xb2);
         assert!(same_public_identity_key(&valid_identity, &valid_identity));
-        let mut valid_identity_with_different_hex = valid_identity.clone();
-        valid_identity_with_different_hex.public_key_hex =
-            synthetic_public_identity(0xb3).public_key_hex;
+        let valid_identity_with_different_hex = synthetic_public_identity(0xb3);
         assert!(!same_public_identity_key(
             &valid_identity,
             &valid_identity_with_different_hex

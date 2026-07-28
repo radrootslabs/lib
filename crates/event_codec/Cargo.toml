@@ -17,8 +17,18 @@ name = "radroots_event_codec"
 
 [features]
 default = ["std"]
-std = ["radroots_blossom/std", "radroots_core/std", "radroots_event/std"]
-serde = ["dep:serde", "radroots_core/serde", "radroots_event/serde"]
+std = [
+  "radroots_blossom/std",
+  "radroots_core/std",
+  "radroots_event/std",
+  "radroots_identity/std",
+]
+serde = [
+  "dep:serde",
+  "radroots_core/serde",
+  "radroots_event/serde",
+  "radroots_identity/serde",
+]
 serde_json = ["serde", "dep:serde_json"]
 nostr = ["dep:nostr", "std"]
 knowledge = ["serde_json", "radroots_event/knowledge"]
@@ -29,6 +39,7 @@ contract-manifest = ["knowledge", "dep:hex", "dep:sha2"]
 radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
+radroots_identity = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }

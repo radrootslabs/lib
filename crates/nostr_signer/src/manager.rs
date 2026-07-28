@@ -19,7 +19,7 @@ use crate::model::{
 };
 use crate::store::{RadrootsNostrMemorySignerStore, RadrootsNostrSignerStore};
 use nostr::{PublicKey, RelayUrl};
-use radroots_identity::RadrootsIdentityPublic;
+use radroots_identity::PublicIdentity;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod,
     RadrootsNostrConnectPermissions, RadrootsNostrConnectRequest,
@@ -57,9 +57,7 @@ impl RadrootsNostrSignerManager {
         })
     }
 
-    pub fn signer_identity(
-        &self,
-    ) -> Result<Option<RadrootsIdentityPublic>, RadrootsNostrSignerError> {
+    pub fn signer_identity(&self) -> Result<Option<PublicIdentity>, RadrootsNostrSignerError> {
         let guard = self
             .state
             .read()
@@ -69,7 +67,7 @@ impl RadrootsNostrSignerManager {
 
     pub fn set_signer_identity(
         &self,
-        signer_identity: RadrootsIdentityPublic,
+        signer_identity: PublicIdentity,
     ) -> Result<(), RadrootsNostrSignerError> {
         validate_public_identity(&signer_identity)?;
         self.update_state(|state| {
@@ -289,11 +287,11 @@ impl RadrootsNostrSignerManager {
             if state.connections.iter().any(|record| {
                 !record.is_terminal()
                     && record.client_public_key == draft.client_public_key
-                    && record.user_identity.id == draft.user_identity.id
+                    && record.user_identity.id() == draft.user_identity.id()
             }) {
                 return Err(RadrootsNostrSignerError::ConnectionAlreadyExists {
                     client_public_key: draft.client_public_key.to_hex(),
-                    user_identity_id: draft.user_identity.id.to_string(),
+                    user_identity_id: draft.user_identity.id().to_string(),
                 });
             }
 
@@ -1026,14 +1024,7 @@ fn ensure_no_active_publish_workflow(
     Ok(())
 }
 
-fn validate_public_identity(
-    identity: &RadrootsIdentityPublic,
-) -> Result<(), RadrootsNostrSignerError> {
-    if identity.id.as_str() != identity.public_key_hex {
-        return Err(RadrootsNostrSignerError::InvalidState(
-            "public identity id does not match public key".into(),
-        ));
-    }
+fn validate_public_identity(_identity: &PublicIdentity) -> Result<(), RadrootsNostrSignerError> {
     Ok(())
 }
 
@@ -1174,13 +1165,11 @@ fn request_decision(
 }
 
 fn parse_identity_public_key(
-    identity: &RadrootsIdentityPublic,
+    identity: &PublicIdentity,
 ) -> Result<PublicKey, RadrootsNostrSignerError> {
-    PublicKey::parse(identity.public_key_hex.as_str())
-        .or_else(|_| PublicKey::from_hex(identity.public_key_hex.as_str()))
-        .map_err(|_| {
-            RadrootsNostrSignerError::InvalidState("identity public key is invalid".into())
-        })
+    PublicKey::from_hex(&identity.public_key().to_hex()).map_err(|_| {
+        RadrootsNostrSignerError::InvalidState("identity public key is invalid".into())
+    })
 }
 
 fn now_unix_secs() -> u64 {
@@ -1226,21 +1215,14 @@ mod tests {
         synthetic_public_identity, synthetic_public_key, tertiary_relay,
     };
     use nostr::{PublicKey, Timestamp, UnsignedEvent};
-    use radroots_identity::RadrootsIdentityPublic;
+    use radroots_identity::PublicIdentity;
     use radroots_nostr_connect::prelude::RadrootsNostrConnectPermission;
     use serde_json::json;
     use std::sync::Arc;
     use std::thread;
 
-    fn public_identity(index: u32) -> RadrootsIdentityPublic {
+    fn public_identity(index: u32) -> PublicIdentity {
         synthetic_public_identity(index)
-    }
-
-    fn invalid_public_identity(index: u32) -> RadrootsIdentityPublic {
-        let mut identity = public_identity(index);
-        identity.id =
-            radroots_identity::RadrootsIdentityId::parse(&public_key(0xff).to_hex()).expect("id");
-        identity
     }
 
     fn public_key(index: u32) -> PublicKey {
@@ -1369,10 +1351,8 @@ mod tests {
         .join();
     }
 
-    fn assert_same_public_identity(left: &RadrootsIdentityPublic, right: &RadrootsIdentityPublic) {
-        assert_eq!(left.id.as_str(), right.id.as_str());
-        assert_eq!(left.public_key_hex, right.public_key_hex);
-        assert_eq!(left.public_key_npub, right.public_key_npub);
+    fn assert_same_public_identity(left: &PublicIdentity, right: &PublicIdentity) {
+        assert_eq!(left, right);
     }
 
     fn assert_same_connection(
@@ -1529,7 +1509,7 @@ mod tests {
     }
 
     #[test]
-    fn set_signer_identity_validates_and_persists() {
+    fn set_signer_identity_persists_invariant_checked_value() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         let signer_identity = fixture_alice_identity();
         manager
@@ -1541,14 +1521,6 @@ mod tests {
             .expect("identity")
             .expect("loaded");
         assert_same_public_identity(&loaded, &signer_identity);
-
-        let err = manager
-            .set_signer_identity(invalid_public_identity(0x2))
-            .expect_err("invalid identity");
-        assert!(
-            err.to_string()
-                .contains("public identity id does not match public key")
-        );
     }
 
     #[test]
@@ -1672,18 +1644,6 @@ mod tests {
             duplicate_secret
                 .to_string()
                 .contains("connect secret already in use")
-        );
-
-        let invalid_user = manager
-            .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key(0x13),
-                invalid_public_identity(0x14),
-            ))
-            .expect_err("invalid user identity");
-        assert!(
-            invalid_user
-                .to_string()
-                .contains("public identity id does not match public key")
         );
     }
 
@@ -2989,41 +2949,6 @@ mod tests {
         );
         assert!(evaluation.connection.pending_request.is_none());
 
-        let (invalid_identity_eval_record, invalid_identity_eval_workflow, _) =
-            start_auth_replay_workflow(10, "req-eval-invalid-identity");
-        {
-            let mut state = manager.state.write().expect("write");
-            let pending_request = RadrootsNostrSignerPendingRequest::new(
-                request_message_with_request(
-                    "req-eval-invalid-identity",
-                    RadrootsNostrConnectRequest::GetSessionCapability,
-                ),
-                81,
-            )
-            .expect("pending request");
-            let workflow = state
-                .publish_workflows
-                .iter_mut()
-                .find(|workflow| workflow.workflow_id == invalid_identity_eval_workflow.workflow_id)
-                .expect("stored workflow");
-            workflow.pending_request = Some(pending_request.clone());
-            let record = state
-                .connections
-                .iter_mut()
-                .find(|record| record.connection_id == invalid_identity_eval_record.connection_id)
-                .expect("stored connection");
-            record.pending_request = Some(pending_request);
-            record.user_identity.public_key_hex = "invalid".into();
-        }
-        let invalid_identity_eval_err = manager
-            .evaluate_auth_replay_publish_workflow(&invalid_identity_eval_workflow.workflow_id)
-            .expect_err("invalid identity evaluate");
-        assert!(
-            invalid_identity_eval_err
-                .to_string()
-                .contains("user identity public key is invalid")
-        );
-
         let (terminal_eval_record, terminal_eval_workflow, _) =
             start_auth_replay_workflow(2, "req-eval-terminal");
         {
@@ -3455,28 +3380,6 @@ mod tests {
     }
 
     #[test]
-    fn register_connection_rejects_invalid_persisted_signer_identity() {
-        let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let state = RadrootsNostrSignerStoreState {
-            signer_identity: Some(invalid_public_identity(0x54)),
-            ..Default::default()
-        };
-        store.save(&state).expect("seed state");
-
-        let manager = RadrootsNostrSignerManager::new(store).expect("manager");
-        let err = manager
-            .register_connection(RadrootsNostrSignerConnectionDraft::new(
-                public_key(0x55),
-                public_identity(0x56),
-            ))
-            .expect_err("invalid signer identity");
-        assert!(
-            err.to_string()
-                .contains("public identity id does not match public key")
-        );
-    }
-
-    #[test]
     fn manager_reports_poisoned_state_lock() {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         poison_manager_state(&manager);
@@ -3555,8 +3458,8 @@ mod tests {
             .evaluate_connect_request(
                 public_key(0x58),
                 RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: PublicKey::parse(
-                        signer_identity.public_key_hex.as_str(),
+                    remote_signer_public_key: PublicKey::from_hex(
+                        &signer_identity.public_key().to_hex(),
                     )
                     .expect("signer public key"),
                     secret: Some("secret".into()),
@@ -3755,7 +3658,7 @@ mod tests {
         let manager = RadrootsNostrSignerManager::new_in_memory();
         let signer_identity = public_identity(0x60);
         let signer_public_key =
-            PublicKey::parse(signer_identity.public_key_hex.as_str()).expect("signer public key");
+            PublicKey::from_hex(&signer_identity.public_key().to_hex()).expect("signer public key");
         manager
             .set_signer_identity(signer_identity)
             .expect("set signer");
@@ -3929,34 +3832,6 @@ mod tests {
             existing_secret_mismatch
                 .to_string()
                 .contains("different client public key")
-        );
-
-        let store = Arc::new(RadrootsNostrMemorySignerStore::new());
-        let mut invalid_identity = public_identity(0x69);
-        invalid_identity.public_key_hex = "invalid".into();
-        let invalid_state = RadrootsNostrSignerStoreState {
-            signer_identity: Some(invalid_identity),
-            ..Default::default()
-        };
-        store
-            .save(&invalid_state)
-            .expect("save invalid signer state");
-        let invalid_manager = RadrootsNostrSignerManager::new(store).expect("invalid manager");
-        let invalid_signer_err = invalid_manager
-            .evaluate_connect_request(
-                public_key(0x70),
-                RadrootsNostrConnectRequest::Connect {
-                    remote_signer_public_key: signer_public_key,
-                    secret: None,
-                    requested_permissions: RadrootsNostrConnectPermissions::default(),
-                    client_metadata: None,
-                },
-            )
-            .expect_err("invalid signer public key");
-        assert!(
-            invalid_signer_err
-                .to_string()
-                .contains("identity public key is invalid")
         );
     }
 
@@ -4176,25 +4051,5 @@ mod tests {
         )
         .expect_err("invalid pending request");
         assert!(invalid_pending.to_string().contains("invalid request id"));
-
-        let mut invalid_user_record = RadrootsNostrSignerConnectionRecord::new(
-            RadrootsNostrSignerConnectionId::new_v7(),
-            public_identity(0x87),
-            RadrootsNostrSignerConnectionDraft::new(public_key(0x88), public_identity(0x89)),
-            1,
-        );
-        invalid_user_record.status = RadrootsNostrSignerConnectionStatus::Active;
-        invalid_user_record.user_identity.public_key_hex = "invalid".into();
-        let response_hint_err = evaluate_request_action(
-            &mut invalid_user_record,
-            &request_message_with_request("req-get", RadrootsNostrConnectRequest::GetPublicKey),
-            1,
-        )
-        .expect_err("invalid response hint");
-        assert!(
-            response_hint_err
-                .to_string()
-                .contains("user identity public key is invalid")
-        );
     }
 }

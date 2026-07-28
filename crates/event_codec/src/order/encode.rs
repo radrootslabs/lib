@@ -13,6 +13,8 @@ use radroots_event::{
 use crate::{error::EventEncodeError, order::tags::order_envelope_tags};
 #[cfg(feature = "serde_json")]
 use radroots_event::wire::RadrootsNip01EventWireParts;
+#[cfg(feature = "serde_json")]
+use radroots_identity::PublicKey;
 
 #[cfg(feature = "serde_json")]
 fn map_order_envelope_error(error: RadrootsOrderEnvelopeError) -> EventEncodeError {
@@ -75,7 +77,7 @@ fn map_order_payload_error(error: RadrootsOrderPayloadError) -> EventEncodeError
 
 #[cfg(feature = "serde_json")]
 struct OrderEnvelopeEventBuildParts<'a, T> {
-    recipient_pubkey: &'a str,
+    recipient_pubkey: &'a PublicKey,
     message_type: RadrootsOrderEventType,
     listing_addr: &'a str,
     order_id: &'a str,
@@ -110,7 +112,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
     envelope.validate().map_err(map_order_envelope_error)?;
     let content = serde_json::to_string(&envelope).map_err(|_| EventEncodeError::Json)?;
     let tags = order_envelope_tags(
-        parts.recipient_pubkey,
+        &parts.recipient_pubkey.to_hex(),
         parts.listing_addr,
         Some(parts.order_id),
         parts.listing_event,
@@ -192,6 +194,9 @@ mod tests {
         ids::RadrootsEventId,
         order::{RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError},
     };
+    use radroots_identity::PublicKey;
+
+    const RECIPIENT: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
     fn event_id(character: char) -> RadrootsEventId {
         core::iter::repeat_n(character, 64)
@@ -307,11 +312,12 @@ mod tests {
     #[test]
     fn order_envelope_event_build_requires_context_tags_by_message_type() {
         let payload = payload();
+        let recipient_pubkey = PublicKey::from_hex(RECIPIENT).expect("recipient public key");
         let root_event_id = event_id('1');
         let prev_event_id = event_id('2');
 
         let missing_listing_event = order_envelope_event_build(OrderEnvelopeEventBuildParts {
-            recipient_pubkey: "recipient",
+            recipient_pubkey: &recipient_pubkey,
             message_type: RadrootsOrderEventType::OrderRequested,
             listing_addr: "listing-address",
             order_id: "order-1",
@@ -324,7 +330,7 @@ mod tests {
         assert_empty_required(missing_listing_event, "listing_event.id");
 
         let missing_root = order_envelope_event_build(OrderEnvelopeEventBuildParts {
-            recipient_pubkey: "recipient",
+            recipient_pubkey: &recipient_pubkey,
             message_type: RadrootsOrderEventType::OrderDecision,
             listing_addr: "listing-address",
             order_id: "order-1",
@@ -337,7 +343,7 @@ mod tests {
         assert_empty_required(missing_root, "root_event_id");
 
         let missing_prev = order_envelope_event_build(OrderEnvelopeEventBuildParts {
-            recipient_pubkey: "recipient",
+            recipient_pubkey: &recipient_pubkey,
             message_type: RadrootsOrderEventType::OrderDecision,
             listing_addr: "listing-address",
             order_id: "order-1",
@@ -350,7 +356,7 @@ mod tests {
         assert_empty_required(missing_prev, "prev_event_id");
 
         let invalid_listing_event = order_envelope_event_build(OrderEnvelopeEventBuildParts {
-            recipient_pubkey: "recipient",
+            recipient_pubkey: &recipient_pubkey,
             message_type: RadrootsOrderEventType::OrderRequested,
             listing_addr: "listing-address",
             order_id: "order-1",

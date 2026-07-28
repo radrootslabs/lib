@@ -81,7 +81,7 @@ pub(crate) fn raw_source_capacity_delta_v1(
     let event = ingest.event();
     let raw_event_bytes = raw_event_row_bytes_v1(
         event.id_str(),
-        event.author_str(),
+        &event.author().to_hex(),
         tags_json,
         event.content(),
         event.sig_str(),

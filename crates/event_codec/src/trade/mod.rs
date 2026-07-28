@@ -121,7 +121,7 @@ fn validate_trade_mutation_tags(
         return Err(RadrootsTradeMutationParseError::TradeIdTagMismatch);
     }
     let counterparty = required_tag_value(tags, "p")?;
-    if counterparty != envelope.counterparty_pubkey.as_str() {
+    if counterparty != envelope.counterparty_pubkey.to_hex() {
         return Err(RadrootsTradeMutationParseError::CounterpartyTagMismatch);
     }
     let mut parents = Vec::new();
@@ -216,7 +216,7 @@ mod tests {
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         ids::{
             RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId,
-            RadrootsInventoryBinId, RadrootsPublicKey, RadrootsTradeId,
+            RadrootsInventoryBinId, RadrootsTradeId,
         },
         trade::{
             RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
@@ -226,6 +226,7 @@ mod tests {
             RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1,
         },
     };
+    use radroots_identity::PublicKey;
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -235,8 +236,8 @@ mod tests {
         core::iter::repeat_n(character, 32).collect()
     }
 
-    fn pubkey(character: char) -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(hex_64(character)).unwrap()
+    fn pubkey(character: char) -> PublicKey {
+        PublicKey::from_hex(&crate::test_fixtures::fixture_public_key_hex(character)).unwrap()
     }
 
     fn event_id(character: char) -> RadrootsEventId {
@@ -276,7 +277,7 @@ mod tests {
                 line_id: RadrootsDTag::parse("line-1").unwrap(),
                 listing_addr: RadrootsClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-1",
-                    hex_64('b')
+                    pubkey('b').to_hex()
                 ))
                 .unwrap(),
                 listing_event_id: event_id('c'),
@@ -340,7 +341,7 @@ mod tests {
         let envelope = trade_mutation_from_event(
             &RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
                 id: hex_64('e'),
-                author: hex_64('a'),
+                author: pubkey('a').to_hex(),
                 created_at: 1_799_000_000,
                 kind: parts.kind,
                 tags: parts.tags,
@@ -401,7 +402,7 @@ mod tests {
         *tags
             .iter_mut()
             .find(|tag| tag.first().map(String::as_str) == Some("p"))
-            .unwrap() = vec!["p".into(), hex_64('c')];
+            .unwrap() = vec!["p".into(), pubkey('c').to_hex()];
         assert_eq!(
             validate_trade_mutation_tags(&proposal(), &tags).unwrap_err(),
             RadrootsTradeMutationParseError::CounterpartyTagMismatch
@@ -454,7 +455,7 @@ mod tests {
         let built = trade_mutation_event_build(proposal()).unwrap();
         let invalid_kind = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: hex_64('e'),
-            author: hex_64('a'),
+            author: pubkey('a').to_hex(),
             created_at: 1_799_000_000,
             kind: 1,
             tags: built.tags.clone(),
@@ -469,7 +470,7 @@ mod tests {
 
         let kind_contract_mismatch = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: hex_64('e'),
-            author: hex_64('a'),
+            author: pubkey('a').to_hex(),
             created_at: 1_799_000_000,
             kind: radroots_event::kinds::KIND_TRADE_DECISION,
             tags: built.tags,

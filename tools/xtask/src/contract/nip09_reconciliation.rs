@@ -215,11 +215,11 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_CARGO_MANIFEST_RELATIVE,
-        "6e21eb3a0e276ed96ee42d557794097c87e51c928c5ba78e63986cea4f704105",
+        "543b11b38bb0e3c6074f478cede97cb48f901b3bea0ffa1cc4b8e4a3777509b3",
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
-        "e135922812764cff3d3552bee4f953fa827b9a593d00fda081e93f6dc04c860d",
+        "9510aa7a69335ef72bdeb76e048b17e8de044bf9d75847f09e01e3f37cca99f1",
     ),
     (
         BLOSSOM_CARGO_MANIFEST_RELATIVE,
@@ -227,7 +227,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_STORE_CARGO_MANIFEST_RELATIVE,
-        "3f34cc54eebaad1ae414905a5376bc3e4eb97369bab62479f365c40c26743531",
+        "8ecd900f34ea701429e326911dff0ed49364b4b5aee654ee9f68b0c1e1bf7cbf",
     ),
     (
         TRANSPORT_CARGO_MANIFEST_RELATIVE,
@@ -235,7 +235,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "2652382f63714f1f9fb6518c051c16b9b0ee775634b2c7b7b066e5e56ed60dd5",
+        "3c7294555fa6b99fe9cf4d50d3bdfd8c4709abd5a75ce80bdf2cdfb6fdc059ef",
     ),
 ];
 
@@ -301,8 +301,8 @@ const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 11] = [
     },
     ImmutableArtifactSpec {
         relative: RESULT_VECTOR_EXECUTOR_RELATIVE,
-        byte_length: 18_446,
-        sha256: "ca2a2bf54062aa6ddf2e553fd624c7217a01ad56309487ce73fa58c47c06c208",
+        byte_length: 18_451,
+        sha256: "9e9cc8d2f2382da6c73e78d73d41015559a5a3649b797cce13d7aafa9bbcc8d7",
     },
     ImmutableArtifactSpec {
         relative: MIGRATION_V1_UP_RELATIVE,
@@ -2495,10 +2495,15 @@ pub(super) fn validate_nip09_predecessor_production_sources_under_lock(
             })
             .collect::<Vec<_>>();
         if current_impls != expected_impls {
-            return Err(
-                "unchanged predecessor impl-resolution authority drifted from the immutable manifest"
-                    .to_owned(),
-            );
+            let expected_set = expected_impls.iter().collect::<BTreeSet<_>>();
+            let current_set = current_impls.iter().collect::<BTreeSet<_>>();
+            let drifted_paths = expected_set
+                .symmetric_difference(&current_set)
+                .map(|item| item.path.as_str())
+                .collect::<BTreeSet<_>>();
+            return Err(format!(
+                "unchanged predecessor impl-resolution authority drifted from the immutable manifest at {drifted_paths:?}"
+            ));
         }
     }
 
@@ -12747,7 +12752,7 @@ fn validate_source_maintenance_runtime_token_authority(
     workspace_root: &Path,
 ) -> Result<(), String> {
     const SOURCE_RUNTIME_AST_SHA256: &str =
-        "181576a5de365cf664b8a87091c30b0389ce0be90e7d1cc16fd7170342f6c2bc";
+        "c52b1acee9261d45590d8b443f10ad4fdd539fa8d6227e4ca8bc09c593c4c2b6";
     const FUNCTION_SPECS: [(&str, &str, &str); 4] = [
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,

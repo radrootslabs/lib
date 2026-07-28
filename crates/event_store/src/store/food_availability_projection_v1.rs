@@ -17,11 +17,12 @@ use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
 use radroots_event::food_availability::RadrootsFoodIdentifier;
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsFoodAvailabilityProjectionOutcome,
     project_verified_food_availability_event_registry_v7,
 };
+use radroots_identity::PublicKey;
 use serde::Deserialize;
 use sqlx::{Row, SqliteConnection};
 
@@ -50,13 +51,13 @@ struct FoodAvailabilityProjectionCursorState {
 impl RadrootsEventStore {
     pub async fn food_availability_v1(
         &self,
-        pubkey: &RadrootsPublicKey,
+        pubkey: &PublicKey,
         identifier: &RadrootsFoodIdentifier,
     ) -> Result<Option<RadrootsStoredFoodAvailabilityV1>, RadrootsEventStoreError> {
         let mut tx = self.pool.begin().await?;
         validate_food_availability_projection_hook_state_fast_v1(&mut tx).await?;
         let row = sqlx::query(FOOD_AVAILABILITY_POINT_QUERY_V1)
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .bind(identifier.as_str())
             .fetch_optional(&mut *tx)
             .await?;
@@ -335,7 +336,7 @@ async fn apply_transition(
         "SELECT event_id FROM radroots_event_store_food_availability_projection WHERE source_generation = ? AND pubkey = ? AND d_tag = ?",
     )
     .bind(transition.source_generation().as_bytes().as_slice())
-    .bind(coordinate.pubkey().as_str())
+    .bind(coordinate.pubkey().to_hex())
     .bind(coordinate.d_tag())
     .fetch_optional(&mut *connection)
     .await?;
@@ -349,7 +350,7 @@ async fn apply_transition(
                 "DELETE FROM radroots_event_store_food_availability_projection WHERE source_generation = ? AND pubkey = ? AND d_tag = ? AND event_id = ?",
             )
             .bind(transition.source_generation().as_bytes().as_slice())
-            .bind(coordinate.pubkey().as_str())
+            .bind(coordinate.pubkey().to_hex())
             .bind(coordinate.d_tag())
             .bind(retracted.event_id().as_str())
             .execute(&mut *connection)
@@ -404,7 +405,7 @@ async fn apply_transition(
         };
     let event = ingest.event();
     if canonical.event_id().as_str() != event.id_str()
-        || canonical.pubkey().as_str() != event.author_str()
+        || canonical.pubkey() != event.author()
         || canonical.created_at() != event.created_at_u64()
         || canonical.kind() != event.kind_u32()
     {
@@ -440,7 +441,7 @@ async fn persist_projection(
         "INSERT INTO radroots_event_store_food_availability_projection(source_generation, kind, pubkey, d_tag, event_id, event_seq, created_at, contract_id, content, title, summary, published_at, location, price_amount, price_currency, price_unit, quantity_amount, quantity_unit, status, diagnostic_codes_json, source_transition_seq) VALUES (?, 30402, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(projection.source_generation().as_bytes().as_slice())
-    .bind(projection.pubkey().as_str())
+    .bind(projection.pubkey().to_hex())
     .bind(projection.identifier().as_str())
     .bind(projection.event_id().as_str())
     .bind(projection.event_seq())
@@ -487,7 +488,7 @@ async fn persist_image(
         "INSERT INTO radroots_event_store_food_availability_image(source_generation, pubkey, d_tag, image_index, raw_tag_json, url, width, height, blossom_sha256, qualifies, diagnostic_codes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(projection.source_generation().as_bytes().as_slice())
-    .bind(projection.pubkey().as_str())
+    .bind(projection.pubkey().to_hex())
     .bind(projection.identifier().as_str())
     .bind(i64::from(image.image_index()))
     .bind(raw_tag_json)
@@ -525,7 +526,7 @@ pub(crate) async fn validate_food_availability_projection_hook_v1(
         validate_projection_source_transition(connection, &projection).await?;
         validate_fts_row(connection, &projection).await?;
         actual_coordinates.push((
-            projection.pubkey().as_str().to_owned(),
+            projection.pubkey().to_hex(),
             projection.identifier().as_str().to_owned(),
             projection.event_id().as_str().to_owned(),
             projection.event_seq(),
@@ -594,7 +595,7 @@ async fn validate_projection_source_transition(
     )
     .bind(projection.source_transition_seq())
     .bind(projection.source_generation().as_bytes().as_slice())
-    .bind(projection.pubkey().as_str())
+    .bind(projection.pubkey().to_hex())
     .bind(projection.identifier().as_str())
     .bind(projection.event_id().as_str())
     .bind(projection.event_seq())
@@ -702,7 +703,7 @@ fn load_and_validate_projection_row(
         row.try_get("source_generation")?,
         "stored projection generation is invalid",
     )?;
-    let pubkey = RadrootsPublicKey::parse(row.try_get::<String, _>("pubkey")?.as_str())
+    let pubkey = PublicKey::from_hex(row.try_get::<String, _>("pubkey")?.as_str())
         .map_err(|error| projection_drift(format!("stored pubkey is invalid: {error}")))?;
     let event_id = RadrootsEventId::parse(row.try_get::<String, _>("event_id")?.as_str())
         .map_err(|error| projection_drift(format!("stored event id is invalid: {error}")))?;
@@ -714,7 +715,7 @@ fn load_and_validate_projection_row(
     let ingest = RadrootsEventIngest::from_raw_json(raw_json, 0)
         .map_err(|error| projection_drift(format!("projected event reverify failed: {error}")))?;
     if ingest.event().id_str() != event_id.as_str()
-        || ingest.event().author_str() != pubkey.as_str()
+        || ingest.event().author() != &pubkey
         || ingest.event().created_at_u64() != created_at
         || ingest.event().kind_u32() != 30_402
     {
@@ -870,7 +871,7 @@ async fn validate_fts_row(
     .await?
     .ok_or_else(|| projection_drift("FoodAvailability FTS row is missing"))?;
     if row.try_get::<String, _>("event_id")? != projection.event_id().as_str()
-        || row.try_get::<String, _>("pubkey")? != projection.pubkey().as_str()
+        || row.try_get::<String, _>("pubkey")? != projection.pubkey().to_hex()
         || row.try_get::<String, _>("d_tag")? != projection.identifier().as_str()
         || row.try_get::<String, _>("title")? != projection.title().as_str()
         || row.try_get::<String, _>("summary")? != projection.summary().as_str()

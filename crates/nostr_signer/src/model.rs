@@ -1,7 +1,7 @@
 use crate::error::RadrootsNostrSignerError;
 use hex::encode as hex_encode;
 use nostr::{PublicKey, RelayUrl};
-use radroots_identity::RadrootsIdentityPublic;
+use radroots_identity::PublicIdentity;
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
     RadrootsNostrConnectPermissions, RadrootsNostrConnectRequestMessage,
@@ -120,7 +120,7 @@ pub struct RadrootsNostrSignerPermissionGrant {
 #[derive(Debug, Clone)]
 pub struct RadrootsNostrSignerConnectionDraft {
     pub client_public_key: PublicKey,
-    pub user_identity: RadrootsIdentityPublic,
+    pub user_identity: PublicIdentity,
     pub connect_secret: Option<String>,
     pub client_metadata: Option<RadrootsNostrConnectClientMetadata>,
     pub requested_permissions: RadrootsNostrConnectPermissions,
@@ -132,8 +132,8 @@ pub struct RadrootsNostrSignerConnectionDraft {
 pub struct RadrootsNostrSignerConnectionRecord {
     pub connection_id: RadrootsNostrSignerConnectionId,
     pub client_public_key: PublicKey,
-    pub signer_identity: RadrootsIdentityPublic,
-    pub user_identity: RadrootsIdentityPublic,
+    pub signer_identity: PublicIdentity,
+    pub user_identity: PublicIdentity,
     #[serde(
         default,
         alias = "connect_secret",
@@ -197,7 +197,7 @@ pub struct RadrootsNostrSignerPublishWorkflowRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrSignerStoreState {
     pub version: u32,
-    pub signer_identity: Option<RadrootsIdentityPublic>,
+    pub signer_identity: Option<PublicIdentity>,
     pub connections: Vec<RadrootsNostrSignerConnectionRecord>,
     pub audit_records: Vec<RadrootsNostrSignerRequestAuditRecord>,
     #[serde(default)]
@@ -456,7 +456,7 @@ impl RadrootsNostrSignerPermissionGrant {
 }
 
 impl RadrootsNostrSignerConnectionDraft {
-    pub fn new(client_public_key: PublicKey, user_identity: RadrootsIdentityPublic) -> Self {
+    pub fn new(client_public_key: PublicKey, user_identity: PublicIdentity) -> Self {
         Self {
             client_public_key,
             user_identity,
@@ -506,7 +506,7 @@ impl RadrootsNostrSignerConnectionDraft {
 impl RadrootsNostrSignerConnectionRecord {
     pub fn new(
         connection_id: RadrootsNostrSignerConnectionId,
-        signer_identity: RadrootsIdentityPublic,
+        signer_identity: PublicIdentity,
         draft: RadrootsNostrSignerConnectionDraft,
         created_at_unix: u64,
     ) -> Self {
@@ -771,12 +771,12 @@ mod tests {
         primary_relay, synthetic_public_identity, synthetic_public_key,
     };
     use nostr::PublicKey;
-    use radroots_identity::RadrootsIdentityPublic;
+    use radroots_identity::PublicIdentity;
     use serde_json::json;
     use std::str::FromStr;
     use tempfile::tempdir;
 
-    fn public_identity(index: u32) -> RadrootsIdentityPublic {
+    fn public_identity(index: u32) -> PublicIdentity {
         synthetic_public_identity(index)
     }
 

@@ -1009,7 +1009,7 @@ fn ensure_raw_event_matches_signed_event(
         (
             "pubkey",
             event.pubkey.to_hex(),
-            signed_event.pubkey_str().to_owned(),
+            signed_event.pubkey().to_hex().to_owned(),
         ),
         (
             "created_at",

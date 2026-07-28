@@ -5,7 +5,7 @@
   "manifest_schema": {
     "path": "crates/event_store/contracts/source_maintenance_v1.manifest.schema.json",
     "byte_length": 12315,
-    "sha256": "ad4a6c8ae9488fc8033792bc6952af04687f312901c1847d8c668a62913bb642",
+    "sha256": "96ea98a5abf3348b61565954cd34f2c622411d8dd34205ef04134bbe0e3d3f2b",
     "hash_algorithm": "sha256_bytes_v1"
   },
   "predecessor": {
@@ -13,7 +13,7 @@
     "manifest": {
       "path": "crates/event_store/contracts/food_availability_projection_v1.manifest.json",
       "byte_length": 17455,
-      "sha256": "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+      "sha256": "02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990",
       "hash_algorithm": "sha256_bytes_v1"
     }
   },
@@ -23,7 +23,7 @@
     "up": {
       "path": "crates/event_store/migrations/0004_source_maintenance.up.sql",
       "byte_length": 19841,
-      "sha256": "425dc799f392b87f265a6fb81f89c4a1c7a5db8391ab0380970708cb9c66704d",
+      "sha256": "ab2724188f8d08c897eebea2533a635e7c74282a25e84e4c0c37e78b08837a43",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "down": {
@@ -32,7 +32,7 @@
       "sha256": "fe44fd53c51545c08ea479b385e6781079dab70fc63da2a3c205d727a00ce860",
       "hash_algorithm": "sha256_bytes_v1"
     },
-    "schema_sha256": "d526d96ea02be12b4b0aed99e97cfdde17c4474ace67111506a7b900ee78b186",
+    "schema_sha256": "074f85b663444ac150239ecd8441ea4a96ad83a798a55e22d2e5e2f7ee943a8c",
     "catalog": {
       "objects": [
         "radroots_event_store_source_capacity_delete_guard",
@@ -96,7 +96,7 @@
       "nip09_hook_id": "nip09_reconciliation_v1",
       "nip09_manifest_sha256": "74af832420ffbaa9805e89df3c0b34f126a443e1598f757e3372f407f9003b77",
       "food_hook_id": "food_availability_projection_v1",
-      "food_manifest_sha256": "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+      "food_manifest_sha256": "02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990",
       "food_scope_fingerprint_sha256": "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0",
       "active_generation_authority": "radroots_event_store_source_state",
       "marker_close_authority": "radroots_event_store_source_capacity_marker_close_guard"
@@ -206,10 +206,297 @@
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
+      "role": "blossom_hash_authority",
+      "path": "crates/blossom/src/hash.rs",
+      "byte_length": 11251,
+      "sha256": "753eff6ef9a810045c88839d39a46b37d62a4ad0a5ea57aa30e2a8219e3cdbda",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "blossom_url_authority",
+      "path": "crates/blossom/src/url.rs",
+      "byte_length": 15364,
+      "sha256": "05325325da6627ba48318851fb4e61a9ad540aad37fc1c27ac9a47f27300891f",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_contract_facade",
+      "path": "crates/event/src/contract.rs",
+      "byte_length": 86,
+      "sha256": "9994cbca9dcc7450ad133b6b927e7c06bee08ef813652452cc1e56a284c1be10",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_contract_registry_v7_authority",
+      "path": "crates/event/src/contract/registry_v7.rs",
+      "byte_length": 155788,
+      "sha256": "6305e487a6d51c0b04ad5620f28530d550e81b28152406cd5f224563ecd72f5c",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_envelope_authority",
+      "path": "crates/event/src/envelope.rs",
+      "byte_length": 31165,
+      "sha256": "97a3bb38d630666bba497b98e856ee457d6899de230dabf6cab786a5bd55a3ce",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_head_facade",
+      "path": "crates/event/src/event_head.rs",
+      "byte_length": 68,
+      "sha256": "cb52f6006f7ecd862707d6b048f9fc407e0cd5ebcd3091b3c54e195ffa5cba64",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_head_v1_authority",
+      "path": "crates/event/src/event_head/v1.rs",
+      "byte_length": 7529,
+      "sha256": "0a4b50c4b7a93e9d88cc995cf69d9e87b341cba66d7feb51c357dfa4e5b2de37",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_ids_authority",
+      "path": "crates/event/src/ids.rs",
+      "byte_length": 46282,
+      "sha256": "f3c34e7dcf09fc225cb9c12f02ae932d5155c859f73f8b8573db8e5ebf298678",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_trade_authority",
+      "path": "crates/event/src/trade.rs",
+      "byte_length": 68376,
+      "sha256": "1012b44295cb26844206304bc24b355a49c18a023844f6b3905337c63b1417a7",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_kinds_authority",
+      "path": "crates/event/src/kinds.rs",
+      "byte_length": 34961,
+      "sha256": "8b3ce6193cab1f7e1587d0c1b2880a81b0aa43c77d89671b602772db37edcebf",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_tags_authority",
+      "path": "crates/event/src/tags.rs",
+      "byte_length": 4530,
+      "sha256": "cb8f12a639fc72d9238e32495d9e67e928e6627fb8c94ec0a58c5d95e7373cd6",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_draft_authority",
+      "path": "crates/event/src/draft.rs",
+      "byte_length": 58674,
+      "sha256": "fa4e802f1143eba72ba7fc334104ea0d6613c886725ff9f3e61dab2443c243b6",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_calendar_authority",
+      "path": "crates/event/src/calendar.rs",
+      "byte_length": 103969,
+      "sha256": "94e07896e8cf3486b55becf2a64be72a5129625bd52a86e70e2a4b273fcf20e5",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_classified_listing_authority",
+      "path": "crates/event/src/classified_listing.rs",
+      "byte_length": 8226,
+      "sha256": "745aa08953a6243ea1afad22aa63e44f6746f2f243ab0d6b617d6ab64fa58749",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_profile_authority",
+      "path": "crates/event/src/profile.rs",
+      "byte_length": 19061,
+      "sha256": "f2b03be027aea187645e8bc3ae7a7d4004d6e58d4e1b361b35786ccdc36d907a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_post_authority",
+      "path": "crates/event/src/post.rs",
+      "byte_length": 22813,
+      "sha256": "d4a573cf2510f3a261f6aac3efd16489591281cdbdb387af5a7d67f516e1e056",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_comment_authority",
+      "path": "crates/event/src/comment.rs",
+      "byte_length": 36375,
+      "sha256": "f4d1a57780eff0d315bc4e2fbad316dfb7c7ced1bcc9e8e85afe0b5ecdaf3aa8",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_food_availability_authority",
+      "path": "crates/event/src/food_availability.rs",
+      "byte_length": 45680,
+      "sha256": "1c8c3fba6514f9b246545b3305e8ac2742258857d1b813fa34c5fbefa6135e12",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_deletion_authority",
+      "path": "crates/event/src/deletion.rs",
+      "byte_length": 31155,
+      "sha256": "c8b7ab79998ae62e03497f5511dd3950a41d73155edda3d8d34c65fc797e9d09",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_relay_hint_authority",
+      "path": "crates/event/src/relay_hint.rs",
+      "byte_length": 14317,
+      "sha256": "1a14aea5d2f2620970dc1de9e3d311d9042cab4d5805a56461548168112a0801",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_media_authority",
+      "path": "crates/event/src/media.rs",
+      "byte_length": 3821,
+      "sha256": "ca98ddb134cb522912900544080d910867398d6aff6e8c6b061dc1fb77212ec3",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_social_authority",
+      "path": "crates/event/src/social.rs",
+      "byte_length": 5483,
+      "sha256": "1b89c6d0954822e7f1e778479ed43694e88929bcd5310ee066f8f4ba6505045a",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_wire_facade",
+      "path": "crates/event/src/wire.rs",
+      "byte_length": 68,
+      "sha256": "cb52f6006f7ecd862707d6b048f9fc407e0cd5ebcd3091b3c54e195ffa5cba64",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_wire_v1_authority",
+      "path": "crates/event/src/wire/v1.rs",
+      "byte_length": 22133,
+      "sha256": "cc28c8cbd962b32ed2efe43e84c1e0d1ea3bd89636efff2d5553714072fce1a4",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_verification_facade",
+      "path": "crates/event_codec/src/verification.rs",
+      "byte_length": 253,
+      "sha256": "b49a32df605035c87f295c0a151140d43d2e588c5e11b05183e5fc92993dae0e",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_verification_v1_authority",
+      "path": "crates/event_codec/src/verification/v1.rs",
+      "byte_length": 8751,
+      "sha256": "fc4c5d45e475151c56330ba9c4db70de603e4ec48adabd6365f80d5f6a3733f4",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_registry_v7_admission_authority",
+      "path": "crates/event_codec/src/admission/registry_v7.rs",
+      "byte_length": 5350,
+      "sha256": "755e63dd7ad1115c219e5a3ea540bef67d2770fc9f2a5aa6ba97c925c99bdced",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_profile_inbound_facade",
+      "path": "crates/event_codec/src/profile/inbound.rs",
+      "byte_length": 86,
+      "sha256": "9994cbca9dcc7450ad133b6b927e7c06bee08ef813652452cc1e56a284c1be10",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_profile_registry_v7_authority",
+      "path": "crates/event_codec/src/profile/inbound/registry_v7.rs",
+      "byte_length": 10394,
+      "sha256": "c37c225ea8153beb098a39c4a56203aa03382af12646f40cd3f8628663700702",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_post_inbound_facade",
+      "path": "crates/event_codec/src/post/inbound.rs",
+      "byte_length": 86,
+      "sha256": "9994cbca9dcc7450ad133b6b927e7c06bee08ef813652452cc1e56a284c1be10",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_post_registry_v7_authority",
+      "path": "crates/event_codec/src/post/inbound/registry_v7.rs",
+      "byte_length": 16016,
+      "sha256": "bc0bb839c28f3588f05544c846c987528ea3934c75305fef70af8e027a97cc58",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_reply_inbound_facade",
+      "path": "crates/event_codec/src/reply/inbound.rs",
+      "byte_length": 86,
+      "sha256": "9994cbca9dcc7450ad133b6b927e7c06bee08ef813652452cc1e56a284c1be10",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_reply_registry_v7_authority",
+      "path": "crates/event_codec/src/reply/inbound/registry_v7.rs",
+      "byte_length": 26820,
+      "sha256": "d49a950c25e36fc145ce9f1762ae345c028e6f2834b63795603741bbe365c3c8",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_comment_inbound_facade",
+      "path": "crates/event_codec/src/comment/inbound.rs",
+      "byte_length": 86,
+      "sha256": "9994cbca9dcc7450ad133b6b927e7c06bee08ef813652452cc1e56a284c1be10",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_comment_registry_v7_authority",
+      "path": "crates/event_codec/src/comment/inbound/registry_v7.rs",
+      "byte_length": 53783,
+      "sha256": "30d1b0155963b25d64685ddd042f423ef7707b111dc56ead15bd468e0433a432",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_deletion_facade",
+      "path": "crates/event_codec/src/deletion/mod.rs",
+      "byte_length": 115,
+      "sha256": "17d56f82ddb0a86bc97abbcf3e037fe460ea31fff2548f527be4bf004dac3a95",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_deletion_reconciliation_v1_authority",
+      "path": "crates/event_codec/src/deletion/reconciliation_v1.rs",
+      "byte_length": 38469,
+      "sha256": "3e06d1fa923ca5faabb1e95338c35650b0e20b078ff5c972e35ab845d8b7476c",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_food_inbound_facade",
+      "path": "crates/event_codec/src/food_availability/inbound.rs",
+      "byte_length": 86,
+      "sha256": "9994cbca9dcc7450ad133b6b927e7c06bee08ef813652452cc1e56a284c1be10",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_food_registry_v7_authority",
+      "path": "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+      "byte_length": 26865,
+      "sha256": "908015346eaec97bee6f44fe2a524410b701529ac19a5dab4505706d40d527da",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_codec_job_traits_authority",
+      "path": "crates/event_codec/src/job/traits.rs",
+      "byte_length": 5029,
+      "sha256": "353df3703de4d99fc318474952dc6c95cbce9a19756f3e235ed2d715f36c4364",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_store_dependency_authority",
+      "path": "crates/event_store/Cargo.toml",
+      "byte_length": 1569,
+      "sha256": "30f43004bcf0ffa9b9b6f338cba8c56be0265bc1cee708e93f7b7dc54ed60f9c",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
       "role": "event_store_error_and_limits",
       "path": "crates/event_store/src/error.rs",
-      "byte_length": 19421,
-      "sha256": "4772e041cb20a4963afb2f3159804c777e2f2be61bfdb6ee267e7a7c04258972",
+      "byte_length": 19517,
+      "sha256": "4bf24ee1aa6117597ab467b1379a05549b79024213dc7622a2d276bc26fffab4",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -236,15 +523,43 @@
     {
       "role": "predecessor_model_public_surface",
       "path": "crates/event_store/src/model.rs",
-      "byte_length": 33617,
-      "sha256": "79296b8f263aa06d17005795e4515f769f064ea6fd971eeb1296e1151debaf20",
+      "byte_length": 33596,
+      "sha256": "98b1742ffb517f66f8e9edefa61d1c3cf3e22be5985202c6c340310a98c72c8e",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_store_reconciliation_v1_model",
+      "path": "crates/event_store/src/model/reconciliation_v1.rs",
+      "byte_length": 11138,
+      "sha256": "8a26bc373035878ef9b41767ceea7b681896e17d88bedce118de1d622125e1d6",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "event_store_reconciliation_v1_ingest_model",
+      "path": "crates/event_store/src/model/ingest_reconciliation_v1.rs",
+      "byte_length": 1626,
+      "sha256": "47bf13b3fc0f8a913a660f7d655413de0f6b90568bc4acc510aa6bd741bab47b",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "addressable_transition_feed_model",
+      "path": "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+      "byte_length": 22279,
+      "sha256": "f8ea454a0e998a3d433bba52d1ff9759a04fcb91db286cf2a2b10ef7d0057694",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "food_projection_model",
+      "path": "crates/event_store/src/model/food_availability_projection_v1.rs",
+      "byte_length": 17482,
+      "sha256": "7e8ead52ebfe091e3770878b781a9d089f2f4273f8f57ca0e5c6b12c3ab9acaf",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "source_generation_rebuild_authority",
       "path": "crates/event_store/src/nip09/reconciliation_v1.rs",
-      "byte_length": 184407,
-      "sha256": "c455d40fc736e3db264f567c7809af7bd897d89be8a33dfb21667a6ef6b8d6c6",
+      "byte_length": 184402,
+      "sha256": "7fa01e52f51d3470ba60e6068dc05797c2a6eaf5eb317d23111a961dbe4451f9",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -257,22 +572,57 @@
     {
       "role": "public_store_and_transaction_authority",
       "path": "crates/event_store/src/store.rs",
-      "byte_length": 394574,
-      "sha256": "db57dc3e35e64c7194683142fe55edba853671a829269449dd2273056dfc3a0e",
+      "byte_length": 394777,
+      "sha256": "6a2431a6f4b7b5b1d25f493758008ae2246fbe57472552e233fe259404f629a1",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "addressable_transition_feed_store",
+      "path": "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+      "byte_length": 40261,
+      "sha256": "3b978d2cc7d489b23733d37413824c6fd0bf0c83e3117654939fa856bc8956a3",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "food_projection_store",
+      "path": "crates/event_store/src/store/food_availability_projection_v1.rs",
+      "byte_length": 48993,
+      "sha256": "91003e69bb6d7a82cc200581089d0e9eb61203a2706e9a3d27286e118b069feb",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_post_core_v1_extension",
+      "path": "crates/event_store/src/store/post_core_extensions_v1.rs",
+      "byte_length": 6923,
+      "sha256": "2fbfc6252f9ce249468a99b5230fd6b7b59b9e47ee4f38783c5fd9379c823fd0",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_post_core_v1_storage",
+      "path": "crates/event_store/src/store/post_core_storage_v1.rs",
+      "byte_length": 16876,
+      "sha256": "f27dc7dcd643762226f8d4df0d297027b384bcf1004277222e978965bc2d40cf",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "raw_ingest_capacity_authority",
       "path": "crates/event_store/src/store/protocol_reconciliation_v1.rs",
-      "byte_length": 30140,
-      "sha256": "210112eeaa6975a3b4fbb97d5c52588f8c6d8d07975e531d39737fd11235de51",
+      "byte_length": 30145,
+      "sha256": "a8a26763dc39124ab7537fdcc3f89a1f0aa7e1830f4f9dec9ee4057bbb4fd228",
+      "hash_algorithm": "sha256_bytes_v1"
+    },
+    {
+      "role": "predecessor_protocol_storage",
+      "path": "crates/event_store/src/store/protocol_storage_v1.rs",
+      "byte_length": 10929,
+      "sha256": "20de4436945bac0d8cbeca0ae6cd95232a92da8cd6be6ae6beacba17fe50d658",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "source_maintenance_runtime",
       "path": "crates/event_store/src/source_maintenance_v1.rs",
-      "byte_length": 51756,
-      "sha256": "f8d5b62f0613104aa86658d5bf1baade92c7df83f00ef0cddadd734b9797afca",
+      "byte_length": 51762,
+      "sha256": "5db9c9e86fd18a2fcc08dbc3468f373bf39d8948bc6a08936b252a4dda3546e9",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -285,29 +635,29 @@
     {
       "role": "predecessor_successor_governance",
       "path": "tools/xtask/src/contract/food_availability_projection.rs",
-      "byte_length": 194594,
-      "sha256": "b859df0608b000f0de53f6543d2dea9501fa9080f57e3fdd8d9e71acf386e0a7",
+      "byte_length": 194572,
+      "sha256": "f251b1202c72ae0b63a2f0adee35eb474ba39b9cde7348feee3ab7085d306a11",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 835558,
-      "sha256": "6218e33cc8445fce59194508f73290e7eea8c91495fbe77a5323b258ef21f4a6",
+      "byte_length": 835899,
+      "sha256": "c37bb32405003775ce34e1379d1197b8c6e330fff96a402612c200a1d206cb38",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "source_maintenance_governance",
       "path": "tools/xtask/src/contract/source_maintenance.rs",
-      "byte_length": 177996,
-      "sha256": "c309da38f12101d77c4de1caa49ef443252cac6238b49692182851c2cf894bda",
+      "byte_length": 186734,
+      "sha256": "0b1d19043d06d6f628f4e92dd11f0b7ec6eb9942ad13a426c5ef78c162b35a6a",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "contract_command_authority",
       "path": "tools/xtask/src/contract.rs",
-      "byte_length": 500241,
-      "sha256": "972e2a6b1099267e11d9a34e73fd38b20fc217a3dd79bd9a0f1f060b680ba2ba",
+      "byte_length": 504371,
+      "sha256": "0f8de542e17aa2b1475d5ccb7c38cd35c9132a3390f3c9537ef5de29aa68420f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

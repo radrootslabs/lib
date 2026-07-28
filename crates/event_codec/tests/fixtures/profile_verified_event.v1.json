@@ -4,12 +4,12 @@
   "vectors": [
     {
       "expected": {
-        "event_id": "a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958",
+        "event_id": "407b62d3d2c91737c4cba8352ec844b2c5cdd2c9dd441edd93a3c70cdbf8d7e7",
         "kind": 65535
       },
       "id": "event_verify_max_kind_001",
       "input": {
-        "event_json": "{\"id\":\"a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000104,\"kind\":65535,\"tags\":[],\"content\":\"maximum-kind\",\"sig\":\"d79b19843a0bfd769c02c73866d44a3a06f7b11e107a5257971b60e700aa25565802fd3a7eed4042fe8db7d709a465e5f61478eb8291178831bf48f6b0980671\"}"
+        "event_json": "{\"id\":\"407b62d3d2c91737c4cba8352ec844b2c5cdd2c9dd441edd93a3c70cdbf8d7e7\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000104,\"kind\":65535,\"tags\":[],\"content\":\"maximum-kind\",\"sig\":\"d1791afa8b3428151e6d6c8425842bcc68ebbce202bb6abb24976ad514794f8df5b4602cf69eee26fb20b7afcb249fb7a0eac5c953839838bccdb03bd1212ab6\"}"
       },
       "kind": "event.verify_nip01.valid"
     },
@@ -19,7 +19,7 @@
       },
       "id": "event_verify_id_mismatch_001",
       "input": {
-        "event_json": "{\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"created_at\":1800000100,\"id\":\"fdcebf1cbdcddea8027b5e214cb7b223fa662d8b85f5d68acf2e8849be0d71c4\",\"kind\":0,\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"sig\":\"e5448d11671bcf73aa8d56941aff9df46d4e9fb250596671950e5f3c9d747440523efd33d8b9ff4f2a2ef1bd4b79e0a7cf5850132172b1db4b642ef2b348f721\",\"tags\":[]}"
+        "event_json": "{\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"created_at\":1800000100,\"id\":\"062bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0\",\"kind\":0,\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"sig\":\"4290da0bb6422986647bc8cd5f63bd52d49f41e7b665d3b47105b8109183e8d596f322c531d4061df53e1d2b70fda12d5d1c14f3720d7a56d9d0a03746af5109\",\"tags\":[]}"
       },
       "kind": "event.verify_nip01.invalid_id"
     },
@@ -29,19 +29,19 @@
       },
       "id": "event_verify_signature_invalid_001",
       "input": {
-        "event_json": "{\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"created_at\":1800000100,\"id\":\"b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f\",\"kind\":0,\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"sig\":\"d015e365c530c44fbc33e970af13616e482fafe65d0947edcdaa1e7b3038e9285b4b6826bdf454e8381d66e9dc6978d9974358572d97850ebc726fcc539e2b88\",\"tags\":[]}"
+        "event_json": "{\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"created_at\":1800000100,\"id\":\"762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0\",\"kind\":0,\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"sig\":\"0290da0bb6422986647bc8cd5f63bd52d49f41e7b665d3b47105b8109183e8d596f322c531d4061df53e1d2b70fda12d5d1c14f3720d7a56d9d0a03746af5109\",\"tags\":[]}"
       },
       "kind": "event.verify_nip01.invalid_signature"
     },
     {
       "expected": {
-        "error": "malformed_envelope"
+        "error": "invalid_public_key"
       },
       "id": "event_verify_malformed_curve_pubkey_001",
       "input": {
         "event_json": "{\"id\":\"8d71bc1e4126e8b16c7e9229487d9028df9508c156d5e501d1487eda799af161\",\"pubkey\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"created_at\":1800000107,\"kind\":0,\"tags\":[],\"content\":\"malformed-curve-pubkey\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\"}"
       },
-      "kind": "event.verify_nip01.malformed_envelope"
+      "kind": "event.wire.invalid_public_key"
     },
     {
       "expected": {
@@ -50,13 +50,13 @@
       },
       "id": "event_verify_kind_overflow_001",
       "input": {
-        "event_json": "{\"content\":\"overflow-kind\",\"created_at\":1800000106,\"id\":\"82dff74958bd7e1e52ad98add08bbb70d4ce9cf9d90e4741c64c212df0804ccb\",\"kind\":65536,\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"tags\":[]}"
+        "event_json": "{\"content\":\"overflow-kind\",\"created_at\":1800000106,\"id\":\"ecb111a334b5d374db240f42c32fd57ce61f42d4bbe1c1d88b62ed72755f906c\",\"kind\":65536,\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"sig\":\"00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"tags\":[]}"
       },
       "kind": "event.verify_nip01.kind_overflow"
     },
     {
       "expected": {
-        "event_id": "b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f",
+        "event_id": "762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0",
         "projected": {
           "bot": false,
           "display_name": "Moss Street Farm"
@@ -69,7 +69,7 @@
       },
       "id": "profile_admit_tagless_tolerant_001",
       "input": {
-        "event_json": "{\"id\":\"b0450c4fb0a82cc829159646f90dc548503e8b7f850a434fd9ea58bf1b8d677f\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000100,\"kind\":0,\"tags\":[],\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"sig\":\"e5448d11671bcf73aa8d56941aff9df46d4e9fb250596671950e5f3c9d747440523efd33d8b9ff4f2a2ef1bd4b79e0a7cf5850132172b1db4b642ef2b348f721\"}"
+        "event_json": "{\"id\":\"762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000100,\"kind\":0,\"tags\":[],\"content\":\"{\\\"display_name\\\":\\\"Moss Street Farm\\\",\\\"bot\\\":false,\\\"website\\\":\\\"https://mossstreet.example\\\",\\\"picture\\\":42}\",\"sig\":\"4290da0bb6422986647bc8cd5f63bd52d49f41e7b665d3b47105b8109183e8d596f322c531d4061df53e1d2b70fda12d5d1c14f3720d7a56d9d0a03746af5109\"}"
       },
       "kind": "profile.verify_and_admit.valid"
     },
@@ -80,7 +80,7 @@
       },
       "id": "profile_admit_wrong_kind_001",
       "input": {
-        "event_json": "{\"id\":\"05b2ebdf444f09330198f8c07ea3e3c7d8ac97d94c41e957b74bce921f611080\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000102,\"kind\":1,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"not-a-profile\\\"}\",\"sig\":\"3d12c2dfea5cff7e9993166d20b9092f4a6a9dd7e9f4af26355d2f4c4fa0e1ba7a0e5fe6e4b90c93ae57d52cc71b38b409051702200868dfd601dbdd74b89710\"}"
+        "event_json": "{\"id\":\"530131615015d1631d89c80e5cbde5487ce44de24d1164e7d9d8be86f47f1399\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000102,\"kind\":1,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"not-a-profile\\\"}\",\"sig\":\"1e62c75d7cd1427ce03728ebc27413c284a9c72a0c1049ea6e537ccf7f1a3ed139718468c3f0cf78dc2da7d22ccf35843463272d8f42f59bccd69ffebb8ef3bf\"}"
       },
       "kind": "profile.verify_and_admit.invalid_kind"
     },
@@ -90,19 +90,19 @@
       },
       "id": "profile_admit_non_object_001",
       "input": {
-        "event_json": "{\"id\":\"671f2d9f80a2fa2759c9514ae36fd18296cee71417fc86995525f2c659a5f781\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000103,\"kind\":0,\"tags\":[],\"content\":\"[]\",\"sig\":\"67d0420384e366407499ce4ab501cd87a02bea0d4221007b7a3ff01d9b68a0b9d372882184ab48775a8516f6a6554b506fc3e7652162a53e08a43e63daeacac7\"}"
+        "event_json": "{\"id\":\"6205ecbaead32e5bb64afa301446f3ba9cf47d3113b23db6978800f47e5e4183\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000103,\"kind\":0,\"tags\":[],\"content\":\"[]\",\"sig\":\"909f64b7b5393a80e7db8d0aa788d301133f966c23346e71ca9c019f8b7ac297fe7e27b5049410d60f5858c9060bc7e86fcf8b165c53da2c45f200a00b03f98f\"}"
       },
       "kind": "profile.verify_and_admit.invalid_metadata"
     },
     {
       "expected": {
         "created_at": 1800000105,
-        "event_id": "ad00fc208cc7036b95fadb7a4660bc600aa007502430250630d70d15b50695b3"
+        "event_id": "73956f3c723129dbe43ec2865261f6de04632b2817daede8b3cc47ab93faac3f"
       },
       "id": "profile_equal_time_lowest_id_001",
       "input": {
-        "first_event_json": "{\"id\":\"fdcebf1cbdcddea8027b5e214cb7b223fa662d8b85f5d68acf2e8849be0d71c4\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000105,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"arrival-a\\\"}\",\"sig\":\"445a4a08bd365acbe3d68b1433cd8952f8974cb1f454c7d6790881b123c1e7a6449662f78e3044436c7cda8745ae74aa8ee382e292160a3a3f420dd3bb4f275c\"}",
-        "second_event_json": "{\"id\":\"ad00fc208cc7036b95fadb7a4660bc600aa007502430250630d70d15b50695b3\",\"pubkey\":\"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f\",\"created_at\":1800000105,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"arrival-b\\\"}\",\"sig\":\"6b52cb1cbcf2639104b564144517d8479833272690514af9e9d45b170a1c88320ac3425b9339aa525e591584f97666b1c556b4709fb6ef27959775e70c8caabe\"}"
+        "first_event_json": "{\"id\":\"73956f3c723129dbe43ec2865261f6de04632b2817daede8b3cc47ab93faac3f\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000105,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"arrival-a\\\"}\",\"sig\":\"18c2196e1f9eba23147f138f2ee2e5b140bbfc48ec37f72f4919c28d2d03eaeb60269fe7c6d61a8d93f5d25e05a94f5f87dc1a449850b239114bb7fe76cd6190\"}",
+        "second_event_json": "{\"id\":\"e6e8ff39b7e4365d8fd89a8d47fb6c4e33ce364a449aeb108d5219b4f5d23658\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1800000105,\"kind\":0,\"tags\":[],\"content\":\"{\\\"name\\\":\\\"arrival-b\\\"}\",\"sig\":\"0b87cc548732f65032187fe33e1f357fd8fe4d1d4c6ec3a2ee8e42713f6bfa73c12f2e6740374ec11b1f318d78c07730dc495abbe50ba025dfbe697041297a22\"}"
       },
       "kind": "profile.select_equal_time_head"
     }

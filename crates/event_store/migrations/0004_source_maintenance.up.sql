@@ -553,7 +553,7 @@ WHEN NOT EXISTS (
     AND hex(cursor.scope_fingerprint) =
       '8B63C5DDC48A2CC7DB69295238B96D5F814DBA50427C80B4D0079F061E6D3DE0'
     AND cursor.hook_manifest_sha256 =
-      '33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23'
+      '02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990'
     AND cursor.last_transition_seq = state.last_transition_seq
     AND cursor.projected_row_count = (
       SELECT COUNT(*)

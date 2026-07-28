@@ -2,24 +2,24 @@
 
 use crate::{RadrootsAuthorityError, RadrootsEventSigner, RadrootsSignerError};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::RadrootsPublicKey;
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 
 pub struct RadrootsLocalEventSigner {
     keys: RadrootsNostrKeys,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
 }
 
 impl RadrootsLocalEventSigner {
     pub fn new(keys: RadrootsNostrKeys) -> Result<Self, RadrootsAuthorityError> {
-        let pubkey = RadrootsPublicKey::parse(keys.public_key().to_hex())
+        let pubkey = PublicKey::from_hex(&keys.public_key().to_hex())
             .map_err(|_| RadrootsAuthorityError::InvalidSignerPubkey)?;
         Ok(Self { keys, pubkey })
     }
 }
 
 impl RadrootsEventSigner for RadrootsLocalEventSigner {
-    fn pubkey(&self) -> &RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -75,7 +75,7 @@ mod tests {
     fn local_signer_reports_public_key() {
         let signer = RadrootsLocalEventSigner::new(fixture_keys()).expect("signer");
 
-        assert_eq!(signer.pubkey().as_str(), FIXTURE_ALICE_PUBLIC_KEY_HEX);
+        assert_eq!(signer.pubkey().to_hex(), FIXTURE_ALICE_PUBLIC_KEY_HEX);
     }
 
     #[test]
@@ -86,7 +86,7 @@ mod tests {
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
-        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
+        assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(
             radroots_nostr_verify_event(&verification_event(&signed)),
             RadrootsNostrEventVerification::Verified

@@ -20,7 +20,8 @@ use crate::model::{
 use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
+use radroots_identity::PublicKey;
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 
 impl RadrootsEventStore {
@@ -337,7 +338,7 @@ async fn transition_from_row(
     }
     let coordinate = RadrootsAddressableTransitionCoordinateV1 {
         kind,
-        pubkey: RadrootsPublicKey::parse(pubkey.as_str())
+        pubkey: PublicKey::from_hex(pubkey.as_str())
             .map_err(|error| corruption(format!("transition pubkey is invalid: {error}")))?,
         d_tag,
     };
@@ -493,7 +494,7 @@ async fn transition_from_row(
             let event_reference = cause_reference
                 .clone()
                 .ok_or_else(|| corruption("loaded transition cause has no reference"))?;
-            let pubkey = RadrootsPublicKey::parse(event.pubkey.as_str()).map_err(|error| {
+            let pubkey = PublicKey::from_hex(event.pubkey.as_str()).map_err(|error| {
                 corruption(format!("transition cause pubkey is invalid: {error}"))
             })?;
             Ok::<RadrootsAddressableTransitionCauseV1, RadrootsEventStoreError>(
@@ -575,7 +576,7 @@ async fn validate_incremental_cause(
                     "non-head incremental transition was not caused by an admitted deletion request",
                 ));
             }
-            let author_matches = cause_event.pubkey == coordinate.pubkey().as_str();
+            let author_matches = cause_event.pubkey == coordinate.pubkey().to_hex();
             let records_author_mismatch = suppression.is_some_and(|evidence| {
                 evidence.reason()
                     == crate::model::RadrootsNip09SuppressionReason::RequestAuthorMismatch
@@ -594,7 +595,7 @@ async fn validate_incremental_cause(
             .bind(generation.as_bytes().as_slice())
             .bind(cause_reference.event_id().as_str())
             .bind(i64::from(coordinate.kind()))
-            .bind(coordinate.pubkey().as_str())
+            .bind(coordinate.pubkey().to_hex())
             .bind(coordinate.d_tag())
             .fetch_one(&mut *connection)
             .await?;
@@ -632,7 +633,7 @@ async fn validate_retraction_lineage(
     )
     .bind(generation.as_bytes().as_slice())
     .bind(i64::from(coordinate.kind()))
-    .bind(coordinate.pubkey().as_str())
+    .bind(coordinate.pubkey().to_hex())
     .bind(coordinate.d_tag())
     .bind(transition_seq)
     .fetch_optional(&mut *connection)
@@ -883,7 +884,7 @@ async fn load_and_validate_stored_event(
         ))
     })?;
     if stored.event_id != event.id_str()
-        || stored.pubkey != event.author_str()
+        || stored.pubkey != event.author().to_hex()
         || stored.created_at != event.created_at_u64()
         || stored.kind != event.kind_u32()
         || stored.tags_json != tags_json
@@ -921,7 +922,7 @@ async fn validate_addressable_reference(
 ) -> Result<(), RadrootsEventStoreError> {
     if event.event_class != StoredEventClass::Addressable
         || event.kind != coordinate.kind()
-        || event.pubkey != coordinate.pubkey().as_str()
+        || event.pubkey != coordinate.pubkey().to_hex()
     {
         return Err(corruption(format!(
             "event `{}` does not match transition coordinate `{}:{}:{}`",
@@ -938,7 +939,7 @@ async fn validate_addressable_reference(
     .bind(reference.event_seq())
     .bind(reference.event_id().as_str())
     .bind(i64::from(coordinate.kind()))
-    .bind(coordinate.pubkey().as_str())
+    .bind(coordinate.pubkey().to_hex())
     .bind(coordinate.d_tag())
     .fetch_one(&mut *connection)
     .await?;

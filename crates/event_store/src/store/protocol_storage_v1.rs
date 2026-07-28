@@ -5,7 +5,7 @@ use crate::model::reconciliation_v1::{
 };
 use radroots_event::envelope::RadrootsEventKind;
 use radroots_event::event_head::v1::RadrootsEventHeadCoordinate;
-use radroots_event::ids::RadrootsPublicKey;
+use radroots_identity::PublicKey;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -101,7 +101,7 @@ pub(super) async fn raw_head_snapshot_in_transaction(
                 "SELECT event.seq, event.event_id, event.pubkey, event.created_at, event.kind, event.tags_json, event.content, event.sig, event.raw_json, event.verification_status, event.contract_status, event.contract_id, event.event_class, event.projection_eligible, event.inserted_at_ms, event.updated_at_ms, head.coordinate_type AS raw_head_coordinate_type, head.kind AS raw_head_kind, head.pubkey AS raw_head_pubkey, head.d_tag AS raw_head_d_tag, head.event_id AS raw_head_event_id, head.created_at AS raw_head_created_at, head.updated_at_ms AS raw_head_updated_at_ms FROM event_envelope_head AS head LEFT JOIN event_envelopes AS event ON event.event_id = head.event_id WHERE head.coordinate_type = 'replaceable' AND head.kind = ? AND head.pubkey = ? AND head.d_tag IS NULL",
             )
             .bind(i64::from(*kind))
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .fetch_optional(&mut **tx)
             .await?
         }
@@ -114,7 +114,7 @@ pub(super) async fn raw_head_snapshot_in_transaction(
                 "SELECT event.seq, event.event_id, event.pubkey, event.created_at, event.kind, event.tags_json, event.content, event.sig, event.raw_json, event.verification_status, event.contract_status, event.contract_id, event.event_class, event.projection_eligible, event.inserted_at_ms, event.updated_at_ms, head.coordinate_type AS raw_head_coordinate_type, head.kind AS raw_head_kind, head.pubkey AS raw_head_pubkey, head.d_tag AS raw_head_d_tag, head.event_id AS raw_head_event_id, head.created_at AS raw_head_created_at, head.updated_at_ms AS raw_head_updated_at_ms FROM event_envelope_head AS head LEFT JOIN event_envelopes AS event ON event.event_id = head.event_id WHERE head.coordinate_type = 'addressable' AND head.kind = ? AND head.pubkey = ? AND head.d_tag = ?",
             )
             .bind(i64::from(*kind))
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .bind(d_tag.as_str())
             .fetch_optional(&mut **tx)
             .await?
@@ -140,7 +140,7 @@ pub(super) fn raw_head_coordinate_for_stored_event(
     let inconsistent = || RadrootsEventStoreError::StoredHeadInconsistent {
         event_id: event.event_id.clone(),
     };
-    let pubkey = RadrootsPublicKey::parse(event.pubkey.clone()).map_err(|_| inconsistent())?;
+    let pubkey = PublicKey::from_hex(&event.pubkey).map_err(|_| inconsistent())?;
     match event.event_class {
         StoredEventClass::Replaceable => Ok(RadrootsEventHeadCoordinate::Replaceable {
             kind: event.kind,
@@ -192,7 +192,7 @@ fn validate_raw_head_snapshot(
         StoredEventClass::Replaceable if raw_head.d_tag.is_none() => {
             RadrootsEventHeadCoordinate::Replaceable {
                 kind: raw_head.kind,
-                pubkey: RadrootsPublicKey::parse(raw_head.pubkey.clone()).map_err(|_| {
+                pubkey: PublicKey::from_hex(&raw_head.pubkey).map_err(|_| {
                     RadrootsEventStoreError::StoredHeadInconsistent {
                         event_id: raw_head.event_id.clone(),
                     }
@@ -201,7 +201,7 @@ fn validate_raw_head_snapshot(
         }
         StoredEventClass::Addressable => RadrootsEventHeadCoordinate::Addressable {
             kind: raw_head.kind,
-            pubkey: RadrootsPublicKey::parse(raw_head.pubkey.clone()).map_err(|_| {
+            pubkey: PublicKey::from_hex(&raw_head.pubkey).map_err(|_| {
                 RadrootsEventStoreError::StoredHeadInconsistent {
                     event_id: raw_head.event_id.clone(),
                 }

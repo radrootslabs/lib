@@ -30,6 +30,7 @@ std = [
   "radroots_event/std",
   "radroots_event_codec/std",
   "radroots_event_codec/nostr",
+  "radroots_identity/std",
 ]
 event_store = [
   "std",
@@ -45,6 +46,7 @@ serde = [
   "radroots_core/serde",
   "radroots_event/serde",
   "radroots_event_codec/serde",
+  "radroots_identity/serde",
 ]
 serde_json = [
   "serde",
@@ -60,6 +62,7 @@ radroots_authority = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
+radroots_identity = { workspace = true, default-features = false }
 radroots_event_store = { workspace = true, optional = true, default-features = false }
 base64 = { workspace = true, optional = true }
 dto_bindgen = { workspace = true, optional = true }

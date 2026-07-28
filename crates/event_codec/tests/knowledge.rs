@@ -93,7 +93,7 @@ fn event_with_parts(
 ) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: event.id_str().to_string(),
-        author: event.author_str().to_string(),
+        author: event.author().to_hex().to_string(),
         created_at: event.created_at_u64(),
         kind: event.kind_u32(),
         tags,

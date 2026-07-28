@@ -29,6 +29,10 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
   "serde_json",
   "std",
 ] }
+radroots_identity = { workspace = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
 radroots_transport = { workspace = true, default-features = false }
 hex = { workspace = true }
 getrandom = { workspace = true, optional = true, features = ["std"] }

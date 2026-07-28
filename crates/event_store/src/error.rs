@@ -55,6 +55,8 @@ pub enum RadrootsEventStoreError {
     Json(#[from] serde_json::Error),
     #[error("identifier parse error: {0}")]
     IdParse(#[from] RadrootsIdParseError),
+    #[error("identity value parse error: {0}")]
+    Identity(#[from] radroots_identity::Error),
     #[error("event wire error: {0}")]
     EventWire(#[from] RadrootsEventWireError),
     #[error("signed event error: {0}")]

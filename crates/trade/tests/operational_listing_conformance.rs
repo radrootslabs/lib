@@ -157,7 +157,7 @@ fn address_valid(vector: &Vector) {
     let actual = json!({
         "address": parsed.address.as_str(),
         "kind": parsed.kind,
-        "seller_pubkey": parsed.seller_pubkey.as_str(),
+        "seller_pubkey": parsed.seller_pubkey.to_hex(),
         "listing_id": parsed.listing_id.as_str(),
     });
     assert_eq!(actual, vector.expected, "{}", vector.id);
@@ -190,6 +190,7 @@ fn address_error_value(error: &RadrootsIdParseError) -> Value {
             "actual": actual,
         }),
         RadrootsIdParseError::InvalidCharacter => json!({ "kind": "invalid_character" }),
+        RadrootsIdParseError::InvalidPublicKey => json!({ "kind": "invalid_public_key" }),
         RadrootsIdParseError::UnexpectedKind { expected, actual } => json!({
             "kind": "unexpected_kind",
             "expected": expected,
@@ -276,7 +277,7 @@ fn validation_valid(vector: &Vector, event: &RadrootsSignatureVerifiedEvent) {
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         projection.listing.farm.pubkey,
-        event.event().author_str(),
+        event.event().author().to_hex(),
         "{} decoded farm author drift",
         vector.id
     );

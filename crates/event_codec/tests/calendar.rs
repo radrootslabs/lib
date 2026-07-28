@@ -44,8 +44,8 @@ use radroots_event_codec::{
 const DATE_D_TAG: &str = "fernwood-csa-pickup";
 const TIME_D_TAG: &str = "wash-pack-shift";
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const EVENT_AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-const SECOND_AUTHOR: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const EVENT_AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+const SECOND_AUTHOR: &str = "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 const EVENT_SIG: &str = concat!(
     "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"

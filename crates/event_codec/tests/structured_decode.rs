@@ -574,7 +574,7 @@ fn plot_metadata_and_index_decode_roundtrip() {
         EVENT_SIG.to_string(),
     )
     .expect("plot index");
-    assert_eq!(index.event.author_str(), TEST_PUBKEY_HEX);
+    assert_eq!(index.event.author().to_hex(), TEST_PUBKEY_HEX);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 

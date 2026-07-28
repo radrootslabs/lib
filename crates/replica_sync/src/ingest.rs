@@ -253,7 +253,7 @@ fn ingest_profile_event(
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let data_result = profile_decode::data_from_event(
         event.id_str().to_owned(),
-        event.author_str().to_owned(),
+        event.author().to_hex().to_owned(),
         event.created_at_u64(),
         event.kind_u32(),
         event.content().to_owned(),
@@ -355,7 +355,7 @@ fn ingest_farm_event(
         created_at: None,
         updated_at: None,
         d_tag: Some(farm.d_tag.clone()),
-        pubkey: Some(event.author_str().to_owned()),
+        pubkey: Some(event.author().to_hex().to_owned()),
         name: None,
         about: None,
         website: None,
@@ -379,7 +379,7 @@ fn ingest_farm_event(
     let farm_id = if let Some(row) = existing.results.first() {
         let fields = IFarmFieldsPartial {
             d_tag: Some(Value::from(farm.d_tag.clone())),
-            pubkey: Some(Value::from(event.author_str().to_owned())),
+            pubkey: Some(Value::from(event.author().to_hex().to_owned())),
             name: Some(Value::from(farm.name.clone())),
             about: to_value_opt(farm.about.clone()),
             website: to_value_opt(farm.website.clone()),
@@ -402,7 +402,7 @@ fn ingest_farm_event(
     } else {
         let fields = IFarmFields {
             d_tag: farm.d_tag.clone(),
-            pubkey: event.author_str().to_owned(),
+            pubkey: event.author().to_hex().to_owned(),
             name: farm.name.clone(),
             about: farm.about.clone(),
             website: farm.website.clone(),
@@ -622,7 +622,7 @@ fn ingest_list_set_event(
         if !decision.apply {
             return Ok(RadrootsReplicaIngestOutcome::Skipped);
         }
-        upsert_member_claims(exec, event.author_str(), &list_set)?;
+        upsert_member_claims(exec, &event.author().to_hex(), &list_set)?;
         upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
     }
@@ -642,7 +642,7 @@ fn ingest_list_set_event(
         if !decision.apply {
             return Ok(RadrootsReplicaIngestOutcome::Skipped);
         }
-        let farm = find_farm_by_ref(exec, event.author_str(), &farm_d_tag)?;
+        let farm = find_farm_by_ref(exec, &event.author().to_hex(), &farm_d_tag)?;
         upsert_farm_members(exec, &farm.id, role, &list_set)?;
         upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
@@ -667,8 +667,9 @@ fn trade_product_fields_from_listing(
     listing_addr: &str,
 ) -> Result<ITradeProductFields, RadrootsReplicaEventsError> {
     let bin = primary_listing_bin(listing)?;
-    let qty_amt = decimal_to_f64(&bin.quantity.amount, "listing primary bin quantity")?;
-    let qty_amt_exact = bin.quantity.amount.to_string();
+    let quantity_amount = bin.quantity.amount();
+    let qty_amt = decimal_to_f64(&quantity_amount, "listing primary bin quantity")?;
+    let qty_amt_exact = quantity_amount.to_string();
     let qty_avail = listing
         .inventory_available
         .as_ref()
@@ -677,30 +678,30 @@ fn trade_product_fields_from_listing(
     let price_source = bin
         .display_price
         .as_ref()
-        .unwrap_or(&bin.price_per_canonical_unit.amount);
-    let Some(price_amt) = price_source.amount.to_f64_lossy() else {
+        .unwrap_or(bin.price_per_canonical_unit.amount());
+    let Some(price_amt) = price_source.amount().to_f64_lossy() else {
         return Err(RadrootsReplicaEventsError::InvalidData(
             "listing price amount out of range".to_string(),
         ));
     };
-    let price_amt_exact = price_source.amount.to_string();
-    let price_currency = price_source.currency.as_str().to_string();
+    let price_amt_exact = price_source.amount().to_string();
+    let price_currency = price_source.currency().as_str().to_string();
     let price_qty_amt = if bin.display_price.is_some() {
         1.0
     } else {
         decimal_to_f64(
-            &bin.price_per_canonical_unit.quantity.amount,
+            &bin.price_per_canonical_unit.quantity().amount(),
             "listing price quantity",
         )?
     };
     let price_qty_amt_exact = if bin.display_price.is_some() {
         "1".to_string()
     } else {
-        bin.price_per_canonical_unit.quantity.amount.to_string()
+        bin.price_per_canonical_unit.quantity().amount().to_string()
     };
     let price_qty_unit = bin
         .display_price_unit
-        .unwrap_or(bin.price_per_canonical_unit.quantity.unit)
+        .unwrap_or(bin.price_per_canonical_unit.quantity().unit())
         .to_string();
 
     Ok(ITradeProductFields {
@@ -719,11 +720,11 @@ fn trade_product_fields_from_listing(
             .unwrap_or_default(),
         qty_amt,
         qty_amt_exact,
-        qty_unit: bin.quantity.unit.to_string(),
+        qty_unit: bin.quantity.unit().to_string(),
         qty_label: bin
             .display_label
             .clone()
-            .or_else(|| bin.quantity.label.clone()),
+            .or_else(|| bin.quantity.label().map(ToOwned::to_owned)),
         qty_avail,
         price_amt,
         price_amt_exact,
@@ -1019,7 +1020,7 @@ fn event_head_decision(
                 apply: false,
                 key: String::new(),
                 kind: event.kind_u32(),
-                pubkey: event.author_str().to_owned(),
+                pubkey: event.author().to_hex().to_owned(),
                 d_tag: String::new(),
                 last_event_id: event.id_str().to_owned(),
                 last_created_at: event.created_at_u64(),
@@ -1683,7 +1684,7 @@ mod tests {
     ) -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event.id_str().to_owned(),
-            author: event.author_str().to_owned(),
+            author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind,
             tags,

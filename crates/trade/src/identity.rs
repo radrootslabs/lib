@@ -4,8 +4,8 @@ use core::str::FromStr;
 
 use radroots_event::ids::{
     RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError, RadrootsOrderId,
-    RadrootsPublicKey,
 };
+use radroots_identity::PublicKey;
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
@@ -66,8 +66,10 @@ pub struct RadrootsTradeLocator {
     pub trade_id: RadrootsTradeId,
     pub root_event_id: Option<RadrootsEventId>,
     pub listing_addr: Option<RadrootsClassifiedListingAddress>,
-    pub buyer_pubkey: Option<RadrootsPublicKey>,
-    pub seller_pubkey: Option<RadrootsPublicKey>,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: Option<PublicKey>,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: Option<PublicKey>,
 }
 
 impl RadrootsTradeLocator {
@@ -99,12 +101,12 @@ impl RadrootsTradeLocator {
         self
     }
 
-    pub fn with_buyer_pubkey(mut self, buyer_pubkey: RadrootsPublicKey) -> Self {
+    pub fn with_buyer_pubkey(mut self, buyer_pubkey: PublicKey) -> Self {
         self.buyer_pubkey = Some(buyer_pubkey);
         self
     }
 
-    pub fn with_seller_pubkey(mut self, seller_pubkey: RadrootsPublicKey) -> Self {
+    pub fn with_seller_pubkey(mut self, seller_pubkey: PublicKey) -> Self {
         self.seller_pubkey = Some(seller_pubkey);
         self
     }
@@ -118,8 +120,10 @@ pub struct RadrootsTradeLocatorCandidate {
     pub trade_id: RadrootsTradeId,
     pub root_event_id: RadrootsEventId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
 }
 
 impl RadrootsTradeLocatorCandidate {
@@ -138,9 +142,10 @@ impl RadrootsTradeLocatorCandidate {
 mod tests {
     use super::*;
     use radroots_event::kinds::KIND_CLASSIFIED_LISTING;
+    use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
-    const BUYER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const BUYER: &str = FIXTURE_BOB_PUBLIC_KEY_HEX;
+    const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
     fn event_id(raw: u8) -> RadrootsEventId {
         RadrootsEventId::parse(format!("{raw:064x}")).expect("event id")
@@ -150,8 +155,8 @@ mod tests {
         RadrootsOrderId::parse("order-1").expect("order id")
     }
 
-    fn public_key(raw: &str) -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(raw).expect("public key")
+    fn public_key(raw: &str) -> PublicKey {
+        PublicKey::from_hex(raw).expect("public key")
     }
 
     fn listing_addr() -> RadrootsClassifiedListingAddress {

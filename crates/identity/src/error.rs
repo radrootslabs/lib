@@ -2,7 +2,7 @@ use thiserror::Error;
 
 /// Errors produced while validating public identity values.
 #[non_exhaustive]
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum Error {
     #[error("identifier byte representation must contain {expected} bytes, but contained {actual}")]
     InvalidByteLength { expected: usize, actual: usize },

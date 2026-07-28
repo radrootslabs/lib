@@ -78,7 +78,7 @@ async fn store_trade_mutation_event(
             return Ok(());
         }
     };
-    if parsed.author_pubkey.as_str() != event.author_str() {
+    if &parsed.author_pubkey != event.author() {
         storage
             .quarantine_trade(
                 Some(parsed.trade_id.as_str()),

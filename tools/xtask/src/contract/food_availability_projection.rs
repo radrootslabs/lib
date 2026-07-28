@@ -104,7 +104,7 @@ const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 9] = [
     ImmutableArtifactSpec {
         relative: MANIFEST_RELATIVE,
         byte_length: 17_455,
-        sha256: "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+        sha256: "02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990",
     },
     ImmutableArtifactSpec {
         relative: MANIFEST_SCHEMA_RELATIVE,
@@ -114,12 +114,12 @@ const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 9] = [
     ImmutableArtifactSpec {
         relative: MANIFEST_SHA256_RELATIVE,
         byte_length: 65,
-        sha256: "4ac4c79a946ccb1a11726cbafc18e2e016f08f3f6797964400dea3494c66dbc5",
+        sha256: "85446b0c05bed6f2187f85c505db95078f7457ad17fe62fd596611064a275a0e",
     },
     ImmutableArtifactSpec {
         relative: GENERATED_DESCRIPTOR_RELATIVE,
         byte_length: 21_437,
-        sha256: "90908da53ab9572f45f5916ccc2652736b7ea26ba6dd202a4f69af1e651b564b",
+        sha256: "69730956d3f9f7d3b06b3fe4bd49c818e6dd549dc1bdda73fd126e39e8031f44",
     },
     ImmutableArtifactSpec {
         relative: RESULT_VECTOR_CANONICAL_RELATIVE,
@@ -133,8 +133,8 @@ const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 9] = [
     },
     ImmutableArtifactSpec {
         relative: RESULT_VECTOR_EXECUTOR_RELATIVE,
-        byte_length: 34_075,
-        sha256: "9e8e11abae7bbc7dda30eab6f0a79074ffc3761aa6b955cff58c4c62fa581aa3",
+        byte_length: 34_078,
+        sha256: "59e20d81562299cf9dd942dd637b5ca404c7aacc98c7ce3fbf1e14751c1b2d9b",
     },
     ImmutableArtifactSpec {
         relative: MIGRATION_UP_RELATIVE,
@@ -1775,7 +1775,7 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
                 validate_projection_source_transition(connection, &projection).await?;
                 validate_fts_row(connection, &projection).await?;
                 actual_coordinates.push((
-                    projection.pubkey().as_str().to_owned(),
+                    projection.pubkey().to_hex(),
                     projection.identifier().as_str().to_owned(),
                     projection.event_id().as_str().to_owned(),
                     projection.event_seq(),
@@ -1869,7 +1869,7 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
             validate_projection_source_transition(connection, &projection).await?;
             validate_fts_row(connection, &projection).await?;
             actual_coordinates.push((
-                projection.pubkey().as_str().to_owned(),
+                projection.pubkey().to_hex(),
                 projection.identifier().as_str().to_owned(),
                 projection.event_id().as_str().to_owned(),
                 projection.event_seq(),
@@ -1976,7 +1976,7 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
             let authoritative: i64 = sqlx::query_scalar({SOURCE_TRANSITION_QUERY:?},)
                 .bind(projection.source_transition_seq())
                 .bind(projection.source_generation().as_bytes().as_slice())
-                .bind(projection.pubkey().as_str())
+                .bind(projection.pubkey().to_hex())
                 .bind(projection.identifier().as_str())
                 .bind(projection.event_id().as_str())
                 .bind(projection.event_seq())

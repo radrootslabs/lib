@@ -495,7 +495,7 @@ fn coordinate_for(
     RadrootsNip01Coordinate::parse(format!(
         "{}:{}:{identifier}",
         target.event().kind_u32(),
-        target.event().author_str()
+        target.event().author().to_hex()
     ))
     .expect("target coordinate")
 }

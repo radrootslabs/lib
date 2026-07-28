@@ -115,10 +115,10 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         .bind(candidate_id)
         .bind(proposal_mutation_id)
         .bind(target_claim_mutation_id)
-        .bind(write.mutation.author_pubkey.as_str())
-        .bind(write.mutation.counterparty_pubkey.as_str())
-        .bind(write.mutation.buyer_pubkey.as_str())
-        .bind(write.mutation.seller_pubkey.as_str())
+        .bind(write.mutation.author_pubkey.to_hex())
+        .bind(write.mutation.counterparty_pubkey.to_hex())
+        .bind(write.mutation.buyer_pubkey.to_hex())
+        .bind(write.mutation.seller_pubkey.to_hex())
         .bind(write.mutation.farm_id.as_str())
         .bind(i64_from_u64(
             "authored_at_unix_s",
@@ -206,7 +206,7 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         .bind(write.mutation_id.as_str())
         .bind(write.mutation.trade_id.as_str())
         .bind(RadrootsTransportKind::Nostr.canonical_label())
-        .bind(write.event.author_str())
+        .bind(write.event.author().to_hex())
         .bind(i64_from_u64("created_at", write.event.created_at_u64())?)
         .bind(write.stored_event_seq)
         .bind(write.payload_sha256)
@@ -268,7 +268,7 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         .bind(mutation.trade_id.as_str())
         .bind(reservation.candidate_id.as_str())
         .bind(claim_mutation_id.as_str())
-        .bind(reservation.inventory_authority_id.as_str())
+        .bind(reservation.inventory_authority_id.to_hex())
         .bind(i64_from_u64(
             "inventory_epoch",
             reservation.inventory_epoch,

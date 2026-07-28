@@ -4,9 +4,7 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "serde_json")]
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventPtr,
-    ids::{
-        RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey,
-    },
+    ids::{RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError},
     kinds::is_order_event_kind,
     order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
@@ -15,6 +13,8 @@ use radroots_event::{
     },
     tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
 };
+#[cfg(feature = "serde_json")]
+use radroots_identity::PublicKey;
 #[cfg(feature = "serde_json")]
 use serde::de::DeserializeOwned;
 
@@ -95,7 +95,7 @@ impl std::error::Error for RadrootsOrderEnvelopeParseError {
 #[cfg(feature = "serde_json")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEventContext {
-    pub counterparty_pubkey: RadrootsPublicKey,
+    pub counterparty_pubkey: PublicKey,
     pub listing_event: Option<RadrootsEventPtr>,
     pub root_event_id: Option<RadrootsEventId>,
     pub prev_event_id: Option<RadrootsEventId>,
@@ -223,7 +223,7 @@ pub fn order_event_context_from_tags(
 ) -> Result<RadrootsOrderEventContext, RadrootsOrderEnvelopeParseError> {
     let counterparty_pubkey =
         parse_order_counterparty_tag(tags).map_err(map_tag_parse_error_for_order_envelope)?;
-    let counterparty_pubkey = RadrootsPublicKey::parse(&counterparty_pubkey)
+    let counterparty_pubkey = PublicKey::from_hex(&counterparty_pubkey)
         .map_err(|_| RadrootsOrderEnvelopeParseError::InvalidTag("p"))?;
     let listing_event =
         parse_order_listing_event_tag(tags).map_err(map_tag_parse_error_for_order_envelope)?;
@@ -316,8 +316,8 @@ fn validate_order_binding<T>(
     envelope: &RadrootsOrderEnvelope<T>,
     payload_order_id: &str,
     payload_listing_addr: &str,
-    expected_author: &str,
-    expected_counterparty: &str,
+    expected_author: &PublicKey,
+    expected_counterparty: &PublicKey,
 ) -> Result<(), RadrootsOrderEnvelopeParseError> {
     if envelope.order_id != payload_order_id {
         return Err(RadrootsOrderEnvelopeParseError::PayloadBindingMismatch(
@@ -329,11 +329,11 @@ fn validate_order_binding<T>(
             "listing_addr",
         ));
     }
-    if event.author_str() != expected_author {
+    if event.author() != expected_author {
         return Err(RadrootsOrderEnvelopeParseError::AuthorMismatch);
     }
     let context = order_event_context_from_tags(envelope.message_type, &event.tags_as_vec())?;
-    if context.counterparty_pubkey.as_str() != expected_counterparty {
+    if &context.counterparty_pubkey != expected_counterparty {
         return Err(RadrootsOrderEnvelopeParseError::CounterpartyTagMismatch);
     }
     Ok(())
@@ -355,7 +355,7 @@ mod tests {
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr,
         ids::{
             RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsInventoryBinId,
-            RadrootsOrderId, RadrootsOrderQuoteId, RadrootsPublicKey,
+            RadrootsOrderId, RadrootsOrderQuoteId,
         },
         kinds::{KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
         order::{
@@ -367,28 +367,28 @@ mod tests {
         },
         tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
+    use radroots_identity::PublicKey;
 
-    fn pubkey(character: char) -> RadrootsPublicKey {
-        core::iter::repeat_n(character, 64)
-            .collect::<String>()
+    fn pubkey(character: char) -> PublicKey {
+        crate::test_fixtures::fixture_public_key_hex(character)
             .parse()
             .unwrap()
     }
 
-    fn buyer_pubkey() -> RadrootsPublicKey {
+    fn buyer_pubkey() -> PublicKey {
         pubkey('b')
     }
 
-    fn seller_pubkey() -> RadrootsPublicKey {
+    fn seller_pubkey() -> PublicKey {
         pubkey('a')
     }
 
     fn buyer_pubkey_wire() -> String {
-        buyer_pubkey().into_string()
+        buyer_pubkey().to_hex()
     }
 
     fn seller_pubkey_wire() -> String {
-        seller_pubkey().into_string()
+        seller_pubkey().to_hex()
     }
 
     fn listing_addr() -> RadrootsClassifiedListingAddress {
@@ -1138,7 +1138,7 @@ mod tests {
         assert_eq!(err, RadrootsOrderEnvelopeParseError::AuthorMismatch);
 
         let mut tags = built.tags;
-        tags[0] = vec!["p".into(), pubkey('c').into_string()];
+        tags[0] = vec!["p".into(), pubkey('c').to_hex()];
         let counterparty_mismatch =
             event_envelope(buyer_pubkey_wire(), built.kind, tags, built.content);
         let err = order_request_from_event(&counterparty_mismatch).unwrap_err();

@@ -37,7 +37,7 @@ use std::{borrow::Cow, collections::BTreeSet, fs, path::Path, str::FromStr};
 use serde_json::Value;
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -1148,7 +1148,7 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
     )
     .unwrap();
     assert_eq!(parsed.event.id_str(), EVENT_ID);
-    assert_eq!(parsed.event.author_str(), AUTHOR);
+    assert_eq!(parsed.event.author().to_hex(), AUTHOR);
     assert_eq!(parsed.event.created_at_u64(), 7);
     assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);

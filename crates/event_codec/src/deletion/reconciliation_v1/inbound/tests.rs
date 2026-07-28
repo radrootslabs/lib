@@ -1,7 +1,7 @@
 use super::*;
 
 fn h(character: char) -> String {
-    character.to_string().repeat(64)
+    crate::test_fixtures::fixture_public_key_hex(character)
 }
 
 fn valid_event_tags() -> Vec<Vec<String>> {

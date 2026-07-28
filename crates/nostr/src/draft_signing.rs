@@ -13,9 +13,9 @@ pub fn radroots_nostr_sign_frozen_draft(
 ) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
     draft.validate_for_signing()?;
     let actual_pubkey = keys.public_key().to_hex();
-    if actual_pubkey != draft.expected_pubkey_str() {
+    if actual_pubkey != draft.expected_pubkey().to_hex() {
         return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey_str().to_owned(),
+            expected_pubkey: draft.expected_pubkey().to_hex().to_owned(),
             actual_pubkey,
         });
     }
@@ -74,7 +74,7 @@ mod tests {
         let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
-        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
+        assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(signed.created_at(), draft.created_at_u64());
         assert_eq!(signed.kind(), draft.kind_u32());
         assert_eq!(signed.tags_as_vec(), draft.tags_as_vec());

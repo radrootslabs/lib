@@ -9,7 +9,7 @@ use alloc::{
 use radroots_core::{Decimal, Money, Quantity, Unit};
 use radroots_event::{
     classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
-    ids::{RadrootsClassifiedListingAddress, RadrootsPublicKey},
+    ids::RadrootsClassifiedListingAddress,
     kinds::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind},
     location::{has_textual_locality, is_public_geohash5},
     operational_listing::{
@@ -19,6 +19,7 @@ use radroots_event::{
     },
     trade_validation::RadrootsOperationalListingValidationError as OperationalListingValidationError,
 };
+use radroots_identity::PublicKey;
 
 use radroots_event_codec::{
     operational_listing::decode::operational_listing_from_nostr_event,
@@ -86,17 +87,14 @@ pub fn validate_operational_listing_event(
 /// [`validate_operational_listing_event`] instead.
 pub fn validate_operational_listing_model(
     listing: RadrootsOperationalListing,
-    seller_pubkey: &RadrootsPublicKey,
+    seller_pubkey: &PublicKey,
 ) -> Result<RadrootsOperationalListingTradeProjection, OperationalListingValidationError> {
     let listing_id = listing.d_tag.trim().to_string();
 
-    if listing.farm.pubkey != seller_pubkey.as_str() {
+    if listing.farm.pubkey != seller_pubkey.to_hex() {
         return Err(OperationalListingValidationError::InvalidSeller);
     }
-    let listing_addr_raw = format!(
-        "{KIND_CLASSIFIED_LISTING}:{}:{listing_id}",
-        seller_pubkey.as_str()
-    );
+    let listing_addr_raw = format!("{KIND_CLASSIFIED_LISTING}:{}:{listing_id}", seller_pubkey);
     let listing_addr = RadrootsClassifiedListingAddress::parse(&listing_addr_raw)
         .expect("validated listing identity must form a listing address");
 
@@ -182,7 +180,7 @@ pub fn validate_operational_listing_model(
     Ok(RadrootsOperationalListingTradeProjection {
         listing_id,
         listing_addr,
-        seller_pubkey: seller_pubkey.as_str().to_string(),
+        seller_pubkey: seller_pubkey.to_hex(),
         title,
         description,
         product_type,
@@ -241,7 +239,7 @@ mod tests {
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
         farm::RadrootsFarmRef,
-        ids::{RadrootsDTag, RadrootsInventoryBinId, RadrootsPublicKey},
+        ids::{RadrootsDTag, RadrootsInventoryBinId},
         kinds::KIND_CLASSIFIED_LISTING,
         operational_listing::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
@@ -250,6 +248,7 @@ mod tests {
         },
     };
     use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
+    use radroots_identity::PublicKey;
     use radroots_nostr::prelude::radroots_event_from_nostr;
     use radroots_test_fixtures::{
         FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
@@ -267,12 +266,12 @@ mod tests {
         RadrootsInventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn seller_pubkey() -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(SELLER).expect("seller pubkey")
+    fn seller_pubkey() -> PublicKey {
+        PublicKey::from_hex(SELLER).expect("seller pubkey")
     }
 
-    fn other_seller_pubkey() -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(OTHER_SELLER).expect("other seller pubkey")
+    fn other_seller_pubkey() -> PublicKey {
+        PublicKey::from_hex(OTHER_SELLER).expect("other seller pubkey")
     }
 
     fn base_listing() -> RadrootsOperationalListing {
@@ -738,7 +737,7 @@ mod tests {
         let event = verified.into_event();
         let tampered = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event.id_str().to_owned(),
-            author: event.author_str().to_owned(),
+            author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind: event.kind_u32(),
             tags: event.tags_as_vec(),

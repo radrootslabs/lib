@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use nostr_sdk::{Client, ClientBuilder, ClientOptions};
-use radroots_identity::RadrootsIdentity;
 
 use crate::error::RadrootsNostrError;
 #[cfg(feature = "events")]
@@ -139,14 +138,6 @@ impl RadrootsNostrClient {
     pub fn new_with_monitor(keys: RadrootsNostrKeys, monitor: RadrootsNostrMonitor) -> Self {
         let inner = Client::builder().signer(keys).monitor(monitor).build();
         Self { inner }
-    }
-
-    pub fn from_identity(identity: &RadrootsIdentity) -> Self {
-        Self::new(identity.keys().clone())
-    }
-
-    pub fn from_identity_owned(identity: RadrootsIdentity) -> Self {
-        Self::new(identity.into_keys())
     }
 
     pub fn from_inner(inner: Client) -> Self {
@@ -462,6 +453,7 @@ pub async fn radroots_nostr_fetch_event_by_id(
 mod tests {
     use super::{RadrootsNostrClient, RadrootsNostrClientOptions};
     use crate::error::RadrootsNostrError;
+    use crate::test_fixtures::FIXTURE_BOB_PUBLIC_KEY_HEX;
     use crate::types::{
         RadrootsNostrFilter, RadrootsNostrGenericEventBuilder, RadrootsNostrKeys,
         RadrootsNostrKind, RadrootsNostrSecretKey, RadrootsNostrSubscriptionId, RadrootsNostrTag,
@@ -603,7 +595,7 @@ mod tests {
         let client = RadrootsNostrClient::new(keys);
         let reference = radroots_event::reply::RadrootsNip10ReplyReference::parse(
             "a".repeat(64),
-            "b".repeat(64),
+            FIXTURE_BOB_PUBLIC_KEY_HEX,
             None,
         )
         .expect("reference");

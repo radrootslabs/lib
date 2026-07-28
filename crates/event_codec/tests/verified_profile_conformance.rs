@@ -7,6 +7,7 @@ use radroots_event::event_head::{
     RadrootsEventHeadDecision, event_head_candidate_for_event, select_event_head,
 };
 use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsNip01EventWire};
+use radroots_event::{RadrootsEventWireError, ids::RadrootsIdParseError};
 use radroots_event_codec::profile::admission::{
     RadrootsAdmittedProfileEvent, RadrootsProfileAdmissionError, verify_and_admit_profile_event,
 };
@@ -89,7 +90,7 @@ fn execute(vector: &Vector) {
         "event.verify_nip01.valid" => verify_valid(vector),
         "event.verify_nip01.invalid_id" => verify_invalid_id(vector),
         "event.verify_nip01.invalid_signature" => verify_invalid_signature(vector),
-        "event.verify_nip01.malformed_envelope" => verify_malformed_envelope(vector),
+        "event.wire.invalid_public_key" => reject_invalid_wire_public_key(vector),
         "event.verify_nip01.kind_overflow" => verify_kind_overflow(vector),
         "profile.verify_and_admit.valid" => profile_admit_valid(vector),
         "profile.verify_and_admit.invalid_kind" => profile_admit_invalid_kind(vector),
@@ -133,11 +134,17 @@ fn verify_invalid_signature(vector: &Vector) {
     assert_eq!(error, RadrootsNip01VerificationError::SignatureInvalid);
 }
 
-fn verify_malformed_envelope(vector: &Vector) {
-    let error = verify_nip01_event(canonical_envelope(input_str(vector, "event_json")))
-        .expect_err("invalid secp256k1 public key must fail envelope conversion");
-    assert_eq!(error.code(), expected_str(vector, "error"));
-    assert_eq!(error, RadrootsNip01VerificationError::MalformedEnvelope);
+fn reject_invalid_wire_public_key(vector: &Vector) {
+    let error = RadrootsNip01EventWire::parse_json(input_str(vector, "event_json"))
+        .expect_err("invalid secp256k1 public key must fail wire parsing");
+    assert_eq!(expected_str(vector, "error"), "invalid_public_key");
+    assert_eq!(
+        error,
+        RadrootsEventWireError::InvalidIdentifier {
+            field: "pubkey",
+            error: RadrootsIdParseError::InvalidPublicKey,
+        }
+    );
 }
 
 fn verify_kind_overflow(vector: &Vector) {

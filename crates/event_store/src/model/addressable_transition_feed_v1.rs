@@ -3,7 +3,8 @@ use super::{
     RadrootsNip09SuppressionEvidenceV1,
 };
 use crate::RadrootsEventStoreError;
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
+use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -289,7 +290,7 @@ pub struct RadrootsAddressableTransitionEventReferenceV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsAddressableTransitionCauseV1 {
     pub(crate) event: RadrootsAddressableTransitionEventReferenceV1,
-    pub(crate) pubkey: RadrootsPublicKey,
+    pub(crate) pubkey: PublicKey,
     pub(crate) created_at: u64,
     pub(crate) kind: u32,
     pub(crate) admission_status: RadrootsEventAdmissionStatus,
@@ -302,7 +303,7 @@ impl RadrootsAddressableTransitionCauseV1 {
         &self.event
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -336,7 +337,7 @@ impl RadrootsAddressableTransitionCauseV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsAddressableTransitionCoordinateV1 {
     pub(crate) kind: u32,
-    pub(crate) pubkey: RadrootsPublicKey,
+    pub(crate) pubkey: PublicKey,
     pub(crate) d_tag: String,
 }
 
@@ -345,7 +346,7 @@ impl RadrootsAddressableTransitionCoordinateV1 {
         self.kind
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -373,7 +374,7 @@ impl RadrootsAddressableTransitionEventReferenceV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoreProducedCanonicalEventV1 {
     pub(crate) event_id: RadrootsEventId,
-    pub(crate) pubkey: RadrootsPublicKey,
+    pub(crate) pubkey: PublicKey,
     pub(crate) created_at: u64,
     pub(crate) kind: u32,
     pub(crate) raw_json: String,
@@ -384,7 +385,7 @@ impl RadrootsStoreProducedCanonicalEventV1 {
         &self.event_id
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 

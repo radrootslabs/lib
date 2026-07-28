@@ -9,12 +9,13 @@ use radroots_event::{
         RadrootsFoodIdentifier, RadrootsFoodImageDimensions, RadrootsFoodPrice,
         RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText, food_media_blossom_digest,
     },
-    ids::{RadrootsEventId, RadrootsPublicKey},
+    ids::RadrootsEventId,
 };
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsInboundFoodAvailabilityImage,
     RadrootsInboundFoodAvailabilityProjection,
 };
+use radroots_identity::PublicKey;
 
 pub const RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1: u32 = 1;
 pub const RADROOTS_FOOD_AVAILABILITY_PROJECTION_APPLY_PAGE_LIMIT_V1: u32 =
@@ -220,7 +221,7 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredFoodAvailabilityV1 {
     source_generation: RadrootsEventStoreSourceGeneration,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     identifier: RadrootsFoodIdentifier,
     event_id: RadrootsEventId,
     event_seq: i64,
@@ -242,7 +243,7 @@ impl RadrootsStoredFoodAvailabilityV1 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_projection(
         source_generation: RadrootsEventStoreSourceGeneration,
-        pubkey: RadrootsPublicKey,
+        pubkey: PublicKey,
         event_id: RadrootsEventId,
         event_seq: i64,
         created_at: u64,
@@ -313,7 +314,7 @@ impl RadrootsStoredFoodAvailabilityV1 {
         self.source_generation
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 

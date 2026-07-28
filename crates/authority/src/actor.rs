@@ -3,7 +3,7 @@
 use crate::RadrootsAuthorityError;
 use core::{fmt, str::FromStr};
 use radroots_event::contract::RadrootsActorRole;
-use radroots_event::ids::RadrootsPublicKey;
+use radroots_identity::PublicKey;
 
 #[cfg(not(feature = "std"))]
 use alloc::{collections::BTreeSet, string::String};
@@ -99,7 +99,7 @@ pub enum RadrootsActorSource {
 pub enum RadrootsActorSelector {
     SelectedAccount,
     AccountId(RadrootsActorAccountId),
-    PublicKey(RadrootsPublicKey),
+    PublicKey(PublicKey),
     DraftExpectedPubkey,
 }
 
@@ -109,7 +109,7 @@ impl RadrootsActorSelector {
     }
 
     pub fn public_key(pubkey: impl AsRef<str>) -> Result<Self, RadrootsAuthorityError> {
-        let pubkey = RadrootsPublicKey::parse(pubkey.as_ref())
+        let pubkey = PublicKey::from_hex(pubkey.as_ref())
             .map_err(|_| RadrootsAuthorityError::InvalidActorPubkey)?;
         Ok(Self::PublicKey(pubkey))
     }
@@ -150,7 +150,7 @@ impl RadrootsActorResolutionRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsActorContext {
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     roles: BTreeSet<RadrootsActorRole>,
     account_id: Option<RadrootsActorAccountId>,
     source: RadrootsActorSource,
@@ -231,7 +231,7 @@ impl RadrootsActorContext {
     where
         I: IntoIterator<Item = RadrootsActorRole>,
     {
-        let pubkey = RadrootsPublicKey::parse(pubkey.as_ref())
+        let pubkey = PublicKey::from_hex(pubkey.as_ref())
             .map_err(|_| RadrootsAuthorityError::InvalidActorPubkey)?;
         Ok(Self {
             pubkey,
@@ -241,7 +241,7 @@ impl RadrootsActorContext {
         })
     }
 
-    pub fn pubkey(&self) -> &RadrootsPublicKey {
+    pub fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -276,13 +276,13 @@ pub fn role_satisfies(
 mod tests {
     use super::*;
 
-    fn hex_64(character: char) -> String {
-        std::iter::repeat_n(character, 64).collect()
-    }
+    const VALID_PUBKEY: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    const OTHER_VALID_PUBKEY: &str =
+        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 
     #[test]
     fn any_is_satisfied_by_any_actor_context() {
-        let actor = RadrootsActorContext::test(hex_64('a'), []).expect("actor");
+        let actor = RadrootsActorContext::test(VALID_PUBKEY, []).expect("actor");
 
         assert!(actor.satisfies(RadrootsActorRole::Any));
     }
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn specific_roles_require_explicit_membership() {
         let actor =
-            RadrootsActorContext::test(hex_64('a'), [RadrootsActorRole::Farmer]).expect("actor");
+            RadrootsActorContext::test(VALID_PUBKEY, [RadrootsActorRole::Farmer]).expect("actor");
 
         assert!(actor.satisfies(RadrootsActorRole::Farmer));
         assert!(!actor.satisfies(RadrootsActorRole::Seller));
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn farmer_does_not_globally_satisfy_seller() {
         let actor =
-            RadrootsActorContext::test(hex_64('a'), [RadrootsActorRole::Farmer]).expect("actor");
+            RadrootsActorContext::test(VALID_PUBKEY, [RadrootsActorRole::Farmer]).expect("actor");
 
         assert!(!actor.satisfies(RadrootsActorRole::Seller));
     }
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn multi_role_actors_satisfy_each_assigned_role() {
         let actor = RadrootsActorContext::test(
-            hex_64('a'),
+            VALID_PUBKEY,
             [RadrootsActorRole::Farmer, RadrootsActorRole::Seller],
         )
         .expect("actor");
@@ -320,14 +320,14 @@ mod tests {
     #[test]
     fn local_account_context_carries_validated_account_id() {
         let actor = RadrootsActorContext::local_account(
-            hex_64('a'),
+            VALID_PUBKEY,
             "acct-field-01",
             [RadrootsActorRole::Farmer],
         )
         .expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::LocalAccount);
-        assert_eq!(actor.pubkey().as_str(), hex_64('a'));
+        assert_eq!(actor.pubkey().to_hex(), VALID_PUBKEY);
         assert_eq!(
             actor.roles().iter().copied().collect::<Vec<_>>(),
             vec![RadrootsActorRole::Farmer]
@@ -339,8 +339,9 @@ mod tests {
 
     #[test]
     fn explicit_pubkey_context_has_no_account_id() {
-        let actor = RadrootsActorContext::explicit_pubkey(hex_64('a'), [RadrootsActorRole::Seller])
-            .expect("actor");
+        let actor =
+            RadrootsActorContext::explicit_pubkey(VALID_PUBKEY, [RadrootsActorRole::Seller])
+                .expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::ExplicitPubkey);
         assert_eq!(actor.account_id(), None);
@@ -349,7 +350,7 @@ mod tests {
     #[test]
     fn test_context_has_no_account_id() {
         let actor =
-            RadrootsActorContext::test(hex_64('a'), [RadrootsActorRole::Farmer]).expect("actor");
+            RadrootsActorContext::test(VALID_PUBKEY, [RadrootsActorRole::Farmer]).expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::Test);
         assert_eq!(actor.account_id(), None);
@@ -358,14 +359,17 @@ mod tests {
     #[test]
     fn remote_signer_and_service_contexts_carry_account_ids() {
         let remote = RadrootsActorContext::remote_signer(
-            hex_64('a'),
+            VALID_PUBKEY,
             "acct-remote",
             [RadrootsActorRole::Buyer],
         )
         .expect("remote actor");
-        let service =
-            RadrootsActorContext::service(hex_64('b'), "acct-service", [RadrootsActorRole::Any])
-                .expect("service actor");
+        let service = RadrootsActorContext::service(
+            OTHER_VALID_PUBKEY,
+            "acct-service",
+            [RadrootsActorRole::Any],
+        )
+        .expect("service actor");
 
         assert_eq!(remote.source(), RadrootsActorSource::RemoteSigner);
         assert_eq!(
@@ -382,20 +386,20 @@ mod tests {
     #[test]
     fn account_id_rejects_invalid_values() {
         assert!(matches!(
-            RadrootsActorContext::local_account(hex_64('a'), "", []),
+            RadrootsActorContext::local_account(VALID_PUBKEY, "", []),
             Err(RadrootsAuthorityError::InvalidActorAccountIdEmpty)
         ));
         assert!(matches!(
-            RadrootsActorContext::local_account(hex_64('a'), " account ", []),
+            RadrootsActorContext::local_account(VALID_PUBKEY, " account ", []),
             Err(RadrootsAuthorityError::InvalidActorAccountIdUntrimmed)
         ));
         assert!(matches!(
-            RadrootsActorContext::local_account(hex_64('a'), "account\nid", []),
+            RadrootsActorContext::local_account(VALID_PUBKEY, "account\nid", []),
             Err(RadrootsAuthorityError::InvalidActorAccountIdControlCharacter)
         ));
         assert!(matches!(
             RadrootsActorContext::local_account(
-                hex_64('a'),
+                VALID_PUBKEY,
                 core::iter::repeat_n('a', MAX_ACTOR_ACCOUNT_ID_LEN + 1).collect::<String>(),
                 []
             ),
@@ -455,7 +459,7 @@ mod tests {
             RadrootsActorSelector::SelectedAccount
         ));
         assert!(matches!(
-            RadrootsActorSelector::public_key(hex_64('b')).expect("selector"),
+            RadrootsActorSelector::public_key(OTHER_VALID_PUBKEY).expect("selector"),
             RadrootsActorSelector::PublicKey(_)
         ));
         assert!(matches!(

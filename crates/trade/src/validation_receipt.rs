@@ -10,11 +10,12 @@ use alloc::{
 use base64::Engine as _;
 use radroots_event::{
     RadrootsEventEnvelope,
-    ids::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsPublicKey},
+    ids::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts},
     kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
     tags::{TAG_A, TAG_D},
     wire::RadrootsNip01EventWireParts,
 };
+use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -38,7 +39,7 @@ pub const VALIDATOR_SET_V1_THRESHOLD: u8 = 1;
 #[serde(deny_unknown_fields)]
 pub struct RadrootsValidatorSetV1 {
     pub set_id: String,
-    pub validator_pubkey: RadrootsPublicKey,
+    pub validator_pubkey: PublicKey,
     pub threshold: u8,
     pub valid_from: u64,
     pub valid_until: u64,
@@ -52,7 +53,7 @@ pub struct RadrootsVerifiedValidatorSetV1 {
     pub set: RadrootsValidatorSetV1,
     pub event_id: String,
     pub address: RadrootsAddressableCoordinate,
-    pub authority_pubkey: RadrootsPublicKey,
+    pub authority_pubkey: PublicKey,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -204,7 +205,7 @@ impl RadrootsTradeValidationTrustPolicy {
         self
     }
 
-    pub fn trusts_validator_pubkey(&self, pubkey: &RadrootsPublicKey) -> bool {
+    pub fn trusts_validator_pubkey(&self, pubkey: &PublicKey) -> bool {
         self.validator_set
             .as_ref()
             .is_some_and(|validator_set| validator_set.validator_pubkey == *pubkey)
@@ -426,7 +427,7 @@ impl RadrootsValidatorSetV1 {
 }
 
 pub fn validator_set_address(
-    authority_pubkey: &RadrootsPublicKey,
+    authority_pubkey: &PublicKey,
     set_id: &str,
 ) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
     validate_uuidv7(set_id, "validator_set.set_id")?;
@@ -484,7 +485,7 @@ pub fn validator_set_from_event(
 
 pub fn verify_validator_set_event(
     event: &RadrootsEventEnvelope,
-    expected_author: Option<&RadrootsPublicKey>,
+    expected_author: Option<&PublicKey>,
 ) -> Result<RadrootsVerifiedValidatorSetV1, RadrootsValidationReceiptError> {
     if event.kind_u32() != KIND_VALIDATOR_SET {
         return Err(RadrootsValidationReceiptError::InvalidKind {
@@ -1146,9 +1147,13 @@ mod tests {
     };
     use radroots_event::{
         RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
-        ids::{RadrootsAddressableCoordinate, RadrootsPublicKey},
+        ids::RadrootsAddressableCoordinate,
         kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
         tags::TAG_D,
+    };
+    use radroots_identity::PublicKey;
+    use radroots_test_fixtures::{
+        FIXTURE_BOB_PUBLIC_KEY_HEX, FIXTURE_CAROL_PUBLIC_KEY_HEX, FIXTURE_DIEGO_PUBLIC_KEY_HEX,
     };
 
     fn hash32(c: char) -> String {
@@ -1163,12 +1168,12 @@ mod tests {
         "018f3d99-7d35-7c0c-8a0f-7f3b645abcde".to_string()
     }
 
-    fn validator_set_author() -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(event_id('d')).expect("validator set author")
+    fn validator_set_author() -> PublicKey {
+        PublicKey::from_hex(FIXTURE_DIEGO_PUBLIC_KEY_HEX).expect("validator set author")
     }
 
-    fn validator_set_pubkey() -> RadrootsPublicKey {
-        RadrootsPublicKey::parse(event_id('e')).expect("validator pubkey")
+    fn validator_set_pubkey() -> PublicKey {
+        PublicKey::from_hex(FIXTURE_CAROL_PUBLIC_KEY_HEX).expect("validator pubkey")
     }
 
     fn validator_set_addr() -> radroots_event::ids::RadrootsAddressableCoordinate {
@@ -1271,7 +1276,7 @@ mod tests {
     ) -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event_id('7'),
-            author: validator_set_author().as_str().to_string(),
+            author: validator_set_author().to_hex(),
             created_at: 1_700_000_001,
             kind,
             tags,
@@ -1383,7 +1388,7 @@ mod tests {
     #[test]
     fn validation_trust_policy_builders_preserve_explicit_settings() {
         let trusted = validator_set_pubkey();
-        let other = RadrootsPublicKey::parse(event_id('b')).unwrap();
+        let other = PublicKey::from_hex(FIXTURE_BOB_PUBLIC_KEY_HEX).expect("other validator");
         let policy = RadrootsTradeValidationTrustPolicy::production()
             .with_validator_set(sample_validator_set(), validator_set_addr(), event_id('8'))
             .with_require_cryptographic_proof(false);
@@ -1422,7 +1427,7 @@ mod tests {
 
         let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event_id('7'),
-            author: validator_set_author().as_str().to_string(),
+            author: validator_set_author().to_hex(),
             created_at: 1_700_000_001,
             kind: parts.kind,
             tags: parts.tags,

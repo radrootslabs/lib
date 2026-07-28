@@ -1,7 +1,7 @@
 use super::*;
 
 fn h(character: char) -> String {
-    character.to_string().repeat(64)
+    crate::test_fixtures::fixture_public_key_hex(character)
 }
 
 fn top_event_tags() -> Vec<Vec<String>> {
@@ -111,9 +111,9 @@ fn nested_parent_uses_author_hint_and_keeps_mentions() {
         panic!("nested");
     };
     assert_eq!(parent.event_id().as_str(), h('c'));
-    assert_eq!(parent.author().pubkey().as_str(), h('d'));
+    assert_eq!(parent.author().pubkey().to_hex(), h('d'));
     assert_eq!(projection.mentions().len(), 1);
-    assert_eq!(projection.mentions()[0].pubkey().as_str(), h('e'));
+    assert_eq!(projection.mentions()[0].pubkey().to_hex(), h('e'));
 }
 
 #[test]

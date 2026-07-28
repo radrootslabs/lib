@@ -209,7 +209,7 @@
           "const": "source_maintenance"
         },
         "schema_sha256": {
-          "const": "d526d96ea02be12b4b0aed99e97cfdde17c4474ace67111506a7b900ee78b186"
+          "const": "074f85b663444ac150239ecd8441ea4a96ad83a798a55e22d2e5e2f7ee943a8c"
         },
         "up": {
           "$ref": "#/$defs/file"
@@ -405,7 +405,7 @@
               "const": "food_availability_projection_v1"
             },
             "food_manifest_sha256": {
-              "const": "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23"
+              "const": "02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990"
             },
             "food_scope_fingerprint_sha256": {
               "const": "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0"

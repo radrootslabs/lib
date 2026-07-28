@@ -411,8 +411,8 @@
     "executor_id": "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1",
     "executor_path": "crates/event_store/tests/food_availability_projection_v1_result_vector.rs",
     "executor_test": "food_availability_projection_v1_result_vector",
-    "executor_byte_length": 34075,
-    "executor_sha256": "9e8e11abae7bbc7dda30eab6f0a79074ffc3761aa6b955cff58c4c62fa581aa3",
+    "executor_byte_length": 34078,
+    "executor_sha256": "59e20d81562299cf9dd942dd637b5ca404c7aacc98c7ce3fbf1e14751c1b2d9b",
     "executor_hash_algorithm": "sha256_bytes_v1"
   }
 }

@@ -4499,6 +4499,7 @@ name = "radroots_authority"
 version = "1.0.0-alpha.1"
 dependencies = [
  "radroots_event",
+ "radroots_identity",
  "radroots_nostr",
  "serde_json",
 ]
@@ -4553,6 +4554,7 @@ dependencies = [
  "radroots_blossom",
  "radroots_core",
  "radroots_event",
+ "radroots_identity",
  "radroots_test_fixtures",
  "serde",
  "serde_json",
@@ -4579,6 +4581,7 @@ dependencies = [
  "radroots_blossom",
  "radroots_event",
  "radroots_event_codec",
+ "radroots_identity",
  "radroots_transport",
  "serde",
  "serde_json",
@@ -4706,6 +4709,7 @@ dependencies = [
 name = "radroots_nostr_accounts"
 version = "1.0.0-alpha.1"
 dependencies = [
+ "nostr",
  "radroots_identity",
  "radroots_nostr_signer",
  "radroots_nostrdb",
@@ -4785,6 +4789,7 @@ dependencies = [
  "hex",
  "radroots_event",
  "radroots_event_store",
+ "radroots_identity",
  "radroots_nostr",
  "radroots_transport",
  "serde",
@@ -5103,6 +5108,7 @@ dependencies = [
  "radroots_event",
  "radroots_event_codec",
  "radroots_event_store",
+ "radroots_identity",
  "radroots_nostr",
  "radroots_test_fixtures",
  "radroots_transport",

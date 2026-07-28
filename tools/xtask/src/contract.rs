@@ -3182,7 +3182,19 @@ struct ConformanceVectorEntry {
     id: String,
     kind: String,
     input: Value,
-    expected: Value,
+    expected: Option<Value>,
+    expected_error_contains: Option<String>,
+}
+
+impl ConformanceVectorEntry {
+    fn expected_value(&self) -> Result<&Value, String> {
+        self.expected.as_ref().ok_or_else(|| {
+            format!(
+                "conformance vector {} does not define an expected output",
+                self.id
+            )
+        })
+    }
 }
 
 impl ReleaseContractFile {
@@ -3726,15 +3738,27 @@ fn validate_conformance_schema(workspace_root: &Path) -> Result<(), String> {
         "required",
         &path,
     )?;
-    let expected_item_required = BTreeSet::from([
-        "expected".to_string(),
-        "id".to_string(),
-        "input".to_string(),
-        "kind".to_string(),
-    ]);
+    let expected_item_required =
+        BTreeSet::from(["id".to_string(), "input".to_string(), "kind".to_string()]);
     if item_required != expected_item_required {
         return Err(format!(
-            "vector item schema in {} must require id, kind, input, and expected",
+            "vector item schema in {} must require id, kind, and input",
+            path.display()
+        ));
+    }
+    let expected_one_of = serde_json::json!([
+        {
+            "required": ["expected"],
+            "not": {"required": ["expected_error_contains"]}
+        },
+        {
+            "required": ["expected_error_contains"],
+            "not": {"required": ["expected"]}
+        }
+    ]);
+    if items.get("oneOf") != Some(&expected_one_of) {
+        return Err(format!(
+            "vector item schema in {} must require exactly one of expected or expected_error_contains",
             path.display()
         ));
     }
@@ -3787,6 +3811,20 @@ fn validate_conformance_schema(workspace_root: &Path) -> Result<(), String> {
             ));
         }
     }
+    validate_string_schema_property(
+        item_properties
+            .get("expected_error_contains")
+            .ok_or_else(|| {
+                format!(
+                    "vector item schema in {} missing expected_error_contains property",
+                    path.display()
+                )
+            })?,
+        "expected_error_contains",
+        &path,
+        Some(1),
+        None,
+    )?;
     Ok(())
 }
 
@@ -4370,6 +4408,24 @@ fn validate_conformance_vector_file(
                 entry.id
             ));
         }
+        match (&entry.expected, &entry.expected_error_contains) {
+            (Some(_), None) => {}
+            (None, Some(fragment)) if !fragment.trim().is_empty() => {}
+            (None, Some(_)) => {
+                return Err(format!(
+                    "conformance vector {} entry {} expected_error_contains must not be blank",
+                    path.display(),
+                    entry.id
+                ));
+            }
+            _ => {
+                return Err(format!(
+                    "conformance vector {} entry {} must define exactly one of expected or expected_error_contains",
+                    path.display(),
+                    entry.id
+                ));
+            }
+        }
     }
     Ok(vector)
 }
@@ -4566,7 +4622,7 @@ fn validate_knowledge_manifest_vector_semantics(
         ("schema_version", schema_version),
         ("registry_version", registry_version),
     ] {
-        let actual = case.expected.get(field).and_then(Value::as_u64);
+        let actual = case.expected_value()?.get(field).and_then(Value::as_u64);
         if actual != Some(expected) {
             return Err(format!(
                 "knowledge manifest conformance expected {field} drift: expected {expected}, got {}",
@@ -6660,8 +6716,9 @@ fn validate_deletion_suppression_vector_shape(
     entry: &ConformanceVectorEntry,
 ) -> Result<(), String> {
     validate_deletion_suppression_forbidden_material(&entry.input, &format!("{}.input", entry.id))?;
+    let expected_value = entry.expected_value()?;
     validate_deletion_suppression_forbidden_material(
-        &entry.expected,
+        expected_value,
         &format!("{}.expected", entry.id),
     )?;
 
@@ -6711,7 +6768,7 @@ fn validate_deletion_suppression_vector_shape(
         request_ids.insert(event.id);
     }
 
-    let expected = deletion_object(&entry.expected, &format!("{} expected", entry.id))?;
+    let expected = deletion_object(expected_value, &format!("{} expected", entry.id))?;
     validate_deletion_object_keys(
         expected,
         &format!("{} expected", entry.id),
@@ -7004,7 +7061,8 @@ fn validate_deletion_suppression_forbidden_material(
 
 fn validate_deletion_vector_shape(entry: &ConformanceVectorEntry) -> Result<(), String> {
     validate_deletion_forbidden_metadata(&entry.input, &format!("{}.input", entry.id))?;
-    validate_deletion_forbidden_metadata(&entry.expected, &format!("{}.expected", entry.id))?;
+    let expected_value = entry.expected_value()?;
+    validate_deletion_forbidden_metadata(expected_value, &format!("{}.expected", entry.id))?;
 
     let input = deletion_object(&entry.input, &format!("{} input", entry.id))?;
     let is_authored = entry
@@ -7104,7 +7162,7 @@ fn validate_deletion_vector_shape(entry: &ConformanceVectorEntry) -> Result<(), 
         }
     }
 
-    let expected = deletion_object(&entry.expected, &format!("{} expected", entry.id))?;
+    let expected = deletion_object(expected_value, &format!("{} expected", entry.id))?;
     if !is_valid {
         validate_deletion_object_keys(expected, &format!("{} expected", entry.id), &["error"])?;
         if !expected
@@ -9669,7 +9727,7 @@ vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "kind", "input", "expected"],
+        "required": ["id", "kind", "input"],
         "properties": {
           "id": {
             "type": "string",
@@ -9680,8 +9738,22 @@ vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
             "minLength": 1
           },
           "input": {},
-          "expected": {}
+          "expected": {},
+          "expected_error_contains": {
+            "type": "string",
+            "minLength": 1
+          }
         },
+        "oneOf": [
+          {
+            "required": ["expected"],
+            "not": {"required": ["expected_error_contains"]}
+          },
+          {
+            "required": ["expected_error_contains"],
+            "not": {"required": ["expected"]}
+          }
+        ],
         "additionalProperties": false
       }
     }
@@ -9855,8 +9927,10 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             .find(|entry| entry.id == "knowledge_manifest_fields_valid_001")
             .expect("knowledge manifest case");
         case.expected
-            .as_object_mut()
+            .as_mut()
             .expect("knowledge manifest expected output")
+            .as_object_mut()
+            .expect("knowledge manifest expected output object")
             .insert("registry_version".to_string(), Value::from(1_u64));
         let error = validate_knowledge_manifest_vector_semantics(&manifest, &vector)
             .expect_err("stale expected registry version must fail");
@@ -9994,7 +10068,8 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             id: "unclaimed_post_case".to_string(),
             kind: "social.post.unclaimed.valid".to_string(),
             input: Value::Object(Default::default()),
-            expected: Value::Object(Default::default()),
+            expected: Some(Value::Object(Default::default())),
+            expected_error_contains: None,
         });
         let error = validate_post_operation_inventory(&manifest, &vector)
             .expect_err("unclaimed post vector kind must fail");
@@ -10220,7 +10295,8 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             id: "unclaimed_comment_case".to_string(),
             kind: "social.comment.project_verified_event.shadow".to_string(),
             input: Value::Object(Default::default()),
-            expected: Value::Object(Default::default()),
+            expected: Some(Value::Object(Default::default())),
+            expected_error_contains: None,
         });
         let error = validate_comment_operation_inventory(&manifest, &vector)
             .expect_err("unclaimed Comment vector kind must fail");
@@ -10241,7 +10317,8 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                 id: "legacy_comment".to_string(),
                 kind: "social.comment.build_tags".to_string(),
                 input: Value::Object(Default::default()),
-                expected: Value::Object(Default::default()),
+                expected: Some(Value::Object(Default::default())),
+                expected_error_contains: None,
             }],
         };
 
@@ -10339,6 +10416,7 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             kind: "social.deletion_request.unclaimed.valid".to_string(),
             input,
             expected,
+            expected_error_contains: None,
         });
         let error =
             validate_deletion_operation_inventory(&manifest, &request_vector, &suppression_vector)
@@ -10403,8 +10481,10 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             .find(|entry| entry.id == "nip09_project_signed_event_target_without_k")
             .expect("signed deletion vector")
             .expected
-            .as_object_mut()
+            .as_mut()
             .expect("projection expected")
+            .as_object_mut()
+            .expect("projection expected object")
             .insert("AuThOrIzAtIoN".to_string(), Value::Bool(true));
         let error =
             validate_deletion_operation_inventory(&manifest, &request_vector, &suppression_vector)
@@ -10488,8 +10568,10 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             .find(|entry| entry.id == "nip09_suppress_same_author_event_reference")
             .expect("event-reference suppression vector")
             .expected
-            .as_object_mut()
+            .as_mut()
             .expect("suppression expected")
+            .as_object_mut()
+            .expect("suppression expected object")
             .get_mut("event_reference")
             .expect("event-reference evidence")
             .as_object_mut()
@@ -10513,7 +10595,8 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
                 id: "nip09_alternate".to_string(),
                 kind: "social.deletion_request.build_authored_draft.valid".to_string(),
                 input: Value::Object(Default::default()),
-                expected: Value::Object(Default::default()),
+                expected: Some(Value::Object(Default::default())),
+                expected_error_contains: None,
             }],
         };
 
@@ -10606,7 +10689,8 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
             id: "food_unclaimed_case".to_string(),
             kind: "food_availability.unclaimed.valid".to_string(),
             input: Value::Object(Default::default()),
-            expected: Value::Object(Default::default()),
+            expected: Some(Value::Object(Default::default())),
+            expected_error_contains: None,
         });
         let error = validate_food_availability_operation_inventory(&manifest, &vector)
             .expect_err("unclaimed FoodAvailability vector kind must fail");
@@ -12951,13 +13035,14 @@ rust_package = "radroots_sdk"
 
         let invalid_vector_root = create_synthetic_workspace("operation_contract_invalid_vector");
         add_operation_contract_files(&invalid_vector_root);
+        let invalid_vector_path = invalid_vector_root
+            .join("contracts")
+            .join("conformance")
+            .join("vectors")
+            .join("profile")
+            .join("metadata.v1.json");
         write_file(
-            &invalid_vector_root
-                .join("contracts")
-                .join("conformance")
-                .join("vectors")
-                .join("profile")
-                .join("metadata.v1.json"),
+            &invalid_vector_path,
             r#"{
   "suite": "profile",
   "contract_version": "1.0.0",
@@ -12975,7 +13060,48 @@ rust_package = "radroots_sdk"
         let err =
             validate_generic_contract_bundle(&bundle).expect_err("invalid vector should fail");
         assert!(err.contains("metadata.v1.json"));
-        assert!(err.contains("parse"));
+        assert!(err.contains("exactly one of expected or expected_error_contains"));
+
+        write_file(
+            &invalid_vector_path,
+            r#"{
+  "suite": "profile",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "profile_build_authored_draft_minimal_001",
+      "kind": "profile.build_authored_draft",
+      "input": {},
+      "expected": {},
+      "expected_error_contains": "invalid"
+    }
+  ]
+}
+"#,
+        );
+        let err = validate_generic_contract_bundle(&bundle)
+            .expect_err("vector with two result authorities should fail");
+        assert!(err.contains("exactly one of expected or expected_error_contains"));
+
+        write_file(
+            &invalid_vector_path,
+            r#"{
+  "suite": "profile",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "profile_build_authored_draft_minimal_001",
+      "kind": "profile.build_authored_draft",
+      "input": {},
+      "expected_error_contains": "   "
+    }
+  ]
+}
+"#,
+        );
+        let err = validate_generic_contract_bundle(&bundle)
+            .expect_err("blank expected error fragment should fail");
+        assert!(err.contains("expected_error_contains must not be blank"));
         let _ = fs::remove_dir_all(&invalid_vector_root);
 
         let root = create_synthetic_workspace("operation_contract_vector_path");

@@ -70,7 +70,7 @@ fn id_verification_rejects_an_out_of_range_kind_before_hashing() {
     let original = signed_max_kind_event();
     let kind = u32::from(u16::MAX) + 1;
     let id = compute_canonical_nip01_event_id_v1(
-        original.author_str(),
+        &original.author().to_hex(),
         original.created_at_u64(),
         kind,
         &original.tags_as_vec(),
@@ -80,7 +80,7 @@ fn id_verification_rejects_an_out_of_range_kind_before_hashing() {
     .into_string();
     let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id,
-        author: original.author_str().to_owned(),
+        author: original.author().to_hex().to_owned(),
         created_at: original.created_at_u64(),
         kind,
         tags: original.tags_as_vec(),

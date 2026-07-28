@@ -747,7 +747,7 @@ pub fn data_from_nostr_event(
 ) -> Result<RadrootsParsedData<RadrootsOperationalListing>, EventParseError> {
     data_from_event(
         event.id_str().to_string(),
-        event.author_str().to_string(),
+        event.author().to_hex().to_string(),
         event.created_at_u64(),
         event.kind_u32(),
         event.content().to_string(),
@@ -760,7 +760,7 @@ pub fn parsed_from_nostr_event(
 ) -> Result<RadrootsParsedEvent<RadrootsOperationalListing>, EventParseError> {
     parsed_from_event(
         event.id_str().to_string(),
-        event.author_str().to_string(),
+        event.author().to_hex().to_string(),
         event.created_at_u64(),
         event.kind_u32(),
         event.content().to_string(),

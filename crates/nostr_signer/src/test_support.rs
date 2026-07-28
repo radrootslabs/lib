@@ -3,12 +3,13 @@ use crate::test_fixtures::{
     FIXTURE_DIEGO, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS, RELAY_TERTIARY_WSS,
 };
 use nostr::{Keys, PublicKey, RelayUrl, SecretKey};
-use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
+use radroots_identity::{PublicIdentity, PublicKey as IdentityPublicKey};
 
-fn approved_public_identity(identity: ApprovedFixtureIdentity) -> RadrootsIdentityPublic {
-    RadrootsIdentity::from_secret_key_str(identity.secret_key_hex)
-        .expect("identity")
-        .to_public()
+fn approved_public_identity(identity: ApprovedFixtureIdentity) -> PublicIdentity {
+    let public_key = approved_public_key(identity);
+    PublicIdentity::new(
+        IdentityPublicKey::from_hex(&public_key.to_hex()).expect("identity public key"),
+    )
 }
 
 fn approved_public_key(identity: ApprovedFixtureIdentity) -> PublicKey {
@@ -20,7 +21,7 @@ fn relay(url: &str) -> RelayUrl {
     RelayUrl::parse(url).expect("relay")
 }
 
-pub(crate) fn fixture_alice_identity() -> RadrootsIdentityPublic {
+pub(crate) fn fixture_alice_identity() -> PublicIdentity {
     approved_public_identity(FIXTURE_ALICE)
 }
 
@@ -28,11 +29,11 @@ pub(crate) fn fixture_alice_public_key() -> PublicKey {
     approved_public_key(FIXTURE_ALICE)
 }
 
-pub(crate) fn fixture_bob_identity() -> RadrootsIdentityPublic {
+pub(crate) fn fixture_bob_identity() -> PublicIdentity {
     approved_public_identity(FIXTURE_BOB)
 }
 
-pub(crate) fn fixture_carol_identity() -> RadrootsIdentityPublic {
+pub(crate) fn fixture_carol_identity() -> PublicIdentity {
     approved_public_identity(FIXTURE_CAROL)
 }
 
@@ -40,7 +41,7 @@ pub(crate) fn fixture_carol_public_key() -> PublicKey {
     approved_public_key(FIXTURE_CAROL)
 }
 
-pub(crate) fn fixture_diego_identity() -> RadrootsIdentityPublic {
+pub(crate) fn fixture_diego_identity() -> PublicIdentity {
     approved_public_identity(FIXTURE_DIEGO)
 }
 
@@ -68,15 +69,21 @@ pub(crate) fn synthetic_secret_hex(index: u32) -> String {
     format!("{index:064x}")
 }
 
-pub(crate) fn synthetic_public_identity(index: u32) -> RadrootsIdentityPublic {
-    let secret_hex = synthetic_secret_hex(index);
-    RadrootsIdentity::from_secret_key_str(secret_hex.as_str())
-        .expect("identity")
-        .to_public()
+pub(crate) fn synthetic_public_identity(index: u32) -> PublicIdentity {
+    let public_key = synthetic_public_key(index);
+    PublicIdentity::new(
+        IdentityPublicKey::from_hex(&public_key.to_hex()).expect("identity public key"),
+    )
 }
 
 pub(crate) fn synthetic_public_key(index: u32) -> PublicKey {
     let secret_hex = synthetic_secret_hex(index);
     let secret = SecretKey::from_hex(secret_hex.as_str()).expect("secret");
     Keys::new(secret).public_key()
+}
+
+pub(crate) fn synthetic_keys(index: u32) -> Keys {
+    let secret_hex = synthetic_secret_hex(index);
+    let secret = SecretKey::from_hex(secret_hex.as_str()).expect("secret");
+    Keys::new(secret)
 }

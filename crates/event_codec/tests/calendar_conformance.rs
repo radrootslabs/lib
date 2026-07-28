@@ -596,7 +596,7 @@ fn assert_author_reference(
     let relay = expected.get("relay").and_then(Value::as_str);
     assert_eq!(actual.raw_pubkey(), pubkey, "{}", vector_id(vector));
     assert_eq!(
-        actual.pubkey().as_str(),
+        actual.pubkey().to_hex(),
         pubkey.to_ascii_lowercase(),
         "{} normalized author key",
         vector_id(vector)
@@ -606,7 +606,7 @@ fn assert_author_reference(
         relay.is_none_or(|relay| radroots_event::ids::RadrootsRelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
-        pubkey == actual.pubkey().as_str() && canonical_relay,
+        pubkey == actual.pubkey().to_hex() && canonical_relay,
         "{} author canonicality",
         vector_id(vector)
     );

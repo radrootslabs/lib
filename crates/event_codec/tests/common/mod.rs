@@ -5,7 +5,7 @@ use radroots_event::{
 };
 
 pub const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-pub const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+pub const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 pub const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

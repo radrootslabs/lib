@@ -98,6 +98,23 @@ pub const FIXTURE_DIEGO: ApprovedFixtureIdentity = ApprovedFixtureIdentity {
     npub: FIXTURE_DIEGO_NPUB,
 };
 
+pub fn fixture_public_key_hex(character: char) -> String {
+    let canonical = match character.to_ascii_lowercase() {
+        'a' => FIXTURE_ALICE_PUBLIC_KEY_HEX,
+        'b' => FIXTURE_BOB_PUBLIC_KEY_HEX,
+        'c' => FIXTURE_CAROL_PUBLIC_KEY_HEX,
+        'd' => FIXTURE_DIEGO_PUBLIC_KEY_HEX,
+        'e' => "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        'f' => "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+        _ => panic!("unsupported fixture public-key label: {character}"),
+    };
+    if character.is_ascii_uppercase() {
+        canonical.to_ascii_uppercase()
+    } else {
+        canonical.to_owned()
+    }
+}
+
 pub const RELAY_PRIMARY_WSS: &str = "wss://relay.example.com";
 pub const RELAY_SECONDARY_WSS: &str = "wss://relay-2.example.com";
 pub const RELAY_TERTIARY_WSS: &str = "wss://relay-3.example.com";

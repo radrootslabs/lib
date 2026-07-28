@@ -24,8 +24,7 @@
         "required": [
           "id",
           "kind",
-          "input",
-          "expected"
+          "input"
         ],
         "properties": {
           "id": {
@@ -37,8 +36,34 @@
             "minLength": 1
           },
           "input": {},
-          "expected": {}
+          "expected": {},
+          "expected_error_contains": {
+            "type": "string",
+            "minLength": 1
+          }
         },
+        "oneOf": [
+          {
+            "required": [
+              "expected"
+            ],
+            "not": {
+              "required": [
+                "expected_error_contains"
+              ]
+            }
+          },
+          {
+            "required": [
+              "expected_error_contains"
+            ],
+            "not": {
+              "required": [
+                "expected"
+              ]
+            }
+          }
+        ],
         "additionalProperties": false
       }
     }

@@ -82,7 +82,7 @@ pub fn validate_food_availability_revision(
     let current_event = current.event();
 
     if previous_event.kind_u32() != current_event.kind_u32()
-        || previous_event.author_str() != current_event.author_str()
+        || previous_event.author().to_hex() != current_event.author().to_hex()
         || previous_projection.identifier() != current_projection.identifier()
     {
         return Err(RadrootsFoodAvailabilityRevisionError::CoordinateChanged);

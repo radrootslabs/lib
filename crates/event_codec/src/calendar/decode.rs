@@ -32,6 +32,7 @@ use radroots_event::{
         DEFAULT_TAG_TOTAL_MAX_BYTES,
     },
 };
+use radroots_identity::PublicKey;
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -583,8 +584,7 @@ fn calendar_participants_from_tags(
         if !(2..=4).contains(&tag.len()) {
             return Err(EventParseError::InvalidTag("p"));
         }
-        radroots_event::ids::RadrootsPublicKey::parse(&tag[1])
-            .map_err(|_| EventParseError::InvalidTag(TAG_P))?;
+        PublicKey::from_hex(&tag[1]).map_err(|_| EventParseError::InvalidTag(TAG_P))?;
         if tag.len() == 3 && tag[2].is_empty() {
             return Err(EventParseError::InvalidTag(TAG_P));
         }

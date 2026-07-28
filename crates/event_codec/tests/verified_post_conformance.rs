@@ -583,7 +583,7 @@ fn reply_event_reference_value(reference: &RadrootsInboundNip10EventReference) -
         "raw_tag": reference.raw_tag(),
         "event_id": reference.event_id().as_str(),
         "relay": reference.relay().map(|relay| relay.as_str()),
-        "author_hint": reference.author_hint().map(|author| author.as_str()),
+        "author_hint": reference.author_hint().map(|author| author.to_hex()),
     })
 }
 
@@ -591,7 +591,7 @@ fn reply_participant_value(participant: &RadrootsInboundNip10Participant) -> Val
     json!({
         "tag_index": participant.tag_index(),
         "raw_tag": participant.raw_tag(),
-        "pubkey": participant.pubkey().as_str(),
+        "pubkey": participant.pubkey().to_hex(),
         "relay": participant.relay().map(|relay| relay.as_str()),
     })
 }

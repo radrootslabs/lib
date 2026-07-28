@@ -765,7 +765,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip09DeletionProjection) -> V
             "tag_index": target.tag_index(),
             "coordinate": target.coordinate().as_str(),
             "kind": target.coordinate().kind(),
-            "pubkey": target.coordinate().pubkey().as_str(),
+            "pubkey": target.coordinate().pubkey().to_hex(),
             "identifier": target.coordinate().identifier(),
             "raw_tag": target.raw_tag(),
         })).collect::<Vec<_>>(),

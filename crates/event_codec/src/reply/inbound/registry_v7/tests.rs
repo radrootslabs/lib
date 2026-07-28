@@ -1,12 +1,16 @@
 use super::*;
 
+fn h(character: char) -> String {
+    crate::test_fixtures::fixture_public_key_hex(character)
+}
+
 #[test]
 fn tolerant_inbound_accepts_blank_content_and_absent_participants() {
     let projection = project_nip10_reply_parts(
         KIND_POST,
         &[vec![
             "e".to_string(),
-            "a".repeat(64),
+            h('a'),
             String::new(),
             "root".to_string(),
         ]],
@@ -31,10 +35,10 @@ fn tolerant_inbound_accepts_blank_content_and_absent_participants() {
 
 #[test]
 fn tolerant_inbound_retains_raw_optional_metadata_and_orders_diagnostics() {
-    let root_id = "a".repeat(64);
-    let parent_id = "d".repeat(64);
-    let participant = "b".repeat(64);
-    let parent_author_hint = "c".repeat(64);
+    let root_id = h('a');
+    let parent_id = h('d');
+    let participant = h('b');
+    let parent_author_hint = h('c');
     let tags = vec![
         vec![
             "e".to_string(),
@@ -76,7 +80,7 @@ fn tolerant_inbound_retains_raw_optional_metadata_and_orders_diagnostics() {
     assert_eq!(projection.participants().len(), 1);
     assert_eq!(projection.participants()[0].tag_index(), 4);
     assert_eq!(projection.participants()[0].raw_tag(), tags[4]);
-    assert_eq!(projection.participants()[0].pubkey().as_str(), participant);
+    assert_eq!(projection.participants()[0].pubkey().to_hex(), participant);
     assert!(projection.participants()[0].relay().is_none());
 
     assert_eq!(
@@ -121,8 +125,8 @@ fn tolerant_inbound_retains_raw_optional_metadata_and_orders_diagnostics() {
 
 #[test]
 fn inbound_projection_uses_the_canonical_relay_hint_profile() {
-    let root_id = "a".repeat(64);
-    let root_author = "b".repeat(64);
+    let root_id = h('a');
+    let root_author = h('b');
     for relay in [
         "wss://%65xample.com",
         "wss://127.1",
@@ -198,8 +202,8 @@ fn inbound_relay_syntax_and_tag_element_budgets_remain_separate() {
     RadrootsNostrRelayHint::parse(&relay).expect("relay syntax has no Reply wire budget");
 
     let tags = vec![
-        vec!["e".to_string(), "a".repeat(64), relay, "root".to_string()],
-        vec!["p".to_string(), "b".repeat(64)],
+        vec!["e".to_string(), h('a'), relay, "root".to_string()],
+        vec!["p".to_string(), h('b')],
     ];
     assert!(matches!(
         project_nip10_reply_parts(KIND_POST, &tags, "Reply", 10),
@@ -214,7 +218,7 @@ fn inbound_relay_syntax_and_tag_element_budgets_remain_separate() {
 
 #[test]
 fn tolerant_inbound_keeps_reference_ids_and_markers_as_hard_gates() {
-    let author = "b".repeat(64);
+    let author = h('b');
     for (tag, expected) in [
         (
             vec![
@@ -228,7 +232,7 @@ fn tolerant_inbound_keeps_reference_ids_and_markers_as_hard_gates() {
         (
             vec![
                 "e".to_string(),
-                "a".repeat(64),
+                h('a'),
                 String::new(),
                 "mention".to_string(),
             ],
@@ -248,8 +252,8 @@ fn tolerant_inbound_keeps_reference_ids_and_markers_as_hard_gates() {
 
 #[test]
 fn marked_inbound_retains_citations_and_ignores_malformed_supplements() {
-    let root_id = "a".repeat(64);
-    let citation_id = "c".repeat(64);
+    let root_id = h('a');
+    let citation_id = h('c');
     let tags = vec![
         vec!["e".to_string()],
         vec![
@@ -257,12 +261,12 @@ fn marked_inbound_retains_citations_and_ignores_malformed_supplements() {
             citation_id.clone(),
             "wss://relay.example".to_string(),
             String::new(),
-            "b".repeat(64),
+            h('b'),
         ],
         vec!["e".to_string(), "not-an-event-id".to_string()],
         vec![
             "e".to_string(),
-            "d".repeat(64),
+            h('d'),
             String::new(),
             "mention".to_string(),
         ],
@@ -293,8 +297,8 @@ fn marked_inbound_retains_citations_and_ignores_malformed_supplements() {
         projection.citations()[0]
             .author_hint()
             .expect("citation author")
-            .as_str(),
-        "b".repeat(64)
+            .to_hex(),
+        h('b')
     );
     assert_eq!(
         projection
@@ -322,8 +326,8 @@ fn marked_inbound_retains_citations_and_ignores_malformed_supplements() {
 
 #[test]
 fn positional_inbound_accepts_empty_markers_and_tolerates_middle_citations() {
-    let root_id = "a".repeat(64);
-    let root_author = "b".repeat(64);
+    let root_id = h('a');
+    let root_author = h('b');
     let direct_tags = vec![
         vec![
             "e".to_string(),
@@ -343,15 +347,15 @@ fn positional_inbound_accepts_empty_markers_and_tolerates_middle_citations() {
             .root()
             .author_hint()
             .expect("root author hint")
-            .as_str(),
+            .to_hex(),
         root_author
     );
     assert!(direct.diagnostics().is_empty());
 
-    let parent_id = "c".repeat(64);
-    let parent_author = "d".repeat(64);
-    let citation_id = "e".repeat(64);
-    let citation_author = "f".repeat(64);
+    let parent_id = h('c');
+    let parent_author = h('d');
+    let citation_id = h('e');
+    let citation_author = h('f');
     let nested_tags = vec![
         vec![
             "e".to_string(),

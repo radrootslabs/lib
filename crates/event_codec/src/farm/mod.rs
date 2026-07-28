@@ -28,7 +28,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     #[cfg(feature = "serde_json")]
-    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     #[cfg(feature = "serde_json")]
     const EVENT_SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",

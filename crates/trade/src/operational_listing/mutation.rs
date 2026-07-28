@@ -162,7 +162,7 @@ pub fn build_operational_listing_mutation_draft(
         created_at,
         parts.tags,
         parts.content,
-        draft.seller_pubkey().as_str(),
+        &draft.seller_pubkey().to_hex(),
     )
     .map_err(RadrootsOperationalListingMutationError::FrozenDraft)
 }
@@ -173,10 +173,7 @@ mod tests {
     use radroots_event::{
         contract::validate_event_contract_shape,
         farm::RadrootsFarmRef,
-        ids::{
-            RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId,
-            RadrootsPublicKey,
-        },
+        ids::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
         kinds::KIND_CLASSIFIED_LISTING,
         operational_listing::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
@@ -187,6 +184,7 @@ mod tests {
         resource_area::RadrootsResourceAreaRef,
     };
     use radroots_event_codec::verification::verify_nip01_event;
+    use radroots_identity::PublicKey;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };
@@ -267,7 +265,7 @@ mod tests {
     fn canonical_draft() -> RadrootsOperationalListingCanonicalEdit {
         RadrootsOperationalListingCanonicalEdit::new(
             listing(),
-            RadrootsPublicKey::parse(SELLER).expect("seller"),
+            PublicKey::from_hex(SELLER).expect("seller"),
         )
         .expect("canonical listing edit")
     }
@@ -305,7 +303,7 @@ mod tests {
                 .canonical_draft()
                 .expect("draft")
                 .seller_pubkey()
-                .as_str(),
+                .to_hex(),
             SELLER
         );
         assert_eq!(
@@ -313,7 +311,7 @@ mod tests {
                 .canonical_draft()
                 .expect("draft")
                 .seller_pubkey()
-                .as_str(),
+                .to_hex(),
             SELLER
         );
         assert_eq!(
@@ -321,7 +319,7 @@ mod tests {
                 .canonical_draft()
                 .expect("draft")
                 .seller_pubkey()
-                .as_str(),
+                .to_hex(),
             SELLER
         );
         assert_eq!(
@@ -393,7 +391,7 @@ mod tests {
             publish_draft.contract_id(),
             OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID
         );
-        assert_eq!(publish_draft.expected_pubkey_str(), SELLER);
+        assert_eq!(publish_draft.expected_pubkey().to_hex(), SELLER);
         assert_eq!(publish_draft.created_at_u64(), 1_700_000_000);
         assert_eq!(publish_draft.content(), "# Coffee\n\nSingle origin coffee");
         assert_eq!(update_draft.kind_u32(), KIND_CLASSIFIED_LISTING);
@@ -401,7 +399,7 @@ mod tests {
             update_draft.contract_id(),
             OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID
         );
-        assert_eq!(update_draft.expected_pubkey_str(), SELLER);
+        assert_eq!(update_draft.expected_pubkey().to_hex(), SELLER);
     }
 
     #[test]
@@ -438,7 +436,7 @@ mod tests {
         });
         let draft = RadrootsOperationalListingCanonicalEdit::new(
             listing,
-            RadrootsPublicKey::parse(SELLER).expect("seller"),
+            PublicKey::from_hex(SELLER).expect("seller"),
         )
         .expect("canonical listing edit");
         let publish = RadrootsOperationalListingMutation::publish(draft);

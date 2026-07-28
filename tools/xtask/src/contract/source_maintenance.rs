@@ -35,7 +35,7 @@ const RETAINED_SOURCE_GENERATION_LIMIT: u32 = 8;
 const RAW_EVENT_REJECTION_SCAN_BOUND: u64 = RAW_EVENT_COUNT_LIMIT + 1;
 const RAW_TAG_REJECTION_SCAN_BOUND: u64 = RAW_TAG_COUNT_LIMIT + 1;
 const RETAINED_GENERATION_REJECTION_SCAN_BOUND: u32 = RETAINED_SOURCE_GENERATION_LIMIT + 1;
-const SCHEMA_SHA256: &str = "d526d96ea02be12b4b0aed99e97cfdde17c4474ace67111506a7b900ee78b186";
+const SCHEMA_SHA256: &str = "074f85b663444ac150239ecd8441ea4a96ad83a798a55e22d2e5e2f7ee943a8c";
 const HASH_ALGORITHM: &str = "sha256_bytes_v1";
 const WRITE_COMMAND: &str = "cargo xtask contract source-maintenance-manifest --write";
 
@@ -44,7 +44,7 @@ const PREDECESSOR_MANIFEST_RELATIVE: &str =
     "crates/event_store/contracts/food_availability_projection_v1.manifest.json";
 const PREDECESSOR_MANIFEST_BYTE_LENGTH: usize = 17_455;
 const PREDECESSOR_MANIFEST_SHA256: &str =
-    "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23";
+    "02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990";
 const NIP09_HOOK_ID: &str = "nip09_reconciliation_v1";
 const NIP09_MANIFEST_SHA256: &str =
     "74af832420ffbaa9805e89df3c0b34f126a443e1598f757e3372f407f9003b77";
@@ -275,6 +275,170 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/core/src/unit.rs",
     },
     SourceSpec {
+        role: "blossom_hash_authority",
+        path: "crates/blossom/src/hash.rs",
+    },
+    SourceSpec {
+        role: "blossom_url_authority",
+        path: "crates/blossom/src/url.rs",
+    },
+    SourceSpec {
+        role: "event_contract_facade",
+        path: "crates/event/src/contract.rs",
+    },
+    SourceSpec {
+        role: "event_contract_registry_v7_authority",
+        path: "crates/event/src/contract/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_envelope_authority",
+        path: "crates/event/src/envelope.rs",
+    },
+    SourceSpec {
+        role: "event_head_facade",
+        path: "crates/event/src/event_head.rs",
+    },
+    SourceSpec {
+        role: "event_head_v1_authority",
+        path: "crates/event/src/event_head/v1.rs",
+    },
+    SourceSpec {
+        role: "event_ids_authority",
+        path: "crates/event/src/ids.rs",
+    },
+    SourceSpec {
+        role: "event_trade_authority",
+        path: "crates/event/src/trade.rs",
+    },
+    SourceSpec {
+        role: "event_kinds_authority",
+        path: "crates/event/src/kinds.rs",
+    },
+    SourceSpec {
+        role: "event_tags_authority",
+        path: "crates/event/src/tags.rs",
+    },
+    SourceSpec {
+        role: "event_draft_authority",
+        path: "crates/event/src/draft.rs",
+    },
+    SourceSpec {
+        role: "event_calendar_authority",
+        path: "crates/event/src/calendar.rs",
+    },
+    SourceSpec {
+        role: "event_classified_listing_authority",
+        path: "crates/event/src/classified_listing.rs",
+    },
+    SourceSpec {
+        role: "event_profile_authority",
+        path: "crates/event/src/profile.rs",
+    },
+    SourceSpec {
+        role: "event_post_authority",
+        path: "crates/event/src/post.rs",
+    },
+    SourceSpec {
+        role: "event_comment_authority",
+        path: "crates/event/src/comment.rs",
+    },
+    SourceSpec {
+        role: "event_food_availability_authority",
+        path: "crates/event/src/food_availability.rs",
+    },
+    SourceSpec {
+        role: "event_deletion_authority",
+        path: "crates/event/src/deletion.rs",
+    },
+    SourceSpec {
+        role: "event_relay_hint_authority",
+        path: "crates/event/src/relay_hint.rs",
+    },
+    SourceSpec {
+        role: "event_media_authority",
+        path: "crates/event/src/media.rs",
+    },
+    SourceSpec {
+        role: "event_social_authority",
+        path: "crates/event/src/social.rs",
+    },
+    SourceSpec {
+        role: "event_wire_facade",
+        path: "crates/event/src/wire.rs",
+    },
+    SourceSpec {
+        role: "event_wire_v1_authority",
+        path: "crates/event/src/wire/v1.rs",
+    },
+    SourceSpec {
+        role: "event_codec_verification_facade",
+        path: "crates/event_codec/src/verification.rs",
+    },
+    SourceSpec {
+        role: "event_codec_verification_v1_authority",
+        path: "crates/event_codec/src/verification/v1.rs",
+    },
+    SourceSpec {
+        role: "event_codec_registry_v7_admission_authority",
+        path: "crates/event_codec/src/admission/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_profile_inbound_facade",
+        path: "crates/event_codec/src/profile/inbound.rs",
+    },
+    SourceSpec {
+        role: "event_codec_profile_registry_v7_authority",
+        path: "crates/event_codec/src/profile/inbound/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_post_inbound_facade",
+        path: "crates/event_codec/src/post/inbound.rs",
+    },
+    SourceSpec {
+        role: "event_codec_post_registry_v7_authority",
+        path: "crates/event_codec/src/post/inbound/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_reply_inbound_facade",
+        path: "crates/event_codec/src/reply/inbound.rs",
+    },
+    SourceSpec {
+        role: "event_codec_reply_registry_v7_authority",
+        path: "crates/event_codec/src/reply/inbound/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_comment_inbound_facade",
+        path: "crates/event_codec/src/comment/inbound.rs",
+    },
+    SourceSpec {
+        role: "event_codec_comment_registry_v7_authority",
+        path: "crates/event_codec/src/comment/inbound/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_deletion_facade",
+        path: "crates/event_codec/src/deletion/mod.rs",
+    },
+    SourceSpec {
+        role: "event_codec_deletion_reconciliation_v1_authority",
+        path: "crates/event_codec/src/deletion/reconciliation_v1.rs",
+    },
+    SourceSpec {
+        role: "event_codec_food_inbound_facade",
+        path: "crates/event_codec/src/food_availability/inbound.rs",
+    },
+    SourceSpec {
+        role: "event_codec_food_registry_v7_authority",
+        path: "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_job_traits_authority",
+        path: "crates/event_codec/src/job/traits.rs",
+    },
+    SourceSpec {
+        role: "event_store_dependency_authority",
+        path: "crates/event_store/Cargo.toml",
+    },
+    SourceSpec {
         role: "event_store_error_and_limits",
         path: "crates/event_store/src/error.rs",
     },
@@ -295,6 +459,22 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_store/src/model.rs",
     },
     SourceSpec {
+        role: "event_store_reconciliation_v1_model",
+        path: "crates/event_store/src/model/reconciliation_v1.rs",
+    },
+    SourceSpec {
+        role: "event_store_reconciliation_v1_ingest_model",
+        path: "crates/event_store/src/model/ingest_reconciliation_v1.rs",
+    },
+    SourceSpec {
+        role: "addressable_transition_feed_model",
+        path: "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+    },
+    SourceSpec {
+        role: "food_projection_model",
+        path: "crates/event_store/src/model/food_availability_projection_v1.rs",
+    },
+    SourceSpec {
         role: "source_generation_rebuild_authority",
         path: "crates/event_store/src/nip09/reconciliation_v1.rs",
     },
@@ -307,8 +487,28 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_store/src/store.rs",
     },
     SourceSpec {
+        role: "addressable_transition_feed_store",
+        path: "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+    },
+    SourceSpec {
+        role: "food_projection_store",
+        path: "crates/event_store/src/store/food_availability_projection_v1.rs",
+    },
+    SourceSpec {
+        role: "predecessor_post_core_v1_extension",
+        path: "crates/event_store/src/store/post_core_extensions_v1.rs",
+    },
+    SourceSpec {
+        role: "predecessor_post_core_v1_storage",
+        path: "crates/event_store/src/store/post_core_storage_v1.rs",
+    },
+    SourceSpec {
         role: "raw_ingest_capacity_authority",
         path: "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+    },
+    SourceSpec {
+        role: "predecessor_protocol_storage",
+        path: "crates/event_store/src/store/protocol_storage_v1.rs",
     },
     SourceSpec {
         role: "source_maintenance_runtime",
@@ -347,6 +547,8 @@ pub(super) fn source_contract_fixture_source_paths() -> Vec<&'static str> {
 
 const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "Cargo.toml",
+    "crates/blossom/src/hash.rs",
+    "crates/blossom/src/url.rs",
     "crates/core/src/currency.rs",
     "crates/core/src/decimal.rs",
     "crates/core/src/money.rs",
@@ -354,15 +556,63 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/core/src/quantity.rs",
     "crates/core/src/quantity_price.rs",
     "crates/core/src/unit.rs",
+    "crates/event/src/calendar.rs",
+    "crates/event/src/classified_listing.rs",
+    "crates/event/src/comment.rs",
+    "crates/event/src/contract.rs",
+    "crates/event/src/contract/registry_v7.rs",
+    "crates/event/src/deletion.rs",
+    "crates/event/src/draft.rs",
+    "crates/event/src/envelope.rs",
+    "crates/event/src/event_head.rs",
+    "crates/event/src/event_head/v1.rs",
+    "crates/event/src/food_availability.rs",
+    "crates/event/src/ids.rs",
+    "crates/event/src/kinds.rs",
+    "crates/event/src/media.rs",
+    "crates/event/src/post.rs",
+    "crates/event/src/profile.rs",
+    "crates/event/src/relay_hint.rs",
+    "crates/event/src/social.rs",
+    "crates/event/src/tags.rs",
+    "crates/event/src/trade.rs",
+    "crates/event/src/wire.rs",
+    "crates/event/src/wire/v1.rs",
+    "crates/event_codec/src/admission/registry_v7.rs",
+    "crates/event_codec/src/comment/inbound.rs",
+    "crates/event_codec/src/comment/inbound/registry_v7.rs",
+    "crates/event_codec/src/deletion/mod.rs",
+    "crates/event_codec/src/deletion/reconciliation_v1.rs",
+    "crates/event_codec/src/food_availability/inbound.rs",
+    "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+    "crates/event_codec/src/job/traits.rs",
+    "crates/event_codec/src/post/inbound.rs",
+    "crates/event_codec/src/post/inbound/registry_v7.rs",
+    "crates/event_codec/src/profile/inbound.rs",
+    "crates/event_codec/src/profile/inbound/registry_v7.rs",
+    "crates/event_codec/src/reply/inbound.rs",
+    "crates/event_codec/src/reply/inbound/registry_v7.rs",
+    "crates/event_codec/src/verification.rs",
+    "crates/event_codec/src/verification/v1.rs",
+    "crates/event_store/Cargo.toml",
     "crates/event_store/src/error.rs",
     "crates/event_store/src/generated.rs",
     "crates/event_store/src/lib.rs",
     "crates/event_store/src/migrations.rs",
     "crates/event_store/src/model.rs",
+    "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/model/food_availability_projection_v1.rs",
+    "crates/event_store/src/model/ingest_reconciliation_v1.rs",
+    "crates/event_store/src/model/reconciliation_v1.rs",
     "crates/event_store/src/nip09/reconciliation_v1.rs",
     "crates/event_store/src/schema.rs",
     "crates/event_store/src/store.rs",
+    "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/store/food_availability_projection_v1.rs",
+    "crates/event_store/src/store/post_core_extensions_v1.rs",
+    "crates/event_store/src/store/post_core_storage_v1.rs",
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
+    "crates/event_store/src/store/protocol_storage_v1.rs",
 ];
 
 #[cfg(test)]
@@ -974,7 +1224,7 @@ fn validate_catalog(catalog: &CatalogDescriptor) -> Result<(), String> {
 
 fn validate_migration_identity(up: &FileDescriptor, down: &FileDescriptor) -> Result<(), String> {
     const UP_BYTE_LENGTH: u64 = 19_841;
-    const UP_SHA256: &str = "425dc799f392b87f265a6fb81f89c4a1c7a5db8391ab0380970708cb9c66704d";
+    const UP_SHA256: &str = "ab2724188f8d08c897eebea2533a635e7c74282a25e84e4c0c37e78b08837a43";
     const DOWN_BYTE_LENGTH: u64 = 5_172;
     const DOWN_SHA256: &str = "fe44fd53c51545c08ea479b385e6781079dab70fc63da2a3c205d727a00ce860";
     if up.path != MIGRATION_UP_RELATIVE
@@ -1734,7 +1984,7 @@ fn validate_sql_capacity_authority(workspace_root: &Path) -> Result<(), String> 
         "retained_generation_count >= retained_generation_limit",
         "CREATE TRIGGER radroots_event_store_source_generation_capacity_advance",
         "CREATE TRIGGER radroots_event_store_source_capacity_marker_close_guard",
-        "33b93a3c87ce428e8aa6f5e92643c77203d9aa006c53ce96f3562fe6d68ffd23",
+        "02dfe1b450fbdac16e718888215b4dd5c85d8975440fa21e8f439fb24c2b2990",
         "8B63C5DDC48A2CC7DB69295238B96D5F814DBA50427C80B4D0079F061E6D3DE0",
         "capacity.retained_generation_count = (\n      SELECT COUNT(*)\n      FROM (\n        SELECT 1\n        FROM radroots_event_store_source_generation\n        LIMIT 9\n      )\n    )",
         "generation.generation_ordinal = capacity.retained_generation_count",
@@ -3196,9 +3446,9 @@ struct DelegatedAuthoritySpec {
 }
 
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
-    "19c405fc91468997aa53f08ebbaed82c526bf4810b2175ad9034d95dc95b8597";
+    "88a60544e38b546dbb2c555b0347308eac0c4a3eb66f403ba44d45fb4a5818e6";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "ba44c729ebba14e658ec7b48f7ba395fd4e8fb3d597d306df5cfa7010a4f9bac";
+    "af59af8101b14f5eacf88b851e0298e3b4b3c97951f6cd4b5a73a5c2a39e6a3e";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {

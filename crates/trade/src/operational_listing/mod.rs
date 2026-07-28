@@ -8,11 +8,12 @@ use radroots_event::{
     RadrootsEventEnvelope,
     ids::{
         RadrootsAddressableCoordinateParts, RadrootsClassifiedListingAddress, RadrootsDTag,
-        RadrootsIdParseError, RadrootsPublicKey,
+        RadrootsIdParseError,
     },
     operational_listing::{RadrootsOperationalListing, RadrootsOperationalListingParseError},
 };
 use radroots_event_codec::operational_listing::decode::operational_listing_from_nostr_event;
+use radroots_identity::PublicKey;
 
 pub use self::draft::{
     RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditDocumentV1,
@@ -32,7 +33,7 @@ pub use self::validation::{
 pub struct RadrootsClassifiedListingAddressParts {
     pub address: RadrootsClassifiedListingAddress,
     pub kind: u32,
-    pub seller_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: PublicKey,
     pub listing_id: RadrootsDTag,
 }
 
@@ -46,7 +47,7 @@ impl RadrootsClassifiedListingAddressParts {
 pub struct RadrootsPublicClassifiedListingAddress {
     pub address: RadrootsClassifiedListingAddress,
     pub kind: u32,
-    pub seller_pubkey: RadrootsPublicKey,
+    pub seller_pubkey: PublicKey,
     pub listing_id: RadrootsDTag,
 }
 
@@ -186,9 +187,9 @@ mod tests {
         assert_eq!(listing.address.as_str(), raw);
         assert_eq!(public.address.as_str(), raw);
         assert_eq!(typed.address.as_str(), raw);
-        assert_eq!(listing.seller_pubkey.as_str(), SELLER);
-        assert_eq!(public.seller_pubkey.as_str(), SELLER);
-        assert_eq!(typed.seller_pubkey.as_str(), SELLER);
+        assert_eq!(listing.seller_pubkey.to_hex(), SELLER);
+        assert_eq!(public.seller_pubkey.to_hex(), SELLER);
+        assert_eq!(typed.seller_pubkey.to_hex(), SELLER);
     }
 
     #[test]
@@ -198,7 +199,7 @@ mod tests {
 
         assert_eq!(parsed.address.as_str(), raw);
         assert_eq!(parsed.kind, KIND_CLASSIFIED_LISTING);
-        assert_eq!(parsed.seller_pubkey.as_str(), SELLER);
+        assert_eq!(parsed.seller_pubkey.to_hex(), SELLER);
         assert_eq!(parsed.listing_id.as_str(), "listing-1");
     }
 

@@ -23,7 +23,7 @@ use crate::sqlite::RadrootsNostrSignerSqliteDb;
 #[cfg(feature = "native")]
 use nostr::RelayUrl;
 #[cfg(feature = "native")]
-use radroots_identity::RadrootsIdentityPublic;
+use radroots_identity::PublicIdentity;
 #[cfg(feature = "native")]
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientMetadata, RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
@@ -159,7 +159,7 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
             signer_identity: metadata
                 .signer_identity_json
                 .as_deref()
-                .map(parse_json_field::<RadrootsIdentityPublic>)
+                .map(parse_json_field::<PublicIdentity>)
                 .transpose()?,
             connections: Vec::new(),
             audit_records: Vec::new(),
@@ -297,11 +297,11 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                     state
                         .signer_identity
                         .as_ref()
-                        .map(|identity| identity.id.to_string()),
+                        .map(|identity| identity.id().to_string()),
                     state
                         .signer_identity
                         .as_ref()
-                        .map(|identity| identity.public_key_hex.clone()),
+                        .map(|identity| identity.public_key().to_hex()),
                     state
                         .signer_identity
                         .as_ref()
@@ -317,11 +317,11 @@ impl RadrootsNostrSignerStore for RadrootsNostrSqliteSignerStore {
                     json!([
                         connection.connection_id.as_str(),
                         connection.client_public_key.to_hex(),
-                        connection.signer_identity.id.to_string(),
-                        connection.signer_identity.public_key_hex.clone(),
+                        connection.signer_identity.id().to_string(),
+                        connection.signer_identity.public_key().to_hex(),
                         serde_json::to_string(&connection.signer_identity)?,
-                        connection.user_identity.id.to_string(),
-                        connection.user_identity.public_key_hex.clone(),
+                        connection.user_identity.id().to_string(),
+                        connection.user_identity.public_key().to_hex(),
                         serde_json::to_string(&connection.user_identity)?,
                         connection
                             .connect_secret_hash

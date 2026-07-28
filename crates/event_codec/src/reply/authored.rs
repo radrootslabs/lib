@@ -45,38 +45,32 @@ fn event_tag(reference: &RadrootsNip10ReplyReference, marker: &str) -> Vec<Strin
 }
 
 fn public_key_tag(reference: &RadrootsNip10ReplyReference) -> Vec<String> {
-    vec!["p".to_string(), reference.author().as_str().to_string()]
+    vec!["p".to_string(), reference.author().to_hex()]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn h(character: char) -> String {
+        crate::test_fixtures::fixture_public_key_hex(character)
+    }
+
     #[test]
     fn nested_reply_deduplicates_equal_reference_authors() {
-        let author = "b".repeat(64);
-        let root = RadrootsNip10ReplyReference::parse("a".repeat(64), &author, None)
-            .expect("root reference");
-        let parent = RadrootsNip10ReplyReference::parse("c".repeat(64), &author, None)
-            .expect("parent reference");
+        let author = h('b');
+        let root =
+            RadrootsNip10ReplyReference::parse(h('a'), &author, None).expect("root reference");
+        let parent =
+            RadrootsNip10ReplyReference::parse(h('c'), &author, None).expect("parent reference");
         let reply =
             RadrootsAuthoredNip10Reply::nested("Reply", root, parent).expect("nested reply");
 
         assert_eq!(
             authored_nip10_reply_to_wire_parts(&reply).tags,
             vec![
-                vec![
-                    "e".to_string(),
-                    "a".repeat(64),
-                    String::new(),
-                    "root".to_string(),
-                ],
-                vec![
-                    "e".to_string(),
-                    "c".repeat(64),
-                    String::new(),
-                    "reply".to_string(),
-                ],
+                vec!["e".to_string(), h('a'), String::new(), "root".to_string(),],
+                vec!["e".to_string(), h('c'), String::new(), "reply".to_string(),],
                 vec!["p".to_string(), author],
             ]
         );

@@ -2,7 +2,7 @@ use nostr::{
     UnsignedEvent,
     filter::{Alphabet, SingleLetterTag},
 };
-use radroots_identity::RadrootsIdentityPublic;
+use radroots_identity::PublicIdentity;
 use radroots_nostr::prelude::{
     RadrootsNostrEvent, RadrootsNostrFilter, RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
     RadrootsNostrPublicKey, RadrootsNostrRelayUrl, RadrootsNostrTag, RadrootsNostrTimestamp,
@@ -42,7 +42,7 @@ pub trait RadrootsNostrSignerNip46Signer: Clone + Send + Sync {
         client_public_key: &RadrootsNostrPublicKey,
         payload: &str,
     ) -> Result<String, RadrootsNostrSignerError>;
-    fn user_identity(&self) -> RadrootsIdentityPublic;
+    fn user_identity(&self) -> PublicIdentity;
     /// Signs a caller-supplied NIP-46 unsigned event without claiming typed
     /// Radroots product authoring.
     fn sign_user_event(
@@ -206,7 +206,7 @@ impl<S: RadrootsNostrSignerNip46Signer> RadrootsNostrSignerNip46Codec<S> {
         &self,
         unsigned_event: UnsignedEvent,
     ) -> RadrootsNostrConnectResponse {
-        let user_public_key = self.signer.user_identity().public_key_hex;
+        let user_public_key = self.signer.user_identity().public_key().to_hex();
         if unsigned_event.pubkey.to_hex() != user_public_key {
             return RadrootsNostrConnectResponse::Error {
                 result: None,
@@ -853,8 +853,8 @@ mod tests {
     };
     use crate::store::RadrootsNostrSignerStore;
     use crate::test_support::{fixture_alice_identity, fixture_carol_public_key, primary_relay};
-    use nostr::{Keys, Timestamp, UnsignedEvent};
-    use radroots_identity::{RadrootsIdentity, RadrootsIdentityPublic};
+    use nostr::{Keys, SecretKey, Timestamp, UnsignedEvent};
+    use radroots_identity::{PublicIdentity, PublicKey as IdentityPublicKey};
     use radroots_nostr::prelude::{
         RadrootsNostrEvent, RadrootsNostrGenericEventBuilder, RadrootsNostrKind,
         RadrootsNostrPublicKey, RadrootsNostrTagKind,
@@ -872,8 +872,8 @@ mod tests {
 
     #[derive(Clone)]
     struct TestSigner {
-        signer_identity: RadrootsIdentity,
-        user_identity: RadrootsIdentity,
+        signer_identity: Keys,
+        user_identity: Keys,
         sign_events: bool,
         fail_crypto: bool,
     }
@@ -948,8 +948,8 @@ mod tests {
             Ok(payload.to_owned())
         }
 
-        fn user_identity(&self) -> RadrootsIdentityPublic {
-            self.user_identity.to_public()
+        fn user_identity(&self) -> PublicIdentity {
+            public_identity_from_keys(&self.user_identity)
         }
 
         fn sign_user_event(
@@ -958,7 +958,7 @@ mod tests {
         ) -> Result<RadrootsNostrEvent, RadrootsNostrSignerError> {
             if self.sign_events {
                 return unsigned_event
-                    .sign_with_keys(self.user_identity.keys())
+                    .sign_with_keys(&self.user_identity)
                     .map_err(|error| RadrootsNostrSignerError::Sign(error.to_string()));
             }
             Err(RadrootsNostrSignerError::Sign(
@@ -1069,16 +1069,24 @@ mod tests {
         test_signer_with_options(false, false)
     }
 
+    fn keys_from_secret(secret_key_hex: &str) -> Keys {
+        Keys::new(SecretKey::from_hex(secret_key_hex).expect("secret key"))
+    }
+
+    fn public_identity_from_keys(keys: &Keys) -> PublicIdentity {
+        PublicIdentity::new(
+            IdentityPublicKey::from_hex(&keys.public_key().to_hex()).expect("identity public key"),
+        )
+    }
+
     fn test_signer_with_options(sign_events: bool, fail_crypto: bool) -> TestSigner {
         TestSigner {
-            signer_identity: RadrootsIdentity::from_secret_key_str(
+            signer_identity: keys_from_secret(
                 "1111111111111111111111111111111111111111111111111111111111111111",
-            )
-            .expect("signer identity"),
-            user_identity: RadrootsIdentity::from_secret_key_str(
+            ),
+            user_identity: keys_from_secret(
                 "2222222222222222222222222222222222222222222222222222222222222222",
-            )
-            .expect("user identity"),
+            ),
             sign_events,
             fail_crypto,
         }
@@ -2010,17 +2018,15 @@ mod tests {
         backend
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
                 client_public_key,
-                test_signer().user_identity.to_public(),
+                test_signer().user_identity(),
             ))
             .expect("first connection");
         backend
             .register_connection(RadrootsNostrSignerConnectionDraft::new(
                 client_public_key,
-                RadrootsIdentity::from_secret_key_str(
+                public_identity_from_keys(&keys_from_secret(
                     "3333333333333333333333333333333333333333333333333333333333333333",
-                )
-                .expect("second user identity")
-                .to_public(),
+                )),
             ))
             .expect("second connection");
 
@@ -2119,7 +2125,7 @@ mod tests {
         let response = codec
             .sign_event_response(
                 serde_json::from_value(serde_json::json!({
-                    "pubkey": fixture_alice_identity().public_key_hex,
+                    "pubkey": fixture_alice_identity().public_key().to_hex(),
                     "created_at": 1,
                     "kind": 1,
                     "tags": [],
@@ -2188,8 +2194,8 @@ mod tests {
                 | RadrootsNostrSignerAuthState::Authorized
         ));
         assert_eq!(
-            connection.user_identity.id,
-            test_signer().user_identity().id
+            connection.user_identity.id(),
+            test_signer().user_identity().id()
         );
     }
 }
