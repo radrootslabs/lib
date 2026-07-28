@@ -2559,6 +2559,34 @@ mod tests {
         store
     }
 
+    async fn suppressed_food_visibility_store() -> (RadrootsEventStore, String) {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let food = food_availability_event(
+            220,
+            "visibility-drift-carrots",
+            "Visibility Drift Carrots",
+            "Suppressed harvest",
+            "active",
+            Vec::new(),
+        );
+        let food_id = food.id_str().to_owned();
+        let deletion = deletion_event(
+            &fixture_keys(),
+            230,
+            vec![vec![
+                "a".to_owned(),
+                food_availability_coordinate("visibility-drift-carrots"),
+            ]],
+        );
+        for (observed_at_ms, event) in [(19_100, food), (19_101, deletion)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("suppressed visibility fixture ingest");
+        }
+        (store, food_id)
+    }
+
     fn calendar_date_event(
         created_at: u32,
         d_tag: &str,
@@ -8524,6 +8552,69 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             Err(RadrootsEventStoreError::CurrentVisibilityDrift { reason })
                 if reason.contains("has no current-visibility authority")
         ));
+    }
+
+    #[tokio::test]
+    async fn current_visibility_rejects_addressable_head_projection_drift() {
+        for (label, bypass_checks, mutation, expected_reason) in [
+            (
+                "negative stored cutoff",
+                true,
+                "UPDATE radroots_event_store_addressable_head_state SET address_reference_cutoff = -1",
+                "stored address deletion cutoff is invalid",
+            ),
+            (
+                "contract disagreement",
+                false,
+                "UPDATE radroots_event_store_addressable_head_state SET contract_id = 'radroots.event.invalid.v1'",
+                "central visibility disagrees with addressable head state",
+            ),
+        ] {
+            let (store, food_id) = suppressed_food_visibility_store().await;
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            sqlx::query("DROP TRIGGER radroots_event_store_addressable_state_old_update_guard")
+                .execute(&mut *connection)
+                .await
+                .expect("trusted addressable-state guard removal");
+            if bypass_checks {
+                sqlx::query("PRAGMA foreign_keys = OFF")
+                    .execute(&mut *connection)
+                    .await
+                    .expect("disable trusted foreign-key enforcement");
+                sqlx::query("PRAGMA ignore_check_constraints = ON")
+                    .execute(&mut *connection)
+                    .await
+                    .expect("enable trusted check-constraint bypass");
+            }
+            sqlx::query(mutation)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted addressable-state corruption");
+            if bypass_checks {
+                sqlx::query("PRAGMA ignore_check_constraints = OFF")
+                    .execute(&mut *connection)
+                    .await
+                    .expect("restore check-constraint enforcement");
+                sqlx::query("PRAGMA foreign_keys = ON")
+                    .execute(&mut *connection)
+                    .await
+                    .expect("restore foreign-key enforcement");
+            }
+            drop(connection);
+
+            let error = store
+                .current_event_visibility_v1(food_id.as_str())
+                .await
+                .expect_err("corrupt addressable head projection must fail visibility read");
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::CurrentVisibilityDrift { ref reason }
+                        if reason.contains(expected_reason)
+                ),
+                "{label}: {error}",
+            );
+        }
     }
 
     #[tokio::test]
