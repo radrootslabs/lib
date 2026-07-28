@@ -36,7 +36,7 @@ packages = [
 
 [repositories.sdk]
 url = "https://github.com/radrootslabs/sdk"
-version = "0.1.0-alpha"
+version = "0.1.0"
 packages = ["radroots_sdk", "radroots"]
 
 [repository_policy]

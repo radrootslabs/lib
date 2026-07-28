@@ -1322,13 +1322,11 @@ dependency requirement is pinned to exactly `=0.1.0-alpha`. This temporary
 cohort is frozen until an explicit future authority changes it; neither normal
 development nor release preparation may bump it implicitly.
 
-Every Rust crate in `radrootslabs/sdk`, including bindings, WASM wrappers,
-runtime contracts, build tools, `radroots_sdk`, and `radroots`, is likewise
-pinned to exactly `0.1.0-alpha`; every internal Radroots dependency uses the
-exact `=0.1.0-alpha` requirement. Cross-repository dependencies use that same
-frozen cohort without creating a path dependency between the standalone
-repositories. This document's “V1” is the architecture specification version,
-not a claim that Rust APIs are already 1.0-stable.
+The two `radrootslabs/sdk` public packages remain at `0.1.0` under their
+independent repository authority. Cross-repository dependencies therefore use
+the exact version assigned to the package's owning repository rather than a
+single monorepo-wide version. This document's “V1” is the architecture
+specification version, not a claim that Rust APIs are already 1.0-stable.
 
 Cargo package versions are independent from versioned wire, conformance,
 database, and operation contracts. Changing the library crate cohort MUST NOT
