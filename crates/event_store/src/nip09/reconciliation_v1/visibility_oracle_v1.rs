@@ -607,6 +607,39 @@ mod tests {
     }
 
     #[test]
+    fn raw_snapshot_visibility_oracle_keeps_newer_coordinate_head_v1() {
+        let newer = signed_ingest_with_tags(
+            30_402,
+            2,
+            "newer",
+            vec![vec!["d".to_owned(), "same-coordinate".to_owned()]],
+        );
+        let newer_id = newer.event().id_str().to_owned();
+        let older = signed_ingest_with_tags(
+            30_402,
+            1,
+            "older",
+            vec![vec!["d".to_owned(), "same-coordinate".to_owned()]],
+        );
+        let events = [
+            reconciled_event(newer, RadrootsEventAdmissionStatus::Admitted),
+            reconciled_event(older, RadrootsEventAdmissionStatus::Admitted),
+        ];
+
+        let winners = oracle_head_winners(&events);
+        assert_eq!(winners.len(), 1);
+        assert_eq!(
+            winners
+                .values()
+                .next()
+                .expect("coordinate winner")
+                .event_id
+                .as_str(),
+            newer_id
+        );
+    }
+
+    #[test]
     fn raw_snapshot_visibility_oracle_bounds_high_fan_in_evidence_v1() {
         const REQUEST_COUNT: usize = 512;
         let target = signed_ingest_with_tags(

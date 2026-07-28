@@ -627,6 +627,21 @@ mod tests {
             )
         ));
 
+        value["source_generation"] = serde_json::json!("42".repeat(32));
+        value["scope_fingerprint"] = serde_json::json!("AA".repeat(32));
+        assert!(matches!(
+            RadrootsAddressableTransitionCursorV1::from_json(
+                serde_json::to_string(&value)
+                    .expect("scope encoding JSON")
+                    .as_str()
+            ),
+            Err(
+                RadrootsEventStoreError::AddressableTransitionCursorEncoding {
+                    field: "scope_fingerprint"
+                }
+            )
+        ));
+
         assert!(matches!(
             RadrootsAddressableTransitionCursorV1::new(
                 cursor.source_generation(),

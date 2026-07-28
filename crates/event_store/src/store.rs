@@ -4483,6 +4483,111 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sqlite_busy_classification_is_exact() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("busy-classification.sqlite");
+        let mut holder = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("holder connection");
+        sqlx::query("CREATE TABLE fixture(value INTEGER NOT NULL)")
+            .execute(&mut holder)
+            .await
+            .expect("fixture table");
+        let mut contender =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
+                .await
+                .expect("contender connection");
+        sqlx::query("PRAGMA busy_timeout = 0")
+            .execute(&mut contender)
+            .await
+            .expect("disable busy wait");
+        sqlx::query("BEGIN EXCLUSIVE")
+            .execute(&mut holder)
+            .await
+            .expect("exclusive holder");
+
+        let busy = sqlx::query("BEGIN IMMEDIATE")
+            .execute(&mut contender)
+            .await
+            .expect_err("contender must observe SQLITE_BUSY");
+        assert!(sqlite_error_is_busy(&busy));
+        assert!(sqlite_error_is_busy_or_locked(&busy));
+        assert!(!sqlite_error_is_busy(&sqlx::Error::RowNotFound));
+        assert!(!sqlite_error_is_busy_or_locked(&sqlx::Error::RowNotFound));
+
+        sqlx::query("ROLLBACK")
+            .execute(&mut holder)
+            .await
+            .expect("release holder");
+    }
+
+    #[tokio::test]
+    async fn sqlite_busy_journal_mode_probe_fails_closed_until_reader_releases() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("busy-journal-mode.sqlite");
+        let mut initializer = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true),
+        )
+        .await
+        .expect("initializer connection");
+        sqlx::query("CREATE TABLE fixture(value INTEGER NOT NULL)")
+            .execute(&mut initializer)
+            .await
+            .expect("fixture table");
+        initializer.close().await.expect("close initializer");
+
+        let mut reader =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
+                .await
+                .expect("reader connection");
+        sqlx::query("BEGIN")
+            .execute(&mut reader)
+            .await
+            .expect("reader transaction");
+        let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fixture")
+            .fetch_one(&mut reader)
+            .await
+            .expect("establish read lock");
+
+        let mut contender = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(&path)
+                .busy_timeout(std::time::Duration::ZERO),
+        )
+        .await
+        .expect("contender connection");
+
+        let error = configure_file_journal_mode(&mut contender)
+            .await
+            .expect_err("exclusive journal-mode probe must respect the read lock");
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::Sqlx(ref source) if sqlite_error_is_busy_or_locked(source)
+        ));
+
+        sqlx::query("ROLLBACK")
+            .execute(&mut reader)
+            .await
+            .expect("release read lock");
+        configure_file_journal_mode(&mut contender)
+            .await
+            .expect("journal mode after reader release");
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("PRAGMA main.journal_mode")
+                .fetch_one(&mut contender)
+                .await
+                .expect("journal mode"),
+            "wal"
+        );
+    }
+
+    #[tokio::test]
     async fn open_file_rejects_utf16_main_database_before_schema_or_journal_mutation() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let path = tempdir.path().join("open-file-utf16.sqlite");

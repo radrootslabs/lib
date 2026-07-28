@@ -1257,6 +1257,41 @@ mod migration_framework {
     use std::str::FromStr;
     use std::time::Duration;
 
+    #[test]
+    fn pending_capacity_hooks_follow_schema_progress() {
+        let uninitialized = RadrootsEventStoreSchemaStatus::Uninitialized;
+        assert!(!has_pending_source_capacity_hook(
+            &uninitialized,
+            EVENT_STORE_MIGRATIONS,
+        ));
+        assert!(!has_pending_source_maintenance_hook(
+            &uninitialized,
+            EVENT_STORE_MIGRATIONS,
+        ));
+
+        let baseline = RadrootsEventStoreSchemaStatus::UnledgeredBaseline;
+        assert!(has_pending_source_capacity_hook(
+            &baseline,
+            EVENT_STORE_MIGRATIONS,
+        ));
+        assert!(has_pending_source_maintenance_hook(
+            &baseline,
+            EVENT_STORE_MIGRATIONS,
+        ));
+
+        let current = RadrootsEventStoreSchemaStatus::Managed {
+            version: RADROOTS_EVENT_STORE_SCHEMA_VERSION_CURRENT,
+        };
+        assert!(!has_pending_source_capacity_hook(
+            &current,
+            EVENT_STORE_MIGRATIONS,
+        ));
+        assert!(!has_pending_source_maintenance_hook(
+            &current,
+            EVENT_STORE_MIGRATIONS,
+        ));
+    }
+
     const SYNTHETIC_V2_UP: &str = "CREATE TABLE radroots_event_store_v2_parent (
   id INTEGER PRIMARY KEY NOT NULL
 ) STRICT;
