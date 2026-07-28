@@ -1,9 +1,6 @@
 #![forbid(unsafe_code)]
 
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomError,
-    RadrootsBlossomMediaType, RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, Error, MediaType, Sha256};
 use radroots_event::article::RadrootsArticle;
 use radroots_event::comment::{
     RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
@@ -146,7 +143,7 @@ fn authored_error(code: &str) -> RadrootsJsValue {
     error_json("encode_error", Some(code))
 }
 
-fn blossom_authored_error(error: RadrootsBlossomError) -> RadrootsJsValue {
+fn blossom_authored_error(error: Error) -> RadrootsJsValue {
     authored_error(error.code())
 }
 
@@ -413,13 +410,12 @@ fn authored_post_images(
 fn authored_post_image(
     input: AuthoredImageInput,
 ) -> Result<RadrootsAuthoredPostImage, RadrootsJsValue> {
-    let media_type =
-        RadrootsBlossomMediaType::parse(&input.media_type).map_err(blossom_authored_error)?;
-    let sha256 = RadrootsBlossomSha256::digest(&input.bytes);
+    let media_type = MediaType::parse(&input.media_type).map_err(blossom_authored_error)?;
+    let sha256 = Sha256::digest(&input.bytes);
     let size = u64::try_from(input.bytes.len())
         .map_err(|_| authored_error("blob_size_platform_overflow"))?;
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&input.url).map_err(blossom_authored_error)?,
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&input.url).map_err(blossom_authored_error)?,
         sha256,
         size,
         media_type.clone(),
@@ -437,7 +433,7 @@ fn authored_post_image(
     let mut authored = RadrootsAuthoredPostImage::new(image, dimensions, input.alt)
         .map_err(post_authored_error)?;
     for fallback in input.fallbacks {
-        let fallback = RadrootsBlossomBlobUrl::parse(&fallback)
+        let fallback = BlobUrl::parse(&fallback)
             .map_err(blossom_authored_error)?
             .approve()
             .map_err(blossom_authored_error)?;
@@ -1609,7 +1605,7 @@ mod tests {
     #[test]
     fn authored_media_binding_verifies_exact_arbitrary_bytes() {
         let bytes = vec![0, 159, 146, 150];
-        let hash = RadrootsBlossomSha256::digest(&bytes);
+        let hash = Sha256::digest(&bytes);
         let url = format!("https://media.example/{hash}.webp");
         let input = serde_json::json!({
             "content": format!("Harvest {url}"),
@@ -1647,7 +1643,7 @@ mod tests {
     #[test]
     fn authored_media_binding_rejects_fabricated_descriptor_fields() {
         let bytes = b"image".to_vec();
-        let hash = RadrootsBlossomSha256::digest(&bytes);
+        let hash = Sha256::digest(&bytes);
         let url = format!("https://media.example/{hash}.webp");
         let mut input = serde_json::json!({
             "content": format!("Harvest {url}"),
