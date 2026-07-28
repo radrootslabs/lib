@@ -9288,6 +9288,121 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[tokio::test]
+    async fn addressable_transition_feed_rejects_expired_and_missing_cursors() {
+        let expired_store = food_availability_audit_corruption_store().await;
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        let current = expired_store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect("current transition page");
+        let expired = crate::RadrootsAddressableTransitionCursorV1::new(
+            current.next_cursor().source_generation(),
+            scope.fingerprint(),
+            0,
+        )
+        .expect("expired cursor fixture");
+        let mut connection = expired_store
+            .pool()
+            .acquire()
+            .await
+            .expect("trusted connection");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_generation_update_guard")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted generation guard removal");
+        sqlx::query("PRAGMA ignore_check_constraints = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("enable trusted check-constraint bypass");
+        sqlx::query("UPDATE radroots_event_store_source_generation SET transition_floor_seq = 1")
+            .execute(&mut *connection)
+            .await
+            .expect("advance trusted generation floor");
+        sqlx::query(
+            "UPDATE radroots_event_store_addressable_feed_integrity_v1 SET transition_floor_seq = 1, last_transition_seq = 1, transition_count = 0",
+        )
+        .execute(&mut *connection)
+        .await
+        .expect("advance trusted integrity floor");
+        sqlx::query("PRAGMA ignore_check_constraints = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("restore check-constraint enforcement");
+        drop(connection);
+        assert!(matches!(
+            expired_store
+                .addressable_transition_page_v1(&scope, Some(&expired), 64)
+                .await,
+            Err(
+                RadrootsEventStoreError::AddressableTransitionCursorExpired {
+                    cursor: 0,
+                    floor: 1,
+                }
+            )
+        ));
+
+        let missing_store = RadrootsEventStore::open_memory().await.expect("open");
+        let first = food_availability_event(
+            300,
+            "missing-cursor-first",
+            "Missing Cursor Carrots",
+            "First cursor authority fixture",
+            "active",
+            Vec::new(),
+        );
+        let unrelated = signed_event(
+            30_340,
+            301,
+            vec![vec!["d".to_owned(), "missing-cursor-middle".to_owned()]],
+            "unrelated cursor authority fixture",
+        );
+        let third = food_availability_event(
+            302,
+            "missing-cursor-third",
+            "Missing Cursor Carrots",
+            "Third cursor authority fixture",
+            "active",
+            Vec::new(),
+        );
+        for (index, event) in [first, unrelated, third].into_iter().enumerate() {
+            missing_store
+                .ingest_event(RadrootsEventIngest::new(
+                    event,
+                    19_200 + i64::try_from(index).expect("fixture index"),
+                ))
+                .await
+                .expect("missing-cursor fixture ingest");
+        }
+        let current = missing_store
+            .addressable_transition_page_v1(&scope, None, 2)
+            .await
+            .expect("current cursor page");
+        let middle = crate::RadrootsAddressableTransitionCursorV1::new(
+            current.next_cursor().source_generation(),
+            scope.fingerprint(),
+            2,
+        )
+        .expect("middle cursor");
+        sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_delete_guard")
+            .execute(missing_store.pool())
+            .await
+            .expect("trusted transition delete guard removal");
+        sqlx::query(
+            "DELETE FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 2",
+        )
+        .execute(missing_store.pool())
+        .await
+        .expect("trusted cursor transition deletion");
+        assert!(matches!(
+            missing_store
+                .addressable_transition_page_v1(&scope, Some(&middle), 64)
+                .await,
+            Err(RadrootsEventStoreError::AddressableTransitionSequenceGap { reason })
+                if reason.contains("cursor sequence 2 is absent")
+        ));
+    }
+
+    #[tokio::test]
     async fn raw_addressable_heads_use_the_first_opaque_d_value_or_empty() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let missing = signed_event(39_990, 30, Vec::new(), "missing");
