@@ -1,4 +1,9 @@
 //! Canonical Blossom media-type values.
+//!
+//! [`MediaType`] rejects wildcards and duplicate parameters, then emits a
+//! deterministic parameter order. Parsing describes declared media type only;
+//! callers remain responsible for sniffing or applying content policy where
+//! untrusted bytes require it.
 
 #[cfg(feature = "serde")]
 use alloc::string::String;

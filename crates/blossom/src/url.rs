@@ -1,3 +1,11 @@
+//! Structural Blossom blob URLs and the Radroots-approved reference state.
+//!
+//! [`BlobUrl`] preserves received HTTP or HTTPS references after strict
+//! structural parsing. [`BlobUrl::approve`] produces [`ApprovedBlobUrl`] only
+//! for HTTPS and loopback HTTP references. Approval permits a caller to consider
+//! the reference for transport; it does not perform a request or establish host
+//! reputation, byte integrity, authenticity, or application media safety.
+
 #[cfg(feature = "serde")]
 use alloc::string::String;
 use alloc::string::ToString;

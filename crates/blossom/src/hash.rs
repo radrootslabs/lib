@@ -1,3 +1,10 @@
+//! Canonical SHA-256 values, safe file extensions, and root hash paths.
+//!
+//! [`Sha256`] hashes or parses exact lowercase hexadecimal values. [`HashPath`]
+//! models the single root path segment used by Blossom and rejects traversal,
+//! escaping, queries, and fragments. These values identify bytes; they do not
+//! establish origin, authenticity, or content safety.
+
 use alloc::string::{String, ToString};
 use core::{fmt, str::FromStr};
 use sha2::{Digest, Sha256 as Sha256Hasher};

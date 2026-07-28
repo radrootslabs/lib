@@ -208,22 +208,22 @@
     {
       "role": "blossom_public_surface",
       "path": "crates/blossom/src/lib.rs",
-      "byte_length": 471,
-      "sha256": "821c0fb1c8a8832b89ec318192d4a054581ca7f9c208e8e02d7aa198184fe0e1",
+      "byte_length": 510,
+      "sha256": "a4dfcbd193457c50c1b0fbfc91bb547981ecd3a6e23cfc6f1030edfb511dc58c",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "blossom_authorization_authority",
       "path": "crates/blossom/src/authorization.rs",
-      "byte_length": 38819,
-      "sha256": "68e1b118232953ce7cc63d078aa13804dd17da6ed7f223dd6b106743fb5112a4",
+      "byte_length": 39360,
+      "sha256": "461947b30516315a342b3b5697599f701d27050888f29f67f5d7a7ad4afa4c28",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "blossom_descriptor_authority",
       "path": "crates/blossom/src/descriptor.rs",
-      "byte_length": 13238,
-      "sha256": "dc2ff3d9cb0a81da5ce99b14370a42b2dac7a8842a584f55156dfa7c0fa93c74",
+      "byte_length": 13702,
+      "sha256": "b2a4ffa760256e1316f70e012d200e2b5f4afd8ede771b85a5147f96b247f599",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -236,22 +236,22 @@
     {
       "role": "blossom_hash_authority",
       "path": "crates/blossom/src/hash.rs",
-      "byte_length": 10634,
-      "sha256": "964f3217ad2f81aece1f20c40ebcd125542b77ba6a1fa01f29118cc51129f415",
+      "byte_length": 11006,
+      "sha256": "45eca0d81ac0f46c305a32f81aafcdd90b14679d0614f72862289a6e5d4cb08f",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "blossom_media_type_authority",
       "path": "crates/blossom/src/media_type.rs",
-      "byte_length": 2101,
-      "sha256": "e0d953fc9b38d49560e02a005277f9e91a25bd890d9f1654529df9d8ab7eb029",
+      "byte_length": 2368,
+      "sha256": "69db5c0f9fcdd7dbe1f22daa499f65603ae4ce198083dab2c73a36813fa18a46",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "blossom_url_authority",
       "path": "crates/blossom/src/url.rs",
-      "byte_length": 14109,
-      "sha256": "8532c827a55d6392139143de6979e2913538a58f815d1fdb0e243b02369cb465",
+      "byte_length": 14580,
+      "sha256": "342c995fcf620e5fb32461a7d8276f5668ba2662890bd32d12780cc9121c6451",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -684,8 +684,8 @@
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 835884,
-      "sha256": "c266610ba4a55e9fc3b5e80c52c7b244aa9fac7336c7a7cd37489a8bbdb97f1d",
+      "byte_length": 836131,
+      "sha256": "af71c0172eb214f10a615fc867e309cb6d07780a0dc583858a42c617e10cea83",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

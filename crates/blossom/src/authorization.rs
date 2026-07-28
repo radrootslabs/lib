@@ -1,3 +1,12 @@
+//! Pure BUD-11 authorization claim construction, parsing, and validation.
+//!
+//! This module validates bounded claim content and caller-supplied endpoint,
+//! server, hash, and time context. It does not read a clock, verify Nostr event
+//! signatures or authors, encode HTTP headers, send requests, or publish events.
+//! A [`ValidatedAuthorizationClaim`] therefore proves only the checks represented
+//! by its [`AuthorizationValidation`]; the composing Nostr and HTTP layers retain
+//! authentication and request-commit responsibility.
+
 use alloc::{
     string::{String, ToString},
     vec,

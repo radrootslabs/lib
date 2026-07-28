@@ -1,3 +1,11 @@
+//! BUD-02 descriptors and explicit reference- and byte-verification states.
+//!
+//! [`BlobDescriptor`] establishes structural descriptor invariants.
+//! [`ApprovedDescriptor`] additionally proves the URL passed the Radroots
+//! HTTPS-or-loopback policy, and [`ByteVerifiedDescriptor`] proves descriptor
+//! agreement with a local [`ByteCommitment`]. None of these states attests that
+//! network upload, retrieval, content scanning, or durable storage occurred.
+
 use crate::{
     Error, MediaType, Sha256,
     url::{ApprovedBlobUrl, BlobUrl},
