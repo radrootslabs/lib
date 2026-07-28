@@ -207,8 +207,8 @@ async fn farm_prepare_publish_is_side_effect_free() {
     assert_eq!(prepared.frozen_draft().kind_u32(), KIND_FARM);
     assert_eq!(prepared.created_at().unix_seconds(), 1_700_000_000);
     assert_eq!(
-        prepared.expected_event_id().as_str(),
-        prepared.frozen_draft().expected_event_id_str()
+        prepared.expected_event_id().to_hex(),
+        prepared.frozen_draft().expected_event_id_hex()
     );
     assert_eq!(
         prepared.farm_addr().as_str(),
@@ -229,7 +229,7 @@ async fn farm_prepare_publish_is_side_effect_free() {
     );
     assert!(
         event_store
-            .raw_event(prepared.expected_event_id().as_str())
+            .raw_event(&prepared.expected_event_id().to_hex())
             .await
             .expect("event lookup")
             .is_none()
@@ -616,7 +616,7 @@ async fn farm_enqueue_publish_stores_event_and_queues_signed_outbox_without_prof
         .expect("event store status");
     assert_eq!(status.total_events, 1);
     let stored_event = event_store
-        .valid_event(receipt.signed_event_id.as_str())
+        .valid_event(&receipt.signed_event_id.to_hex())
         .await
         .expect("event lookup")
         .expect("stored event");
@@ -1284,8 +1284,8 @@ async fn farm_runtime_dtos_serialize_deterministically() {
         receipt_json,
         serde_json::json!({
             "farm_addr": receipt.farm_addr.as_str(),
-            "expected_event_id": receipt.expected_event_id.as_str(),
-            "signed_event_id": receipt.signed_event_id.as_str(),
+            "expected_event_id": receipt.expected_event_id.to_hex(),
+            "signed_event_id": receipt.signed_event_id.to_hex(),
             "local_event_seq": 1,
             "outbox_operation_id": 1,
             "outbox_event_id": 1,

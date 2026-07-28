@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .push_outbox_with_transport(&transport, PushOutboxRequest::new().with_limit(1))
         .await?;
 
-    println!("queued listing event: {}", enqueue.signed_event_id.as_str());
+    println!("queued listing event: {}", enqueue.signed_event_id.to_hex());
     println!("published events: {}", push.published_events);
     Ok(())
 }

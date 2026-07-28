@@ -211,7 +211,7 @@ fn reservation(
         reservation_id: RadrootsDTag::parse("reservation-1").expect("reservation id"),
         inventory_authority_id: pubkey(seller_pubkey),
         inventory_epoch: 42,
-        candidate_id: candidate.candidate_id.clone().expect("candidate id"),
+        candidate_id: candidate.candidate_id.expect("candidate id"),
         commitments: candidate
             .lines
             .iter()
@@ -233,7 +233,7 @@ fn accepted_decision(
     buyer_pubkey: &str,
     seller_pubkey: &str,
 ) -> RadrootsTradeMutationEnvelopeV1 {
-    let proposal_id = proposal.mutation_id.clone().expect("proposal id");
+    let proposal_id = proposal.mutation_id.expect("proposal id");
     let candidate = match &proposal.body {
         RadrootsTradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
         _ => unreachable!(),
@@ -242,18 +242,18 @@ fn accepted_decision(
         mutation_id: None,
         contract_id: RADROOTS_TRADE_DECISION_CONTRACT_ID.to_owned(),
         schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
-        trade_id: proposal.trade_id.clone(),
-        root_mutation_id: Some(proposal_id.clone()),
+        trade_id: proposal.trade_id,
+        root_mutation_id: Some(proposal_id),
         buyer_pubkey: pubkey(buyer_pubkey),
         seller_pubkey: pubkey(seller_pubkey),
         farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
-        parent_mutation_ids: vec![proposal_id.clone()],
+        parent_mutation_ids: vec![proposal_id],
         author_pubkey: pubkey(seller_pubkey),
         counterparty_pubkey: pubkey(buyer_pubkey),
         authored_at_unix_s: 1_799_000_060,
         body: RadrootsTradeMutationBodyV1::Decision {
             proposal_mutation_id: proposal_id,
-            candidate_id: candidate.candidate_id.clone().expect("candidate id"),
+            candidate_id: candidate.candidate_id.expect("candidate id"),
             decision: RadrootsTradeDecisionV1::Accepted {
                 reservation_assertion: Some(reservation(&candidate, seller_pubkey)),
             },

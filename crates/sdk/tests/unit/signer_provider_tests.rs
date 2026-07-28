@@ -254,7 +254,7 @@ async fn local_key_provider_signs_authorized_frozen_draft() {
     assert!(provider.capability().nip46_permissions.is_empty());
     assert_eq!(receipt.mode, RadrootsSdkSignerMode::LocalKey);
     assert_eq!(receipt.signer_pubkey, user_pubkey());
-    assert_eq!(receipt.signed_event_id, draft.expected_event_id_str());
+    assert_eq!(receipt.signed_event_id, draft.expected_event_id_hex());
     assert_eq!(
         progress,
         vec![
@@ -1045,5 +1045,5 @@ async fn sdk_builder_installs_configured_signer_provider() {
         ))
         .await
         .expect("receipt");
-    assert_eq!(receipt.signed_event_id, draft.expected_event_id_str());
+    assert_eq!(receipt.signed_event_id, draft.expected_event_id_hex());
 }

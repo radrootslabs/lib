@@ -151,7 +151,7 @@ fn signed_event() -> RadrootsSignedEvent {
     let draft = frozen_draft();
     let sig = "c".repeat(128);
     let raw_json = serde_json::json!({
-        "id": draft.expected_event_id_str(),
+        "id": draft.expected_event_id_hex(),
         "pubkey": draft.expected_pubkey().to_hex(),
         "created_at": draft.created_at_u64(),
         "kind": draft.kind_u32(),
@@ -161,7 +161,7 @@ fn signed_event() -> RadrootsSignedEvent {
     })
     .to_string();
     RadrootsSignedEvent::new(RadrootsSignedEventParts {
-        id: draft.expected_event_id_str().to_owned(),
+        id: draft.expected_event_id_hex().to_owned(),
         pubkey: draft.expected_pubkey().to_hex().to_owned(),
         created_at: draft.created_at_u64(),
         kind: draft.kind_u32(),
@@ -233,7 +233,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     assert!(input.event_store_inserted);
     assert_eq!(
         durable_event_persistence(
-            draft.expected_event_id_str(),
+            &draft.expected_event_id_hex(),
             &RadrootsEventPersistence::Inserted { seq: 7 },
         )
         .expect("inserted persistence"),
@@ -241,7 +241,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     );
     assert_eq!(
         durable_event_persistence(
-            draft.expected_event_id_str(),
+            &draft.expected_event_id_hex(),
             &RadrootsEventPersistence::Duplicate { seq: 7 },
         )
         .expect("duplicate persistence"),
@@ -249,7 +249,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     );
     assert!(matches!(
         durable_event_persistence(
-            draft.expected_event_id_str(),
+            &draft.expected_event_id_hex(),
             &RadrootsEventPersistence::NotPersisted,
         ),
         Err(RadrootsSdkError::InvalidRequest { message })
@@ -258,7 +258,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     let frozen = frozen_draft_json(&draft).expect("frozen draft json");
     assert!(frozen.contains("\"expected_event_id\""));
     let receipt = SdkWorkflowEnqueueReceipt {
-        signed_event_id: RadrootsEventId::parse(draft.expected_event_id_str()).expect("event id"),
+        signed_event_id: RadrootsEventId::parse(draft.expected_event_id_hex()).expect("event id"),
         local_event_seq: 1,
         outbox_operation_id: 2,
         outbox_event_id: 3,
@@ -670,8 +670,8 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
     .expect("enqueue signed workflow");
 
     assert_eq!(
-        receipt.signed_event_id.as_str(),
-        first_draft.expected_event_id_str()
+        receipt.signed_event_id.to_hex(),
+        first_draft.expected_event_id_hex()
     );
     assert!(receipt.local_event_seq > 0);
     assert!(receipt.outbox_operation_id > 0);
@@ -772,8 +772,8 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
     .expect("configured enqueue");
 
     assert_eq!(
-        receipt.signed_event_id.as_str(),
-        draft.expected_event_id_str()
+        receipt.signed_event_id.to_hex(),
+        draft.expected_event_id_hex()
     );
     assert_eq!(receipt.idempotency_digest_prefix.len(), 12);
 }

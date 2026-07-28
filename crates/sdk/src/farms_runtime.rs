@@ -768,7 +768,7 @@ fn validate_farm_publish_plan(
         return Err(invalid("contract or kind does not match Farm publish"));
     }
 
-    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_str())
+    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_hex())
         .expect("validated frozen draft has a typed event ID");
     if plan.expected_event_id != expected_event_id {
         return Err(invalid("expected event ID does not match frozen draft"));
@@ -825,7 +825,7 @@ fn farm_publish_plan(
         actor.pubkey().to_hex(),
     )
     .expect("validated farm publish draft freezes");
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_hex())
         .expect("frozen farm draft produces a valid event id");
     Ok(FarmPublishPlan {
         farm_addr,

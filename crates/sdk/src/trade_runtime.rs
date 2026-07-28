@@ -217,11 +217,11 @@ impl<'client> TradeQueryService<'client> {
         let view = trade_status_view(self.sdk, &request.trade_id).await?;
         let last = last_trade_mutation_snapshot(self.sdk, &request.trade_id).await?;
         let checkpoint = RadrootsTradeProjectionCheckpoint {
-            trade_id: view.trade_id.clone(),
+            trade_id: view.trade_id,
             reducer_contract_id: RADROOTS_TRADE_REDUCER_CONTRACT_ID.to_owned(),
             reducer_version: RADROOTS_TRADE_REDUCER_VERSION,
             projection_digest: view.projection.projection_digest.clone(),
-            root_mutation_id: view.projection.root_mutation_id.clone(),
+            root_mutation_id: view.projection.root_mutation_id,
             negotiation_state: enum_label(&view.projection.negotiation_state)?,
             agreement_state: enum_label(&view.projection.agreement_state)?,
             evidence_state: enum_label(&view.projection.evidence_state)?,
@@ -1189,7 +1189,7 @@ async fn trade_command_plan(
             )
         })?;
     validate_command_private_terms(sdk, operation_kind, &canonical, acknowledged).await?;
-    let mutation_id = canonical.mutation_id.clone().ok_or_else(|| {
+    let mutation_id = canonical.mutation_id.ok_or_else(|| {
         trade_command_error(
             RadrootsSdkTradeErrorKind::InvalidEnvelope,
             operation_kind,
@@ -1215,7 +1215,7 @@ async fn trade_command_plan(
         operation_kind,
         actor,
         frozen_draft,
-        trade_id: canonical.trade_id.clone(),
+        trade_id: canonical.trade_id,
         mutation_id,
         target_policy,
         satisfaction_policy,
@@ -1248,7 +1248,7 @@ async fn trade_command_receipt(
         operation_state: TradeCommandLifecycleState::Committed,
         trade_id: plan.trade_id,
         mutation_id: plan.mutation_id,
-        expected_event_id: RadrootsEventId::parse(plan.frozen_draft.expected_event_id_str())
+        expected_event_id: RadrootsEventId::parse(plan.frozen_draft.expected_event_id_hex())
             .expect("trade workflow draft has a valid expected event id"),
         signed_event_id: enqueue.signed_event_id,
         local_event_seq: enqueue.local_event_seq,
@@ -1452,11 +1452,13 @@ async fn ensure_private_terms_ref_available(
     candidate_id: &RadrootsTradeCandidateId,
     private_ref: &RadrootsTradePrivateTermsRefV1,
 ) -> Result<(), RadrootsSdkError> {
+    let trade_id_hex = trade_id.to_hex();
+    let candidate_id_hex = candidate_id.to_hex();
     let evidence = sdk
         ._private_store
         .private_terms_evidence(
-            trade_id.as_str(),
-            candidate_id.as_str(),
+            trade_id_hex.as_str(),
+            candidate_id_hex.as_str(),
             private_ref.artifact_id.as_str(),
             private_ref.schema_id.as_str(),
             private_ref.ciphertext_commitment.as_str(),
@@ -1485,11 +1487,11 @@ async fn seal_private_artifact(
     let now_ms = sdk_now_ms(sdk)?;
     let input = SdkPrivateTradeArtifactInput {
         artifact_id: request.artifact_id,
-        trade_id: request.trade_id.as_str().to_owned(),
+        trade_id: request.trade_id.to_hex(),
         candidate_id: request
             .candidate_id
             .as_ref()
-            .map(|candidate_id| candidate_id.as_str().to_owned()),
+            .map(RadrootsTradeCandidateId::to_hex),
         artifact_kind: request.artifact_kind.into(),
         schema_id: request.schema_id,
         plaintext: request.plaintext,
@@ -1586,7 +1588,7 @@ async fn trade_status_view(
         .await?
         .len();
     Ok(TradeStatusView {
-        trade_id: trade_id.clone(),
+        trade_id: *trade_id,
         projection,
         source_event_count,
         private_terms,
@@ -1609,7 +1611,7 @@ async fn trade_projection_for_trade(
             "trade is not present in the local event store",
         ));
     }
-    let mut input = RadrootsTradeReductionInputV1::new(trade_id.clone());
+    let mut input = RadrootsTradeReductionInputV1::new(*trade_id);
     input.mutations = stored
         .iter()
         .map(stored_trade_mutation_record)
@@ -1636,7 +1638,7 @@ async fn private_terms_views_for_trade(
     let evidence = private_terms_evidence_for_mutations(sdk, trade_id, &records).await?;
     let mut evidence_by_candidate = evidence
         .into_iter()
-        .map(|item| (item.candidate_id.clone(), item.state))
+        .map(|item| (item.candidate_id, item.state))
         .collect::<BTreeMap<_, _>>();
     let mut views = BTreeMap::<RadrootsTradeCandidateId, TradePrivateTermsAvailabilityView>::new();
     for record in records {
@@ -1645,7 +1647,7 @@ async fn private_terms_views_for_trade(
                 .remove(&candidate_id)
                 .unwrap_or(RadrootsTradePrivateTermsStateV1::Missing);
             views.insert(
-                candidate_id.clone(),
+                candidate_id,
                 TradePrivateTermsAvailabilityView {
                     candidate_id,
                     artifact_id: Some(private_ref.artifact_id.clone()),
@@ -1667,16 +1669,18 @@ async fn private_terms_evidence_for_mutations(
 ) -> Result<Vec<RadrootsTradePrivateTermsEvidenceV1>, RadrootsSdkError> {
     let mut evidence = Vec::new();
     let mut seen = BTreeSet::new();
+    let trade_id_hex = trade_id.to_hex();
     for record in mutations {
         if let Some((candidate_id, private_ref)) = candidate_private_ref(&record.mutation) {
-            if !seen.insert(candidate_id.clone()) {
+            if !seen.insert(candidate_id) {
                 continue;
             }
+            let candidate_id_hex = candidate_id.to_hex();
             evidence.push(
                 sdk._private_store
                     .private_terms_evidence(
-                        trade_id.as_str(),
-                        candidate_id.as_str(),
+                        trade_id_hex.as_str(),
+                        candidate_id_hex.as_str(),
                         private_ref.artifact_id.as_str(),
                         private_ref.schema_id.as_str(),
                         private_ref.ciphertext_commitment.as_str(),
@@ -1695,7 +1699,7 @@ fn candidate_private_ref(
     match &envelope.body {
         RadrootsTradeMutationBodyV1::Proposal { candidate }
         | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => {
-            let candidate_id = candidate.candidate_id.clone()?;
+            let candidate_id = candidate.candidate_id?;
             let private_ref = candidate.private_terms.clone()?;
             Some((candidate_id, private_ref))
         }
@@ -1708,7 +1712,7 @@ fn stored_trade_mutation_record(
     stored: &RadrootsStoredTradeMutation,
 ) -> Result<RadrootsTradeMutationRecordV1, RadrootsSdkError> {
     Ok(RadrootsTradeMutationRecordV1 {
-        transport_event_id: Some(stored.first_transport_event_id.clone()),
+        transport_event_id: Some(stored.first_transport_event_id),
         mutation: stored_trade_envelope(stored)?,
     })
 }
@@ -1903,7 +1907,7 @@ async fn inspect_evidence_views(
     let offset = evidence_cursor_offset(request.cursor.as_deref())?;
     let metadata = sdk
         ._private_store
-        .trade_artifact_metadata_for_trade(request.trade_id.as_str())
+        .trade_artifact_metadata_for_trade(&request.trade_id.to_hex())
         .await?;
     let mut items = Vec::new();
     for item in metadata
@@ -1948,7 +1952,7 @@ async fn last_trade_mutation_snapshot(
     let row = sqlx::query(
         "SELECT mutation_id, first_event_seq FROM trade_mutation WHERE trade_id = ? ORDER BY first_event_seq DESC, mutation_id DESC LIMIT 1",
     )
-    .bind(trade_id.as_str())
+    .bind(trade_id.to_hex())
     .fetch_optional(sdk._event_store.pool())
     .await
     .map_err(trade_query_store_error)?;

@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
         "prepared knowledge claim draft: {}",
-        draft.expected_event_id_str()
+        draft.expected_event_id_hex()
     );
     println!("knowledge manifest sha256: {manifest_hash}");
     Ok(())

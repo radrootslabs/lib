@@ -367,7 +367,7 @@ fn validate_listing_publish_plan(
         ));
     }
 
-    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_str())
+    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_hex())
         .expect("validated frozen draft has a typed event ID");
     if plan.expected_event_id != expected_event_id {
         return Err(invalid("expected event ID does not match frozen draft"));
@@ -415,7 +415,7 @@ fn listing_publish_plan(
     let mutation = RadrootsOperationalListingMutation::publish(canonical);
     let frozen_draft =
         build_operational_listing_mutation_draft(&mutation, u64::from(created_at_nostr))?;
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())
+    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_hex())
         .expect("frozen listing edit produces a valid event id");
     Ok(ListingPublishPlan {
         public_listing_addr,

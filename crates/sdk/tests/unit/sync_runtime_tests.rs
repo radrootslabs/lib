@@ -924,7 +924,7 @@ async fn radrootsd_push_empty_queue_and_private_helpers_are_deterministic() {
         message.clone(),
     )
     .expect("radrootsd transport error receipt");
-    assert_eq!(receipt.event_id, signed_event.id_str());
+    assert_eq!(receipt.event_id, *signed_event.id());
     assert_eq!(receipt.final_state, PushOutboxEventState::PublishRetryable);
     assert_eq!(receipt.retryable_count, 1);
     assert!(!receipt.quorum_met);

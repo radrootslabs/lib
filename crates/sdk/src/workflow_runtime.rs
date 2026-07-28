@@ -153,7 +153,7 @@ async fn enqueue_signed_workflow_event(
                 ),
             })?;
     let observed_at_ms = sdk_now_ms(sdk)?;
-    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_str())
+    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_hex())
         .expect("frozen workflow draft has a valid expected event id");
     let delivery_plan_value = delivery_plan.delivery_plan;
     let mut tx =
@@ -232,7 +232,7 @@ async fn enqueue_signed_trade_workflow_event(
                 ),
             })?;
     let observed_at_ms = sdk_now_ms(sdk)?;
-    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_str())
+    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_hex())
         .expect("frozen workflow draft has a valid expected event id");
     let delivery_plan_value = delivery_plan.delivery_plan;
     let mut tx =
@@ -603,7 +603,7 @@ async fn prepare_runtime_operation_journal(
     let observed_at_ms = sdk_now_ms(sdk)?;
     let command_hash = runtime_request_digest(request, &delivery_plan.delivery_plan);
     let frozen_draft_json = frozen_draft_json(request.frozen_draft)?;
-    let expected_transport_id = request.frozen_draft.expected_event_id_str();
+    let expected_transport_id = request.frozen_draft.expected_event_id_hex();
     let mut tx =
         sdk._event_store
             .pool()
@@ -874,7 +874,7 @@ fn workflow_receipt_result_json(receipt: &SdkWorkflowEnqueueReceipt) -> serde_js
     serde_json::json!({
         "api_version": 1,
         "state": "committed",
-        "signed_event_id": receipt.signed_event_id.as_str(),
+        "signed_event_id": receipt.signed_event_id.to_hex(),
         "local_event_seq": receipt.local_event_seq,
         "outbox_operation_id": receipt.outbox_operation_id,
         "outbox_event_id": receipt.outbox_event_id,
@@ -970,7 +970,7 @@ fn frozen_draft_json(frozen_draft: &RadrootsEventDraft) -> Result<String, Radroo
         "tags": frozen_draft.tags_as_vec(),
         "content": frozen_draft.content(),
         "expected_pubkey": frozen_draft.expected_pubkey().to_hex(),
-        "expected_event_id": frozen_draft.expected_event_id_str()
+        "expected_event_id": frozen_draft.expected_event_id_hex()
     }))
     .map_err(|error| RadrootsSdkError::EventStore {
         message: error.to_string(),
@@ -1024,7 +1024,7 @@ fn runtime_request_digest(
             "tags": request.frozen_draft.tags_as_vec(),
             "content_sha256": hex::encode(Sha256::digest(request.frozen_draft.content().as_bytes())),
             "expected_pubkey": request.frozen_draft.expected_pubkey().to_hex(),
-            "expected_event_id": request.frozen_draft.expected_event_id_str()
+            "expected_event_id": request.frozen_draft.expected_event_id_hex()
         },
         "delivery_plan": {
             "transport_profile_id": delivery_plan.transport_profile_id.as_str(),

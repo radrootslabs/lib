@@ -168,8 +168,8 @@ async fn prepare_publish_is_side_effect_free() {
     assert_eq!(prepared.frozen_draft().kind_u32(), KIND_CLASSIFIED_LISTING);
     assert_eq!(prepared.created_at().unix_seconds(), 1_700_000_000);
     assert_eq!(
-        prepared.expected_event_id().as_str(),
-        prepared.frozen_draft().expected_event_id_str()
+        prepared.expected_event_id().to_hex(),
+        prepared.frozen_draft().expected_event_id_hex()
     );
     assert_eq!(
         prepared.public_listing_addr().as_str(),
@@ -185,7 +185,7 @@ async fn prepare_publish_is_side_effect_free() {
         .expect("event store");
     assert!(
         event_store
-            .raw_event(prepared.expected_event_id().as_str())
+            .raw_event(&prepared.expected_event_id().to_hex())
             .await
             .expect("event lookup")
             .is_none()
@@ -254,7 +254,7 @@ async fn enqueue_publish_stores_event_and_queues_signed_outbox_without_publish()
         .expect("event store");
     assert!(
         event_store
-            .valid_event(receipt.signed_event_id.as_str())
+            .valid_event(&receipt.signed_event_id.to_hex())
             .await
             .expect("event lookup")
             .is_some()
@@ -329,7 +329,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .expect("event store");
     assert!(
         event_store
-            .valid_event(prepared.expected_event_id().as_str())
+            .valid_event(&prepared.expected_event_id().to_hex())
             .await
             .expect("event lookup")
             .is_some()
@@ -343,7 +343,7 @@ async fn prepare_then_enqueue_prepared_uses_same_event_id() {
         .await
         .expect("outbox event")
         .expect("outbox event");
-    assert_eq!(outbox_event.event_id, prepared.expected_event_id().as_str());
+    assert_eq!(outbox_event.event_id, prepared.expected_event_id().to_hex());
 }
 
 #[tokio::test]
@@ -620,7 +620,7 @@ async fn explicit_historical_created_at_does_not_backdate_observed_at_ms() {
         .await
         .expect("event store");
     let stored_event = event_store
-        .valid_event(receipt.signed_event_id.as_str())
+        .valid_event(&receipt.signed_event_id.to_hex())
         .await
         .expect("event lookup")
         .expect("stored event");
@@ -817,7 +817,7 @@ async fn enqueue_publish_rolls_back_event_and_journal_when_outbox_conflicts_afte
         .expect("event store");
     assert!(
         event_store
-            .raw_event(prepared.expected_event_id().as_str())
+            .raw_event(&prepared.expected_event_id().to_hex())
             .await
             .expect("event lookup")
             .is_none()

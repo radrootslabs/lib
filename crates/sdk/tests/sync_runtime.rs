@@ -2861,7 +2861,7 @@ async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
             format!(
                 "radroots-nostr-outbox-{}-1-{}-",
                 first.outbox_event_id,
-                first.signed_event_id.as_str()
+                first.signed_event_id.to_hex()
             )
             .as_str()
         )
@@ -2871,7 +2871,7 @@ async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
             format!(
                 "radroots-nostr-outbox-{}-2-{}-",
                 first.outbox_event_id,
-                first.signed_event_id.as_str()
+                first.signed_event_id.to_hex()
             )
             .as_str()
         )
