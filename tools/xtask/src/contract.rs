@@ -1725,6 +1725,7 @@ struct FoodAvailabilityOperationExpectation {
 #[serde(deny_unknown_fields)]
 pub struct VersionPolicy {
     pub contract: VersionContract,
+    pub rust_crates: RustCrateVersionPolicy,
     pub semver: SemverRules,
     pub release_integrity: ReleaseIntegrityRules,
 }
@@ -1734,6 +1735,14 @@ pub struct VersionPolicy {
 pub struct VersionContract {
     pub version: String,
     pub stability: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustCrateVersionPolicy {
+    pub version: String,
+    pub scope: String,
+    pub internal_dependency_requirement: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4216,32 +4225,32 @@ fn validate_contract_version_lockstep(bundle: &ContractBundle) -> Result<(), Str
 
 fn validate_workspace_version_lockstep(
     workspace_root: &Path,
-    contract_version: &str,
+    crate_version: &str,
 ) -> Result<(), String> {
     let workspace_manifest =
         parse_toml::<WorkspaceVersionCargoManifest>(&workspace_root.join("Cargo.toml"))?;
-    if workspace_manifest.workspace.package.version != contract_version {
+    if workspace_manifest.workspace.package.version != crate_version {
         return Err(format!(
-            "workspace.package.version {} must match contract version {}",
-            workspace_manifest.workspace.package.version, contract_version
+            "workspace.package.version {} must match Rust crate version authority {}",
+            workspace_manifest.workspace.package.version, crate_version
         ));
     }
 
-    let exact_requirement = format!("={contract_version}");
+    let exact_requirement = format!("={crate_version}");
     let mut governed_packages = BTreeMap::new();
     for member in &workspace_manifest.workspace.members {
         let package_path = workspace_root.join(member).join("Cargo.toml");
         let package = parse_toml::<VersionedPackageCargoManifest>(&package_path)?;
         match package.package.version {
-            PackageVersionSource::Literal(ref version) if version == contract_version => {}
+            PackageVersionSource::Literal(ref version) if version == crate_version => {}
             PackageVersionSource::Literal(version) => {
                 return Err(format!(
-                    "workspace member {member} package version {version} must match contract version {contract_version}"
+                    "workspace member {member} package version {version} must match Rust crate version authority {crate_version}"
                 ));
             }
             PackageVersionSource::Workspace { workspace } => {
                 return Err(format!(
-                    "workspace member {member} must set an explicit package version {contract_version}, not version.workspace = {workspace}, so mounted path consumers preserve the public package version"
+                    "workspace member {member} must set an explicit package version {crate_version}, not version.workspace = {workspace}, so mounted path consumers preserve the public package version"
                 ));
             }
         }
@@ -4286,12 +4295,12 @@ fn validate_workspace_version_lockstep(
         }
     }
 
-    validate_cargo_lock_version_lockstep(workspace_root, contract_version, &governed_packages)
+    validate_cargo_lock_version_lockstep(workspace_root, crate_version, &governed_packages)
 }
 
 fn validate_cargo_lock_version_lockstep(
     workspace_root: &Path,
-    contract_version: &str,
+    crate_version: &str,
     governed_packages: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     let lock = parse_toml::<CargoLockManifest>(&workspace_root.join("Cargo.lock"))?;
@@ -4306,9 +4315,9 @@ fn validate_cargo_lock_version_lockstep(
                 "Cargo.lock must contain exactly one source-free entry for workspace member {member} ({package_name})"
             ));
         }
-        if workspace_entries[0].version != contract_version {
+        if workspace_entries[0].version != crate_version {
             return Err(format!(
-                "Cargo.lock package {package_name} version {} must match contract version {contract_version}",
+                "Cargo.lock package {package_name} version {} must match Rust crate version authority {crate_version}",
                 workspace_entries[0].version
             ));
         }
@@ -4683,9 +4692,10 @@ fn validate_version_governance(
     workspace_root: &Path,
 ) -> Result<(), String> {
     validate_contract_version_lockstep(bundle)?;
-    let version = bundle.manifest.contract.version.as_str();
-    validate_workspace_version_lockstep(workspace_root, version)?;
-    validate_release_record(workspace_root, version, &bundle.version.semver)?;
+    let contract_version = bundle.manifest.contract.version.as_str();
+    let crate_version = bundle.version.rust_crates.version.as_str();
+    validate_workspace_version_lockstep(workspace_root, crate_version)?;
+    validate_release_record(workspace_root, contract_version, &bundle.version.semver)?;
     validate_conformance_vector_mirrors(workspace_root)
 }
 
@@ -9040,6 +9050,18 @@ fn validate_contract_bundle_with_release_policy_override_and_profile(
     if bundle.version.contract.stability.trim().is_empty() {
         return Err("version.contract.stability is required".to_string());
     }
+    if bundle.version.rust_crates.version.trim().is_empty() {
+        return Err("version.rust_crates.version is required".to_string());
+    }
+    parse_semver_version(&bundle.version.rust_crates.version)?;
+    if bundle.version.rust_crates.scope != "all_workspace_members" {
+        return Err("version.rust_crates.scope must remain all_workspace_members".to_string());
+    }
+    if bundle.version.rust_crates.internal_dependency_requirement != "exact" {
+        return Err(
+            "version.rust_crates.internal_dependency_requirement must remain exact".to_string(),
+        );
+    }
     if bundle.version.semver.major_on.is_empty()
         || bundle.version.semver.minor_on.is_empty()
         || bundle.version.semver.patch_on.is_empty()
@@ -9661,6 +9683,11 @@ require_deterministic_emit_ingest = true
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
+
+[rust_crates]
+version = "1.0.0"
+scope = "all_workspace_members"
+internal_dependency_requirement = "exact"
 
 [semver]
 major_on = ["breaking"]
@@ -11027,6 +11054,15 @@ crates = ["radroots_a", "radroots_b", "radroots_c", "radroots_d", "radroots_e"]
         let contract_error = validate_contract_version_lockstep(&bundle)
             .expect_err("contract header drift must fail");
         assert!(contract_error.contains("must match manifest contract version"));
+
+        let mut package_decoupled_bundle =
+            load_contract_bundle(&root).expect("load package-decoupled contract");
+        package_decoupled_bundle.version.rust_crates.version = "0.1.0-alpha".to_string();
+        validate_contract_version_lockstep(&package_decoupled_bundle)
+            .expect("Rust crate version authority must remain independent of contract version");
+        let package_authority_error = validate_workspace_version_lockstep(&root, "0.1.0-alpha")
+            .expect_err("workspace package cohort drift must fail");
+        assert!(package_authority_error.contains("Rust crate version authority 0.1.0-alpha"));
 
         let member_path = root.join("crates/a/Cargo.toml");
         let member = fs::read_to_string(&member_path).expect("read member manifest");
@@ -12750,6 +12786,22 @@ legacy-ingest = ["std"]
         assert_bundle_error("version.contract.stability is required", |bundle| {
             bundle.version.contract.stability.clear();
         });
+        assert_bundle_error("version.rust_crates.version is required", |bundle| {
+            bundle.version.rust_crates.version.clear();
+        });
+        assert_bundle_error(
+            "version.rust_crates.scope must remain all_workspace_members",
+            |bundle| {
+                bundle.version.rust_crates.scope = "published_only".to_string();
+            },
+        );
+        assert_bundle_error(
+            "version.rust_crates.internal_dependency_requirement must remain exact",
+            |bundle| {
+                bundle.version.rust_crates.internal_dependency_requirement =
+                    "compatible".to_string();
+            },
+        );
         assert_bundle_error("version.semver rules must all be non-empty", |bundle| {
             bundle.version.semver.major_on.clear();
         });
@@ -13637,6 +13689,11 @@ edition = "2024"
             r#"[contract]
 version = "1.0.0"
 stability = "alpha"
+
+[rust_crates]
+version = "1.0.0"
+scope = "all_workspace_members"
+internal_dependency_requirement = "exact"
 
 [semver]
 major_on = ["breaking"]

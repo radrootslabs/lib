@@ -48,9 +48,9 @@
   "source_files": [
     {
       "file": {
-        "byte_length": 1858,
+        "byte_length": 1856,
         "path": "crates/outbox/Cargo.toml",
-        "sha256": "0c1df46ac2450865c4fca94d6426395a8e4505a028d4507f9addd0400852d78e"
+        "sha256": "f643aa30ee5d9ada9ef43bfeae7517ccacb234f237953a35175fc6b8a4b5bbaa"
       },
       "role": "outbox_package_manifest"
     },
@@ -112,9 +112,9 @@
     },
     {
       "file": {
-        "byte_length": 507689,
+        "byte_length": 510144,
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "a387d19e4b78b496adcf234b68f578250377c235f79ef25ff449cc7072a4b721"
+        "sha256": "c08947646a9769e4278d8a044b3474026fd71b3a2315babccae992b2ae55c368"
       },
       "role": "contract_dispatch"
     },
@@ -128,17 +128,17 @@
     },
     {
       "file": {
-        "byte_length": 27060,
+        "byte_length": 27103,
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "7dc8f9403dd9eb79fa6381f0dd3eb2a233d2f376eda38f6ec501ff29b98a2923"
+        "sha256": "f12cc739f3253b6847556e5659c4cba061bf18265435b2af39f6961ba6bb86e5"
       },
       "role": "release_record"
     },
     {
       "file": {
-        "byte_length": 37874,
+        "byte_length": 37945,
         "path": "CHANGELOG.md",
-        "sha256": "290225f031b2b6f7a393f0c6baa50eee06e1e2e5b8cb2f177bca3ae9c0ee581e"
+        "sha256": "5f377b808a1baec86637d17ef67c0ce280249ce58077dd2374ba69e36c27f33f"
       },
       "role": "release_notes"
     }

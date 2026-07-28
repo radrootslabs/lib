@@ -2644,7 +2644,7 @@ fn validate_blossom_dependency_values(
         || workspace_dependency
             .get("version")
             .and_then(toml::Value::as_str)
-            != Some("=1.0.0-alpha.1")
+            != Some("=0.1.0-alpha")
         || workspace_dependency
             .get("default-features")
             .and_then(toml::Value::as_bool)

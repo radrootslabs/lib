@@ -4592,7 +4592,7 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "radroots_authority"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_event",
  "radroots_event_codec",
@@ -4602,7 +4602,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_blossom"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "hex",
  "image",
@@ -4620,7 +4620,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_core"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen",
  "rust_decimal",
@@ -4631,7 +4631,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_event"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen",
  "hex",
@@ -4648,7 +4648,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_event_codec"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "hex",
  "nostr",
@@ -4663,7 +4663,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_event_index"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen",
  "dto_bindgen_core",
@@ -4673,7 +4673,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_event_store"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "getrandom 0.2.17",
@@ -4694,7 +4694,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_geocoder"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures-executor",
  "hex",
@@ -4711,7 +4711,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_identity"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "nostr",
  "radroots_protected_store",
@@ -4729,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_log"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "chrono",
  "serde_json",
@@ -4741,7 +4741,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_mesh"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_transport",
  "serde",
@@ -4750,7 +4750,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_mesh_agent_client"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_mesh",
  "radroots_mesh_agent_proto",
@@ -4761,14 +4761,14 @@ dependencies = [
 
 [[package]]
 name = "radroots_mesh_agent_proto"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
 name = "radroots_net"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "directories",
  "futures",
@@ -4792,7 +4792,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_nostr"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "nostr",
@@ -4811,7 +4811,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_nostr_accounts"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_identity",
  "radroots_nostr_signer",
@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_nostr_connect"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "nostr",
  "serde",
@@ -4839,7 +4839,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_nostr_runtime"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "nostr",
@@ -4850,7 +4850,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_nostr_signer"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "hex",
  "nostr",
@@ -4870,7 +4870,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_nostrdb"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "hex",
@@ -4886,7 +4886,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_outbox"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "getrandom 0.2.17",
  "hex",
@@ -4907,7 +4907,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_protected_store"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.2.17",
@@ -4920,7 +4920,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_protocol_contract_v1"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen",
  "serde",
@@ -4928,7 +4928,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_replica_schema"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen_core",
  "serde",
@@ -4937,7 +4937,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_replica_store"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "hex",
  "radroots_replica_schema",
@@ -4949,7 +4949,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_replica_sync"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "hex",
@@ -4970,7 +4970,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_runtime"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "anyhow",
  "chacha20poly1305",
@@ -4995,7 +4995,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_runtime_distribution"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -5004,7 +5004,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_runtime_manager"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "flate2",
  "radroots_runtime_paths",
@@ -5017,7 +5017,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_runtime_paths"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -5025,7 +5025,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_runtime_store"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_sql_core",
  "serde",
@@ -5035,14 +5035,14 @@ dependencies = [
 
 [[package]]
 name = "radroots_secret_vault"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "keyring",
 ]
 
 [[package]]
 name = "radroots_simplex_agent_proto"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "radroots_simplex_smp_crypto",
@@ -5051,7 +5051,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_agent_runtime"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "radroots_simplex_agent_proto",
@@ -5066,7 +5066,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_agent_store"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.2.17",
@@ -5084,7 +5084,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_app_store"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "hex",
  "serde",
@@ -5093,7 +5093,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_chat_proto"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "serde",
@@ -5103,7 +5103,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_interop_tests"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_simplex_agent_proto",
  "radroots_simplex_agent_runtime",
@@ -5116,7 +5116,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_smp_crypto"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -5136,14 +5136,14 @@ dependencies = [
 
 [[package]]
 name = "radroots_simplex_smp_proto"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
 ]
 
 [[package]]
 name = "radroots_simplex_smp_transport"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "radroots_simplex_smp_crypto",
@@ -5156,7 +5156,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_sql_core"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "chrono",
  "futures-executor",
@@ -5168,14 +5168,14 @@ dependencies = [
 
 [[package]]
 name = "radroots_test_fixtures"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_event",
 ]
 
 [[package]]
 name = "radroots_trade"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "dto_bindgen",
@@ -5197,7 +5197,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_trade_sp1_guest"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "serde",
  "serde_json",
@@ -5208,7 +5208,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_trade_sp1_host"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "base64 0.22.1",
  "bincode",
@@ -5227,7 +5227,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_transport"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "serde",
@@ -5237,7 +5237,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_transport_nostr"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "async-wsocket",
  "futures",
@@ -5266,7 +5266,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_transport_publish_protocol"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "radroots_transport",
  "serde",
@@ -5275,7 +5275,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_transport_reticulum"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "radroots_transport",
@@ -9107,7 +9107,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen_core",
  "fs2",

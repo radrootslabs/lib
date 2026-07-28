@@ -368,9 +368,10 @@ publish policy both pass for the same source revision.
 - Strict authored posts enforce the 256 KiB compact signed-event ceiling after
   exact JSON escaping, in addition to per-element and aggregate decoded tag
   limits.
-- Workspace packages declare one governed version explicitly so mounted path
-  consumers preserve it, and every internal root dependency requires that exact
-  pre-release version.
+- Every Rust workspace package declares the exact `0.1.0-alpha` crate version
+  explicitly so mounted path consumers preserve it, and every internal root
+  dependency requires that same package cohort independently of the event
+  contract generation.
 - Conformance suites now identify the `1.0.0` event-contract generation.
 - Release metadata records exact governed impacts for removed public types,
   fields, functions, modules, constants, Cargo features, and trait

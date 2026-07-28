@@ -237,7 +237,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "edb48180d3cc3d00fead18984159487bb07afedeb646249a84c1d64ec0529e24",
+        "5d43b9baf1b1f354296cb6bde5024e779189d121f69cc3bb364989dd645a94de",
     ),
 ];
 
@@ -14667,7 +14667,7 @@ xtask = "run -q -p xtask --"
             .and_then(toml::Value::as_table)
             .ok_or_else(|| format!("{relative} must declare [package]"))?;
         if package.get("name").and_then(toml::Value::as_str) != Some(expected_package_name)
-            || package.get("version").and_then(toml::Value::as_str) != Some("1.0.0-alpha.1")
+            || package.get("version").and_then(toml::Value::as_str) != Some("0.1.0-alpha")
             || package
                 .get("edition")
                 .and_then(toml::Value::as_table)
@@ -14682,7 +14682,7 @@ xtask = "run -q -p xtask --"
                 != Some(true)
         {
             return Err(format!(
-                "{relative} compiler package identity must remain {expected_package_name} 1.0.0-alpha.1 with workspace edition and rust-version"
+                "{relative} compiler package identity must remain {expected_package_name} 0.1.0-alpha with workspace edition and rust-version"
             ));
         }
         if [
@@ -20992,7 +20992,7 @@ pub(crate) fn migration_for_version"#,
         let cargo_lock = fs::read_to_string(&cargo_lock_path).expect("Cargo.lock");
         let transport_lock_package = r#"[[package]]
 name = "radroots_transport"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "serde",
@@ -21002,7 +21002,7 @@ dependencies = [
 "#;
         let future_transport_lock_package = r#"[[package]]
 name = "radroots_transport"
-version = "1.0.0-alpha.1"
+version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "serde",

@@ -344,8 +344,8 @@
     },
     "project_lockfile": {
       "path": "fuzz/Cargo.lock",
-      "byte_length": 19013,
-      "sha256": "05add36124173589e21d1e9706b77dc9622542bd5072346b3a355ada65e39e64",
+      "byte_length": 19011,
+      "sha256": "2bfa3270800d5763aadb4884ac8cc9a0a5ed5dcf94b80c00d1345607b1cb2ee3",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "toolchain": {

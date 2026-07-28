@@ -132,6 +132,8 @@ const BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
 ];
 const RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] =
     &["build/nix/apps.nix", "build/nix/toolchains.nix"];
+const RUST_CRATE_VERSION_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] =
+    &["crates/event_store/Cargo.toml", "tools/xtask/Cargo.toml"];
 
 const PUBLIC_TYPES: &[&str] = &[
     "RadrootsPhase1PublicationEventVariant",
@@ -1077,7 +1079,7 @@ fn validate_package_shape(
         .and_then(toml::Value::as_table)
         .ok_or_else(|| format!("{relative} must declare [package]"))?;
     if package.get("name").and_then(toml::Value::as_str) != Some(expected_name)
-        || package.get("version").and_then(toml::Value::as_str) != Some("1.0.0-alpha.1")
+        || package.get("version").and_then(toml::Value::as_str) != Some("0.1.0-alpha")
         || package
             .get("edition")
             .and_then(toml::Value::as_table)
@@ -1420,11 +1422,17 @@ fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Resul
                 .iter()
                 .copied(),
         )
+        .chain(
+            RUST_CRATE_VERSION_RAW_PREDECESSOR_SUPERSEDED_PATHS
+                .iter()
+                .copied(),
+        )
         .collect::<BTreeSet<_>>();
     if superseded.len()
         != RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
             + BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
             + RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
+            + RUST_CRATE_VERSION_RAW_PREDECESSOR_SUPERSEDED_PATHS.len()
     {
         return Err("raw predecessor supersession paths must be unique".to_owned());
     }

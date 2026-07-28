@@ -615,7 +615,7 @@ const DELEGATED_COMPILER_SOURCE_PINS: &[(&str, &str)] = &[
     ),
     (
         XTASK_MANIFEST_RELATIVE,
-        "b915e0289bf7390d3c4194aaed1e748cf5e591426e0443c310775ddc7d7f63a5",
+        "63b32e8981247bfec6aceb5925f6754d8f6360b73e57e73a57d2d1149701f6c5",
     ),
 ];
 
