@@ -350,6 +350,28 @@ mod tests {
     use crate::model::{
         RadrootsEventAdmissionStatus, RadrootsEventStoreSourceGeneration, RadrootsStoredRawEvent,
     };
+    use sqlx::{Connection, SqliteConnection};
+
+    async fn suppression_evidence_row(
+        connection: &mut SqliteConnection,
+        outcome: Option<&str>,
+        reason: Option<&str>,
+        event_reference_request_id: Option<&str>,
+        address_reference_request_id: Option<&str>,
+        address_reference_cutoff: Option<i64>,
+    ) -> sqlx::sqlite::SqliteRow {
+        sqlx::query(
+            "SELECT ? AS suppression_outcome, ? AS suppression_reason, ? AS event_reference_request_id, ? AS address_reference_request_id, ? AS address_reference_cutoff",
+        )
+        .bind(outcome)
+        .bind(reason)
+        .bind(event_reference_request_id)
+        .bind(address_reference_request_id)
+        .bind(address_reference_cutoff)
+        .fetch_one(connection)
+        .await
+        .expect("suppression evidence row")
+    }
 
     fn event(event_class: StoredEventClass) -> RadrootsStoredRawEvent {
         RadrootsStoredRawEvent {
@@ -459,6 +481,176 @@ mod tests {
             assert_eq!(parse_suppression_reason(value).expect("reason"), expected);
         }
         assert!(parse_suppression_reason("unknown").is_err());
+    }
+
+    #[tokio::test]
+    async fn suppression_row_decoder_rejects_each_malformed_authority() {
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection");
+        let event_request_id = "a".repeat(64);
+        let address_request_id = "b".repeat(64);
+
+        let empty = suppression_evidence_row(&mut connection, None, None, None, None, None).await;
+        assert_eq!(
+            suppression_evidence_from_row(&empty).expect("empty evidence"),
+            None
+        );
+
+        let populated = suppression_evidence_row(
+            &mut connection,
+            Some("visible"),
+            Some("deletion_no_authorized_reference"),
+            Some(event_request_id.as_str()),
+            Some(address_request_id.as_str()),
+            Some(7),
+        )
+        .await;
+        let evidence = suppression_evidence_from_row(&populated)
+            .expect("populated evidence")
+            .expect("suppression evidence");
+        assert_eq!(evidence.outcome, RadrootsNip09SuppressionOutcome::Visible);
+        assert_eq!(
+            evidence.reason,
+            RadrootsNip09SuppressionReason::NoAuthorizedReference
+        );
+        assert_eq!(
+            evidence
+                .event_reference_request_id
+                .as_ref()
+                .map(RadrootsEventId::as_str),
+            Some(event_request_id.as_str()),
+        );
+        assert_eq!(
+            evidence
+                .address_reference_request_id
+                .as_ref()
+                .map(RadrootsEventId::as_str),
+            Some(address_request_id.as_str()),
+        );
+        assert_eq!(evidence.address_reference_cutoff, Some(7));
+
+        for (label, row, expected_context) in [
+            (
+                "event request id",
+                suppression_evidence_row(
+                    &mut connection,
+                    Some("visible"),
+                    Some("deletion_no_authorized_reference"),
+                    Some("invalid"),
+                    None,
+                    None,
+                )
+                .await,
+                "event deletion request id",
+            ),
+            (
+                "address request id",
+                suppression_evidence_row(
+                    &mut connection,
+                    Some("visible"),
+                    Some("deletion_no_authorized_reference"),
+                    None,
+                    Some("invalid"),
+                    None,
+                )
+                .await,
+                "address deletion request id",
+            ),
+            (
+                "address cutoff",
+                suppression_evidence_row(
+                    &mut connection,
+                    Some("visible"),
+                    Some("deletion_no_authorized_reference"),
+                    None,
+                    None,
+                    Some(-1),
+                )
+                .await,
+                "address deletion cutoff",
+            ),
+            (
+                "outcome",
+                suppression_evidence_row(
+                    &mut connection,
+                    Some("invalid"),
+                    Some("deletion_no_authorized_reference"),
+                    None,
+                    None,
+                    None,
+                )
+                .await,
+                "suppression outcome",
+            ),
+            (
+                "reason",
+                suppression_evidence_row(
+                    &mut connection,
+                    Some("visible"),
+                    Some("invalid"),
+                    None,
+                    None,
+                    None,
+                )
+                .await,
+                "suppression reason",
+            ),
+        ] {
+            assert!(
+                matches!(
+                    suppression_evidence_from_row(&row),
+                    Err(RadrootsEventStoreError::CurrentVisibilityDrift { ref reason })
+                        if reason.contains(expected_context)
+                ),
+                "{label} corruption was accepted",
+            );
+        }
+
+        for (label, row) in [
+            (
+                "missing reason",
+                suppression_evidence_row(&mut connection, Some("visible"), None, None, None, None)
+                    .await,
+            ),
+            (
+                "orphan event request",
+                suppression_evidence_row(
+                    &mut connection,
+                    None,
+                    None,
+                    Some(event_request_id.as_str()),
+                    None,
+                    None,
+                )
+                .await,
+            ),
+            (
+                "orphan address request",
+                suppression_evidence_row(
+                    &mut connection,
+                    None,
+                    None,
+                    None,
+                    Some(address_request_id.as_str()),
+                    None,
+                )
+                .await,
+            ),
+            (
+                "orphan address cutoff",
+                suppression_evidence_row(&mut connection, None, None, None, None, Some(7)).await,
+            ),
+        ] {
+            assert!(
+                matches!(
+                    suppression_evidence_from_row(&row),
+                    Err(RadrootsEventStoreError::CurrentVisibilityDrift { ref reason })
+                        if reason == "suppression evidence is incomplete"
+                ),
+                "{label} authority was accepted",
+            );
+        }
     }
 
     #[test]
