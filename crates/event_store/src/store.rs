@@ -641,13 +641,6 @@ impl RadrootsEventStore {
         let actual =
             projection_cursor_unchecked(&mut tx, cursor.projection_id(), active_generation).await?;
         if let Some(actual) = actual.as_ref() {
-            if actual.source_generation() != active_generation {
-                return Err(
-                    RadrootsEventStoreError::ProjectionSourceGenerationMismatch {
-                        projection_id: cursor.projection_id().to_owned(),
-                    },
-                );
-            }
             if actual.projection_version() != cursor.projection_version() {
                 return Err(RadrootsEventStoreError::ProjectionVersionMismatch {
                     projection_id: cursor.projection_id().to_owned(),
@@ -789,11 +782,10 @@ impl RadrootsEventStore {
                 .bind(updated_at_ms)
                 .execute(&mut *tx)
                 .await?;
-                if inserted.rows_affected() != 1 {
-                    return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
-                        projection_id,
-                    });
-                }
+                ensure_projection_rebuild_row_changed(
+                    projection_id.as_str(),
+                    inserted.rows_affected(),
+                )?;
             }
             (
                 RadrootsProjectionRebuildPrior::Cursor {
@@ -829,12 +821,8 @@ impl RadrootsEventStore {
                         projection_id,
                     });
                 }
-                let expected_revision_i64 = i64::try_from(expected_revision).map_err(|_| {
-                    RadrootsEventStoreError::InvalidProjectionSourceRevision {
-                        projection_id: projection_id.clone(),
-                        value: None,
-                    }
-                })?;
+                let expected_revision_i64 =
+                    projection_source_revision_to_i64(projection_id.as_str(), expected_revision)?;
                 let updated = sqlx::query(
                     "UPDATE projection_cursor SET projection_version = ?, last_event_seq = ?, updated_at_ms = ? WHERE projection_id = ? AND projection_version = ? AND last_event_seq = ? AND updated_at_ms = ? AND EXISTS (SELECT 1 FROM radroots_event_store_projection_cursor_source AS source WHERE source.projection_id = projection_cursor.projection_id AND source.source_generation IS ? AND source.source_revision = ?)",
                 )
@@ -853,11 +841,10 @@ impl RadrootsEventStore {
                 .bind(expected_revision_i64)
                 .execute(&mut *tx)
                 .await?;
-                if updated.rows_affected() != 1 {
-                    return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
-                        projection_id,
-                    });
-                }
+                ensure_projection_rebuild_row_changed(
+                    projection_id.as_str(),
+                    updated.rows_affected(),
+                )?;
             }
             _ => {
                 return Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
@@ -1689,6 +1676,31 @@ fn projection_source_revision_from_i64(
         });
     }
     Ok(value as u64)
+}
+
+fn projection_source_revision_to_i64(
+    projection_id: &str,
+    value: u64,
+) -> Result<i64, RadrootsEventStoreError> {
+    i64::try_from(value).map_err(
+        |_| RadrootsEventStoreError::InvalidProjectionSourceRevision {
+            projection_id: projection_id.to_owned(),
+            value: None,
+        },
+    )
+}
+
+fn ensure_projection_rebuild_row_changed(
+    projection_id: &str,
+    rows_affected: u64,
+) -> Result<(), RadrootsEventStoreError> {
+    if rows_affected == 1 {
+        Ok(())
+    } else {
+        Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
+            projection_id: projection_id.to_owned(),
+        })
+    }
 }
 
 async fn validate_projection_cursor_high_water(
@@ -4262,6 +4274,45 @@ mod tests {
         ));
 
         let generation = store.source_generation().await.expect("generation");
+
+        let missing_success_ticket = store
+            .prepare_projection_cursor_rebuild("missing-success", 1)
+            .await
+            .expect("missing-success ticket");
+        assert!(matches!(
+            missing_success_ticket.prior(),
+            RadrootsProjectionRebuildPrior::Missing
+        ));
+        let missing_success = store
+            .reset_projection_cursor_after_rebuild(missing_success_ticket, 29)
+            .await
+            .expect("missing-success rebuild");
+        assert_eq!(missing_success.last_event_seq(), 1);
+        assert_eq!(
+            store
+                .projection_cursor("missing-success", 1)
+                .await
+                .expect("missing-success cursor read")
+                .expect("missing-success cursor"),
+            missing_success
+        );
+
+        let mut high_water_ticket = store
+            .prepare_projection_cursor_rebuild("ahead-ticket", 1)
+            .await
+            .expect("ahead ticket");
+        high_water_ticket.target_raw_high_water_seq = 2;
+        assert!(matches!(
+            store
+                .reset_projection_cursor_after_rebuild(high_water_ticket, 29)
+                .await,
+            Err(RadrootsEventStoreError::ProjectionCursorAheadOfSource {
+                projection_id,
+                proposed: 2,
+                high_water: 1,
+            }) if projection_id == "ahead-ticket"
+        ));
+
         let ahead = RadrootsProjectionCursor::new("ahead", 1, generation, 2, 30).expect("ahead");
         assert!(matches!(
             store
@@ -4354,6 +4405,37 @@ mod tests {
             }) if projection_id == "legacy"
         ));
         validate_nip09_authority(&store).await;
+
+        let ahead_store = RadrootsEventStore::open_memory()
+            .await
+            .expect("ahead store");
+        ahead_store
+            .ingest_event(RadrootsEventIngest::new(
+                signed_event(KIND_POST, 11, Vec::new(), "ahead cursor source"),
+                2_000,
+            ))
+            .await
+            .expect("ahead cursor source");
+        sqlx::query("DROP TRIGGER radroots_event_store_projection_cursor_insert_guard")
+            .execute(ahead_store.pool())
+            .await
+            .expect("remove cursor high-water guard");
+        sqlx::query(
+            "INSERT INTO projection_cursor(projection_id, projection_version, last_event_seq, updated_at_ms) VALUES ('ahead-existing', 1, 2, 10)",
+        )
+        .execute(ahead_store.pool())
+        .await
+        .expect("install ahead cursor fixture");
+        assert!(matches!(
+            ahead_store
+                .prepare_projection_cursor_rebuild("ahead-existing", 2)
+                .await,
+            Err(RadrootsEventStoreError::ProjectionCursorAheadOfSource {
+                projection_id,
+                proposed: 2,
+                high_water: 1,
+            }) if projection_id == "ahead-existing"
+        ));
     }
 
     #[tokio::test]
@@ -6667,6 +6749,27 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                     projection_id,
                     value: actual,
                 }) if projection_id == "projection" && actual == value
+            ));
+        }
+        assert_eq!(
+            projection_source_revision_to_i64("projection", 1).expect("stored revision"),
+            1
+        );
+        assert!(matches!(
+            projection_source_revision_to_i64("projection", u64::MAX),
+            Err(RadrootsEventStoreError::InvalidProjectionSourceRevision {
+                projection_id,
+                value: None,
+            }) if projection_id == "projection"
+        ));
+
+        ensure_projection_rebuild_row_changed("projection", 1).expect("one changed row");
+        for rows_affected in [0, 2] {
+            assert!(matches!(
+                ensure_projection_rebuild_row_changed("projection", rows_affected),
+                Err(RadrootsEventStoreError::ProjectionRebuildTicketConflict {
+                    projection_id,
+                }) if projection_id == "projection"
             ));
         }
 
