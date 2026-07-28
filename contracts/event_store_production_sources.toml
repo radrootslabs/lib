@@ -11,7 +11,7 @@ sha256 = "7d588cd181f42b6c8731d84f71e5a778cd6605add07dc9b7d0b8144b51a44a9f"
 
 [[sources]]
 path = "crates/event_store/src/migrations.rs"
-sha256 = "5244eaf726eaa1f81973c98ded096e78b4874dedcd869f6ab6b844962efb51d6"
+sha256 = "86d46d91fc2b456873e98b022bcb0641980810dabff4678ddbc2e7b4f0b581c1"
 
 [[sources]]
 path = "crates/event_store/src/model.rs"

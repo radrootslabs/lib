@@ -755,6 +755,107 @@ pub(crate) fn validate_migration_registry(
     Ok(())
 }
 
+enum GeneratedManifestMetadataAxis<'a> {
+    JsonU64 {
+        pointer: &'static str,
+        expected: u64,
+    },
+    JsonString {
+        pointer: &'static str,
+        expected: &'a str,
+    },
+    JsonU64Array {
+        pointer: &'static str,
+        expected: &'a [u64],
+    },
+    JsonStringArray {
+        pointer: &'static str,
+        expected: &'a [&'a str],
+    },
+    U64 {
+        actual: u64,
+        expected: u64,
+    },
+    PositiveI64 {
+        actual: i64,
+    },
+    String {
+        actual: &'a str,
+        expected: &'a str,
+    },
+    U32Array {
+        actual: &'a [u32],
+        expected: &'a [u32],
+    },
+    StringArray {
+        actual: &'a [&'a str],
+        expected: &'a [&'a str],
+    },
+}
+
+impl GeneratedManifestMetadataAxis<'_> {
+    fn matches(&self, manifest: &serde_json::Value) -> bool {
+        match self {
+            Self::JsonU64 { pointer, expected } => {
+                manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
+            }
+            Self::JsonString { pointer, expected } => {
+                manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
+            }
+            Self::JsonU64Array { pointer, expected } => {
+                let Some(values) = manifest.pointer(pointer).and_then(|value| value.as_array())
+                else {
+                    return false;
+                };
+                if values.len() != expected.len() {
+                    return false;
+                }
+                for (value, expected) in values.iter().zip(*expected) {
+                    if value.as_u64() != Some(*expected) {
+                        return false;
+                    }
+                }
+                true
+            }
+            Self::JsonStringArray { pointer, expected } => {
+                let Some(values) = manifest.pointer(pointer).and_then(|value| value.as_array())
+                else {
+                    return false;
+                };
+                if values.len() != expected.len() {
+                    return false;
+                }
+                for (value, expected) in values.iter().zip(*expected) {
+                    if value.as_str() != Some(*expected) {
+                        return false;
+                    }
+                }
+                true
+            }
+            Self::U64 { actual, expected } => actual == expected,
+            Self::PositiveI64 { actual } => *actual > 0,
+            Self::String { actual, expected } => actual == expected,
+            Self::U32Array { actual, expected } => actual == expected,
+            Self::StringArray { actual, expected } => actual == expected,
+        }
+    }
+}
+
+fn validate_generated_manifest_metadata(
+    manifest: &serde_json::Value,
+    axes: &[GeneratedManifestMetadataAxis<'_>],
+    reason: &'static str,
+) -> Result<(), RadrootsEventStoreError> {
+    for axis in axes {
+        if !axis.matches(manifest) {
+            return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+                reason: reason.to_owned(),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventStoreError> {
     let bytes = nip09_manifest::NIP09_RECONCILIATION_MANIFEST_JSON.as_bytes();
     if bytes.len() != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_BYTE_LENGTH {
@@ -799,75 +900,88 @@ fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventSto
     .map_err(|_| RadrootsEventStoreError::MigrationRegistryDefect {
         reason: "generated NIP-09 addressable feed version is out of range".to_owned(),
     })?;
-    let expected_numbers = [
-        (
-            "/schema_version",
-            u64::from(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SCHEMA_VERSION),
-        ),
-        (
-            "/migration/version",
-            u64::from(nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION),
-        ),
-        ("/migration/up_byte_length", up_byte_length),
-        ("/migration/down_byte_length", down_byte_length),
-        ("/profile/reconciliation_version", reconciliation_version),
-        (
-            "/profile/addressable_feed_version",
-            addressable_feed_version,
-        ),
-        (
-            "/profile/event_contract_registry_version",
-            u64::from(nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION),
-        ),
-    ];
-    let expected_strings = [
-        ("/hook_id", nip09_manifest::NIP09_RECONCILIATION_HOOK_ID),
-        (
-            "/migration/name",
-            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_NAME,
-        ),
-        (
-            "/migration/up_sha256",
-            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_SHA256,
-        ),
-        (
-            "/migration/down_sha256",
-            nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_SHA256,
-        ),
-        (
-            "/migration/schema_sha256",
-            nip09_manifest::NIP09_RECONCILIATION_SCHEMA_SHA256,
-        ),
-        (
-            "/result_vector/sha256",
-            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_SHA256,
-        ),
-        (
-            "/result_vector/executor_id",
-            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_ID,
-        ),
-        (
-            "/result_vector/executor_sha256",
-            nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_SHA256,
-        ),
-    ];
-    let numbers_match = expected_numbers.iter().all(|(pointer, expected)| {
-        manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
-    });
-    let strings_match = expected_strings.iter().all(|(pointer, expected)| {
-        manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
-    });
-    if nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SCHEMA_VERSION != 1
-        || nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION != 2
-        || nip09_manifest::NIP09_RECONCILIATION_VERSION <= 0
-        || nip09_manifest::NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION <= 0
-        || !numbers_match
-        || !strings_match
-    {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated NIP-09 manifest metadata is inconsistent".to_owned(),
-        });
-    }
+    validate_generated_manifest_metadata(
+        &manifest,
+        &[
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SCHEMA_VERSION),
+                expected: 1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION),
+                expected: 2,
+            },
+            GeneratedManifestMetadataAxis::PositiveI64 {
+                actual: nip09_manifest::NIP09_RECONCILIATION_VERSION,
+            },
+            GeneratedManifestMetadataAxis::PositiveI64 {
+                actual: nip09_manifest::NIP09_RECONCILIATION_ADDRESSABLE_FEED_VERSION,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/schema_version",
+                expected: u64::from(nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SCHEMA_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/version",
+                expected: u64::from(nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/up_byte_length",
+                expected: up_byte_length,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/down_byte_length",
+                expected: down_byte_length,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/profile/reconciliation_version",
+                expected: reconciliation_version,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/profile/addressable_feed_version",
+                expected: addressable_feed_version,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/profile/event_contract_registry_version",
+                expected: u64::from(
+                    nip09_manifest::NIP09_RECONCILIATION_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/hook_id",
+                expected: nip09_manifest::NIP09_RECONCILIATION_HOOK_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/name",
+                expected: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_NAME,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/up_sha256",
+                expected: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/down_sha256",
+                expected: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_DOWN_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/schema_sha256",
+                expected: nip09_manifest::NIP09_RECONCILIATION_SCHEMA_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/sha256",
+                expected: nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/executor_id",
+                expected: nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/executor_sha256",
+                expected: nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_SHA256,
+            },
+        ],
+        "generated NIP-09 manifest metadata is inconsistent",
+    )?;
     for (field, digest) in [
         (
             "migration up",
@@ -935,112 +1049,144 @@ fn validate_generated_food_availability_projection_manifest_descriptor()
                 reason: "generated FoodAvailability migration down byte length is out of range"
                     .to_owned(),
             })?;
-    let expected_numbers = [
-        (
-            "/schema_version",
-            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION),
-        ),
-        (
-            "/migration/version",
-            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION),
-        ),
-        ("/migration/up/byte_length", up_byte_length),
-        ("/migration/down/byte_length", down_byte_length),
-        (
-            "/profile/projection_version",
-            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_VERSION),
-        ),
-        (
-            "/profile/addressable_feed_version",
-            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_FEED_VERSION),
-        ),
-        (
-            "/profile/event_contract_registry_version",
-            u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION),
-        ),
-    ];
-    let expected_strings = [
-        (
-            "/contract_id",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_CONTRACT_ID,
-        ),
-        (
-            "/hook_id",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID,
-        ),
-        (
-            "/predecessor/manifest/sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256,
-        ),
-        (
-            "/migration/name",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME,
-        ),
-        (
-            "/migration/up/sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_SHA256,
-        ),
-        (
-            "/migration/down/sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_SHA256,
-        ),
-        (
-            "/migration/schema_sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_SCHEMA_SHA256,
-        ),
-        (
-            "/profile/scope_fingerprint_sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256,
-        ),
-        (
-            "/result_vector/sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_SHA256,
-        ),
-        (
-            "/result_vector/executor_id",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_ID,
-        ),
-        (
-            "/result_vector/executor_sha256",
-            food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_SHA256,
-        ),
-    ];
-    let numbers_match = expected_numbers.iter().all(|(pointer, expected)| {
-        manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
-    });
-    let strings_match = expected_strings.iter().all(|(pointer, expected)| {
-        manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
-    });
-    let scope_matches = manifest
-        .pointer("/profile/scope_kinds")
-        .and_then(|value| value.as_array())
-        .is_some_and(|scope| scope.len() == 1 && scope[0].as_u64() == Some(30_402));
-    if food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION != 1
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_CONTRACT_ID
-            != "radroots_event_store.food_availability_projection_v1"
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID != "food_availability_projection_v1"
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION != 3
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME
-            != "food_availability_projection"
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_VERSION != 1
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_FEED_VERSION != 1
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION != 7
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_KINDS != [30_402]
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256
-            != "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0"
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256
-            != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256
-        || food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_ID
-            != "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1"
-        || !numbers_match
-        || !strings_match
-        || !scope_matches
-    {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated FoodAvailability projection manifest metadata is inconsistent"
-                .to_owned(),
-        });
-    }
+    validate_generated_manifest_metadata(
+        &manifest,
+        &[
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(
+                    food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION,
+                ),
+                expected: 1,
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_CONTRACT_ID,
+                expected: "radroots_event_store.food_availability_projection_v1",
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID,
+                expected: "food_availability_projection_v1",
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION),
+                expected: 3,
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME,
+                expected: "food_availability_projection",
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_VERSION),
+                expected: 1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_FEED_VERSION),
+                expected: 1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(
+                    food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
+                expected: 7,
+            },
+            GeneratedManifestMetadataAxis::U32Array {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_KINDS,
+                expected: &[30_402],
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256,
+                expected: "8b63c5ddc48a2cc7db69295238b96d5f814dba50427c80b4d0079f061e6d3de0",
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256,
+                expected: nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256,
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_ID,
+                expected: "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1",
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/schema_version",
+                expected: u64::from(
+                    food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SCHEMA_VERSION,
+                ),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/version",
+                expected: u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/up/byte_length",
+                expected: up_byte_length,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/down/byte_length",
+                expected: down_byte_length,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/profile/projection_version",
+                expected: u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/profile/addressable_feed_version",
+                expected: u64::from(food_manifest::FOOD_AVAILABILITY_PROJECTION_FEED_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/profile/event_contract_registry_version",
+                expected: u64::from(
+                    food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/contract_id",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_CONTRACT_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/hook_id",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/predecessor/manifest/sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_PREDECESSOR_MANIFEST_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/name",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_NAME,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/up/sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/down/sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_DOWN_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/schema_sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_SCHEMA_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/profile/scope_fingerprint_sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_SCOPE_FINGERPRINT_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonU64Array {
+                pointer: "/profile/scope_kinds",
+                expected: &[30_402],
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/executor_id",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/executor_sha256",
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_RESULT_VECTOR_EXECUTOR_SHA256,
+            },
+        ],
+        "generated FoodAvailability projection manifest metadata is inconsistent",
+    )?;
     for (field, digest) in [
         (
             "migration up",
@@ -1105,167 +1251,215 @@ fn validate_generated_source_maintenance_manifest_descriptor() -> Result<(), Rad
             reason: format!("generated source-maintenance manifest JSON is invalid: {error}"),
         }
     })?;
-    let expected_numbers = [
-        (
-            "/schema_version",
-            u64::from(source_manifest::SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION),
-        ),
-        (
-            "/migration/version",
-            u64::from(source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION),
-        ),
-        (
-            "/migration/up/byte_length",
-            source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_BYTE_LENGTH as u64,
-        ),
-        (
-            "/migration/down/byte_length",
-            source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_BYTE_LENGTH as u64,
-        ),
-        (
-            "/source_maintenance/version",
-            u64::from(source_manifest::SOURCE_MAINTENANCE_CAPACITY_VERSION),
-        ),
-        (
-            "/source_maintenance/event_contract_registry_version",
-            u64::from(source_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION),
-        ),
-        (
-            "/source_maintenance/limits/raw_events",
-            source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT,
-        ),
-        (
-            "/source_maintenance/limits/raw_tags",
-            source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT,
-        ),
-        (
-            "/source_maintenance/limits/raw_event_text_bytes",
-            source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT,
-        ),
-        (
-            "/source_maintenance/limits/raw_tag_text_bytes",
-            source_manifest::SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT,
-        ),
-        (
-            "/source_maintenance/limits/retained_source_generations",
-            u64::from(source_manifest::SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT),
-        ),
-    ];
-    let expected_strings = [
-        (
-            "/contract_id",
-            source_manifest::SOURCE_MAINTENANCE_CONTRACT_ID,
-        ),
-        ("/hook_id", source_manifest::SOURCE_MAINTENANCE_HOOK_ID),
-        (
-            "/predecessor/hook_id",
-            source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID,
-        ),
-        (
-            "/predecessor/manifest/sha256",
-            source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256,
-        ),
-        (
-            "/migration/name",
-            source_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME,
-        ),
-        (
-            "/migration/up/sha256",
-            source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_SHA256,
-        ),
-        (
-            "/migration/down/sha256",
-            source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256,
-        ),
-        (
-            "/migration/schema_sha256",
-            source_manifest::SOURCE_MAINTENANCE_SCHEMA_SHA256,
-        ),
-        (
-            "/source_maintenance/capacity_authority_id",
-            source_manifest::SOURCE_MAINTENANCE_CAPACITY_AUTHORITY_ID,
-        ),
-        (
-            "/source_maintenance/accounting/algorithm",
-            source_manifest::SOURCE_MAINTENANCE_ACCOUNTING_ALGORITHM,
-        ),
-        (
-            "/result_vector/sha256",
-            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_SHA256,
-        ),
-        (
-            "/result_vector/executor_id",
-            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_ID,
-        ),
-        (
-            "/result_vector/executor_sha256",
-            source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_SHA256,
-        ),
-    ];
-    let numbers_match = expected_numbers.iter().all(|(pointer, expected)| {
-        manifest.pointer(pointer).and_then(|value| value.as_u64()) == Some(*expected)
-    });
-    let strings_match = expected_strings.iter().all(|(pointer, expected)| {
-        manifest.pointer(pointer).and_then(|value| value.as_str()) == Some(*expected)
-    });
-    let string_array_matches = |pointer: &str, expected: &[&str]| {
-        manifest
-            .pointer(pointer)
-            .and_then(|value| value.as_array())
-            .is_some_and(|values| {
-                values.len() == expected.len()
-                    && values
-                        .iter()
-                        .zip(expected)
-                        .all(|(value, expected)| value.as_str() == Some(*expected))
-            })
-    };
-    if source_manifest::SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION != 1
-        || source_manifest::SOURCE_MAINTENANCE_CONTRACT_ID
-            != "radroots_event_store.source_maintenance_v1"
-        || source_manifest::SOURCE_MAINTENANCE_HOOK_ID != "source_maintenance_v1"
-        || source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION != 4
-        || source_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME != "source_maintenance"
-        || source_manifest::SOURCE_MAINTENANCE_CAPACITY_VERSION != 1
-        || source_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION
-            != food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION
-        || source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID
-            != food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID
-        || source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256
-            != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256
-        || source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT
-            != crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1
-        || source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT
-            != crate::RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1
-        || source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT
-            != crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1
-        || source_manifest::SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT
-            != crate::RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1
-        || source_manifest::SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT
-            != crate::RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
-        || !numbers_match
-        || !strings_match
-        || !string_array_matches(
-            "/migration/catalog/replaced_objects",
-            source_manifest::SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
-        )
-        || !string_array_matches(
-            "/source_maintenance/accounting/raw_event_columns",
-            source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COLUMNS,
-        )
-        || !string_array_matches(
-            "/source_maintenance/accounting/raw_tag_columns",
-            source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COLUMNS,
-        )
-        || !string_array_matches(
-            "/source_maintenance/accounting/nullable_raw_tag_columns",
-            source_manifest::SOURCE_MAINTENANCE_NULLABLE_RAW_TAG_COLUMNS,
-        )
-    {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated source-maintenance manifest metadata is inconsistent".to_owned(),
-        });
-    }
+    validate_generated_manifest_metadata(
+        &manifest,
+        &[
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(source_manifest::SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION),
+                expected: 1,
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: source_manifest::SOURCE_MAINTENANCE_CONTRACT_ID,
+                expected: "radroots_event_store.source_maintenance_v1",
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: source_manifest::SOURCE_MAINTENANCE_HOOK_ID,
+                expected: "source_maintenance_v1",
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION),
+                expected: 4,
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: source_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME,
+                expected: "source_maintenance",
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(source_manifest::SOURCE_MAINTENANCE_CAPACITY_VERSION),
+                expected: 1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(
+                    source_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
+                expected: u64::from(
+                    food_manifest::FOOD_AVAILABILITY_PROJECTION_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID,
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_HOOK_ID,
+            },
+            GeneratedManifestMetadataAxis::String {
+                actual: source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256,
+                expected: food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT,
+                expected: crate::RADROOTS_EVENT_STORE_RAW_EVENT_COUNT_LIMIT_V1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT,
+                expected: crate::RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT,
+                expected: crate::RADROOTS_EVENT_STORE_RAW_EVENT_TEXT_BYTES_LIMIT_V1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: source_manifest::SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT,
+                expected: crate::RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: u64::from(
+                    source_manifest::SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT,
+                ),
+                expected: u64::from(
+                    crate::RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+                ),
+            },
+            GeneratedManifestMetadataAxis::StringArray {
+                actual: source_manifest::SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
+                expected: EVENT_STORE_SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
+            },
+            GeneratedManifestMetadataAxis::StringArray {
+                actual: source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COLUMNS,
+                expected: &[
+                    "event_id",
+                    "pubkey",
+                    "tags_json",
+                    "content",
+                    "sig",
+                    "raw_json",
+                ],
+            },
+            GeneratedManifestMetadataAxis::StringArray {
+                actual: source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COLUMNS,
+                expected: &["event_id", "tag_name", "tag_value", "tag_json"],
+            },
+            GeneratedManifestMetadataAxis::StringArray {
+                actual: source_manifest::SOURCE_MAINTENANCE_NULLABLE_RAW_TAG_COLUMNS,
+                expected: &["tag_value"],
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/schema_version",
+                expected: u64::from(source_manifest::SOURCE_MAINTENANCE_MANIFEST_SCHEMA_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/version",
+                expected: u64::from(source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/up/byte_length",
+                expected: source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_BYTE_LENGTH as u64,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/migration/down/byte_length",
+                expected: source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_BYTE_LENGTH as u64,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/version",
+                expected: u64::from(source_manifest::SOURCE_MAINTENANCE_CAPACITY_VERSION),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/event_contract_registry_version",
+                expected: u64::from(
+                    source_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,
+                ),
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/limits/raw_events",
+                expected: source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COUNT_LIMIT,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/limits/raw_tags",
+                expected: source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COUNT_LIMIT,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/limits/raw_event_text_bytes",
+                expected: source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_TEXT_BYTES_LIMIT,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/limits/raw_tag_text_bytes",
+                expected: source_manifest::SOURCE_MAINTENANCE_RAW_TAG_TEXT_BYTES_LIMIT,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/source_maintenance/limits/retained_source_generations",
+                expected: u64::from(
+                    source_manifest::SOURCE_MAINTENANCE_RETAINED_SOURCE_GENERATION_LIMIT,
+                ),
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/contract_id",
+                expected: source_manifest::SOURCE_MAINTENANCE_CONTRACT_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/hook_id",
+                expected: source_manifest::SOURCE_MAINTENANCE_HOOK_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/predecessor/hook_id",
+                expected: source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_HOOK_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/predecessor/manifest/sha256",
+                expected: source_manifest::SOURCE_MAINTENANCE_PREDECESSOR_MANIFEST_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/name",
+                expected: source_manifest::SOURCE_MAINTENANCE_MIGRATION_NAME,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/up/sha256",
+                expected: source_manifest::SOURCE_MAINTENANCE_MIGRATION_UP_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/down/sha256",
+                expected: source_manifest::SOURCE_MAINTENANCE_MIGRATION_DOWN_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/migration/schema_sha256",
+                expected: source_manifest::SOURCE_MAINTENANCE_SCHEMA_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/source_maintenance/capacity_authority_id",
+                expected: source_manifest::SOURCE_MAINTENANCE_CAPACITY_AUTHORITY_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/source_maintenance/accounting/algorithm",
+                expected: source_manifest::SOURCE_MAINTENANCE_ACCOUNTING_ALGORITHM,
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/migration/catalog/replaced_objects",
+                expected: source_manifest::SOURCE_MAINTENANCE_REPLACED_OBJECT_NAMES,
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/source_maintenance/accounting/raw_event_columns",
+                expected: source_manifest::SOURCE_MAINTENANCE_RAW_EVENT_COLUMNS,
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/source_maintenance/accounting/raw_tag_columns",
+                expected: source_manifest::SOURCE_MAINTENANCE_RAW_TAG_COLUMNS,
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/source_maintenance/accounting/nullable_raw_tag_columns",
+                expected: source_manifest::SOURCE_MAINTENANCE_NULLABLE_RAW_TAG_COLUMNS,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/sha256",
+                expected: source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_SHA256,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/executor_id",
+                expected: source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_ID,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/result_vector/executor_sha256",
+                expected: source_manifest::SOURCE_MAINTENANCE_RESULT_VECTOR_EXECUTOR_SHA256,
+            },
+        ],
+        "generated source-maintenance manifest metadata is inconsistent",
+    )?;
     for (field, digest) in [
         (
             "migration up",
@@ -1393,6 +1587,136 @@ mod migration_framework {
     const FROZEN_V1_SCHEMA_SHA256: &str =
         "5b1f92779640f1a2dbd75e37a96996bda6c8be58883190f69eb3eced22a48f03";
     const FROZEN_V1_OBJECT_COUNT: usize = 46;
+
+    #[test]
+    fn generated_manifest_metadata_axis_inventory_is_closed() {
+        const REASON: &str = "generated manifest metadata is inconsistent";
+        let manifest = serde_json::json!({
+            "number": 7,
+            "string": "value",
+            "numbers": [1, 2],
+            "strings": ["a", "b"],
+            "wrong_type": false,
+        });
+        validate_generated_manifest_metadata(
+            &manifest,
+            &[
+                GeneratedManifestMetadataAxis::JsonU64 {
+                    pointer: "/number",
+                    expected: 7,
+                },
+                GeneratedManifestMetadataAxis::JsonString {
+                    pointer: "/string",
+                    expected: "value",
+                },
+                GeneratedManifestMetadataAxis::JsonU64Array {
+                    pointer: "/numbers",
+                    expected: &[1, 2],
+                },
+                GeneratedManifestMetadataAxis::JsonStringArray {
+                    pointer: "/strings",
+                    expected: &["a", "b"],
+                },
+                GeneratedManifestMetadataAxis::U64 {
+                    actual: 1,
+                    expected: 1,
+                },
+                GeneratedManifestMetadataAxis::PositiveI64 { actual: 1 },
+                GeneratedManifestMetadataAxis::String {
+                    actual: "value",
+                    expected: "value",
+                },
+                GeneratedManifestMetadataAxis::U32Array {
+                    actual: &[1, 2],
+                    expected: &[1, 2],
+                },
+                GeneratedManifestMetadataAxis::StringArray {
+                    actual: &["a", "b"],
+                    expected: &["a", "b"],
+                },
+            ],
+            REASON,
+        )
+        .expect("matching metadata inventory");
+
+        for axis in [
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/missing",
+                expected: 7,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/wrong_type",
+                expected: 7,
+            },
+            GeneratedManifestMetadataAxis::JsonU64 {
+                pointer: "/number",
+                expected: 8,
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/missing",
+                expected: "value",
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/wrong_type",
+                expected: "value",
+            },
+            GeneratedManifestMetadataAxis::JsonString {
+                pointer: "/string",
+                expected: "other",
+            },
+            GeneratedManifestMetadataAxis::JsonU64Array {
+                pointer: "/missing",
+                expected: &[1, 2],
+            },
+            GeneratedManifestMetadataAxis::JsonU64Array {
+                pointer: "/numbers",
+                expected: &[1],
+            },
+            GeneratedManifestMetadataAxis::JsonU64Array {
+                pointer: "/numbers",
+                expected: &[1, 3],
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/missing",
+                expected: &["a", "b"],
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/strings",
+                expected: &["a"],
+            },
+            GeneratedManifestMetadataAxis::JsonStringArray {
+                pointer: "/strings",
+                expected: &["a", "c"],
+            },
+            GeneratedManifestMetadataAxis::U64 {
+                actual: 1,
+                expected: 2,
+            },
+            GeneratedManifestMetadataAxis::PositiveI64 { actual: 0 },
+            GeneratedManifestMetadataAxis::String {
+                actual: "value",
+                expected: "other",
+            },
+            GeneratedManifestMetadataAxis::U32Array {
+                actual: &[1, 2],
+                expected: &[1, 3],
+            },
+            GeneratedManifestMetadataAxis::StringArray {
+                actual: &["a", "b"],
+                expected: &["a", "c"],
+            },
+        ] {
+            assert!(matches!(
+                validate_generated_manifest_metadata(
+                    &manifest,
+                    std::slice::from_ref(&axis),
+                    REASON,
+                ),
+                Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                    if reason == REASON
+            ));
+        }
+    }
 
     fn assert_registry_defect(
         registry: &[EventStoreMigration],
