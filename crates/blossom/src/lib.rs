@@ -6,8 +6,9 @@ extern crate alloc;
 
 pub mod authorization;
 pub mod descriptor;
-pub mod error;
+mod error;
 pub mod hash;
+pub mod media_type;
 pub mod url;
 
 pub use authorization::{

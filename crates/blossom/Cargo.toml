@@ -16,7 +16,7 @@ readme = "README.md"
 name = "radroots_blossom"
 
 [features]
-default = ["serde"]
+default = ["std", "serde"]
 serde = ["dep:serde"]
 std = ["serde?/std", "sha2/std", "url_nostd/std"]
 

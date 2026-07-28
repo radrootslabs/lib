@@ -275,6 +275,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/core/src/unit.rs",
     },
     SourceSpec {
+        role: "blossom_public_surface",
+        path: "crates/blossom/src/lib.rs",
+    },
+    SourceSpec {
         role: "blossom_hash_authority",
         path: "crates/blossom/src/hash.rs",
     },
@@ -548,6 +552,7 @@ pub(super) fn source_contract_fixture_source_paths() -> Vec<&'static str> {
 const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "Cargo.toml",
     "crates/blossom/src/hash.rs",
+    "crates/blossom/src/lib.rs",
     "crates/blossom/src/url.rs",
     "crates/core/src/currency.rs",
     "crates/core/src/decimal.rs",
