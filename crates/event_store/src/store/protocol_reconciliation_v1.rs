@@ -792,4 +792,34 @@ mod tests {
             }) if reason == "fixture"
         ));
     }
+
+    #[tokio::test]
+    async fn protocol_write_lock_requires_singleton_authority() {
+        let store = crate::RadrootsEventStore::open_memory()
+            .await
+            .expect("open store");
+        let mut transaction = store.pool().begin().await.expect("transaction");
+        acquire_event_store_write_lock(&mut transaction)
+            .await
+            .expect("singleton write lock");
+        transaction.rollback().await.expect("rollback");
+
+        sqlx::query("DROP TRIGGER radroots_event_store_write_lock_delete_guard")
+            .execute(store.pool())
+            .await
+            .expect("trusted write-lock guard removal");
+        sqlx::query("DELETE FROM radroots_event_store_write_lock")
+            .execute(store.pool())
+            .await
+            .expect("trusted write-lock corruption");
+
+        let mut transaction = store.pool().begin().await.expect("transaction");
+        assert!(matches!(
+            acquire_event_store_write_lock(&mut transaction).await,
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: "nip09_reconciliation_v1",
+                reason,
+            }) if reason == "event-store write lock authority is missing"
+        ));
+    }
 }
