@@ -132,8 +132,8 @@ impl RadrootsTradeLocatorCandidate {
             trade_id: self.trade_id.clone(),
             root_event_id: Some(self.root_event_id.clone()),
             listing_addr: Some(self.listing_addr.clone()),
-            buyer_pubkey: Some(self.buyer_pubkey.clone()),
-            seller_pubkey: Some(self.seller_pubkey.clone()),
+            buyer_pubkey: Some(self.buyer_pubkey),
+            seller_pubkey: Some(self.seller_pubkey),
         }
     }
 }

@@ -117,8 +117,7 @@ fn collect_source_boundary_guard_files(root: &Path, paths: &mut Vec<PathBuf>) {
 }
 
 fn forbidden_event_name_allowed(relative_path: &str, pattern: &str) -> bool {
-    (pattern == "RadrootsPublicKey" && !relative_path.starts_with("crates/event/"))
-        || (pattern == "RadrootsNostrEvent" && is_nostr_protocol_context(relative_path))
+    pattern == "RadrootsNostrEvent" && is_nostr_protocol_context(relative_path)
 }
 
 fn is_nostr_protocol_context(relative_path: &str) -> bool {

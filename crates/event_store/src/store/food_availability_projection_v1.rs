@@ -415,7 +415,7 @@ async fn apply_transition(
     }
     let stored = RadrootsStoredFoodAvailabilityV1::from_projection(
         transition.source_generation(),
-        canonical.pubkey().clone(),
+        *canonical.pubkey(),
         canonical.event_id().clone(),
         transition.raw_head().event_seq(),
         canonical.created_at(),

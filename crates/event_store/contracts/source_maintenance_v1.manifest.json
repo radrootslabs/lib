@@ -432,8 +432,8 @@
     {
       "role": "event_codec_reply_registry_v7_authority",
       "path": "crates/event_codec/src/reply/inbound/registry_v7.rs",
-      "byte_length": 26820,
-      "sha256": "d49a950c25e36fc145ce9f1762ae345c028e6f2834b63795603741bbe365c3c8",
+      "byte_length": 26812,
+      "sha256": "a72e9721ed13addca2a63942ac9e43c1daa8f1d1457eef08ec6a3ee5eb8872c5",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -579,15 +579,15 @@
     {
       "role": "addressable_transition_feed_store",
       "path": "crates/event_store/src/store/addressable_transition_feed_v1.rs",
-      "byte_length": 40261,
-      "sha256": "3b978d2cc7d489b23733d37413824c6fd0bf0c83e3117654939fa856bc8956a3",
+      "byte_length": 40254,
+      "sha256": "de656face46735b938b7b20780687404eade47885871129cc5a7c009155d6336",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "food_projection_store",
       "path": "crates/event_store/src/store/food_availability_projection_v1.rs",
-      "byte_length": 48993,
-      "sha256": "91003e69bb6d7a82cc200581089d0e9eb61203a2706e9a3d27286e118b069feb",
+      "byte_length": 48986,
+      "sha256": "dac90f2d4a289ce0ba5876e351d32417d517f2dca5342666b06eb51ab4bb30ca",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

@@ -162,7 +162,7 @@ pub fn build_operational_listing_mutation_draft(
         created_at,
         parts.tags,
         parts.content,
-        &draft.seller_pubkey().to_hex(),
+        draft.seller_pubkey().to_hex(),
     )
     .map_err(RadrootsOperationalListingMutationError::FrozenDraft)
 }

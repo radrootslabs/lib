@@ -3572,7 +3572,7 @@ mod tests {
             canonical.envelope.authored_at_unix_s,
             tags,
             canonical.content.clone(),
-            &canonical.envelope.author_pubkey.to_hex(),
+            canonical.envelope.author_pubkey.to_hex(),
         )
         .expect("trade mutation draft")
     }

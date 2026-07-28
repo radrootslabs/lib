@@ -112,7 +112,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
     envelope.validate().map_err(map_order_envelope_error)?;
     let content = serde_json::to_string(&envelope).map_err(|_| EventEncodeError::Json)?;
     let tags = order_envelope_tags(
-        &parts.recipient_pubkey.to_hex(),
+        parts.recipient_pubkey.to_hex(),
         parts.listing_addr,
         Some(parts.order_id),
         parts.listing_event,

@@ -513,7 +513,7 @@ pub fn verify_validator_set_event(
         set: validator_set,
         event_id: event.id_str().to_owned(),
         address,
-        authority_pubkey: event.author().clone(),
+        authority_pubkey: *event.author(),
     })
 }
 

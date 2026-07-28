@@ -476,7 +476,7 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
                     mutation_id.clone(),
                     CandidateRecord {
                         proposal_mutation_id: mutation_id.clone(),
-                        author_pubkey: mutation.author_pubkey.clone(),
+                        author_pubkey: mutation.author_pubkey,
                         candidate: candidate.clone(),
                     },
                 );
@@ -544,8 +544,8 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
             .as_ref()
             .and_then(|root_id| mutations.get(root_id))
             .expect("root proposal selected from the validated mutation map");
-        projection.buyer_pubkey = Some(root.buyer_pubkey.clone());
-        projection.seller_pubkey = Some(root.seller_pubkey.clone());
+        projection.buyer_pubkey = Some(root.buyer_pubkey);
+        projection.seller_pubkey = Some(root.seller_pubkey);
         projection.farm_id = Some(root.farm_id.clone());
     }
 
@@ -714,8 +714,8 @@ fn apply_decision(
                         claim_mutation_id: mutation_id.clone(),
                         proposal_mutation_id: candidate_record.proposal_mutation_id.clone(),
                         candidate_id: candidate_id.clone(),
-                        candidate_author_pubkey: candidate_record.author_pubkey.clone(),
-                        accepted_by_pubkey: mutation.author_pubkey.clone(),
+                        candidate_author_pubkey: candidate_record.author_pubkey,
+                        accepted_by_pubkey: mutation.author_pubkey,
                         reservation_commitment: reservation.assertion_commitment.clone(),
                     },
                 );
@@ -730,9 +730,9 @@ fn candidate_record_author_counterparty(
     mutation: &RadrootsTradeMutationEnvelopeV1,
 ) -> PublicKey {
     if candidate_record.author_pubkey == mutation.buyer_pubkey {
-        mutation.seller_pubkey.clone()
+        mutation.seller_pubkey
     } else {
-        mutation.buyer_pubkey.clone()
+        mutation.buyer_pubkey
     }
 }
 
@@ -1217,7 +1217,7 @@ mod tests {
     ) -> RadrootsSellerReservationAssertionV1 {
         RadrootsSellerReservationAssertionV1 {
             reservation_id: dtag(&format!("reservation-{marker}")),
-            inventory_authority_id: candidate.seller_pubkey.clone(),
+            inventory_authority_id: candidate.seller_pubkey,
             inventory_epoch: 42,
             candidate_id: candidate.candidate_id.clone().unwrap(),
             commitments: candidate
@@ -1728,8 +1728,8 @@ mod tests {
         )));
 
         let mut wrong_author = accepted_decision(&root, '2');
-        wrong_author.author_pubkey = wrong_author.buyer_pubkey.clone();
-        wrong_author.counterparty_pubkey = wrong_author.seller_pubkey.clone();
+        wrong_author.author_pubkey = wrong_author.buyer_pubkey;
+        wrong_author.counterparty_pubkey = wrong_author.seller_pubkey;
         let wrong_author = recanonicalize(wrong_author);
         let projection = reduce(vec![root.clone(), wrong_author]);
         assert!(projection.issues.iter().any(|issue| matches!(
@@ -1946,8 +1946,8 @@ mod tests {
     fn reducer_rejects_self_identified_decision_author_bypass() {
         let root = proposal();
         let mut decision = accepted_decision(&root, '7');
-        decision.author_pubkey = decision.buyer_pubkey.clone();
-        decision.counterparty_pubkey = decision.buyer_pubkey.clone();
+        decision.author_pubkey = decision.buyer_pubkey;
+        decision.counterparty_pubkey = decision.buyer_pubkey;
         let decision = recanonicalize(decision);
 
         let projection = reduce(vec![root, decision]);
@@ -2009,7 +2009,7 @@ mod tests {
         };
         let mut candidate_record = CandidateRecord {
             proposal_mutation_id: root_id(&root),
-            author_pubkey: root.buyer_pubkey.clone(),
+            author_pubkey: root.buyer_pubkey,
             candidate,
         };
         let decision = accepted_decision(&root, '8');
@@ -2017,7 +2017,7 @@ mod tests {
             candidate_record_author_counterparty(&candidate_record, &decision),
             decision.seller_pubkey
         );
-        candidate_record.author_pubkey = decision.seller_pubkey.clone();
+        candidate_record.author_pubkey = decision.seller_pubkey;
         assert_eq!(
             candidate_record_author_counterparty(&candidate_record, &decision),
             decision.buyer_pubkey
@@ -2075,8 +2075,8 @@ mod tests {
             claim_mutation_id,
             proposal_mutation_id: root_id(&root),
             candidate_id: candidate_id.clone(),
-            candidate_author_pubkey: root.buyer_pubkey.clone(),
-            accepted_by_pubkey: root.seller_pubkey.clone(),
+            candidate_author_pubkey: root.buyer_pubkey,
+            accepted_by_pubkey: root.seller_pubkey,
             reservation_commitment: hex_64('a'),
         };
         let claims = BTreeMap::from([
@@ -2144,7 +2144,7 @@ mod tests {
             root_id(&root),
             CandidateRecord {
                 proposal_mutation_id: root_id(&root),
-                author_pubkey: root.author_pubkey.clone(),
+                author_pubkey: root.author_pubkey,
                 candidate: candidate.clone(),
             },
         )]);
@@ -2164,7 +2164,7 @@ mod tests {
             root_id(&root),
             CandidateRecord {
                 proposal_mutation_id: root_id(&root),
-                author_pubkey: root.author_pubkey.clone(),
+                author_pubkey: root.author_pubkey,
                 candidate: disabled_candidate,
             },
         )]);

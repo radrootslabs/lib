@@ -57,7 +57,7 @@ impl RadrootsNostrAccountsManager {
         }
 
         let mut state_dirty = false;
-        if let Some(default_account_id) = state.default_account_id.clone() {
+        if let Some(default_account_id) = state.default_account_id {
             let exists = state
                 .accounts
                 .iter()
@@ -135,7 +135,7 @@ impl RadrootsNostrAccountsManager {
         let guard = self.state.read().map_err(|_| {
             RadrootsNostrAccountsError::Store("accounts state lock poisoned".into())
         })?;
-        Ok(guard.default_account_id.clone())
+        Ok(guard.default_account_id)
     }
 
     pub fn default_account(&self) -> Result<Option<AccountRecord>, RadrootsNostrAccountsError> {
@@ -1549,7 +1549,7 @@ mod tests {
             .expect("set default second");
         assert_eq!(
             manager.default_account_id().expect("default"),
-            Some(second_id.clone())
+            Some(second_id)
         );
         assert!(
             manager
@@ -1623,7 +1623,7 @@ mod tests {
             .expect("upsert watch");
         assert_eq!(
             manager.default_account_id().expect("default"),
-            Some(original_default.clone())
+            Some(original_default)
         );
 
         manager

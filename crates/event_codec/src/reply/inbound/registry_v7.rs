@@ -728,7 +728,7 @@ fn project_participants(
                 None
             }
         };
-        if !seen.insert(pubkey.clone()) {
+        if !seen.insert(pubkey) {
             diagnostics.push(RadrootsNip10ReplyDiagnostic::ReplyAuthorDuplicateIgnored {
                 tag_index,
                 raw_tag: tag.clone(),

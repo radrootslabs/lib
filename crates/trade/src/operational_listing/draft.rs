@@ -180,7 +180,7 @@ pub fn canonicalize_operational_listing_edit(
         });
     }
 
-    let seller_pubkey = actor.pubkey().clone();
+    let seller_pubkey = *actor.pubkey();
     let farm_pubkey = document.listing.farm.pubkey.as_str();
     if farm_pubkey.is_empty() {
         document.listing.farm.pubkey = seller_pubkey.to_hex();
@@ -314,9 +314,8 @@ mod tests {
         let seller_pubkey = PublicKey::from_hex(SELLER).expect("seller");
         let listing = listing();
 
-        let canonical =
-            RadrootsOperationalListingCanonicalEdit::new(listing, seller_pubkey.clone())
-                .expect("canonical");
+        let canonical = RadrootsOperationalListingCanonicalEdit::new(listing, seller_pubkey)
+            .expect("canonical");
 
         assert_eq!(canonical.seller_pubkey(), &seller_pubkey);
         assert_eq!(
