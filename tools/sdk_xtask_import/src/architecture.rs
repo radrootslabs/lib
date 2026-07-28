@@ -218,11 +218,48 @@ fn validate_workspace_toolchain(
         .values()
         .find(|repository| repository.url == workspace_package.repository)
         .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
-    if public_metadata.version != repository.version {
+    if workspace_package.version != repository.version
+        || public_metadata.version != repository.version
+    {
         return Err(format!(
-            "public package version source {} must match repository version {}",
-            public_metadata.version, repository.version
+            "workspace package version {} and public package version source {} must match frozen repository version {}",
+            workspace_package.version, public_metadata.version, repository.version
         ));
+    }
+    for member in &manifest.workspace.members {
+        let member_path = workspace_root.join(member).join("Cargo.toml");
+        let member_raw = fs::read_to_string(&member_path)
+            .map_err(|error| format!("read {}: {error}", member_path.display()))?;
+        let member_manifest = member_raw
+            .parse::<toml::Value>()
+            .map_err(|error| format!("parse {}: {error}", member_path.display()))?;
+        let package = member_manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .ok_or_else(|| format!("{} is missing [package]", member_path.display()))?;
+        let package_name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| format!("{} is missing package.name", member_path.display()))?;
+        let package_version = match package.get("version") {
+            Some(toml::Value::String(version)) => version.as_str(),
+            Some(toml::Value::Table(source))
+                if source.get("workspace").and_then(toml::Value::as_bool) == Some(true) =>
+            {
+                workspace_package.version.as_str()
+            }
+            _ => {
+                return Err(format!(
+                    "workspace package {package_name} must declare version 0.1.0-alpha or inherit it from workspace.package"
+                ));
+            }
+        };
+        if package_version != repository.version {
+            return Err(format!(
+                "workspace package {package_name} version {package_version} must match frozen repository version {}",
+                repository.version
+            ));
+        }
     }
     if public_metadata.authors != PUBLIC_AUTHORS {
         return Err("public package authors source must match the workspace convention".to_owned());
@@ -1190,7 +1227,7 @@ adr_required = false
                 "sdk".to_string(),
                 ArchitectureRepository {
                     url: "https://github.com/radrootslabs/sdk".to_string(),
-                    version: "0.1.0".to_string(),
+                    version: "0.1.0-alpha".to_string(),
                     packages: vec!["radroots".to_string()],
                 },
             )]),
@@ -1202,7 +1239,7 @@ adr_required = false
 
     fn complete_workspace_manifest(members: &str) -> String {
         format!(
-            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"forbid\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
+            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0-alpha\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0-alpha\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"forbid\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
         )
     }
 
@@ -1288,7 +1325,7 @@ adr_required = false
         .expect("write snake package manifest");
         fs::write(
             root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/radroots_probe\", \"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.dependencies]\nradroots-probe = \"0.1.0\"\n",
+            "[workspace]\nmembers = [\"crates/radroots_probe\", \"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.dependencies]\nradroots-probe = \"0.1.0-alpha\"\n",
         )
         .expect("write kebab dependency key");
 
@@ -1323,6 +1360,21 @@ adr_required = false
         let error = validate_workspace_toolchain(&root, &architecture)
             .expect_err("mismatched toolchain must fail");
         assert!(error.contains("channel must match"));
+
+        fs::write(
+            root.join("rust-toolchain.toml"),
+            "[toolchain]\nchannel = \"1.97.1\"\n",
+        )
+        .expect("restore toolchain");
+        let manifest = complete_workspace_manifest("").replacen(
+            "[workspace.package]\nversion = \"0.1.0-alpha\"",
+            "[workspace.package]\nversion = \"0.1.0\"",
+            1,
+        );
+        fs::write(root.join("Cargo.toml"), manifest).expect("write mismatched version cohort");
+        let version_error = validate_workspace_toolchain(&root, &architecture)
+            .expect_err("mismatched version cohort must fail");
+        assert!(version_error.contains("must match frozen repository version"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1372,19 +1424,19 @@ adr_required = false
         fs::write(
             root.join("Cargo.toml"),
             format!(
-                "{}\n[workspace.dependencies]\nradroots_core = {{ package = \"radroots_core\", path = \"crates/dependency\", version = \"=0.1.0\" }}\n",
+                "{}\n[workspace.dependencies]\nradroots_core = {{ package = \"radroots_core\", path = \"crates/dependency\", version = \"=0.1.0-alpha\" }}\n",
                 complete_workspace_manifest("\"crates/radroots\"")
             ),
         )
         .expect("write workspace manifest");
         fs::write(
             root.join("crates/radroots/Cargo.toml"),
-            "[package]\nname = \"radroots\"\nversion = \"0.1.0\"\n\n[dependencies]\nradroots_core = { workspace = true }\n",
+            "[package]\nname = \"radroots\"\nversion = \"0.1.0-alpha\"\n\n[dependencies]\nradroots_core = { workspace = true }\n",
         )
         .expect("write public manifest");
         fs::write(
             root.join("crates/dependency/Cargo.toml"),
-            "[package]\nname = \"radroots_core\"\nversion = \"0.1.0\"\n",
+            "[package]\nname = \"radroots_core\"\nversion = \"0.1.0-alpha\"\n",
         )
         .expect("write dependency manifest");
         let mut architecture = architecture();
@@ -1404,12 +1456,12 @@ adr_required = false
         let workspace = fs::read_to_string(&workspace_path).expect("read workspace manifest");
         fs::write(
             &workspace_path,
-            workspace.replace(", version = \"=0.1.0\"", ""),
+            workspace.replace(", version = \"=0.1.0-alpha\"", ""),
         )
         .expect("write path-only dependency");
         let error = validate_public_dependency_versions(&root, &architecture)
             .expect_err("path-only public dependency must fail");
-        assert!(error.contains("must declare path and exact version =0.1.0"));
+        assert!(error.contains("must declare path and exact version =0.1.0-alpha"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1429,7 +1481,7 @@ adr_required = false
         fs::write(
             root.join("crates/radroots/Cargo.toml"),
             format!(
-                "[package]\nname = \"radroots\"\nversion = \"0.1.0\"\n\n[dependencies]\nprobe = {{ path = \"{sibling_path}\" }}\n"
+                "[package]\nname = \"radroots\"\nversion = \"0.1.0-alpha\"\n\n[dependencies]\nprobe = {{ path = \"{sibling_path}\" }}\n"
             ),
         )
         .expect("write sibling dependency");
@@ -1439,7 +1491,7 @@ adr_required = false
 
         fs::write(
             root.join("crates/radroots/Cargo.toml"),
-            "[package]\nname = \"radroots\"\nversion = \"0.1.0\"\n\n[dependencies]\nprobe = { path = \"../dependency\" }\n",
+            "[package]\nname = \"radroots\"\nversion = \"0.1.0-alpha\"\n\n[dependencies]\nprobe = { path = \"../dependency\" }\n",
         )
         .expect("write local dependency");
         fs::create_dir_all(root.join(".cargo")).expect("create cargo config directory");
