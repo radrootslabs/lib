@@ -4026,6 +4026,85 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn deep_reconciliation_rejects_source_and_raw_authority_drift() {
+        for (label, guard_drops, mutation, expected_reason) in [
+            (
+                "active generation metadata",
+                &["DROP TRIGGER radroots_event_store_source_generation_update_guard"][..],
+                "UPDATE radroots_event_store_source_generation SET hook_id = 'invalid' WHERE source_generation = (SELECT active_generation FROM radroots_event_store_source_state WHERE singleton = 1)",
+                "generation contract metadata is unsupported",
+            ),
+            (
+                "active generation ordinal",
+                &[
+                    "DROP TRIGGER radroots_event_store_source_generation_insert_conflict_guard",
+                    "DROP TRIGGER radroots_event_store_source_generation_append_guard",
+                ][..],
+                "INSERT INTO radroots_event_store_source_generation(source_generation, generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq) SELECT zeroblob(32), generation_ordinal + 1, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq FROM radroots_event_store_source_generation WHERE source_generation = (SELECT active_generation FROM radroots_event_store_source_state WHERE singleton = 1)",
+                "active generation contract metadata is inconsistent",
+            ),
+            (
+                "generation baseline",
+                &["DROP TRIGGER radroots_event_store_source_generation_update_guard"][..],
+                "UPDATE radroots_event_store_source_generation SET baseline_raw_event_count = baseline_raw_event_count + 1 WHERE source_generation = (SELECT active_generation FROM radroots_event_store_source_state WHERE singleton = 1)",
+                "active generation baseline exceeds current authority",
+            ),
+            (
+                "raw high water",
+                &["DROP TRIGGER radroots_event_store_source_state_authority_update_guard"][..],
+                "UPDATE radroots_event_store_source_state SET raw_high_water_seq = raw_high_water_seq + 1 WHERE singleton = 1",
+                "raw high-water does not match active source authority",
+            ),
+            (
+                "transition bounds",
+                &["DROP TRIGGER radroots_event_store_source_state_authority_update_guard"][..],
+                "UPDATE radroots_event_store_source_state SET last_transition_seq = last_transition_seq + 1 WHERE singleton = 1",
+                "active transition bounds are inconsistent",
+            ),
+            (
+                "signed created_at",
+                &["DROP TRIGGER radroots_event_store_event_envelopes_raw_update_guard"][..],
+                "UPDATE event_envelopes SET created_at = created_at + 1 WHERE seq = 1",
+                "signed raw JSON field `created_at`",
+            ),
+            (
+                "signed kind",
+                &["DROP TRIGGER radroots_event_store_event_envelopes_raw_update_guard"][..],
+                "UPDATE event_envelopes SET kind = kind + 1 WHERE seq = 1",
+                "signed raw JSON field `kind`",
+            ),
+            (
+                "signed tags",
+                &["DROP TRIGGER radroots_event_store_event_envelopes_raw_update_guard"][..],
+                "UPDATE event_envelopes SET tags_json = '[]' WHERE seq = 1",
+                "signed raw JSON field `tags_json`",
+            ),
+            (
+                "missing raw tag",
+                &["DROP TRIGGER radroots_event_store_event_tags_delete_guard"][..],
+                "DELETE FROM event_envelope_tags WHERE event_id = (SELECT event_id FROM event_envelopes WHERE seq = 1)",
+                "signed raw JSON field `tag_rows`",
+            ),
+            (
+                "forged raw tag",
+                &["DROP TRIGGER radroots_event_store_event_tags_raw_update_guard"][..],
+                "UPDATE event_envelope_tags SET tag_name = 'forged' WHERE rowid = (SELECT MIN(rowid) FROM event_envelope_tags)",
+                "signed raw JSON field `tag_rows`",
+            ),
+        ] {
+            let error = deep_reconciliation_error_after_corruption(guard_drops, mutation).await;
+            assert!(
+                matches!(
+                    &error,
+                    RadrootsEventStoreError::MigrationHookStateDrift { .. }
+                        | RadrootsEventStoreError::RawEventReconciliationMismatch { .. }
+                ) && error.to_string().contains(expected_reason),
+                "{label}: {error}",
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn source_rebuild_rotates_three_generations_with_deterministic_parity() {
         let pool = open_v1_test_pool().await;
         install_unrelated_foreign_key_violation(&pool).await;
