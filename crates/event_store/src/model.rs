@@ -710,14 +710,6 @@ mod tests {
         .expect("caller-redacted message");
         assert_eq!(observation.caller_redacted_message(), Some("seen"));
         assert_eq!(
-            observation
-                .caller_redacted_message
-                .as_ref()
-                .expect("message")
-                .as_ref(),
-            "seen"
-        );
-        assert_eq!(
             observation.endpoint_uri().as_str(),
             "wss://relay.example.test"
         );

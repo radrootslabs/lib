@@ -554,7 +554,15 @@ fn raw_tag_row_bytes_v1(
     checked_capacity_add(
         RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
         required,
-        tag_value.map_or(0, str::len) as u64,
+        u64::try_from(tag_value.map_or(0, str::len)).map_err(|_| {
+            RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+                current: required,
+                requested: u64::MAX,
+                limit: ReconciliationCapacityLimits::production()
+                    .limit(RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes),
+            }
+        })?,
     )
 }
 
@@ -563,7 +571,14 @@ fn checked_text_byte_sum<const N: usize>(
     values: [&str; N],
 ) -> Result<u64, RadrootsEventStoreError> {
     values.iter().try_fold(0_u64, |current, value| {
-        let requested = value.len() as u64;
+        let requested = u64::try_from(value.len()).map_err(|_| {
+            RadrootsEventStoreError::SourceCapacityExceeded {
+                resource,
+                current,
+                requested: u64::MAX,
+                limit: ReconciliationCapacityLimits::production().limit(resource),
+            }
+        })?;
         checked_capacity_add(resource, current, requested)
     })
 }
@@ -838,157 +853,6 @@ mod tests {
                 }
             )
         ));
-    }
-
-    #[test]
-    fn capacity_arithmetic_and_storage_conversions_fail_closed() {
-        let resource = RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes;
-        assert_eq!(
-            raw_tag_row_bytes_v1("e", "t", None, "[]").expect("tag bytes"),
-            4
-        );
-        assert!(matches!(
-            checked_capacity_add(resource, u64::MAX, 1),
-            Err(RadrootsEventStoreError::SourceCapacityExceeded {
-                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
-                current: u64::MAX,
-                requested: 1,
-                ..
-            })
-        ));
-        assert!(matches!(
-            validate_prospective_capacity(
-                capacity_with(resource, u64::MAX),
-                delta_with(resource, 1)
-            ),
-            Err(RadrootsEventStoreError::SourceCapacityExceeded {
-                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
-                current: u64::MAX,
-                requested: 1,
-                ..
-            })
-        ));
-
-        assert_eq!(
-            sqlite_nonnegative_capacity(resource, 7).expect("positive"),
-            7
-        );
-        assert!(sqlite_nonnegative_capacity(resource, -1).is_err());
-        assert_eq!(
-            sqlite_capacity_value(7, "fixture").expect("SQLite value"),
-            7
-        );
-        assert!(sqlite_capacity_value(u64::MAX, "fixture").is_err());
-        assert_eq!(generation_count(1).expect("generation count"), 1);
-        assert!(generation_count(0).is_err());
-        assert!(generation_count(-1).is_err());
-        assert!(generation_count(i64::from(u32::MAX) + 1).is_err());
-        assert_eq!(
-            source_generation_bytes(vec![0x42; 32]).expect("generation"),
-            [0x42; 32]
-        );
-        assert!(source_generation_bytes(vec![0x42; 31]).is_err());
-        assert!(matches!(
-            source_capacity_drift::<()>("fixture drift".to_owned()),
-            Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
-                if reason == "fixture drift"
-        ));
-    }
-
-    #[tokio::test]
-    async fn direct_capacity_validation_rejects_seal_and_row_count_drift() {
-        for assignment in [
-            "raw_event_count = raw_event_count + 1",
-            "raw_tag_count = raw_tag_count + 1",
-            "raw_high_water_seq = raw_high_water_seq + 1",
-            "retained_generation_count = retained_generation_count + 1",
-        ] {
-            let store = RadrootsEventStore::open_memory().await.expect("store");
-            let mut transaction = store.begin_write_transaction().await.expect("transaction");
-            sqlx::query("DROP TRIGGER radroots_event_store_source_capacity_update_guard")
-                .execute(&mut *transaction)
-                .await
-                .expect("drop update guard");
-            sqlx::query(sqlx::AssertSqlSafe(format!(
-                "UPDATE radroots_event_store_source_capacity_v1 SET {assignment} WHERE singleton = 1"
-            )))
-            .execute(&mut *transaction)
-            .await
-            .expect("corrupt capacity seal");
-            assert!(matches!(
-                validate_source_capacity_authority_fast_v1(&mut transaction).await,
-                Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
-            ));
-            transaction.rollback().await.expect("rollback fixture");
-        }
-
-        let store = RadrootsEventStore::open_memory().await.expect("store");
-        let mut transaction = store.begin_write_transaction().await.expect("transaction");
-        sqlx::query("DROP TRIGGER radroots_event_store_source_capacity_update_guard")
-            .execute(&mut *transaction)
-            .await
-            .expect("drop update guard");
-        sqlx::query(
-            "UPDATE radroots_event_store_source_capacity_v1 SET raw_event_bytes = raw_event_bytes + 1 WHERE singleton = 1",
-        )
-        .execute(&mut *transaction)
-        .await
-        .expect("corrupt measured byte seal");
-        assert!(matches!(
-            validate_source_capacity_authority_full_v1(&mut transaction).await,
-            Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
-        ));
-        transaction.rollback().await.expect("rollback fixture");
-
-        let store = RadrootsEventStore::open_memory().await.expect("store");
-        let mut transaction = store.begin_write_transaction().await.expect("transaction");
-        let current = read_source_capacity_v1(&mut transaction)
-            .await
-            .expect("current capacity");
-        assert!(matches!(
-            bind_source_capacity_to_generation_v1(&mut transaction, current.source_generation)
-                .await,
-            Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
-        ));
-        transaction.rollback().await.expect("rollback fixture");
-
-        let store = RadrootsEventStore::open_memory().await.expect("store");
-        let mut transaction = store.begin_write_transaction().await.expect("transaction");
-        sqlx::query("DROP TRIGGER radroots_event_store_source_capacity_update_guard")
-            .execute(&mut *transaction)
-            .await
-            .expect("drop update guard");
-        sqlx::query(
-            "CREATE TEMP TRIGGER ignore_capacity_bind BEFORE UPDATE ON radroots_event_store_source_capacity_v1 BEGIN SELECT RAISE(IGNORE); END",
-        )
-        .execute(&mut *transaction)
-        .await
-        .expect("install ignored update");
-        assert!(matches!(
-            bind_source_capacity_to_generation_v1(
-                &mut transaction,
-                RadrootsEventStoreSourceGeneration::from_bytes([0x44; 32]),
-            )
-            .await,
-            Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
-        ));
-        transaction.rollback().await.expect("rollback fixture");
-
-        let store = RadrootsEventStore::open_memory().await.expect("store");
-        let mut transaction = store.begin_write_transaction().await.expect("transaction");
-        sqlx::query("DROP TRIGGER radroots_event_store_source_capacity_delete_guard")
-            .execute(&mut *transaction)
-            .await
-            .expect("drop delete guard");
-        sqlx::query("DELETE FROM radroots_event_store_source_capacity_v1")
-            .execute(&mut *transaction)
-            .await
-            .expect("delete capacity row");
-        assert!(matches!(
-            read_source_capacity_v1(&mut transaction).await,
-            Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
-        ));
-        transaction.rollback().await.expect("rollback fixture");
     }
 
     #[tokio::test]

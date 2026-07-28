@@ -160,6 +160,144 @@ struct RegionCoverageKey {
     kind: u64,
 }
 
+#[derive(Debug)]
+struct CoverageSource {
+    lines: Vec<String>,
+    cfg_test_lines: Vec<bool>,
+}
+
+type CoverageSourceCache = BTreeMap<String, Option<CoverageSource>>;
+
+impl CoverageSource {
+    fn parse(source: String, external_test_only: bool) -> Self {
+        let lines = source.lines().map(str::to_owned).collect::<Vec<_>>();
+        let file_is_test_only = external_test_only
+            || lines.iter().any(|line| {
+                let trimmed = line.trim();
+                trimmed.starts_with("#![cfg(test)]") || trimmed.starts_with("#![cfg(all(test,")
+            });
+        if file_is_test_only {
+            return Self {
+                cfg_test_lines: vec![true; lines.len()],
+                lines,
+            };
+        }
+
+        let mut cfg_test_lines = Vec::with_capacity(lines.len());
+        let mut pending_cfg_test = false;
+        let mut test_depth: Option<i64> = None;
+        for line in &lines {
+            let trimmed = line.trim();
+            let mut started_test_block = false;
+            if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,") {
+                pending_cfg_test = true;
+            } else if pending_cfg_test && trimmed.starts_with("mod tests") && trimmed.contains('{')
+            {
+                test_depth = Some(brace_delta(trimmed));
+                pending_cfg_test = false;
+                started_test_block = true;
+            }
+            cfg_test_lines.push(pending_cfg_test || test_depth.is_some());
+            if started_test_block {
+                continue;
+            }
+            if let Some(depth) = test_depth.as_mut() {
+                *depth += brace_delta(trimmed);
+                if *depth <= 0 {
+                    test_depth = None;
+                }
+            }
+        }
+
+        Self {
+            lines,
+            cfg_test_lines,
+        }
+    }
+
+    fn line(&self, line_number: u64) -> Option<&str> {
+        let index = usize::try_from(line_number.checked_sub(1)?).ok()?;
+        self.lines.get(index).map(String::as_str)
+    }
+
+    fn is_cfg_test_line(&self, line_number: u64) -> bool {
+        let Some(index) = line_number
+            .checked_sub(1)
+            .and_then(|index| usize::try_from(index).ok())
+        else {
+            return false;
+        };
+        self.cfg_test_lines.get(index).copied().unwrap_or(false)
+    }
+}
+
+fn cached_coverage_source<'a>(
+    filename: &str,
+    source_cache: &'a mut CoverageSourceCache,
+) -> Option<&'a CoverageSource> {
+    source_cache
+        .entry(filename.to_string())
+        .or_insert_with(|| {
+            fs::read_to_string(filename)
+                .ok()
+                .map(|source| CoverageSource::parse(source, is_external_cfg_test_module(filename)))
+        })
+        .as_ref()
+}
+
+fn is_external_cfg_test_module(filename: &str) -> bool {
+    let source_path = Path::new(filename);
+    let Some(module_name) = source_path.file_stem().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some(module_directory) = source_path.parent() else {
+        return false;
+    };
+    let parent_candidates = [
+        module_directory.with_extension("rs"),
+        module_directory.join("mod.rs"),
+    ];
+    parent_candidates.iter().any(|parent_path| {
+        let Ok(parent_source) = fs::read_to_string(parent_path) else {
+            return false;
+        };
+        let Ok(parsed) = syn::parse_file(&parent_source) else {
+            return false;
+        };
+        parsed.items.iter().any(|item| {
+            let syn::Item::Mod(module) = item else {
+                return false;
+            };
+            module.ident == module_name
+                && module.content.is_none()
+                && module.attrs.iter().any(is_cfg_test_attribute)
+        })
+    })
+}
+
+fn is_cfg_test_attribute(attribute: &syn::Attribute) -> bool {
+    if !attribute.path().is_ident("cfg") {
+        return false;
+    }
+    attribute
+        .parse_args::<syn::Meta>()
+        .ok()
+        .is_some_and(|meta| match meta {
+            syn::Meta::Path(path) => path.is_ident("test"),
+            syn::Meta::List(list) if list.path.is_ident("all") => list
+                .parse_args_with(
+                    syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+                )
+                .ok()
+                .is_some_and(|nested| {
+                    nested
+                        .iter()
+                        .any(|item| matches!(item, syn::Meta::Path(path) if path.is_ident("test")))
+                }),
+            _ => false,
+        })
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CoveragePolicyFile {
@@ -351,7 +489,7 @@ fn read_detailed_summary(
     let mut regions_covered = 0_u64;
     let mut functions_total = 0_u64;
     let mut functions_covered = 0_u64;
-    let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut source_cache = CoverageSourceCache::new();
     let scope_filter = scope.map(scope_path_fragment);
     for variants in functions_by_key.values() {
         if let Some(scope_filter) = scope_filter.as_deref()
@@ -423,19 +561,16 @@ fn read_detailed_summary(
 fn is_ignorable_detail_function(
     filename: &str,
     variants: &[&LlvmCovFunction],
-    source_cache: &mut BTreeMap<String, Option<String>>,
+    source_cache: &mut CoverageSourceCache,
 ) -> bool {
-    let source = source_cache
-        .entry(filename.to_string())
-        .or_insert_with(|| fs::read_to_string(filename).ok());
-    let Some(source) = source.as_ref() else {
+    let Some(source) = cached_coverage_source(filename, source_cache) else {
         return false;
     };
     variants.iter().all(|function| {
         function
             .regions
             .iter()
-            .all(|region| is_cfg_test_source_line(source, region[0]))
+            .all(|region| source.is_cfg_test_line(region[0]))
     })
 }
 
@@ -455,24 +590,18 @@ fn percentage(covered: u64, total: u64) -> f64 {
 fn is_ignorable_synthetic_region(
     filename: &str,
     region: &RegionCoverageKey,
-    source_cache: &mut BTreeMap<String, Option<String>>,
+    source_cache: &mut CoverageSourceCache,
 ) -> bool {
-    let source = source_cache
-        .entry(filename.to_string())
-        .or_insert_with(|| fs::read_to_string(filename).ok());
-    let Some(source) = source.as_ref() else {
+    let Some(source) = cached_coverage_source(filename, source_cache) else {
         return false;
     };
-    if is_cfg_test_source_line(source, region.line_start) {
+    if source.is_cfg_test_line(region.line_start) {
         return true;
     }
     if region.line_start != region.line_end {
         return false;
     }
-    let Some(line) = source
-        .lines()
-        .nth(region.line_start.saturating_sub(1) as usize)
-    else {
+    let Some(line) = source.line(region.line_start) else {
         return false;
     };
     let start = region.column_start.saturating_sub(1) as usize;
@@ -496,18 +625,15 @@ fn is_ignorable_synthetic_region(
 fn is_ignorable_lcov_source_line(
     filename: &str,
     line_number: u64,
-    source_cache: &mut BTreeMap<String, Option<String>>,
+    source_cache: &mut CoverageSourceCache,
 ) -> bool {
-    let source = source_cache
-        .entry(filename.to_string())
-        .or_insert_with(|| fs::read_to_string(filename).ok());
-    let Some(source) = source.as_ref() else {
+    let Some(source) = cached_coverage_source(filename, source_cache) else {
         return false;
     };
-    if is_cfg_test_source_line(source, line_number) {
+    if source.is_cfg_test_line(line_number) {
         return true;
     }
-    let Some(line) = source.lines().nth(line_number.saturating_sub(1) as usize) else {
+    let Some(line) = source.line(line_number) else {
         return false;
     };
     let trimmed = line.trim();
@@ -529,41 +655,9 @@ fn is_ignorable_lcov_source_line(
         || line.contains("panic!(\"unexpected")
 }
 
+#[cfg(test)]
 fn is_cfg_test_source_line(source: &str, line_number: u64) -> bool {
-    if source.lines().any(|line| {
-        let trimmed = line.trim();
-        trimmed.starts_with("#![cfg(test)]") || trimmed.starts_with("#![cfg(all(test,")
-    }) {
-        return true;
-    }
-    let mut pending_cfg_test = false;
-    let mut test_depth: Option<i64> = None;
-    for (index, line) in source.lines().enumerate() {
-        let current_line = index as u64 + 1;
-        let trimmed = line.trim();
-        let mut started_test_block = false;
-        if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,") {
-            pending_cfg_test = true;
-        } else if pending_cfg_test && trimmed.starts_with("mod tests") && trimmed.contains('{') {
-            test_depth = Some(brace_delta(trimmed));
-            pending_cfg_test = false;
-            started_test_block = true;
-        }
-        let in_test = pending_cfg_test || test_depth.is_some();
-        if current_line == line_number {
-            return in_test;
-        }
-        if started_test_block {
-            continue;
-        }
-        if let Some(depth) = test_depth.as_mut() {
-            *depth += brace_delta(trimmed);
-            if *depth <= 0 {
-                test_depth = None;
-            }
-        }
-    }
-    false
+    CoverageSource::parse(source.to_owned(), false).is_cfg_test_line(line_number)
 }
 
 fn brace_delta(line: &str) -> i64 {
@@ -861,7 +955,7 @@ pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
     };
 
     let mut current_filename: Option<String> = None;
-    let mut source_cache: BTreeMap<String, Option<String>> = BTreeMap::new();
+    let mut source_cache = CoverageSourceCache::new();
     let mut da_total: u64 = 0;
     let mut da_covered: u64 = 0;
     let mut executable_total: u64 = 0;
@@ -2358,8 +2452,10 @@ mod tests {
     fn cfg_test_source_line_covers_pending_non_block_forms() {
         let source = "#[cfg(test)]\nfn helper() {}\n#[cfg(test)]\nmod tests\n{\n}\n";
 
+        assert!(!is_cfg_test_source_line(source, 0));
         assert!(is_cfg_test_source_line(source, 2));
         assert!(is_cfg_test_source_line(source, 4));
+        assert!(!is_cfg_test_source_line(source, 7));
         assert!(is_cfg_test_source_line(
             "#![cfg(test)]\nfn helper() {}\n",
             2
@@ -2368,6 +2464,36 @@ mod tests {
             "#![cfg(all(test, feature = \"sqlite\"))]\nfn helper() {}\n",
             2
         ));
+    }
+
+    #[test]
+    fn external_test_module_detection_uses_structured_parent_authority() {
+        let root = temp_dir_path("coverage_external_test_module");
+        let module_directory = root.join("parent");
+        let module_path = module_directory.join("helper.rs");
+        write_file(&root.join("parent.rs"), "#[cfg(test)]\nmod helper;\n");
+        write_file(&module_path, "fn helper() {}\n");
+        assert!(is_external_cfg_test_module(
+            module_path.to_str().expect("UTF-8 module path")
+        ));
+
+        write_file(
+            &root.join("parent.rs"),
+            "const DECOY: &str = \"#[cfg(test)] mod helper;\";\nmod helper;\n",
+        );
+        assert!(!is_external_cfg_test_module(
+            module_path.to_str().expect("UTF-8 module path")
+        ));
+
+        write_file(
+            &module_directory.join("mod.rs"),
+            "#[cfg(all(feature = \"fixtures\", test))]\nmod helper;\n",
+        );
+        assert!(is_external_cfg_test_module(
+            module_path.to_str().expect("UTF-8 module path")
+        ));
+
+        fs::remove_dir_all(root).expect("remove external test module root");
     }
 
     #[test]
