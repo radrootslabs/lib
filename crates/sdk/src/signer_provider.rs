@@ -418,7 +418,7 @@ impl RadrootsSdkMycNip46Signer {
         })?;
         authorize_actor_for_draft(request.actor, request.frozen_draft)?;
         let signer_identity = RadrootsSdkSignerIdentityOnly {
-            pubkey: self.user_pubkey.clone(),
+            pubkey: self.user_pubkey,
         };
         authorize_signer_for_draft(&signer_identity, request.frozen_draft)?;
         let sign_event_request = sign_event_request_from_frozen_draft(request.frozen_draft)?;
