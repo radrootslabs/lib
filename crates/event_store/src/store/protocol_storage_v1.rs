@@ -244,3 +244,147 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsEventSto
 fn u64_from_i64(field: &'static str, value: i64) -> Result<u64, RadrootsEventStoreError> {
     u64::try_from(value).map_err(|_| RadrootsEventStoreError::IntegerRange { field, value })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn raw_event(
+        kind: u32,
+        event_class: StoredEventClass,
+        tags_json: &str,
+    ) -> RadrootsStoredRawEvent {
+        RadrootsStoredRawEvent {
+            seq: 1,
+            event_id: "b".repeat(64),
+            pubkey: "a".repeat(64),
+            created_at: 7,
+            kind,
+            tags_json: tags_json.to_owned(),
+            content: String::new(),
+            sig: "c".repeat(128),
+            raw_json: "{}".to_owned(),
+            admission_status: RadrootsEventAdmissionStatus::Admitted,
+            contract_id: Some("fixture".to_owned()),
+            event_class,
+            valid_stream_eligible: true,
+            inserted_at_ms: 8,
+            updated_at_ms: 9,
+        }
+    }
+
+    fn raw_head(event: &RadrootsStoredRawEvent) -> RadrootsStoredRawEventHead {
+        RadrootsStoredRawEventHead {
+            coordinate_type: event.event_class,
+            kind: event.kind,
+            pubkey: event.pubkey.clone(),
+            d_tag: None,
+            event_id: event.event_id.clone(),
+            created_at: event.created_at,
+            updated_at_ms: event.updated_at_ms,
+        }
+    }
+
+    #[test]
+    fn stored_event_coordinates_fail_closed_for_every_class_and_encoding() {
+        let replaceable = raw_event(10_001, StoredEventClass::Replaceable, "[]");
+        let coordinate =
+            raw_head_coordinate_for_stored_event(&replaceable).expect("replaceable coordinate");
+        assert!(matches!(
+            coordinate,
+            RadrootsEventHeadCoordinate::Replaceable { kind: 10_001, .. }
+        ));
+
+        let addressable = raw_event(
+            30_001,
+            StoredEventClass::Addressable,
+            r#"[["d","opaque"],["d","ignored"]]"#,
+        );
+        assert!(matches!(
+            raw_head_coordinate_for_stored_event(&addressable).expect("addressable coordinate"),
+            RadrootsEventHeadCoordinate::Addressable { kind: 30_001, d_tag, .. }
+                if d_tag == "opaque"
+        ));
+        let no_identifier = raw_event(30_001, StoredEventClass::Addressable, "[]");
+        assert!(matches!(
+            raw_head_coordinate_for_stored_event(&no_identifier).expect("empty d coordinate"),
+            RadrootsEventHeadCoordinate::Addressable { d_tag, .. } if d_tag.is_empty()
+        ));
+
+        let mut invalid = addressable.clone();
+        invalid.pubkey = "invalid".to_owned();
+        assert!(raw_head_coordinate_for_stored_event(&invalid).is_err());
+        invalid = addressable.clone();
+        invalid.tags_json = "not JSON".to_owned();
+        assert!(raw_head_coordinate_for_stored_event(&invalid).is_err());
+        for event_class in [StoredEventClass::Regular, StoredEventClass::Ephemeral] {
+            invalid = addressable.clone();
+            invalid.event_class = event_class;
+            assert!(raw_head_coordinate_for_stored_event(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn raw_head_snapshot_validation_rejects_each_identity_drift() {
+        let event = raw_event(10_001, StoredEventClass::Replaceable, "[]");
+        let requested = raw_head_coordinate_for_stored_event(&event).expect("coordinate");
+        let head = raw_head(&event);
+        validate_raw_head_snapshot(&requested, &head, &event).expect("valid snapshot");
+
+        let wrong_requested = RadrootsEventHeadCoordinate::Replaceable {
+            kind: 10_002,
+            pubkey: RadrootsPublicKey::parse(event.pubkey.clone()).expect("pubkey"),
+        };
+        assert!(validate_raw_head_snapshot(&wrong_requested, &head, &event).is_err());
+
+        let mut mutated = head.clone();
+        mutated.kind += 1;
+        assert!(validate_raw_head_snapshot(&requested, &mutated, &event).is_err());
+        mutated = head.clone();
+        mutated.event_id = "d".repeat(64);
+        assert!(validate_raw_head_snapshot(&requested, &mutated, &event).is_err());
+        mutated = head.clone();
+        mutated.created_at += 1;
+        assert!(validate_raw_head_snapshot(&requested, &mutated, &event).is_err());
+        mutated = head.clone();
+        mutated.pubkey = "invalid".to_owned();
+        assert!(validate_raw_head_snapshot(&requested, &mutated, &event).is_err());
+        mutated = head.clone();
+        mutated.d_tag = Some("unexpected".to_owned());
+        assert!(validate_raw_head_snapshot(&requested, &mutated, &event).is_err());
+
+        let addressable = raw_event(30_001, StoredEventClass::Addressable, r#"[["d","opaque"]]"#);
+        let requested = raw_head_coordinate_for_stored_event(&addressable).expect("coordinate");
+        let mut addressable_head = raw_head(&addressable);
+        addressable_head.d_tag = Some("opaque".to_owned());
+        validate_raw_head_snapshot(&requested, &addressable_head, &addressable)
+            .expect("valid addressable snapshot");
+        addressable_head.d_tag = None;
+        assert!(validate_raw_head_snapshot(&requested, &addressable_head, &addressable).is_err());
+        addressable_head.d_tag = Some("opaque".to_owned());
+        addressable_head.pubkey = "invalid".to_owned();
+        assert!(validate_raw_head_snapshot(&requested, &addressable_head, &addressable).is_err());
+
+        mutated = head;
+        mutated.coordinate_type = StoredEventClass::Regular;
+        assert!(validate_raw_head_snapshot(&requested, &mutated, &addressable).is_err());
+    }
+
+    #[test]
+    fn storage_integer_and_legacy_status_helpers_are_exact() {
+        for legacy in [
+            "supported",
+            "unsupported_kind",
+            "unsupported_shape",
+            "ambiguous_shape",
+        ] {
+            assert!(is_legacy_contract_status(legacy));
+        }
+        assert!(!is_legacy_contract_status("admitted"));
+        assert_eq!(u32_from_i64("fixture", 7).expect("u32"), 7);
+        assert!(u32_from_i64("fixture", -1).is_err());
+        assert!(u32_from_i64("fixture", i64::from(u32::MAX) + 1).is_err());
+        assert_eq!(u64_from_i64("fixture", 7).expect("u64"), 7);
+        assert!(u64_from_i64("fixture", -1).is_err());
+    }
+}
