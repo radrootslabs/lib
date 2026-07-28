@@ -169,12 +169,7 @@ pub(crate) async fn reset_and_replay_food_availability_from_raw_v1(
     )
     .fetch_one(&mut *connection)
     .await?;
-    if residual_count != 0 {
-        return Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
-            kind: RadrootsEventStoreRawSourceRebuildDriftV1::DerivedProductStateAuthority,
-            detail: format!("FoodAvailability reset left {residual_count} stale derived row(s)"),
-        });
-    }
+    validate_projection_reset_residual_count(residual_count)?;
     apply_pending_food_availability_transitions_v1(connection).await
 }
 
@@ -222,11 +217,7 @@ async fn ensure_projection_cursor(
     )?;
     let floor: i64 = source.try_get("transition_floor_seq")?;
     let feed_version: i64 = source.try_get("addressable_feed_version")?;
-    if feed_version != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1) {
-        return Err(projection_drift(format!(
-            "addressable feed version is {feed_version}"
-        )));
-    }
+    validate_projection_feed_version(feed_version)?;
 
     let existing = sqlx::query(
         "SELECT source_generation, feed_version, projection_version, scope_fingerprint, hook_manifest_sha256, last_transition_seq, projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
@@ -333,12 +324,11 @@ async fn advance_projection_cursor(
         .checked_add(projected_row_delta)
         .ok_or_else(|| projection_drift("projection row count overflowed"))?;
     validate_projected_row_count(next_projected_row_count)?;
-    if next.last_transition_seq() == expected.feed_cursor.last_transition_seq() {
-        if projected_row_delta != 0 {
-            return Err(projection_drift(
-                "projection row count changed without a feed transition",
-            ));
-        }
+    if projection_cursor_is_stationary(
+        expected.feed_cursor.last_transition_seq(),
+        next.last_transition_seq(),
+        projected_row_delta,
+    )? {
         return Ok(expected.clone());
     }
     let updated = sqlx::query(
@@ -959,6 +949,43 @@ fn require_single_projection_row(
     Ok(())
 }
 
+fn validate_projection_reset_residual_count(
+    residual_count: i64,
+) -> Result<(), RadrootsEventStoreError> {
+    if residual_count != 0 {
+        return Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+            kind: RadrootsEventStoreRawSourceRebuildDriftV1::DerivedProductStateAuthority,
+            detail: format!("FoodAvailability reset left {residual_count} stale derived row(s)"),
+        });
+    }
+    Ok(())
+}
+
+fn validate_projection_feed_version(feed_version: i64) -> Result<(), RadrootsEventStoreError> {
+    if feed_version != i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1) {
+        return Err(projection_drift(format!(
+            "addressable feed version is {feed_version}"
+        )));
+    }
+    Ok(())
+}
+
+fn projection_cursor_is_stationary(
+    current_transition_seq: i64,
+    next_transition_seq: i64,
+    projected_row_delta: i64,
+) -> Result<bool, RadrootsEventStoreError> {
+    if next_transition_seq != current_transition_seq {
+        return Ok(false);
+    }
+    if projected_row_delta != 0 {
+        return Err(projection_drift(
+            "projection row count changed without a feed transition",
+        ));
+    }
+    Ok(true)
+}
+
 fn validate_projected_row_count(value: i64) -> Result<(), RadrootsEventStoreError> {
     if value < 0 {
         return Err(projection_drift(format!(
@@ -1183,6 +1210,30 @@ mod tests {
             require_single_projection_row(0, "fixture mutation failed".to_owned()),
             Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
                 if reason == "fixture mutation failed"
+        ));
+        validate_projection_reset_residual_count(0).expect("empty reset state");
+        assert!(matches!(
+            validate_projection_reset_residual_count(2),
+            Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+                kind: RadrootsEventStoreRawSourceRebuildDriftV1::DerivedProductStateAuthority,
+                detail,
+            }) if detail == "FoodAvailability reset left 2 stale derived row(s)"
+        ));
+        validate_projection_feed_version(i64::from(
+            RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
+        ))
+        .expect("governed feed version");
+        assert!(matches!(
+            validate_projection_feed_version(2),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason == "addressable feed version is 2"
+        ));
+        assert!(projection_cursor_is_stationary(7, 7, 0).expect("stationary projection cursor"));
+        assert!(!projection_cursor_is_stationary(7, 8, 1).expect("advancing projection cursor"));
+        assert!(matches!(
+            projection_cursor_is_stationary(7, 7, 1),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason == "projection row count changed without a feed transition"
         ));
     }
 }
