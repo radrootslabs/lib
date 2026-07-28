@@ -2587,6 +2587,100 @@ mod tests {
         (store, food_id)
     }
 
+    async fn transition_cause_corruption_store() -> RadrootsEventStore {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let regular = signed_event(KIND_POST, 240, Vec::new(), "transition cause fixture");
+        let food = food_availability_event(
+            250,
+            "transition-cause-carrots",
+            "Transition Cause Carrots",
+            "Transition cause harvest",
+            "active",
+            Vec::new(),
+        );
+        for (observed_at_ms, event) in [(19_300, regular), (19_301, food)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("transition cause fixture ingest");
+        }
+        store
+    }
+
+    async fn replacement_transition_corruption_store() -> RadrootsEventStore {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let first = food_availability_event(
+            260,
+            "transition-lineage-carrots",
+            "Transition Lineage Carrots",
+            "First lineage harvest",
+            "active",
+            Vec::new(),
+        );
+        let second = food_availability_event(
+            270,
+            "transition-lineage-carrots",
+            "Transition Lineage Carrots",
+            "Second lineage harvest",
+            "sold",
+            Vec::new(),
+        );
+        for (observed_at_ms, event) in [(19_400, first), (19_401, second)] {
+            store
+                .ingest_event(RadrootsEventIngest::new(event, observed_at_ms))
+                .await
+                .expect("replacement transition fixture ingest");
+        }
+        store
+    }
+
+    async fn transition_feed_error_after_trusted_corruption(
+        store: &RadrootsEventStore,
+        additional_guards: &[&'static str],
+        mutations: &[&'static str],
+    ) -> RadrootsEventStoreError {
+        let mut connection = store.pool().acquire().await.expect("trusted connection");
+        sqlx::query("DROP TRIGGER radroots_event_store_addressable_transition_update_guard")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted transition guard removal");
+        for guard in additional_guards {
+            sqlx::query(*guard)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted transition dependency guard removal");
+        }
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable trusted foreign-key enforcement");
+        sqlx::query("PRAGMA ignore_check_constraints = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("enable trusted check-constraint bypass");
+        for mutation in mutations {
+            sqlx::query(*mutation)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted transition lineage corruption");
+        }
+        sqlx::query("PRAGMA ignore_check_constraints = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("restore check-constraint enforcement");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign-key enforcement");
+        drop(connection);
+
+        let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+        store
+            .addressable_transition_page_v1(&scope, None, 64)
+            .await
+            .expect_err("corrupt transition lineage must fail public feed read")
+    }
+
     fn calendar_date_event(
         created_at: u32,
         d_tag: &str,
@@ -9400,6 +9494,93 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             Err(RadrootsEventStoreError::AddressableTransitionSequenceGap { reason })
                 if reason.contains("cursor sequence 2 is absent")
         ));
+    }
+
+    #[tokio::test]
+    async fn addressable_transition_feed_rejects_incremental_cause_and_lineage_drift() {
+        for (label, mutation) in [
+            (
+                "applied cause identity",
+                "UPDATE radroots_event_store_addressable_head_transition SET cause_event_id = (SELECT event_id FROM event_envelopes WHERE kind = 1), cause_event_seq = (SELECT seq FROM event_envelopes WHERE kind = 1)",
+            ),
+            (
+                "non-deletion non-head cause",
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_decision = 'not_head_selected'",
+            ),
+            (
+                "illegal incremental decision",
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_decision = 'skipped_older'",
+            ),
+        ] {
+            let store = transition_cause_corruption_store().await;
+            let error =
+                transition_feed_error_after_trusted_corruption(&store, &[], &[mutation]).await;
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::AddressableTransitionCorruption { .. }
+                ),
+                "{label}: {error}",
+            );
+        }
+
+        let (evidence_store, _) = suppressed_food_visibility_store().await;
+        let evidence_error = transition_feed_error_after_trusted_corruption(
+            &evidence_store,
+            &[],
+            &[
+                "UPDATE radroots_event_store_addressable_head_transition SET visibility = 'visible', visible_event_id = raw_head_event_id, visible_event_seq = raw_head_event_seq, retracted_event_id = NULL, retracted_event_seq = NULL, nip09_outcome = 'visible', nip09_reason = 'deletion_request_author_mismatch', event_reference_request_id = NULL, address_reference_request_id = NULL, address_reference_cutoff = NULL WHERE transition_seq = 2",
+            ],
+        )
+        .await;
+        assert!(matches!(
+            evidence_error,
+            RadrootsEventStoreError::AddressableTransitionCorruption { ref reason }
+                if reason.contains("author does not agree")
+        ));
+
+        let (target_store, _) = suppressed_food_visibility_store().await;
+        let target_error = transition_feed_error_after_trusted_corruption(
+            &target_store,
+            &["DROP TRIGGER radroots_event_store_nip09_address_target_delete_guard"],
+            &["DELETE FROM radroots_event_store_nip09_address_target"],
+        )
+        .await;
+        assert!(matches!(
+            target_error,
+            RadrootsEventStoreError::AddressableTransitionCorruption { ref reason }
+                if reason.contains("does not target the transitioned coordinate")
+        ));
+
+        for (label, mutation, expected_reason) in [
+            (
+                "missing retraction",
+                "UPDATE radroots_event_store_addressable_head_transition SET retracted_event_id = NULL, retracted_event_seq = NULL WHERE transition_seq = 2",
+                "retraction does not match",
+            ),
+            (
+                "repeated prior state",
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_event_id = (SELECT raw_head_event_id FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), raw_head_event_seq = (SELECT raw_head_event_seq FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), raw_head_created_at = (SELECT raw_head_created_at FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), visible_event_id = (SELECT visible_event_id FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), visible_event_seq = (SELECT visible_event_seq FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), retracted_event_id = NULL, retracted_event_seq = NULL, cause_event_id = (SELECT raw_head_event_id FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1), cause_event_seq = (SELECT raw_head_event_seq FROM radroots_event_store_addressable_head_transition WHERE transition_seq = 1) WHERE transition_seq = 2",
+                "repeats the complete prior state",
+            ),
+            (
+                "baseline after prior state",
+                "UPDATE radroots_event_store_addressable_head_transition SET origin = 'baseline', retracted_event_id = NULL, retracted_event_seq = NULL, cause_event_id = NULL, cause_event_seq = NULL, raw_head_decision = 'baseline_rebuild' WHERE transition_seq = 2",
+                "baseline transition follows existing coordinate state",
+            ),
+        ] {
+            let store = replacement_transition_corruption_store().await;
+            let error =
+                transition_feed_error_after_trusted_corruption(&store, &[], &[mutation]).await;
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::AddressableTransitionCorruption { ref reason }
+                        if reason.contains(expected_reason)
+                ),
+                "{label}: {error}",
+            );
+        }
     }
 
     #[tokio::test]
