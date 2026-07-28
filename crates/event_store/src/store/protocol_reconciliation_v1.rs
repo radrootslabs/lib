@@ -200,18 +200,11 @@ async fn read_protocol_post_extension_authority_seal(
         ));
     }
 
-    let source_rows = sqlx::query(
+    let source_row = sqlx::query(
         "SELECT state.active_generation, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, state.last_transition_seq, generation.generation_ordinal, generation.reconciliation_version, generation.addressable_feed_version, generation.event_contract_registry_version, generation.hook_id, generation.hook_manifest_sha256, generation.transition_floor_seq, generation.baseline_raw_event_count, generation.baseline_raw_tag_count, generation.baseline_raw_high_water_seq FROM radroots_event_store_source_state AS state JOIN radroots_event_store_source_generation AS generation ON generation.source_generation = state.active_generation WHERE state.singleton = 1",
     )
-    .fetch_all(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
-    if source_rows.len() != 1 {
-        return protocol_post_extension_drift(format!(
-            "expected one active source state, found {}",
-            source_rows.len()
-        ));
-    }
-    let source_row = &source_rows[0];
     let source_generation = generation_from_blob(source_row.try_get("active_generation")?)?;
     let raw_event_count: i64 = source_row.try_get("raw_event_count")?;
     let raw_tag_count: i64 = source_row.try_get("raw_tag_count")?;
@@ -237,9 +230,11 @@ async fn read_protocol_post_extension_authority_seal(
     .await?;
     let expected_global_min = (last_transition_seq > 0).then_some(1);
     let expected_global_max = (last_transition_seq > 0).then_some(last_transition_seq);
-    if last_transition_seq < 0
-        || global_transition_min_seq != expected_global_min
-        || global_transition_max_seq != expected_global_max
+    if (
+        last_transition_seq < 0,
+        global_transition_min_seq,
+        global_transition_max_seq,
+    ) != (false, expected_global_min, expected_global_max)
     {
         return protocol_post_extension_drift(format!(
             "global transition bounds disagree with source state: min={global_transition_min_seq:?}, max={global_transition_max_seq:?}, last={last_transition_seq}"
@@ -258,28 +253,20 @@ async fn read_protocol_post_extension_authority_seal(
     .bind(source_generation.as_bytes().as_slice())
     .fetch_optional(&mut **tx)
     .await?;
-    let active_transition_span = last_transition_seq
-        .checked_sub(transition_floor_seq)
-        .ok_or_else(|| RadrootsEventStoreError::MigrationHookStateDrift {
-            hook_id: "nip09_reconciliation_v1",
-            reason: format!(
-                "active transition floor exceeds source authority: floor={transition_floor_seq}, last={last_transition_seq}"
-            ),
-        })?;
-    let expected_active_min = if active_transition_span == 0 {
+    // Both persisted values are nonnegative SQLite INTEGERs, so their
+    // difference remains representable even when the authority is corrupt.
+    let active_transition_span = last_transition_seq - transition_floor_seq;
+    let expected_active_min = if active_transition_span <= 0 {
         None
     } else {
-        Some(transition_floor_seq.checked_add(1).ok_or_else(|| {
-            RadrootsEventStoreError::MigrationHookStateDrift {
-                hook_id: "nip09_reconciliation_v1",
-                reason: "active transition floor is exhausted at SQLite INTEGER maximum".to_owned(),
-            }
-        })?)
+        Some(transition_floor_seq + 1)
     };
     let expected_active_max = (active_transition_span > 0).then_some(last_transition_seq);
-    if active_transition_span < 0
-        || active_transition_min_seq != expected_active_min
-        || active_transition_max_seq != expected_active_max
+    if (
+        active_transition_span < 0,
+        active_transition_min_seq,
+        active_transition_max_seq,
+    ) != (false, expected_active_min, expected_active_max)
     {
         return protocol_post_extension_drift(format!(
             "active transition bounds disagree with source state: floor={transition_floor_seq}, last={last_transition_seq}, min={active_transition_min_seq:?}, max={active_transition_max_seq:?}"
@@ -334,89 +321,73 @@ fn protocol_post_extension_authority_matches(
     expected: &ProtocolPostExtensionAuthoritySeal,
     actual: &ProtocolPostExtensionAuthoritySeal,
 ) -> bool {
-    let ProtocolPostExtensionAuthoritySeal {
-        source_generation: expected_source_generation,
-        generation_ordinal: expected_generation_ordinal,
-        reconciliation_version: expected_reconciliation_version,
-        addressable_feed_version: expected_addressable_feed_version,
-        event_contract_registry_version: expected_event_contract_registry_version,
-        hook_id: expected_hook_id,
-        hook_manifest_sha256: expected_hook_manifest_sha256,
-        transition_floor_seq: expected_transition_floor_seq,
-        baseline_raw_event_count: expected_baseline_raw_event_count,
-        baseline_raw_tag_count: expected_baseline_raw_tag_count,
-        baseline_raw_high_water_seq: expected_baseline_raw_high_water_seq,
-        raw_event_count: expected_raw_event_count,
-        raw_tag_count: expected_raw_tag_count,
-        raw_event_bytes: expected_raw_event_bytes,
-        raw_tag_bytes: expected_raw_tag_bytes,
-        raw_high_water_seq: expected_raw_high_water_seq,
-        last_transition_seq: expected_last_transition_seq,
-        retained_generation_count: expected_retained_generation_count,
-        retained_generation_limit: expected_retained_generation_limit,
-        actual_raw_high_water_seq: expected_actual_raw_high_water_seq,
-        global_transition_min_seq: expected_global_transition_min_seq,
-        global_transition_max_seq: expected_global_transition_max_seq,
-        active_transition_min_seq: expected_active_transition_min_seq,
-        active_transition_max_seq: expected_active_transition_max_seq,
-        main_schema_version: expected_main_schema_version,
-        temp_schema_version: expected_temp_schema_version,
-    } = expected;
-    let ProtocolPostExtensionAuthoritySeal {
-        source_generation: actual_source_generation,
-        generation_ordinal: actual_generation_ordinal,
-        reconciliation_version: actual_reconciliation_version,
-        addressable_feed_version: actual_addressable_feed_version,
-        event_contract_registry_version: actual_event_contract_registry_version,
-        hook_id: actual_hook_id,
-        hook_manifest_sha256: actual_hook_manifest_sha256,
-        transition_floor_seq: actual_transition_floor_seq,
-        baseline_raw_event_count: actual_baseline_raw_event_count,
-        baseline_raw_tag_count: actual_baseline_raw_tag_count,
-        baseline_raw_high_water_seq: actual_baseline_raw_high_water_seq,
-        raw_event_count: actual_state_raw_event_count,
-        raw_tag_count: actual_state_raw_tag_count,
-        raw_event_bytes: actual_raw_event_bytes,
-        raw_tag_bytes: actual_raw_tag_bytes,
-        raw_high_water_seq: actual_state_raw_high_water_seq,
-        last_transition_seq: actual_last_transition_seq,
-        retained_generation_count: actual_retained_generation_count,
-        retained_generation_limit: actual_retained_generation_limit,
-        actual_raw_high_water_seq: actual_observed_raw_high_water_seq,
-        global_transition_min_seq: actual_global_transition_min_seq,
-        global_transition_max_seq: actual_global_transition_max_seq,
-        active_transition_min_seq: actual_active_transition_min_seq,
-        active_transition_max_seq: actual_active_transition_max_seq,
-        main_schema_version: actual_main_schema_version,
-        temp_schema_version: actual_temp_schema_version,
-    } = actual;
-
-    expected_source_generation == actual_source_generation
-        && expected_generation_ordinal == actual_generation_ordinal
-        && expected_reconciliation_version == actual_reconciliation_version
-        && expected_addressable_feed_version == actual_addressable_feed_version
-        && expected_event_contract_registry_version == actual_event_contract_registry_version
-        && expected_hook_id == actual_hook_id
-        && expected_hook_manifest_sha256 == actual_hook_manifest_sha256
-        && expected_transition_floor_seq == actual_transition_floor_seq
-        && expected_baseline_raw_event_count == actual_baseline_raw_event_count
-        && expected_baseline_raw_tag_count == actual_baseline_raw_tag_count
-        && expected_baseline_raw_high_water_seq == actual_baseline_raw_high_water_seq
-        && expected_raw_event_count == actual_state_raw_event_count
-        && expected_raw_tag_count == actual_state_raw_tag_count
-        && expected_raw_event_bytes == actual_raw_event_bytes
-        && expected_raw_tag_bytes == actual_raw_tag_bytes
-        && expected_raw_high_water_seq == actual_state_raw_high_water_seq
-        && expected_last_transition_seq == actual_last_transition_seq
-        && expected_retained_generation_count == actual_retained_generation_count
-        && expected_retained_generation_limit == actual_retained_generation_limit
-        && expected_actual_raw_high_water_seq == actual_observed_raw_high_water_seq
-        && expected_global_transition_min_seq == actual_global_transition_min_seq
-        && expected_global_transition_max_seq == actual_global_transition_max_seq
-        && expected_active_transition_min_seq == actual_active_transition_min_seq
-        && expected_active_transition_max_seq == actual_active_transition_max_seq
-        && expected_main_schema_version == actual_main_schema_version
-        && expected_temp_schema_version == actual_temp_schema_version
+    (
+        (
+            &expected.source_generation,
+            expected.generation_ordinal,
+            expected.reconciliation_version,
+            expected.addressable_feed_version,
+            expected.event_contract_registry_version,
+            &expected.hook_id,
+            &expected.hook_manifest_sha256,
+            expected.transition_floor_seq,
+            expected.baseline_raw_event_count,
+        ),
+        (
+            expected.baseline_raw_tag_count,
+            expected.baseline_raw_high_water_seq,
+            expected.raw_event_count,
+            expected.raw_tag_count,
+            expected.raw_event_bytes,
+            expected.raw_tag_bytes,
+            expected.raw_high_water_seq,
+            expected.last_transition_seq,
+            expected.retained_generation_count,
+        ),
+        (
+            expected.retained_generation_limit,
+            expected.actual_raw_high_water_seq,
+            expected.global_transition_min_seq,
+            expected.global_transition_max_seq,
+            expected.active_transition_min_seq,
+            expected.active_transition_max_seq,
+            expected.main_schema_version,
+            expected.temp_schema_version,
+        ),
+    ) == (
+        (
+            &actual.source_generation,
+            actual.generation_ordinal,
+            actual.reconciliation_version,
+            actual.addressable_feed_version,
+            actual.event_contract_registry_version,
+            &actual.hook_id,
+            &actual.hook_manifest_sha256,
+            actual.transition_floor_seq,
+            actual.baseline_raw_event_count,
+        ),
+        (
+            actual.baseline_raw_tag_count,
+            actual.baseline_raw_high_water_seq,
+            actual.raw_event_count,
+            actual.raw_tag_count,
+            actual.raw_event_bytes,
+            actual.raw_tag_bytes,
+            actual.raw_high_water_seq,
+            actual.last_transition_seq,
+            actual.retained_generation_count,
+        ),
+        (
+            actual.retained_generation_limit,
+            actual.actual_raw_high_water_seq,
+            actual.global_transition_min_seq,
+            actual.global_transition_max_seq,
+            actual.active_transition_min_seq,
+            actual.active_transition_max_seq,
+            actual.main_schema_version,
+            actual.temp_schema_version,
+        ),
+    )
 }
 
 fn protocol_post_extension_drift<T>(reason: String) -> Result<T, RadrootsEventStoreError> {
@@ -571,23 +542,9 @@ pub(super) async fn apply_raw_event_head(
     let candidate = match profile {
         ReconciliationProfile::Nip09V1RegistryV7 => event_head_candidate_for_nip01_event_v1(event),
     };
-    let candidate = match candidate {
-        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
-        RadrootsEventHeadCandidateResult::NotHeadSelected => {
-            return Ok(AppliedHead {
-                decision: RadrootsRawHeadDecision::NotHeadSelected,
-            });
-        }
-        RadrootsEventHeadCandidateResult::NotPersisted => {
-            return Ok(AppliedHead {
-                decision: RadrootsRawHeadDecision::NotPersisted,
-            });
-        }
-        RadrootsEventHeadCandidateResult::Malformed(_) => {
-            return Ok(AppliedHead {
-                decision: RadrootsRawHeadDecision::MalformedCoordinate,
-            });
-        }
+    let candidate = match raw_head_candidate(candidate) {
+        Ok(candidate) => candidate,
+        Err(decision) => return Ok(AppliedHead { decision }),
     };
     let current = current_event_head(tx, &candidate.coordinate).await?;
     let protocol_decision = match profile {
@@ -601,6 +558,23 @@ pub(super) async fn apply_raw_event_head(
     Ok(AppliedHead {
         decision: RadrootsRawHeadDecision::from_protocol(&protocol_decision),
     })
+}
+
+fn raw_head_candidate(
+    candidate: RadrootsEventHeadCandidateResult,
+) -> Result<RadrootsEventHeadCandidate, RadrootsRawHeadDecision> {
+    match candidate {
+        RadrootsEventHeadCandidateResult::Candidate(candidate) => Ok(candidate),
+        RadrootsEventHeadCandidateResult::NotHeadSelected => {
+            Err(RadrootsRawHeadDecision::NotHeadSelected)
+        }
+        RadrootsEventHeadCandidateResult::NotPersisted => {
+            Err(RadrootsRawHeadDecision::NotPersisted)
+        }
+        RadrootsEventHeadCandidateResult::Malformed(_) => {
+            Err(RadrootsRawHeadDecision::MalformedCoordinate)
+        }
+    }
 }
 
 async fn current_event_head(
@@ -689,6 +663,26 @@ const fn bool_i64(value: bool) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn protocol_seal_error_after_corruption(
+        statements: &[&'static str],
+    ) -> RadrootsEventStoreError {
+        let store = crate::RadrootsEventStore::open_memory()
+            .await
+            .expect("open store");
+        let mut transaction = store.pool().begin().await.expect("transaction");
+        for statement in statements {
+            sqlx::query(*statement)
+                .execute(&mut *transaction)
+                .await
+                .expect("apply trusted corruption");
+        }
+        let error = read_protocol_post_extension_authority_seal(&mut transaction)
+            .await
+            .expect_err("protocol seal must reject corruption");
+        transaction.rollback().await.expect("rollback corruption");
+        error
+    }
 
     fn authority_seal() -> ProtocolPostExtensionAuthoritySeal {
         ProtocolPostExtensionAuthoritySeal {
@@ -790,6 +784,62 @@ mod tests {
                 hook_id: "nip09_reconciliation_v1",
                 reason,
             }) if reason == "fixture"
+        ));
+        assert_eq!(
+            raw_head_candidate(RadrootsEventHeadCandidateResult::Malformed(
+                radroots_event::event_head::v1::RadrootsEventHeadMalformed::MissingDTag,
+            ))
+            .expect_err("malformed coordinate"),
+            RadrootsRawHeadDecision::MalformedCoordinate
+        );
+    }
+
+    #[tokio::test]
+    async fn protocol_authority_seal_rejects_isolated_storage_drift() {
+        let marker = protocol_seal_error_after_corruption(&[
+            "DROP TRIGGER radroots_event_store_source_rebuild_marker_insert_guard",
+            "INSERT INTO radroots_event_store_source_rebuild_marker(singleton, barrier_key, target_generation, target_generation_ordinal, reconciliation_version, addressable_feed_version, event_contract_registry_version, hook_id, hook_manifest_sha256, transition_floor_seq, baseline_raw_event_count, baseline_raw_tag_count, baseline_raw_high_water_seq, prior_active_generation, prior_raw_event_count, prior_raw_tag_count, prior_raw_high_water_seq, prior_last_transition_seq) SELECT 1, 1, generation.source_generation, generation.generation_ordinal, generation.reconciliation_version, generation.addressable_feed_version, generation.event_contract_registry_version, generation.hook_id, generation.hook_manifest_sha256, generation.transition_floor_seq, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, state.active_generation, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, state.last_transition_seq FROM radroots_event_store_source_generation AS generation JOIN radroots_event_store_source_state AS state ON state.active_generation = generation.source_generation WHERE state.singleton = 1",
+        ])
+        .await;
+        assert!(matches!(
+            marker,
+            RadrootsEventStoreError::MigrationHookStateDrift { reason, .. }
+                if reason.contains("source rebuild marker residue")
+        ));
+
+        let raw_high_water = protocol_seal_error_after_corruption(&[
+            "DROP TRIGGER radroots_event_store_source_capacity_update_guard",
+            "DROP TRIGGER radroots_event_store_source_state_authority_update_guard",
+            "UPDATE radroots_event_store_source_capacity_v1 SET raw_event_count = 1, raw_high_water_seq = 1 WHERE singleton = 1",
+            "UPDATE radroots_event_store_source_state SET raw_event_count = 1, raw_high_water_seq = 1 WHERE singleton = 1",
+        ])
+        .await;
+        assert!(matches!(
+            raw_high_water,
+            RadrootsEventStoreError::MigrationHookStateDrift { reason, .. }
+                if reason.contains("raw high-water does not match source authority")
+        ));
+
+        let global_bounds = protocol_seal_error_after_corruption(&[
+            "DROP TRIGGER radroots_event_store_source_state_authority_update_guard",
+            "UPDATE radroots_event_store_source_state SET last_transition_seq = 1 WHERE singleton = 1",
+        ])
+        .await;
+        assert!(matches!(
+            global_bounds,
+            RadrootsEventStoreError::MigrationHookStateDrift { reason, .. }
+                if reason.contains("global transition bounds disagree")
+        ));
+
+        let active_bounds = protocol_seal_error_after_corruption(&[
+            "DROP TRIGGER radroots_event_store_source_generation_update_guard",
+            "UPDATE radroots_event_store_source_generation SET transition_floor_seq = 1 WHERE source_generation = (SELECT active_generation FROM radroots_event_store_source_state WHERE singleton = 1)",
+        ])
+        .await;
+        assert!(matches!(
+            active_bounds,
+            RadrootsEventStoreError::MigrationHookStateDrift { reason, .. }
+                if reason.contains("active transition bounds disagree")
         ));
     }
 
