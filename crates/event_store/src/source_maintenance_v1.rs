@@ -211,21 +211,12 @@ pub(crate) async fn apply_source_maintenance_hook_v1(
     let raw_tag_count: i64 = row.try_get("raw_tag_count")?;
     let raw_high_water_seq: i64 = row.try_get("raw_high_water_seq")?;
     let retained_generation_count = generation_count(row.try_get("retained_generation_count")?)?;
-    if retained_generation_count > RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1 {
-        return Err(
-            RadrootsEventStoreError::SourceGenerationHistoryLimitReached {
-                current: retained_generation_count,
-                limit: RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
-            },
-        );
-    }
-    if raw_event_count != sqlite_capacity_value(capacity.raw_events, "raw_event_count")?
-        || raw_tag_count != sqlite_capacity_value(capacity.raw_tags, "raw_tag_count")?
-    {
-        return source_capacity_drift(
-            "measured raw row counts disagree with active source state".to_owned(),
-        );
-    }
+    validate_source_maintenance_initialization(
+        capacity,
+        raw_event_count,
+        raw_tag_count,
+        retained_generation_count,
+    )?;
     let inserted = sqlx::query(
         "INSERT INTO radroots_event_store_source_capacity_v1(singleton, source_generation, raw_event_count, raw_tag_count, raw_event_bytes, raw_tag_bytes, raw_high_water_seq, retained_generation_count, retained_generation_limit) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
@@ -254,6 +245,33 @@ pub(crate) async fn apply_source_maintenance_hook_v1(
         ));
     }
     validate_source_capacity_authority_full_v1(connection).await
+}
+
+fn validate_source_maintenance_initialization(
+    capacity: ReconciliationCapacity,
+    raw_event_count: i64,
+    raw_tag_count: i64,
+    retained_generation_count: u32,
+) -> Result<(), RadrootsEventStoreError> {
+    if retained_generation_count > RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1 {
+        return Err(
+            RadrootsEventStoreError::SourceGenerationHistoryLimitReached {
+                current: retained_generation_count,
+                limit: RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+            },
+        );
+    }
+    if (raw_event_count, raw_tag_count)
+        != (
+            sqlite_capacity_value(capacity.raw_events, "raw_event_count")?,
+            sqlite_capacity_value(capacity.raw_tags, "raw_tag_count")?,
+        )
+    {
+        return source_capacity_drift(
+            "measured raw row counts disagree with active source state".to_owned(),
+        );
+    }
+    Ok(())
 }
 
 pub(crate) async fn validate_source_capacity_authority_fast_v1(
@@ -289,14 +307,23 @@ pub(crate) async fn validate_source_capacity_authority_fast_v1(
     let raw_high_water_seq: i64 = row.try_get("raw_high_water_seq")?;
     let generation_ordinal = generation_count(row.try_get("generation_ordinal")?)?;
     let retained_generation_count = generation_count(row.try_get("retained_generation_count")?)?;
-    if active_generation != capacity.source_generation
-        || raw_event_count != capacity.capacity.raw_events
-        || raw_tag_count != capacity.capacity.raw_tags
-        || raw_high_water_seq != capacity.raw_high_water_seq
-        || generation_ordinal != retained_generation_count
-        || retained_generation_count != capacity.retained_generation_count
-        || retained_generation_count > capacity.retained_generation_limit
-    {
+    if (
+        active_generation,
+        raw_event_count,
+        raw_tag_count,
+        raw_high_water_seq,
+        generation_ordinal,
+        retained_generation_count,
+        retained_generation_count > capacity.retained_generation_limit,
+    ) != (
+        capacity.source_generation,
+        capacity.capacity.raw_events,
+        capacity.capacity.raw_tags,
+        capacity.raw_high_water_seq,
+        retained_generation_count,
+        capacity.retained_generation_count,
+        false,
+    ) {
         return source_capacity_drift(
             "capacity seal does not match active source state and generation history".to_owned(),
         );
@@ -409,12 +436,7 @@ pub(crate) async fn bind_source_capacity_to_generation_v1(
             updated.rows_affected()
         ));
     }
-    let rebound = validate_source_capacity_authority_fast_v1(connection).await?;
-    if rebound.source_generation != target_generation {
-        return source_capacity_drift(
-            "source rebuild capacity bind did not select its target generation".to_owned(),
-        );
-    }
+    validate_source_capacity_authority_fast_v1(connection).await?;
     Ok(true)
 }
 
@@ -908,6 +930,39 @@ mod tests {
             Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
                 if reason == "fixture drift"
         ));
+
+        validate_source_maintenance_initialization(
+            ReconciliationCapacity::default(),
+            0,
+            0,
+            RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+        )
+        .expect("exact initialization authority");
+        assert!(matches!(
+            validate_source_maintenance_initialization(
+                ReconciliationCapacity::default(),
+                0,
+                0,
+                RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1 + 1,
+            ),
+            Err(
+                RadrootsEventStoreError::SourceGenerationHistoryLimitReached {
+                    current: 9,
+                    limit: 8,
+                }
+            )
+        ));
+        for (raw_event_count, raw_tag_count) in [(1, 0), (0, 1)] {
+            assert!(matches!(
+                validate_source_maintenance_initialization(
+                    ReconciliationCapacity::default(),
+                    raw_event_count,
+                    raw_tag_count,
+                    1,
+                ),
+                Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
+            ));
+        }
     }
 
     #[tokio::test]
@@ -952,6 +1007,35 @@ mod tests {
         assert!(matches!(
             validate_source_capacity_authority_full_v1(&mut transaction).await,
             Err(RadrootsEventStoreError::SourceCapacityStateDrift { .. })
+        ));
+        transaction.rollback().await.expect("rollback fixture");
+
+        let store = RadrootsEventStore::open_memory().await.expect("store");
+        let mut transaction = store.begin_write_transaction().await.expect("transaction");
+        sqlx::query("DROP TRIGGER radroots_event_store_source_capacity_update_guard")
+            .execute(&mut *transaction)
+            .await
+            .expect("drop update guard");
+        sqlx::query(
+            "CREATE TEMP TRIGGER ignore_capacity_advance BEFORE UPDATE ON radroots_event_store_source_capacity_v1 BEGIN SELECT RAISE(IGNORE); END",
+        )
+        .execute(&mut *transaction)
+        .await
+        .expect("install ignored advance");
+        assert!(matches!(
+            advance_source_capacity_after_insert_v1(
+                &mut transaction,
+                RawSourceCapacityDeltaV1 {
+                    raw_events: 0,
+                    raw_tags: 0,
+                    raw_event_bytes: 0,
+                    raw_tag_bytes: 0,
+                },
+                0,
+            )
+            .await,
+            Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
+                if reason.contains("append authority compare-and-swap affected 0 rows")
         ));
         transaction.rollback().await.expect("rollback fixture");
 
