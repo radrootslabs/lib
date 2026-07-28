@@ -343,3 +343,268 @@ fn visibility_authority_error(
         reason: format!("{context} is invalid: {error}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{
+        RadrootsEventAdmissionStatus, RadrootsEventStoreSourceGeneration, RadrootsStoredRawEvent,
+    };
+
+    fn event(event_class: StoredEventClass) -> RadrootsStoredRawEvent {
+        RadrootsStoredRawEvent {
+            seq: 1,
+            event_id: "a".repeat(64),
+            pubkey: "b".repeat(64),
+            created_at: 7,
+            kind: match event_class {
+                StoredEventClass::Regular => 1,
+                StoredEventClass::Replaceable => 10_001,
+                StoredEventClass::Addressable => 30_001,
+                StoredEventClass::Ephemeral => 20_001,
+            },
+            tags_json: "[]".to_owned(),
+            content: String::new(),
+            sig: "c".repeat(128),
+            raw_json: "{}".to_owned(),
+            admission_status: RadrootsEventAdmissionStatus::Admitted,
+            contract_id: Some("fixture".to_owned()),
+            event_class,
+            valid_stream_eligible: true,
+            inserted_at_ms: 8,
+            updated_at_ms: 9,
+        }
+    }
+
+    fn visible_evidence() -> RadrootsNip09SuppressionEvidenceV1 {
+        RadrootsNip09SuppressionEvidenceV1 {
+            outcome: RadrootsNip09SuppressionOutcome::Visible,
+            reason: RadrootsNip09SuppressionReason::NoAuthorizedReference,
+            event_reference_request_id: None,
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        }
+    }
+
+    fn suppressed_evidence() -> RadrootsNip09SuppressionEvidenceV1 {
+        RadrootsNip09SuppressionEvidenceV1 {
+            outcome: RadrootsNip09SuppressionOutcome::Suppressed,
+            reason: RadrootsNip09SuppressionReason::EventIdReference,
+            event_reference_request_id: Some(
+                RadrootsEventId::parse("d".repeat(64)).expect("request id"),
+            ),
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        }
+    }
+
+    fn visibility(
+        event_class: StoredEventClass,
+        decision: RadrootsCurrentVisibilityDecisionV1,
+        is_raw_head: bool,
+        raw_head_event_id: Option<&str>,
+        suppression: Option<RadrootsNip09SuppressionEvidenceV1>,
+    ) -> RadrootsCurrentEventVisibilityV1 {
+        RadrootsCurrentEventVisibilityV1 {
+            source_generation: RadrootsEventStoreSourceGeneration::from_bytes([0x11; 32]),
+            event: event(event_class),
+            is_raw_head,
+            raw_head_event_id: raw_head_event_id
+                .map(|value| RadrootsEventId::parse(value.repeat(64)).expect("raw-head event id")),
+            suppression,
+            decision,
+        }
+    }
+
+    #[test]
+    fn suppression_storage_enums_round_trip_and_reject_unknown_values() {
+        for (value, expected) in [
+            ("visible", RadrootsNip09SuppressionOutcome::Visible),
+            ("suppressed", RadrootsNip09SuppressionOutcome::Suppressed),
+        ] {
+            assert_eq!(parse_suppression_outcome(value).expect("outcome"), expected);
+        }
+        assert!(parse_suppression_outcome("unknown").is_err());
+
+        for (value, expected) in [
+            (
+                "deletion_request_immune",
+                RadrootsNip09SuppressionReason::DeletionRequestImmune,
+            ),
+            (
+                "deletion_no_authorized_reference",
+                RadrootsNip09SuppressionReason::NoAuthorizedReference,
+            ),
+            (
+                "deletion_request_author_mismatch",
+                RadrootsNip09SuppressionReason::RequestAuthorMismatch,
+            ),
+            (
+                "deletion_address_cutoff_precedes_target",
+                RadrootsNip09SuppressionReason::AddressCutoffPrecedesTarget,
+            ),
+            (
+                "deletion_event_id_reference",
+                RadrootsNip09SuppressionReason::EventIdReference,
+            ),
+            (
+                "deletion_address_reference",
+                RadrootsNip09SuppressionReason::AddressReferenceAtOrBeforeCutoff,
+            ),
+            (
+                "deletion_event_id_and_address_reference",
+                RadrootsNip09SuppressionReason::EventIdAndAddressReference,
+            ),
+        ] {
+            assert_eq!(parse_suppression_reason(value).expect("reason"), expected);
+        }
+        assert!(parse_suppression_reason("unknown").is_err());
+    }
+
+    #[test]
+    fn visibility_shape_accepts_each_decision_and_rejects_each_incoherence() {
+        let regular_id = "a".repeat(64);
+        validate_visibility_shape(&visibility(
+            StoredEventClass::Regular,
+            RadrootsCurrentVisibilityDecisionV1::Visible,
+            true,
+            None,
+            Some(visible_evidence()),
+        ))
+        .expect("visible");
+
+        let mut not_admitted = visibility(
+            StoredEventClass::Regular,
+            RadrootsCurrentVisibilityDecisionV1::NotAdmitted,
+            true,
+            None,
+            None,
+        );
+        not_admitted.event.admission_status = RadrootsEventAdmissionStatus::Unsupported;
+        not_admitted.event.contract_id = None;
+        not_admitted.event.valid_stream_eligible = false;
+        validate_visibility_shape(&not_admitted).expect("not admitted");
+
+        validate_visibility_shape(&visibility(
+            StoredEventClass::Replaceable,
+            RadrootsCurrentVisibilityDecisionV1::NotCurrent,
+            false,
+            Some("e"),
+            Some(visible_evidence()),
+        ))
+        .expect("not current");
+        validate_visibility_shape(&visibility(
+            StoredEventClass::Regular,
+            RadrootsCurrentVisibilityDecisionV1::Suppressed,
+            true,
+            None,
+            Some(suppressed_evidence()),
+        ))
+        .expect("suppressed");
+
+        assert!(
+            validate_visibility_shape(&visibility(
+                StoredEventClass::Ephemeral,
+                RadrootsCurrentVisibilityDecisionV1::Visible,
+                true,
+                None,
+                Some(visible_evidence()),
+            ))
+            .is_err()
+        );
+        for (is_raw_head, raw_head_event_id) in [(false, None), (true, Some("e"))] {
+            assert!(
+                validate_visibility_shape(&visibility(
+                    StoredEventClass::Regular,
+                    RadrootsCurrentVisibilityDecisionV1::Visible,
+                    is_raw_head,
+                    raw_head_event_id,
+                    Some(visible_evidence()),
+                ))
+                .is_err()
+            );
+        }
+        assert!(
+            validate_visibility_shape(&visibility(
+                StoredEventClass::Replaceable,
+                RadrootsCurrentVisibilityDecisionV1::Visible,
+                true,
+                None,
+                Some(visible_evidence()),
+            ))
+            .is_err()
+        );
+        assert!(
+            validate_visibility_shape(&visibility(
+                StoredEventClass::Replaceable,
+                RadrootsCurrentVisibilityDecisionV1::Visible,
+                false,
+                None,
+                Some(visible_evidence()),
+            ))
+            .is_err()
+        );
+
+        let incoherent = RadrootsNip09SuppressionEvidenceV1 {
+            outcome: RadrootsNip09SuppressionOutcome::Visible,
+            reason: RadrootsNip09SuppressionReason::EventIdReference,
+            event_reference_request_id: None,
+            address_reference_request_id: None,
+            address_reference_cutoff: None,
+        };
+        assert!(
+            validate_visibility_shape(&visibility(
+                StoredEventClass::Regular,
+                RadrootsCurrentVisibilityDecisionV1::Visible,
+                true,
+                None,
+                Some(incoherent),
+            ))
+            .is_err()
+        );
+
+        let mut invalid = visibility(
+            StoredEventClass::Regular,
+            RadrootsCurrentVisibilityDecisionV1::Visible,
+            true,
+            None,
+            None,
+        );
+        assert!(validate_visibility_shape(&invalid).is_err());
+        invalid = not_admitted.clone();
+        invalid.event.admission_status = RadrootsEventAdmissionStatus::Admitted;
+        assert!(validate_visibility_shape(&invalid).is_err());
+        invalid = visibility(
+            StoredEventClass::Replaceable,
+            RadrootsCurrentVisibilityDecisionV1::NotCurrent,
+            false,
+            Some("e"),
+            None,
+        );
+        assert!(validate_visibility_shape(&invalid).is_err());
+        invalid = visibility(
+            StoredEventClass::Regular,
+            RadrootsCurrentVisibilityDecisionV1::Suppressed,
+            true,
+            None,
+            Some(visible_evidence()),
+        );
+        assert!(validate_visibility_shape(&invalid).is_err());
+
+        assert_eq!(regular_id, invalid.event.event_id);
+    }
+
+    #[test]
+    fn visibility_errors_preserve_context() {
+        assert!(matches!(
+            current_visibility_drift::<()>("fixture"),
+            Err(RadrootsEventStoreError::CurrentVisibilityDrift { reason })
+                if reason == "fixture"
+        ));
+        assert!(matches!(
+            visibility_authority_error("fixture", "bad"),
+            RadrootsEventStoreError::CurrentVisibilityDrift { reason }
+                if reason == "fixture is invalid: bad"
+        ));
+    }
+}
