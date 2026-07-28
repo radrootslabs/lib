@@ -20,6 +20,7 @@ radroots_core_bindings = { path = "../../crates/core_bindings", version = "=0.1.
 radroots_event = { workspace = true, features = ["dto-bindgen"] }
 radroots_event_bindings = { path = "../../crates/event_bindings", version = "=0.1.0-alpha" }
 radroots_event_index = { workspace = true, features = ["dto-bindgen"] }
+radroots_identity = { workspace = true }
 radroots_identity_bindings = { path = "../../crates/identity_bindings", version = "=0.1.0-alpha" }
 radroots_replica_schema_bindings = { path = "../../crates/replica_schema_bindings", version = "=0.1.0-alpha" }
 radroots_runtime_contract_v1 = { path = "../../crates/runtime_contract_v1", version = "=0.1.0-alpha" }

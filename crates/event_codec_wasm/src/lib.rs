@@ -969,7 +969,8 @@ mod tests {
     fn knowledge_event_ref(seed: char, kind: u32) -> radroots_event::RadrootsEventRef {
         radroots_event::RadrootsEventRef {
             id: synthetic_event_id(seed),
-            author: synthetic_pubkey('a'),
+            author: radroots_identity::PublicKey::from_hex(&synthetic_pubkey('a'))
+                .expect("fixture public key"),
             kind,
             d_tag: None,
             relays: Some(vec!["wss://relay.example.test".to_string()]),

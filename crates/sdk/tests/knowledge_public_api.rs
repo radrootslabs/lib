@@ -2,6 +2,7 @@
 
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
 use radroots_event::RadrootsEventEnvelopeParts;
+use radroots_identity::PublicKey;
 use radroots_sdk::knowledge::prelude::*;
 use std::sync::LazyLock;
 
@@ -482,7 +483,7 @@ fn hex_64(character: char) -> String {
 fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
     RadrootsEventRef {
         id: hex_64(character),
-        author: hex_64('a'),
+        author: PublicKey::from_hex(&public_key_hex()).expect("fixture public key"),
         kind,
         d_tag: None,
         relays: Some(vec![RELAY.to_owned()]),

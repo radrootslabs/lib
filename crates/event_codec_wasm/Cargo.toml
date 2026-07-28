@@ -39,3 +39,6 @@ nostr = { workspace = true }
 radroots_core = { workspace = true, default-features = false, features = [
   "std",
 ] }
+radroots_identity = { workspace = true, default-features = false, features = [
+  "std",
+] }

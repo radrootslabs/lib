@@ -1,5 +1,6 @@
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
 use radroots_event::RadrootsEventEnvelopeParts;
+use radroots_identity::PublicKey;
 use radroots_sdk::knowledge::prelude::*;
 
 const CREATED_AT: u32 = 1_800_000_000;
@@ -70,7 +71,10 @@ fn hex_64(character: char) -> String {
 fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
     RadrootsEventRef {
         id: hex_64(character),
-        author: hex_64('a'),
+        author: PublicKey::from_hex(
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        )
+        .expect("fixture public key"),
         kind,
         d_tag: None,
         relays: Some(vec![RELAY.to_owned()]),
