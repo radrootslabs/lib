@@ -2537,6 +2537,28 @@ mod tests {
         )
     }
 
+    async fn food_availability_audit_corruption_store() -> RadrootsEventStore {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let event = food_availability_event(
+            200,
+            "audit-corruption-carrots",
+            "Audit Corruption Carrots",
+            "Fresh audit harvest",
+            "active",
+            vec![vec![
+                "image".to_owned(),
+                "https://media.example/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.webp"
+                    .to_owned(),
+                "800x600".to_owned(),
+            ]],
+        );
+        store
+            .ingest_event(RadrootsEventIngest::new(event, 19_050))
+            .await
+            .expect("FoodAvailability audit fixture ingest");
+        store
+    }
+
     fn calendar_date_event(
         created_at: u32,
         d_tag: &str,
@@ -7168,6 +7190,86 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             store.audit_food_availability_projection_v1().await,
             Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn food_availability_exhaustive_audit_rejects_projection_and_image_row_drift() {
+        for (label, guard, bypass_checks, mutation, expected_reason) in [
+            (
+                "projection column",
+                Some("DROP TRIGGER radroots_event_store_food_availability_projection_update_guard"),
+                false,
+                "UPDATE radroots_event_store_food_availability_projection SET title = 'corrupt title'",
+                "columns differ",
+            ),
+            (
+                "image count",
+                Some("DROP TRIGGER radroots_event_store_food_availability_image_delete_guard"),
+                false,
+                "DELETE FROM radroots_event_store_food_availability_image",
+                "image count differs",
+            ),
+            (
+                "Blossom digest",
+                Some("DROP TRIGGER radroots_event_store_food_availability_image_update_guard"),
+                true,
+                "UPDATE radroots_event_store_food_availability_image SET blossom_sha256 = 'invalid'",
+                "stored Blossom digest is invalid",
+            ),
+            (
+                "image dimensions",
+                Some("DROP TRIGGER radroots_event_store_food_availability_image_update_guard"),
+                false,
+                "UPDATE radroots_event_store_food_availability_image SET width = width + 1",
+                "stored FoodAvailability image differs",
+            ),
+            (
+                "FTS content",
+                None,
+                false,
+                "UPDATE radroots_event_store_food_availability_search_fts SET title = 'corrupt title'",
+                "FTS row differs",
+            ),
+        ] {
+            let store = food_availability_audit_corruption_store().await;
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            if let Some(guard) = guard {
+                sqlx::query(guard)
+                    .execute(&mut *connection)
+                    .await
+                    .expect("trusted FoodAvailability guard removal");
+            }
+            if bypass_checks {
+                sqlx::query("PRAGMA ignore_check_constraints = ON")
+                    .execute(&mut *connection)
+                    .await
+                    .expect("enable trusted check-constraint bypass");
+            }
+            sqlx::query(mutation)
+                .execute(&mut *connection)
+                .await
+                .expect("trusted FoodAvailability corruption");
+            if bypass_checks {
+                sqlx::query("PRAGMA ignore_check_constraints = OFF")
+                    .execute(&mut *connection)
+                    .await
+                    .expect("restore check-constraint enforcement");
+            }
+            drop(connection);
+
+            let error = store
+                .audit_food_availability_projection_v1()
+                .await
+                .expect_err("corrupt FoodAvailability authority must fail audit");
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason }
+                        if reason.contains(expected_reason)
+                ),
+                "{label}: {error}",
+            );
+        }
     }
 
     #[tokio::test]
