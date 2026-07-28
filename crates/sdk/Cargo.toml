@@ -19,13 +19,11 @@ default = ["std", "serde", "serde_json", "identity-models"]
 std = [
   "radroots_event/std",
   "radroots_event_codec/std",
-  "radroots_runtime_contract_v1/std",
   "radroots_trade/std",
 ]
 serde = [
   "dep:serde",
   "radroots_event/serde",
-  "radroots_runtime_contract_v1/serde",
   "radroots_trade/serde",
 ]
 serde_json = [
@@ -52,13 +50,13 @@ radrootsd-execution = [
   "std",
   "serde_json",
   "dep:futures",
+  "dep:radroots_protocol",
   "dep:radroots_transport",
-  "dep:radroots_transport_publish_protocol",
   "dep:radroots_transport_nostr",
   "dep:reqwest",
+  "radroots_protocol/serde",
+  "radroots_protocol/std",
   "radroots_transport/serde",
-  "radroots_transport_publish_protocol/serde",
-  "radroots_transport_publish_protocol/std",
   "radroots_transport_nostr/std",
 ]
 signer-adapters = [
@@ -142,14 +140,13 @@ radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_geocoder = { workspace = true, optional = true }
 radroots_outbox = { workspace = true, optional = true, default-features = false }
+radroots_protocol = { workspace = true, optional = true, default-features = false }
 radroots_protected_store = { workspace = true, optional = true, default-features = false }
 radroots_transport = { workspace = true, optional = true, default-features = false }
-radroots_transport_publish_protocol = { workspace = true, optional = true, default-features = false }
 radroots_transport_nostr = { workspace = true, optional = true, default-features = false }
 radroots_transport_reticulum = { workspace = true, optional = true, default-features = false }
 radroots_runtime_paths = { workspace = true, optional = true, default-features = false }
 radroots_secret_vault = { workspace = true, optional = true, default-features = false }
-radroots_runtime_contract_v1 = { path = "../runtime_contract_v1", version = "=0.1.0-alpha", default-features = false }
 radroots_trade = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }

@@ -2,9 +2,10 @@ use core::fmt;
 use core::time::Duration;
 
 use radroots_event::draft::RadrootsSignedEvent;
-use radroots_transport_publish_protocol::{
-    METHOD_EVENT, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
-    TransportPublishEventResponse, TransportPublishProtocolError, TransportPublishTargetPolicy,
+use radroots_protocol::radrootsd::transport_publish::v5::{
+    DeliveryPolicy as TransportPublishDeliveryPolicy, Error as TransportPublishProtocolError,
+    EventRequest as TransportPublishEventRequest, EventResponse as TransportPublishEventResponse,
+    METHOD_EVENT, TargetPolicy as TransportPublishTargetPolicy,
 };
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};

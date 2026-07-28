@@ -42,6 +42,16 @@ use radroots_outbox::{
 use radroots_outbox::{
     RadrootsOutboxEventState, RadrootsOutboxEventStoreIngestReceipt, RadrootsOutboxStatusSummary,
 };
+#[cfg(feature = "radrootsd-execution")]
+use radroots_protocol::radrootsd::transport_publish::v5::{
+    DeliveryPolicy as TransportPublishDeliveryPolicy, Job as TransportPublishJobView,
+    JobStatus as TransportPublishJobStatus,
+    NostrTargetSourcePolicy as NostrPublishTargetSourcePolicy,
+    OutcomeKind as TransportPublishOutcomeKind, Target as TransportPublishTarget,
+    TargetFingerprint as TransportPublishTargetFingerprint,
+    TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
+    TargetSource as TransportPublishTargetSource,
+};
 use radroots_transport::{
     RadrootsTransportDeliveryTargetStatus, RadrootsTransportMeshScopeId, RadrootsTransportTarget,
     RadrootsTransportTargetLabel,
@@ -52,12 +62,6 @@ use radroots_transport_nostr::{
     RadrootsNostrTransport, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
     RadrootsRelayPublishRequest, RadrootsRelayTransportError,
-};
-#[cfg(feature = "radrootsd-execution")]
-use radroots_transport_publish_protocol::{
-    NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishJobStatus,
-    TransportPublishJobView, TransportPublishOutcomeKind, TransportPublishTarget,
-    TransportPublishTargetOutcome, TransportPublishTargetPolicy, TransportPublishTargetSource,
 };
 use std::collections::BTreeSet;
 #[cfg(feature = "radrootsd-execution")]
@@ -886,10 +890,19 @@ async fn radrootsd_push_empty_queue_and_private_helpers_are_deterministic() {
         .expect("required remaining targets")
         .expect("required target policy");
     assert_eq!(remaining, vec![second_required.fingerprint().clone()]);
+    let protocol_remaining = remaining
+        .iter()
+        .map(|fingerprint| {
+            TransportPublishTargetFingerprint::parse(fingerprint.as_str().to_owned())
+                .expect("protocol target fingerprint")
+        })
+        .collect();
     assert_eq!(
         radrootsd_delivery_policy_from_remaining(2, remaining.len(), Some(&remaining), &policy)
             .expect("required target radrootsd policy"),
-        TransportPublishDeliveryPolicy::RequiredTargets { targets: remaining }
+        TransportPublishDeliveryPolicy::RequiredTargets {
+            targets: protocol_remaining
+        }
     );
     assert!(matches!(
         radrootsd_delivery_policy_from_remaining(0, 1, Some(&[]), &policy),

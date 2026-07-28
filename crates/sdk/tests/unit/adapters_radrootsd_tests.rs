@@ -1,12 +1,16 @@
 use super::*;
 use radroots_event::wire::RadrootsNip01EventWire;
-use radroots_transport::RADROOTS_RETICULUM_ENDPOINT_URI;
-use radroots_transport_publish_protocol::{
-    NostrPublishTargetSourcePolicy, TransportPublishDeliveryPolicy, TransportPublishEventRequest,
-    TransportPublishEventResponse, TransportPublishJobStatus, TransportPublishJobView,
-    TransportPublishOutcomeKind, TransportPublishReticulumBehavior, TransportPublishTarget,
-    TransportPublishTargetOutcome, TransportPublishTargetPolicy, TransportPublishTargetSource,
+use radroots_protocol::radrootsd::transport_publish::v5::{
+    DeliveryPolicy as TransportPublishDeliveryPolicy, EventRequest as TransportPublishEventRequest,
+    EventResponse as TransportPublishEventResponse, Job as TransportPublishJobView,
+    JobStatus as TransportPublishJobStatus,
+    NostrTargetSourcePolicy as NostrPublishTargetSourcePolicy,
+    OutcomeKind as TransportPublishOutcomeKind,
+    ReticulumBehavior as TransportPublishReticulumBehavior, Target as TransportPublishTarget,
+    TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
+    TargetSource as TransportPublishTargetSource,
 };
+use radroots_transport::RADROOTS_RETICULUM_ENDPOINT_URI;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread::JoinHandle;

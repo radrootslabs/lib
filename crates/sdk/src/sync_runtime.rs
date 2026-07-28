@@ -24,6 +24,13 @@ use radroots_outbox::{
     RadrootsOutboxDeliveryTargetRecord, RadrootsOutboxDeliveryTargetStatus,
     RadrootsOutboxEventState, RadrootsOutboxReticulumEventRecord, RadrootsOutboxStatusSummary,
 };
+#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
+use radroots_protocol::radrootsd::transport_publish::v5::{
+    DeliveryPolicy as TransportPublishDeliveryPolicy, Job as TransportPublishJobView,
+    JobStatus as TransportPublishJobStatus, OutcomeKind as TransportPublishOutcomeKind,
+    Target as TransportPublishTarget, TargetFingerprint as TransportPublishTargetFingerprint,
+    TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
+};
 #[cfg(feature = "runtime")]
 use radroots_trade::workflow::{
     RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
@@ -45,12 +52,6 @@ use radroots_transport_nostr::{RadrootsNostrClientPublishAdapter, RadrootsNostrT
 use radroots_transport_nostr::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
     RadrootsRelayOutcomeKind, publish_claimed_outbox_event_with_transport,
-};
-#[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
-use radroots_transport_publish_protocol::{
-    TransportPublishDeliveryPolicy, TransportPublishJobStatus, TransportPublishJobView,
-    TransportPublishOutcomeKind, TransportPublishTarget, TransportPublishTargetOutcome,
-    TransportPublishTargetPolicy,
 };
 #[cfg(feature = "runtime")]
 use sha2::{Digest, Sha256};
@@ -1338,16 +1339,22 @@ fn radrootsd_delivery_policy_from_remaining(
         RadrootsTransportSatisfactionPolicy::Any { .. } => TransportPublishDeliveryPolicy::Any,
         RadrootsTransportSatisfactionPolicy::All { .. } => TransportPublishDeliveryPolicy::All,
         RadrootsTransportSatisfactionPolicy::RequiredTargets { .. } => {
-            TransportPublishDeliveryPolicy::required_targets(
-                required_remaining_targets
-                    .ok_or_else(|| RadrootsSdkError::InvalidRequest {
-                        message: "radrootsd publish missing required target fingerprints"
-                            .to_owned(),
-                    })?
-                    .to_vec(),
-            )
-            .map_err(|error| RadrootsSdkError::InvalidRequest {
-                message: error.to_string(),
+            let targets = required_remaining_targets
+                .ok_or_else(|| RadrootsSdkError::InvalidRequest {
+                    message: "radrootsd publish missing required target fingerprints".to_owned(),
+                })?
+                .iter()
+                .map(|fingerprint| {
+                    TransportPublishTargetFingerprint::parse(fingerprint.as_str().to_owned())
+                        .map_err(|error| RadrootsSdkError::InvalidRequest {
+                            message: error.to_string(),
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            TransportPublishDeliveryPolicy::required_targets(targets).map_err(|error| {
+                RadrootsSdkError::InvalidRequest {
+                    message: error.to_string(),
+                }
             })?
         }
         RadrootsTransportSatisfactionPolicy::Quorum { .. } => {
