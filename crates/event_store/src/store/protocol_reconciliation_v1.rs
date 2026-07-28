@@ -10,8 +10,9 @@ use crate::nip09::reconciliation_v1::{
     persist_event_coordinate_after_insert, synchronize_after_insert, validate_source_raw_authority,
 };
 use crate::source_maintenance_v1::{
-    advance_source_capacity_after_insert_v1, preflight_unique_raw_source_append_v1,
-    raw_source_capacity_delta_v1, validate_source_capacity_authority_fast_v1,
+    RawSourceCapacityDeltaV1, advance_source_capacity_after_insert_v1,
+    preflight_unique_raw_source_append_v1, raw_source_capacity_delta_v1,
+    validate_source_capacity_authority_fast_v1,
 };
 use radroots_event::contract::registry_v7::RadrootsEventContract;
 use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
@@ -135,11 +136,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
         .decision;
     if inserted {
         let capacity_delta =
-            capacity_delta.ok_or_else(|| RadrootsEventStoreError::SourceCapacityStateDrift {
-                reason: format!(
-                    "unique raw event `{event_id}` was inserted after duplicate preflight"
-                ),
-            })?;
+            require_unique_raw_event_capacity_delta(event_id.as_str(), capacity_delta)?;
         synchronize_after_insert(
             tx,
             ingest,
@@ -649,6 +646,15 @@ async fn upsert_head(
     Ok(())
 }
 
+fn require_unique_raw_event_capacity_delta(
+    event_id: &str,
+    capacity_delta: Option<RawSourceCapacityDeltaV1>,
+) -> Result<RawSourceCapacityDeltaV1, RadrootsEventStoreError> {
+    capacity_delta.ok_or_else(|| RadrootsEventStoreError::SourceCapacityStateDrift {
+        reason: format!("unique raw event `{event_id}` was inserted after duplicate preflight"),
+    })
+}
+
 fn i64_from_u64(field: &'static str, value: u64) -> Result<i64, RadrootsEventStoreError> {
     match i64::try_from(value) {
         Ok(value) => Ok(value),
@@ -792,6 +798,11 @@ mod tests {
             .expect_err("malformed coordinate"),
             RadrootsRawHeadDecision::MalformedCoordinate
         );
+        assert!(matches!(
+            require_unique_raw_event_capacity_delta("event-id", None),
+            Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
+                if reason == "unique raw event `event-id` was inserted after duplicate preflight"
+        ));
     }
 
     #[tokio::test]
