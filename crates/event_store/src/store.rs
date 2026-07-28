@@ -4242,6 +4242,54 @@ mod tests {
                 updated_at_ms: 10,
             }
         ));
+        for (label, prior) in [
+            (
+                "projection version",
+                RadrootsProjectionRebuildPrior::Cursor {
+                    source_generation: None,
+                    source_revision: 1,
+                    projection_version: 2,
+                    last_event_seq: 0,
+                    updated_at_ms: 10,
+                },
+            ),
+            (
+                "event sequence",
+                RadrootsProjectionRebuildPrior::Cursor {
+                    source_generation: None,
+                    source_revision: 1,
+                    projection_version: 1,
+                    last_event_seq: 1,
+                    updated_at_ms: 10,
+                },
+            ),
+            (
+                "update timestamp",
+                RadrootsProjectionRebuildPrior::Cursor {
+                    source_generation: None,
+                    source_revision: 1,
+                    projection_version: 1,
+                    last_event_seq: 0,
+                    updated_at_ms: 11,
+                },
+            ),
+        ] {
+            let mut forged_ticket = legacy_ticket.clone();
+            forged_ticket.prior = prior;
+            let error = store
+                .reset_projection_cursor_after_rebuild(forged_ticket, 19)
+                .await
+                .expect_err("forged prior must be rejected");
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::ProjectionRebuildTicketConflict {
+                        ref projection_id,
+                    } if projection_id == "legacy"
+                ),
+                "{label}: {error}",
+            );
+        }
         let replay_ticket = legacy_ticket.clone();
         let rebuilt = store
             .reset_projection_cursor_after_rebuild(legacy_ticket, 20)
@@ -4296,6 +4344,26 @@ mod tests {
                 .expect("missing-success cursor"),
             missing_success
         );
+        let current_success_ticket = store
+            .prepare_projection_cursor_rebuild("missing-success", 2)
+            .await
+            .expect("generation-bound cursor ticket");
+        assert!(matches!(
+            current_success_ticket.prior(),
+            RadrootsProjectionRebuildPrior::Cursor {
+                source_generation: Some(actual_generation),
+                source_revision: 1,
+                projection_version: 1,
+                last_event_seq: 1,
+                updated_at_ms: 29,
+            } if *actual_generation == generation
+        ));
+        let current_success = store
+            .reset_projection_cursor_after_rebuild(current_success_ticket, 30)
+            .await
+            .expect("generation-bound cursor rebuild");
+        assert_eq!(current_success.projection_version(), 2);
+        assert_eq!(current_success.last_event_seq(), 1);
 
         let mut high_water_ticket = store
             .prepare_projection_cursor_rebuild("ahead-ticket", 1)
