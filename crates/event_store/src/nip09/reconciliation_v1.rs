@@ -3947,6 +3947,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn focused_reconciliation_validators_reject_isolated_authority_drift() {
+        let pool = populated_v2_validation_pool().await;
+        let mut connection = pool.acquire().await.expect("validation connection");
+        let source = read_source_state(&mut connection)
+            .await
+            .expect("source state");
+
+        validate_source_raw_authority_with_state(&mut connection, &source)
+            .await
+            .expect("matching raw authority");
+        validate_latest_transitions_match_state(&mut connection, source.generation)
+            .await
+            .expect("matching transition state");
+
+        let mut wrong_source = source.clone();
+        wrong_source.raw_event_count += 1;
+        assert!(matches!(
+            validate_source_raw_authority_with_state(&mut connection, &wrong_source).await,
+            Err(RadrootsEventStoreError::RawEventSourceDrift {
+                expected_count,
+                actual_count,
+                ..
+            }) if expected_count == source.raw_event_count + 1
+                && actual_count == source.raw_event_count
+        ));
+
+        let non_addressable = EventCoordinateFact {
+            event_id: "regular-fixture".to_owned(),
+            event_seq: 1,
+            coordinate_type: "regular".to_owned(),
+            kind: i64::from(KIND_POST),
+            pubkey: fixture_author(),
+            created_at: i64::try_from(TARGET_CREATED_AT).expect("created_at"),
+            inserted_at_ms: 1,
+            admission_status: RadrootsEventAdmissionStatus::Admitted.as_str().to_owned(),
+            admission_code: None,
+            contract_id: None,
+            raw_d_tag: String::new(),
+            nip09_matchable: 0,
+            nip09_d_tag: None,
+        };
+        assert!(matches!(
+            addressable_state_for_stored_facts(
+                &mut connection,
+                source.generation,
+                &non_addressable,
+            )
+            .await,
+            Err(RadrootsEventStoreError::MigrationHookStateDrift { ref reason, .. })
+                if reason.contains("is not addressable")
+        ));
+
+        sqlx::raw_sql(
+            "DROP TRIGGER radroots_event_store_addressable_transition_update_guard;
+             UPDATE radroots_event_store_addressable_head_transition
+             SET raw_head_created_at = raw_head_created_at + 1",
+        )
+        .execute(&mut *connection)
+        .await
+        .expect("isolate transition-state drift");
+        assert!(matches!(
+            validate_latest_transitions_match_state(&mut connection, source.generation).await,
+            Err(RadrootsEventStoreError::MigrationHookStateDrift { ref reason, .. })
+                if reason.contains("latest addressable transition snapshots")
+        ));
+    }
+
+    #[tokio::test]
     async fn deep_reconciliation_rejects_each_persisted_fact_drift() {
         for (label, guards, mutation, expected_reason) in [
             (
