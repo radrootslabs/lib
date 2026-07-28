@@ -1,18 +1,24 @@
 [package]
 name = "radroots_protocol"
-description = "Versioned wire contracts for Radroots"
+publish = false
 version = "0.1.0"
 edition.workspace = true
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Versioned wire contracts for Radroots"
 repository.workspace = true
 homepage.workspace = true
-authors.workspace = true
+documentation = "https://docs.rs/radroots_protocol"
 readme = "README.md"
-publish = false
 
 [lib]
 name = "radroots_protocol"
+
+[features]
+default = ["std", "serde"]
+serde = []
+std = []
 
 [lints]
 workspace = true
