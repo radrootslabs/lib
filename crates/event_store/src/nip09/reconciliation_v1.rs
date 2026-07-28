@@ -4076,13 +4076,13 @@ mod tests {
             (
                 "signed tags",
                 &["DROP TRIGGER radroots_event_store_event_envelopes_raw_update_guard"][..],
-                "UPDATE event_envelopes SET tags_json = '[]' WHERE seq = 1",
+                "UPDATE event_envelopes SET tags_json = '[]' WHERE kind = 30002",
                 "signed raw JSON field `tags_json`",
             ),
             (
                 "missing raw tag",
                 &["DROP TRIGGER radroots_event_store_event_tags_delete_guard"][..],
-                "DELETE FROM event_envelope_tags WHERE event_id = (SELECT event_id FROM event_envelopes WHERE seq = 1)",
+                "DELETE FROM event_envelope_tags WHERE event_id = (SELECT event_id FROM event_envelopes WHERE kind = 30002)",
                 "signed raw JSON field `tag_rows`",
             ),
             (
@@ -4766,6 +4766,24 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
     async fn populated_v2_validation_pool() -> SqlitePool {
         let pool = open_v1_test_pool().await;
         let author = fixture_author();
+        seed_v1_raw_event(
+            &pool,
+            signed_event(TARGET_CREATED_AT - 3, 0, Vec::new(), "{}"),
+            500,
+        )
+        .await;
+        seed_v1_raw_event(
+            &pool,
+            signed_event(TARGET_CREATED_AT - 2, KIND_POST, Vec::new(), "regular"),
+            600,
+        )
+        .await;
+        seed_v1_raw_event(
+            &pool,
+            signed_event(TARGET_CREATED_AT - 1, 20_001, Vec::new(), "ephemeral"),
+            700,
+        )
+        .await;
         let target = signed_event(
             TARGET_CREATED_AT,
             KIND_LIST_SET_RELAY,
