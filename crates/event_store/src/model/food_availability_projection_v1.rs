@@ -493,6 +493,11 @@ mod tests {
             Some("active")
         );
         assert_eq!(
+            RadrootsFoodAvailabilityStatusFilterV1::from(RadrootsFoodAvailabilityStatus::Active)
+                .storage_value(),
+            Some("active")
+        );
+        assert_eq!(
             RadrootsFoodAvailabilityStatusFilterV1::from(RadrootsFoodAvailabilityStatus::Sold)
                 .storage_value(),
             Some("sold")
@@ -534,5 +539,33 @@ mod tests {
             ),
             Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { .. })
         ));
+
+        let clean = RadrootsStoredFoodAvailabilityImageV1 {
+            image_index: 0,
+            raw_tag: vec!["image".to_owned()],
+            url: None,
+            dimensions: None,
+            blossom_sha256: None,
+            diagnostics: Vec::new(),
+        };
+        let image_level_count = RadrootsStoredFoodAvailabilityImageV1 {
+            diagnostics: vec![RadrootsFoodAvailabilityImageDiagnostic::CountExceeded],
+            ..clean.clone()
+        };
+        assert!(validate_projection_diagnostics(&[], &[image_level_count]).is_err());
+
+        let maximum_clean = vec![clean.clone(); RADROOTS_FOOD_IMAGE_MAX_COUNT];
+        validate_projection_diagnostics(
+            &[RadrootsFoodAvailabilityImageDiagnostic::CountExceeded],
+            &maximum_clean,
+        )
+        .expect("coherent count diagnostic");
+        assert!(
+            validate_projection_diagnostics(
+                &[RadrootsFoodAvailabilityImageDiagnostic::DimensionsMissing],
+                &[clean],
+            )
+            .is_err()
+        );
     }
 }

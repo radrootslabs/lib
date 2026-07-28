@@ -808,6 +808,106 @@ mod tests {
     }
 
     #[test]
+    fn stored_event_wrappers_and_projection_authority_cover_typed_boundaries() {
+        let raw = RadrootsStoredRawEvent {
+            seq: 1,
+            event_id: "a".repeat(64),
+            pubkey: "b".repeat(64),
+            created_at: 1,
+            kind: 10_001,
+            tags_json: "[]".to_owned(),
+            content: String::new(),
+            sig: "c".repeat(128),
+            raw_json: "{}".to_owned(),
+            admission_status: RadrootsEventAdmissionStatus::Admitted,
+            contract_id: None,
+            event_class: StoredEventClass::Replaceable,
+            valid_stream_eligible: true,
+            inserted_at_ms: 1,
+            updated_at_ms: 1,
+        };
+
+        let mut invalid = raw.clone();
+        invalid.admission_status = RadrootsEventAdmissionStatus::Unsupported;
+        assert!(RadrootsStoredValidEvent::try_from_raw(invalid).is_err());
+        invalid = raw.clone();
+        invalid.event_class = StoredEventClass::Regular;
+        assert!(RadrootsStoredValidEvent::try_from_raw(invalid).is_err());
+        invalid = raw.clone();
+        invalid.kind = 20_001;
+        invalid.event_class = StoredEventClass::Ephemeral;
+        assert!(RadrootsStoredValidEvent::try_from_raw(invalid).is_err());
+        invalid = raw.clone();
+        invalid.valid_stream_eligible = false;
+        assert!(RadrootsStoredValidEvent::try_from_raw(invalid).is_err());
+
+        let valid = RadrootsStoredValidEvent::try_from_raw(raw.clone()).expect("valid event");
+        assert_eq!(valid.raw_event(), &raw);
+        assert_eq!(valid.clone().into_raw_event(), raw);
+        let visible = RadrootsStoredVisibleEvent::new(valid.clone());
+        assert_eq!(visible.valid_event(), &valid);
+        assert_eq!(visible.clone().into_valid_event(), valid);
+        let raw_head = RadrootsStoredRawEventHead {
+            coordinate_type: StoredEventClass::Replaceable,
+            kind: 10_001,
+            pubkey: "b".repeat(64),
+            d_tag: None,
+            event_id: "a".repeat(64),
+            created_at: 1,
+            updated_at_ms: 1,
+        };
+        let head = RadrootsStoredVisibleEventHead::new(raw_head.clone(), visible.clone());
+        assert_eq!(head.raw_head(), &raw_head);
+        assert_eq!(head.event(), &visible);
+
+        let source_generation = RadrootsEventStoreSourceGeneration::from_bytes([0x42; 32]);
+        assert!(matches!(
+            RadrootsProjectionCursor::new("", 1, source_generation, 0, 1),
+            Err(RadrootsEventStoreError::InvalidProjectionId)
+        ));
+        assert!(matches!(
+            RadrootsProjectionCursor::new("fixture", 0, source_generation, 0, 1),
+            Err(RadrootsEventStoreError::InvalidProjectionVersion { value: 0, .. })
+        ));
+        assert!(matches!(
+            RadrootsProjectionCursor::new("fixture", 1, source_generation, -1, 1),
+            Err(RadrootsEventStoreError::InvalidProjectionCursor { value: -1, .. })
+        ));
+        let cursor = RadrootsProjectionCursor::new("fixture", 2, source_generation, 7, 9)
+            .expect("projection cursor");
+        assert_eq!(cursor.projection_id(), "fixture");
+        assert_eq!(cursor.projection_version(), 2);
+        assert_eq!(cursor.source_generation(), source_generation);
+        assert_eq!(cursor.last_event_seq(), 7);
+        assert_eq!(cursor.updated_at_ms(), 9);
+
+        let ticket = RadrootsProjectionRebuildTicket {
+            projection_id: "fixture".to_owned(),
+            target_projection_version: 3,
+            target_source_generation: source_generation,
+            target_raw_high_water_seq: 11,
+            prior: RadrootsProjectionRebuildPrior::Cursor {
+                source_generation: Some(source_generation),
+                source_revision: 1,
+                projection_version: 2,
+                last_event_seq: 7,
+                updated_at_ms: 9,
+            },
+        };
+        assert_eq!(ticket.projection_id(), "fixture");
+        assert_eq!(ticket.target_projection_version(), 3);
+        assert_eq!(ticket.target_source_generation(), source_generation);
+        assert_eq!(ticket.target_raw_high_water_seq(), 11);
+        assert!(matches!(
+            ticket.prior(),
+            RadrootsProjectionRebuildPrior::Cursor {
+                source_revision: 1,
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn head_decisions_and_tag_metadata_names_cover_all_variants() {
         let coordinate = RadrootsEventHeadCoordinate::Addressable {
             kind: 30_023,
