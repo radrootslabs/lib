@@ -685,3 +685,111 @@ fn i64_from_u64(field: &'static str, value: u64) -> Result<i64, RadrootsEventSto
 const fn bool_i64(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn authority_seal() -> ProtocolPostExtensionAuthoritySeal {
+        ProtocolPostExtensionAuthoritySeal {
+            source_generation: RadrootsEventStoreSourceGeneration::from_bytes([0x11; 32]),
+            generation_ordinal: 1,
+            reconciliation_version: 1,
+            addressable_feed_version: 1,
+            event_contract_registry_version: 7,
+            hook_id: "nip09_reconciliation_v1".to_owned(),
+            hook_manifest_sha256: "a".repeat(64),
+            transition_floor_seq: 0,
+            baseline_raw_event_count: 0,
+            baseline_raw_tag_count: 0,
+            baseline_raw_high_water_seq: 0,
+            raw_event_count: 1,
+            raw_tag_count: 2,
+            raw_event_bytes: 3,
+            raw_tag_bytes: 4,
+            raw_high_water_seq: 5,
+            last_transition_seq: 6,
+            retained_generation_count: 1,
+            retained_generation_limit: 8,
+            actual_raw_high_water_seq: 5,
+            global_transition_min_seq: Some(1),
+            global_transition_max_seq: Some(6),
+            active_transition_min_seq: Some(1),
+            active_transition_max_seq: Some(6),
+            main_schema_version: 7,
+            temp_schema_version: 0,
+        }
+    }
+
+    #[test]
+    fn post_extension_authority_match_rejects_every_field_drift() {
+        assert!(protocol_post_extension_authority_matches(
+            &authority_seal(),
+            &authority_seal()
+        ));
+
+        macro_rules! rejects {
+            ($field:ident, $value:expr) => {{
+                let expected = authority_seal();
+                let mut actual = authority_seal();
+                actual.$field = $value;
+                assert!(
+                    !protocol_post_extension_authority_matches(&expected, &actual),
+                    "accepted drift in {}",
+                    stringify!($field)
+                );
+            }};
+        }
+
+        rejects!(
+            source_generation,
+            RadrootsEventStoreSourceGeneration::from_bytes([0x22; 32])
+        );
+        rejects!(generation_ordinal, 2);
+        rejects!(reconciliation_version, 2);
+        rejects!(addressable_feed_version, 2);
+        rejects!(event_contract_registry_version, 8);
+        rejects!(hook_id, "other".to_owned());
+        rejects!(hook_manifest_sha256, "b".repeat(64));
+        rejects!(transition_floor_seq, 1);
+        rejects!(baseline_raw_event_count, 1);
+        rejects!(baseline_raw_tag_count, 1);
+        rejects!(baseline_raw_high_water_seq, 1);
+        rejects!(raw_event_count, 2);
+        rejects!(raw_tag_count, 3);
+        rejects!(raw_event_bytes, 4);
+        rejects!(raw_tag_bytes, 5);
+        rejects!(raw_high_water_seq, 6);
+        rejects!(last_transition_seq, 7);
+        rejects!(retained_generation_count, 2);
+        rejects!(retained_generation_limit, 9);
+        rejects!(actual_raw_high_water_seq, 6);
+        rejects!(global_transition_min_seq, None);
+        rejects!(global_transition_max_seq, None);
+        rejects!(active_transition_min_seq, None);
+        rejects!(active_transition_max_seq, None);
+        rejects!(main_schema_version, 8);
+        rejects!(temp_schema_version, 1);
+    }
+
+    #[test]
+    fn protocol_scalar_helpers_fail_closed() {
+        assert_eq!(bool_i64(false), 0);
+        assert_eq!(bool_i64(true), 1);
+        assert_eq!(i64_from_u64("fixture", 7).expect("i64"), 7);
+        assert!(matches!(
+            i64_from_u64("fixture", u64::MAX),
+            Err(RadrootsEventStoreError::UnsignedIntegerRange {
+                field: "fixture",
+                value: u64::MAX,
+            })
+        ));
+        assert!(matches!(
+            protocol_post_extension_drift::<()>("fixture".to_owned()),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: "nip09_reconciliation_v1",
+                reason,
+            }) if reason == "fixture"
+        ));
+    }
+}
