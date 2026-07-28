@@ -38,6 +38,24 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
 }
 
 #[test]
+fn manifest_dependency_surface_is_protocol_only() {
+    assert_eq!(
+        table_keys(MANIFEST, "[dependencies]"),
+        BTreeSet::from([
+            "mediatype",
+            "serde",
+            "sha2",
+            "unicode-general-category",
+            "url_nostd",
+        ])
+    );
+    assert_eq!(
+        table_keys(MANIFEST, "[dev-dependencies]"),
+        BTreeSet::from(["hex", "serde_json"])
+    );
+}
+
+#[test]
 fn crate_root_matches_the_approved_module_skeleton() {
     assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
     assert_eq!(
@@ -91,20 +109,72 @@ fn final_root_and_module_paths_compile() {
 
 #[test]
 fn production_types_do_not_repeat_the_crate_name() {
-    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    for entry in fs::read_dir(source_root).expect("read Blossom source directory") {
-        let path = entry.expect("source directory entry").path();
-        if path.extension().and_then(|value| value.to_str()) != Some("rs") {
-            continue;
-        }
-        let source = fs::read_to_string(&path).expect("read Blossom source");
-        let production = source.split("\n#[cfg(test)]").next().unwrap_or(&source);
+    for (path, production) in production_sources() {
         assert!(
             !production.contains("RadrootsBlossom"),
             "Blossom production type repeats its crate name: {}",
             path.display()
         );
     }
+}
+
+#[test]
+fn production_surface_owns_no_io_or_application_media_policy() {
+    const FORBIDDEN_MARKERS: &[&str] = &[
+        "std::fs",
+        "std::io",
+        "std::net",
+        "std::path",
+        "std::process",
+        "std::thread",
+        "std::time",
+        "tokio::",
+        "reqwest::",
+        "hyper::",
+        "ureq::",
+        "tower::",
+        "HttpClient",
+        "BlobClient",
+        "UploadClient",
+        "DownloadClient",
+        "UploadQueue",
+        "DownloadQueue",
+        "CachePolicy",
+        "FileCache",
+        "RetryPolicy",
+        "BackoffPolicy",
+        "MediaPolicy",
+        "Filesystem",
+        "FileSystem",
+    ];
+
+    for (path, production) in production_sources() {
+        for marker in FORBIDDEN_MARKERS {
+            assert!(
+                !production.contains(marker),
+                "Blossom production source owns forbidden I/O or application policy marker `{marker}`: {}",
+                path.display()
+            );
+        }
+    }
+}
+
+fn production_sources() -> Vec<(std::path::PathBuf, String)> {
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    fs::read_dir(source_root)
+        .expect("read Blossom source directory")
+        .map(|entry| entry.expect("source directory entry").path())
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("rs"))
+        .map(|path| {
+            let source = fs::read_to_string(&path).expect("read Blossom source");
+            let production = source
+                .split("\n#[cfg(test)]")
+                .next()
+                .unwrap_or(&source)
+                .to_owned();
+            (path, production)
+        })
+        .collect()
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
