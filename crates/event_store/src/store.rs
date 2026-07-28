@@ -9187,6 +9187,107 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[tokio::test]
+    async fn addressable_transition_feed_rejects_source_authority_drift() {
+        for (label, mutations, expected_class) in [
+            (
+                "missing source state",
+                &["DELETE FROM radroots_event_store_source_state"][..],
+                "corruption",
+            ),
+            (
+                "invalid generation",
+                &[
+                    "UPDATE radroots_event_store_source_generation SET source_generation = zeroblob(31)",
+                    "UPDATE radroots_event_store_addressable_feed_integrity_v1 SET source_generation = zeroblob(31)",
+                    "UPDATE radroots_event_store_source_state SET active_generation = zeroblob(31)",
+                ][..],
+                "corruption",
+            ),
+            (
+                "unsupported feed version",
+                &["UPDATE radroots_event_store_source_generation SET addressable_feed_version = 2"]
+                    [..],
+                "version",
+            ),
+            (
+                "negative transition floor",
+                &["UPDATE radroots_event_store_source_generation SET transition_floor_seq = -1"][..],
+                "corruption",
+            ),
+            (
+                "high-water before floor",
+                &["UPDATE radroots_event_store_source_state SET last_transition_seq = -1"][..],
+                "corruption",
+            ),
+            (
+                "integrity seal mismatch",
+                &[
+                    "UPDATE radroots_event_store_addressable_feed_integrity_v1 SET last_transition_seq = last_transition_seq + 1, transition_count = transition_count + 1",
+                ][..],
+                "gap",
+            ),
+            (
+                "missing boundary transition",
+                &["DELETE FROM radroots_event_store_addressable_head_transition"][..],
+                "gap",
+            ),
+        ] {
+            let store = food_availability_audit_corruption_store().await;
+            let mut connection = store.pool().acquire().await.expect("trusted connection");
+            for guard in [
+                "DROP TRIGGER radroots_event_store_source_state_active_generation_guard",
+                "DROP TRIGGER radroots_event_store_source_state_authority_update_guard",
+                "DROP TRIGGER radroots_event_store_source_state_delete_guard",
+                "DROP TRIGGER radroots_event_store_source_generation_update_guard",
+                "DROP TRIGGER radroots_event_store_addressable_transition_delete_guard",
+            ] {
+                sqlx::query(guard)
+                    .execute(&mut *connection)
+                    .await
+                    .expect("trusted feed-authority guard removal");
+            }
+            sqlx::query("PRAGMA foreign_keys = OFF")
+                .execute(&mut *connection)
+                .await
+                .expect("disable trusted foreign-key enforcement");
+            sqlx::query("PRAGMA ignore_check_constraints = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("enable trusted check-constraint bypass");
+            for mutation in mutations {
+                sqlx::query(*mutation)
+                    .execute(&mut *connection)
+                    .await
+                    .expect("trusted feed-authority corruption");
+            }
+            sqlx::query("PRAGMA ignore_check_constraints = OFF")
+                .execute(&mut *connection)
+                .await
+                .expect("restore check-constraint enforcement");
+            sqlx::query("PRAGMA foreign_keys = ON")
+                .execute(&mut *connection)
+                .await
+                .expect("restore foreign-key enforcement");
+            drop(connection);
+
+            let scope = crate::RadrootsAddressableTransitionScopeV1::food_availability();
+            let error = store
+                .addressable_transition_page_v1(&scope, None, 64)
+                .await
+                .expect_err("corrupt source authority must fail public feed read");
+            let actual_class = match &error {
+                RadrootsEventStoreError::AddressableTransitionCorruption { .. } => "corruption",
+                RadrootsEventStoreError::AddressableTransitionFeedVersionMismatch { .. } => {
+                    "version"
+                }
+                RadrootsEventStoreError::AddressableTransitionSequenceGap { .. } => "gap",
+                _ => "unexpected",
+            };
+            assert_eq!(actual_class, expected_class, "{label}: {error}");
+        }
+    }
+
+    #[tokio::test]
     async fn raw_addressable_heads_use_the_first_opaque_d_value_or_empty() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let missing = signed_event(39_990, 30, Vec::new(), "missing");
