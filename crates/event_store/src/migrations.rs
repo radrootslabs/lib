@@ -868,6 +868,37 @@ fn parse_generated_manifest(
     }
 }
 
+struct GeneratedManifestEnvelope<'a> {
+    name: &'static str,
+    bytes: &'a [u8],
+    expected_byte_length: usize,
+    migration_version: u32,
+    expected_sha256: &'a str,
+    byte_length_reason: &'static str,
+    digest_reason: &'static str,
+}
+
+fn validate_generated_manifest_envelope(
+    envelope: GeneratedManifestEnvelope<'_>,
+) -> Result<serde_json::Value, RadrootsEventStoreError> {
+    if envelope.bytes.len() != envelope.expected_byte_length {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: envelope.byte_length_reason.to_owned(),
+        });
+    }
+    validate_sha256_literal(
+        envelope.migration_version,
+        "hook manifest",
+        envelope.expected_sha256,
+    )?;
+    if sha256_hex(envelope.bytes) != envelope.expected_sha256 {
+        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
+            reason: envelope.digest_reason.to_owned(),
+        });
+    }
+    parse_generated_manifest(envelope.bytes, envelope.name)
+}
+
 fn generated_manifest_u128_to_u64(
     value: u128,
     reason: &'static str,
@@ -894,22 +925,15 @@ fn generated_manifest_i64_to_u64(
 
 fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventStoreError> {
     let bytes = nip09_manifest::NIP09_RECONCILIATION_MANIFEST_JSON.as_bytes();
-    if bytes.len() != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_BYTE_LENGTH {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated NIP-09 manifest byte length is inconsistent".to_owned(),
-        });
-    }
-    validate_sha256_literal(
-        nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION,
-        "hook manifest",
-        nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256,
-    )?;
-    if sha256_hex(bytes) != nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256 {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated NIP-09 manifest digest is inconsistent".to_owned(),
-        });
-    }
-    let manifest = parse_generated_manifest(bytes, "NIP-09")?;
+    let manifest = validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+        name: "NIP-09",
+        bytes,
+        expected_byte_length: nip09_manifest::NIP09_RECONCILIATION_MANIFEST_BYTE_LENGTH,
+        migration_version: nip09_manifest::NIP09_RECONCILIATION_MIGRATION_VERSION,
+        expected_sha256: nip09_manifest::NIP09_RECONCILIATION_MANIFEST_SHA256,
+        byte_length_reason: "generated NIP-09 manifest byte length is inconsistent",
+        digest_reason: "generated NIP-09 manifest digest is inconsistent",
+    })?;
     let up_byte_length = generated_manifest_u128_to_u64(
         nip09_manifest::NIP09_RECONCILIATION_MIGRATION_UP_BYTE_LENGTH as u128,
         "generated NIP-09 migration up byte length is out of range",
@@ -1039,24 +1063,15 @@ fn validate_generated_nip09_manifest_descriptor() -> Result<(), RadrootsEventSto
 fn validate_generated_food_availability_projection_manifest_descriptor()
 -> Result<(), RadrootsEventStoreError> {
     let bytes = food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_JSON.as_bytes();
-    if bytes.len() != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_BYTE_LENGTH {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated FoodAvailability projection manifest byte length is inconsistent"
-                .to_owned(),
-        });
-    }
-    validate_sha256_literal(
-        food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION,
-        "hook manifest",
-        food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256,
-    )?;
-    if sha256_hex(bytes) != food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256 {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated FoodAvailability projection manifest digest is inconsistent"
-                .to_owned(),
-        });
-    }
-    let manifest = parse_generated_manifest(bytes, "FoodAvailability projection")?;
+    let manifest = validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+        name: "FoodAvailability projection",
+        bytes,
+        expected_byte_length: food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_BYTE_LENGTH,
+        migration_version: food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_VERSION,
+        expected_sha256: food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256,
+        byte_length_reason: "generated FoodAvailability projection manifest byte length is inconsistent",
+        digest_reason: "generated FoodAvailability projection manifest digest is inconsistent",
+    })?;
     let up_byte_length = generated_manifest_u128_to_u64(
         food_manifest::FOOD_AVAILABILITY_PROJECTION_MIGRATION_UP_BYTE_LENGTH as u128,
         "generated FoodAvailability migration up byte length is out of range",
@@ -1247,22 +1262,15 @@ fn validate_generated_source_maintenance_manifest_descriptor() -> Result<(), Rad
     use source_maintenance_manifest as source_manifest;
 
     let bytes = source_manifest::SOURCE_MAINTENANCE_MANIFEST_JSON.as_bytes();
-    if bytes.len() != source_manifest::SOURCE_MAINTENANCE_MANIFEST_BYTE_LENGTH {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated source-maintenance manifest byte length is inconsistent".to_owned(),
-        });
-    }
-    validate_sha256_literal(
-        source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION,
-        "hook manifest",
-        source_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256,
-    )?;
-    if sha256_hex(bytes) != source_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256 {
-        return Err(RadrootsEventStoreError::MigrationRegistryDefect {
-            reason: "generated source-maintenance manifest digest is inconsistent".to_owned(),
-        });
-    }
-    let manifest = parse_generated_manifest(bytes, "source-maintenance")?;
+    let manifest = validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+        name: "source-maintenance",
+        bytes,
+        expected_byte_length: source_manifest::SOURCE_MAINTENANCE_MANIFEST_BYTE_LENGTH,
+        migration_version: source_manifest::SOURCE_MAINTENANCE_MIGRATION_VERSION,
+        expected_sha256: source_manifest::SOURCE_MAINTENANCE_MANIFEST_SHA256,
+        byte_length_reason: "generated source-maintenance manifest byte length is inconsistent",
+        digest_reason: "generated source-maintenance manifest digest is inconsistent",
+    })?;
     validate_generated_manifest_metadata(
         &manifest,
         &[
@@ -1739,6 +1747,74 @@ mod migration_framework {
         );
         assert!(matches!(
             parse_generated_manifest(b"{", "fixture"),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.starts_with("generated fixture manifest JSON is invalid:")
+        ));
+
+        let valid_bytes = br#"{"schema_version":1}"#;
+        let valid_sha256 = sha256_hex(valid_bytes);
+        validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+            name: "fixture",
+            bytes: valid_bytes,
+            expected_byte_length: valid_bytes.len(),
+            migration_version: 1,
+            expected_sha256: valid_sha256.as_str(),
+            byte_length_reason: "fixture length",
+            digest_reason: "fixture digest",
+        })
+        .expect("valid generated manifest envelope");
+        assert!(matches!(
+            validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+                name: "fixture",
+                bytes: valid_bytes,
+                expected_byte_length: valid_bytes.len() + 1,
+                migration_version: 1,
+                expected_sha256: valid_sha256.as_str(),
+                byte_length_reason: "fixture length",
+                digest_reason: "fixture digest",
+            }),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason == "fixture length"
+        ));
+        let other_sha256 = sha256_hex(b"{}");
+        assert!(matches!(
+            validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+                name: "fixture",
+                bytes: valid_bytes,
+                expected_byte_length: valid_bytes.len(),
+                migration_version: 1,
+                expected_sha256: other_sha256.as_str(),
+                byte_length_reason: "fixture length",
+                digest_reason: "fixture digest",
+            }),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason == "fixture digest"
+        ));
+        assert!(matches!(
+            validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+                name: "fixture",
+                bytes: valid_bytes,
+                expected_byte_length: valid_bytes.len(),
+                migration_version: 1,
+                expected_sha256: "invalid",
+                byte_length_reason: "fixture length",
+                digest_reason: "fixture digest",
+            }),
+            Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
+                if reason.contains("invalid hook manifest SHA-256 literal")
+        ));
+        let invalid_json = b"{";
+        let invalid_json_sha256 = sha256_hex(invalid_json);
+        assert!(matches!(
+            validate_generated_manifest_envelope(GeneratedManifestEnvelope {
+                name: "fixture",
+                bytes: invalid_json,
+                expected_byte_length: invalid_json.len(),
+                migration_version: 1,
+                expected_sha256: invalid_json_sha256.as_str(),
+                byte_length_reason: "fixture length",
+                digest_reason: "fixture digest",
+            }),
             Err(RadrootsEventStoreError::MigrationRegistryDefect { reason })
                 if reason.starts_with("generated fixture manifest JSON is invalid:")
         ));
