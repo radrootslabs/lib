@@ -4331,6 +4331,19 @@ mod tests {
 
         let generation = store.source_generation().await.expect("generation");
 
+        let missing_update = RadrootsProjectionCursor::new("missing-update", 1, generation, 1, 28)
+            .expect("missing update cursor");
+        assert!(matches!(
+            store
+                .compare_and_swap_projection_cursor(&missing_update, Some(0))
+                .await,
+            Err(RadrootsEventStoreError::ProjectionCursorConflict {
+                projection_id,
+                expected: Some(0),
+                actual: None,
+            }) if projection_id == "missing-update"
+        ));
+
         let missing_success_ticket = store
             .prepare_projection_cursor_rebuild("missing-success", 1)
             .await
@@ -5369,6 +5382,34 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(status.transport_observations, 1);
         assert_eq!(status.last_event_seq, Some(1));
         assert_eq!(status.last_event_updated_at_ms, Some(1_000));
+    }
+
+    #[tokio::test]
+    async fn status_summary_rejects_stored_classification_drift() {
+        let store = RadrootsEventStore::open_memory().await.expect("open");
+        let event = signed_event(KIND_POST, 10, Vec::new(), "classification authority");
+        let event_id = event.id_str().to_owned();
+        store
+            .ingest_event(RadrootsEventIngest::new(event, 1_000))
+            .await
+            .expect("event ingest");
+
+        sqlx::query("DROP TRIGGER radroots_event_store_event_envelopes_derived_update_guard")
+            .execute(store.pool())
+            .await
+            .expect("remove derived classification guard");
+        sqlx::query("UPDATE event_envelopes SET projection_eligible = 0 WHERE event_id = ?")
+            .bind(event_id.as_str())
+            .execute(store.pool())
+            .await
+            .expect("forge stored classification");
+
+        assert!(matches!(
+            store.status_summary().await,
+            Err(RadrootsEventStoreError::StoredRawEventClassificationInconsistent {
+                event_id: actual,
+            }) if actual == event_id
+        ));
     }
 
     #[tokio::test]
