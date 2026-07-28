@@ -7196,6 +7196,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     async fn food_availability_exhaustive_audit_rejects_projection_and_image_row_drift() {
         for (label, guard, bypass_checks, mutation, expected_reason) in [
             (
+                "projection identity",
+                Some("DROP TRIGGER radroots_event_store_food_availability_projection_update_guard"),
+                false,
+                "UPDATE radroots_event_store_food_availability_projection SET created_at = created_at + 1",
+                "projection identity disagrees",
+            ),
+            (
                 "projection column",
                 Some("DROP TRIGGER radroots_event_store_food_availability_projection_update_guard"),
                 false,
@@ -7222,6 +7229,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 false,
                 "UPDATE radroots_event_store_food_availability_image SET width = width + 1",
                 "stored FoodAvailability image differs",
+            ),
+            (
+                "sealed projection row count",
+                Some("DROP TRIGGER radroots_event_store_food_availability_cursor_update_guard"),
+                false,
+                "UPDATE radroots_event_store_food_availability_cursor SET projected_row_count = projected_row_count + 1",
+                "projection row count",
             ),
             (
                 "FTS content",
