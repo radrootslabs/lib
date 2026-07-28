@@ -976,6 +976,30 @@ fn i64_from_u64(field: &'static str, value: u64) -> Result<i64, RadrootsEventSto
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::Connection;
+
+    async fn cursor_identity_row(
+        connection: &mut SqliteConnection,
+        source_generation: Vec<u8>,
+        feed_version: i64,
+        projection_version: i64,
+        scope_fingerprint: Vec<u8>,
+        hook_manifest_sha256: &str,
+        projected_row_count: i64,
+    ) -> sqlx::sqlite::SqliteRow {
+        sqlx::query(
+            "SELECT ? AS source_generation, ? AS feed_version, ? AS projection_version, ? AS scope_fingerprint, ? AS hook_manifest_sha256, ? AS projected_row_count",
+        )
+        .bind(source_generation)
+        .bind(feed_version)
+        .bind(projection_version)
+        .bind(scope_fingerprint)
+        .bind(hook_manifest_sha256)
+        .bind(projected_row_count)
+        .fetch_one(connection)
+        .await
+        .expect("cursor identity row")
+    }
 
     #[test]
     fn projection_generation_corruption_uses_the_projection_error_surface() {
@@ -987,6 +1011,165 @@ mod tests {
             Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
                 if reason.contains("stored projection generation is invalid")
                     && reason.contains("31 bytes instead of 32")
+        ));
+    }
+
+    #[tokio::test]
+    async fn cursor_identity_validator_rejects_each_authority_mismatch() {
+        let mut connection = SqliteConnection::connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connection");
+        let generation = RadrootsEventStoreSourceGeneration::from_bytes([0x42; 32]);
+        let scope = RadrootsAddressableTransitionScopeV1::food_availability();
+        let valid_generation = generation.as_bytes().to_vec();
+        let valid_feed_version = i64::from(RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1);
+        let valid_projection_version = i64::from(RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1);
+        let valid_fingerprint = scope.fingerprint().as_bytes().to_vec();
+        let valid_manifest = food_manifest::FOOD_AVAILABILITY_PROJECTION_MANIFEST_SHA256;
+
+        let valid = cursor_identity_row(
+            &mut connection,
+            valid_generation.clone(),
+            valid_feed_version,
+            valid_projection_version,
+            valid_fingerprint.clone(),
+            valid_manifest,
+            0,
+        )
+        .await;
+        validate_cursor_identity(&valid, generation, &scope).expect("valid cursor identity");
+
+        for (label, row) in [
+            (
+                "source generation",
+                cursor_identity_row(
+                    &mut connection,
+                    vec![0x24; 32],
+                    valid_feed_version,
+                    valid_projection_version,
+                    valid_fingerprint.clone(),
+                    valid_manifest,
+                    0,
+                )
+                .await,
+            ),
+            (
+                "feed version",
+                cursor_identity_row(
+                    &mut connection,
+                    valid_generation.clone(),
+                    valid_feed_version + 1,
+                    valid_projection_version,
+                    valid_fingerprint.clone(),
+                    valid_manifest,
+                    0,
+                )
+                .await,
+            ),
+            (
+                "projection version",
+                cursor_identity_row(
+                    &mut connection,
+                    valid_generation.clone(),
+                    valid_feed_version,
+                    valid_projection_version + 1,
+                    valid_fingerprint.clone(),
+                    valid_manifest,
+                    0,
+                )
+                .await,
+            ),
+            (
+                "scope fingerprint",
+                cursor_identity_row(
+                    &mut connection,
+                    valid_generation.clone(),
+                    valid_feed_version,
+                    valid_projection_version,
+                    vec![0x24; valid_fingerprint.len()],
+                    valid_manifest,
+                    0,
+                )
+                .await,
+            ),
+            (
+                "hook manifest",
+                cursor_identity_row(
+                    &mut connection,
+                    valid_generation,
+                    valid_feed_version,
+                    valid_projection_version,
+                    valid_fingerprint,
+                    "invalid-manifest",
+                    0,
+                )
+                .await,
+            ),
+        ] {
+            assert!(
+                matches!(
+                    validate_cursor_identity(&row, generation, &scope),
+                    Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason })
+                        if reason == "projection cursor identity is inconsistent"
+                ),
+                "{label} mismatch was accepted",
+            );
+        }
+
+        let malformed_generation = cursor_identity_row(
+            &mut connection,
+            vec![0x42; 31],
+            valid_feed_version,
+            valid_projection_version,
+            scope.fingerprint().as_bytes().to_vec(),
+            valid_manifest,
+            0,
+        )
+        .await;
+        assert!(matches!(
+            validate_cursor_identity(&malformed_generation, generation, &scope),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason.contains("stored cursor generation is invalid")
+                    && reason.contains("31 bytes instead of 32")
+        ));
+
+        let negative_row_count = cursor_identity_row(
+            &mut connection,
+            generation.as_bytes().to_vec(),
+            valid_feed_version,
+            valid_projection_version,
+            scope.fingerprint().as_bytes().to_vec(),
+            valid_manifest,
+            -1,
+        )
+        .await;
+        assert!(matches!(
+            validate_cursor_identity(&negative_row_count, generation, &scope),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason == "projection cursor has negative row count -1"
+        ));
+    }
+
+    #[test]
+    fn projection_numeric_guards_enforce_exact_boundaries() {
+        validate_projected_row_count(0).expect("zero projected rows");
+        validate_projected_row_count(i64::MAX).expect("maximum projected rows");
+        assert!(matches!(
+            validate_projected_row_count(-1),
+            Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { reason })
+                if reason == "projection cursor has negative row count -1"
+        ));
+
+        assert_eq!(
+            i64_from_u64("food.boundary", i64::MAX as u64).expect("maximum signed value"),
+            i64::MAX,
+        );
+        assert!(matches!(
+            i64_from_u64("food.boundary", i64::MAX as u64 + 1),
+            Err(RadrootsEventStoreError::UnsignedIntegerRange {
+                field: "food.boundary",
+                value,
+            }) if value == i64::MAX as u64 + 1
         ));
     }
 }
