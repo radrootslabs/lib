@@ -215,7 +215,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_CARGO_MANIFEST_RELATIVE,
-        "543b11b38bb0e3c6074f478cede97cb48f901b3bea0ffa1cc4b8e4a3777509b3",
+        "d37e85cb3be5a72471b9bdf3ed405433dd558cb546c24a63f9c420529eaede5a",
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
