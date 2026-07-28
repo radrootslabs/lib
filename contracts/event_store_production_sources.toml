@@ -67,7 +67,7 @@ sha256 = "6c90be0b0997ca33e5ab5cfb6f10e9e6ddc6679bcb5c8255dbfc21ed61d769e5"
 
 [[sources]]
 path = "crates/event_store/src/store.rs"
-sha256 = "ef277328d99ef75a978f2907dc654cbf391436b9db693c3be69655dccbe74f89"
+sha256 = "d66e0665a5ee704b6e59070b2fc0ddba6901709e65f8501ec1cba198619ac364"
 
 [[sources]]
 path = "crates/event_store/src/store/addressable_transition_feed_v1.rs"

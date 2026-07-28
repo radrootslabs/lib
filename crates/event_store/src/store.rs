@@ -486,16 +486,7 @@ impl RadrootsEventStore {
         }
         tx.commit().await?;
 
-        event_ids
-            .into_iter()
-            .map(|event_id| {
-                evaluated.get(&event_id).cloned().ok_or_else(|| {
-                    RadrootsEventStoreError::CurrentVisibilityDrift {
-                        reason: format!("event visibility batch lost evaluated id `{event_id}`"),
-                    }
-                })
-            })
-            .collect()
+        collect_event_visibilities(event_ids, &evaluated)
     }
 
     pub async fn visible_event(
@@ -526,13 +517,10 @@ impl RadrootsEventStore {
             return Ok(None);
         };
         let raw_head = snapshot.raw_head;
-        let Some(current) =
-            current_visibility_in_transaction(&mut tx, raw_head.event_id.as_str()).await?
-        else {
-            return Err(RadrootsEventStoreError::StoredHeadInconsistent {
-                event_id: raw_head.event_id,
-            });
-        };
+        let current = require_raw_head_visibility(
+            &raw_head,
+            current_visibility_in_transaction(&mut tx, raw_head.event_id.as_str()).await?,
+        )?;
         if current.decision() != RadrootsCurrentVisibilityDecisionV1::Visible {
             tx.commit().await?;
             return Ok(None);
@@ -1139,6 +1127,31 @@ impl RadrootsEventStore {
     }
 }
 
+fn collect_event_visibilities(
+    event_ids: Vec<RadrootsEventId>,
+    evaluated: &BTreeMap<RadrootsEventId, Option<RadrootsEventVisibility>>,
+) -> Result<Vec<Option<RadrootsEventVisibility>>, RadrootsEventStoreError> {
+    event_ids
+        .into_iter()
+        .map(|event_id| {
+            evaluated.get(&event_id).cloned().ok_or_else(|| {
+                RadrootsEventStoreError::CurrentVisibilityDrift {
+                    reason: format!("event visibility batch lost evaluated id `{event_id}`"),
+                }
+            })
+        })
+        .collect()
+}
+
+fn require_raw_head_visibility(
+    raw_head: &RadrootsStoredRawEventHead,
+    current: Option<crate::model::RadrootsCurrentEventVisibilityV1>,
+) -> Result<crate::model::RadrootsCurrentEventVisibilityV1, RadrootsEventStoreError> {
+    current.ok_or_else(|| RadrootsEventStoreError::StoredHeadInconsistent {
+        event_id: raw_head.event_id.clone(),
+    })
+}
+
 async fn event_visibility_in_transaction(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     event_id: &str,
@@ -1146,6 +1159,13 @@ async fn event_visibility_in_transaction(
     let Some(current) = current_visibility_in_transaction(tx, event_id).await? else {
         return Ok(None);
     };
+    Ok(Some(event_visibility_from_current(event_id, &current)?))
+}
+
+fn event_visibility_from_current(
+    event_id: &str,
+    current: &crate::model::RadrootsCurrentEventVisibilityV1,
+) -> Result<RadrootsEventVisibility, RadrootsEventStoreError> {
     let visibility = match current.decision() {
         RadrootsCurrentVisibilityDecisionV1::Visible => RadrootsEventVisibility::Visible,
         RadrootsCurrentVisibilityDecisionV1::NotAdmitted => RadrootsEventVisibility::NotAdmitted,
@@ -1176,7 +1196,7 @@ async fn event_visibility_in_transaction(
             }
         }
     };
-    Ok(Some(visibility))
+    Ok(visibility)
 }
 
 /// Inspects an existing event-store pool without configuring or migrating it.
@@ -6662,6 +6682,37 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn visibility_collection_helpers_preserve_typed_integrity_failures() {
+        let missing_id = RadrootsEventId::parse(event_id('a')).expect("event id");
+        let error = collect_event_visibilities(
+            vec![missing_id.clone()],
+            &BTreeMap::<RadrootsEventId, Option<RadrootsEventVisibility>>::new(),
+        )
+        .expect_err("missing evaluated visibility");
+        assert!(matches!(
+            error,
+            RadrootsEventStoreError::CurrentVisibilityDrift { reason }
+                if reason.contains(missing_id.as_str())
+        ));
+
+        let raw_head = RadrootsStoredRawEventHead {
+            coordinate_type: crate::model::StoredEventClass::Replaceable,
+            kind: KIND_PROFILE,
+            pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned(),
+            d_tag: None,
+            event_id: missing_id.to_string(),
+            created_at: 1,
+            updated_at_ms: 2,
+        };
+        assert!(matches!(
+            require_raw_head_visibility(&raw_head, None),
+            Err(RadrootsEventStoreError::StoredHeadInconsistent { event_id })
+                if event_id == raw_head.event_id
+        ));
+    }
+
+    #[test]
     fn ingest_rollback_failure_preserves_the_primary_error() {
         let result: Result<(), _> = preserve_ingest_primary_failure(
             RadrootsEventStoreError::MissingEvent("primary".to_owned()),
@@ -8679,6 +8730,20 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     #[tokio::test]
     async fn current_visibility_agrees_for_regular_replaceable_and_addressable_reads() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
+        assert!(
+            store
+                .visible_event(event_id('f').as_str())
+                .await
+                .expect("missing visible event")
+                .is_none()
+        );
+        assert!(
+            store
+                .visible_event_head(&profile_coordinate())
+                .await
+                .expect("missing visible head")
+                .is_none()
+        );
         let regular = signed_event(KIND_POST, 100, Vec::new(), "Victoria harvest update");
         let older_profile = signed_event(KIND_PROFILE, 110, Vec::new(), "{\"name\":\"Alice\"}");
         let newer_profile =
@@ -8729,6 +8794,22 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(regular_current.is_raw_head());
         assert!(regular_current.raw_head_event_id().is_none());
+
+        let mut incomplete_not_current = regular_current.clone();
+        incomplete_not_current.decision = RadrootsCurrentVisibilityDecisionV1::NotCurrent;
+        assert!(matches!(
+            event_visibility_from_current(regular.id_str(), &incomplete_not_current),
+            Err(RadrootsEventStoreError::StoredHeadCoordinateUnavailable { event_id })
+                if event_id == regular.id_str()
+        ));
+        let mut incomplete_suppression = regular_current.clone();
+        incomplete_suppression.decision = RadrootsCurrentVisibilityDecisionV1::Suppressed;
+        incomplete_suppression.suppression = None;
+        assert!(matches!(
+            event_visibility_from_current(regular.id_str(), &incomplete_suppression),
+            Err(RadrootsEventStoreError::CurrentVisibilityDrift { reason })
+                if reason.contains("missing evidence")
+        ));
         assert_eq!(
             store
                 .event_visibility(regular.id_str())
