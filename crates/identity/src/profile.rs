@@ -1,4 +1,12 @@
 //! Public, transport-neutral identity profiles.
+//!
+//! [`Profile`] contains optional public metadata only. [`PublicIdentity`]
+//! couples a validated [`PublicKey`] to its derived [`IdentityId`] and rejects
+//! mismatched separately decoded parts. Empty profiles are omitted so one
+//! public identity has one canonical native representation.
+//!
+//! Profiles do not perform discovery, authorization, event verification,
+//! persistence, or secret handling.
 
 use crate::{Error, IdentityId, PublicKey, Username};
 

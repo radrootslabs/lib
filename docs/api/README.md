@@ -31,3 +31,4 @@ expand a package beyond its charter.
 | Package | Baseline | Charter |
 | --- | --- | --- |
 | `radroots_core` | [`radroots_core.txt`](radroots_core.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots_identity` | [`radroots_identity.txt`](radroots_identity.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |

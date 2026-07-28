@@ -1,4 +1,14 @@
 //! Public, transport-neutral account value types.
+//!
+//! [`AccountId`] is derived from the same canonical public bytes as an
+//! identity. [`Record`] combines that identifier with a [`PublicIdentity`], an
+//! optional host-facing label, and caller-supplied timestamps while preserving
+//! their cross-field invariants. [`Status`] reports only observable readiness;
+//! it contains no secret, signer, persistence, or host-selection state.
+//!
+//! This module does not read a clock or persist mutations. In particular,
+//! [`Record::set_label`] and [`Record::touch_updated`] are separate operations
+//! so the composing host retains explicit timestamp and commit policy.
 
 use alloc::string::String;
 

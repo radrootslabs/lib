@@ -1,4 +1,9 @@
 //! Canonical public usernames.
+//!
+//! [`Username`] trims surrounding whitespace, lowercases ASCII input, enforces
+//! [`MIN_LENGTH`] and [`MAX_LENGTH`], and accepts only the documented public
+//! character set and dot placement. Parsing and serde decoding use the same
+//! validator and always produce canonical text.
 
 use alloc::string::String;
 use core::{fmt, str::FromStr};

@@ -1,4 +1,10 @@
 //! Canonical public-key and identity identifier value types.
+//!
+//! [`PublicKey`] validates a 32-byte x-only secp256k1 public key. [`IdentityId`]
+//! is a distinct Rust type derived from the same canonical bytes. Both values
+//! parse exact-width hexadecimal text, preserve fixed-width binary form, and
+//! emit lowercase hexadecimal text without exposing secret-key or Nostr
+//! bech32 behavior.
 
 use crate::Error;
 

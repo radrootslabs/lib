@@ -1,19 +1,7 @@
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![forbid(unsafe_code)]
-//! Portable public identity and account values.
-//!
-//! Host filesystem and runtime-path APIs are intentionally absent:
-//!
-//! ```compile_fail
-//! use radroots_identity::{storage, IdentityError};
-//! ```
-//!
-//! Secret-bearing and upstream Nostr event APIs are intentionally absent:
-//!
-//! ```compile_fail
-//! use radroots_identity::{NostrEvent, SecretKey};
-//! ```
 
 extern crate alloc;
 
