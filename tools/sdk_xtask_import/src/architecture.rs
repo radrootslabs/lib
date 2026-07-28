@@ -613,9 +613,12 @@ fn validate_public_dependency_table(
             toml::Value::Table(table) => table.get("version").and_then(toml::Value::as_str),
             _ => None,
         };
-        let governed_version = policy.package_versions.get(dependency_name).ok_or_else(|| {
-            format!("public dependency {dependency_name} has no repository version authority")
-        })?;
+        let governed_version = policy
+            .package_versions
+            .get(dependency_name)
+            .ok_or_else(|| {
+                format!("public dependency {dependency_name} has no repository version authority")
+            })?;
         let exact_version = format!("={governed_version}");
         if policy.local_packages.contains(dependency_name)
             && (dependency_path.is_none() || version != Some(exact_version.as_str()))
