@@ -94,13 +94,8 @@ pub(crate) fn raw_source_capacity_delta_v1(
         let tag_name = values.first().map(String::as_str).unwrap_or("");
         let tag_value = values.get(1).map(String::as_str);
         let tag_json = serde_json::to_string(values)?;
-        raw_tags = checked_capacity_add(
-            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+        (raw_tags, raw_tag_bytes) = extend_raw_tag_capacity(
             raw_tags,
-            1,
-        )?;
-        raw_tag_bytes = checked_capacity_add(
-            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
             raw_tag_bytes,
             raw_tag_row_bytes_v1(event.id_str(), tag_name, tag_value, tag_json.as_str())?,
         )?;
@@ -128,28 +123,7 @@ pub(crate) async fn advance_source_capacity_after_insert_v1(
 ) -> Result<(), RadrootsEventStoreError> {
     let current = read_source_capacity_v1(connection).await?;
     validate_prospective_capacity(current.capacity, delta)?;
-    let next = ReconciliationCapacity {
-        raw_events: checked_capacity_add(
-            RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
-            current.capacity.raw_events,
-            delta.raw_events,
-        )?,
-        raw_tags: checked_capacity_add(
-            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
-            current.capacity.raw_tags,
-            delta.raw_tags,
-        )?,
-        raw_event_bytes: checked_capacity_add(
-            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
-            current.capacity.raw_event_bytes,
-            delta.raw_event_bytes,
-        )?,
-        raw_tag_bytes: checked_capacity_add(
-            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
-            current.capacity.raw_tag_bytes,
-            delta.raw_tag_bytes,
-        )?,
-    };
+    let next = apply_capacity_delta(current.capacity, delta)?;
     let updated = sqlx::query(
         "UPDATE radroots_event_store_source_capacity_v1 SET raw_event_count = ?, raw_tag_count = ?, raw_event_bytes = ?, raw_tag_bytes = ?, raw_high_water_seq = ? WHERE singleton = 1 AND source_generation = ? AND raw_event_count = ? AND raw_tag_count = ? AND raw_event_bytes = ? AND raw_tag_bytes = ? AND raw_high_water_seq = ? AND retained_generation_count = ? AND retained_generation_limit = ?",
     )
@@ -180,12 +154,7 @@ pub(crate) async fn advance_source_capacity_after_insert_v1(
     .bind(i64::from(current.retained_generation_limit))
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return source_capacity_drift(format!(
-            "append authority compare-and-swap affected {} rows",
-            updated.rows_affected()
-        ));
-    }
+    require_single_capacity_row("append authority compare-and-swap", updated.rows_affected())?;
     validate_source_capacity_authority_fast_v1(connection)
         .await
         .map(|_| ())
@@ -238,12 +207,7 @@ pub(crate) async fn apply_source_maintenance_hook_v1(
     ))
     .execute(&mut *connection)
     .await?;
-    if inserted.rows_affected() != 1 {
-        return source_capacity_drift(format!(
-            "source capacity initialization affected {} rows",
-            inserted.rows_affected()
-        ));
-    }
+    require_single_capacity_row("source capacity initialization", inserted.rows_affected())?;
     validate_source_capacity_authority_full_v1(connection).await
 }
 
@@ -279,15 +243,7 @@ pub(crate) async fn validate_source_capacity_authority_fast_v1(
 ) -> Result<RadrootsEventStoreSourceCapacityV1, RadrootsEventStoreError> {
     let capacity = read_source_capacity_v1(connection).await?;
     validate_measured_capacity(capacity.capacity)?;
-    if capacity.retained_generation_limit
-        != RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
-    {
-        return source_capacity_drift(format!(
-            "retained generation limit is {}, expected {}",
-            capacity.retained_generation_limit,
-            RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
-        ));
-    }
+    validate_retained_generation_limit(capacity.retained_generation_limit)?;
     let row = sqlx::query(
         "SELECT state.active_generation, state.raw_event_count, state.raw_tag_count, state.raw_high_water_seq, generation.generation_ordinal, (SELECT COUNT(*) FROM (SELECT 1 FROM radroots_event_store_source_generation LIMIT 9)) AS retained_generation_count FROM radroots_event_store_source_state AS state JOIN radroots_event_store_source_generation AS generation ON generation.source_generation = state.active_generation WHERE state.singleton = 1",
     )
@@ -430,12 +386,7 @@ pub(crate) async fn bind_source_capacity_to_generation_v1(
     .bind(i64::from(current.retained_generation_limit))
     .execute(&mut *connection)
     .await?;
-    if updated.rows_affected() != 1 {
-        return source_capacity_drift(format!(
-            "source rebuild capacity bind affected {} rows",
-            updated.rows_affected()
-        ));
-    }
+    require_single_capacity_row("source rebuild capacity bind", updated.rows_affected())?;
     validate_source_capacity_authority_fast_v1(connection).await?;
     Ok(true)
 }
@@ -535,6 +486,53 @@ fn validate_prospective_capacity(
     Ok(())
 }
 
+fn apply_capacity_delta(
+    current: ReconciliationCapacity,
+    delta: RawSourceCapacityDeltaV1,
+) -> Result<ReconciliationCapacity, RadrootsEventStoreError> {
+    Ok(ReconciliationCapacity {
+        raw_events: checked_capacity_add(
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+            current.raw_events,
+            delta.raw_events,
+        )?,
+        raw_tags: checked_capacity_add(
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+            current.raw_tags,
+            delta.raw_tags,
+        )?,
+        raw_event_bytes: checked_capacity_add(
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+            current.raw_event_bytes,
+            delta.raw_event_bytes,
+        )?,
+        raw_tag_bytes: checked_capacity_add(
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+            current.raw_tag_bytes,
+            delta.raw_tag_bytes,
+        )?,
+    })
+}
+
+fn extend_raw_tag_capacity(
+    raw_tags: u64,
+    raw_tag_bytes: u64,
+    row_bytes: u64,
+) -> Result<(u64, u64), RadrootsEventStoreError> {
+    Ok((
+        checked_capacity_add(
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+            raw_tags,
+            1,
+        )?,
+        checked_capacity_add(
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+            raw_tag_bytes,
+            row_bytes,
+        )?,
+    ))
+}
+
 fn validate_measured_capacity(
     capacity: ReconciliationCapacity,
 ) -> Result<(), RadrootsEventStoreError> {
@@ -576,15 +574,11 @@ fn raw_tag_row_bytes_v1(
     checked_capacity_add(
         RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
         required,
-        u64::try_from(tag_value.map_or(0, str::len)).map_err(|_| {
-            RadrootsEventStoreError::SourceCapacityExceeded {
-                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
-                current: required,
-                requested: u64::MAX,
-                limit: ReconciliationCapacityLimits::production()
-                    .limit(RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes),
-            }
-        })?,
+        capacity_value_from_u128(
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+            required,
+            tag_value.map_or(0, str::len) as u128,
+        )?,
     )
 }
 
@@ -593,16 +587,42 @@ fn checked_text_byte_sum<const N: usize>(
     values: [&str; N],
 ) -> Result<u64, RadrootsEventStoreError> {
     values.iter().try_fold(0_u64, |current, value| {
-        let requested = u64::try_from(value.len()).map_err(|_| {
-            RadrootsEventStoreError::SourceCapacityExceeded {
-                resource,
-                current,
-                requested: u64::MAX,
-                limit: ReconciliationCapacityLimits::production().limit(resource),
-            }
-        })?;
+        let requested = capacity_value_from_u128(resource, current, value.len() as u128)?;
         checked_capacity_add(resource, current, requested)
     })
+}
+
+fn capacity_value_from_u128(
+    resource: RadrootsEventStoreSourceCapacityResourceV1,
+    current: u64,
+    requested: u128,
+) -> Result<u64, RadrootsEventStoreError> {
+    u64::try_from(requested).map_err(|_| RadrootsEventStoreError::SourceCapacityExceeded {
+        resource,
+        current,
+        requested: u64::MAX,
+        limit: ReconciliationCapacityLimits::production().limit(resource),
+    })
+}
+
+fn require_single_capacity_row(
+    action: &'static str,
+    rows_affected: u64,
+) -> Result<(), RadrootsEventStoreError> {
+    if rows_affected != 1 {
+        return source_capacity_drift(format!("{action} affected {rows_affected} rows"));
+    }
+    Ok(())
+}
+
+fn validate_retained_generation_limit(actual: u32) -> Result<(), RadrootsEventStoreError> {
+    if actual != RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1 {
+        return source_capacity_drift(format!(
+            "retained generation limit is {actual}, expected {}",
+            RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1
+        ));
+    }
+    Ok(())
 }
 
 fn checked_capacity_add(
@@ -892,6 +912,94 @@ mod tests {
                 requested: 1,
                 ..
             })
+        ));
+        assert_eq!(
+            extend_raw_tag_capacity(2, 3, 4).expect("raw tag capacity"),
+            (3, 7)
+        );
+        assert!(matches!(
+            extend_raw_tag_capacity(u64::MAX, 3, 4),
+            Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+                ..
+            })
+        ));
+        assert!(matches!(
+            extend_raw_tag_capacity(2, u64::MAX, 1),
+            Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+                ..
+            })
+        ));
+        assert_eq!(
+            apply_capacity_delta(
+                ReconciliationCapacity {
+                    raw_events: 1,
+                    raw_tags: 2,
+                    raw_event_bytes: 3,
+                    raw_tag_bytes: 4,
+                },
+                RawSourceCapacityDeltaV1 {
+                    raw_events: 5,
+                    raw_tags: 6,
+                    raw_event_bytes: 7,
+                    raw_tag_bytes: 8,
+                },
+            )
+            .expect("capacity delta"),
+            ReconciliationCapacity {
+                raw_events: 6,
+                raw_tags: 8,
+                raw_event_bytes: 10,
+                raw_tag_bytes: 12,
+            }
+        );
+        for resource in [
+            RadrootsEventStoreSourceCapacityResourceV1::RawEvents,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTags,
+            RadrootsEventStoreSourceCapacityResourceV1::RawEventBytes,
+            RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+        ] {
+            assert!(matches!(
+                apply_capacity_delta(
+                    capacity_with(resource, u64::MAX),
+                    delta_with(resource, 1),
+                ),
+                Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                    resource: actual,
+                    ..
+                }) if actual == resource
+            ));
+        }
+        assert_eq!(
+            capacity_value_from_u128(resource, 3, 7).expect("u64 capacity value"),
+            7
+        );
+        assert!(matches!(
+            capacity_value_from_u128(resource, 3, u128::from(u64::MAX) + 1),
+            Err(RadrootsEventStoreError::SourceCapacityExceeded {
+                resource: RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
+                current: 3,
+                requested: u64::MAX,
+                ..
+            })
+        ));
+        require_single_capacity_row("fixture update", 1).expect("one affected row");
+        assert!(matches!(
+            require_single_capacity_row("fixture update", 0),
+            Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
+                if reason == "fixture update affected 0 rows"
+        ));
+        validate_retained_generation_limit(
+            RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1,
+        )
+        .expect("governed generation limit");
+        assert!(matches!(
+            validate_retained_generation_limit(
+                RADROOTS_EVENT_STORE_RETAINED_SOURCE_GENERATION_LIMIT_V1 - 1,
+            ),
+            Err(RadrootsEventStoreError::SourceCapacityStateDrift { reason })
+                if reason == "retained generation limit is 7, expected 8"
         ));
         assert!(matches!(
             validate_prospective_capacity(
