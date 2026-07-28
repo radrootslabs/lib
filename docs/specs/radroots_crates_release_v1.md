@@ -1425,17 +1425,18 @@ For every public package:
 During the active heavy-development refactor, every required workspace crate
 owned by `radrootslabs/lib` MUST maintain at least 90% executable-line,
 function, region, and branch coverage. Branch measurement remains required
-except for a machine-recorded temporary exception where the coverage tool emits no branch
-records. Crate-specific numeric thresholds below 90% are forbidden. The
+except for a machine-recorded temporary exception where the coverage tool
+emits no branch records. Crate-specific numeric thresholds below 90% are
+forbidden. The
 machine-readable authority for the active gate is `contracts/coverage.toml` in
 `radrootslabs/lib`.
 
 This amendment does not alter the independently governed `radrootslabs/sdk`
 coverage contract. The 90% baseline is temporary development policy, not
 permission to remove meaningful tests or weaken package-specific conformance
-requirements. The 100%
-threshold is deferred until this refactor stabilizes and may be reinstated only
-through an explicit future contract and specification update.
+requirements. The 100% threshold is deferred until this refactor stabilizes
+and may be reinstated only through an explicit future contract and
+specification update.
 
 ### 24.6 Package-realistic release validation
 
