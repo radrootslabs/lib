@@ -268,7 +268,16 @@ pub fn protocol_v1_registry() -> Result<Registry, Error> {
         .iter()
         .copied()
         .map(|metadata| (metadata, ModuleVersion::EventV1));
-    Registry::try_from_metadata(capability.chain(event))
+    let mut descriptors = Registry::try_from_metadata(capability.chain(event))?
+        .descriptors()
+        .to_vec();
+    descriptors.extend(
+        crate::runtime::v1::schema_registry()?
+            .descriptors()
+            .iter()
+            .cloned(),
+    );
+    Registry::try_new(descriptors)
 }
 
 /// Schema identity or registry validation failure.
@@ -509,9 +518,11 @@ mod tests {
     #[test]
     fn protocol_v1_registry_dispatches_all_migrated_schemas() {
         let registry = protocol_v1_registry().expect("protocol V1 registry");
-        assert_eq!(registry.len(), 5);
+        assert_eq!(registry.len(), 5 + crate::runtime::v1::CATALOG.len() * 2);
         for descriptor in registry.descriptors() {
-            let expected = if descriptor.id().as_str().contains("event_descriptor")
+            let expected = if descriptor.id().as_str().starts_with("radroots.runtime.") {
+                ModuleVersion::RuntimeV1
+            } else if descriptor.id().as_str().contains("event_descriptor")
                 || descriptor.id().as_str().contains("trade_state")
             {
                 ModuleVersion::EventV1

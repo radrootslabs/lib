@@ -46,9 +46,8 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
     for source in [CAPABILITY, EVENT] {
         assert!(source.lines().any(|line| line.trim() == "pub mod v1;"));
     }
-    for source in [ERROR, RUNTIME] {
-        assert!(source.lines().any(|line| line.trim() == "pub mod v1 {}"));
-    }
+    assert!(ERROR.lines().any(|line| line.trim() == "pub mod v1 {}"));
+    assert!(RUNTIME.lines().any(|line| line.trim() == "pub mod v1;"));
     assert!(RADROOTSD.contains("pub mod transport_publish {"));
     assert!(RADROOTSD.lines().any(|line| line.trim() == "pub mod v5 {}"));
     assert!(
