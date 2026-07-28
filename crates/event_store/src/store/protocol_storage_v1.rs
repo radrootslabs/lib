@@ -387,4 +387,47 @@ mod tests {
         assert_eq!(u64_from_i64("fixture", 7).expect("u64"), 7);
         assert!(u64_from_i64("fixture", -1).is_err());
     }
+
+    #[tokio::test]
+    async fn raw_head_join_rejects_a_missing_referenced_event() {
+        let store = crate::RadrootsEventStore::open_memory()
+            .await
+            .expect("open store");
+        let pubkey = "a".repeat(64);
+        let event_id = "b".repeat(64);
+        let mut connection = store.pool().acquire().await.expect("trusted connection");
+        sqlx::query("DROP TRIGGER radroots_event_store_event_head_insert_guard")
+            .execute(&mut *connection)
+            .await
+            .expect("trusted head guard removal");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable trusted foreign-key enforcement");
+        sqlx::query(
+            "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('replaceable', 10001, ?, NULL, ?, 7, 8)",
+        )
+        .bind(pubkey.as_str())
+        .bind(event_id.as_str())
+        .execute(&mut *connection)
+        .await
+        .expect("trusted orphan head insertion");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign-key enforcement");
+        drop(connection);
+
+        let coordinate = RadrootsEventHeadCoordinate::Replaceable {
+            kind: 10_001,
+            pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+        };
+        let mut transaction = store.pool().begin().await.expect("transaction");
+        assert!(matches!(
+            raw_head_snapshot_in_transaction(&mut transaction, &coordinate).await,
+            Err(RadrootsEventStoreError::StoredHeadInconsistent {
+                event_id: stored_event_id,
+            }) if stored_event_id == event_id
+        ));
+    }
 }
