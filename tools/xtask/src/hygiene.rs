@@ -343,7 +343,10 @@ fn reject_retired_listing_aliases(root: &Path, failures: &mut Vec<String>) {
                     line.trim()
                 ));
             }
-            if is_listing_module_scope(&rel) && contains_retired_listing_module_reference(line) {
+            if is_listing_module_scope(&rel)
+                && !is_canonical_event_listing_module_reference(&rel, line)
+                && contains_retired_listing_module_reference(line)
+            {
                 failures.push(format!(
                     "retired listing public aliases must not reappear: {}:{}: {}",
                     rel,
@@ -379,12 +382,17 @@ fn is_identifier_continue(ch: char) -> bool {
 
 fn is_retired_listing_module_path(rel: &str) -> bool {
     is_listing_module_scope(rel)
+        && !is_canonical_event_listing_module_path(rel)
         && Path::new(rel).components().any(|component| {
             component.as_os_str() == "listing"
                 || Path::new(component.as_os_str())
                     .file_stem()
                     .is_some_and(|stem| stem == "listing")
         })
+}
+
+fn is_canonical_event_listing_module_path(rel: &str) -> bool {
+    rel == "crates/event/src/listing.rs" || rel.starts_with("crates/event/src/listing/")
 }
 
 fn is_listing_module_scope(rel: &str) -> bool {
@@ -406,6 +414,10 @@ fn contains_retired_listing_module_reference(line: &str) -> bool {
             before.ends_with("::") || before.trim_end().ends_with("mod") || before.ends_with('/');
         starts_module_segment && after.is_none_or(|ch| !is_identifier_continue(ch))
     })
+}
+
+fn is_canonical_event_listing_module_reference(rel: &str, line: &str) -> bool {
+    rel == "crates/event/src/lib.rs" && line.trim() == "pub mod listing;"
 }
 
 fn is_retired_listing_negative_guard(rel: &str, line: &str) -> bool {
@@ -747,6 +759,12 @@ mod tests {
     #[test]
     fn listing_alias_guard_is_token_and_path_aware() {
         let clean_root = unique_temp_dir("listing_alias_clean");
+        write_file(&clean_root, "crates/event/src/lib.rs", "pub mod listing;\n");
+        write_file(
+            &clean_root,
+            "crates/event/src/listing.rs",
+            "pub struct CanonicalListing;\n",
+        );
         write_file(
             &clean_root,
             "crates/event/src/kinds.rs",
