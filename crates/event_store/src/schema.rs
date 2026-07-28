@@ -969,11 +969,17 @@ fn validate_ledger_catalog(catalog: &[CatalogRow]) -> Result<bool, RadrootsEvent
         });
     }
     let row = rows[0];
-    if row.object_type != "table"
-        || row.name != EVENT_STORE_LEDGER_NAME
-        || row.table_name != EVENT_STORE_LEDGER_NAME
-        || row.sql.as_deref() != Some(EVENT_STORE_LEDGER_DDL)
-    {
+    if (
+        row.object_type.as_str(),
+        row.name.as_str(),
+        row.table_name.as_str(),
+        row.sql.as_deref(),
+    ) != (
+        "table",
+        EVENT_STORE_LEDGER_NAME,
+        EVENT_STORE_LEDGER_NAME,
+        Some(EVENT_STORE_LEDGER_DDL),
+    ) {
         return Err(RadrootsEventStoreError::MigrationLedgerDrift {
             reason: "ledger table definition does not match the canonical catalog SQL".to_owned(),
         });
@@ -1050,12 +1056,7 @@ async fn read_repair_history_bounded_v1(
     connection: &mut SqliteConnection,
     supported_current: u32,
 ) -> Result<Vec<AppliedMigration>, RadrootsEventStoreError> {
-    let row_limit = i64::from(supported_current).checked_add(1).ok_or_else(|| {
-        RadrootsEventStoreError::RawSourceRebuildStateDrift {
-            kind: RadrootsEventStoreRawSourceRebuildDriftV1::ManagedSchemaAuthority,
-            detail: "managed migration-history authority cannot reserve a drift row".to_owned(),
-        }
-    })?;
+    let row_limit = i64::from(supported_current) + 1;
     let rows = sqlx::query(
         "SELECT version, name, up_sha256, down_sha256, schema_sha256
          FROM main.radroots_event_store_schema_migrations
@@ -1212,6 +1213,30 @@ async fn validate_database_integrity(
     }
 
     let catalog = read_catalog(connection).await?;
+    validate_fts5_integrity(connection, registry, &catalog).await?;
+
+    let foreign_key_rows = sqlx::query("PRAGMA foreign_key_check")
+        .fetch_all(&mut *connection)
+        .await?;
+    for row in foreign_key_rows {
+        let table: String = row.try_get("table")?;
+        if is_event_store_owned_table_name(registry, &table) {
+            return Err(RadrootsEventStoreError::ForeignKeyViolation {
+                table,
+                rowid: row.try_get("rowid")?,
+                parent: row.try_get("parent")?,
+                foreign_key_index: row.try_get("fkid")?,
+            });
+        }
+    }
+    Ok(())
+}
+
+async fn validate_fts5_integrity(
+    connection: &mut SqliteConnection,
+    registry: &[EventStoreMigration],
+    catalog: &[CatalogRow],
+) -> Result<(), RadrootsEventStoreError> {
     for table in registry
         .iter()
         .flat_map(|migration| migration.fts5_table_names.iter().copied())
@@ -1229,21 +1254,6 @@ async fn validate_database_integrity(
                 table,
                 source,
             })?;
-    }
-
-    let foreign_key_rows = sqlx::query("PRAGMA foreign_key_check")
-        .fetch_all(&mut *connection)
-        .await?;
-    for row in foreign_key_rows {
-        let table: String = row.try_get("table")?;
-        if is_event_store_owned_table_name(registry, &table) {
-            return Err(RadrootsEventStoreError::ForeignKeyViolation {
-                table,
-                rowid: row.try_get("rowid")?,
-                parent: row.try_get("parent")?,
-                foreign_key_index: row.try_get("fkid")?,
-            });
-        }
     }
     Ok(())
 }
@@ -1289,6 +1299,18 @@ mod migration_framework {
         assert!(!has_pending_source_maintenance_hook(
             &current,
             EVENT_STORE_MIGRATIONS,
+        ));
+
+        let mut future_without_hook = EVENT_STORE_MIGRATIONS[1];
+        future_without_hook.hook = EventStoreMigrationHook::None;
+        let no_hook_registry = [EVENT_STORE_MIGRATIONS[0], future_without_hook];
+        assert!(!has_pending_source_capacity_hook(
+            &baseline,
+            &no_hook_registry,
+        ));
+        assert!(!has_pending_source_maintenance_hook(
+            &baseline,
+            &no_hook_registry,
         ));
     }
 
@@ -2421,18 +2443,17 @@ DROP TABLE event_envelopes;";
             .execute(&mut *connection)
             .await
             .expect("corrupt FTS index");
-        let error = validate_database_integrity(&mut connection, EVENT_STORE_MIGRATIONS)
+        let catalog = read_catalog(&mut connection).await.expect("catalog");
+        let error = validate_fts5_integrity(&mut connection, EVENT_STORE_MIGRATIONS, &catalog)
             .await
             .expect_err("corrupt FTS index");
-        match error {
+        assert!(matches!(
+            error,
             RadrootsEventStoreError::Fts5IntegrityCheckFailed {
                 table: "listing_search_fts",
                 ..
-            } => {}
-            RadrootsEventStoreError::IntegrityCheckFailed { detail }
-                if detail.to_ascii_lowercase().contains("fts5") => {}
-            other => panic!("unexpected FTS integrity error: {other:?}"),
-        }
+            }
+        ));
     }
 
     #[tokio::test]
@@ -2666,6 +2687,19 @@ DROP TABLE event_envelopes;";
                 5
             ),
             Err(RadrootsEventStoreError::UnknownMigration { version: 5 })
+        ));
+
+        let negative = AppliedMigration {
+            version: -1,
+            name: "invalid".to_owned(),
+            up_sha256: "0".repeat(64),
+            down_sha256: "1".repeat(64),
+            schema_sha256: "2".repeat(64),
+        };
+        assert!(matches!(
+            validate_history_against_registry(&[negative], EVENT_STORE_MIGRATIONS, 4),
+            Err(RadrootsEventStoreError::MigrationLedgerDrift { reason })
+                if reason.contains("outside the supported positive range")
         ));
     }
 
@@ -3177,6 +3211,14 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         migration.replaced_object_names = REPLACED_OBJECTS;
         validate_catalog_delta(&before, &changed, &migration, "up")
             .expect("exact up replacement delta");
+        assert!(matches!(
+            validate_catalog_delta(&before, &changed, &migration, "sideways"),
+            Err(RadrootsEventStoreError::MigrationCatalogDeltaMismatch {
+                direction: "sideways",
+                reason,
+                ..
+            }) if reason.contains("expected removed objects")
+        ));
 
         let mut undeclared = migration;
         undeclared.replaced_object_names = &[];
