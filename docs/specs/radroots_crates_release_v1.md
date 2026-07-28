@@ -1218,9 +1218,9 @@ Names containing `common`, `utils`, `types`, `models`, `preview`, `unstable`, `v
 | `radroots_core` | `radroots_core` | Retain the snake-case package name and remove RadrootsCore type prefixes. |
 | `radroots_identity` | `radroots_identity + radroots_signing + radroots_secrets + radroots_storage` | Keep only public identity/account concepts in identity; move secrets, signers, and persistence. |
 | `radroots_blossom` | `radroots_blossom` | Retain portable protocol primitives. |
-| `radroots_protocol_contract_v1` | `radroots_protocol::event::v1 / capability::v1` | Merge; generation becomes a module, never a package suffix. |
-| `radroots_runtime_contract_v1` | `radroots_protocol::runtime::v1` | Merge; generation becomes a module. |
-| `radroots_transport_publish_protocol` | `radroots_protocol::radrootsd::transport_publish::v5` | Merge daemon wire DTOs into the versioned protocol package. |
+| `radroots_protocol_contract_v1` | `radroots_protocol::event::v1 / capability::v1` | Retired, non-publishable compatibility package after merge; final removal at Step 270 after the CLI cutover. |
+| `radroots_runtime_contract_v1` | `radroots_protocol::runtime::v1` | Retired, non-publishable SDK compatibility package after merge; final removal at Step 270 after the CLI cutover. |
+| `radroots_transport_publish_protocol` | `radroots_protocol::radrootsd::transport_publish::v5` | Retired, non-publishable compatibility package after merge; final removal at Step 286 after the radrootsd cutover. |
 | `radroots_event` | `radroots_event` | Retain singular package; narrow to canonical event-domain model. |
 | `radroots_event_codec` | `radroots_event_codec` | Retain; remove live Nostr/upstream client responsibilities. |
 | `radroots_event_index` | `radroots_storage::projection/index` | Merge; current checkpoint/manifest model is not an independent indexing engine. |

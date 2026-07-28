@@ -61,7 +61,6 @@ private = [
   "radroots_nostr_signer",
   "radroots_outbox",
   "radroots_protected_store",
-  "radroots_protocol_contract_v1",
   "radroots_runtime",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
@@ -69,7 +68,6 @@ private = [
   "radroots_runtime_store",
   "radroots_secret_vault",
   "radroots_sql_core",
-  "radroots_transport_publish_protocol",
 ]
 build_codegen = ["xtask"]
 test_support = ["radroots_test_fixtures"]
@@ -94,7 +92,10 @@ preview = [
   "radroots_trade_sp1_host",
   "radroots_transport_reticulum",
 ]
-retired = []
+retired = [
+  "radroots_protocol_contract_v1",
+  "radroots_transport_publish_protocol",
+]
 
 [publish_order]
 crates = []
