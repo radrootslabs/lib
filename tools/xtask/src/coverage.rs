@@ -9,6 +9,7 @@ use std::{collections::BTreeMap, collections::BTreeSet, io::Write};
 
 use serde::Deserialize;
 use serde::Serialize;
+use syn::spanned::Spanned;
 
 #[derive(Debug, Clone)]
 pub struct CoverageSummary {
@@ -171,43 +172,15 @@ type CoverageSourceCache = BTreeMap<String, Option<CoverageSource>>;
 impl CoverageSource {
     fn parse(source: String, external_test_only: bool) -> Self {
         let lines = source.lines().map(str::to_owned).collect::<Vec<_>>();
-        let file_is_test_only = external_test_only
-            || lines.iter().any(|line| {
-                let trimmed = line.trim();
-                trimmed.starts_with("#![cfg(test)]") || trimmed.starts_with("#![cfg(all(test,")
-            });
-        if file_is_test_only {
+        if external_test_only {
             return Self {
                 cfg_test_lines: vec![true; lines.len()],
                 lines,
             };
         }
 
-        let mut cfg_test_lines = Vec::with_capacity(lines.len());
-        let mut pending_cfg_test = false;
-        let mut test_depth: Option<i64> = None;
-        for line in &lines {
-            let trimmed = line.trim();
-            let mut started_test_block = false;
-            if trimmed.starts_with("#[cfg(test)]") || trimmed.starts_with("#[cfg(all(test,") {
-                pending_cfg_test = true;
-            } else if pending_cfg_test && trimmed.starts_with("mod tests") && trimmed.contains('{')
-            {
-                test_depth = Some(brace_delta(trimmed));
-                pending_cfg_test = false;
-                started_test_block = true;
-            }
-            cfg_test_lines.push(pending_cfg_test || test_depth.is_some());
-            if started_test_block {
-                continue;
-            }
-            if let Some(depth) = test_depth.as_mut() {
-                *depth += brace_delta(trimmed);
-                if *depth <= 0 {
-                    test_depth = None;
-                }
-            }
-        }
+        let mut cfg_test_lines = vec![false; lines.len()];
+        mark_structured_cfg_test_lines(&source, &mut cfg_test_lines);
 
         Self {
             lines,
@@ -228,6 +201,59 @@ impl CoverageSource {
             return false;
         };
         self.cfg_test_lines.get(index).copied().unwrap_or(false)
+    }
+}
+
+fn mark_structured_cfg_test_lines(source: &str, cfg_test_lines: &mut [bool]) {
+    let Ok(parsed) = syn::parse_file(source) else {
+        return;
+    };
+    if parsed.attrs.iter().any(is_cfg_test_attribute) {
+        cfg_test_lines.fill(true);
+        return;
+    }
+    for item in &parsed.items {
+        let Some(attributes) = item_attributes(item) else {
+            continue;
+        };
+        let cfg_attributes = attributes
+            .iter()
+            .filter(|attribute| is_cfg_test_attribute(attribute))
+            .collect::<Vec<_>>();
+        if cfg_attributes.is_empty() {
+            continue;
+        }
+        let start_line = cfg_attributes
+            .iter()
+            .map(|attribute| attribute.span().start().line)
+            .min()
+            .unwrap_or(1);
+        let end_line = item.span().end().line.max(start_line);
+        let start_index = start_line.saturating_sub(1).min(cfg_test_lines.len());
+        let end_index = end_line.min(cfg_test_lines.len());
+        cfg_test_lines[start_index..end_index].fill(true);
+    }
+}
+
+fn item_attributes(item: &syn::Item) -> Option<&[syn::Attribute]> {
+    match item {
+        syn::Item::Const(item) => Some(&item.attrs),
+        syn::Item::Enum(item) => Some(&item.attrs),
+        syn::Item::ExternCrate(item) => Some(&item.attrs),
+        syn::Item::Fn(item) => Some(&item.attrs),
+        syn::Item::ForeignMod(item) => Some(&item.attrs),
+        syn::Item::Impl(item) => Some(&item.attrs),
+        syn::Item::Macro(item) => Some(&item.attrs),
+        syn::Item::Mod(item) => Some(&item.attrs),
+        syn::Item::Static(item) => Some(&item.attrs),
+        syn::Item::Struct(item) => Some(&item.attrs),
+        syn::Item::Trait(item) => Some(&item.attrs),
+        syn::Item::TraitAlias(item) => Some(&item.attrs),
+        syn::Item::Type(item) => Some(&item.attrs),
+        syn::Item::Union(item) => Some(&item.attrs),
+        syn::Item::Use(item) => Some(&item.attrs),
+        syn::Item::Verbatim(_) => None,
+        _ => None,
     }
 }
 
@@ -282,20 +308,20 @@ fn is_cfg_test_attribute(attribute: &syn::Attribute) -> bool {
     attribute
         .parse_args::<syn::Meta>()
         .ok()
-        .is_some_and(|meta| match meta {
-            syn::Meta::Path(path) => path.is_ident("test"),
-            syn::Meta::List(list) if list.path.is_ident("all") => list
-                .parse_args_with(
-                    syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-                )
-                .ok()
-                .is_some_and(|nested| {
-                    nested
-                        .iter()
-                        .any(|item| matches!(item, syn::Meta::Path(path) if path.is_ident("test")))
-                }),
-            _ => false,
-        })
+        .is_some_and(|meta| cfg_meta_requires_test(&meta))
+}
+
+fn cfg_meta_requires_test(meta: &syn::Meta) -> bool {
+    match meta {
+        syn::Meta::Path(path) => path.is_ident("test"),
+        syn::Meta::List(list) if list.path.is_ident("all") => list
+            .parse_args_with(
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+            )
+            .ok()
+            .is_some_and(|nested| nested.iter().any(cfg_meta_requires_test)),
+        _ => false,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -658,12 +684,6 @@ fn is_ignorable_lcov_source_line(
 #[cfg(test)]
 fn is_cfg_test_source_line(source: &str, line_number: u64) -> bool {
     CoverageSource::parse(source.to_owned(), false).is_cfg_test_line(line_number)
-}
-
-fn brace_delta(line: &str) -> i64 {
-    let opens = line.bytes().filter(|byte| *byte == b'{').count() as i64;
-    let closes = line.bytes().filter(|byte| *byte == b'}').count() as i64;
-    opens - closes
 }
 
 impl CoveragePolicyFile {
@@ -2449,12 +2469,16 @@ mod tests {
     }
 
     #[test]
-    fn cfg_test_source_line_covers_pending_non_block_forms() {
-        let source = "#[cfg(test)]\nfn helper() {}\n#[cfg(test)]\nmod tests\n{\n}\n";
+    fn cfg_test_source_line_uses_structured_item_boundaries() {
+        let source =
+            "#[cfg(test)]\nfn helper() {}\n#[cfg(test)]\nmod tests\n{\n}\nfn production() {}\n";
 
         assert!(!is_cfg_test_source_line(source, 0));
+        assert!(is_cfg_test_source_line(source, 1));
         assert!(is_cfg_test_source_line(source, 2));
+        assert!(is_cfg_test_source_line(source, 3));
         assert!(is_cfg_test_source_line(source, 4));
+        assert!(is_cfg_test_source_line(source, 6));
         assert!(!is_cfg_test_source_line(source, 7));
         assert!(is_cfg_test_source_line(
             "#![cfg(test)]\nfn helper() {}\n",
@@ -2462,6 +2486,10 @@ mod tests {
         ));
         assert!(is_cfg_test_source_line(
             "#![cfg(all(test, feature = \"sqlite\"))]\nfn helper() {}\n",
+            2
+        ));
+        assert!(!is_cfg_test_source_line(
+            "#[cfg(any(test, feature = \"fixtures\"))]\nfn helper() {}\n",
             2
         ));
     }
@@ -3520,13 +3548,13 @@ mod tests {
         let source = root.join("lib.rs");
         write_file(
             &source,
-            "pub fn live() {}\n)?\n])?;\n#[cfg(test)]\nmod tests {\n    fn fallback() {\n        panic!(\"unexpected fallback\");\n    }\n}\npub fn impossible() { unreachable!() }\npub fn expected() { panic!(\"expected branch\") }\n",
+            "pub fn live() {}\npub fn synthetic() -> Option<()> {\n    Some(\n        (),\n    )?;\n    Some([\n        (),\n    ])?;\n    Some(())\n}\n#[cfg(test)]\nmod tests {\n    fn fallback() {\n        panic!(\"unexpected fallback\");\n    }\n}\npub fn impossible() { unreachable!() }\npub fn expected() { panic!(\"expected branch\") }\n",
         );
         let path = root.join("lcov.info");
         write_file(
             &path,
             &format!(
-                "SF:{}\nDA:1,1\nDA:2,0\nDA:3,0\nDA:4,0\nDA:6,0\nDA:7,0\nDA:10,0\nDA:11,0\nBRDA:1,0,0,1\nBRDA:2,0,0,0\nBRDA:3,0,0,0\nBRDA:6,0,0,0\nBRDA:10,0,0,0\nBRDA:11,0,0,0\n",
+                "SF:{}\nDA:1,1\nDA:5,0\nDA:8,0\nDA:11,0\nDA:13,0\nDA:14,0\nDA:17,0\nDA:18,0\nBRDA:1,0,0,1\nBRDA:5,0,0,0\nBRDA:8,0,0,0\nBRDA:13,0,0,0\nBRDA:17,0,0,0\nBRDA:18,0,0,0\n",
                 source.display()
             ),
         );

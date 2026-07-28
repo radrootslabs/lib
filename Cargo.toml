@@ -163,7 +163,7 @@ nostr-sdk = { version = "0.44.1" }
 num_cpus = { version = "1.17.0" }
 poly1305 = { version = "0.8", default-features = false }
 prettyplease = { version = "0.2.37" }
-proc-macro2 = { version = "1" }
+proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = { version = "1" }
 secrecy = { version = "0.10.3" }
 salsa20 = { version = "0.10.2", default-features = false }
