@@ -2,7 +2,7 @@ use core::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum RadrootsBlossomError {
+pub enum Error {
     InvalidSha256,
     InvalidFileExtension,
     InvalidHashPath,
@@ -42,7 +42,7 @@ pub enum RadrootsBlossomError {
     AuthorizationHashMismatch,
 }
 
-impl RadrootsBlossomError {
+impl Error {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidSha256 => "invalid_sha256",
@@ -86,7 +86,7 @@ impl RadrootsBlossomError {
     }
 }
 
-impl fmt::Display for RadrootsBlossomError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidSha256 => {
@@ -187,56 +187,56 @@ impl fmt::Display for RadrootsBlossomError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsBlossomError {}
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {
-    use super::RadrootsBlossomError;
+    use super::Error;
     use alloc::format;
 
     #[test]
     fn error_codes_and_messages_are_stable() {
         let errors = [
-            RadrootsBlossomError::InvalidSha256,
-            RadrootsBlossomError::InvalidFileExtension,
-            RadrootsBlossomError::InvalidHashPath,
-            RadrootsBlossomError::InvalidBlobUrl,
-            RadrootsBlossomError::UnsupportedBlobUrlScheme,
-            RadrootsBlossomError::BlobUrlCredentialsForbidden,
-            RadrootsBlossomError::BlobUrlQueryForbidden,
-            RadrootsBlossomError::BlobUrlFragmentForbidden,
-            RadrootsBlossomError::InsecureBlobUrl,
-            RadrootsBlossomError::DescriptorExtensionRequired,
-            RadrootsBlossomError::DescriptorHashMismatch,
-            RadrootsBlossomError::InvalidMediaType,
-            RadrootsBlossomError::BlobHashMismatch,
-            RadrootsBlossomError::BlobSizeMismatch {
+            Error::InvalidSha256,
+            Error::InvalidFileExtension,
+            Error::InvalidHashPath,
+            Error::InvalidBlobUrl,
+            Error::UnsupportedBlobUrlScheme,
+            Error::BlobUrlCredentialsForbidden,
+            Error::BlobUrlQueryForbidden,
+            Error::BlobUrlFragmentForbidden,
+            Error::InsecureBlobUrl,
+            Error::DescriptorExtensionRequired,
+            Error::DescriptorHashMismatch,
+            Error::InvalidMediaType,
+            Error::BlobHashMismatch,
+            Error::BlobSizeMismatch {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::BlobMediaTypeMismatch,
-            RadrootsBlossomError::InvalidAuthorizationContent,
-            RadrootsBlossomError::InvalidAuthorizationAction,
-            RadrootsBlossomError::InvalidAuthorizationServerDomain,
-            RadrootsBlossomError::MissingAuthorizationActionTag,
-            RadrootsBlossomError::DuplicateAuthorizationActionTag,
-            RadrootsBlossomError::MalformedAuthorizationActionTag,
-            RadrootsBlossomError::MissingAuthorizationExpirationTag,
-            RadrootsBlossomError::DuplicateAuthorizationExpirationTag,
-            RadrootsBlossomError::MalformedAuthorizationExpirationTag,
-            RadrootsBlossomError::MalformedAuthorizationServerTag,
-            RadrootsBlossomError::MalformedAuthorizationHashTag,
-            RadrootsBlossomError::InvalidAuthorizationCreatedAge,
-            RadrootsBlossomError::InvalidAuthorizationLifetime,
-            RadrootsBlossomError::AuthorizationTimestampOverflow,
-            RadrootsBlossomError::AuthorizationCreatedInFuture,
-            RadrootsBlossomError::AuthorizationStale,
-            RadrootsBlossomError::AuthorizationExpired,
-            RadrootsBlossomError::AuthorizationActionMismatch,
-            RadrootsBlossomError::AuthorizationServerRequired,
-            RadrootsBlossomError::AuthorizationServerMismatch,
-            RadrootsBlossomError::AuthorizationHashRequired,
-            RadrootsBlossomError::AuthorizationHashMismatch,
+            Error::BlobMediaTypeMismatch,
+            Error::InvalidAuthorizationContent,
+            Error::InvalidAuthorizationAction,
+            Error::InvalidAuthorizationServerDomain,
+            Error::MissingAuthorizationActionTag,
+            Error::DuplicateAuthorizationActionTag,
+            Error::MalformedAuthorizationActionTag,
+            Error::MissingAuthorizationExpirationTag,
+            Error::DuplicateAuthorizationExpirationTag,
+            Error::MalformedAuthorizationExpirationTag,
+            Error::MalformedAuthorizationServerTag,
+            Error::MalformedAuthorizationHashTag,
+            Error::InvalidAuthorizationCreatedAge,
+            Error::InvalidAuthorizationLifetime,
+            Error::AuthorizationTimestampOverflow,
+            Error::AuthorizationCreatedInFuture,
+            Error::AuthorizationStale,
+            Error::AuthorizationExpired,
+            Error::AuthorizationActionMismatch,
+            Error::AuthorizationServerRequired,
+            Error::AuthorizationServerMismatch,
+            Error::AuthorizationHashRequired,
+            Error::AuthorizationHashMismatch,
         ];
         for error in errors {
             assert!(!error.code().is_empty());
@@ -248,112 +248,112 @@ mod tests {
     fn authorization_error_codes_and_messages_are_stable() {
         let cases = [
             (
-                RadrootsBlossomError::InvalidAuthorizationContent,
+                Error::InvalidAuthorizationContent,
                 "invalid_authorization_content",
                 "Blossom authorization content must be bounded human-readable text",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationAction,
+                Error::InvalidAuthorizationAction,
                 "invalid_authorization_action",
                 "invalid Blossom authorization action",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationServerDomain,
+                Error::InvalidAuthorizationServerDomain,
                 "invalid_authorization_server_domain",
                 "invalid Blossom authorization server domain",
             ),
             (
-                RadrootsBlossomError::MissingAuthorizationActionTag,
+                Error::MissingAuthorizationActionTag,
                 "missing_authorization_action_tag",
                 "Blossom authorization is missing a t action tag",
             ),
             (
-                RadrootsBlossomError::DuplicateAuthorizationActionTag,
+                Error::DuplicateAuthorizationActionTag,
                 "duplicate_authorization_action_tag",
                 "Blossom authorization has more than one t action tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationActionTag,
+                Error::MalformedAuthorizationActionTag,
                 "malformed_authorization_action_tag",
                 "malformed Blossom authorization t action tag",
             ),
             (
-                RadrootsBlossomError::MissingAuthorizationExpirationTag,
+                Error::MissingAuthorizationExpirationTag,
                 "missing_authorization_expiration_tag",
                 "Blossom authorization is missing an expiration tag",
             ),
             (
-                RadrootsBlossomError::DuplicateAuthorizationExpirationTag,
+                Error::DuplicateAuthorizationExpirationTag,
                 "duplicate_authorization_expiration_tag",
                 "Blossom authorization has more than one expiration tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationExpirationTag,
+                Error::MalformedAuthorizationExpirationTag,
                 "malformed_authorization_expiration_tag",
                 "malformed Blossom authorization expiration tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationServerTag,
+                Error::MalformedAuthorizationServerTag,
                 "malformed_authorization_server_tag",
                 "malformed Blossom authorization server tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationHashTag,
+                Error::MalformedAuthorizationHashTag,
                 "malformed_authorization_hash_tag",
                 "malformed Blossom authorization x hash tag",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationCreatedAge,
+                Error::InvalidAuthorizationCreatedAge,
                 "invalid_authorization_created_age",
                 "Blossom authorization maximum created age must not exceed 300 seconds",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationLifetime,
+                Error::InvalidAuthorizationLifetime,
                 "invalid_authorization_lifetime",
                 "Blossom authorization lifetime must be between 1 and 300 seconds",
             ),
             (
-                RadrootsBlossomError::AuthorizationTimestampOverflow,
+                Error::AuthorizationTimestampOverflow,
                 "authorization_timestamp_overflow",
                 "Blossom authorization expiration timestamp overflows u64",
             ),
             (
-                RadrootsBlossomError::AuthorizationCreatedInFuture,
+                Error::AuthorizationCreatedInFuture,
                 "authorization_created_in_future",
                 "Blossom authorization must be created in the past",
             ),
             (
-                RadrootsBlossomError::AuthorizationStale,
+                Error::AuthorizationStale,
                 "authorization_stale",
                 "Blossom authorization is outside the accepted creation-age window",
             ),
             (
-                RadrootsBlossomError::AuthorizationExpired,
+                Error::AuthorizationExpired,
                 "authorization_expired",
                 "Blossom authorization is expired",
             ),
             (
-                RadrootsBlossomError::AuthorizationActionMismatch,
+                Error::AuthorizationActionMismatch,
                 "authorization_action_mismatch",
                 "Blossom authorization action does not match the target endpoint",
             ),
             (
-                RadrootsBlossomError::AuthorizationServerRequired,
+                Error::AuthorizationServerRequired,
                 "authorization_server_required",
                 "Blossom authorization requires a server scope",
             ),
             (
-                RadrootsBlossomError::AuthorizationServerMismatch,
+                Error::AuthorizationServerMismatch,
                 "authorization_server_mismatch",
                 "Blossom authorization does not include the target server",
             ),
             (
-                RadrootsBlossomError::AuthorizationHashRequired,
+                Error::AuthorizationHashRequired,
                 "authorization_hash_required",
                 "Blossom authorization requires an x hash scope",
             ),
             (
-                RadrootsBlossomError::AuthorizationHashMismatch,
+                Error::AuthorizationHashMismatch,
                 "authorization_hash_mismatch",
                 "Blossom authorization does not include the target blob hash",
             ),

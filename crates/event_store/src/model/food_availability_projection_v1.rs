@@ -2,7 +2,7 @@ use super::{
     RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1, RadrootsEventStoreSourceGeneration,
 };
 use crate::RadrootsEventStoreError;
-use radroots_blossom::RadrootsBlossomSha256;
+use radroots_blossom::Sha256;
 use radroots_event::{
     food_availability::{
         RADROOTS_FOOD_IMAGE_MAX_COUNT, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
@@ -160,7 +160,7 @@ pub struct RadrootsStoredFoodAvailabilityImageV1 {
     raw_tag: Vec<String>,
     url: Option<String>,
     dimensions: Option<RadrootsFoodImageDimensions>,
-    blossom_sha256: Option<RadrootsBlossomSha256>,
+    blossom_sha256: Option<Sha256>,
     diagnostics: Vec<RadrootsFoodAvailabilityImageDiagnostic>,
 }
 
@@ -200,7 +200,7 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
         self.dimensions
     }
 
-    pub const fn blossom_sha256(&self) -> Option<RadrootsBlossomSha256> {
+    pub const fn blossom_sha256(&self) -> Option<Sha256> {
         self.blossom_sha256
     }
 

@@ -2,11 +2,13 @@
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS, RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS,
-    RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND, RadrootsBlossomAuthoredUploadClaim,
-    RadrootsBlossomAuthorizationContent, RadrootsBlossomAuthorizationTarget,
-    RadrootsBlossomAuthorizationValidation, RadrootsBlossomParsedAuthorizationClaim,
-    RadrootsBlossomServerDomain, RadrootsBlossomServerScopeRequirement, RadrootsBlossomSha256,
+    Sha256,
+    authorization::{
+        AuthoredUploadClaim, AuthorizationClaim, AuthorizationContent, AuthorizationTarget,
+        AuthorizationValidation, RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS,
+        RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS, RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND,
+        ServerDomain, ServerScopeRequirement,
+    },
 };
 use radroots_nostr::blossom::{
     RadrootsNostrBlossomError, radroots_nostr_decode_verify_blossom_authorization_header,
@@ -203,7 +205,7 @@ fn header_payload(header: &str) -> &str {
     &header[payload_start..]
 }
 
-fn vector_validation(vector: &Vector) -> RadrootsBlossomAuthorizationValidation {
+fn vector_validation(vector: &Vector) -> AuthorizationValidation {
     let validation = vector.input.get("validation").expect("validation input");
     let target = validation.get("target").expect("validation target");
     let target_type = target
@@ -211,7 +213,7 @@ fn vector_validation(vector: &Vector) -> RadrootsBlossomAuthorizationValidation 
         .and_then(Value::as_str)
         .expect("validation target type");
     let target_hash = || {
-        RadrootsBlossomSha256::from_hex(
+        Sha256::from_hex(
             target
                 .get("hash")
                 .and_then(Value::as_str)
@@ -220,15 +222,15 @@ fn vector_validation(vector: &Vector) -> RadrootsBlossomAuthorizationValidation 
         .expect("valid validation target hash")
     };
     let target = match target_type {
-        "get_blob" => RadrootsBlossomAuthorizationTarget::GetBlob(target_hash()),
-        "upload" => RadrootsBlossomAuthorizationTarget::Upload(target_hash()),
-        "list" => RadrootsBlossomAuthorizationTarget::List,
-        "delete_blob" => RadrootsBlossomAuthorizationTarget::DeleteBlob(target_hash()),
-        "mirror" => RadrootsBlossomAuthorizationTarget::Mirror(target_hash()),
-        "media" => RadrootsBlossomAuthorizationTarget::Media(target_hash()),
+        "get_blob" => AuthorizationTarget::GetBlob(target_hash()),
+        "upload" => AuthorizationTarget::Upload(target_hash()),
+        "list" => AuthorizationTarget::List,
+        "delete_blob" => AuthorizationTarget::DeleteBlob(target_hash()),
+        "mirror" => AuthorizationTarget::Mirror(target_hash()),
+        "media" => AuthorizationTarget::Media(target_hash()),
         other => panic!("{} has unsupported target {other}", vector.id),
     };
-    let server = RadrootsBlossomServerDomain::parse(
+    let server = ServerDomain::parse(
         validation
             .get("server_domain")
             .and_then(Value::as_str)
@@ -240,11 +242,11 @@ fn vector_validation(vector: &Vector) -> RadrootsBlossomAuthorizationValidation 
         .and_then(Value::as_str)
         .expect("validation server_scope")
     {
-        "optional_any_match" => RadrootsBlossomServerScopeRequirement::OptionalAnyMatch,
-        "required_any_match" => RadrootsBlossomServerScopeRequirement::RequiredAnyMatch,
+        "optional_any_match" => ServerScopeRequirement::OptionalAnyMatch,
+        "required_any_match" => ServerScopeRequirement::RequiredAnyMatch,
         other => panic!("{} has unsupported server scope {other}", vector.id),
     };
-    RadrootsBlossomAuthorizationValidation::new(
+    AuthorizationValidation::new(
         target,
         server,
         server_scope,
@@ -304,17 +306,17 @@ fn keys() -> RadrootsNostrKeys {
     RadrootsNostrKeys::parse(SECRET_KEY).expect("fixed test secret key")
 }
 
-fn hash() -> RadrootsBlossomSha256 {
-    RadrootsBlossomSha256::from_hex(HASH).expect("fixed test hash")
+fn hash() -> Sha256 {
+    Sha256::from_hex(HASH).expect("fixed test hash")
 }
 
-fn server() -> RadrootsBlossomServerDomain {
-    RadrootsBlossomServerDomain::parse(SERVER).expect("fixed test server")
+fn server() -> ServerDomain {
+    ServerDomain::parse(SERVER).expect("fixed test server")
 }
 
-fn authored_claim() -> RadrootsBlossomAuthoredUploadClaim {
-    RadrootsBlossomAuthoredUploadClaim::new(
-        RadrootsBlossomAuthorizationContent::parse(CONTENT).expect("fixed test content"),
+fn authored_claim() -> AuthoredUploadClaim {
+    AuthoredUploadClaim::new(
+        AuthorizationContent::parse(CONTENT).expect("fixed test content"),
         server(),
         hash(),
         CREATED_AT,
@@ -323,11 +325,11 @@ fn authored_claim() -> RadrootsBlossomAuthoredUploadClaim {
     .expect("fixed authored claim")
 }
 
-fn validation() -> RadrootsBlossomAuthorizationValidation {
-    RadrootsBlossomAuthorizationValidation::new(
-        RadrootsBlossomAuthorizationTarget::Upload(hash()),
+fn validation() -> AuthorizationValidation {
+    AuthorizationValidation::new(
+        AuthorizationTarget::Upload(hash()),
         server(),
-        RadrootsBlossomServerScopeRequirement::RequiredAnyMatch,
+        ServerScopeRequirement::RequiredAnyMatch,
         CREATED_AT + 1,
         RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS,
     )
@@ -557,7 +559,7 @@ fn blossom_header_authenticates_before_claim_parsing() {
     );
 
     let raw_tags: Vec<Vec<String>> = Vec::new();
-    let pure_error = RadrootsBlossomParsedAuthorizationClaim::parse("", CREATED_AT, &raw_tags)
+    let pure_error = AuthorizationClaim::parse("", CREATED_AT, &raw_tags)
         .expect_err("empty content is not a claim");
     let adapter_error = radroots_nostr_decode_verify_blossom_authorization_header(
         &raw_header(&malformed_claim),
@@ -570,10 +572,10 @@ fn blossom_header_authenticates_before_claim_parsing() {
 
     let signed = radroots_nostr_sign_blossom_authorization(&keys(), &authored_claim())
         .expect("sign authored authorization");
-    let media_policy = RadrootsBlossomAuthorizationValidation::new(
-        RadrootsBlossomAuthorizationTarget::Media(hash()),
+    let media_policy = AuthorizationValidation::new(
+        AuthorizationTarget::Media(hash()),
         server(),
-        RadrootsBlossomServerScopeRequirement::RequiredAnyMatch,
+        ServerScopeRequirement::RequiredAnyMatch,
         CREATED_AT + 1,
         RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS,
     )

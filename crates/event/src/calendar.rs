@@ -16,7 +16,7 @@ use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_MAX_BYTES,
 };
-use radroots_blossom::url::RadrootsBlossomBlobUrl;
+use radroots_blossom::url::BlobUrl;
 use url_nostd::Url;
 
 pub const RADROOTS_CALENDAR_SECONDS_PER_DAY: u64 = 86_400;
@@ -743,7 +743,7 @@ impl RadrootsParsedNip52Calendar {
 pub struct RadrootsAdmittedCalendar {
     parsed: RadrootsParsedNip52Calendar,
     uid: RadrootsCalendarUid,
-    blossom_image: Option<RadrootsBlossomBlobUrl>,
+    blossom_image: Option<BlobUrl>,
 }
 
 impl RadrootsAdmittedCalendar {
@@ -778,7 +778,7 @@ impl RadrootsAdmittedCalendar {
         let blossom_image = parsed
             .image()
             .map(|image| {
-                RadrootsBlossomBlobUrl::parse(image.as_str())
+                BlobUrl::parse(image.as_str())
                     .map_err(|_| RadrootsCalendarAdmissionError::NonBlossomImage)
             })
             .transpose()?;
@@ -813,7 +813,7 @@ impl RadrootsAdmittedCalendar {
         self.parsed.list_description()
     }
 
-    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+    pub fn blossom_image(&self) -> Option<&BlobUrl> {
         self.blossom_image.as_ref()
     }
 }
@@ -1744,7 +1744,7 @@ impl std::error::Error for RadrootsCalendarAdmissionError {}
 pub struct RadrootsAdmittedCalendarDateEvent {
     parsed: RadrootsParsedNip52CalendarDateEvent,
     d_tag: RadrootsDTag,
-    blossom_image: Option<RadrootsBlossomBlobUrl>,
+    blossom_image: Option<BlobUrl>,
 }
 
 impl RadrootsAdmittedCalendarDateEvent {
@@ -1772,7 +1772,7 @@ impl RadrootsAdmittedCalendarDateEvent {
         &self.d_tag
     }
 
-    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+    pub fn blossom_image(&self) -> Option<&BlobUrl> {
         self.blossom_image.as_ref()
     }
 }
@@ -1782,7 +1782,7 @@ pub struct RadrootsAdmittedCalendarTimeEvent {
     parsed: RadrootsParsedNip52CalendarTimeEvent,
     d_tag: RadrootsDTag,
     covered_utc_days: Vec<u64>,
-    blossom_image: Option<RadrootsBlossomBlobUrl>,
+    blossom_image: Option<BlobUrl>,
 }
 
 impl RadrootsAdmittedCalendarTimeEvent {
@@ -1839,7 +1839,7 @@ impl RadrootsAdmittedCalendarTimeEvent {
         &self.covered_utc_days
     }
 
-    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+    pub fn blossom_image(&self) -> Option<&BlobUrl> {
         self.blossom_image.as_ref()
     }
 }
@@ -2159,12 +2159,12 @@ fn validate_admitted_calendar_common(
 
 fn admitted_blossom_image(
     common: &RadrootsParsedNip52CalendarCommon,
-) -> Result<Option<RadrootsBlossomBlobUrl>, RadrootsCalendarAdmissionError> {
+) -> Result<Option<BlobUrl>, RadrootsCalendarAdmissionError> {
     common
         .image
         .as_ref()
         .map(|image| {
-            RadrootsBlossomBlobUrl::parse(image.as_str())
+            BlobUrl::parse(image.as_str())
                 .map_err(|_| RadrootsCalendarAdmissionError::NonBlossomImage)
         })
         .transpose()

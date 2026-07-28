@@ -46,7 +46,6 @@ use std::path::{Path, PathBuf};
 pub(crate) fn validate_artifact_contracts(workspace_root: &Path) -> Result<(), String> {
     validate_event_contract_registry_v7_inventory(workspace_root)?;
     validate_nip09_reconciliation_manifest(workspace_root)?;
-    validate_food_availability_projection_manifest(workspace_root)?;
     validate_source_maintenance_manifest(workspace_root)?;
     validate_knowledge_contract_manifest(workspace_root)
 }
@@ -218,7 +217,7 @@ const RETIRED_OPERATION_EVENT_NAMES: [&str; 15] = [
 ];
 const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsNip01EventWireParts",
-    "RadrootsBlossomBlobUrl",
+    "BlobUrl",
     "RadrootsAuthoredImage",
     "RadrootsAuthoredImageError",
     "RadrootsIanaTimeZoneId",
@@ -253,8 +252,8 @@ const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsAdmittedCalendarEventRsvp",
 ];
 const REQUIRED_POST_PUBLIC_TYPES: [&str; 34] = [
-    "RadrootsBlossomApprovedBlobUrl",
-    "RadrootsBlossomByteVerifiedDescriptor",
+    "ApprovedBlobUrl",
+    "ByteVerifiedDescriptor",
     "RadrootsNip01EventWireParts",
     "RadrootsEventEnvelope",
     "RadrootsSignatureVerifiedEvent",
@@ -289,7 +288,7 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 34] = [
     "RadrootsNip10ReplyAdmissionError",
 ];
 const REQUIRED_FOOD_AVAILABILITY_PUBLIC_TYPES: [&str; 31] = [
-    "RadrootsBlossomByteVerifiedDescriptor",
+    "ByteVerifiedDescriptor",
     "RadrootsNip01EventWireParts",
     "RadrootsEventEnvelope",
     "RadrootsSignatureVerifiedEvent",
@@ -494,7 +493,7 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_blossom::RadrootsBlossomBlobUrl",
+            "radroots_blossom::BlobUrl",
             "radroots_event::calendar::RadrootsAdmittedCalendar",
             "radroots_event::calendar::RadrootsCalendarAdmissionError",
             "radroots_event::calendar::RadrootsCalendarEventReference",
@@ -607,8 +606,8 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/post/authored.rs",
         ],
         rust_types: &[
-            "radroots_blossom::RadrootsBlossomApprovedBlobUrl",
-            "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+            "radroots_blossom::ApprovedBlobUrl",
+            "radroots_blossom::ByteVerifiedDescriptor",
             "radroots_event::media::RadrootsAuthoredImage",
             "radroots_event::post::RadrootsAuthoredPhotoUpdate",
             "radroots_event::post::RadrootsAuthoredPostError",
@@ -1044,7 +1043,7 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
             "crates/event_codec/src/food_availability/authored.rs",
         ],
         rust_types: &[
-            "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+            "radroots_blossom::ByteVerifiedDescriptor",
             "radroots_event::food_availability::RadrootsFoodAvailabilityDetails",
             "radroots_event::food_availability::RadrootsFoodAvailabilityDetailsParts",
             "radroots_event::food_availability::RadrootsFoodAvailabilityError",

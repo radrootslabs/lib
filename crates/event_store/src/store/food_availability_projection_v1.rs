@@ -832,7 +832,7 @@ fn validate_image_rows(
         let stored_blossom_sha256 = row
             .blossom_sha256
             .map(|value| {
-                radroots_blossom::RadrootsBlossomSha256::from_hex(value.as_str()).map_err(|error| {
+                radroots_blossom::Sha256::from_hex(value.as_str()).map_err(|error| {
                     projection_drift(format!("stored Blossom digest is invalid: {error}"))
                 })
             })

@@ -3143,7 +3143,7 @@ mod tests {
         assert_eq!(
             projected.images()[0].blossom_sha256(),
             Some(
-                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                radroots_blossom::Sha256::from_hex(
                     "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
                 )
                 .expect("Blossom digest"),
@@ -6652,7 +6652,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(
             projected.images()[0].blossom_sha256(),
             Some(
-                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                radroots_blossom::Sha256::from_hex(
                     "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
                 )
                 .expect("Blossom digest"),
@@ -6662,7 +6662,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(
             projected.images()[1].blossom_sha256(),
             Some(
-                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                radroots_blossom::Sha256::from_hex(
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 )
                 .expect("Blossom digest"),

@@ -3,10 +3,7 @@
 use super::artifact_bundle::{
     GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction,
 };
-use super::food_availability_projection::{
-    validate_food_availability_projection_manifest_under_lock,
-    validate_food_availability_projection_predecessor_production_sources_under_lock,
-};
+use super::food_availability_projection::validate_food_availability_projection_predecessor_production_sources_under_lock;
 use super::nip09_reconciliation::validate_current_event_store_successor_authority;
 use quote::ToTokens;
 use serde::{Deserialize, Serialize};
@@ -73,10 +70,12 @@ const RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
 const RESULT_VECTOR_EXECUTOR_ID: &str =
     "radroots_event_store.source_maintenance_v1.result_vector_executor.v1";
 const RESULT_VECTOR_EXECUTOR_TEST: &str = "source_maintenance_v1_result_vector";
+const FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE: &str =
+    "crates/event_store/tests/food_availability_projection_v1_result_vector.rs";
 const CONTRACT_COMMAND_SOURCE_RELATIVE: &str = "tools/xtask/src/contract.rs";
 const XTASK_MAIN_SOURCE_RELATIVE: &str = "tools/xtask/src/main.rs";
 const XTASK_MAIN_FULL_AST_SHA256: &str =
-    "f5e6d2f42277238ba3af7ed2603bdd699258dc9e8400b0acaece070858e9aaf8";
+    "e9db250071c528e1483f80e973fe502b0e1e3f2cbadb86d6fa3842ad2b2f0eea";
 
 const RAW_EVENT_COLUMNS: &[&str] = &[
     "event_id",
@@ -279,8 +278,24 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/blossom/src/lib.rs",
     },
     SourceSpec {
+        role: "blossom_authorization_authority",
+        path: "crates/blossom/src/authorization.rs",
+    },
+    SourceSpec {
+        role: "blossom_descriptor_authority",
+        path: "crates/blossom/src/descriptor.rs",
+    },
+    SourceSpec {
+        role: "blossom_error_authority",
+        path: "crates/blossom/src/error.rs",
+    },
+    SourceSpec {
         role: "blossom_hash_authority",
         path: "crates/blossom/src/hash.rs",
+    },
+    SourceSpec {
+        role: "blossom_media_type_authority",
+        path: "crates/blossom/src/media_type.rs",
     },
     SourceSpec {
         role: "blossom_url_authority",
@@ -519,6 +534,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_store/src/source_maintenance_v1.rs",
     },
     SourceSpec {
+        role: "predecessor_food_result_vector_executor",
+        path: FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE,
+    },
+    SourceSpec {
         role: "artifact_transaction_authority",
         path: "tools/xtask/src/contract/artifact_bundle.rs",
     },
@@ -551,6 +570,9 @@ pub(super) fn source_contract_fixture_source_paths() -> Vec<&'static str> {
 
 const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "Cargo.toml",
+    "crates/blossom/src/authorization.rs",
+    "crates/blossom/src/descriptor.rs",
+    "crates/blossom/src/error.rs",
     "crates/blossom/src/hash.rs",
     "crates/blossom/src/lib.rs",
     "crates/blossom/src/url.rs",
@@ -619,6 +641,9 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
     "crates/event_store/src/store/protocol_storage_v1.rs",
 ];
+
+const PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS: &[&str] =
+    &[FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE];
 
 #[cfg(test)]
 pub(super) fn predecessor_superseded_source_paths() -> &'static [&'static str] {
@@ -912,7 +937,6 @@ fn describe_manifest(
     workspace_root: &Path,
     schema_bytes: &[u8],
 ) -> Result<SourceMaintenanceManifest, String> {
-    validate_food_availability_projection_manifest_under_lock(workspace_root)?;
     validate_source_contract(workspace_root)?;
     validate_predecessor_production_source_coverage(workspace_root)?;
 
@@ -1086,9 +1110,30 @@ fn validate_predecessor_production_source_coverage(workspace_root: &Path) -> Res
     if superseded.len() != PREDECESSOR_SUPERSEDED_SOURCE_PATHS.len() {
         return Err("SourceMaintenance predecessor supersession paths must be unique".to_owned());
     }
+    let superseded_artifacts = PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if superseded_artifacts.len() != PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS.len() {
+        return Err(
+            "SourceMaintenance predecessor artifact supersession paths must be unique".to_owned(),
+        );
+    }
+    for path in PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS {
+        let count = source_paths
+            .iter()
+            .filter(|candidate| **candidate == *path)
+            .count();
+        if count != 1 {
+            return Err(format!(
+                "SourceMaintenance successor must current-byte-bind superseded predecessor artifact `{path}` exactly once; found {count}"
+            ));
+        }
+    }
     validate_food_availability_projection_predecessor_production_sources_under_lock(
         workspace_root,
         PREDECESSOR_SUPERSEDED_SOURCE_PATHS,
+        PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS,
     )
 }
 
@@ -1293,7 +1338,6 @@ fn validate_contract_command_reachability_sources(
             ) -> Result<(), String> {
                 validate_event_contract_registry_v7_inventory(workspace_root)?;
                 validate_nip09_reconciliation_manifest(workspace_root)?;
-                validate_food_availability_projection_manifest(workspace_root)?;
                 validate_source_maintenance_manifest(workspace_root)?;
                 validate_knowledge_contract_manifest(workspace_root)
             }"#,
@@ -3453,7 +3497,7 @@ struct DelegatedAuthoritySpec {
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
     "88a60544e38b546dbb2c555b0347308eac0c4a3eb66f403ba44d45fb4a5818e6";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "af59af8101b14f5eacf88b851e0298e3b4b3c97951f6cd4b5a73a5c2a39e6a3e";
+    "211622a960515491cd59e1179a86efe8163c16b108e9220d2fb32ecfad8138b4";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {
@@ -4397,8 +4441,8 @@ mod tests {
             (
                 "aggregate reordering",
                 contract.replacen(
-                    "    validate_food_availability_projection_manifest(workspace_root)?;\n    validate_source_maintenance_manifest(workspace_root)?;",
-                    "    validate_source_maintenance_manifest(workspace_root)?;\n    validate_food_availability_projection_manifest(workspace_root)?;",
+                    "    validate_nip09_reconciliation_manifest(workspace_root)?;\n    validate_source_maintenance_manifest(workspace_root)?;",
+                    "    validate_source_maintenance_manifest(workspace_root)?;\n    validate_nip09_reconciliation_manifest(workspace_root)?;",
                     1,
                 ),
                 main.clone(),

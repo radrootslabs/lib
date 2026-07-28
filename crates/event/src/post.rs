@@ -2,7 +2,7 @@
 use alloc::{format, string::String, vec::Vec};
 use core::fmt;
 
-use radroots_blossom::url::RadrootsBlossomApprovedBlobUrl;
+use radroots_blossom::url::ApprovedBlobUrl;
 use url_nostd::Url;
 
 use crate::media::RadrootsAuthoredImage;
@@ -227,7 +227,7 @@ pub struct RadrootsAuthoredPostImage {
     image: RadrootsAuthoredImage,
     dimensions: RadrootsPostImageDimensions,
     alt: String,
-    fallbacks: Vec<RadrootsBlossomApprovedBlobUrl>,
+    fallbacks: Vec<ApprovedBlobUrl>,
     imeta_tag: Vec<String>,
 }
 
@@ -267,7 +267,7 @@ impl RadrootsAuthoredPostImage {
 
     pub fn try_with_fallback(
         mut self,
-        fallback: RadrootsBlossomApprovedBlobUrl,
+        fallback: ApprovedBlobUrl,
     ) -> Result<Self, RadrootsAuthoredPostError> {
         if fallback.as_blob_url().hash_path().hash() != self.image.descriptor().sha256() {
             return Err(RadrootsAuthoredPostError::ImageFallbackHashMismatch);
@@ -294,7 +294,7 @@ impl RadrootsAuthoredPostImage {
         &self.alt
     }
 
-    pub fn fallbacks(&self) -> &[RadrootsBlossomApprovedBlobUrl] {
+    pub fn fallbacks(&self) -> &[ApprovedBlobUrl] {
         &self.fallbacks
     }
 
@@ -450,7 +450,7 @@ fn derive_imeta_tag(
     image: &RadrootsAuthoredImage,
     dimensions: RadrootsPostImageDimensions,
     alt: &str,
-    fallbacks: &[RadrootsBlossomApprovedBlobUrl],
+    fallbacks: &[ApprovedBlobUrl],
 ) -> Result<Vec<String>, RadrootsAuthoredPostError> {
     let descriptor = image.descriptor();
     let mut tag = Vec::with_capacity(7 + fallbacks.len());

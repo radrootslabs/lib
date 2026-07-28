@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use radroots_blossom::RadrootsBlossomSha256;
+use radroots_blossom::Sha256;
 use radroots_event::food_availability::RadrootsFoodIdentifier;
 use radroots_event_store::{
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
@@ -14,7 +14,7 @@ use radroots_event_store::{
 };
 use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256 as Sha256Hasher};
 
 const RESULT_VECTOR_EXECUTOR_ID: &str =
     "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1";
@@ -305,7 +305,7 @@ async fn food_availability_projection_v1_result_vector() {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
+    hex::encode(Sha256Hasher::digest(bytes))
 }
 
 fn raw_head_decision_code(decision: &RadrootsRawHeadDecision) -> &'static str {
@@ -969,7 +969,7 @@ fn assert_projection(
             "{case_id}"
         );
         let expected_blossom_sha256 = expected.blossom_sha256.0.as_deref().map(|value| {
-            RadrootsBlossomSha256::from_hex(value)
+            Sha256::from_hex(value)
                 .unwrap_or_else(|error| panic!("{case_id}: expected Blossom digest: {error}"))
         });
         assert_eq!(

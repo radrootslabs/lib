@@ -1,7 +1,4 @@
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-    RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     RadrootsAuthoredImage, RadrootsEventTags,
     calendar::{
@@ -57,10 +54,10 @@ fn date(value: &str) -> RadrootsCalendarDate {
 
 fn authored_image() -> RadrootsAuthoredImage {
     let bytes = b"canonical-calendar-image";
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse("image/webp").unwrap();
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://media.example.test/{hash}.webp")).unwrap(),
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse("image/webp").unwrap();
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://media.example.test/{hash}.webp")).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),

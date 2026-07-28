@@ -21,7 +21,7 @@ use crate::{
     },
     kinds::*,
 };
-use radroots_blossom::url::RadrootsBlossomBlobUrl;
+use radroots_blossom::url::BlobUrl;
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 7;
 
@@ -4443,7 +4443,7 @@ fn validate_calendar_blossom_image(
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsContractValidationError> {
     if let Some(image) = tag_value(tags, "image")
-        && RadrootsBlossomBlobUrl::parse(image).is_err()
+        && BlobUrl::parse(image).is_err()
     {
         return Err(calendar_tag_mismatch(
             contract,
@@ -4723,7 +4723,7 @@ fn validate_canonical_calendar_common_tags(
         ));
     }
     if let Some(image) = tag_value(tags, "image")
-        && RadrootsBlossomBlobUrl::parse(image).is_err()
+        && BlobUrl::parse(image).is_err()
     {
         return Err(calendar_tag_mismatch(
             contract,

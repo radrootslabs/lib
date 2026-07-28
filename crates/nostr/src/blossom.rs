@@ -8,9 +8,11 @@ use base64::{
     engine::general_purpose::{GeneralPurpose, NO_PAD, URL_SAFE_NO_PAD},
 };
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND, RadrootsBlossomAuthoredUploadClaim,
-    RadrootsBlossomAuthorizationValidation, RadrootsBlossomError,
-    RadrootsBlossomParsedAuthorizationClaim, RadrootsBlossomValidatedAuthorizationClaim,
+    Error,
+    authorization::{
+        AuthoredUploadClaim, AuthorizationClaim, AuthorizationValidation,
+        RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND, ValidatedAuthorizationClaim,
+    },
 };
 
 use crate::types::{
@@ -89,7 +91,7 @@ impl AsRef<str> for RadrootsNostrBlossomAuthorizationHeader {
 #[derive(Clone, PartialEq, Eq)]
 pub struct RadrootsNostrVerifiedBlossomAuthorization {
     event: RadrootsNostrEvent,
-    claim: RadrootsBlossomValidatedAuthorizationClaim,
+    claim: ValidatedAuthorizationClaim,
 }
 
 impl fmt::Debug for RadrootsNostrVerifiedBlossomAuthorization {
@@ -116,7 +118,7 @@ impl RadrootsNostrVerifiedBlossomAuthorization {
         self.event.created_at
     }
 
-    pub fn claim(&self) -> &RadrootsBlossomValidatedAuthorizationClaim {
+    pub fn claim(&self) -> &ValidatedAuthorizationClaim {
         &self.claim
     }
 }
@@ -137,7 +139,7 @@ pub enum RadrootsNostrBlossomError {
     InvalidEventId,
     InvalidEventSignature,
     EventSigning,
-    BlossomClaim(RadrootsBlossomError),
+    BlossomClaim(Error),
 }
 
 impl RadrootsNostrBlossomError {
@@ -159,7 +161,7 @@ impl RadrootsNostrBlossomError {
         }
     }
 
-    pub fn blossom_claim_error(&self) -> Option<&RadrootsBlossomError> {
+    pub fn blossom_claim_error(&self) -> Option<&Error> {
         match self {
             Self::BlossomClaim(error) => Some(error),
             _ => None,
@@ -210,8 +212,8 @@ impl fmt::Display for RadrootsNostrBlossomError {
 
 impl std::error::Error for RadrootsNostrBlossomError {}
 
-impl From<RadrootsBlossomError> for RadrootsNostrBlossomError {
-    fn from(error: RadrootsBlossomError) -> Self {
+impl From<Error> for RadrootsNostrBlossomError {
+    fn from(error: Error) -> Self {
         Self::BlossomClaim(error)
     }
 }
@@ -219,7 +221,7 @@ impl From<RadrootsBlossomError> for RadrootsNostrBlossomError {
 /// Sign a direct kind-24242 event from a strict authored BUD-11 upload claim.
 pub fn radroots_nostr_sign_blossom_authorization(
     keys: &RadrootsNostrKeys,
-    claim: &RadrootsBlossomAuthoredUploadClaim,
+    claim: &AuthoredUploadClaim,
 ) -> Result<RadrootsNostrSignedBlossomAuthorization, RadrootsNostrBlossomError> {
     let wire = claim.wire_parts();
     let tags = wire
@@ -268,7 +270,7 @@ pub fn radroots_nostr_encode_blossom_authorization_header(
 /// Decode, authenticate, parse, and validate a BUD-11 authorization value.
 pub fn radroots_nostr_decode_verify_blossom_authorization_header(
     header: &str,
-    validation: &RadrootsBlossomAuthorizationValidation,
+    validation: &AuthorizationValidation,
 ) -> Result<RadrootsNostrVerifiedBlossomAuthorization, RadrootsNostrBlossomError> {
     if header.trim_start() != header {
         return Err(RadrootsNostrBlossomError::InvalidHeaderWhitespace);
@@ -317,12 +319,8 @@ pub fn radroots_nostr_decode_verify_blossom_authorization_header(
         .iter()
         .map(|tag| tag.as_slice().to_vec())
         .collect();
-    let claim = RadrootsBlossomParsedAuthorizationClaim::parse(
-        &event.content,
-        event.created_at.as_secs(),
-        &tags,
-    )?
-    .validate(validation)?;
+    let claim = AuthorizationClaim::parse(&event.content, event.created_at.as_secs(), &tags)?
+        .validate(validation)?;
 
     Ok(RadrootsNostrVerifiedBlossomAuthorization { event, claim })
 }

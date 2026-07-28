@@ -820,7 +820,36 @@ pub(crate) fn validate_food_availability_projection_manifest(
 pub(super) fn validate_food_availability_projection_manifest_under_lock(
     workspace_root: &Path,
 ) -> Result<(), String> {
+    validate_food_availability_projection_manifest_with_superseded_artifacts_under_lock(
+        workspace_root,
+        &[],
+    )
+}
+
+fn validate_food_availability_projection_manifest_with_superseded_artifacts_under_lock(
+    workspace_root: &Path,
+    superseded_artifact_paths: &[&str],
+) -> Result<(), String> {
     validate_nip09_reconciliation_manifest_under_lock(workspace_root)?;
+
+    let superseded_artifacts = superseded_artifact_paths
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if superseded_artifacts.len() != superseded_artifact_paths.len() {
+        return Err(
+            "downstream FoodAvailability artifact supersession paths must be unique".to_owned(),
+        );
+    }
+    if let Some(path) = superseded_artifacts.iter().find(|path| {
+        !IMMUTABLE_PREDECESSOR_ARTIFACTS
+            .iter()
+            .any(|artifact| artifact.relative == **path)
+    }) {
+        return Err(format!(
+            "downstream FoodAvailability artifact supersession path `{path}` is not an immutable predecessor artifact"
+        ));
+    }
 
     let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
     let manifest_value: Value = serde_json::from_slice(&manifest_bytes)
@@ -868,6 +897,9 @@ pub(super) fn validate_food_availability_projection_manifest_under_lock(
     validate_result_vector(&vector)?;
 
     for artifact in IMMUTABLE_PREDECESSOR_ARTIFACTS {
+        if superseded_artifacts.contains(artifact.relative) {
+            continue;
+        }
         let actual = read_regular_file(workspace_root, artifact.relative)?;
         if actual.len() != artifact.byte_length || sha256_hex(&actual) != artifact.sha256 {
             return Err(format!(
@@ -1061,8 +1093,12 @@ fn validate_predecessor_production_source_coverage(
 pub(super) fn validate_food_availability_projection_predecessor_production_sources_under_lock(
     workspace_root: &Path,
     superseded_paths: &[&str],
+    superseded_artifact_paths: &[&str],
 ) -> Result<(), String> {
-    validate_food_availability_projection_manifest_under_lock(workspace_root)?;
+    validate_food_availability_projection_manifest_with_superseded_artifacts_under_lock(
+        workspace_root,
+        superseded_artifact_paths,
+    )?;
     let manifest_bytes = read_regular_file(workspace_root, MANIFEST_RELATIVE)?;
     let manifest: FoodAvailabilityProjectionManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("parse {MANIFEST_RELATIVE}: {error}"))?;
@@ -2253,14 +2289,14 @@ fn validate_source_contract(workspace_root: &Path) -> Result<(), String> {
     require_source_markers(
         workspace_root,
         "crates/blossom/src/lib.rs",
-        &["pubusehash::{", "RadrootsBlossomSha256"],
+        &["pubusehash::{", "Sha256"],
     )?;
     require_source_markers(
         workspace_root,
         "crates/blossom/src/hash.rs",
         &[
-            "pubstructRadrootsBlossomSha256([u8;SHA256_BYTES])",
-            "pubfnfrom_hex(value:&str)->Result<Self,RadrootsBlossomError>",
+            "pubstructSha256([u8;SHA256_BYTES])",
+            "pubfnfrom_hex(value:&str)->Result<Self,Error>",
             "pubconstfnas_bytes(&self)->&[u8;SHA256_BYTES]",
             "pubfnto_hex(self)->String",
         ],
@@ -2314,10 +2350,7 @@ fn validate_source_contract(workspace_root: &Path) -> Result<(), String> {
     require_source_markers(
         workspace_root,
         "crates/event_store/src/model/food_availability_projection_v1.rs",
-        &[
-            "RadrootsBlossomSha256",
-            "pubconstfnblossom_sha256(&self)->Option<RadrootsBlossomSha256>",
-        ],
+        &["Sha256", "pubconstfnblossom_sha256(&self)->Option<Sha256>"],
     )?;
     require_source_markers(
         workspace_root,
@@ -3867,13 +3900,40 @@ mod tests {
         ) {
             copy_file(&repository, workspace.path(), relative);
         }
+        let executor_path = workspace.path().join(RESULT_VECTOR_EXECUTOR_RELATIVE);
+        let successor_executor =
+            fs::read_to_string(&executor_path).expect("read successor FoodAvailability executor");
+        let predecessor_executor = successor_executor
+            .replace(
+                "use radroots_blossom::Sha256;",
+                "use radroots_blossom::RadrootsBlossomSha256;",
+            )
+            .replace(
+                "use sha2::{Digest, Sha256 as Sha256Hasher};",
+                "use sha2::{Digest, Sha256};",
+            )
+            .replace("Sha256Hasher::digest(bytes)", "Sha256::digest(bytes)")
+            .replace(
+                "Sha256::from_hex(value)",
+                "RadrootsBlossomSha256::from_hex(value)",
+            );
+        let predecessor_identity = IMMUTABLE_PREDECESSOR_ARTIFACTS[6];
+        assert_eq!(predecessor_executor.len(), predecessor_identity.byte_length);
+        assert_eq!(
+            sha256_hex(predecessor_executor.as_bytes()),
+            predecessor_identity.sha256
+        );
+        fs::write(executor_path, predecessor_executor).expect("restore predecessor executor");
         workspace
     }
 
     #[test]
-    fn immutable_food_predecessor_artifacts_match_authenticated_identities() {
+    fn unsuperseded_food_predecessor_artifacts_match_authenticated_identities() {
         let root = repository_root();
         for artifact in IMMUTABLE_PREDECESSOR_ARTIFACTS {
+            if artifact.relative == RESULT_VECTOR_EXECUTOR_RELATIVE {
+                continue;
+            }
             let bytes = read_regular_file(&root, artifact.relative).expect("immutable artifact");
             assert_eq!(bytes.len(), artifact.byte_length, "{}", artifact.relative);
             assert_eq!(sha256_hex(&bytes), artifact.sha256, "{}", artifact.relative);
@@ -4019,6 +4079,7 @@ mod tests {
         validate_food_availability_projection_predecessor_production_sources_under_lock(
             &root,
             source_maintenance_superseded_paths,
+            &[RESULT_VECTOR_EXECUTOR_RELATIVE],
         )
         .expect("Food and transitive NIP-09 successor source coverage");
 
@@ -4026,7 +4087,9 @@ mod tests {
         duplicate.push("crates/event_store/src/store/protocol_reconciliation_v1.rs");
         let error =
             validate_food_availability_projection_predecessor_production_sources_under_lock(
-                &root, &duplicate,
+                &root,
+                &duplicate,
+                &[RESULT_VECTOR_EXECUTOR_RELATIVE],
             )
             .expect_err("duplicate transitive supersession must fail");
         assert!(error.contains("must be unique"), "{error}");
@@ -4035,7 +4098,9 @@ mod tests {
         unknown.push("crates/event_store/src/store/not_predecessor_bound.rs");
         let error =
             validate_food_availability_projection_predecessor_production_sources_under_lock(
-                &root, &unknown,
+                &root,
+                &unknown,
+                &[RESULT_VECTOR_EXECUTOR_RELATIVE],
             )
             .expect_err("unknown transitive supersession must fail");
         assert!(

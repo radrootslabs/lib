@@ -362,8 +362,9 @@ mod tests {
             .expect("contract registry-v7 inventory");
         run_contract(&["nip09-reconciliation-manifest".to_string()])
             .expect("contract NIP-09 reconciliation manifest");
-        run_contract(&["food-availability-projection-manifest".to_string()])
-            .expect("contract FoodAvailability projection manifest");
+        let food_error = run_contract(&["food-availability-projection-manifest".to_string()])
+            .expect_err("superseded FoodAvailability predecessor executor must stay immutable");
+        assert!(food_error.contains("immutable FoodAvailability predecessor artifact"));
         run_contract(&["source-maintenance-manifest".to_string()])
             .expect("contract SourceMaintenance manifest");
         run_contract(&["knowledge-manifest".to_string()]).expect("contract knowledge manifest");

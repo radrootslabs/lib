@@ -2,10 +2,7 @@
 
 use std::{borrow::Cow, collections::BTreeMap, fs, path::Path};
 
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-    RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     RadrootsAuthoredImage, RadrootsEventEnvelope, RadrootsNip01EventWire,
     contract::identify_event_contract,
@@ -668,11 +665,11 @@ fn authored_image(
     input: &Value,
 ) -> Result<RadrootsAuthoredPostImage, RadrootsAuthoredPostError> {
     let bytes = value_str(vector, input, "bytes_utf8").as_bytes();
-    let media_type = RadrootsBlossomMediaType::parse(value_str(vector, input, "media_type"))
+    let media_type = MediaType::parse(value_str(vector, input, "media_type"))
         .unwrap_or_else(|error| panic!("{} media type setup failed: {error}", vector.id));
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(value_str(vector, input, "url"))
+    let hash = Sha256::digest(bytes);
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(value_str(vector, input, "url"))
             .unwrap_or_else(|error| panic!("{} URL setup failed: {error}", vector.id)),
         hash,
         u64::try_from(bytes.len()).expect("authored image byte length must fit u64"),
@@ -697,7 +694,7 @@ fn authored_image(
     if let Some(fallbacks) = input.get("fallbacks").and_then(Value::as_array) {
         for fallback in fallbacks {
             image = image.try_with_fallback(
-                RadrootsBlossomBlobUrl::parse(
+                BlobUrl::parse(
                     fallback
                         .as_str()
                         .unwrap_or_else(|| panic!("{} image fallback must be a string", vector.id)),

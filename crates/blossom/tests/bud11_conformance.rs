@@ -1,9 +1,10 @@
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND, RadrootsBlossomAuthoredUploadClaim,
-    RadrootsBlossomAuthorizationAction, RadrootsBlossomAuthorizationContent,
-    RadrootsBlossomAuthorizationTarget, RadrootsBlossomAuthorizationValidation,
-    RadrootsBlossomParsedAuthorizationClaim, RadrootsBlossomServerDomain,
-    RadrootsBlossomServerScopeRequirement, RadrootsBlossomSha256,
+    Sha256,
+    authorization::{
+        AuthoredUploadClaim, AuthorizationAction, AuthorizationClaim, AuthorizationContent,
+        AuthorizationTarget, AuthorizationValidation, RADROOTS_BLOSSOM_AUTHORIZATION_EVENT_KIND,
+        ServerDomain, ServerScopeRequirement,
+    },
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -87,7 +88,7 @@ fn execute(vector: &Vector) {
 }
 
 fn action_parse_valid(vector: &Vector) {
-    let action = RadrootsBlossomAuthorizationAction::parse(input_str(vector, "action"))
+    let action = AuthorizationAction::parse(input_str(vector, "action"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         action.as_str(),
@@ -104,13 +105,13 @@ fn action_parse_valid(vector: &Vector) {
 }
 
 fn action_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomAuthorizationAction::parse(input_str(vector, "action"))
+    let error = AuthorizationAction::parse(input_str(vector, "action"))
         .expect_err("invalid action vector must fail");
     assert_error(vector, error.code());
 }
 
 fn server_domain_parse_valid(vector: &Vector) {
-    let domain = RadrootsBlossomServerDomain::parse(input_str(vector, "domain"))
+    let domain = ServerDomain::parse(input_str(vector, "domain"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         domain.as_str(),
@@ -127,13 +128,13 @@ fn server_domain_parse_valid(vector: &Vector) {
 }
 
 fn server_domain_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomServerDomain::parse(input_str(vector, "domain"))
+    let error = ServerDomain::parse(input_str(vector, "domain"))
         .expect_err("invalid server-domain vector must fail");
     assert_error(vector, error.code());
 }
 
 fn content_parse_valid(vector: &Vector) {
-    let content = RadrootsBlossomAuthorizationContent::parse(input_str(vector, "content"))
+    let content = AuthorizationContent::parse(input_str(vector, "content"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         content.as_str(),
@@ -150,7 +151,7 @@ fn content_parse_valid(vector: &Vector) {
 }
 
 fn content_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomAuthorizationContent::parse(input_str(vector, "content"))
+    let error = AuthorizationContent::parse(input_str(vector, "content"))
         .expect_err("invalid content vector must fail");
     assert_error(vector, error.code());
 }
@@ -253,13 +254,11 @@ fn authored_upload_invalid(vector: &Vector) {
     assert_error(vector, error.code());
 }
 
-fn authored_upload(
-    vector: &Vector,
-) -> Result<RadrootsBlossomAuthoredUploadClaim, radroots_blossom::RadrootsBlossomError> {
-    let content = RadrootsBlossomAuthorizationContent::parse(input_str(vector, "content"))?;
-    let server = RadrootsBlossomServerDomain::parse(input_str(vector, "server_domain"))?;
-    let hash = RadrootsBlossomSha256::from_hex(input_str(vector, "hash"))?;
-    RadrootsBlossomAuthoredUploadClaim::new(
+fn authored_upload(vector: &Vector) -> Result<AuthoredUploadClaim, radroots_blossom::Error> {
+    let content = AuthorizationContent::parse(input_str(vector, "content"))?;
+    let server = ServerDomain::parse(input_str(vector, "server_domain"))?;
+    let hash = Sha256::from_hex(input_str(vector, "hash"))?;
+    AuthoredUploadClaim::new(
         content,
         server,
         hash,
@@ -268,23 +267,21 @@ fn authored_upload(
     )
 }
 
-fn try_parse_claim(
-    input: &Value,
-) -> Result<RadrootsBlossomParsedAuthorizationClaim, radroots_blossom::RadrootsBlossomError> {
+fn try_parse_claim(input: &Value) -> Result<AuthorizationClaim, radroots_blossom::Error> {
     let tags: Vec<Vec<String>> =
         serde_json::from_value(input["tags"].clone()).expect("claim tags must be string arrays");
-    RadrootsBlossomParsedAuthorizationClaim::parse(
+    AuthorizationClaim::parse(
         value_str(input, "content"),
         value_u64(input, "created_at"),
         &tags,
     )
 }
 
-fn parse_claim(input: &Value, id: &str) -> RadrootsBlossomParsedAuthorizationClaim {
+fn parse_claim(input: &Value, id: &str) -> AuthorizationClaim {
     try_parse_claim(input).unwrap_or_else(|error| panic!("{id} claim parse failed: {error}"))
 }
 
-fn assert_claim(vector: &Vector, claim: &RadrootsBlossomParsedAuthorizationClaim) {
+fn assert_claim(vector: &Vector, claim: &AuthorizationClaim) {
     assert_eq!(
         claim.content().as_str(),
         expected_str(vector, "content"),
@@ -324,17 +321,15 @@ fn assert_claim(vector: &Vector, claim: &RadrootsBlossomParsedAuthorizationClaim
     assert_eq!(hashes, expected_strings(vector, "hashes"), "{}", vector.id);
 }
 
-fn build_validation(
-    vector: &Vector,
-) -> Result<RadrootsBlossomAuthorizationValidation, radroots_blossom::RadrootsBlossomError> {
+fn build_validation(vector: &Vector) -> Result<AuthorizationValidation, radroots_blossom::Error> {
     let target = parse_target(&vector.input["target"]);
-    let server = RadrootsBlossomServerDomain::parse(input_str(vector, "server_domain"))?;
+    let server = ServerDomain::parse(input_str(vector, "server_domain"))?;
     let server_scope = match input_str(vector, "server_scope") {
-        "optional_any_match" => RadrootsBlossomServerScopeRequirement::OptionalAnyMatch,
-        "required_any_match" => RadrootsBlossomServerScopeRequirement::RequiredAnyMatch,
+        "optional_any_match" => ServerScopeRequirement::OptionalAnyMatch,
+        "required_any_match" => ServerScopeRequirement::RequiredAnyMatch,
         value => panic!("{} has unsupported server scope {value}", vector.id),
     };
-    RadrootsBlossomAuthorizationValidation::new(
+    AuthorizationValidation::new(
         target,
         server,
         server_scope,
@@ -343,18 +338,15 @@ fn build_validation(
     )
 }
 
-fn parse_target(input: &Value) -> RadrootsBlossomAuthorizationTarget {
-    let hash = || {
-        RadrootsBlossomSha256::from_hex(value_str(input, "hash"))
-            .expect("target hash must be valid")
-    };
+fn parse_target(input: &Value) -> AuthorizationTarget {
+    let hash = || Sha256::from_hex(value_str(input, "hash")).expect("target hash must be valid");
     match value_str(input, "type") {
-        "get_blob" => RadrootsBlossomAuthorizationTarget::GetBlob(hash()),
-        "upload" => RadrootsBlossomAuthorizationTarget::Upload(hash()),
-        "list" => RadrootsBlossomAuthorizationTarget::List,
-        "delete_blob" => RadrootsBlossomAuthorizationTarget::DeleteBlob(hash()),
-        "mirror" => RadrootsBlossomAuthorizationTarget::Mirror(hash()),
-        "media" => RadrootsBlossomAuthorizationTarget::Media(hash()),
+        "get_blob" => AuthorizationTarget::GetBlob(hash()),
+        "upload" => AuthorizationTarget::Upload(hash()),
+        "list" => AuthorizationTarget::List,
+        "delete_blob" => AuthorizationTarget::DeleteBlob(hash()),
+        "mirror" => AuthorizationTarget::Mirror(hash()),
+        "media" => AuthorizationTarget::Media(hash()),
         value => panic!("unsupported BUD-11 target {value}"),
     }
 }

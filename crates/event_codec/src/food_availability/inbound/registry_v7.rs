@@ -4,7 +4,7 @@
 use alloc::{boxed::Box, string::String, string::ToString, vec::Vec};
 
 use core::fmt;
-use radroots_blossom::{hash::RadrootsBlossomSha256, url::RadrootsBlossomBlobUrl};
+use radroots_blossom::{hash::Sha256, url::BlobUrl};
 use radroots_event::{
     RadrootsEventTags,
     classified_listing::RadrootsClassifiedListingPartition,
@@ -646,13 +646,13 @@ pub(crate) fn project_strict_verified_food_availability_event(
         .into());
     }
     let mut seen_urls = Vec::<String>::new();
-    let mut seen_digests = Vec::<RadrootsBlossomSha256>::new();
+    let mut seen_digests = Vec::<Sha256>::new();
     for tag in matching_tags(&tags, "image") {
         if tag.len() != 3 {
             return Err(RadrootsFoodAvailabilityProjectionError::TagInvalid);
         }
-        let url = RadrootsBlossomBlobUrl::parse(&tag[1])
-            .and_then(RadrootsBlossomBlobUrl::approve)
+        let url = BlobUrl::parse(&tag[1])
+            .and_then(BlobUrl::approve)
             .map_err(|_| RadrootsFoodAvailabilityProjectionError::TagInvalid)?;
         RadrootsFoodImageDimensions::parse(&tag[2])?;
         if seen_urls.iter().any(|seen| seen == &tag[1]) {
@@ -706,7 +706,7 @@ fn project_images(
     let bounded = &image_tags[..image_tags.len().min(RADROOTS_FOOD_IMAGE_MAX_COUNT)];
     let mut images = Vec::with_capacity(bounded.len());
     let mut seen_urls = Vec::<String>::new();
-    let mut seen_digests = Vec::<RadrootsBlossomSha256>::new();
+    let mut seen_digests = Vec::<Sha256>::new();
 
     for tag in bounded {
         let raw_url = tag.get(1).cloned();

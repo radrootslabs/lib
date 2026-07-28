@@ -95,7 +95,7 @@ const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
     "8c29ceccb06abc94279db3257d52e14ad721e2eb302e54fbf26f8856d0db0b53";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
-    "58692c9ea54ffecd3de476a47b1a947f9cd095b402fed09d679c5caea6ffac76";
+    "5066faee05fad71a94be757767f67bf99a10e5637acc41522cefe7a37eb0b4e4";
 const ROUTE_FACADE_BASELINE_SHA256: &str =
     "8891c7824e4db6de269f2b833f2cb25510967034145423acdbac559b3ad5a52d";
 const ROUTE_FACADE_BASELINE_SOURCES: [&str; 17] = [
@@ -20614,7 +20614,7 @@ version = "0.1.0"
             ),
             (
                 format!(
-                    "{original}\nmacro_rules! inject_impl {{ () => {{ impl Drop for RadrootsBlossomSha256 {{ fn drop(&mut self) {{}} }} }} }}\ninject_impl!();\n"
+                    "{original}\nmacro_rules! inject_impl {{ () => {{ impl Drop for Sha256 {{ fn drop(&mut self) {{}} }} }} }}\ninject_impl!();\n"
                 ),
                 "unapproved production item-macro authority",
             ),

@@ -1,7 +1,4 @@
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomHashPath,
-    RadrootsBlossomMediaType, RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256, hash::HashPath};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{borrow::Cow, fs, path::Path};
@@ -89,7 +86,7 @@ fn execute(vector: &Vector) {
 fn sha256_digest(vector: &Vector) {
     let bytes = input_bytes(vector);
     assert_eq!(
-        RadrootsBlossomSha256::digest(&bytes).to_string(),
+        Sha256::digest(&bytes).to_string(),
         expected_str(vector, "sha256"),
         "{}",
         vector.id
@@ -97,7 +94,7 @@ fn sha256_digest(vector: &Vector) {
 }
 
 fn sha256_parse_valid(vector: &Vector) {
-    let parsed = RadrootsBlossomSha256::from_hex(input_str(vector, "sha256"))
+    let parsed = Sha256::from_hex(input_str(vector, "sha256"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         parsed.to_string(),
@@ -108,13 +105,13 @@ fn sha256_parse_valid(vector: &Vector) {
 }
 
 fn sha256_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomSha256::from_hex(input_str(vector, "sha256"))
+    let error = Sha256::from_hex(input_str(vector, "sha256"))
         .expect_err("invalid SHA-256 vector must fail");
     assert_error(vector, error.code());
 }
 
 fn hash_path_parse_valid(vector: &Vector) {
-    let parsed = RadrootsBlossomHashPath::parse(input_str(vector, "path"))
+    let parsed = HashPath::parse(input_str(vector, "path"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         parsed.hash().to_string(),
@@ -131,8 +128,8 @@ fn hash_path_parse_valid(vector: &Vector) {
 }
 
 fn hash_path_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomHashPath::parse(input_str(vector, "path"))
-        .expect_err("invalid hash-path vector must fail");
+    let error =
+        HashPath::parse(input_str(vector, "path")).expect_err("invalid hash-path vector must fail");
     assert_error(vector, error.code());
 }
 
@@ -169,8 +166,8 @@ fn blob_url_parse_valid(vector: &Vector) {
 }
 
 fn blob_url_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomBlobUrl::parse(input_str(vector, "url"))
-        .expect_err("invalid blob-URL vector must fail");
+    let error =
+        BlobUrl::parse(input_str(vector, "url")).expect_err("invalid blob-URL vector must fail");
     assert_error(vector, error.code());
 }
 
@@ -204,7 +201,7 @@ fn reference_policy_invalid(vector: &Vector) {
 }
 
 fn media_type_parse_valid(vector: &Vector) {
-    let parsed = RadrootsBlossomMediaType::parse(input_str(vector, "media_type"))
+    let parsed = MediaType::parse(input_str(vector, "media_type"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         parsed.as_str(),
@@ -215,7 +212,7 @@ fn media_type_parse_valid(vector: &Vector) {
 }
 
 fn media_type_parse_invalid(vector: &Vector) {
-    let error = RadrootsBlossomMediaType::parse(input_str(vector, "media_type"))
+    let error = MediaType::parse(input_str(vector, "media_type"))
         .expect_err("invalid media-type vector must fail");
     assert_error(vector, error.code());
 }
@@ -228,7 +225,7 @@ fn descriptor_parse_valid(vector: &Vector) {
 
 fn descriptor_parse_invalid(vector: &Vector) {
     let input = &vector.input["descriptor"];
-    serde_json::from_value::<RadrootsBlossomBlobDescriptor>(input.clone())
+    serde_json::from_value::<BlobDescriptor>(input.clone())
         .expect_err("invalid descriptor vector must fail");
     let code = classify_descriptor_input(input);
     assert_error(vector, code);
@@ -299,18 +296,18 @@ fn descriptor_verify_invalid(vector: &Vector) {
     assert_error(vector, error.code());
 }
 
-fn parse_blob_url(vector: &Vector) -> RadrootsBlossomBlobUrl {
-    RadrootsBlossomBlobUrl::parse(input_str(vector, "url"))
+fn parse_blob_url(vector: &Vector) -> BlobUrl {
+    BlobUrl::parse(input_str(vector, "url"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id))
 }
 
-fn parse_descriptor(vector: &Vector) -> RadrootsBlossomBlobDescriptor {
+fn parse_descriptor(vector: &Vector) -> BlobDescriptor {
     serde_json::from_value(vector.input["descriptor"].clone())
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id))
 }
 
-fn approved_media_type(vector: &Vector) -> RadrootsBlossomMediaType {
-    RadrootsBlossomMediaType::parse(input_str(vector, "approved_media_type"))
+fn approved_media_type(vector: &Vector) -> MediaType {
+    MediaType::parse(input_str(vector, "approved_media_type"))
         .unwrap_or_else(|error| panic!("{} media type failed: {error}", vector.id))
 }
 
@@ -350,7 +347,7 @@ fn classify_descriptor_input(input: &Value) -> &'static str {
         }
     }
 
-    let url = match RadrootsBlossomBlobUrl::parse(
+    let url = match BlobUrl::parse(
         input["url"]
             .as_str()
             .expect("descriptor url must be a string"),
@@ -358,7 +355,7 @@ fn classify_descriptor_input(input: &Value) -> &'static str {
         Ok(url) => url,
         Err(error) => return error.code(),
     };
-    let sha256 = match RadrootsBlossomSha256::from_hex(
+    let sha256 = match Sha256::from_hex(
         input["sha256"]
             .as_str()
             .expect("descriptor sha256 must be a string"),
@@ -369,7 +366,7 @@ fn classify_descriptor_input(input: &Value) -> &'static str {
     let Some(size) = input["size"].as_u64() else {
         return "invalid_descriptor_size";
     };
-    let media_type = match RadrootsBlossomMediaType::parse(
+    let media_type = match MediaType::parse(
         input["type"]
             .as_str()
             .expect("descriptor type must be a string"),
@@ -381,7 +378,7 @@ fn classify_descriptor_input(input: &Value) -> &'static str {
         return "invalid_descriptor_uploaded";
     };
 
-    RadrootsBlossomBlobDescriptor::new(url, sha256, size, media_type, uploaded)
+    BlobDescriptor::new(url, sha256, size, media_type, uploaded)
         .expect_err("invalid descriptor vector must fail structured construction")
         .code()
 }

@@ -1,7 +1,4 @@
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomByteVerifiedDescriptor,
-    RadrootsBlossomMediaType, RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, ByteVerifiedDescriptor, MediaType, Sha256};
 use radroots_event::{
     RadrootsAuthoredImage,
     post::{
@@ -425,16 +422,11 @@ fn authored_image(bytes: &[u8], media_type: &str, extension: &str) -> RadrootsAu
     .unwrap()
 }
 
-fn verified_descriptor(
-    bytes: &[u8],
-    media_type: &str,
-    extension: &str,
-) -> RadrootsBlossomByteVerifiedDescriptor {
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-    RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://media.example/{hash}.{extension}"))
-            .unwrap(),
+fn verified_descriptor(bytes: &[u8], media_type: &str, extension: &str) -> ByteVerifiedDescriptor {
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse(media_type).unwrap();
+    BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://media.example/{hash}.{extension}")).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),
@@ -450,16 +442,16 @@ fn verified_descriptor(
 fn verified_descriptor_with_url_element_bytes(
     bytes: &[u8],
     element_bytes: usize,
-) -> RadrootsBlossomByteVerifiedDescriptor {
-    let hash = RadrootsBlossomSha256::digest(bytes);
+) -> ByteVerifiedDescriptor {
+    let hash = Sha256::digest(bytes);
     let prefix = format!("https://media.example/{hash}.");
     let extension_bytes = element_bytes
         .checked_sub("url ".len() + prefix.len())
         .expect("requested URL tag element is large enough");
     assert!(extension_bytes > 0);
-    let media_type = RadrootsBlossomMediaType::parse("image/webp").unwrap();
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("{prefix}{}", "x".repeat(extension_bytes))).unwrap(),
+    let media_type = MediaType::parse("image/webp").unwrap();
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&format!("{prefix}{}", "x".repeat(extension_bytes))).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),
@@ -481,9 +473,9 @@ fn fallback_url(
     bytes: &[u8],
     host: &str,
     extension: &str,
-) -> radroots_blossom::RadrootsBlossomApprovedBlobUrl {
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    RadrootsBlossomBlobUrl::parse(&format!("https://{host}/{hash}.{extension}"))
+) -> radroots_blossom::url::ApprovedBlobUrl {
+    let hash = Sha256::digest(bytes);
+    BlobUrl::parse(&format!("https://{host}/{hash}.{extension}"))
         .unwrap()
         .approve()
         .unwrap()
@@ -492,13 +484,13 @@ fn fallback_url(
 fn fallback_url_with_element_bytes(
     bytes: &[u8],
     element_bytes: usize,
-) -> radroots_blossom::RadrootsBlossomApprovedBlobUrl {
+) -> radroots_blossom::url::ApprovedBlobUrl {
     let prefix = fallback_element_prefix(bytes);
     let extension_bytes = element_bytes
         .checked_sub(prefix.len())
         .expect("requested fallback tag element is large enough");
     assert!(extension_bytes > 0);
-    let fallback = RadrootsBlossomBlobUrl::parse(&format!(
+    let fallback = BlobUrl::parse(&format!(
         "{}{}",
         prefix.strip_prefix("fallback ").unwrap(),
         "x".repeat(extension_bytes)
@@ -511,7 +503,7 @@ fn fallback_url_with_element_bytes(
 }
 
 fn fallback_element_prefix(bytes: &[u8]) -> String {
-    let hash = RadrootsBlossomSha256::digest(bytes);
+    let hash = Sha256::digest(bytes);
     format!("fallback https://cache.example/{hash}.")
 }
 

@@ -1,8 +1,6 @@
 use std::{borrow::Cow, fs, path::Path};
 
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomError,
-};
+use radroots_blossom::{BlobDescriptor, ByteVerifiedDescriptor, Error};
 use radroots_event::{
     RadrootsAuthoredImage,
     calendar::{
@@ -1414,15 +1412,13 @@ fn authored_image(input: &Value, vector_id: &str) -> RadrootsAuthoredImage {
         .unwrap_or_else(|error| panic!("{vector_id} image failed: {error}"))
 }
 
-fn verified_descriptor(input: &Value, vector_id: &str) -> RadrootsBlossomByteVerifiedDescriptor {
+fn verified_descriptor(input: &Value, vector_id: &str) -> ByteVerifiedDescriptor {
     verified_descriptor_result(input)
         .unwrap_or_else(|error| panic!("{vector_id} byte verification failed: {error}"))
 }
 
-fn verified_descriptor_result(
-    input: &Value,
-) -> Result<RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomError> {
-    let descriptor: RadrootsBlossomBlobDescriptor =
+fn verified_descriptor_result(input: &Value) -> Result<ByteVerifiedDescriptor, Error> {
+    let descriptor: BlobDescriptor =
         serde_json::from_value(input["descriptor"].clone()).expect("image descriptor must parse");
     let media_type = descriptor.media_type().clone();
     descriptor.approve_reference()?.verify_bytes(
