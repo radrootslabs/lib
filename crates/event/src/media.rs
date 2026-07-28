@@ -1,6 +1,6 @@
 use core::fmt;
 
-use radroots_blossom::descriptor::ByteVerifiedDescriptor;
+use radroots_blossom::ByteVerifiedDescriptor;
 
 /// Errors raised while constructing strict authored image media.
 #[non_exhaustive]

@@ -264,8 +264,8 @@
     {
       "role": "event_contract_registry_v7_authority",
       "path": "crates/event/src/contract/registry_v7.rs",
-      "byte_length": 155743,
-      "sha256": "2ed52d1279390ba073fa85a2d41020eb8b8e6fa9fc7268029182a95487b5eddd",
+      "byte_length": 155738,
+      "sha256": "e9133e65b37810478c3e34ec4ac2005d81209a714ec2de5bd0232b9f02740dde",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -327,8 +327,8 @@
     {
       "role": "event_calendar_authority",
       "path": "crates/event/src/calendar.rs",
-      "byte_length": 103819,
-      "sha256": "f86464c4be674a75902e57f25b73130bda7538f2c4f2e29ebde59fe51c9b67c4",
+      "byte_length": 103814,
+      "sha256": "f8e0fcb4802d0dcd2a1a13b17216a0c5278950a60c09a261ab349e9ce1989d72",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -383,8 +383,8 @@
     {
       "role": "event_media_authority",
       "path": "crates/event/src/media.rs",
-      "byte_length": 3533,
-      "sha256": "9a589cfca489626746fdc2eba7ed0aba4e524840aadce51d4fb11a1e7b3d32bb",
+      "byte_length": 3521,
+      "sha256": "8f670e634452872a525efdad0cb9480288885c62f22a9b9915a67a7e7965651c",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -509,8 +509,8 @@
     {
       "role": "event_codec_food_registry_v7_authority",
       "path": "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
-      "byte_length": 26775,
-      "sha256": "379321c2f9702773ae94304000e94104af0ab9ad165870c8c57f74bbb2c096c3",
+      "byte_length": 26764,
+      "sha256": "a5786cff942b7b0038f741afb5b9a19230ac58cb57a5ba747b32e1b95d414e15",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

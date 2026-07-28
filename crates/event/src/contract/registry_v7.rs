@@ -21,7 +21,7 @@ use crate::{
     },
     kinds::*,
 };
-use radroots_blossom::url::BlobUrl;
+use radroots_blossom::BlobUrl;
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 7;
 

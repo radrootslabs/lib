@@ -4,7 +4,7 @@
 use alloc::{boxed::Box, string::String, string::ToString, vec::Vec};
 
 use core::fmt;
-use radroots_blossom::{hash::Sha256, url::BlobUrl};
+use radroots_blossom::{BlobUrl, Sha256};
 use radroots_event::{
     RadrootsEventTags,
     classified_listing::RadrootsClassifiedListingPartition,
