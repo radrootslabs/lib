@@ -2,6 +2,11 @@ use std::collections::BTreeSet;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const CAPABILITY: &str = include_str!("../src/capability.rs");
+const ERROR: &str = include_str!("../src/error.rs");
+const EVENT: &str = include_str!("../src/event.rs");
+const RADROOTSD: &str = include_str!("../src/radrootsd.rs");
+const RUNTIME: &str = include_str!("../src/runtime.rs");
 
 #[test]
 fn manifest_has_final_identity_features_and_no_dependencies() {
@@ -32,18 +37,11 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "schema"
         ])
     );
-    assert!(ROOT.contains(
-        "pub mod capability {\n    /// Capability contracts for generation 1.\n    pub mod v1 {}"
-    ));
-    assert!(ROOT.contains(
-        "pub mod error {\n    /// Error-report contracts for generation 1.\n    pub mod v1 {}"
-    ));
-    assert!(ROOT.contains(
-        "pub mod event {\n    /// Event wire contracts for generation 1.\n    pub mod v1 {}"
-    ));
-    assert!(ROOT.contains("pub mod runtime {\n    /// Runtime operation contracts for generation 1.\n    pub mod v1 {}"));
-    assert!(ROOT.contains("pub mod transport_publish {\n        /// Transport-publish contracts for generation 5.\n        pub mod v5 {}"));
-    assert!(ROOT.contains("pub mod schema {}"));
+    for source in [CAPABILITY, ERROR, EVENT, RUNTIME] {
+        assert!(source.lines().any(|line| line.trim() == "pub mod v1 {}"));
+    }
+    assert!(RADROOTSD.contains("pub mod transport_publish {"));
+    assert!(RADROOTSD.lines().any(|line| line.trim() == "pub mod v5 {}"));
     assert!(
         !ROOT
             .lines()
@@ -71,8 +69,8 @@ fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
 
 fn root_declarations(prefix: &str) -> BTreeSet<&str> {
     ROOT.lines()
-        .filter(|line| !line.starts_with(char::is_whitespace))
+        .map(str::trim)
         .filter_map(|line| line.strip_prefix(prefix))
-        .filter_map(|name| name.strip_suffix(" {").or_else(|| name.strip_suffix(" {}")))
+        .filter_map(|name| name.strip_suffix(';'))
         .collect()
 }

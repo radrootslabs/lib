@@ -6,37 +6,19 @@
 extern crate alloc;
 
 /// Versioned capability catalog contracts.
-pub mod capability {
-    /// Capability contracts for generation 1.
-    pub mod v1 {}
-}
+pub mod capability;
 
 /// Versioned stable error-report contracts.
-pub mod error {
-    /// Error-report contracts for generation 1.
-    pub mod v1 {}
-}
+pub mod error;
 
 /// Versioned event wire contracts.
-pub mod event {
-    /// Event wire contracts for generation 1.
-    pub mod v1 {}
-}
+pub mod event;
 
 /// Versioned daemon protocol contracts.
-pub mod radrootsd {
-    /// Versioned transport-publish contracts.
-    pub mod transport_publish {
-        /// Transport-publish contracts for generation 5.
-        pub mod v5 {}
-    }
-}
+pub mod radrootsd;
 
 /// Versioned runtime operation contracts.
-pub mod runtime {
-    /// Runtime operation contracts for generation 1.
-    pub mod v1 {}
-}
+pub mod runtime;
 
 /// Schema identity and structural validation contracts.
-pub mod schema {}
+pub mod schema;
