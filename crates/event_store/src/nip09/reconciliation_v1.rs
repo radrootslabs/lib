@@ -4689,6 +4689,107 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
         assert_request_index_matches_protocol(&target, &reversed, &RequestIndex::new(&reversed));
     }
 
+    #[test]
+    fn expected_transition_history_replays_incremental_heads_and_requests() {
+        fn reconciled(
+            seq: i64,
+            observed_at_ms: i64,
+            envelope: RadrootsEventEnvelope,
+        ) -> ReconciledEvent {
+            let ingest = ingest_for_test(envelope, observed_at_ms);
+            let admission = EventAdmission::for_profile(
+                ReconciliationProfile::Nip09V1RegistryV7,
+                ingest.verified_event(),
+            )
+            .expect("fixture admission");
+            ReconciledEvent {
+                seq,
+                inserted_at_ms: observed_at_ms,
+                verified_event: ingest.verified_event().clone(),
+                admission,
+            }
+        }
+
+        let author = fixture_author();
+        let identifier = "incremental-history";
+        let baseline = signed_event(
+            TARGET_CREATED_AT,
+            KIND_LIST_SET_RELAY,
+            vec![vec!["d".to_owned(), identifier.to_owned()]],
+            "{}",
+        );
+        let replacement = signed_event(
+            TARGET_CREATED_AT + 10,
+            KIND_LIST_SET_RELAY,
+            vec![vec!["d".to_owned(), identifier.to_owned()]],
+            "{}",
+        );
+        let replacement_id = replacement.id_str().to_owned();
+        let older = signed_event(
+            TARGET_CREATED_AT - 1,
+            KIND_LIST_SET_RELAY,
+            vec![vec!["d".to_owned(), identifier.to_owned()]],
+            "{}",
+        );
+        let replaceable = signed_event(TARGET_CREATED_AT + 20, 0, Vec::new(), "{}");
+        let replaceable_id = replaceable.id_str().to_owned();
+        let deletion = signed_event(
+            TARGET_CREATED_AT + 30,
+            KIND_DELETION_REQUEST,
+            vec![
+                vec!["e".to_owned(), "0".repeat(64)],
+                vec!["e".to_owned(), replacement_id.clone()],
+                vec!["e".to_owned(), replaceable_id],
+                vec!["a".to_owned(), coordinate(author.as_str(), identifier)],
+            ],
+            "remove current head",
+        );
+        let deletion_id = deletion.id_str().to_owned();
+        let events = vec![
+            reconciled(1, 1_000, baseline),
+            reconciled(2, 2_000, replacement),
+            reconciled(3, 3_000, older),
+            reconciled(4, 4_000, replaceable),
+            reconciled(5, 5_000, deletion),
+        ];
+        let source = SourceState {
+            generation: RadrootsEventStoreSourceGeneration::from_bytes([0x71; 32]),
+            profile: ReconciliationProfile::Nip09V1RegistryV7,
+            raw_event_count: 5,
+            raw_tag_count: 7,
+            raw_high_water_seq: 5,
+            last_transition_seq: 3,
+            transition_floor_seq: 0,
+            baseline_raw_event_count: 1,
+            baseline_raw_tag_count: 1,
+            baseline_raw_high_water_seq: 1,
+        };
+
+        let transitions =
+            expected_transition_history(&source, &events).expect("incremental history");
+        assert_eq!(transitions.len(), 3, "{transitions:#?}");
+        assert_eq!(transitions[0].origin, "baseline");
+        assert_eq!(transitions[0].raw_head_decision, "baseline_rebuild");
+        assert_eq!(transitions[1].origin, "incremental");
+        assert_eq!(transitions[1].raw_head_decision, "applied");
+        assert_eq!(transitions[1].raw_head_event_id, replacement_id);
+        assert_eq!(transitions[2].origin, "incremental");
+        assert_eq!(transitions[2].raw_head_decision, "not_head_selected");
+        assert_eq!(transitions[2].visibility, "suppressed");
+        assert_eq!(
+            transitions[2].event_reference_request_id.as_deref(),
+            Some(deletion_id.as_str())
+        );
+        assert_eq!(
+            transitions[2].address_reference_request_id.as_deref(),
+            Some(deletion_id.as_str())
+        );
+        assert_eq!(
+            transitions[2].retracted_event_id.as_deref(),
+            Some(replacement_id.as_str())
+        );
+    }
+
     type RawEventRows = Vec<(
         i64,
         String,
