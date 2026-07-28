@@ -2175,7 +2175,7 @@ mod tests {
     fn write_publication_architecture(root: &Path) {
         fs::create_dir_all(root.join("docs/specs")).expect("create spec directory");
         let mut architecture = format!(
-            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\n\n[repositories.lib]\npackages = [{}]\n\n[repositories.sdk]\npackages = [{}]\n",
+            "spec_id = \"radroots.crates.release.v1\"\npackage_count = 19\n\n[repositories.lib]\nversion = \"0.1.0-alpha\"\npackages = [{}]\n\n[repositories.sdk]\nversion = \"0.1.0\"\npackages = [{}]\n",
             toml_strings(&APPROVED_CRATES[..17]),
             toml_strings(&APPROVED_CRATES[17..]),
         );
