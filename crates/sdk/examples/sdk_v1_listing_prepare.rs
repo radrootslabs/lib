@@ -51,11 +51,15 @@ fn sample_listing(seller: &str) -> RadrootsOperationalListing {
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
-            price_per_canonical_unit: QuantityPrice {
-                amount: Money::new(Decimal::from(20u32), Currency::USD),
-                quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-            },
+            quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG)
+                .expect("positive example quantity"),
+            price_per_canonical_unit: QuantityPrice::try_new(
+                Money::try_new(Decimal::from(20u32), Currency::USD)
+                    .expect("non-negative example money"),
+                Quantity::try_new(Decimal::from(1u32), Unit::MassG)
+                    .expect("positive example pricing quantity"),
+            )
+            .expect("non-zero example pricing quantity"),
             display_amount: None,
             display_unit: None,
             display_label: None,

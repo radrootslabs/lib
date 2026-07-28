@@ -1,6 +1,7 @@
 use crate::RadrootsSdkError;
 use core::fmt;
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
+use radroots_identity::PublicKey;
 use serde::ser::SerializeStruct;
 
 pub const SDK_IDEMPOTENCY_KEY_MAX_LEN: usize = 256;
@@ -69,7 +70,7 @@ impl serde::Serialize for SdkIdempotencyKey {
 pub struct SdkTradeIdempotencyRecord {
     pub idempotency_key: SdkIdempotencyKey,
     pub operation_kind: String,
-    pub actor_pubkey: RadrootsPublicKey,
+    pub actor_pubkey: PublicKey,
     pub digest: String,
     pub canonical_payload_hash: String,
     pub expected_event_id: RadrootsEventId,
@@ -84,7 +85,7 @@ impl SdkTradeIdempotencyRecord {
     pub fn conflict_error(&self, new_digest: impl Into<String>) -> RadrootsSdkError {
         RadrootsSdkError::IdempotencyConflict {
             operation_kind: self.operation_kind.clone(),
-            expected_pubkey_prefix: self.actor_pubkey.as_str().chars().take(12).collect(),
+            expected_pubkey_prefix: self.actor_pubkey.to_hex().chars().take(12).collect(),
             existing_digest_prefix: self.digest.chars().take(12).collect(),
             new_digest_prefix: new_digest.into().chars().take(12).collect(),
         }

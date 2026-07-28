@@ -342,7 +342,7 @@ fn knowledge_draft_builder_freezes_mvp_drafts_without_runtime() {
         field_report.contract_id(),
         KNOWLEDGE_FIELD_REPORT_CONTRACT_ID
     );
-    assert_eq!(claim.expected_pubkey_str(), public_key_hex());
+    assert_eq!(claim.expected_pubkey().to_hex(), public_key_hex());
     assert_eq!(claim.created_at_u64(), u64::from(CREATED_AT));
     assert_eq!(claim.kind_u32(), KIND_KNOWLEDGE_CLAIM);
 }

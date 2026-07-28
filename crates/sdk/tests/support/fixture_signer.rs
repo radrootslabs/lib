@@ -1,5 +1,6 @@
 use radroots_authority::{RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 use std::sync::LazyLock;
 
@@ -48,7 +49,7 @@ impl FixtureSigner {
 }
 
 impl RadrootsEventSigner for FixtureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         self.identity.pubkey()
     }
 
@@ -56,7 +57,7 @@ impl RadrootsEventSigner for FixtureSigner {
         &self,
         draft: &RadrootsEventDraft,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-        if self.pubkey().as_str() != draft.expected_pubkey_str() {
+        if self.pubkey() != draft.expected_pubkey() {
             return Err(RadrootsSignerError::SigningFailed {
                 message: "wrong fixture signer".to_owned(),
             });

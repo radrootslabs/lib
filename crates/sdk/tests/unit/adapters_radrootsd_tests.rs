@@ -11,6 +11,9 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread::JoinHandle;
 
+const SIGNED_EVENT_PUBLIC_KEY: &str =
+    "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+
 struct RecordedHttpRequest {
     request_line: String,
     headers: Vec<(String, String)>,
@@ -89,7 +92,7 @@ fn spawn_http_server(
 fn signed_event() -> RadrootsSignedEvent {
     let mut wire = RadrootsNip01EventWire {
         id: String::new(),
-        pubkey: "b".repeat(64),
+        pubkey: SIGNED_EVENT_PUBLIC_KEY.to_owned(),
         created_at: 1_700_000_000,
         kind: 30_402,
         tags: vec![vec!["d".to_owned(), "listing-1".to_owned()]],
@@ -120,7 +123,7 @@ fn signed_event_id() -> String {
 }
 
 fn signed_event_pubkey() -> String {
-    signed_event().pubkey_str().to_owned()
+    signed_event().pubkey().to_hex().to_owned()
 }
 
 fn job_status_for_outcome(outcome_kind: TransportPublishOutcomeKind) -> TransportPublishJobStatus {
@@ -362,7 +365,7 @@ fn publish_event_request_json_uses_signed_event_contract() {
     let raw_event_json = value["raw_event_json"].as_str().expect("raw event json");
     let raw_event: serde_json::Value = serde_json::from_str(raw_event_json).expect("raw event");
     assert_eq!(raw_event["id"], signed_event_id());
-    assert_eq!(raw_event["pubkey"], "b".repeat(64));
+    assert_eq!(raw_event["pubkey"], SIGNED_EVENT_PUBLIC_KEY);
     assert_eq!(raw_event["kind"], 30_402);
     assert_eq!(value["target_policy"]["kind"], "nostr");
     assert_eq!(

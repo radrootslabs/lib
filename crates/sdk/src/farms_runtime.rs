@@ -600,7 +600,7 @@ impl<'sdk> FarmsClient<'sdk> {
         let public_locality = public_locality_from_reverse(request.exact_location, &reverse)?;
         let record = SdkPrivateFarmLocationRecord {
             farm_addr: farm_addr.clone(),
-            farm_pubkey: request.actor.pubkey().as_str().to_owned(),
+            farm_pubkey: request.actor.pubkey().to_hex(),
             farm_d_tag: request.farm_d_tag,
             label,
             latitude: request.exact_location.latitude,
@@ -645,7 +645,7 @@ impl<'sdk> FarmsClient<'sdk> {
                 };
                 let record = SdkPrivateFarmLocationRecord {
                     farm_addr: farm_addr.clone(),
-                    farm_pubkey: actor.pubkey().as_str().to_owned(),
+                    farm_pubkey: actor.pubkey().to_hex(),
                     farm_d_tag,
                     label,
                     latitude: exact_location.latitude,
@@ -670,7 +670,7 @@ impl<'sdk> FarmsClient<'sdk> {
             GeocoderLocalityLookup::NoMatch => Ok(FarmPrivateLocationSetResult::NoMatch(
                 farm_private_location_lookup_receipt(
                     farm_addr,
-                    actor.pubkey().as_str(),
+                    actor.pubkey().to_hex().as_str(),
                     farm_d_tag,
                     FarmPrivateLocationInput::Locality(locality_query),
                     Vec::new(),
@@ -679,7 +679,7 @@ impl<'sdk> FarmsClient<'sdk> {
             GeocoderLocalityLookup::Ambiguous { candidates } => Ok(
                 FarmPrivateLocationSetResult::Ambiguous(farm_private_location_lookup_receipt(
                     farm_addr,
-                    actor.pubkey().as_str(),
+                    actor.pubkey().to_hex().as_str(),
                     farm_d_tag,
                     FarmPrivateLocationInput::Locality(locality_query),
                     candidates
@@ -790,7 +790,7 @@ fn validate_farm_publish_plan(
     }
     let farm_addr = RadrootsAddressableCoordinate::parse(format!(
         "{KIND_FARM}:{}:{d_tag}",
-        plan.frozen_draft.expected_pubkey_str()
+        plan.frozen_draft.expected_pubkey().to_hex()
     ))
     .map_err(|_| invalid("frozen draft farm address is invalid"))?;
     if plan.farm_addr != farm_addr {
@@ -822,7 +822,7 @@ fn farm_publish_plan(
         created_at_nostr.into(),
         parts.tags,
         parts.content,
-        actor.pubkey().as_str(),
+        actor.pubkey().to_hex(),
     )
     .expect("validated farm publish draft freezes");
     let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_str())

@@ -101,7 +101,6 @@ Radroots v1 listing and trade event contracts.
 Optional advanced substrate is explicitly feature-scoped:
 
 - `identity-models`: identity data types without local storage coupling
-- `identity-storage`: encrypted identity-file helpers
 - `signing`: dependency substrate for curated Nostr adapters; it exposes no
   generic builder or caller-constructed wire-part signing module
 - `transport-nostr-client`: Nostr relay WebSocket client and publish adapters

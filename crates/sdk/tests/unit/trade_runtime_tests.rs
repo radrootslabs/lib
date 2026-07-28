@@ -8,7 +8,7 @@ use radroots_event::{
     contract::RadrootsActorRole,
     ids::{
         RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
-        RadrootsPublicKey, RadrootsTradeId,
+        RadrootsTradeId,
     },
     kinds::TRADE_MUTATION_EVENT_KINDS,
     trade::{
@@ -22,14 +22,15 @@ use radroots_event::{
         RadrootsTradeMutationEnvelopeV1, canonical_trade_mutation_content,
     },
 };
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_trade::workflow::{
     RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
     RadrootsTradePrivateTermsStateV1,
 };
 
-fn pubkey(value: &str) -> RadrootsPublicKey {
-    RadrootsPublicKey::parse(value).expect("pubkey")
+fn pubkey(value: &str) -> PublicKey {
+    PublicKey::from_hex(value).expect("pubkey")
 }
 
 fn event_id(marker: char) -> RadrootsEventId {

@@ -5,6 +5,7 @@ use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_event::contract::RadrootsActorRole;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
 use radroots_event::kinds::{KIND_FARM, KIND_GEOCHAT};
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 use std::sync::LazyLock;
 
@@ -55,7 +56,7 @@ impl FailIfCalledSigner {
 }
 
 impl RadrootsEventSigner for FailIfCalledSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         self.identity.pubkey()
     }
 
@@ -76,7 +77,7 @@ impl InvalidSignatureSigner {
 }
 
 impl RadrootsEventSigner for InvalidSignatureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         self.0.pubkey()
     }
 
@@ -98,7 +99,7 @@ impl RadrootsEventSigner for InvalidSignatureSigner {
 }
 
 impl RadrootsEventSigner for WorkflowSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         self.identity.pubkey()
     }
 
@@ -151,7 +152,7 @@ fn signed_event() -> RadrootsSignedEvent {
     let sig = "c".repeat(128);
     let raw_json = serde_json::json!({
         "id": draft.expected_event_id_str(),
-        "pubkey": draft.expected_pubkey_str(),
+        "pubkey": draft.expected_pubkey().to_hex(),
         "created_at": draft.created_at_u64(),
         "kind": draft.kind_u32(),
         "tags": draft.tags_as_vec(),
@@ -161,7 +162,7 @@ fn signed_event() -> RadrootsSignedEvent {
     .to_string();
     RadrootsSignedEvent::new(RadrootsSignedEventParts {
         id: draft.expected_event_id_str().to_owned(),
-        pubkey: draft.expected_pubkey_str().to_owned(),
+        pubkey: draft.expected_pubkey().to_hex().to_owned(),
         created_at: draft.created_at_u64(),
         kind: draft.kind_u32(),
         tags: draft.tags_as_vec(),

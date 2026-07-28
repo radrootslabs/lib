@@ -391,7 +391,7 @@ fn validate_listing_publish_plan(
     }
     let public_listing_addr = RadrootsClassifiedListingAddress::parse(format!(
         "{KIND_CLASSIFIED_LISTING}:{}:{d_tag}",
-        plan.frozen_draft.expected_pubkey_str()
+        plan.frozen_draft.expected_pubkey().to_hex()
     ))
     .map_err(|_| invalid("frozen draft listing address is invalid"))?;
     if plan.public_listing_addr != public_listing_addr {

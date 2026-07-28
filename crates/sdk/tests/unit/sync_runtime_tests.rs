@@ -30,6 +30,8 @@ use radroots_event::ids::RadrootsEventId;
 use radroots_event::kinds::KIND_FARM;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
+use radroots_identity::PublicKey;
+#[cfg(feature = "radrootsd-execution")]
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 #[cfg(feature = "radrootsd-execution")]
 use radroots_outbox::{
@@ -100,7 +102,7 @@ impl RadrootsdFixtureSigner {
 
 #[cfg(feature = "radrootsd-execution")]
 impl RadrootsEventSigner for RadrootsdFixtureSigner {
-    fn pubkey(&self) -> &radroots_event::ids::RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         self.identity.pubkey()
     }
 
@@ -1459,7 +1461,8 @@ async fn radrootsd_completion_updates_outbox_for_success_retryable_and_terminal_
                 .signed_event
                 .as_ref()
                 .expect("signed event")
-                .pubkey_str()
+                .pubkey()
+                .to_hex()
         );
         assert_eq!(
             publish.event_kind,

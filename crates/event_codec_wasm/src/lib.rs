@@ -469,7 +469,7 @@ fn authored_comment_from_input(
         } => {
             let root = RadrootsNip22AddressRootReference::parse(coordinate, relay.as_deref())
                 .map_err(comment_authored_error)?;
-            if root.author().as_str() != author {
+            if root.author().to_hex() != author {
                 return Err(authored_error("comment_root_author_mismatch"));
             }
             if root.kind().as_u32() != kind {
@@ -884,11 +884,14 @@ mod tests {
     };
 
     fn sample_listing() -> RadrootsOperationalListing {
-        let quantity = Quantity::new(Decimal::from(1u32), Unit::Each);
-        let price = QuantityPrice::new(
-            Money::new(Decimal::from(10u32), Currency::USD),
+        let quantity =
+            Quantity::try_new(Decimal::from(1u32), Unit::Each).expect("positive fixture quantity");
+        let price = QuantityPrice::try_new(
+            Money::try_new(Decimal::from(10u32), Currency::USD)
+                .expect("non-negative fixture money"),
             quantity.clone(),
-        );
+        )
+        .expect("non-zero fixture pricing quantity");
 
         RadrootsOperationalListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),

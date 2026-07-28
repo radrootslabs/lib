@@ -1,9 +1,8 @@
 use core::time::Duration;
 
-use crate::identity::RadrootsIdentity;
 use radroots_nostr::prelude::{
     RadrootsNostrClient, RadrootsNostrClientOptions, RadrootsNostrError, RadrootsNostrEvent,
-    RadrootsNostrEventId, RadrootsNostrOutput,
+    RadrootsNostrEventId, RadrootsNostrKeys, RadrootsNostrOutput,
 };
 
 pub fn signerless_client() -> RadrootsNostrClient {
@@ -16,8 +15,8 @@ pub fn signerless_client_with_options(
     RadrootsNostrClient::new_signerless_with_options(options)
 }
 
-pub fn client_from_identity(identity: &RadrootsIdentity) -> RadrootsNostrClient {
-    RadrootsNostrClient::from_identity(identity)
+pub fn client_from_keys(keys: RadrootsNostrKeys) -> RadrootsNostrClient {
+    RadrootsNostrClient::new(keys)
 }
 
 pub async fn configure_write_relays(
@@ -33,12 +32,12 @@ pub async fn configure_write_relays(
     Ok(())
 }
 
-pub async fn connected_client_from_identity(
-    identity: &RadrootsIdentity,
+pub async fn connected_client_from_keys(
+    keys: RadrootsNostrKeys,
     relay_urls: &[String],
     connect_timeout: Duration,
 ) -> Result<RadrootsNostrClient, RadrootsNostrError> {
-    let client = client_from_identity(identity);
+    let client = client_from_keys(keys);
     configure_write_relays(&client, relay_urls, connect_timeout).await?;
     Ok(client)
 }

@@ -1,6 +1,7 @@
 use super::{SdkIdempotencyKey, SdkTradeIdempotencyRecord};
 use crate::RadrootsSdkError;
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
+use radroots_identity::PublicKey;
 
 use crate::serializer_failure::assert_struct_serialize_error_paths;
 
@@ -54,7 +55,7 @@ fn trade_idempotency_record_binds_payload_and_reports_conflicts() {
         idempotency_key: SdkIdempotencyKey::new("01890f0e-6c00-7000-8000-000000000003")
             .expect("key"),
         operation_kind: "trade.submit.v1".to_owned(),
-        actor_pubkey: RadrootsPublicKey::parse(
+        actor_pubkey: PublicKey::from_hex(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )
         .expect("actor pubkey"),

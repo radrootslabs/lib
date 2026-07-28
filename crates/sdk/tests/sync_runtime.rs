@@ -410,11 +410,15 @@ fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            quantity: Quantity::new(Decimal::from(1000u32), Unit::MassG),
-            price_per_canonical_unit: QuantityPrice {
-                amount: Money::new(Decimal::from(20u32), Currency::USD),
-                quantity: Quantity::new(Decimal::from(1u32), Unit::MassG),
-            },
+            quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG)
+                .expect("positive fixture quantity"),
+            price_per_canonical_unit: QuantityPrice::try_new(
+                Money::try_new(Decimal::from(20u32), Currency::USD)
+                    .expect("non-negative fixture money"),
+                Quantity::try_new(Decimal::from(1u32), Unit::MassG)
+                    .expect("positive fixture pricing quantity"),
+            )
+            .expect("non-zero fixture pricing quantity"),
             display_amount: None,
             display_unit: None,
             display_label: None,

@@ -26,8 +26,9 @@ impl serde::Serialize for SdkActorContextJson<'_> {
             .map(actor_role_code)
             .collect::<Vec<_>>();
         let account_id = self.0.account_id().map(|account_id| account_id.as_str());
+        let pubkey = self.0.pubkey().to_hex();
         let mut state = serializer.serialize_struct("SdkActorContext", 4)?;
-        state.serialize_field("pubkey", self.0.pubkey().as_str())?;
+        state.serialize_field("pubkey", &pubkey)?;
         state.serialize_field("roles", &roles)?;
         state.serialize_field("account_id", &account_id)?;
         state.serialize_field("source", actor_source_code(self.0.source()))?;

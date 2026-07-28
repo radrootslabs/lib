@@ -411,7 +411,7 @@ fn signer_provider_reports_myc_status_capability_and_constructor_errors() {
 fn nip46_private_helpers_map_identity_adapter_and_response_edges() {
     let pubkey = user_pubkey().parse().expect("pubkey");
     let identity = RadrootsSdkSignerIdentityOnly { pubkey };
-    assert_eq!(identity.pubkey().as_str(), user_pubkey());
+    assert_eq!(identity.pubkey().to_hex(), user_pubkey());
     assert!(matches!(
         identity.sign_frozen_draft(&frozen_draft()),
         Err(RadrootsSignerError::Unavailable)
@@ -587,7 +587,7 @@ async fn myc_nip46_provider_signs_and_validates_remote_event() {
         .collect::<Vec<_>>();
     assert_eq!(
         sign_event_request.pubkey.to_hex(),
-        draft.expected_pubkey_str()
+        draft.expected_pubkey().to_hex()
     );
     assert_eq!(
         sign_event_request.created_at.as_secs(),

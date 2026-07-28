@@ -617,7 +617,7 @@ async fn prepare_runtime_operation_journal(
     )
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().as_str())
+    .bind(request.actor.pubkey().to_hex())
     .bind(idempotency_key.as_str())
     .fetch_optional(&mut *tx)
     .await
@@ -634,7 +634,7 @@ async fn prepare_runtime_operation_journal(
             let new_digest_prefix = digest_prefix(command_hash.as_str());
             let error = RadrootsSdkError::IdempotencyConflict {
                 operation_kind: request.operation_kind.to_owned(),
-                expected_pubkey_prefix: request.actor.pubkey().as_str().chars().take(12).collect(),
+                expected_pubkey_prefix: request.actor.pubkey().to_hex().chars().take(12).collect(),
                 existing_digest_prefix: existing_digest_prefix.clone(),
                 new_digest_prefix: new_digest_prefix.clone(),
             };
@@ -643,7 +643,7 @@ async fn prepare_runtime_operation_journal(
             )
             .bind("idempotency_conflict")
             .bind(request.operation_kind)
-            .bind(request.actor.pubkey().as_str())
+            .bind(request.actor.pubkey().to_hex())
             .bind(idempotency_key.as_str())
             .bind("retry_operation_with_same_idempotency_key")
             .bind(
@@ -688,7 +688,7 @@ async fn prepare_runtime_operation_journal(
             .bind(observed_at_ms)
             .bind(SDK_RUNTIME_CONTRACT_VERSION)
             .bind(request.operation_kind)
-            .bind(request.actor.pubkey().as_str())
+            .bind(request.actor.pubkey().to_hex())
             .bind(idempotency_key.as_str())
             .execute(&mut *tx)
             .await
@@ -703,7 +703,7 @@ async fn prepare_runtime_operation_journal(
         )
         .bind(SDK_RUNTIME_CONTRACT_VERSION)
         .bind(request.operation_kind)
-        .bind(request.actor.pubkey().as_str())
+        .bind(request.actor.pubkey().to_hex())
         .bind(idempotency_key.as_str())
         .bind(command_hash.as_str())
         .bind(frozen_draft_json.as_str())
@@ -755,7 +755,7 @@ async fn mark_runtime_operation_state(
     .bind(observed_at_ms)
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().as_str())
+    .bind(request.actor.pubkey().to_hex())
     .bind(idempotency_key.as_str())
     .execute(sdk._event_store.pool())
     .await
@@ -791,12 +791,13 @@ async fn record_runtime_operation_failure(
         _ => None,
     };
     if let Some((recovery_code, recovery_action)) = recovery {
+        let actor_pubkey = request.actor.pubkey().to_hex();
         record_runtime_recovery_receipt(
             sdk._event_store.pool(),
             RuntimeRecoveryReceiptWrite {
                 recovery_code,
                 operation_kind: Some(request.operation_kind),
-                actor_pubkey: Some(request.actor.pubkey().as_str()),
+                actor_pubkey: Some(actor_pubkey.as_str()),
                 idempotency_key: Some(idempotency_key.as_str()),
                 recovery_action,
                 detail_json: error.detail_json(),
@@ -818,7 +819,7 @@ async fn ensure_runtime_operation_can_commit(
     )
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().as_str())
+    .bind(request.actor.pubkey().to_hex())
     .bind(idempotency_key.as_str())
     .fetch_one(tx.as_mut())
     .await
@@ -859,7 +860,7 @@ async fn commit_runtime_operation_journal(
     .bind(observed_at_ms)
     .bind(SDK_RUNTIME_CONTRACT_VERSION)
     .bind(request.operation_kind)
-    .bind(request.actor.pubkey().as_str())
+    .bind(request.actor.pubkey().to_hex())
     .bind(idempotency_key.as_str())
     .execute(tx.as_mut())
     .await
@@ -968,7 +969,7 @@ fn frozen_draft_json(frozen_draft: &RadrootsEventDraft) -> Result<String, Radroo
         "created_at": frozen_draft.created_at_u64(),
         "tags": frozen_draft.tags_as_vec(),
         "content": frozen_draft.content(),
-        "expected_pubkey": frozen_draft.expected_pubkey_str(),
+        "expected_pubkey": frozen_draft.expected_pubkey().to_hex(),
         "expected_event_id": frozen_draft.expected_event_id_str()
     }))
     .map_err(|error| RadrootsSdkError::EventStore {
@@ -1014,7 +1015,7 @@ fn runtime_request_digest(
     let digest_document = serde_json::json!({
         "contract_version": SDK_RUNTIME_CONTRACT_VERSION,
         "operation_kind": request.operation_kind,
-        "actor_pubkey": request.actor.pubkey().as_str(),
+        "actor_pubkey": request.actor.pubkey().to_hex(),
         "draft": {
             "contract_id": request.frozen_draft.contract_id(),
             "contract_registry_version": request.frozen_draft.contract_registry_version(),
@@ -1022,7 +1023,7 @@ fn runtime_request_digest(
             "created_at": request.frozen_draft.created_at_u64(),
             "tags": request.frozen_draft.tags_as_vec(),
             "content_sha256": hex::encode(Sha256::digest(request.frozen_draft.content().as_bytes())),
-            "expected_pubkey": request.frozen_draft.expected_pubkey_str(),
+            "expected_pubkey": request.frozen_draft.expected_pubkey().to_hex(),
             "expected_event_id": request.frozen_draft.expected_event_id_str()
         },
         "delivery_plan": {

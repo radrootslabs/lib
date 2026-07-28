@@ -124,7 +124,7 @@ mod tests {
     fn parse_event_accepts_author_domain_envelope() {
         let author = "a".repeat(64);
         let event = parse_event_model(&event_json(Some(author.as_str()), None)).expect("event");
-        assert_eq!(event.author_str(), author);
+        assert_eq!(event.author().to_hex(), author);
         assert_eq!(
             event.tags_as_vec(),
             vec![vec!["d".to_owned(), "one".to_owned()]]

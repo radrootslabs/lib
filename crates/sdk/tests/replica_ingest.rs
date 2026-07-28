@@ -82,5 +82,5 @@ fn sdk_farm_draft_ingests_into_replica_projection() {
     assert_eq!(farms.len(), 1);
     assert_eq!(farms[0].d_tag, sample_farm().d_tag);
     assert_eq!(farms[0].name, sample_farm().name);
-    assert_eq!(farms[0].pubkey, event.author_str());
+    assert_eq!(farms[0].pubkey, event.author().to_hex());
 }

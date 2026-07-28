@@ -1,16 +1,16 @@
 use crate::RadrootsSdkError;
-use nostr::{JsonUtil, Kind, PublicKey, Tag, Tags, Timestamp, UnsignedEvent};
+use nostr::{JsonUtil, Kind, PublicKey as NostrPublicKey, Tag, Tags, Timestamp, UnsignedEvent};
 use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, authorize_actor_for_draft,
     authorize_signer_for_draft, sign_authorized_draft, validate_signed_event_matches_draft,
 };
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::RadrootsPublicKey;
 use radroots_event::kinds::{
     KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION,
     KIND_TRADE_PROPOSAL, KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
 };
 use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys};
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientRequest, RadrootsNostrConnectClientTarget,
@@ -230,7 +230,7 @@ impl RadrootsSdkLocalKeySigner {
     pub fn from_shared_event_signer(
         signer: Arc<RadrootsSdkLocalSignerCapability>,
     ) -> Result<Self, RadrootsSdkError> {
-        let signer_pubkey = signer.pubkey().as_str().to_owned();
+        let signer_pubkey = signer.pubkey().to_hex();
         Ok(Self {
             signer,
             signer_pubkey,
@@ -325,7 +325,7 @@ impl Default for RadrootsSdkMycNip46RequestPolicy {
 pub struct RadrootsSdkMycNip46Signer {
     client_keys: RadrootsNostrKeys,
     target: RadrootsNostrConnectClientTarget,
-    user_pubkey: RadrootsPublicKey,
+    user_pubkey: PublicKey,
     transport: Arc<dyn RadrootsSdkNip46Transport>,
     request_policy: RadrootsSdkMycNip46RequestPolicy,
     request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
@@ -373,7 +373,7 @@ impl RadrootsSdkMycNip46Signer {
         request_id_generator: Arc<dyn RadrootsSdkMycNip46RequestIdGenerator>,
     ) -> Result<Self, RadrootsSdkError> {
         RadrootsSdkMycNip46RequestPolicy::new(request_policy.request_timeout())?;
-        let user_pubkey = RadrootsPublicKey::parse(user_pubkey.as_ref()).map_err(|error| {
+        let user_pubkey = PublicKey::from_hex(user_pubkey.as_ref()).map_err(|error| {
             RadrootsSdkError::InvalidRequest {
                 message: format!("myc_nip46 user pubkey is invalid: {error}"),
             }
@@ -392,7 +392,7 @@ impl RadrootsSdkMycNip46Signer {
         RadrootsSdkSignerStatus {
             mode: RadrootsSdkSignerMode::MycNip46,
             state: RadrootsSdkSignerState::Ready,
-            signer_pubkey: self.user_pubkey.as_str().to_owned(),
+            signer_pubkey: self.user_pubkey.to_hex(),
             remote_signer_pubkey: Some(self.target.remote_signer_public_key.to_hex()),
             relay_count: self.target.relays.len(),
         }
@@ -401,7 +401,7 @@ impl RadrootsSdkMycNip46Signer {
     pub fn capability(&self) -> RadrootsSdkSignerCapability {
         RadrootsSdkSignerCapability {
             mode: RadrootsSdkSignerMode::MycNip46,
-            signer_pubkey: self.user_pubkey.as_str().to_owned(),
+            signer_pubkey: self.user_pubkey.to_hex(),
             remote_signer_pubkey: Some(self.target.remote_signer_public_key.to_hex()),
             relays: self.target.relays.iter().map(ToString::to_string).collect(),
             can_sign_events: true,
@@ -471,7 +471,7 @@ impl RadrootsSdkMycNip46Signer {
         Ok(sign_receipt(
             request.operation_kind,
             RadrootsSdkSignerMode::MycNip46,
-            self.user_pubkey.as_str().to_owned(),
+            self.user_pubkey.to_hex(),
             Some(self.target.remote_signer_public_key.to_hex()),
             signed_event,
         ))
@@ -516,11 +516,11 @@ pub fn radroots_sdk_myc_nip46_product_permission_strings() -> Vec<String> {
 }
 
 struct RadrootsSdkSignerIdentityOnly {
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
 }
 
 impl RadrootsEventSigner for RadrootsSdkSignerIdentityOnly {
-    fn pubkey(&self) -> &RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -568,8 +568,10 @@ fn sign_event_request_from_frozen_draft(
     Ok(RadrootsNostrConnectRequest::SignEvent(unsigned_event))
 }
 
-fn nip46_unsigned_event_pubkey(draft: &RadrootsEventDraft) -> Result<PublicKey, RadrootsSdkError> {
-    PublicKey::parse(draft.expected_pubkey_str()).map_err(|error| {
+fn nip46_unsigned_event_pubkey(
+    draft: &RadrootsEventDraft,
+) -> Result<NostrPublicKey, RadrootsSdkError> {
+    NostrPublicKey::from_slice(draft.expected_pubkey().as_bytes()).map_err(|error| {
         nip46_sign_event_protocol_error(format!(
             "failed to parse frozen draft pubkey for NIP-46 unsigned event: {error}"
         ))

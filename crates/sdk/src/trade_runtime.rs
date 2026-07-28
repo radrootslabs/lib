@@ -1202,7 +1202,7 @@ async fn trade_command_plan(
         canonical.authored_at_unix_s,
         wire.tags,
         wire.content,
-        actor.pubkey().as_str(),
+        actor.pubkey().to_hex(),
     )
     .map_err(|error| {
         trade_command_error(
@@ -1307,7 +1307,7 @@ fn validate_actor_matches_envelope(
     actor: &RadrootsActorContext,
     envelope: &RadrootsTradeMutationEnvelopeV1,
 ) -> Result<(), RadrootsSdkError> {
-    if actor.pubkey().as_str() == envelope.author_pubkey.as_str() {
+    if actor.pubkey() == &envelope.author_pubkey {
         Ok(())
     } else {
         Err(RadrootsSdkError::UnauthorizedActor {

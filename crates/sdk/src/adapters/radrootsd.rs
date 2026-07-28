@@ -131,7 +131,7 @@ impl RadrootsdPublishEventIdentity {
     fn from_signed_event(event: &RadrootsSignedEvent) -> Self {
         Self {
             event_id: event.id_str().to_owned(),
-            pubkey: event.pubkey_str().to_owned(),
+            pubkey: event.pubkey().to_hex().to_owned(),
             kind: event.kind(),
         }
     }

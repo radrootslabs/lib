@@ -346,7 +346,7 @@ impl SdkPrivateStore {
     ) -> Result<(), RadrootsSdkError> {
         validate_location_record(record)?;
         let parts = farm_location_parts(&record.farm_addr)?;
-        let owner_pubkey = public_key_bytes(parts.pubkey.as_str())?;
+        let owner_pubkey = parts.pubkey.as_bytes().to_vec();
         let envelope = self.seal_farm_location(record)?;
         let nonce = envelope.header.nonce.to_vec();
         let ciphertext = envelope.encode_json().map_err(private_store_error)?;
@@ -388,7 +388,7 @@ impl SdkPrivateStore {
         farm_addr: &RadrootsAddressableCoordinate,
     ) -> Result<Option<SdkPrivateFarmLocationRecord>, RadrootsSdkError> {
         let parts = farm_location_parts(farm_addr)?;
-        let owner_pubkey = public_key_bytes(parts.pubkey.as_str())?;
+        let owner_pubkey = parts.pubkey.as_bytes().to_vec();
         let row = sqlx::query(
             r#"
             SELECT ciphertext, nonce
@@ -411,7 +411,7 @@ impl SdkPrivateStore {
         farm_addr: &RadrootsAddressableCoordinate,
     ) -> Result<bool, RadrootsSdkError> {
         let parts = farm_location_parts(farm_addr)?;
-        let owner_pubkey = public_key_bytes(parts.pubkey.as_str())?;
+        let owner_pubkey = parts.pubkey.as_bytes().to_vec();
         sqlx::query(
             r#"
             DELETE FROM private_farm_location
@@ -781,7 +781,7 @@ impl SdkPrivateStore {
             serde_json::from_slice(plaintext.as_slice()).map_err(private_store_error)?;
         Ok(SdkPrivateFarmLocationRecord {
             farm_addr,
-            farm_pubkey: parts.pubkey.as_str().to_owned(),
+            farm_pubkey: parts.pubkey.to_hex(),
             farm_d_tag: parts.d_tag.as_str().to_owned(),
             label: payload.label,
             latitude: payload.latitude,
@@ -922,12 +922,6 @@ fn farm_location_parts(
     Ok(parts)
 }
 
-fn public_key_bytes(pubkey: &str) -> Result<Vec<u8>, RadrootsSdkError> {
-    hex::decode(pubkey).map_err(|error| RadrootsSdkError::InvalidRequest {
-        message: format!("public key is invalid hex: {error}"),
-    })
-}
-
 fn farm_location_key_slot(farm_addr: &str) -> String {
     format!("private_farm_location:{farm_addr}")
 }
@@ -969,7 +963,7 @@ fn validate_location_record(record: &SdkPrivateFarmLocationRecord) -> Result<(),
         });
     }
     let parts = farm_location_parts(&record.farm_addr)?;
-    if parts.pubkey.as_str() != record.farm_pubkey {
+    if parts.pubkey.to_hex() != record.farm_pubkey {
         return Err(RadrootsSdkError::InvalidRequest {
             message: "farm private location address pubkey does not match record pubkey".to_owned(),
         });

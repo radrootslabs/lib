@@ -45,7 +45,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
 
     let draft_fallback = RadrootsSdkError::from(
         radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidFarmPubkey(
-            radroots_event::ids::RadrootsIdParseError::InvalidCharacter,
+            radroots_identity::PublicKey::from_hex("bad").expect_err("invalid public key"),
         ),
     );
     assert!(matches!(

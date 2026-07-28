@@ -57,11 +57,15 @@ fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsOperati
         primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            quantity: Quantity::new(Decimal::from(12u32), Unit::Each),
-            price_per_canonical_unit: QuantityPrice {
-                amount: Money::new(Decimal::from(4u32), Currency::USD),
-                quantity: Quantity::new(Decimal::from(1u32), Unit::Each),
-            },
+            quantity: Quantity::try_new(Decimal::from(12u32), Unit::Each)
+                .expect("positive fixture quantity"),
+            price_per_canonical_unit: QuantityPrice::try_new(
+                Money::try_new(Decimal::from(4u32), Currency::USD)
+                    .expect("non-negative fixture money"),
+                Quantity::try_new(Decimal::from(1u32), Unit::Each)
+                    .expect("positive fixture pricing quantity"),
+            )
+            .expect("non-zero fixture pricing quantity"),
             display_amount: None,
             display_unit: None,
             display_label: None,
