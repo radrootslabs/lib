@@ -3947,6 +3947,85 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn deep_reconciliation_rejects_each_persisted_fact_drift() {
+        for (label, guards, mutation, expected_reason) in [
+            (
+                "projection cursor orphan",
+                &["DROP TRIGGER radroots_event_store_projection_cursor_source_insert_guard"][..],
+                "INSERT INTO radroots_event_store_projection_cursor_source(projection_id, source_generation, source_revision) SELECT 'orphan', active_generation, 1 FROM radroots_event_store_source_state WHERE singleton = 1",
+                "projection cursor source identity has no cursor",
+            ),
+            (
+                "raw head",
+                &["DROP TRIGGER radroots_event_store_event_head_update_guard"][..],
+                "UPDATE event_envelope_head SET updated_at_ms = updated_at_ms + 1",
+                "raw head rows disagree",
+            ),
+            (
+                "derived envelope",
+                &["DROP TRIGGER radroots_event_store_event_envelopes_derived_update_guard"][..],
+                "UPDATE event_envelopes SET projection_eligible = 1 - projection_eligible",
+                "derived envelope fields disagree",
+            ),
+            (
+                "derived tag",
+                &["DROP TRIGGER radroots_event_store_event_tags_derived_update_guard"][..],
+                "UPDATE event_envelope_tags SET relay_indexed = 1 - relay_indexed WHERE rowid = (SELECT MIN(rowid) FROM event_envelope_tags)",
+                "derived tag fields disagree",
+            ),
+            (
+                "event coordinate",
+                &["DROP TRIGGER radroots_event_store_event_coordinate_update_guard"][..],
+                "UPDATE radroots_event_store_event_coordinate SET inserted_at_ms = inserted_at_ms + 1",
+                "coordinate facts differ",
+            ),
+            (
+                "request",
+                &["DROP TRIGGER radroots_event_store_nip09_request_update_guard"][..],
+                "UPDATE radroots_event_store_nip09_request SET request_created_at = request_created_at + 1",
+                "request facts are incomplete or forged",
+            ),
+            (
+                "event target",
+                &["DROP TRIGGER radroots_event_store_nip09_event_target_update_guard"][..],
+                "UPDATE radroots_event_store_nip09_event_target SET source_tag_value = 'forged'",
+                "event targets are incomplete or forged",
+            ),
+            (
+                "address target",
+                &["DROP TRIGGER radroots_event_store_nip09_address_target_update_guard"][..],
+                "UPDATE radroots_event_store_nip09_address_target SET source_d_tag = 'forged'",
+                "address targets are incomplete or forged",
+            ),
+            (
+                "addressable state",
+                &[
+                    "DROP TRIGGER radroots_event_store_addressable_state_identity_update_guard",
+                    "DROP TRIGGER radroots_event_store_addressable_state_old_update_guard",
+                ][..],
+                "UPDATE radroots_event_store_addressable_head_state SET raw_head_created_at = raw_head_created_at + 1",
+                "addressable head state disagrees",
+            ),
+            (
+                "transition history",
+                &["DROP TRIGGER radroots_event_store_addressable_transition_update_guard"][..],
+                "UPDATE radroots_event_store_addressable_head_transition SET raw_head_created_at = raw_head_created_at + 1",
+                "transition history disagrees",
+            ),
+        ] {
+            let error = deep_reconciliation_error_after_corruption(guards, mutation).await;
+            assert!(
+                matches!(
+                    error,
+                    RadrootsEventStoreError::MigrationHookStateDrift { ref reason, .. }
+                        if reason.contains(expected_reason)
+                ),
+                "{label}: {error}",
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn source_rebuild_rotates_three_generations_with_deterministic_parity() {
         let pool = open_v1_test_pool().await;
         install_unrelated_foreign_key_violation(&pool).await;
@@ -4603,6 +4682,75 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
             .await
             .expect("initial deep validation");
         transaction.commit().await.expect("v2 commit");
+    }
+
+    async fn populated_v2_validation_pool() -> SqlitePool {
+        let pool = open_v1_test_pool().await;
+        let author = fixture_author();
+        let target = signed_event(
+            TARGET_CREATED_AT,
+            KIND_LIST_SET_RELAY,
+            vec![vec!["d".to_owned(), "deep-validation".to_owned()]],
+            "{}",
+        );
+        let target_id = target.id_str().to_owned();
+        seed_v1_raw_event(&pool, target, 1_000).await;
+        seed_v1_raw_event(
+            &pool,
+            signed_event(
+                REQUEST_CREATED_AT,
+                KIND_DELETION_REQUEST,
+                vec![
+                    vec!["e".to_owned(), target_id],
+                    vec![
+                        "a".to_owned(),
+                        coordinate(author.as_str(), "deep-validation"),
+                    ],
+                ],
+                "remove",
+            ),
+            2_000,
+        )
+        .await;
+        install_v2_with_generation(&pool, [0x61; 32]).await;
+        pool
+    }
+
+    async fn deep_reconciliation_error_after_corruption(
+        guard_drops: &[&'static str],
+        mutation: &'static str,
+    ) -> RadrootsEventStoreError {
+        let pool = populated_v2_validation_pool().await;
+        let mut connection = pool.acquire().await.expect("corruption connection");
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("disable foreign keys");
+        sqlx::query("PRAGMA ignore_check_constraints = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("disable check constraints");
+        for guard_drop in guard_drops {
+            sqlx::raw_sql(*guard_drop)
+                .execute(&mut *connection)
+                .await
+                .expect("drop trusted mutation guard");
+        }
+        sqlx::raw_sql(mutation)
+            .execute(&mut *connection)
+            .await
+            .expect("apply trusted corruption");
+        sqlx::query("PRAGMA ignore_check_constraints = OFF")
+            .execute(&mut *connection)
+            .await
+            .expect("restore check constraints");
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *connection)
+            .await
+            .expect("restore foreign keys");
+        validate_applied_hook_state(&mut connection)
+            .await
+            .expect_err("deep validation must reject trusted corruption")
     }
 
     async fn rotate_with_generation(pool: &SqlitePool, generation: [u8; 32]) {
