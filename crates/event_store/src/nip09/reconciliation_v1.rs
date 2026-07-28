@@ -562,6 +562,19 @@ fn reconciliation_capacity_value(
     })
 }
 
+fn sqlite_reconciliation_count(
+    value: u128,
+    reason: &'static str,
+) -> Result<i64, RadrootsEventStoreError> {
+    match i64::try_from(value) {
+        Ok(value) => Ok(value),
+        Err(_) => Err(RadrootsEventStoreError::MigrationHookStateDrift {
+            hook_id: NIP09_HOOK_ID,
+            reason: reason.to_owned(),
+        }),
+    }
+}
+
 pub(crate) async fn apply_reconciliation_hook(
     connection: &mut SqliteConnection,
     generation_provider: &dyn SourceGenerationProvider,
@@ -572,18 +585,14 @@ pub(crate) async fn apply_reconciliation_hook(
     validate_projection_cursor_authority(connection).await?;
     let snapshot = load_reconciliation_snapshot(connection, limits).await?;
     let events = snapshot.events;
-    let raw_event_count = i64::try_from(snapshot.capacity.raw_events).map_err(|_| {
-        RadrootsEventStoreError::MigrationHookStateDrift {
-            hook_id: NIP09_HOOK_ID,
-            reason: "raw event count exceeds SQLite integer range".to_owned(),
-        }
-    })?;
-    let raw_tag_count = i64::try_from(snapshot.capacity.raw_tags).map_err(|_| {
-        RadrootsEventStoreError::MigrationHookStateDrift {
-            hook_id: NIP09_HOOK_ID,
-            reason: "raw tag count exceeds SQLite integer range".to_owned(),
-        }
-    })?;
+    let raw_event_count = sqlite_reconciliation_count(
+        u128::from(snapshot.capacity.raw_events),
+        "raw event count exceeds SQLite integer range",
+    )?;
+    let raw_tag_count = sqlite_reconciliation_count(
+        u128::from(snapshot.capacity.raw_tags),
+        "raw tag count exceeds SQLite integer range",
+    )?;
     let raw_high_water_seq = events.last().map(|event| event.seq).unwrap_or(0);
     let source_state_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM radroots_event_store_source_state")
@@ -1236,12 +1245,10 @@ pub(crate) async fn synchronize_after_insert(
             .bind(inserted_event_id)
             .fetch_one(&mut *connection)
             .await?;
-    let inserted_tag_count = i64::try_from(inserted_tag_count).map_err(|_| {
-        RadrootsEventStoreError::MigrationHookStateDrift {
-            hook_id: NIP09_HOOK_ID,
-            reason: "inserted tag count exceeds SQLite integer range".to_owned(),
-        }
-    })?;
+    let inserted_tag_count = sqlite_reconciliation_count(
+        inserted_tag_count as u128,
+        "inserted tag count exceeds SQLite integer range",
+    )?;
     if actual_inserted_tag_count != inserted_tag_count
         || inserted_seq <= prior.raw_high_water_seq
         || actual_high_water != inserted_seq
@@ -3823,6 +3830,18 @@ mod tests {
                 -1,
             ),
             Err(RadrootsEventStoreError::MigrationHookStateDrift { .. })
+        ));
+        assert_eq!(
+            sqlite_reconciliation_count(i64::MAX as u128, "fixture count range")
+                .expect("maximum SQLite count"),
+            i64::MAX,
+        );
+        assert!(matches!(
+            sqlite_reconciliation_count(i64::MAX as u128 + 1, "fixture count range"),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: NIP09_HOOK_ID,
+                reason,
+            }) if reason == "fixture count range"
         ));
         assert!(matches!(
             EventAdmission::from_registry_v7(RadrootsRegistryV7AdmissionDecision::Defect {
