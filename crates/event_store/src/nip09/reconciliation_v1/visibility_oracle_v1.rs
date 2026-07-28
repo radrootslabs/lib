@@ -521,6 +521,91 @@ mod tests {
             .expect("admitted deletion request")
     }
 
+    fn reconciled_event(
+        ingest: RadrootsEventIngest,
+        status: RadrootsEventAdmissionStatus,
+    ) -> ReconciledEvent {
+        ReconciledEvent {
+            seq: 1,
+            inserted_at_ms: ingest.observed_at_ms(),
+            verified_event: ingest.verified_event().clone(),
+            admission: super::super::EventAdmission {
+                status,
+                code: None,
+                contract: None,
+            },
+        }
+    }
+
+    #[test]
+    fn raw_snapshot_visibility_oracle_rejects_impossible_raw_authority_v1() {
+        let ephemeral = reconciled_event(
+            signed_ingest(20_001, 1_700_000_000, "ephemeral fixture"),
+            RadrootsEventAdmissionStatus::Unsupported,
+        );
+        assert!(matches!(
+            expected_visibility(&[ephemeral]),
+            Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+                kind: RadrootsEventStoreRawSourceRebuildDriftV1::ImmutableRawAuthority,
+                ..
+            })
+        ));
+
+        let malformed_deletion = reconciled_event(
+            signed_ingest(5, 1_700_000_001, "missing deletion targets"),
+            RadrootsEventAdmissionStatus::Admitted,
+        );
+        assert!(matches!(
+            oracle_deletion_requests(&[malformed_deletion]),
+            Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+                kind: RadrootsEventStoreRawSourceRebuildDriftV1::DerivedProductStateAuthority,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn raw_snapshot_visibility_oracle_rejects_unrepresentable_cutoff_v1() {
+        let target = signed_ingest_with_tags(
+            30_402,
+            1,
+            "{}",
+            vec![vec!["d".to_owned(), "unrepresentable-cutoff".to_owned()]],
+        );
+        let coordinate = format!(
+            "30402:{}:unrepresentable-cutoff",
+            target.event().author_str()
+        );
+        let created_at = u64::try_from(i64::MAX).expect("i64 maximum fits u64") + 1;
+        let keys =
+            Keys::new(SecretKey::from_hex(FIXTURE_SECRET_KEY_HEX).expect("fixture secret key"));
+        let request = EventBuilder::new(Kind::Custom(5), "unrepresentable cutoff")
+            .tags(vec![Tag::custom(
+                TagKind::Custom("a".into()),
+                vec![coordinate],
+            )])
+            .custom_created_at(Timestamp::from_secs(created_at))
+            .sign_with_keys(&keys)
+            .expect("signed cutoff request");
+        let request = RadrootsEventIngest::from_raw_json(
+            serde_json::to_string(&request).expect("cutoff request JSON"),
+            0,
+        )
+        .expect("verified cutoff request");
+        let events = [
+            reconciled_event(target, RadrootsEventAdmissionStatus::Admitted),
+            reconciled_event(request, RadrootsEventAdmissionStatus::Admitted),
+        ];
+
+        assert!(matches!(
+            expected_visibility(&events),
+            Err(RadrootsEventStoreError::RawSourceRebuildStateDrift {
+                kind: RadrootsEventStoreRawSourceRebuildDriftV1::DerivedProductStateAuthority,
+                ..
+            })
+        ));
+    }
+
     #[test]
     fn raw_snapshot_visibility_oracle_bounds_high_fan_in_evidence_v1() {
         const REQUEST_COUNT: usize = 512;
