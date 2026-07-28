@@ -344,8 +344,8 @@ const KNOWLEDGE_BETA_CONTRACT_IDS: [&str; 3] = [
     "radroots.knowledge.contribution_attestation.v1",
 ];
 const EVENT_BOUNDARY_MATRIX_ENV: &str = "RADROOTS_EVENT_BOUNDARY_MATRIX";
-const COVERAGE_REQUIRED_THRESHOLD: f64 = 100.0;
-const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "100/100/100/100";
+const COVERAGE_REQUIRED_THRESHOLD: f64 = 90.0;
+const COVERAGE_REQUIRED_THRESHOLD_LABEL: &str = "90/90/90/90";
 #[cfg_attr(not(test), allow(dead_code))]
 const COVERAGE_REPORT_EPSILON: f64 = 0.000_001;
 const DTO_TOOLING_DEPENDENCIES: [&str; 4] = [
@@ -8760,6 +8760,18 @@ fn validate_coverage_policy_parity(
         .iter()
         .cloned()
         .collect::<BTreeSet<_>>();
+    for package in &required_packages {
+        let scoped = policy.thresholds_for_scope(package);
+        if scoped.fail_under_exec_lines < COVERAGE_REQUIRED_THRESHOLD
+            || scoped.fail_under_functions < COVERAGE_REQUIRED_THRESHOLD
+            || scoped.fail_under_regions < COVERAGE_REQUIRED_THRESHOLD
+            || scoped.fail_under_branches < COVERAGE_REQUIRED_THRESHOLD
+        {
+            return Err(format!(
+                "coverage policy scope {package} must enforce at least {COVERAGE_REQUIRED_THRESHOLD_LABEL}"
+            ));
+        }
+    }
     let expected_packages = coverage_required_workspace_crates(workspace_root)?;
     if expected_packages != required_packages {
         let missing = expected_packages
@@ -9393,12 +9405,12 @@ mod tests {
         fs::write(path, content).expect("write file");
     }
 
-    fn strict_thresholds() -> CoverageThresholds {
+    fn required_thresholds() -> CoverageThresholds {
         CoverageThresholds {
-            fail_under_exec_lines: 100.0,
-            fail_under_functions: 100.0,
-            fail_under_regions: 100.0,
-            fail_under_branches: 100.0,
+            fail_under_exec_lines: 90.0,
+            fail_under_functions: 90.0,
+            fail_under_regions: 90.0,
+            fail_under_branches: 90.0,
             require_branches: true,
         }
     }
@@ -9428,7 +9440,7 @@ mod tests {
         TestCoverageRefreshRow {
             crate_name,
             status: "pass",
-            thresholds: coverage_thresholds(100.0, true),
+            thresholds: coverage_thresholds(90.0, true),
             exec: 100.0,
             func: 100.0,
             branch: Some(100.0),
@@ -9700,10 +9712,10 @@ constant = "RADROOTS_REPLICA_TRANSFER_VERSION"
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -10186,10 +10198,10 @@ version = "1.0.0"
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -11777,56 +11789,58 @@ edition = "2024"
     }
 
     #[test]
-    fn validate_required_coverage_summary_enforces_strict_threshold() {
+    fn validate_required_coverage_summary_enforces_required_threshold() {
         let root = temp_root("coverage_summary");
         let coverage_dir = root.join("target").join("coverage");
         fs::create_dir_all(&coverage_dir).expect("create coverage dir");
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t90.0\t90.0\t90.0\t90.0\tfile\n",
         )
         .expect("write coverage file");
         let required = ["radroots_core".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
-        validate_required_coverage_summary(&root, &required, strict_thresholds())
+        validate_required_coverage_summary(&root, &required, required_thresholds())
             .expect("coverage summary");
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t99.9\t100.0\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t90.0\t89.9\t90.0\t90.0\tfile\n",
         )
         .expect("write function coverage file");
-        let func_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
-            .expect_err("function coverage below 100");
+        let func_err = validate_required_coverage_summary(&root, &required, required_thresholds())
+            .expect_err("function coverage below 90");
         assert!(func_err.contains("must satisfy coverage policy"));
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t99.9\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t90.0\t90.0\t89.9\t90.0\tfile\n",
         )
         .expect("write branch coverage file");
-        let branch_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
-            .expect_err("branch coverage below 100");
+        let branch_err =
+            validate_required_coverage_summary(&root, &required, required_thresholds())
+                .expect_err("branch coverage below 90");
         assert!(branch_err.contains("must satisfy coverage policy"));
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\tunavailable\t100.0\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t90.0\t90.0\tunavailable\t90.0\tfile\n",
         )
         .expect("write unavailable branch coverage file");
         let missing_branch_err =
-            validate_required_coverage_summary(&root, &required, strict_thresholds())
+            validate_required_coverage_summary(&root, &required, required_thresholds())
                 .expect_err("branch coverage missing under strict policy");
         assert!(missing_branch_err.contains("unavailable"));
 
         fs::write(
             coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t100.0\t100.0\t100.0\t99.9\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_core\tpass\t90.0\t90.0\t90.0\t89.9\tfile\n",
         )
         .expect("write region coverage file");
-        let region_err = validate_required_coverage_summary(&root, &required, strict_thresholds())
-            .expect_err("region coverage below 100");
+        let region_err =
+            validate_required_coverage_summary(&root, &required, required_thresholds())
+                .expect_err("region coverage below 90");
         assert!(region_err.contains("must satisfy coverage policy"));
         let _ = fs::remove_dir_all(&root);
     }
@@ -12182,21 +12196,23 @@ members = ["crates/a", "crates/b"]
         let required = ["radroots_a".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let non_pass = validate_required_coverage_summary(&root, &required, strict_thresholds())
+        let non_pass = validate_required_coverage_summary(&root, &required, required_thresholds())
             .expect_err("non-pass status");
         assert!(non_pass.contains("non-pass status"));
 
         write_file(
             &coverage_dir.join("coverage-refresh.tsv"),
-            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t99.9\t100\t100\t100\tfile\n",
+            "crate\tstatus\texec\tfunc\tbranch\tregion\treport\nradroots_a\tpass\t89.9\t90\t90\t90\tfile\n",
         );
-        let below_100 = validate_required_coverage_summary(&root, &required, strict_thresholds())
-            .expect_err("coverage below 100");
-        assert!(below_100.contains("must satisfy coverage policy"));
+        let below_required =
+            validate_required_coverage_summary(&root, &required, required_thresholds())
+                .expect_err("coverage below required threshold");
+        assert!(below_required.contains("must satisfy coverage policy"));
 
         let missing = ["missing".to_string()].into_iter().collect::<BTreeSet<_>>();
-        let missing_err = validate_required_coverage_summary(&root, &missing, strict_thresholds())
-            .expect_err("missing required row");
+        let missing_err =
+            validate_required_coverage_summary(&root, &missing, required_thresholds())
+                .expect_err("missing required row");
         assert!(missing_err.contains("missing from coverage-refresh.tsv"));
 
         let _ = fs::remove_dir_all(root);
@@ -12250,10 +12266,10 @@ members = ["crates/a", "crates/b"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -12267,10 +12283,10 @@ crates = []
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 97.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 89.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -12279,15 +12295,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_gate = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid policy thresholds");
-        assert!(invalid_gate.contains("100/100/100/100"));
+        assert!(invalid_gate.contains("90/90/90/90"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 97.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 89.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -12296,15 +12312,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_functions = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid function threshold");
-        assert!(invalid_functions.contains("100/100/100/100"));
+        assert!(invalid_functions.contains("90/90/90/90"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 97.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 89.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -12313,15 +12329,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_regions = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid region threshold");
-        assert!(invalid_regions.contains("100/100/100/100"));
+        assert!(invalid_regions.contains("90/90/90/90"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 97.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 89.0
 require_branches = true
 
 [required]
@@ -12330,15 +12346,15 @@ crates = ["radroots_a", "radroots_b"]
         );
         let invalid_branches = validate_coverage_policy_parity(&root, &contract_root)
             .expect_err("invalid branch threshold");
-        assert!(invalid_branches.contains("100/100/100/100"));
+        assert!(invalid_branches.contains("90/90/90/90"));
 
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -12352,10 +12368,10 @@ crates = ["radroots_a", "radroots_a"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = false
 
 [required]
@@ -12369,10 +12385,33 @@ crates = ["radroots_a", "radroots_b"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
+require_branches = true
+
+[overrides.radroots_a]
+fail_under_exec_lines = 89.9
+temporary = true
+reason = "invalid override below the active development baseline"
+
+[required]
+crates = ["radroots_a", "radroots_b"]
+"#,
+        );
+        let below_minimum_override = validate_coverage_policy_parity(&root, &contract_root)
+            .expect_err("numeric override below the active baseline");
+        assert!(below_minimum_override.contains("scope radroots_a"));
+        assert!(below_minimum_override.contains("at least 90/90/90/90"));
+
+        write_file(
+            &coverage_root.join("coverage.toml"),
+            r#"[gate]
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -12386,10 +12425,10 @@ crates = ["radroots_b"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -13635,10 +13674,10 @@ Volume,
         write_file(
             &root.join("contracts").join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = false
 
 [required]
@@ -13647,7 +13686,7 @@ crates = ["radroots_a", "radroots_b"]
         );
         let policy_err =
             validate_generic_contract_bundle(&bundle).expect_err("coverage policy validation");
-        assert!(policy_err.contains("100/100/100/100"));
+        assert!(policy_err.contains("90/90/90/90"));
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -13683,7 +13722,7 @@ crates = ["radroots_a", "radroots_b"]
         let missing_refresh_err = validate_required_coverage_summary(
             &missing_refresh_root,
             &required,
-            strict_thresholds(),
+            required_thresholds(),
         )
         .expect_err("missing refresh should fail");
         assert!(missing_refresh_err.contains("coverage-refresh.tsv"));
@@ -13798,10 +13837,10 @@ Volume,
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]
@@ -13815,10 +13854,10 @@ crates = ["radroots_a", "radroots_b", "radroots_extra"]
         write_file(
             &coverage_root.join("coverage.toml"),
             r#"[gate]
-fail_under_exec_lines = 100.0
-fail_under_functions = 100.0
-fail_under_regions = 100.0
-fail_under_branches = 100.0
+fail_under_exec_lines = 90.0
+fail_under_functions = 90.0
+fail_under_regions = 90.0
+fail_under_branches = 90.0
 require_branches = true
 
 [required]

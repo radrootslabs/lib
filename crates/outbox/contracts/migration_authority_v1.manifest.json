@@ -305,10 +305,10 @@
     },
     {
       "file": {
-        "byte_length": 506380,
+        "byte_length": 507689,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "a0bfb6155613050b7e19fa6b2f8af72528b5dc12f446cd9fec05319d3ce924a1"
+        "sha256": "a387d19e4b78b496adcf234b68f578250377c235f79ef25ff449cc7072a4b721"
       },
       "role": "contract_dispatch"
     },
