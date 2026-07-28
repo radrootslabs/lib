@@ -644,4 +644,47 @@ mod tests {
             }) if actual == RADROOTS_ADDRESSABLE_TRANSITION_CURSOR_JSON_MAX_BYTES_V1 + 1
         ));
     }
+
+    #[test]
+    fn transition_storage_enums_round_trip_and_reject_unknown_values() {
+        for origin in [
+            RadrootsAddressableTransitionOriginV1::Baseline,
+            RadrootsAddressableTransitionOriginV1::Incremental,
+        ] {
+            assert_eq!(
+                RadrootsAddressableTransitionOriginV1::parse(origin.as_str()).expect("origin"),
+                origin
+            );
+        }
+        assert!(RadrootsAddressableTransitionOriginV1::parse("unknown").is_err());
+
+        for decision in [
+            RadrootsAddressableTransitionRawHeadDecisionV1::BaselineRebuild,
+            RadrootsAddressableTransitionRawHeadDecisionV1::Applied,
+            RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected,
+            RadrootsAddressableTransitionRawHeadDecisionV1::SkippedOlder,
+            RadrootsAddressableTransitionRawHeadDecisionV1::SkippedSameTimestampHigherEventId,
+            RadrootsAddressableTransitionRawHeadDecisionV1::MalformedCoordinate,
+        ] {
+            assert_eq!(
+                RadrootsAddressableTransitionRawHeadDecisionV1::parse(decision.as_str())
+                    .expect("raw-head decision"),
+                decision
+            );
+        }
+        assert!(RadrootsAddressableTransitionRawHeadDecisionV1::parse("unknown").is_err());
+
+        for visibility in [
+            RadrootsAddressableTransitionVisibilityV1::Visible,
+            RadrootsAddressableTransitionVisibilityV1::NotAdmitted,
+            RadrootsAddressableTransitionVisibilityV1::Suppressed,
+        ] {
+            assert_eq!(
+                RadrootsAddressableTransitionVisibilityV1::parse(visibility.as_str())
+                    .expect("visibility"),
+                visibility
+            );
+        }
+        assert!(RadrootsAddressableTransitionVisibilityV1::parse("unknown").is_err());
+    }
 }

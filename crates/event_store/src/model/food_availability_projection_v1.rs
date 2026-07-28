@@ -444,6 +444,13 @@ mod tests {
             query.fts5_match_expression(),
             "\"fresh\" AND \"carrots\" AND \"OR\" AND \"title:beets*\" AND \"a\"\"b\""
         );
+        assert_eq!(query.to_string(), query.as_str());
+        assert_eq!(
+            RadrootsFoodAvailabilitySearchQueryV1::try_from("fresh carrots")
+                .expect("TryFrom query")
+                .as_str(),
+            "fresh carrots"
+        );
     }
 
     #[test]

@@ -1394,6 +1394,20 @@ mod migration_framework {
         "5b1f92779640f1a2dbd75e37a96996bda6c8be58883190f69eb3eced22a48f03";
     const FROZEN_V1_OBJECT_COUNT: usize = 46;
 
+    fn assert_registry_defect(
+        registry: &[EventStoreMigration],
+        minimum: u32,
+        current: u32,
+        expected: &str,
+    ) {
+        let error = validate_migration_registry(registry, minimum, current)
+            .expect_err("migration registry defect");
+        assert!(
+            matches!(&error, RadrootsEventStoreError::MigrationRegistryDefect { reason } if reason.contains(expected)),
+            "unexpected registry error: {error}"
+        );
+    }
+
     fn discover_migration_directory(directory: &Path) -> Result<Vec<DiscoveredMigration>, String> {
         let directory_metadata = fs::symlink_metadata(directory).map_err(|error| {
             format!(
@@ -1582,6 +1596,140 @@ mod migration_framework {
             EVENT_STORE_MIGRATIONS[3].event_contract_registry_version,
             Some(source_maintenance_manifest::SOURCE_MAINTENANCE_EVENT_CONTRACT_REGISTRY_VERSION,)
         );
+    }
+
+    #[test]
+    fn registry_validator_rejects_each_structural_mutation() {
+        const ZERO_SHA256: &str =
+            "0000000000000000000000000000000000000000000000000000000000000000";
+        const RESERVED_OBJECT: &[&str] = &["radroots_event_store_fixture"];
+        const OTHER_RESERVED_OBJECT: &[&str] = &["radroots_event_store_other_fixture"];
+        const DUPLICATE_OBJECTS: &[&str] = &[
+            "radroots_event_store_fixture",
+            "radroots_event_store_fixture",
+        ];
+        const ORDINARY_REPLACEMENT: &[&str] = &["event_envelope_kind_created_idx"];
+
+        let baseline = EVENT_STORE_MIGRATIONS[0];
+        assert_registry_defect(&[baseline], 0, 1, "non-empty positive registry");
+        assert_registry_defect(&[baseline], 2, 1, "non-empty positive registry");
+        assert_registry_defect(&[], 1, 1, "non-empty positive registry");
+
+        let mut mutated = baseline;
+        mutated.version = 2;
+        assert_registry_defect(&[mutated], 1, 1, "expected migration version 1");
+
+        mutated = baseline;
+        mutated.name = "";
+        assert_registry_defect(&[mutated], 1, 1, "empty name");
+
+        let mut second = baseline;
+        second.version = 2;
+        second.owned_object_names = RESERVED_OBJECT;
+        second.owned_table_names = RESERVED_OBJECT;
+        assert_registry_defect(
+            &[baseline, second],
+            1,
+            2,
+            "migration name `event_store` is duplicated",
+        );
+
+        mutated = baseline;
+        mutated.owned_object_names = &[];
+        mutated.owned_table_names = &[];
+        mutated.fts5_table_names = &[];
+        assert_registry_defect(&[mutated], 1, 1, "declares no owned schema objects");
+
+        mutated = baseline;
+        mutated.owned_object_names = DUPLICATE_OBJECTS;
+        mutated.owned_table_names = &[];
+        mutated.fts5_table_names = &[];
+        assert_registry_defect(&[mutated], 1, 1, "owned schema object");
+
+        mutated = baseline;
+        mutated.owned_table_names = &["event_envelopes", "event_envelopes"];
+        mutated.fts5_table_names = &[];
+        assert_registry_defect(&[mutated], 1, 1, "owned schema table");
+
+        second.name = "fixture";
+        second.owned_object_names = &["ordinary_fixture"];
+        second.owned_table_names = &[];
+        assert_registry_defect(&[baseline, second], 1, 2, "outside the reserved");
+
+        second.owned_object_names = RESERVED_OBJECT;
+        second.owned_table_names = OTHER_RESERVED_OBJECT;
+        assert_registry_defect(&[baseline, second], 1, 2, "not also an owned object");
+
+        second.owned_object_names = &[
+            "radroots_event_store_fixture",
+            "radroots_event_store_fixture_fts",
+        ];
+        second.owned_table_names = RESERVED_OBJECT;
+        second.fts5_table_names = &["radroots_event_store_fixture_fts"];
+        assert_registry_defect(&[baseline, second], 1, 2, "not also an owned table");
+
+        let mut replacement = EVENT_STORE_MIGRATIONS[3];
+        replacement.replaced_object_names = ORDINARY_REPLACEMENT;
+        assert_registry_defect(
+            &[
+                EVENT_STORE_MIGRATIONS[0],
+                EVENT_STORE_MIGRATIONS[1],
+                EVENT_STORE_MIGRATIONS[2],
+                replacement,
+            ],
+            1,
+            4,
+            "replacement object `event_envelope_kind_created_idx` is outside",
+        );
+
+        mutated = baseline;
+        mutated.up_len += 1;
+        assert!(matches!(
+            validate_migration_registry(&[mutated], 1, 1),
+            Err(RadrootsEventStoreError::EmbeddedMigrationLengthMismatch { .. })
+        ));
+
+        mutated = baseline;
+        mutated.up_sha256 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        assert_registry_defect(&[mutated], 1, 1, "invalid up SHA-256 literal");
+
+        mutated = baseline;
+        mutated.up_sha256 = ZERO_SHA256;
+        assert!(matches!(
+            validate_migration_registry(&[mutated], 1, 1),
+            Err(RadrootsEventStoreError::EmbeddedMigrationChecksumMismatch { .. })
+        ));
+
+        mutated = baseline;
+        mutated.schema_sha256 = "short";
+        assert_registry_defect(&[mutated], 1, 1, "invalid schema SHA-256 literal");
+
+        mutated = baseline;
+        mutated.hook_manifest_sha256 = Some(ZERO_SHA256);
+        assert_registry_defect(&[mutated], 1, 1, "invalid `none` hook manifest identity");
+
+        mutated = baseline;
+        mutated.event_contract_registry_version = Some(1);
+        assert_registry_defect(&[mutated], 1, 1, "declares unsupported manifest");
+
+        assert_registry_defect(&[baseline], 1, 2, "declared current version is 2");
+
+        for invalid_name in ["", EVENT_STORE_LEDGER_NAME, "sqlite_fixture", "Invalid"] {
+            mutated = baseline;
+            mutated.owned_object_names = match invalid_name {
+                "" => &[""],
+                value if value == EVENT_STORE_LEDGER_NAME => &[EVENT_STORE_LEDGER_NAME],
+                "sqlite_fixture" => &["sqlite_fixture"],
+                _ => &["Invalid"],
+            };
+            mutated.owned_table_names = &[];
+            mutated.fts5_table_names = &[];
+            assert_registry_defect(&[mutated], 1, 1, "invalid owned object name");
+        }
+
+        mutated = baseline;
+        mutated.version = u32::MAX;
+        assert_registry_defect(&[mutated], u32::MAX, u32::MAX, "migration version overflow");
     }
 
     #[test]
