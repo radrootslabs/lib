@@ -280,8 +280,8 @@ impl<'a> OracleRequestIndexV1<'a> {
                     if replace {
                         evidence.authorized = Some(index);
                     }
-                } else if evidence.unauthorized.is_none() {
-                    evidence.unauthorized = Some(index);
+                } else {
+                    evidence.unauthorized.get_or_insert(index);
                 }
             }
         }

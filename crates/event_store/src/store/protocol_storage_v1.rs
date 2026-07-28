@@ -218,11 +218,17 @@ fn validate_raw_head_snapshot(
             });
         }
     };
-    if &stored_coordinate != requested_coordinate
-        || stored_coordinate != expected_coordinate
-        || raw_head.event_id != raw_event.event_id
-        || raw_head.created_at != raw_event.created_at
-    {
+    if (
+        &stored_coordinate,
+        &stored_coordinate,
+        raw_head.event_id.as_str(),
+        raw_head.created_at,
+    ) != (
+        requested_coordinate,
+        &expected_coordinate,
+        raw_event.event_id.as_str(),
+        raw_event.created_at,
+    ) {
         return Err(RadrootsEventStoreError::StoredHeadInconsistent {
             event_id: raw_head.event_id.clone(),
         });

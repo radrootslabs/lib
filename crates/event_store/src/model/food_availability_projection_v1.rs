@@ -271,20 +271,6 @@ impl RadrootsStoredFoodAvailabilityV1 {
             .published_at()
             .validate_created_at(created_at)
             .map_err(|error| food_projection_drift(error.to_string()))?;
-        if projection
-            .quantity()
-            .is_some_and(|quantity| quantity.unit() != projection.price().unit())
-        {
-            return Err(food_projection_drift(
-                "quantity unit does not match the price unit",
-            ));
-        }
-        if projection.images().len() > RADROOTS_FOOD_IMAGE_MAX_COUNT {
-            return Err(food_projection_drift(format!(
-                "bounded projection has {} images; maximum is {RADROOTS_FOOD_IMAGE_MAX_COUNT}",
-                projection.images().len()
-            )));
-        }
 
         let images = projection
             .images()

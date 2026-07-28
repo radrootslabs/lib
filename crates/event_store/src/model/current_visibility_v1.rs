@@ -206,6 +206,9 @@ mod tests {
         assert!(
             !evidence(Suppressed, DeletionRequestImmune, false, None).is_coherent_for_event(5, 10)
         );
+        assert!(
+            !evidence(Visible, NoAuthorizedReference, false, None).is_coherent_for_event(5, 10)
+        );
         assert!(!evidence(Visible, DeletionRequestImmune, true, None).is_coherent_for_event(5, 10));
         assert!(
             !evidence(Visible, DeletionRequestImmune, false, None).is_coherent_for_event(1, 10)

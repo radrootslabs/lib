@@ -251,8 +251,7 @@ impl RadrootsTransportObservation {
     ) -> Result<(), RadrootsEventStoreError> {
         let target =
             RadrootsTransportTarget::new(self.transport_kind.clone(), self.endpoint_uri.as_str())?;
-        if target.uri() != &self.endpoint_uri || target.fingerprint() != &self.endpoint_fingerprint
-        {
+        if target.fingerprint() != &self.endpoint_fingerprint {
             return Err(
                 RadrootsEventStoreError::InvalidStoredTransportEndpointFingerprint {
                     event_id: event_id.to_owned(),

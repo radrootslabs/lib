@@ -173,9 +173,8 @@ async fn read_and_validate_source_authority(
     let sealed_floor: i64 = row.try_get("sealed_floor_seq")?;
     let sealed_high_water: i64 = row.try_get("sealed_last_transition_seq")?;
     let sealed_count: i64 = row.try_get("sealed_transition_count")?;
-    if sealed_floor != authority.floor
-        || sealed_high_water != authority.high_water
-        || sealed_count != expected_count
+    if (sealed_floor, sealed_high_water, sealed_count)
+        != (authority.floor, authority.high_water, expected_count)
     {
         return Err(RadrootsEventStoreError::AddressableTransitionSequenceGap {
             reason: format!(
@@ -278,8 +277,10 @@ async fn transition_from_row(
         .map_err(|error| corruption(error.to_string()))?;
     let pubkey: String = row.try_get("pubkey")?;
     let d_tag: String = row.try_get("d_tag")?;
-    if !(30_000..=39_999).contains(&kind)
-        || d_tag.len() > RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1
+    if (
+        (30_000..=39_999).contains(&kind),
+        d_tag.len() <= RADROOTS_ADDRESSABLE_TRANSITION_D_TAG_MAX_BYTES_V1,
+    ) != (true, true)
     {
         return Err(corruption("transition coordinate is outside wire bounds"));
     }
@@ -354,11 +355,17 @@ async fn transition_from_row(
         &raw_event,
     )
     .await?;
-    if raw_event.created_at != raw_head_created_at
-        || admission.status != admission_status
-        || admission.code.as_deref() != admission_code.as_deref()
-        || admission.contract.map(|contract| contract.id) != contract_id.as_deref()
-    {
+    if (
+        raw_event.created_at,
+        admission.status,
+        admission.code.as_deref(),
+        admission.contract.map(|contract| contract.id),
+    ) != (
+        raw_head_created_at,
+        admission_status,
+        admission_code.as_deref(),
+        contract_id.as_deref(),
+    ) {
         return Err(corruption(format!(
             "transition {transition_seq} disagrees with its raw-head event"
         )));
@@ -509,8 +516,8 @@ async fn validate_incremental_cause(
             }
         }
         RadrootsAddressableTransitionRawHeadDecisionV1::NotHeadSelected => {
-            if cause_event.kind != 5
-                || cause_admission.status != RadrootsEventAdmissionStatus::Admitted
+            if (cause_event.kind, cause_admission.status)
+                != (5, RadrootsEventAdmissionStatus::Admitted)
             {
                 return Err(corruption(
                     "non-head incremental transition was not caused by an admitted deletion request",
@@ -670,9 +677,11 @@ fn validate_transition_shape(
                 })
         }
         RadrootsAddressableTransitionVisibilityV1::NotAdmitted => {
-            admission_status != RadrootsEventAdmissionStatus::Admitted
-                && visible_event.is_none()
-                && suppression.is_none()
+            (
+                admission_status == RadrootsEventAdmissionStatus::Admitted,
+                visible_event.is_none(),
+                suppression.is_none(),
+            ) == (false, true, true)
         }
         RadrootsAddressableTransitionVisibilityV1::Suppressed => {
             admission_status == RadrootsEventAdmissionStatus::Admitted
@@ -728,8 +737,20 @@ fn suppression_evidence_from_transition_row(
         .map(|value| u64_from_i64("transition.address_reference_cutoff", value))
         .transpose()
         .map_err(|error| corruption(error.to_string()))?;
-    match (outcome, reason) {
-        (Some(outcome), Some(reason)) => Ok(Some(RadrootsNip09SuppressionEvidenceV1 {
+    match (
+        outcome,
+        reason,
+        event_reference_request_id,
+        address_reference_request_id,
+        address_reference_cutoff,
+    ) {
+        (
+            Some(outcome),
+            Some(reason),
+            event_reference_request_id,
+            address_reference_request_id,
+            address_reference_cutoff,
+        ) => Ok(Some(RadrootsNip09SuppressionEvidenceV1 {
             outcome: parse_suppression_outcome(outcome.as_str())
                 .map_err(|error| corruption(error.to_string()))?,
             reason: parse_suppression_reason(reason.as_str())
@@ -738,13 +759,7 @@ fn suppression_evidence_from_transition_row(
             address_reference_request_id,
             address_reference_cutoff,
         })),
-        (None, None)
-            if event_reference_request_id.is_none()
-                && address_reference_request_id.is_none()
-                && address_reference_cutoff.is_none() =>
-        {
-            Ok(None)
-        }
+        (None, None, None, None, None) => Ok(None),
         _ => Err(corruption("transition has incomplete suppression evidence")),
     }
 }
@@ -818,14 +833,23 @@ async fn load_and_validate_stored_event(
     let event_pubkey = event.author().clone();
     let tags_json = serde_json::to_string(&event.tags_as_vec())
         .expect("an in-memory vector of string tags always serializes as JSON");
-    if stored.event_id != event.id_str()
-        || stored.pubkey != event.author_str()
-        || stored.created_at != event.created_at_u64()
-        || stored.kind != event.kind_u32()
-        || stored.tags_json != tags_json
-        || stored.content != event.content()
-        || stored.sig != event.sig_str()
-    {
+    if (
+        stored.event_id.as_str(),
+        stored.pubkey.as_str(),
+        stored.created_at,
+        stored.kind,
+        stored.tags_json.as_str(),
+        stored.content.as_str(),
+        stored.sig.as_str(),
+    ) != (
+        event.id_str(),
+        event.author_str(),
+        event.created_at_u64(),
+        event.kind_u32(),
+        tags_json.as_str(),
+        event.content(),
+        event.sig_str(),
+    ) {
         return Err(corruption(format!(
             "stored event `{}` disagrees with its signed raw JSON",
             reference.event_id()
@@ -836,10 +860,15 @@ async fn load_and_validate_stored_event(
         reconstructed.verified_event(),
     )
     .map_err(|error| corruption(format!("stored raw event cannot be admitted: {error}")))?;
-    if admission.status != stored.admission_status
-        || admission.contract.map(|contract| contract.id) != stored.contract_id.as_deref()
-        || admission.valid_stream_eligible(event.kind_class()) != stored.valid_stream_eligible
-    {
+    if (
+        admission.status,
+        admission.contract.map(|contract| contract.id),
+        admission.valid_stream_eligible(event.kind_class()),
+    ) != (
+        stored.admission_status,
+        stored.contract_id.as_deref(),
+        stored.valid_stream_eligible,
+    ) {
         return Err(corruption(format!(
             "stored event `{}` disagrees with registry-v7 admission",
             reference.event_id()
@@ -855,9 +884,12 @@ async fn validate_addressable_reference(
     reference: &RadrootsAddressableTransitionEventReferenceV1,
     event: &RadrootsStoredRawEvent,
 ) -> Result<(), RadrootsEventStoreError> {
-    if event.event_class != StoredEventClass::Addressable
-        || event.kind != coordinate.kind()
-        || event.pubkey != coordinate.pubkey().as_str()
+    if (event.event_class, event.kind, event.pubkey.as_str())
+        != (
+            StoredEventClass::Addressable,
+            coordinate.kind(),
+            coordinate.pubkey().as_str(),
+        )
     {
         return Err(corruption(format!(
             "event `{}` does not match transition coordinate `{}:{}:{}`",

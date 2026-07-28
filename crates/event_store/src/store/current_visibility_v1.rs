@@ -209,31 +209,46 @@ fn validate_visibility_shape(
     }
     let valid = match visibility.decision {
         RadrootsCurrentVisibilityDecisionV1::Visible => {
-            visibility.event.admission_status
-                == crate::model::RadrootsEventAdmissionStatus::Admitted
-                && visibility.is_raw_head
-                && evidence
-                    .is_some_and(|value| value.outcome == RadrootsNip09SuppressionOutcome::Visible)
+            (
+                visibility.event.admission_status,
+                visibility.is_raw_head,
+                evidence.map(|value| value.outcome),
+            ) == (
+                crate::model::RadrootsEventAdmissionStatus::Admitted,
+                true,
+                Some(RadrootsNip09SuppressionOutcome::Visible),
+            )
         }
         RadrootsCurrentVisibilityDecisionV1::NotAdmitted => {
-            visibility.event.admission_status
-                != crate::model::RadrootsEventAdmissionStatus::Admitted
-                && evidence.is_none()
+            (
+                visibility.event.admission_status
+                    == crate::model::RadrootsEventAdmissionStatus::Admitted,
+                evidence.is_none(),
+            ) == (false, true)
         }
         RadrootsCurrentVisibilityDecisionV1::NotCurrent => {
-            visibility.event.admission_status
-                == crate::model::RadrootsEventAdmissionStatus::Admitted
-                && !visibility.is_raw_head
-                && visibility.raw_head_event_id.is_some()
-                && evidence.is_some()
+            (
+                visibility.event.admission_status,
+                visibility.is_raw_head,
+                visibility.raw_head_event_id.is_some(),
+                evidence.is_some(),
+            ) == (
+                crate::model::RadrootsEventAdmissionStatus::Admitted,
+                false,
+                true,
+                true,
+            )
         }
         RadrootsCurrentVisibilityDecisionV1::Suppressed => {
-            visibility.event.admission_status
-                == crate::model::RadrootsEventAdmissionStatus::Admitted
-                && visibility.is_raw_head
-                && evidence.is_some_and(|value| {
-                    value.outcome == RadrootsNip09SuppressionOutcome::Suppressed
-                })
+            (
+                visibility.event.admission_status,
+                visibility.is_raw_head,
+                evidence.map(|value| value.outcome),
+            ) == (
+                crate::model::RadrootsEventAdmissionStatus::Admitted,
+                true,
+                Some(RadrootsNip09SuppressionOutcome::Suppressed),
+            )
         }
     };
     if !valid {
@@ -289,35 +304,50 @@ async fn validate_addressable_head_projection(
         })
         .transpose()
         .map_err(|error| visibility_authority_error("stored address deletion cutoff", error))?;
-    if row.try_get::<String, _>("raw_head_event_id")? != visibility.event.event_id
-        || row.try_get::<i64, _>("raw_head_event_seq")? != visibility.event.seq
-        || stored_created_at != visibility.event.created_at
-        || row.try_get::<String, _>("admission_status")?
-            != visibility.event.admission_status.as_str()
-        || row.try_get::<Option<String>, _>("admission_code")?
-            != row.try_get::<Option<String>, _>("coordinate_admission_code")?
-        || row.try_get::<Option<String>, _>("contract_id")? != visibility.event.contract_id
-        || row.try_get::<String, _>("visibility")? != visibility.decision.as_str()
-        || row
-            .try_get::<Option<String>, _>("nip09_outcome")?
-            .as_deref()
-            != evidence.map(|value| value.outcome.code())
-        || row.try_get::<Option<String>, _>("nip09_reason")?.as_deref()
-            != evidence.map(|value| value.reason.code())
-        || row
-            .try_get::<Option<String>, _>("event_reference_request_id")?
-            .as_deref()
-            != evidence
-                .and_then(|value| value.event_reference_request_id.as_ref())
-                .map(RadrootsEventId::as_str)
-        || row
-            .try_get::<Option<String>, _>("address_reference_request_id")?
-            .as_deref()
-            != evidence
-                .and_then(|value| value.address_reference_request_id.as_ref())
-                .map(RadrootsEventId::as_str)
-        || stored_cutoff != evidence.and_then(|value| value.address_reference_cutoff)
-    {
+    let stored_raw_head_event_id: String = row.try_get("raw_head_event_id")?;
+    let stored_raw_head_event_seq: i64 = row.try_get("raw_head_event_seq")?;
+    let stored_admission_status: String = row.try_get("admission_status")?;
+    let stored_admission_code: Option<String> = row.try_get("admission_code")?;
+    let coordinate_admission_code: Option<String> = row.try_get("coordinate_admission_code")?;
+    let stored_contract_id: Option<String> = row.try_get("contract_id")?;
+    let stored_visibility: String = row.try_get("visibility")?;
+    let stored_outcome: Option<String> = row.try_get("nip09_outcome")?;
+    let stored_reason: Option<String> = row.try_get("nip09_reason")?;
+    let stored_event_reference_request_id: Option<String> =
+        row.try_get("event_reference_request_id")?;
+    let stored_address_reference_request_id: Option<String> =
+        row.try_get("address_reference_request_id")?;
+    if (
+        stored_raw_head_event_id.as_str(),
+        stored_raw_head_event_seq,
+        stored_created_at,
+        stored_admission_status.as_str(),
+        stored_admission_code.as_deref(),
+        stored_contract_id.as_deref(),
+        stored_visibility.as_str(),
+        stored_outcome.as_deref(),
+        stored_reason.as_deref(),
+        stored_event_reference_request_id.as_deref(),
+        stored_address_reference_request_id.as_deref(),
+        stored_cutoff,
+    ) != (
+        visibility.event.event_id.as_str(),
+        visibility.event.seq,
+        visibility.event.created_at,
+        visibility.event.admission_status.as_str(),
+        coordinate_admission_code.as_deref(),
+        visibility.event.contract_id.as_deref(),
+        visibility.decision.as_str(),
+        evidence.map(|value| value.outcome.code()),
+        evidence.map(|value| value.reason.code()),
+        evidence
+            .and_then(|value| value.event_reference_request_id.as_ref())
+            .map(RadrootsEventId::as_str),
+        evidence
+            .and_then(|value| value.address_reference_request_id.as_ref())
+            .map(RadrootsEventId::as_str),
+        evidence.and_then(|value| value.address_reference_cutoff),
+    ) {
         return current_visibility_drift(format!(
             "central visibility disagrees with addressable head state for `{}`",
             visibility.event.event_id
@@ -702,6 +732,17 @@ mod tests {
         not_admitted.event.contract_id = None;
         not_admitted.event.valid_stream_eligible = false;
         validate_visibility_shape(&not_admitted).expect("not admitted");
+        let mut nonregular_not_admitted = visibility(
+            StoredEventClass::Replaceable,
+            RadrootsCurrentVisibilityDecisionV1::NotAdmitted,
+            false,
+            None,
+            None,
+        );
+        nonregular_not_admitted.event.admission_status = RadrootsEventAdmissionStatus::Unsupported;
+        nonregular_not_admitted.event.contract_id = None;
+        nonregular_not_admitted.event.valid_stream_eligible = false;
+        validate_visibility_shape(&nonregular_not_admitted).expect("nonregular not admitted");
 
         validate_visibility_shape(&visibility(
             StoredEventClass::Replaceable,

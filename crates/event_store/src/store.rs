@@ -7332,6 +7332,24 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         let author = RadrootsPublicKey::parse(event.pubkey_str()).expect("author");
         let event_id = RadrootsEventId::parse(event.id_str()).expect("event id");
+        for (event_seq, source_transition_seq, expected_reason) in [
+            (0, 1, "event sequence must be positive"),
+            (1, 0, "source transition sequence must be positive"),
+        ] {
+            assert!(matches!(
+                crate::RadrootsStoredFoodAvailabilityV1::from_projection(
+                    RadrootsEventStoreSourceGeneration::from_bytes([0x55; 32]),
+                    author.clone(),
+                    event_id.clone(),
+                    event_seq,
+                    200,
+                    source_transition_seq,
+                    &projection,
+                ),
+                Err(RadrootsEventStoreError::FoodAvailabilityProjectionDrift { ref reason })
+                    if reason.contains(expected_reason)
+            ));
+        }
         assert!(matches!(
             crate::RadrootsStoredFoodAvailabilityV1::from_projection(
                 RadrootsEventStoreSourceGeneration::from_bytes([0x55; 32]),

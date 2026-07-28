@@ -15,7 +15,7 @@ sha256 = "5244eaf726eaa1f81973c98ded096e78b4874dedcd869f6ab6b844962efb51d6"
 
 [[sources]]
 path = "crates/event_store/src/model.rs"
-sha256 = "14a98fe4361baa90e74c499ca96cd47822531041dfd874281b1758796b8fd22e"
+sha256 = "dd56f9285e3b11248f3d9b28171d1a02861d1578a2ff607cbe593bd2c649b2a2"
 
 [[sources]]
 path = "crates/event_store/src/model/addressable_transition_feed_v1.rs"
@@ -27,7 +27,7 @@ sha256 = "f7ac71596075fe1bff6556d0eb0b63cc0fc0a20a8aca567f77fb05796f0c3d1c"
 
 [[sources]]
 path = "crates/event_store/src/model/food_availability_projection_v1.rs"
-sha256 = "ad6e31eb32bec50b61ac1810f6a62d9f693e2673e372ae12268160c2e59c6e6e"
+sha256 = "4403608130b68f5fb1398dd46aa14147e315fa101cb7c9ffc3f9ed1791413889"
 
 [[sources]]
 path = "crates/event_store/src/model/ingest_reconciliation_v1.rs"
@@ -55,7 +55,7 @@ sha256 = "30a465f5df9a37654d15df2a92ee445037ef41c6f5a5b31e216879f4903b3d6c"
 
 [[sources]]
 path = "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
-sha256 = "b85b11baf75cc9d838c996c728d35141b7cd9d0134f5d5baae2159b7d93fa38b"
+sha256 = "9a9f3e12bd0eebf0e7ce570daa812cca0c3ffe1d0bd84a4a6f81b0d1452a4679"
 
 [[sources]]
 path = "crates/event_store/src/schema.rs"
@@ -71,11 +71,11 @@ sha256 = "ef277328d99ef75a978f2907dc654cbf391436b9db693c3be69655dccbe74f89"
 
 [[sources]]
 path = "crates/event_store/src/store/addressable_transition_feed_v1.rs"
-sha256 = "510f9cdeb3756b0f1ae4fcd5c85cb68ff5cb91344bc15cab0aa9c473938d2743"
+sha256 = "3903af04bd966ba6d19e2c2cd098478d269566676572d1385abdc23353962c91"
 
 [[sources]]
 path = "crates/event_store/src/store/current_visibility_v1.rs"
-sha256 = "ba4f77e758d98b25f034cbcc554dda833c839f3ccb8671c0b43997aaac764806"
+sha256 = "93129c02bf55858aa52e538ef50bf920d35719696183d339443e5c4060d2d4a3"
 
 [[sources]]
 path = "crates/event_store/src/store/food_availability_projection_v1.rs"
@@ -111,4 +111,4 @@ sha256 = "f9d6e28251c8ecaa60ec6ea1b4c2ab2bc0b9d125e67ea4849d35e09324a20108"
 
 [[sources]]
 path = "crates/event_store/src/store/protocol_storage_v1.rs"
-sha256 = "00378eb3b038e549fc4fa1da6797d99333be6baca2bce294be4b16a2c2bfa98e"
+sha256 = "e9a1041f7083962dc95c706d06da232abb1f0547b64351838ad6898f4209bdeb"
