@@ -17,8 +17,17 @@ name = "radroots_protocol"
 
 [features]
 default = ["std", "serde"]
-serde = []
-std = []
+serde = ["dep:serde"]
+std = ["serde?/std"]
+
+[dependencies]
+serde = { workspace = true, default-features = false, features = [
+  "alloc",
+  "derive",
+], optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true

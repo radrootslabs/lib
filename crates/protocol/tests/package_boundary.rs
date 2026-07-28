@@ -9,7 +9,7 @@ const RADROOTSD: &str = include_str!("../src/radrootsd.rs");
 const RUNTIME: &str = include_str!("../src/runtime.rs");
 
 #[test]
-fn manifest_has_final_identity_features_and_no_dependencies() {
+fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_protocol\""));
     assert!(MANIFEST.contains("version = \"0.1.0\""));
     assert!(MANIFEST.contains("publish = false"));
@@ -19,8 +19,14 @@ fn manifest_has_final_identity_features_and_no_dependencies() {
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from(["default", "serde", "std"])
     );
-    assert_eq!(table_keys(MANIFEST, "[dependencies]"), BTreeSet::new());
-    assert_eq!(table_keys(MANIFEST, "[dev-dependencies]"), BTreeSet::new());
+    assert_eq!(
+        table_keys(MANIFEST, "[dependencies]"),
+        BTreeSet::from(["serde"])
+    );
+    assert_eq!(
+        table_keys(MANIFEST, "[dev-dependencies]"),
+        BTreeSet::from(["serde_json"])
+    );
 }
 
 #[test]
@@ -37,7 +43,10 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "schema"
         ])
     );
-    for source in [CAPABILITY, ERROR, EVENT, RUNTIME] {
+    for source in [CAPABILITY, EVENT] {
+        assert!(source.lines().any(|line| line.trim() == "pub mod v1;"));
+    }
+    for source in [ERROR, RUNTIME] {
         assert!(source.lines().any(|line| line.trim() == "pub mod v1 {}"));
     }
     assert!(RADROOTSD.contains("pub mod transport_publish {"));
@@ -60,9 +69,13 @@ fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
         .take_while(|line| !line.trim_start().starts_with('['))
         .filter_map(|line| {
             let line = line.trim();
-            (!line.is_empty() && !line.starts_with('#'))
-                .then(|| line.split_once('=').map(|(key, _)| key.trim()))
-                .flatten()
+            (line
+                .bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_lowercase() || byte == b'_')
+                && !line.starts_with('#'))
+            .then(|| line.split_once('=').map(|(key, _)| key.trim()))
+            .flatten()
         })
         .collect()
 }

@@ -6,6 +6,19 @@ use core::{fmt, str::FromStr};
 /// Maximum UTF-8 byte length accepted for a schema identifier.
 pub const MAX_SCHEMA_ID_BYTES: usize = 255;
 
+/// Passive metadata that preserves an externally governed schema identity.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Metadata {
+    /// Historical generated type name bound by the schema contract.
+    pub type_name: &'static str,
+    /// Canonical schema identifier.
+    pub schema_id: &'static str,
+    /// Declared schema generation.
+    pub schema_version: u16,
+}
+
 /// A canonical, version-suffixed schema identifier.
 ///
 /// Schema identifiers contain one or more dot-separated namespace segments
@@ -194,6 +207,28 @@ impl Registry {
         Ok(Self { descriptors })
     }
 
+    /// Builds a registry from governed schema metadata and module ownership.
+    pub fn try_from_metadata(
+        entries: impl IntoIterator<Item = (Metadata, ModuleVersion)>,
+    ) -> Result<Self, Error> {
+        let descriptors = entries
+            .into_iter()
+            .map(|(metadata, module)| {
+                let descriptor = Descriptor::try_new(metadata.schema_id, module)?;
+                let encoded = descriptor.id().version();
+                if metadata.schema_version != encoded {
+                    return Err(Error::SchemaVersionMismatch {
+                        schema_id: metadata.schema_id.into(),
+                        declared: metadata.schema_version,
+                        encoded,
+                    });
+                }
+                Ok(descriptor)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::try_new(descriptors)
+    }
+
     /// Returns the canonical descriptor sequence.
     pub fn descriptors(&self) -> &[Descriptor] {
         self.descriptors.as_slice()
@@ -223,6 +258,19 @@ impl Registry {
     }
 }
 
+/// Builds the complete protocol V1 schema registry currently owned here.
+pub fn protocol_v1_registry() -> Result<Registry, Error> {
+    let capability = crate::capability::v1::SCHEMAS
+        .iter()
+        .copied()
+        .map(|metadata| (metadata, ModuleVersion::CapabilityV1));
+    let event = crate::event::v1::SCHEMAS
+        .iter()
+        .copied()
+        .map(|metadata| (metadata, ModuleVersion::EventV1));
+    Registry::try_from_metadata(capability.chain(event))
+}
+
 /// Schema identity or registry validation failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -245,6 +293,15 @@ pub enum Error {
     },
     /// The final segment is not a canonical positive `vN` generation.
     InvalidSchemaVersion,
+    /// Metadata declares a generation different from the schema ID suffix.
+    SchemaVersionMismatch {
+        /// Canonical schema identifier.
+        schema_id: String,
+        /// Generation stored in metadata.
+        declared: u16,
+        /// Generation encoded in the schema ID.
+        encoded: u16,
+    },
     /// The registry contains an identifier more than once.
     DuplicateSchemaId {
         /// Duplicated canonical schema identifier.
@@ -268,6 +325,14 @@ impl fmt::Display for Error {
             Self::InvalidSchemaVersion => {
                 formatter.write_str("schema id version must be canonical positive vN")
             }
+            Self::SchemaVersionMismatch {
+                schema_id,
+                declared,
+                encoded,
+            } => write!(
+                formatter,
+                "schema id {schema_id} encodes v{encoded} but metadata declares v{declared}"
+            ),
             Self::DuplicateSchemaId { schema_id } => {
                 write!(formatter, "duplicate schema id {schema_id}")
             }
@@ -422,5 +487,38 @@ mod tests {
                 schema_id: "radroots.protocol.event_descriptor.v1".into(),
             })
         );
+    }
+
+    #[test]
+    fn metadata_registry_rejects_version_mismatch() {
+        let metadata = Metadata {
+            type_name: "EventDescriptor",
+            schema_id: "radroots.protocol.event_descriptor.v1",
+            schema_version: 2,
+        };
+        assert_eq!(
+            Registry::try_from_metadata([(metadata, ModuleVersion::EventV1)]),
+            Err(Error::SchemaVersionMismatch {
+                schema_id: metadata.schema_id.into(),
+                declared: 2,
+                encoded: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn protocol_v1_registry_dispatches_all_migrated_schemas() {
+        let registry = protocol_v1_registry().expect("protocol V1 registry");
+        assert_eq!(registry.len(), 5);
+        for descriptor in registry.descriptors() {
+            let expected = if descriptor.id().as_str().contains("event_descriptor")
+                || descriptor.id().as_str().contains("trade_state")
+            {
+                ModuleVersion::EventV1
+            } else {
+                ModuleVersion::CapabilityV1
+            };
+            assert_eq!(registry.module_for(descriptor.id()), Some(expected));
+        }
     }
 }

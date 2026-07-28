@@ -4817,13 +4817,19 @@ dependencies = [
 [[package]]
 name = "radroots_protocol"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "radroots_protocol_contract_v1"
 version = "1.0.0-alpha.1"
 dependencies = [
  "dto_bindgen",
+ "radroots_protocol",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

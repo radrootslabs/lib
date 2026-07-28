@@ -24,3 +24,10 @@ serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ], optional = true }
+
+[dev-dependencies]
+radroots_protocol = { workspace = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
+serde_json = { workspace = true, features = ["std"] }

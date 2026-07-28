@@ -750,6 +750,18 @@ mod tests {
                     .to_string(),
                 alloc::format!("retired event name {name}")
             );
+            let successor = radroots_protocol::event::v1::EventDescriptor {
+                name,
+                kind: u32::MAX,
+                event_class: radroots_protocol::event::v1::EventClass::Regular,
+                purpose: "retired",
+            };
+            assert_eq!(
+                radroots_protocol::event::v1::validate_catalog(&[successor])
+                    .expect_err("successor retired event name")
+                    .to_string(),
+                alloc::format!("retired event name {name}")
+            );
         }
 
         for kind in RETIRED_PROTOCOL_EVENT_KINDS_V1 {
@@ -762,6 +774,18 @@ mod tests {
             assert_eq!(
                 validate_event_catalog(&[event])
                     .expect_err("retired event kind")
+                    .to_string(),
+                alloc::format!("retired event kind {kind}")
+            );
+            let successor = radroots_protocol::event::v1::EventDescriptor {
+                name: "synthetic_current_name",
+                kind: *kind,
+                event_class: radroots_protocol::event::v1::EventClass::Regular,
+                purpose: "retired",
+            };
+            assert_eq!(
+                radroots_protocol::event::v1::validate_catalog(&[successor])
+                    .expect_err("successor retired event kind")
                     .to_string(),
                 alloc::format!("retired event kind {kind}")
             );
