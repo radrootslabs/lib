@@ -83,6 +83,16 @@
       }
     },
     {
+      "id": "blossom_sha256_parse_too_long_invalid_008b",
+      "kind": "blossom.sha256.parse.invalid",
+      "input": {
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad0"
+      },
+      "expected": {
+        "error": "invalid_sha256"
+      }
+    },
+    {
       "id": "blossom_hash_path_without_extension_009",
       "kind": "blossom.hash_path.parse.valid",
       "input": {

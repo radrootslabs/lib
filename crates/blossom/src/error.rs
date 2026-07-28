@@ -196,51 +196,89 @@ mod tests {
 
     #[test]
     fn error_codes_and_messages_are_stable() {
-        let errors = [
-            Error::InvalidSha256,
-            Error::InvalidFileExtension,
-            Error::InvalidHashPath,
-            Error::InvalidBlobUrl,
-            Error::UnsupportedBlobUrlScheme,
-            Error::BlobUrlCredentialsForbidden,
-            Error::BlobUrlQueryForbidden,
-            Error::BlobUrlFragmentForbidden,
-            Error::InsecureBlobUrl,
-            Error::DescriptorExtensionRequired,
-            Error::DescriptorHashMismatch,
-            Error::InvalidMediaType,
-            Error::BlobHashMismatch,
-            Error::BlobSizeMismatch {
-                expected: 1,
-                actual: 2,
-            },
-            Error::BlobMediaTypeMismatch,
-            Error::InvalidAuthorizationContent,
-            Error::InvalidAuthorizationAction,
-            Error::InvalidAuthorizationServerDomain,
-            Error::MissingAuthorizationActionTag,
-            Error::DuplicateAuthorizationActionTag,
-            Error::MalformedAuthorizationActionTag,
-            Error::MissingAuthorizationExpirationTag,
-            Error::DuplicateAuthorizationExpirationTag,
-            Error::MalformedAuthorizationExpirationTag,
-            Error::MalformedAuthorizationServerTag,
-            Error::MalformedAuthorizationHashTag,
-            Error::InvalidAuthorizationCreatedAge,
-            Error::InvalidAuthorizationLifetime,
-            Error::AuthorizationTimestampOverflow,
-            Error::AuthorizationCreatedInFuture,
-            Error::AuthorizationStale,
-            Error::AuthorizationExpired,
-            Error::AuthorizationActionMismatch,
-            Error::AuthorizationServerRequired,
-            Error::AuthorizationServerMismatch,
-            Error::AuthorizationHashRequired,
-            Error::AuthorizationHashMismatch,
+        let cases = [
+            (
+                Error::InvalidSha256,
+                "invalid_sha256",
+                "sha256 must be 64 lowercase hexadecimal characters",
+            ),
+            (
+                Error::InvalidFileExtension,
+                "invalid_file_extension",
+                "invalid Blossom file extension",
+            ),
+            (
+                Error::InvalidHashPath,
+                "invalid_hash_path",
+                "invalid Blossom root hash path",
+            ),
+            (
+                Error::InvalidBlobUrl,
+                "invalid_blob_url",
+                "invalid Blossom blob URL",
+            ),
+            (
+                Error::UnsupportedBlobUrlScheme,
+                "unsupported_blob_url_scheme",
+                "Blossom blob URL scheme must be http or https",
+            ),
+            (
+                Error::BlobUrlCredentialsForbidden,
+                "blob_url_credentials_forbidden",
+                "Blossom blob URL credentials are forbidden",
+            ),
+            (
+                Error::BlobUrlQueryForbidden,
+                "blob_url_query_forbidden",
+                "Blossom blob URL query is forbidden",
+            ),
+            (
+                Error::BlobUrlFragmentForbidden,
+                "blob_url_fragment_forbidden",
+                "Blossom blob URL fragment is forbidden",
+            ),
+            (
+                Error::InsecureBlobUrl,
+                "insecure_blob_url",
+                "Radroots blob references require HTTPS or loopback HTTP",
+            ),
+            (
+                Error::DescriptorExtensionRequired,
+                "descriptor_extension_required",
+                "BUD-02 descriptor URL requires a file extension",
+            ),
+            (
+                Error::DescriptorHashMismatch,
+                "descriptor_hash_mismatch",
+                "descriptor URL hash does not match descriptor sha256",
+            ),
+            (
+                Error::InvalidMediaType,
+                "invalid_media_type",
+                "invalid media type",
+            ),
+            (
+                Error::BlobHashMismatch,
+                "blob_hash_mismatch",
+                "blob bytes do not match descriptor sha256",
+            ),
+            (
+                Error::BlobSizeMismatch {
+                    expected: 1,
+                    actual: 2,
+                },
+                "blob_size_mismatch",
+                "blob size mismatch: expected 1, got 2",
+            ),
+            (
+                Error::BlobMediaTypeMismatch,
+                "blob_media_type_mismatch",
+                "descriptor media type does not match the approved media type",
+            ),
         ];
-        for error in errors {
-            assert!(!error.code().is_empty());
-            assert!(!format!("{error}").is_empty());
+        for (error, code, message) in cases {
+            assert_eq!(error.code(), code);
+            assert_eq!(format!("{error}"), message);
         }
     }
 

@@ -8,14 +8,31 @@ use radroots_blossom::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use std::{borrow::Cow, fs, path::Path};
+use std::{borrow::Cow, collections::BTreeSet, fs, path::Path};
 
 const PACKAGED_VECTORS: &str = include_str!("fixtures/bud11_claims.v1.json");
 const WORKSPACE_VECTOR_PATH: &str =
     "../../contracts/conformance/vectors/blossom/bud11_claims.v1.json";
 const WORKSPACE_CONTRACT_MARKER_PATH: &str = "../../contracts/manifest.toml";
+const SUPPORTED_VECTOR_KINDS: [&str; 14] = [
+    "blossom.bud11.action.parse.valid",
+    "blossom.bud11.action.parse.invalid",
+    "blossom.bud11.server_domain.parse.valid",
+    "blossom.bud11.server_domain.parse.invalid",
+    "blossom.bud11.content.parse.valid",
+    "blossom.bud11.content.parse.invalid",
+    "blossom.bud11.claim.parse.valid",
+    "blossom.bud11.claim.parse.invalid",
+    "blossom.bud11.validation.new.valid",
+    "blossom.bud11.validation.new.invalid",
+    "blossom.bud11.claim.validate.valid",
+    "blossom.bud11.claim.validate.invalid",
+    "blossom.bud11.authored_upload.valid",
+    "blossom.bud11.authored_upload.invalid",
+];
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Suite {
     suite: String,
     contract_version: String,
@@ -23,6 +40,7 @@ struct Suite {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Vector {
     id: String,
     kind: String,
@@ -37,10 +55,36 @@ fn checked_in_bud11_vectors_execute_against_public_api() {
     assert_eq!(suite.suite, "blossom_bud11_claims");
     assert_eq!(suite.contract_version, "1.0.0");
     assert!(!suite.vectors.is_empty());
+    assert_vector_inventory(&suite.vectors);
 
     for vector in &suite.vectors {
         execute(vector);
     }
+}
+
+fn assert_vector_inventory(vectors: &[Vector]) {
+    let mut ids = BTreeSet::new();
+    let mut kinds = BTreeSet::new();
+    for vector in vectors {
+        assert!(!vector.id.trim().is_empty(), "vector id must be nonblank");
+        assert!(
+            ids.insert(vector.id.as_str()),
+            "duplicate vector id {}",
+            vector.id
+        );
+        assert!(
+            vector.input.is_object(),
+            "{} input must be an object",
+            vector.id
+        );
+        assert!(
+            vector.expected.is_object(),
+            "{} expected must be an object",
+            vector.id
+        );
+        kinds.insert(vector.kind.as_str());
+    }
+    assert_eq!(kinds, BTreeSet::from(SUPPORTED_VECTOR_KINDS));
 }
 
 fn conformance_vectors() -> Cow<'static, str> {
@@ -136,18 +180,24 @@ fn server_domain_parse_invalid(vector: &Vector) {
 fn content_parse_valid(vector: &Vector) {
     let content = AuthorizationContent::parse(input_str(vector, "content"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
-    assert_eq!(
-        content.as_str(),
-        expected_str(vector, "content"),
-        "{}",
-        vector.id
-    );
-    assert_eq!(
-        content.to_string(),
-        expected_str(vector, "content"),
-        "{}",
-        vector.id
-    );
+    if let Some(expected) = vector.expected.get("content").and_then(Value::as_str) {
+        assert_eq!(content.as_str(), expected, "{}", vector.id);
+        assert_eq!(content.to_string(), expected, "{}", vector.id);
+    } else {
+        let expected_byte_length = expected_u64(vector, "content_byte_length");
+        assert_eq!(
+            content.as_str().len() as u64,
+            expected_byte_length,
+            "{}",
+            vector.id
+        );
+        assert_eq!(
+            content.to_string().len() as u64,
+            expected_byte_length,
+            "{}",
+            vector.id
+        );
+    }
 }
 
 fn content_parse_invalid(vector: &Vector) {

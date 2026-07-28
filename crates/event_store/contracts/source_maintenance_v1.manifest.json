@@ -229,8 +229,8 @@
     {
       "role": "blossom_error_authority",
       "path": "crates/blossom/src/error.rs",
-      "byte_length": 16267,
-      "sha256": "679afd92e874513f1f2849603317a0b0f1eba318ad213de1cdaed333ddd39e5c",
+      "byte_length": 17229,
+      "sha256": "02af55beacf437040be17d1fc3271d6e2a62915f656ec2dbe06247deef83f95a",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
