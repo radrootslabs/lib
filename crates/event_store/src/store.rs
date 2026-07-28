@@ -6601,6 +6601,67 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     }
 
     #[test]
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    fn projection_scalar_helpers_reject_every_unrepresentable_boundary() {
+        assert!(matches!(
+            validate_projection_identity("", 1),
+            Err(RadrootsEventStoreError::InvalidProjectionId)
+        ));
+        assert!(matches!(
+            validate_projection_identity("projection", 0),
+            Err(RadrootsEventStoreError::InvalidProjectionVersion {
+                projection_id,
+                value: 0,
+            }) if projection_id == "projection"
+        ));
+
+        assert_eq!(
+            projection_version_from_i64("projection", 1).expect("version"),
+            1
+        );
+        for value in [-1, i64::from(u32::MAX) + 1] {
+            assert!(matches!(
+                projection_version_from_i64("projection", value),
+                Err(RadrootsEventStoreError::InvalidProjectionVersion {
+                    projection_id,
+                    value: actual,
+                }) if projection_id == "projection" && actual == value
+            ));
+        }
+        assert!(matches!(
+            projection_version_from_i64("projection", 0),
+            Err(RadrootsEventStoreError::InvalidProjectionVersion {
+                projection_id,
+                value: 0,
+            }) if projection_id == "projection"
+        ));
+
+        assert_eq!(
+            projection_source_revision_from_i64("projection", Some(1)).expect("revision"),
+            1
+        );
+        for value in [None, Some(-1), Some(0), Some(i64::MAX)] {
+            assert!(matches!(
+                projection_source_revision_from_i64("projection", value),
+                Err(RadrootsEventStoreError::InvalidProjectionSourceRevision {
+                    projection_id,
+                    value: actual,
+                }) if projection_id == "projection" && actual == value
+            ));
+        }
+
+        assert!(!bool_from_i64("flag", 0).expect("false"));
+        assert!(bool_from_i64("flag", 1).expect("true"));
+        assert!(matches!(
+            bool_from_i64("flag", 2),
+            Err(RadrootsEventStoreError::InvalidStoredBoolean {
+                field: "flag",
+                value: 2,
+            })
+        ));
+    }
+
+    #[test]
     fn ingest_rollback_failure_preserves_the_primary_error() {
         let result: Result<(), _> = preserve_ingest_primary_failure(
             RadrootsEventStoreError::MissingEvent("primary".to_owned()),
@@ -11115,6 +11176,55 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("stored cursor"),
             first_cursor
         );
+
+        let mismatched_generation = RadrootsProjectionCursor {
+            source_generation: RadrootsEventStoreSourceGeneration::from_bytes([0xff; 32]),
+            ..first_cursor.clone()
+        };
+        assert!(matches!(
+            store
+                .compare_and_swap_projection_cursor(&mismatched_generation, None)
+                .await,
+            Err(RadrootsEventStoreError::ProjectionSourceGenerationMismatch { .. })
+        ));
+        let duplicate_insert = RadrootsProjectionCursor {
+            updated_at_ms: first_cursor.updated_at_ms() + 1,
+            ..first_cursor.clone()
+        };
+        assert!(matches!(
+            store
+                .compare_and_swap_projection_cursor(&duplicate_insert, None)
+                .await,
+            Err(RadrootsEventStoreError::ProjectionCursorConflict { .. })
+        ));
+        let mismatched_version = RadrootsProjectionCursor {
+            projection_version: 2,
+            ..first_cursor.clone()
+        };
+        assert!(matches!(
+            store
+                .compare_and_swap_projection_cursor(&mismatched_version, None)
+                .await,
+            Err(RadrootsEventStoreError::ProjectionVersionMismatch {
+                expected: 2,
+                actual: 1,
+                ..
+            })
+        ));
+        let stale_insert = RadrootsProjectionCursor {
+            last_event_seq: 0,
+            ..first_cursor.clone()
+        };
+        assert!(matches!(
+            store
+                .compare_and_swap_projection_cursor(&stale_insert, None)
+                .await,
+            Err(RadrootsEventStoreError::ProjectionCursorRegression {
+                current,
+                proposed: 0,
+                ..
+            }) if current == first_seq
+        ));
         assert!(matches!(
             store.projection_cursor("social", 2).await,
             Err(RadrootsEventStoreError::ProjectionVersionMismatch { .. })
