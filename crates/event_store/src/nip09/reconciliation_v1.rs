@@ -1525,12 +1525,10 @@ async fn load_reconciliation_snapshot(
                     ],
                 )?,
             )?;
-            next_tag_rowid = tag_rowid.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: "raw tag rowid exhausts bounded snapshot pagination".to_owned(),
-                }
-            })?;
+            next_tag_rowid = next_reconciliation_page_value(
+                tag_rowid,
+                ReconciliationPaginationAxis::RawTagSnapshot,
+            )?;
             tags_by_event
                 .entry(event_id)
                 .or_default()
@@ -1594,14 +1592,12 @@ async fn load_reconciliation_snapshot(
                     "raw source event `{event_id}` has nonpositive sequence {seq}"
                 ));
             }
-            next_event_seq = seq.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: format!(
-                        "raw source event `{event_id}` exhausts the SQLite INTEGER sequence space"
-                    ),
-                }
-            })?;
+            next_event_seq = next_reconciliation_page_value(
+                seq,
+                ReconciliationPaginationAxis::RawEventSnapshot {
+                    event_id: event_id.as_str(),
+                },
+            )?;
             let inserted_at_ms: i64 = row.try_get("inserted_at_ms")?;
             let ingest =
                 RadrootsEventIngest::from_raw_json_reconciliation_v1(raw_json, inserted_at_ms)
@@ -1687,6 +1683,60 @@ fn compare_raw_tags(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum ReconciliationPaginationAxis<'a> {
+    RawTagSnapshot,
+    RawEventSnapshot { event_id: &'a str },
+    RawEventCapacity { seq: i64 },
+    RawTagCapacity,
+    DerivedEnvelope,
+    DerivedTag,
+}
+
+impl ReconciliationPaginationAxis<'_> {
+    fn exhausted_reason(self) -> String {
+        match self {
+            Self::RawTagSnapshot => "raw tag rowid exhausts bounded snapshot pagination".to_owned(),
+            Self::RawEventSnapshot { event_id } => {
+                format!("raw source event `{event_id}` exhausts the SQLite INTEGER sequence space")
+            }
+            Self::RawEventCapacity { seq } => {
+                format!("raw source event sequence {seq} exhausts bounded snapshot pagination")
+            }
+            Self::RawTagCapacity => "raw tag rowid exhausts bounded capacity pagination".to_owned(),
+            Self::DerivedEnvelope => {
+                "derived envelope sequence exhausts bounded pagination".to_owned()
+            }
+            Self::DerivedTag => {
+                "derived tag rowid exhausts bounded validation pagination".to_owned()
+            }
+        }
+    }
+}
+
+fn next_reconciliation_page_value(
+    value: i64,
+    axis: ReconciliationPaginationAxis<'_>,
+) -> Result<i64, RadrootsEventStoreError> {
+    match value.checked_add(1) {
+        Some(next) => Ok(next),
+        None => Err(RadrootsEventStoreError::MigrationHookStateDrift {
+            hook_id: NIP09_HOOK_ID,
+            reason: axis.exhausted_reason(),
+        }),
+    }
+}
+
+fn next_reconciliation_event_index(value: usize) -> Result<usize, RadrootsEventStoreError> {
+    match value.checked_add(1) {
+        Some(next) => Ok(next),
+        None => Err(RadrootsEventStoreError::MigrationHookStateDrift {
+            hook_id: NIP09_HOOK_ID,
+            reason: "derived envelope count exceeds addressable memory".to_owned(),
+        }),
+    }
+}
+
 pub(crate) async fn measure_reconciliation_capacity_bounded(
     connection: &mut SqliteConnection,
     limits: ReconciliationCapacityLimits,
@@ -1719,14 +1769,10 @@ pub(crate) async fn measure_reconciliation_capacity_bounded(
                     row.try_get("raw_bytes")?,
                 )?,
             )?;
-            next_event_seq = seq.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: format!(
-                        "raw source event sequence {seq} exhausts bounded snapshot pagination"
-                    ),
-                }
-            })?;
+            next_event_seq = next_reconciliation_page_value(
+                seq,
+                ReconciliationPaginationAxis::RawEventCapacity { seq },
+            )?;
         }
         if row_count < page_len {
             break;
@@ -1759,12 +1805,10 @@ pub(crate) async fn measure_reconciliation_capacity_bounded(
                 )?,
             )?;
             let tag_rowid: i64 = row.try_get("tag_rowid")?;
-            next_tag_rowid = tag_rowid.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: "raw tag rowid exhausts bounded capacity pagination".to_owned(),
-                }
-            })?;
+            next_tag_rowid = next_reconciliation_page_value(
+                tag_rowid,
+                ReconciliationPaginationAxis::RawTagCapacity,
+            )?;
         }
         if row_count < page_len {
             break;
@@ -1834,18 +1878,9 @@ async fn validate_derived_event_storage(
                 return hook_drift("derived envelope row count exceeds raw events".to_owned());
             };
             let seq: i64 = row.try_get("seq")?;
-            next_event_seq = seq.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: "derived envelope sequence exhausts bounded pagination".to_owned(),
-                }
-            })?;
-            event_index = event_index.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: "derived envelope count exceeds addressable memory".to_owned(),
-                }
-            })?;
+            next_event_seq =
+                next_reconciliation_page_value(seq, ReconciliationPaginationAxis::DerivedEnvelope)?;
+            event_index = next_reconciliation_event_index(event_index)?;
             let envelope = event.verified_event.event();
             let expected_class = StoredEventClass::from_event_kind_class(envelope.kind_class());
             let expected_projection =
@@ -1912,12 +1947,10 @@ async fn validate_derived_event_storage(
                 row.try_get::<Option<String>, _>("contract_value_type")?,
                 row.try_get::<i64, _>("relay_indexed")?,
             );
-            next_tag_rowid = tag_rowid.checked_add(1).ok_or_else(|| {
-                RadrootsEventStoreError::MigrationHookStateDrift {
-                    hook_id: NIP09_HOOK_ID,
-                    reason: "derived tag rowid exhausts bounded validation pagination".to_owned(),
-                }
-            })?;
+            next_tag_rowid = next_reconciliation_page_value(
+                tag_rowid,
+                ReconciliationPaginationAxis::DerivedTag,
+            )?;
             if !expected_tags.remove(&actual_tag) {
                 return hook_drift(
                     "derived tag fields disagree with admitted contracts".to_owned(),
@@ -3842,6 +3875,58 @@ mod tests {
                 hook_id: NIP09_HOOK_ID,
                 reason,
             }) if reason == "fixture count range"
+        ));
+        assert_eq!(
+            next_reconciliation_page_value(0, ReconciliationPaginationAxis::RawTagSnapshot)
+                .expect("bounded page successor"),
+            1,
+        );
+        for (axis, expected_reason) in [
+            (
+                ReconciliationPaginationAxis::RawTagSnapshot,
+                "raw tag rowid exhausts bounded snapshot pagination",
+            ),
+            (
+                ReconciliationPaginationAxis::RawEventSnapshot {
+                    event_id: "fixture-event",
+                },
+                "raw source event `fixture-event` exhausts the SQLite INTEGER sequence space",
+            ),
+            (
+                ReconciliationPaginationAxis::RawEventCapacity { seq: i64::MAX },
+                "raw source event sequence 9223372036854775807 exhausts bounded snapshot pagination",
+            ),
+            (
+                ReconciliationPaginationAxis::RawTagCapacity,
+                "raw tag rowid exhausts bounded capacity pagination",
+            ),
+            (
+                ReconciliationPaginationAxis::DerivedEnvelope,
+                "derived envelope sequence exhausts bounded pagination",
+            ),
+            (
+                ReconciliationPaginationAxis::DerivedTag,
+                "derived tag rowid exhausts bounded validation pagination",
+            ),
+        ] {
+            assert!(matches!(
+                next_reconciliation_page_value(i64::MAX, axis),
+                Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                    hook_id: NIP09_HOOK_ID,
+                    reason,
+                }) if reason == expected_reason
+            ));
+        }
+        assert_eq!(
+            next_reconciliation_event_index(0).expect("bounded event index"),
+            1,
+        );
+        assert!(matches!(
+            next_reconciliation_event_index(usize::MAX),
+            Err(RadrootsEventStoreError::MigrationHookStateDrift {
+                hook_id: NIP09_HOOK_ID,
+                reason,
+            }) if reason == "derived envelope count exceeds addressable memory"
         ));
         assert!(matches!(
             EventAdmission::from_registry_v7(RadrootsRegistryV7AdmissionDecision::Defect {
