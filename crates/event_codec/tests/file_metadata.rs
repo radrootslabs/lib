@@ -384,6 +384,6 @@ fn file_metadata_wrappers_preserve_event_metadata() {
     .unwrap();
 
     assert_eq!(parsed.event.created_at_u64(), 90);
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.sha256, VALID_HASH);
 }

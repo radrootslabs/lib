@@ -627,7 +627,7 @@ fn validate_authored_comment_wire_size(
                 &mut tag_count,
                 &[
                     "E",
-                    reference.event_id().as_str(),
+                    reference.event_id().to_hex().as_str(),
                     reference.relay_or_empty(),
                     reference.author().to_hex().as_str(),
                 ],
@@ -672,7 +672,7 @@ fn validate_authored_comment_wire_size(
                 &mut tag_count,
                 &[
                     "e",
-                    reference.event_id().as_str(),
+                    reference.event_id().to_hex().as_str(),
                     reference.relay_or_empty(),
                     reference.author().to_hex().as_str(),
                 ],
@@ -710,7 +710,7 @@ fn validate_authored_comment_wire_size(
                 &mut tags_json_bytes,
                 &mut tag_count,
                 "e",
-                current_revision.as_str(),
+                current_revision.to_hex().as_str(),
                 reference.relay(),
             );
             add_tag(
@@ -736,7 +736,7 @@ fn validate_authored_comment_wire_size(
                 &mut tag_count,
                 &[
                     "e",
-                    parent.event_id().as_str(),
+                    parent.event_id().to_hex().as_str(),
                     parent.relay_or_empty(),
                     parent.author().to_hex().as_str(),
                 ],
@@ -911,7 +911,7 @@ mod tests {
 
         let root = event_root(KIND_CLASSIFIED_LISTING);
         let parent = RadrootsNip22CommentParentReference::parse(
-            root.event_id().as_str(),
+            root.event_id().to_hex(),
             "d".repeat(64),
             None,
         )
@@ -944,7 +944,7 @@ mod tests {
         assert!(matches!(
             comment.position(),
             RadrootsNip22CommentPosition::TopLevelAddress { current_revision }
-                if current_revision.as_str() == "e".repeat(64)
+                if current_revision.to_hex() == "e".repeat(64)
         ));
     }
 

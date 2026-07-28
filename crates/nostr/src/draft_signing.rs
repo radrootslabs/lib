@@ -28,9 +28,10 @@ pub fn radroots_nostr_sign_frozen_draft(
     .custom_created_at(RadrootsNostrTimestamp::from_secs(draft.created_at_u64()))
     .sign_with_keys(keys)?;
     let actual_event_id = event.id.to_hex();
-    if actual_event_id != draft.expected_event_id_str() {
+    let expected_event_id = draft.expected_event_id_hex();
+    if actual_event_id != expected_event_id {
         return Err(RadrootsNostrError::FrozenDraftEventIdMismatch {
-            expected_event_id: draft.expected_event_id_str().to_owned(),
+            expected_event_id,
             actual_event_id,
         });
     }
@@ -73,7 +74,7 @@ mod tests {
         let draft = generic_draft(FIXTURE_ALICE.public_key_hex);
         let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
 
-        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.id_str(), draft.expected_event_id_hex());
         assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(signed.created_at(), draft.created_at_u64());
         assert_eq!(signed.kind(), draft.kind_u32());

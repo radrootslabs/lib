@@ -489,7 +489,7 @@ mod tests {
             let author = keys.public_key().to_string();
             let id = compute_canonical_nip01_event_id(&author, created_at, kind, &tags, content)
                 .expect("canonical event id");
-            let nostr_id = nostr::EventId::from_hex(id.as_str()).expect("Nostr event id");
+            let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
             let message = Message::from_digest(nostr_id.to_bytes());
             let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
 

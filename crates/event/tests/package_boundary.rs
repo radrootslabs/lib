@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use radroots_event::id::{DTag, EventId, EventSignature, Nip01Coordinate};
 #[cfg(feature = "knowledge")]
 #[allow(unused_imports)]
 use radroots_event::knowledge as _;
@@ -12,6 +13,8 @@ use radroots_event::{
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const IDENTIFIERS: &str = include_str!("../src/ids.rs");
+const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -64,6 +67,27 @@ fn crate_root_declares_every_approved_module() {
             "missing approved module {module}"
         );
     }
+}
+
+#[test]
+fn canonical_identifier_api_owns_bytes_and_requires_explicit_text_encoding() {
+    let event_id = EventId::parse("A".repeat(64)).expect("event id");
+    let signature = EventSignature::parse("B".repeat(128)).expect("event signature");
+    let d_tag = DTag::parse("listing-1").expect("d tag");
+    let coordinate = Nip01Coordinate::parse(format!("30000:{}:listing-1", event_id.to_hex()))
+        .expect("coordinate");
+
+    assert_eq!(core::mem::size_of::<EventId>(), 32);
+    assert_eq!(core::mem::size_of::<EventSignature>(), 64);
+    assert_eq!(event_id.to_hex(), "a".repeat(64));
+    assert_eq!(EventId::from_bytes(event_id.into_bytes()), event_id);
+    assert_eq!(signature.to_hex(), "b".repeat(128));
+    assert_eq!(d_tag.as_str(), "listing-1");
+    assert_eq!(coordinate.identifier(), "listing-1");
+    assert!(!IDENTIFIERS.contains("impl Deref"));
+    assert!(!IDENTIFIERS.contains("impl Borrow<str>"));
+    assert!(!RELAY_HINT.contains("impl Deref"));
+    assert!(!RELAY_HINT.contains("impl Borrow<str>"));
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

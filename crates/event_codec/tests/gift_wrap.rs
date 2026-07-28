@@ -165,7 +165,7 @@ fn gift_wrap_metadata_and_index_from_event_roundtrip() {
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_GIFT_WRAP);
-    assert_eq!(index.event.sig_str(), EVENT_SIG);
+    assert_eq!(index.event.signature_hex(), EVENT_SIG);
     assert_eq!(index.data.data.recipient.public_key, "pubkey");
 }
 

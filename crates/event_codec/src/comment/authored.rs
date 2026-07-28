@@ -52,7 +52,7 @@ pub fn authored_nip22_comment_to_wire_parts(
             tags.push(address_reference_tag("a", reference));
             tags.push(optional_relay_tag(
                 "e",
-                current_revision.as_str(),
+                current_revision.to_hex().as_str(),
                 reference.relay(),
             ));
             tags.push(vec!["k".to_string(), root.kind().as_u32().to_string()]);
@@ -76,7 +76,7 @@ pub fn authored_nip22_comment_to_wire_parts(
 fn event_reference_tag(name: &str, reference: &RadrootsNip22EventRootReference) -> Vec<String> {
     vec![
         name.to_string(),
-        reference.event_id().as_str().to_string(),
+        reference.event_id().to_hex(),
         reference.relay_or_empty().to_string(),
         reference.author().to_hex(),
     ]
@@ -89,7 +89,7 @@ fn address_reference_tag(name: &str, reference: &RadrootsNip22AddressRootReferen
 fn parent_reference_tag(reference: &RadrootsNip22CommentParentReference) -> Vec<String> {
     vec![
         "e".to_string(),
-        reference.event_id().as_str().to_string(),
+        reference.event_id().to_hex(),
         reference.relay_or_empty().to_string(),
         reference.author().to_hex(),
     ]

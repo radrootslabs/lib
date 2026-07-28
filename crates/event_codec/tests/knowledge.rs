@@ -92,13 +92,13 @@ fn event_with_parts(
     content: String,
 ) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
-        id: event.id_str().to_string(),
+        id: event.id_hex().to_string(),
         author: event.author().to_hex().to_string(),
         created_at: event.created_at_u64(),
         kind: event.kind_u32(),
         tags,
         content,
-        sig: event.sig_str().to_string(),
+        sig: event.signature_hex().to_string(),
     })
     .unwrap()
 }

@@ -55,7 +55,7 @@ async fn store_trade_mutation_event(
                 .quarantine_trade(
                     None,
                     None,
-                    Some(event.id_str()),
+                    Some(event.id_hex()),
                     reason.as_str(),
                     ingest.observed_at_ms(),
                 )
@@ -68,9 +68,9 @@ async fn store_trade_mutation_event(
         None => {
             storage
                 .quarantine_trade(
-                    Some(parsed.trade_id.as_str()),
+                    Some(parsed.trade_id.to_hex()),
                     None,
-                    Some(event.id_str()),
+                    Some(event.id_hex()),
                     "canonical trade mutation content is missing mutation_id",
                     ingest.observed_at_ms(),
                 )
@@ -81,9 +81,9 @@ async fn store_trade_mutation_event(
     if &parsed.author_pubkey != event.author() {
         storage
             .quarantine_trade(
-                Some(parsed.trade_id.as_str()),
-                Some(mutation_id.as_str()),
-                Some(event.id_str()),
+                Some(parsed.trade_id.to_hex()),
+                Some(mutation_id.to_hex()),
+                Some(event.id_hex()),
                 "trade mutation author_pubkey does not match transport event pubkey",
                 ingest.observed_at_ms(),
             )

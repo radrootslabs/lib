@@ -6,7 +6,10 @@ use alloc::{format, string::String, string::ToString, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
-use core::{borrow::Borrow, fmt, ops::Deref, str::FromStr};
+use core::{
+    fmt::{self, Write as _},
+    str::FromStr,
+};
 pub(crate) use radroots_identity::PublicKey;
 use url_nostd::Url;
 
@@ -84,54 +87,10 @@ macro_rules! validated_string_id {
             }
         }
 
-        impl Deref for $name {
-            type Target = str;
-
-            #[inline]
-            fn deref(&self) -> &Self::Target {
-                self.as_str()
-            }
-        }
-
-        impl Borrow<str> for $name {
-            #[inline]
-            fn borrow(&self) -> &str {
-                self.as_str()
-            }
-        }
-
         impl From<$name> for String {
             #[inline]
             fn from(value: $name) -> Self {
                 value.into_string()
-            }
-        }
-
-        impl PartialEq<&str> for $name {
-            #[inline]
-            fn eq(&self, other: &&str) -> bool {
-                self.as_str() == *other
-            }
-        }
-
-        impl PartialEq<$name> for &str {
-            #[inline]
-            fn eq(&self, other: &$name) -> bool {
-                *self == other.as_str()
-            }
-        }
-
-        impl PartialEq<String> for $name {
-            #[inline]
-            fn eq(&self, other: &String) -> bool {
-                self.as_str() == other.as_str()
-            }
-        }
-
-        impl PartialEq<$name> for String {
-            #[inline]
-            fn eq(&self, other: &$name) -> bool {
-                self.as_str() == other.as_str()
             }
         }
 
@@ -188,11 +147,122 @@ macro_rules! validated_string_id {
     };
 }
 
-validated_string_id!(RadrootsEventId, validate_hex_64);
-validated_string_id!(RadrootsEventSignature, validate_hex_128);
-validated_string_id!(RadrootsTradeId, validate_hex_32);
-validated_string_id!(RadrootsTradeCandidateId, validate_hex_64);
-validated_string_id!(RadrootsTradeMutationId, validate_hex_64);
+macro_rules! validated_hex_id {
+    ($name:ident, $byte_len:expr) => {
+        #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub struct $name([u8; $byte_len]);
+
+        impl $name {
+            pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsIdParseError> {
+                decode_hex::<$byte_len>(value.as_ref()).map(Self)
+            }
+
+            #[inline]
+            pub const fn from_bytes(bytes: [u8; $byte_len]) -> Self {
+                Self(bytes)
+            }
+
+            #[inline]
+            pub const fn as_bytes(&self) -> &[u8; $byte_len] {
+                &self.0
+            }
+
+            #[inline]
+            pub const fn into_bytes(self) -> [u8; $byte_len] {
+                self.0
+            }
+
+            pub fn to_hex(&self) -> String {
+                encode_hex(self.0.as_slice())
+            }
+
+            #[inline]
+            pub fn into_string(self) -> String {
+                self.to_hex()
+            }
+        }
+
+        impl AsRef<[u8]> for $name {
+            #[inline]
+            fn as_ref(&self) -> &[u8] {
+                self.0.as_slice()
+            }
+        }
+
+        impl From<[u8; $byte_len]> for $name {
+            #[inline]
+            fn from(bytes: [u8; $byte_len]) -> Self {
+                Self::from_bytes(bytes)
+            }
+        }
+
+        impl From<$name> for [u8; $byte_len] {
+            #[inline]
+            fn from(value: $name) -> Self {
+                value.into_bytes()
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write_hex(formatter, self.0.as_slice())
+            }
+        }
+
+        impl FromStr for $name {
+            type Err = RadrootsIdParseError;
+
+            fn from_str(value: &str) -> Result<Self, Self::Err> {
+                Self::parse(value)
+            }
+        }
+
+        impl TryFrom<&str> for $name {
+            type Error = RadrootsIdParseError;
+
+            fn try_from(value: &str) -> Result<Self, Self::Error> {
+                Self::parse(value)
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = RadrootsIdParseError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::parse(value)
+            }
+        }
+
+        #[cfg(any(feature = "serde", test))]
+        impl serde::Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                serializer.collect_str(self)
+            }
+        }
+
+        #[cfg(any(feature = "serde", test))]
+        impl<'de> serde::Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let value = String::deserialize(deserializer)?;
+                Self::parse(value).map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
+validated_hex_id!(RadrootsEventId, 32);
+validated_hex_id!(RadrootsEventSignature, 64);
+validated_hex_id!(RadrootsTradeId, 16);
+validated_hex_id!(RadrootsTradeCandidateId, 32);
+validated_hex_id!(RadrootsTradeMutationId, 32);
 validated_string_id!(RadrootsDTag, validate_d_tag);
 validated_string_id!(
     RadrootsAddressableCoordinate,
@@ -206,7 +276,7 @@ validated_string_id!(RadrootsOrderId, validate_commercial_id);
 validated_string_id!(RadrootsOrderQuoteId, validate_commercial_id);
 validated_string_id!(RadrootsInventoryBinId, validate_commercial_id);
 validated_string_id!(RadrootsEconomicsDigest, validate_economics_digest);
-validated_string_id!(RadrootsEventPointer, validate_hex_64);
+validated_hex_id!(RadrootsEventPointer, 32);
 validated_string_id!(RadrootsRelayUrl, validate_relay_url);
 
 pub(crate) fn parse_public_key(value: impl AsRef<str>) -> Result<PublicKey, RadrootsIdParseError> {
@@ -390,22 +460,6 @@ impl AsRef<str> for RadrootsNip01Coordinate {
     }
 }
 
-impl Deref for RadrootsNip01Coordinate {
-    type Target = str;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl Borrow<str> for RadrootsNip01Coordinate {
-    #[inline]
-    fn borrow(&self) -> &str {
-        self.as_str()
-    }
-}
-
 impl From<RadrootsNip01Coordinate> for String {
     #[inline]
     fn from(value: RadrootsNip01Coordinate) -> Self {
@@ -502,16 +556,54 @@ impl RadrootsEventEnvelopePointer {
     }
 }
 
-fn validate_hex_64(value: &str) -> Result<String, RadrootsIdParseError> {
-    validate_hex(value, 64)
+fn decode_hex<const N: usize>(value: &str) -> Result<[u8; N], RadrootsIdParseError> {
+    let expected = N * 2;
+    if value.len() != expected {
+        return Err(RadrootsIdParseError::InvalidLength {
+            expected,
+            actual: value.len(),
+        });
+    }
+
+    let mut decoded = [0_u8; N];
+    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+        decoded[index] = (decode_hex_nibble(pair[0])? << 4) | decode_hex_nibble(pair[1])?;
+    }
+    Ok(decoded)
 }
 
-fn validate_hex_32(value: &str) -> Result<String, RadrootsIdParseError> {
-    validate_hex(value, 32)
+fn decode_hex_nibble(value: u8) -> Result<u8, RadrootsIdParseError> {
+    match value {
+        b'0'..=b'9' => Ok(value - b'0'),
+        b'a'..=b'f' => Ok(value - b'a' + 10),
+        b'A'..=b'F' => Ok(value - b'A' + 10),
+        _ => Err(RadrootsIdParseError::InvalidCharacter),
+    }
 }
 
-fn validate_hex_128(value: &str) -> Result<String, RadrootsIdParseError> {
-    validate_hex(value, 128)
+fn encode_hex(bytes: &[u8]) -> String {
+    const LOWER_HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(LOWER_HEX[usize::from(byte >> 4)] as char);
+        encoded.push(LOWER_HEX[usize::from(byte & 0x0f)] as char);
+    }
+    encoded
+}
+
+fn write_hex(formatter: &mut fmt::Formatter<'_>, bytes: &[u8]) -> fmt::Result {
+    for byte in bytes {
+        formatter.write_char(lower_hex_digit(byte >> 4))?;
+        formatter.write_char(lower_hex_digit(byte & 0x0f))?;
+    }
+    Ok(())
+}
+
+const fn lower_hex_digit(value: u8) -> char {
+    match value {
+        0..=9 => (b'0' + value) as char,
+        _ => (b'a' + value - 10) as char,
+    }
 }
 
 fn validate_hex(value: &str, expected_len: usize) -> Result<String, RadrootsIdParseError> {
@@ -655,7 +747,7 @@ fn validate_relay_url(value: &str) -> Result<String, RadrootsIdParseError> {
 mod tests {
     use super::*;
 
-    macro_rules! assert_identifier_impls {
+    macro_rules! assert_string_identifier_impls {
         ($ty:ty, $value:expr) => {{
             let value = $value.to_owned();
             let value = value.as_str();
@@ -663,8 +755,6 @@ mod tests {
 
             assert_eq!(id.as_str(), value);
             assert_eq!(id.as_ref(), value);
-            assert_eq!(&*id, value);
-            assert_eq!(<$ty as core::borrow::Borrow<str>>::borrow(&id), value);
             assert_eq!(id.to_string(), value);
             assert_eq!(
                 <$ty as core::str::FromStr>::from_str(value).expect("from str"),
@@ -678,11 +768,6 @@ mod tests {
                 <$ty as TryFrom<String>>::try_from(value.to_owned()).expect("try from string"),
                 id
             );
-            assert_eq!(id, value);
-            assert_eq!(value, id);
-            assert_eq!(id, value.to_owned());
-            assert_eq!(value.to_owned(), id);
-
             let id = <$ty>::parse(value).expect("parse");
             let converted: String = String::from(id.clone());
             assert_eq!(converted, value);
@@ -694,6 +779,42 @@ mod tests {
                 let encoded = serde_json::to_string(&id).expect("serialize");
                 let decoded: $ty = serde_json::from_str(&encoded).expect("deserialize");
                 assert_eq!(decoded.as_str(), value);
+            }
+        }};
+    }
+
+    macro_rules! assert_hex_identifier_impls {
+        ($ty:ty, $value:expr, $byte_len:expr) => {{
+            let value = $value.to_owned();
+            let value = value.as_str();
+            let id = <$ty>::parse(value).expect("parse");
+
+            assert_eq!(id.to_hex(), value);
+            assert_eq!(id.as_bytes().len(), $byte_len);
+            assert_eq!(id.as_ref(), id.as_bytes());
+            assert_eq!(id.to_string(), value);
+            assert_eq!(
+                <$ty as core::str::FromStr>::from_str(value).expect("from str"),
+                id
+            );
+            assert_eq!(
+                <$ty as TryFrom<&str>>::try_from(value).expect("try from str"),
+                id
+            );
+            assert_eq!(
+                <$ty as TryFrom<String>>::try_from(value.to_owned()).expect("try from string"),
+                id
+            );
+
+            let bytes = id.into_bytes();
+            assert_eq!(<$ty>::from_bytes(bytes), id);
+            assert_eq!(id.into_string(), value.to_owned());
+
+            #[cfg(any(feature = "serde", test))]
+            {
+                let encoded = serde_json::to_string(&id).expect("serialize");
+                let decoded: $ty = serde_json::from_str(&encoded).expect("deserialize");
+                assert_eq!(decoded.to_hex(), value);
             }
         }};
     }
@@ -720,7 +841,7 @@ mod tests {
         );
 
         let event_id = RadrootsEventId::parse(hex_64('f')).expect("event id");
-        assert_eq!(event_id.as_str(), hex_64('f'));
+        assert_eq!(event_id.to_hex(), hex_64('f'));
         assert_eq!(
             RadrootsEventId::parse(" ".repeat(64)).unwrap_err(),
             RadrootsIdParseError::InvalidCharacter
@@ -771,7 +892,7 @@ mod tests {
     #[test]
     fn signatures_require_128_hex_chars() {
         let signature = RadrootsEventSignature::parse(hex_128('B')).expect("signature");
-        assert_eq!(signature.as_str(), "b".repeat(128));
+        assert_eq!(signature.to_hex(), "b".repeat(128));
         assert_eq!(
             RadrootsEventSignature::parse(hex_64('b')).unwrap_err(),
             RadrootsIdParseError::InvalidLength {
@@ -784,7 +905,7 @@ mod tests {
     #[test]
     fn trade_semantic_ids_use_protocol_sized_hex() {
         let trade_id = RadrootsTradeId::parse(hex_32('A')).expect("trade id");
-        assert_eq!(trade_id.as_str(), hex_32('a'));
+        assert_eq!(trade_id.to_hex(), hex_32('a'));
         assert_eq!(
             RadrootsTradeId::parse(hex_64('a')).unwrap_err(),
             RadrootsIdParseError::InvalidLength {
@@ -792,9 +913,9 @@ mod tests {
                 actual: 64
             }
         );
-        assert_identifier_impls!(RadrootsTradeId, &hex_32('a'));
-        assert_identifier_impls!(RadrootsTradeCandidateId, &hex_64('b'));
-        assert_identifier_impls!(RadrootsTradeMutationId, &hex_64('c'));
+        assert_hex_identifier_impls!(RadrootsTradeId, &hex_32('a'), 16);
+        assert_hex_identifier_impls!(RadrootsTradeCandidateId, &hex_64('b'), 32);
+        assert_hex_identifier_impls!(RadrootsTradeMutationId, &hex_64('c'), 32);
     }
 
     #[test]
@@ -869,6 +990,29 @@ mod tests {
                 .unwrap_err(),
             RadrootsIdParseError::InvalidCharacter
         );
+
+        let noncanonical = format!("030402:{}:listing-1", hex_64('A'));
+        assert_eq!(
+            RadrootsAddressableCoordinate::parse(&noncanonical)
+                .expect("validated addressable coordinate")
+                .as_str(),
+            noncanonical
+        );
+    }
+
+    #[test]
+    fn binary_identifier_order_matches_canonical_hex_order() {
+        let lower = RadrootsEventId::from_bytes([0_u8; 32]);
+        let mut upper_bytes = [0_u8; 32];
+        upper_bytes[31] = 1;
+        let upper = RadrootsEventId::from_bytes(upper_bytes);
+
+        assert!(lower < upper);
+        assert!(lower.to_hex() < upper.to_hex());
+
+        let mut identifiers = [upper, lower];
+        identifiers.sort();
+        assert_eq!(identifiers, [lower, upper]);
     }
 
     #[test]
@@ -1024,15 +1168,10 @@ mod tests {
     }
 
     #[test]
-    fn nip01_coordinate_exposes_string_traits_and_validating_serde() {
+    fn nip01_coordinate_exposes_explicit_text_and_validating_serde() {
         let value = format!("30000:{}:farm:victoria", hex_64('a'));
         let coordinate = RadrootsNip01Coordinate::parse(&value).expect("coordinate");
         assert_eq!(coordinate.as_ref(), value);
-        assert_eq!(&*coordinate, value);
-        assert_eq!(
-            <RadrootsNip01Coordinate as Borrow<str>>::borrow(&coordinate),
-            value
-        );
         assert_eq!(coordinate.to_string(), value);
         assert_eq!(
             RadrootsNip01Coordinate::from_str(&value).expect("from str"),
@@ -1098,24 +1237,24 @@ mod tests {
         let id = RadrootsOrderQuoteId::try_from(String::from("quote-1")).expect("quote id");
         assert_eq!(id.as_ref(), "quote-1");
         let parsed: RadrootsEventPointer = hex_64('d').parse().expect("event pointer");
-        assert_eq!(parsed.as_str(), hex_64('d'));
+        assert_eq!(parsed.to_hex(), hex_64('d'));
     }
 
     #[test]
     fn validated_identifier_wrappers_expose_consistent_traits() {
         let addressable = format!("30402:{}:listing-1", hex_64('0'));
 
-        assert_identifier_impls!(RadrootsEventId, hex_64('b').as_str());
-        assert_identifier_impls!(RadrootsEventSignature, hex_128('c').as_str());
-        assert_identifier_impls!(RadrootsDTag, "listing-1");
-        assert_identifier_impls!(RadrootsAddressableCoordinate, addressable.as_str());
-        assert_identifier_impls!(RadrootsClassifiedListingAddress, addressable.as_str());
-        assert_identifier_impls!(RadrootsOrderId, "order-1");
-        assert_identifier_impls!(RadrootsOrderQuoteId, "quote-1");
-        assert_identifier_impls!(RadrootsInventoryBinId, "bin-1");
-        assert_identifier_impls!(RadrootsEconomicsDigest, "digest-1");
-        assert_identifier_impls!(RadrootsEventPointer, hex_64('d').as_str());
-        assert_identifier_impls!(RadrootsRelayUrl, "wss://relay.example.com");
+        assert_hex_identifier_impls!(RadrootsEventId, hex_64('b').as_str(), 32);
+        assert_hex_identifier_impls!(RadrootsEventSignature, hex_128('c').as_str(), 64);
+        assert_string_identifier_impls!(RadrootsDTag, "listing-1");
+        assert_string_identifier_impls!(RadrootsAddressableCoordinate, addressable.as_str());
+        assert_string_identifier_impls!(RadrootsClassifiedListingAddress, addressable.as_str());
+        assert_string_identifier_impls!(RadrootsOrderId, "order-1");
+        assert_string_identifier_impls!(RadrootsOrderQuoteId, "quote-1");
+        assert_string_identifier_impls!(RadrootsInventoryBinId, "bin-1");
+        assert_string_identifier_impls!(RadrootsEconomicsDigest, "digest-1");
+        assert_hex_identifier_impls!(RadrootsEventPointer, hex_64('d').as_str(), 32);
+        assert_string_identifier_impls!(RadrootsRelayUrl, "wss://relay.example.com");
     }
 
     #[test]
@@ -1189,7 +1328,7 @@ mod tests {
     fn nostr_event_pointers_validate_relay_values() {
         let event_id = RadrootsEventId::parse(hex_64('e')).expect("event id");
         let pointer = RadrootsEventEnvelopePointer::new(
-            event_id.clone(),
+            event_id,
             ["wss://relay.one.example", "wss://relay.two.example"],
         )
         .expect("pointer");
@@ -1242,7 +1381,7 @@ mod tests {
     fn serde_deserialization_validates_identifiers() {
         let encoded = format!("\"{}\"", hex_64('E'));
         let event_id: RadrootsEventId = serde_json::from_str(&encoded).expect("event id");
-        assert_eq!(event_id.as_str(), hex_64('e'));
+        assert_eq!(event_id.to_hex(), hex_64('e'));
 
         let invalid = serde_json::from_str::<RadrootsOrderId>("\"bad id\"");
         assert!(invalid.is_err());

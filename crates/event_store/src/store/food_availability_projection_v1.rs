@@ -342,17 +342,17 @@ async fn apply_transition(
     .await?;
     let visible_event_id = transition
         .visible_event()
-        .map(|event| event.event_id().as_str());
+        .map(|event| event.event_id().to_hex());
     let mut projected_row_delta = 0_i64;
     match (existing_event_id.as_deref(), transition.retracted_event()) {
-        (Some(existing), Some(retracted)) if existing == retracted.event_id().as_str() => {
+        (Some(existing), Some(retracted)) if existing == retracted.event_id().to_hex() => {
             let deleted = sqlx::query(
                 "DELETE FROM radroots_event_store_food_availability_projection WHERE source_generation = ? AND pubkey = ? AND d_tag = ? AND event_id = ?",
             )
             .bind(transition.source_generation().as_bytes().as_slice())
             .bind(coordinate.pubkey().to_hex())
             .bind(coordinate.d_tag())
-            .bind(retracted.event_id().as_str())
+            .bind(retracted.event_id().to_hex())
             .execute(&mut *connection)
             .await?;
             if deleted.rows_affected() != 1 {
@@ -362,7 +362,7 @@ async fn apply_transition(
             }
             projected_row_delta = -1;
         }
-        (Some(existing), None) if visible_event_id == Some(existing) => {
+        (Some(existing), None) if visible_event_id.as_deref() == Some(existing) => {
             if transition.contract_id() != Some(FOOD_AVAILABILITY_CONTRACT_ID) {
                 return Err(projection_drift(
                     "unchanged visible FoodAvailability event lost its contract admission",
@@ -404,7 +404,7 @@ async fn apply_transition(
             }
         };
     let event = ingest.event();
-    if canonical.event_id().as_str() != event.id_str()
+    if canonical.event_id().to_hex() != event.id_hex()
         || canonical.pubkey() != event.author()
         || canonical.created_at() != event.created_at_u64()
         || canonical.kind() != event.kind_u32()
@@ -443,7 +443,7 @@ async fn persist_projection(
     .bind(projection.source_generation().as_bytes().as_slice())
     .bind(projection.pubkey().to_hex())
     .bind(projection.identifier().as_str())
-    .bind(projection.event_id().as_str())
+    .bind(projection.event_id().to_hex())
     .bind(projection.event_seq())
     .bind(i64_from_u64("food.created_at", projection.created_at())?)
     .bind(FOOD_AVAILABILITY_CONTRACT_ID)
@@ -528,7 +528,7 @@ pub(crate) async fn validate_food_availability_projection_hook_v1(
         actual_coordinates.push((
             projection.pubkey().to_hex(),
             projection.identifier().as_str().to_owned(),
-            projection.event_id().as_str().to_owned(),
+            projection.event_id().to_hex().to_owned(),
             projection.event_seq(),
             i64_from_u64("food.created_at", projection.created_at())?,
         ));
@@ -597,10 +597,10 @@ async fn validate_projection_source_transition(
     .bind(projection.source_generation().as_bytes().as_slice())
     .bind(projection.pubkey().to_hex())
     .bind(projection.identifier().as_str())
-    .bind(projection.event_id().as_str())
+    .bind(projection.event_id().to_hex())
     .bind(projection.event_seq())
     .bind(i64_from_u64("food.created_at", projection.created_at())?)
-    .bind(projection.event_id().as_str())
+    .bind(projection.event_id().to_hex())
     .bind(projection.event_seq())
     .bind(FOOD_AVAILABILITY_CONTRACT_ID)
     .fetch_one(&mut *connection)
@@ -714,7 +714,7 @@ fn load_and_validate_projection_row(
     let raw_json: String = row.try_get("immutable_raw_json")?;
     let ingest = RadrootsEventIngest::from_raw_json(raw_json, 0)
         .map_err(|error| projection_drift(format!("projected event reverify failed: {error}")))?;
-    if ingest.event().id_str() != event_id.as_str()
+    if ingest.event().id() != &event_id
         || ingest.event().author() != &pubkey
         || ingest.event().created_at_u64() != created_at
         || ingest.event().kind_u32() != 30_402
@@ -870,7 +870,7 @@ async fn validate_fts_row(
     .fetch_optional(&mut *connection)
     .await?
     .ok_or_else(|| projection_drift("FoodAvailability FTS row is missing"))?;
-    if row.try_get::<String, _>("event_id")? != projection.event_id().as_str()
+    if row.try_get::<String, _>("event_id")? != projection.event_id().to_hex()
         || row.try_get::<String, _>("pubkey")? != projection.pubkey().to_hex()
         || row.try_get::<String, _>("d_tag")? != projection.identifier().as_str()
         || row.try_get::<String, _>("title")? != projection.title().as_str()

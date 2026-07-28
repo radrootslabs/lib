@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 #[cfg(all(not(feature = "std"), not(test)))]
-use alloc::{string::String, string::ToString, vec::Vec};
+use alloc::{string::String, vec::Vec};
 
 #[cfg(any(feature = "std", test))]
 use std::{string::String, vec::Vec};
@@ -453,7 +453,7 @@ impl RadrootsEventEnvelope {
     ) -> Result<Self, RadrootsEventEnvelopeError> {
         let id = RadrootsEventId::parse(parts.id.as_str())
             .map_err(RadrootsEventEnvelopeError::InvalidId)?;
-        if id.as_str() != parts.id.as_str() {
+        if id.to_hex() != parts.id {
             return Err(RadrootsEventEnvelopeError::NonCanonicalId);
         }
         let author = parse_public_key(parts.author.as_str())
@@ -463,7 +463,7 @@ impl RadrootsEventEnvelope {
         }
         let sig = RadrootsEventSignature::parse(parts.sig.as_str())
             .map_err(RadrootsEventEnvelopeError::InvalidSignature)?;
-        if sig.as_str() != parts.sig.as_str() {
+        if sig.to_hex() != parts.sig {
             return Err(RadrootsEventEnvelopeError::NonCanonicalSignature);
         }
         let content_len = parts.content.len();
@@ -491,8 +491,8 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn id_str(&self) -> &str {
-        self.id.as_str()
+    pub fn id_hex(&self) -> String {
+        self.id.to_hex()
     }
 
     #[inline]
@@ -550,19 +550,19 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn sig_str(&self) -> &str {
-        self.sig.as_str()
+    pub fn signature_hex(&self) -> String {
+        self.sig.to_hex()
     }
 
     pub fn to_nip01_wire(&self) -> RadrootsNip01EventWire {
         RadrootsNip01EventWire {
-            id: self.id.as_str().to_string(),
+            id: self.id.to_hex(),
             pubkey: self.author.to_hex(),
             created_at: self.created_at.as_u64(),
             kind: self.kind.as_u32(),
             tags: self.tags.to_vec(),
             content: self.content.clone(),
-            sig: self.sig.as_str().to_string(),
+            sig: self.sig.to_hex(),
             extra: Default::default(),
         }
     }
@@ -630,13 +630,13 @@ mod tests {
     fn envelope_uses_private_typed_state_and_getters() {
         let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
 
-        assert_eq!(envelope.id_str(), hex_64('1'));
+        assert_eq!(envelope.id_hex(), hex_64('1'));
         assert_eq!(envelope.author().to_hex(), hex_64('a'));
         assert_eq!(envelope.created_at_u64(), u64::from(u32::MAX) + 1);
         assert_eq!(envelope.kind_u32(), 30_023);
         assert_eq!(envelope.kind_class(), RadrootsEventKindClass::Addressable);
         assert_eq!(envelope.content(), "hello");
-        assert_eq!(envelope.sig_str(), hex_128('b'));
+        assert_eq!(envelope.signature_hex(), hex_128('b'));
         assert_eq!(
             envelope.tags_as_vec(),
             vec![vec!["d".to_owned(), "article".to_owned()]]
@@ -932,15 +932,15 @@ mod tests {
         assert!(serde_json::from_str::<RadrootsEventTags>("[[]]").is_err());
 
         let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
-        assert_eq!(envelope.id().as_str(), envelope.id_str());
+        assert_eq!(envelope.id().to_hex(), envelope.id_hex());
         assert_eq!(envelope.author().to_hex(), hex_64('a'));
         assert_eq!(envelope.created_at().as_u64(), envelope.created_at_u64());
         assert_eq!(envelope.kind().as_u32(), envelope.kind_u32());
         assert_eq!(envelope.tags().to_vec(), envelope.tags_as_vec());
         assert_eq!(envelope.tag_slices(), envelope.tags().as_slice());
-        assert_eq!(envelope.sig().as_str(), envelope.sig_str());
+        assert_eq!(envelope.sig().to_hex(), envelope.signature_hex());
         let wire = envelope.to_nip01_wire();
-        assert_eq!(wire.id, envelope.id_str());
+        assert_eq!(wire.id, envelope.id_hex());
         let encoded = serde_json::to_string(&envelope).expect("envelope json");
         assert_eq!(
             serde_json::from_str::<RadrootsEventEnvelope>(&encoded).expect("envelope"),

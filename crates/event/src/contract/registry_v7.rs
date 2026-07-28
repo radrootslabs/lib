@@ -4388,7 +4388,7 @@ fn validate_calendar_rsvp_pointer_tag(
     {
         let value_is_canonical = tag.get(1).is_some_and(|value| {
             if event_id {
-                RadrootsEventId::parse(value).is_ok_and(|parsed| parsed.as_str() == value)
+                RadrootsEventId::parse(value).is_ok_and(|parsed| parsed.to_hex() == *value)
             } else {
                 parse_public_key(value).is_ok_and(|parsed| parsed.to_hex() == *value)
             }

@@ -42,9 +42,9 @@ fn projects_raw_mixed_duplicates_trailing_and_unknown_tags() {
         projection
             .event_targets()
             .iter()
-            .map(|target| (target.event_id().as_str(), target.tag_index()))
+            .map(|target| (target.event_id().to_hex(), target.tag_index()))
             .collect::<Vec<_>>(),
-        vec![(h('a').as_str(), 3), (h('f').as_str(), 1)]
+        vec![(h('a'), 3), (h('f'), 1)]
     );
     assert_eq!(
         projection

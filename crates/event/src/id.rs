@@ -1,7 +1,12 @@
-//! Canonical event identifier types.
-//!
-//! Identifier ownership is consolidated here by the ordered identifier refactor.
+//! Canonical owned event identifiers and explicit boundary encoders.
 
-/// Internal marker for the target module while identifier types are migrated.
-#[allow(dead_code)]
-pub(crate) struct ModuleScaffold;
+pub use crate::ids::{
+    RadrootsAddressableCoordinate as AddressableCoordinate,
+    RadrootsAddressableCoordinateParts as AddressableCoordinateParts,
+    RadrootsClassifiedListingAddress as ClassifiedListingAddress, RadrootsDTag as DTag,
+    RadrootsEventEnvelopePointer as EventEnvelopePointer, RadrootsEventId as EventId,
+    RadrootsEventPointer as EventPointer, RadrootsEventSignature as EventSignature,
+    RadrootsIdParseError as ParseError, RadrootsNip01Coordinate as Nip01Coordinate,
+    RadrootsNip01CoordinateParseError as Nip01CoordinateParseError,
+    RadrootsNip01CoordinateParts as Nip01CoordinateParts,
+};

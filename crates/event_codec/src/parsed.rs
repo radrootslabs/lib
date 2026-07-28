@@ -161,7 +161,7 @@ mod tests {
             "payload".to_string(),
         )
         .unwrap();
-        assert_eq!(out.event.id_str(), EVENT_ID);
+        assert_eq!(out.event.id_hex(), EVENT_ID);
         assert_eq!(out.event.author().to_hex(), AUTHOR);
         assert_eq!(out.event.created_at_u64(), 77);
         assert_eq!(out.event.kind_u32(), 1111);
@@ -170,7 +170,7 @@ mod tests {
             out.event.tags_as_vec(),
             vec![vec!["e".to_string(), "root".to_string()]]
         );
-        assert_eq!(out.event.sig_str(), SIG);
+        assert_eq!(out.event.signature_hex(), SIG);
         assert_eq!(out.data.id, EVENT_ID);
         assert_eq!(out.data.author, AUTHOR);
         assert_eq!(out.data.published_at, 77);

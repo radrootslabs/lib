@@ -457,7 +457,7 @@ fn authored_error_value(error: &RadrootsFoodAvailabilityEncodeError) -> Value {
 fn projection_valid(vector: &Vector) {
     let input = event_input(vector);
     let verified = verified_event(&input.event, &vector.id);
-    let event_id = verified.event().id_str().to_string();
+    let event_id = verified.event().id_hex().to_string();
     let outcome = project_verified_food_availability_event(&verified)
         .unwrap_or_else(|error| panic!("{} projection failed: {error}", vector.id));
     let actual = match outcome {
@@ -519,7 +519,7 @@ fn verify_and_admit_valid(vector: &Vector) {
     };
     let actual = json!({
         "outcome": "admitted",
-        "event_id": admitted.event().id_str(),
+        "event_id": admitted.event().id_hex(),
         "projection": projection_value(admitted.projection()),
     });
     assert_eq!(actual, vector.expected, "{}", vector.id);
@@ -626,7 +626,7 @@ fn revision_valid(vector: &Vector) {
         .unwrap_or_else(|error| panic!("{} revision failed: {error}", vector.id));
     let actual = json!({
         "result": "accepted",
-        "current_event_id": current.event().id_str(),
+        "current_event_id": current.event().id_hex(),
     });
     assert_eq!(actual, vector.expected, "{}", vector.id);
 }
@@ -720,7 +720,7 @@ fn directly_signed_verified_event(
         &raw.content,
     )
     .unwrap_or_else(|error| panic!("{vector_id} direct event id failed: {error}"));
-    let nostr_id = nostr::EventId::from_hex(id.as_str())
+    let nostr_id = nostr::EventId::from_hex(&id.to_hex())
         .unwrap_or_else(|error| panic!("{vector_id} direct event id conversion failed: {error}"));
     let keys = keys_for_pubkey(&raw.pubkey, vector_id);
     let message = Message::from_digest(nostr_id.to_bytes());

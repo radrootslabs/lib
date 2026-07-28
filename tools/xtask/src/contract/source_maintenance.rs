@@ -510,6 +510,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_store/src/store/addressable_transition_feed_v1.rs",
     },
     SourceSpec {
+        role: "current_visibility_store",
+        path: "crates/event_store/src/store/current_visibility_v1.rs",
+    },
+    SourceSpec {
         role: "food_projection_store",
         path: "crates/event_store/src/store/food_availability_projection_v1.rs",
     },
@@ -635,6 +639,7 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_store/src/schema.rs",
     "crates/event_store/src/store.rs",
     "crates/event_store/src/store/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/store/current_visibility_v1.rs",
     "crates/event_store/src/store/food_availability_projection_v1.rs",
     "crates/event_store/src/store/post_core_extensions_v1.rs",
     "crates/event_store/src/store/post_core_storage_v1.rs",
@@ -3516,9 +3521,9 @@ struct DelegatedAuthoritySpec {
 }
 
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
-    "88a60544e38b546dbb2c555b0347308eac0c4a3eb66f403ba44d45fb4a5818e6";
+    "da4ba88c3cabe0e5ed6df4ca0115645c8a65d43cdea7d2dbf5e78d99256e8e15";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "211622a960515491cd59e1179a86efe8163c16b108e9220d2fb32ecfad8138b4";
+    "14d31381f73b684c3480531acb5321c66ef04b7cb8e25aa6a06269fb4ee6601f";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {
@@ -3557,9 +3562,9 @@ const DELEGATED_AUTHORITIES: &[DelegatedAuthoritySpec] = &[
             "MigrationHookStateDrift",
             "capacity_after_rollback,capacity_after_prior",
             "callermaycommitpriorworkafterfailedingest",
-            "raw_event(prior_event.id_str())",
-            "raw_event(trigger_event.id_str())",
-            "raw_event(forged_event.id_str())",
+            "raw_event(&prior_event.id_hex())",
+            "raw_event(&trigger_event.id_hex())",
+            "raw_event(&forged_event.id_hex())",
             "trade_mutation_count,0",
             "transition_count,0",
             "capacity_after_prior",

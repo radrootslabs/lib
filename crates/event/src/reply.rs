@@ -271,21 +271,23 @@ fn validate_authored_reply_wire_size(
     let mut tag_bytes = 0usize;
     let mut tags_json_bytes = 2usize;
     let mut tag_count = 0usize;
+    let root_event_id = root.event_id.to_hex();
 
     add_tag(
         &mut tag_bytes,
         &mut tags_json_bytes,
         &mut tag_count,
-        &["e", root.event_id.as_str(), root.relay_or_empty(), "root"],
+        &["e", root_event_id.as_str(), root.relay_or_empty(), "root"],
     );
     if let Some(parent) = parent {
+        let parent_event_id = parent.event_id.to_hex();
         add_tag(
             &mut tag_bytes,
             &mut tags_json_bytes,
             &mut tag_count,
             &[
                 "e",
-                parent.event_id.as_str(),
+                parent_event_id.as_str(),
                 parent.relay_or_empty(),
                 "reply",
             ],
@@ -379,7 +381,7 @@ mod tests {
                 .expect("nested");
         assert!(!nested.is_direct());
         assert_eq!(
-            nested.parent().expect("parent").event_id().as_str(),
+            nested.parent().expect("parent").event_id().to_hex(),
             "c".repeat(64)
         );
     }
@@ -407,7 +409,7 @@ mod tests {
             Some("wss://relay.example"),
         )
         .expect("reference");
-        assert_eq!(reference.event_id().as_str(), "a".repeat(64));
+        assert_eq!(reference.event_id().to_hex(), "a".repeat(64));
         assert_eq!(reference.author().to_hex(), crate::test_valid_hex_64('b'));
         assert_eq!(
             reference.relay().expect("relay").as_str(),

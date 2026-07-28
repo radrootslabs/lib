@@ -416,7 +416,7 @@ fn message_file_metadata_and_index_from_event_roundtrip() {
     )
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_MESSAGE_FILE);
-    assert_eq!(index.event.sig_str(), EVENT_SIG);
+    assert_eq!(index.event.signature_hex(), EVENT_SIG);
     assert_eq!(index.data.data.file_type, "image/jpeg");
 }
 

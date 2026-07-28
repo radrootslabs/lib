@@ -459,10 +459,10 @@ mod tests {
             build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
 
         assert_eq!(
-            first.expected_event_id_str(),
-            second.expected_event_id_str()
+            first.expected_event_id_hex(),
+            second.expected_event_id_hex()
         );
-        assert_eq!(first.expected_event_id_str().len(), 64);
+        assert_eq!(first.expected_event_id_hex().len(), 64);
         assert_eq!(first.tags_as_vec(), second.tags_as_vec());
         assert_eq!(first.content(), second.content());
     }
@@ -484,6 +484,11 @@ mod tests {
         let validated = validate_operational_listing_event(&verified).expect("validated listing");
 
         assert_eq!(validated.seller_pubkey, SELLER);
-        assert!(validated.listing_addr.contains(&format!(":{SELLER}:")));
+        assert!(
+            validated
+                .listing_addr
+                .as_str()
+                .contains(&format!(":{SELLER}:"))
+        );
     }
 }

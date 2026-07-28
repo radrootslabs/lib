@@ -275,7 +275,7 @@ impl RadrootsAuthoredNip09DeletionRequest {
             &kind_hints,
         )?;
 
-        event_targets.sort_by(|left, right| left.event_id.cmp(&right.event_id));
+        event_targets.sort_by_key(|target| target.event_id);
         if let Some(duplicates) = event_targets
             .windows(2)
             .find(|targets| targets[0].event_id == targets[1].event_id)
@@ -403,12 +403,13 @@ fn validate_authored_deletion_wire_size(
     let mut tags_json_bytes = 2usize;
     let mut visited_tags = 0usize;
     for target in event_targets {
+        let event_id = target.event_id().to_hex();
         add_tag_size(
             &mut tag_bytes,
             &mut tags_json_bytes,
             &mut visited_tags,
             "e",
-            target.event_id().as_str(),
+            event_id.as_str(),
         )?;
     }
     for target in address_targets {
@@ -533,7 +534,7 @@ mod tests {
     fn target_constructors_validate_identity_and_kind_hint() {
         let target = RadrootsNip09DeletionEventTarget::parse("A".repeat(64), u16::MAX as u32)
             .expect("event target");
-        assert_eq!(target.event_id().as_str(), "a".repeat(64));
+        assert_eq!(target.event_id().to_hex(), "a".repeat(64));
         assert_eq!(target.kind_hint(), u16::MAX as u32);
         assert_eq!(
             RadrootsNip09DeletionEventTarget::parse("5".repeat(64), 5)
@@ -625,11 +626,11 @@ mod tests {
         .expect("canonical request");
 
         assert_eq!(
-            request.event_targets()[0].event_id().as_str(),
+            request.event_targets()[0].event_id().to_hex(),
             "a".repeat(64)
         );
         assert_eq!(
-            request.event_targets()[1].event_id().as_str(),
+            request.event_targets()[1].event_id().to_hex(),
             "f".repeat(64)
         );
         assert_eq!(

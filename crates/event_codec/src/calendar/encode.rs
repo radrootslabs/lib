@@ -277,7 +277,7 @@ fn push_calendar_revision_reference(
     tags: &mut Vec<Vec<String>>,
     reference: &RadrootsCalendarEventRevisionReference,
 ) {
-    let mut tag = vec![TAG_E.to_string(), reference.event_id().as_str().to_string()];
+    let mut tag = vec![TAG_E.to_string(), reference.event_id().to_hex()];
     if let Some(relay) = reference.relay() {
         tag.push(relay.to_string());
     }

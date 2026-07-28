@@ -280,7 +280,7 @@ fn farm_metadata_and_index_decode_roundtrip() {
         EVENT_SIG.to_string(),
     )
     .expect("farm index");
-    assert_eq!(index.event.id_str(), EVENT_ID);
+    assert_eq!(index.event.id_hex(), EVENT_ID);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -833,7 +833,7 @@ fn resource_area_metadata_and_index_decode_roundtrip() {
         EVENT_SIG.to_string(),
     )
     .expect("area index");
-    assert_eq!(index.event.id_str(), EVENT_ID);
+    assert_eq!(index.event.id_hex(), EVENT_ID);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 
@@ -916,6 +916,6 @@ fn resource_cap_metadata_and_index_decode_roundtrip() {
         EVENT_SIG.to_string(),
     )
     .expect("cap index");
-    assert_eq!(index.event.sig_str(), EVENT_SIG);
+    assert_eq!(index.event.signature_hex(), EVENT_SIG);
     assert_eq!(index.data.data.d_tag, d_tag);
 }

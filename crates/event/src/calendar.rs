@@ -389,7 +389,7 @@ impl RadrootsCalendarEventRevisionReference {
 
     pub fn is_canonical(&self) -> bool {
         // Relay hints use strict Radroots syntax; their raw URL spelling is not normalized.
-        self.raw_event_id == self.event_id.as_str()
+        self.raw_event_id == self.event_id.to_hex()
             && self
                 .relay()
                 .is_none_or(|relay| RadrootsRelayUrl::parse(relay).is_ok())
@@ -2983,7 +2983,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(revision.raw_event_id(), "B".repeat(64));
-        assert_eq!(revision.event_id().as_str(), "b".repeat(64));
+        assert_eq!(revision.event_id().to_hex(), "b".repeat(64));
         assert!(!revision.is_canonical());
 
         let author = RadrootsCalendarEventAuthorReference::parse(

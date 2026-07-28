@@ -158,7 +158,7 @@ impl RadrootsOutbox {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -196,13 +196,13 @@ impl RadrootsOutbox {
     ) -> Result<RadrootsOutboxIdempotencyPreflight, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let semantic = validate_trade_mutation_input(
-            input.trade_id.as_str(),
-            input.mutation_id.as_str(),
+            &input.trade_id.to_hex(),
+            &input.mutation_id.to_hex(),
             input.canonical_payload_sha256.as_str(),
             &input.draft,
         )?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = trade_mutation_operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -213,7 +213,7 @@ impl RadrootsOutbox {
             &self.pool,
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
-            input.mutation_id.as_str(),
+            &input.mutation_id.to_hex(),
         )
         .await?
             && existing.operation_idempotency_digest != operation_digest
@@ -258,7 +258,7 @@ impl RadrootsOutbox {
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -325,7 +325,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_event_id_hex())
         .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
@@ -344,7 +344,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            expected_event_id: input.draft.expected_event_id_hex().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -357,7 +357,7 @@ impl RadrootsOutbox {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -431,7 +431,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_event_id_hex())
         .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
@@ -455,7 +455,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            expected_event_id: input.draft.expected_event_id_hex().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -466,13 +466,13 @@ impl RadrootsOutbox {
         input: RadrootsOutboxTradeMutationInput,
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         let semantic = validate_trade_mutation_input(
-            input.trade_id.as_str(),
-            input.mutation_id.as_str(),
+            &input.trade_id.to_hex(),
+            &input.mutation_id.to_hex(),
             input.canonical_payload_sha256.as_str(),
             &input.draft,
         )?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = trade_mutation_operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -484,7 +484,7 @@ impl RadrootsOutbox {
             &mut tx,
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
-            input.mutation_id.as_str(),
+            &input.mutation_id.to_hex(),
         )
         .await?
         {
@@ -566,8 +566,8 @@ impl RadrootsOutbox {
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey().to_hex())
-        .bind(input.trade_id.as_str())
-        .bind(input.mutation_id.as_str())
+        .bind(input.trade_id.to_hex())
+        .bind(input.mutation_id.to_hex())
         .bind(input.canonical_payload_sha256.as_str())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
@@ -582,7 +582,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, 0, ?, 0, 0, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_event_id_hex())
         .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
@@ -601,7 +601,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            expected_event_id: input.draft.expected_event_id_hex().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -613,13 +613,13 @@ impl RadrootsOutbox {
     ) -> Result<RadrootsOutboxEnqueueReceipt, RadrootsOutboxError> {
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let semantic = validate_trade_mutation_input(
-            input.trade_id.as_str(),
-            input.mutation_id.as_str(),
+            &input.trade_id.to_hex(),
+            &input.mutation_id.to_hex(),
             input.canonical_payload_sha256.as_str(),
             &input.draft,
         )?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = trade_mutation_operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -631,7 +631,7 @@ impl RadrootsOutbox {
             &mut tx,
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
-            input.mutation_id.as_str(),
+            &input.mutation_id.to_hex(),
         )
         .await?
         {
@@ -725,8 +725,8 @@ impl RadrootsOutbox {
         )
         .bind(input.operation_kind.as_str())
         .bind(input.draft.expected_pubkey().to_hex())
-        .bind(input.trade_id.as_str())
-        .bind(input.mutation_id.as_str())
+        .bind(input.trade_id.to_hex())
+        .bind(input.mutation_id.to_hex())
         .bind(input.canonical_payload_sha256.as_str())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
@@ -742,7 +742,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_event_id_hex())
         .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
@@ -766,7 +766,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            expected_event_id: input.draft.expected_event_id_hex().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -780,7 +780,7 @@ impl RadrootsOutbox {
         ensure_generic_outbox_draft_allowed(&input.draft)?;
         validate_signed_nostr_event_matches_draft(&input.signed_event, &input.draft)?;
         let prepared =
-            prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
+            prepare_delivery_plan(&input.draft.expected_event_id_hex(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
             &input.draft.expected_pubkey().to_hex(),
@@ -851,7 +851,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_event(operation_id, event_id, expected_pubkey, draft_json, signed_event_json, raw_event_json, state, attempt_count, next_attempt_after_ms, event_store_ingested, event_store_inserted, event_store_ingested_at_ms, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)",
         )
         .bind(operation_id)
-        .bind(input.draft.expected_event_id_str())
+        .bind(input.draft.expected_event_id_hex())
         .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
@@ -873,7 +873,7 @@ impl RadrootsOutbox {
             operation_id,
             outbox_event_id,
             delivery_plan_id: plan.delivery_plan_id,
-            expected_event_id: input.draft.expected_event_id_str().to_owned(),
+            expected_event_id: input.draft.expected_event_id_hex().to_owned(),
             operation_idempotency_digest: operation_digest,
             delivery_plan_idempotency_digest: prepared.delivery_plan_idempotency_digest,
         })
@@ -3179,7 +3179,7 @@ fn validate_trade_mutation_input(
             field: "author_pubkey",
         });
     }
-    if parsed.trade_id.as_str() != trade_id {
+    if parsed.trade_id.to_hex() != trade_id {
         return Err(RadrootsOutboxError::TradeMutationMetadataMismatch { field: "trade_id" });
     }
     let Some(parsed_mutation_id) = parsed.mutation_id.as_ref() else {
@@ -3187,7 +3187,7 @@ fn validate_trade_mutation_input(
             field: "mutation_id",
         });
     };
-    if parsed_mutation_id.as_str() != mutation_id {
+    if parsed_mutation_id.to_hex() != mutation_id {
         return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
             field: "mutation_id",
         });
@@ -3886,8 +3886,8 @@ mod tests {
         let valid_hash = sha256_hex(canonical.content.as_bytes());
         assert!(matches!(
             validate_trade_mutation_input(
-                canonical.envelope.trade_id.as_str(),
-                canonical.mutation_id.as_str(),
+                &canonical.envelope.trade_id.to_hex(),
+                &canonical.mutation_id.to_hex(),
                 valid_hash.as_str(),
                 &generic_draft(FIXTURE_ALICE_PUBLIC_KEY_HEX, "not a trade mutation"),
             ),
@@ -3896,8 +3896,8 @@ mod tests {
         for invalid_hash in ["short".to_owned(), "g".repeat(64)] {
             assert!(matches!(
                 validate_trade_mutation_input(
-                    canonical.envelope.trade_id.as_str(),
-                    canonical.mutation_id.as_str(),
+                    &canonical.envelope.trade_id.to_hex(),
+                    &canonical.mutation_id.to_hex(),
                     invalid_hash.as_str(),
                     &valid_draft,
                 ),
@@ -3912,8 +3912,8 @@ mod tests {
         );
         assert!(matches!(
             validate_trade_mutation_input(
-                canonical.envelope.trade_id.as_str(),
-                canonical.mutation_id.as_str(),
+                &canonical.envelope.trade_id.to_hex(),
+                &canonical.mutation_id.to_hex(),
                 valid_hash.as_str(),
                 &invalid_content,
             ),
@@ -3924,8 +3924,8 @@ mod tests {
             proposal_draft_with_content(canonical.content.clone(), FIXTURE_BOB_PUBLIC_KEY_HEX);
         assert!(matches!(
             validate_trade_mutation_input(
-                canonical.envelope.trade_id.as_str(),
-                canonical.mutation_id.as_str(),
+                &canonical.envelope.trade_id.to_hex(),
+                &canonical.mutation_id.to_hex(),
                 valid_hash.as_str(),
                 &author_mismatch,
             ),
@@ -3936,7 +3936,7 @@ mod tests {
         assert!(matches!(
             validate_trade_mutation_input(
                 hex_32('2').as_str(),
-                canonical.mutation_id.as_str(),
+                &canonical.mutation_id.to_hex(),
                 valid_hash.as_str(),
                 &valid_draft,
             ),
@@ -3944,7 +3944,7 @@ mod tests {
         ));
         assert!(matches!(
             validate_trade_mutation_input(
-                canonical.envelope.trade_id.as_str(),
+                &canonical.envelope.trade_id.to_hex(),
                 hex_64('3').as_str(),
                 valid_hash.as_str(),
                 &valid_draft,
@@ -3955,8 +3955,8 @@ mod tests {
         ));
         assert!(matches!(
             validate_trade_mutation_input(
-                canonical.envelope.trade_id.as_str(),
-                canonical.mutation_id.as_str(),
+                &canonical.envelope.trade_id.to_hex(),
+                &canonical.mutation_id.to_hex(),
                 "0".repeat(64).as_str(),
                 &valid_draft,
             ),
@@ -3976,8 +3976,8 @@ mod tests {
         );
         assert!(matches!(
             validate_trade_mutation_input(
-                envelope_without_mutation_id.trade_id.as_str(),
-                canonical.mutation_id.as_str(),
+                &envelope_without_mutation_id.trade_id.to_hex(),
+                &canonical.mutation_id.to_hex(),
                 sha256_hex(content_without_mutation_id.as_bytes()).as_str(),
                 &draft_without_mutation_id,
             ),
@@ -4668,7 +4668,7 @@ mod tests {
                 .is_err()
         );
         sqlx::query("UPDATE outbox_operations SET trade_id = ?, mutation_id = 'invalid' WHERE operation_id = ?")
-            .bind(canonical.envelope.trade_id.as_str())
+            .bind(&canonical.envelope.trade_id.to_hex())
             .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
@@ -4680,7 +4680,7 @@ mod tests {
                 .is_err()
         );
         sqlx::query("UPDATE outbox_operations SET mutation_id = ? WHERE operation_id = ?")
-            .bind(canonical.mutation_id.as_str())
+            .bind(&canonical.mutation_id.to_hex())
             .bind(trade_operation.operation_id)
             .execute(outbox.pool())
             .await
@@ -5785,7 +5785,7 @@ mod tests {
         sqlx::query(
             "UPDATE outbox_operations SET mutation_id = ?, operation_idempotency_digest = 'corrupt' WHERE operation_id = ?",
         )
-        .bind(canonical.mutation_id.as_str())
+        .bind(&canonical.mutation_id.to_hex())
         .bind(first.operation_id)
         .execute(outbox.pool())
         .await
@@ -5969,7 +5969,7 @@ mod tests {
         assert_ne!(scoped.fingerprint(), rescaled.fingerprint());
 
         let first_prepared = prepare_delivery_plan(
-            draft.expected_event_id_str(),
+            &draft.expected_event_id_hex(),
             &RadrootsOutboxDeliveryPlanInput::new(
                 "transport.nostr.local",
                 1,
@@ -5979,7 +5979,7 @@ mod tests {
         )
         .expect("first plan");
         let relabeled_prepared = prepare_delivery_plan(
-            draft.expected_event_id_str(),
+            &draft.expected_event_id_hex(),
             &RadrootsOutboxDeliveryPlanInput::new(
                 "transport.nostr.local",
                 1,
@@ -5989,7 +5989,7 @@ mod tests {
         )
         .expect("relabeled plan");
         let rescaled_prepared = prepare_delivery_plan(
-            draft.expected_event_id_str(),
+            &draft.expected_event_id_hex(),
             &RadrootsOutboxDeliveryPlanInput::new(
                 "transport.nostr.local",
                 1,

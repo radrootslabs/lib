@@ -31,7 +31,7 @@ fn build_event_ptr_tag(
         .map_err(|_| EventEncodeError::InvalidField(field_prefix))?;
     let mut tag = Vec::with_capacity(3);
     tag.push(name.to_owned());
-    tag.push(event_id.as_str().to_owned());
+    tag.push(event_id.to_hex());
     if let Some(relay) = &ptr.relays {
         if relay.trim().is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("listing_event.relays"));
@@ -69,7 +69,7 @@ fn parse_event_ptr_tag(
             .map_err(|_| EventParseError::InvalidTag(name))?;
     }
     Ok(Some(RadrootsEventPtr {
-        id: event_id.as_str().to_owned(),
+        id: event_id.to_hex(),
         relays: relay,
     }))
 }

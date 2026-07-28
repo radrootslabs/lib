@@ -252,7 +252,7 @@ fn ingest_profile_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let data_result = profile_decode::data_from_event(
-        event.id_str().to_owned(),
+        event.id_hex(),
         event.author().to_hex().to_owned(),
         event.created_at_u64(),
         event.kind_u32(),
@@ -1022,7 +1022,7 @@ fn event_head_decision(
                 kind: event.kind_u32(),
                 pubkey: event.author().to_hex().to_owned(),
                 d_tag: String::new(),
-                last_event_id: event.id_str().to_owned(),
+                last_event_id: event.id_hex(),
                 last_created_at: event.created_at_u64(),
                 content_hash: String::new(),
             });
@@ -1069,7 +1069,7 @@ fn event_head_decision(
         kind,
         pubkey,
         d_tag,
-        last_event_id: event.id_str().to_owned(),
+        last_event_id: event.id_hex(),
         last_created_at: event.created_at_u64(),
         content_hash,
     })
@@ -1683,13 +1683,13 @@ mod tests {
         content: String,
     ) -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
-            id: event.id_str().to_owned(),
+            id: event.id_hex(),
             author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind,
             tags,
             content,
-            sig: event.sig_str().to_owned(),
+            sig: event.signature_hex(),
         })
         .expect("test event envelope parts")
     }
@@ -2918,7 +2918,7 @@ mod tests {
         .expect("event state")
         .result
         .expect("state row");
-        assert_eq!(state.last_event_id, archived.id_str());
+        assert_eq!(state.last_event_id, archived.id_hex());
 
         let stale_active = listing_event(&seller_pubkey, 11, listing_d_tag, "active", "Stale Eggs");
         assert_eq!(
@@ -3151,7 +3151,7 @@ mod tests {
         .expect("event state")
         .result
         .expect("state row");
-        assert_eq!(state_before_replacement.last_event_id, active.id_str());
+        assert_eq!(state_before_replacement.last_event_id, active.id_hex());
 
         assert_eq!(
             radroots_replica_ingest_event(&exec, &signed_replacement)
@@ -3178,7 +3178,7 @@ mod tests {
                     &format!("Equal-time focused replacement {nonce}"),
                 )
             })
-            .find(|candidate| candidate.id_str() < tied_operational.id_str())
+            .find(|candidate| candidate.id_hex() < tied_operational.id_hex())
             .expect("deterministic lower-id focused candidate");
         assert_eq!(
             radroots_replica_ingest_event(&exec, &tied_focused)
@@ -3201,7 +3201,7 @@ mod tests {
         .expect("final event state")
         .result
         .expect("final state row");
-        assert_eq!(final_state.last_event_id, tied_focused.id_str());
+        assert_eq!(final_state.last_event_id, tied_focused.id_hex());
     }
 
     #[test]

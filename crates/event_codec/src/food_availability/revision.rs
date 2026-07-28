@@ -93,7 +93,7 @@ pub fn validate_food_availability_revision(
 
     let current_wins = current_event.created_at_u64() > previous_event.created_at_u64()
         || (current_event.created_at_u64() == previous_event.created_at_u64()
-            && current_event.id_str() < previous_event.id_str());
+            && current_event.id() < previous_event.id());
     if !current_wins {
         return Err(RadrootsFoodAvailabilityRevisionError::NotNewer);
     }

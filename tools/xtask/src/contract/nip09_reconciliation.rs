@@ -12758,12 +12758,12 @@ fn validate_source_maintenance_runtime_token_authority(
     workspace_root: &Path,
 ) -> Result<(), String> {
     const SOURCE_RUNTIME_AST_SHA256: &str =
-        "c52b1acee9261d45590d8b443f10ad4fdd539fa8d6227e4ca8bc09c593c4c2b6";
+        "78b9d310aeed0a2d8bcbced1af900fc1e8e6841d9d10398daa4f82a0ca957f23";
     const FUNCTION_SPECS: [(&str, &str, &str); 4] = [
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "ingest_event_protocol_reconciliation_v1",
-            "f8d26e1d4e1a362c7335f1ba58ad6f1bac2f119162b15ca1067391756149d1e3",
+            "91bec3d7d7aa061297babc1a85aae1f8be187d8378e6d54a410f0c9af9a39337",
         ),
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,

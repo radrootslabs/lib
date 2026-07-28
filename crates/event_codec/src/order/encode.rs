@@ -111,13 +111,15 @@ fn order_envelope_event_build<T: serde::Serialize>(
     );
     envelope.validate().map_err(map_order_envelope_error)?;
     let content = serde_json::to_string(&envelope).map_err(|_| EventEncodeError::Json)?;
+    let root_event_id = parts.root_event_id.map(RadrootsEventId::to_hex);
+    let prev_event_id = parts.prev_event_id.map(RadrootsEventId::to_hex);
     let tags = order_envelope_tags(
         parts.recipient_pubkey.to_hex(),
         parts.listing_addr,
         Some(parts.order_id),
         parts.listing_event,
-        parts.root_event_id.map(RadrootsEventId::as_str),
-        parts.prev_event_id.map(RadrootsEventId::as_str),
+        root_event_id.as_deref(),
+        prev_event_id.as_deref(),
     )?;
     Ok(RadrootsNip01EventWireParts {
         kind: parts.message_type.kind(),
@@ -135,8 +137,8 @@ pub fn order_request_event_build(
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,
         message_type: RadrootsOrderEventType::OrderRequested,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
+        listing_addr: payload.listing_addr.as_str(),
+        order_id: payload.order_id.as_str(),
         listing_event: Some(listing_event),
         root_event_id: None,
         prev_event_id: None,
@@ -154,8 +156,8 @@ pub fn order_decision_event_build(
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.buyer_pubkey,
         message_type: RadrootsOrderEventType::OrderDecision,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
+        listing_addr: payload.listing_addr.as_str(),
+        order_id: payload.order_id.as_str(),
         listing_event: None,
         root_event_id: Some(root_event_id),
         prev_event_id: Some(prev_event_id),
@@ -173,8 +175,8 @@ pub fn order_cancellation_event_build(
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,
         message_type: RadrootsOrderEventType::OrderCancelled,
-        listing_addr: &payload.listing_addr,
-        order_id: &payload.order_id,
+        listing_addr: payload.listing_addr.as_str(),
+        order_id: payload.order_id.as_str(),
         listing_event: None,
         root_event_id: Some(root_event_id),
         prev_event_id: Some(prev_event_id),

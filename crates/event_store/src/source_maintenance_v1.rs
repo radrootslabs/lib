@@ -79,12 +79,14 @@ pub(crate) fn raw_source_capacity_delta_v1(
     tags_json: &str,
 ) -> Result<RawSourceCapacityDeltaV1, RadrootsEventStoreError> {
     let event = ingest.event();
+    let event_id = event.id_hex();
+    let signature = event.signature_hex();
     let raw_event_bytes = raw_event_row_bytes_v1(
-        event.id_str(),
+        event_id.as_str(),
         &event.author().to_hex(),
         tags_json,
         event.content(),
-        event.sig_str(),
+        signature.as_str(),
         ingest.raw_json(),
     )?;
     let mut raw_tags = 0_u64;
@@ -102,7 +104,7 @@ pub(crate) fn raw_source_capacity_delta_v1(
         raw_tag_bytes = checked_capacity_add(
             RadrootsEventStoreSourceCapacityResourceV1::RawTagBytes,
             raw_tag_bytes,
-            raw_tag_row_bytes_v1(event.id_str(), tag_name, tag_value, tag_json.as_str())?,
+            raw_tag_row_bytes_v1(event_id.as_str(), tag_name, tag_value, tag_json.as_str())?,
         )?;
     }
     Ok(RawSourceCapacityDeltaV1 {

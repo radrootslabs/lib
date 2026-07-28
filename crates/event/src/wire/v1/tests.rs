@@ -110,7 +110,7 @@ fn into_envelope_verifies_id_before_domain_conversion() {
             .expect("wire");
 
     let envelope = wire.clone().into_envelope().expect("envelope");
-    assert_eq!(envelope.id_str(), wire.id);
+    assert_eq!(envelope.id_hex(), wire.id);
     assert_eq!(envelope.content(), "hello");
 
     let mut tampered_id = wire.clone();
@@ -522,7 +522,7 @@ fn checked_in_conformance_vectors_match_wire_behavior() {
                         .expect("expected preimage")
                 );
                 assert_eq!(
-                    wire.computed_event_id().expect("event id").as_str(),
+                    wire.computed_event_id().expect("event id").to_hex(),
                     expected
                         .get("computed_event_id")
                         .and_then(Value::as_str)

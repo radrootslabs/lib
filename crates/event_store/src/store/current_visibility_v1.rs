@@ -185,7 +185,7 @@ fn validate_visibility_shape(
         && visibility
             .raw_head_event_id
             .as_ref()
-            .is_none_or(|raw_head_event_id| raw_head_event_id.as_str() != event_id)
+            .is_none_or(|raw_head_event_id| raw_head_event_id.to_hex() != event_id)
     {
         return current_visibility_drift(format!(
             "event `{event_id}` is marked as the raw head without matching head identity"
@@ -307,18 +307,14 @@ async fn validate_addressable_head_projection(
             != evidence.map(|value| value.outcome.code())
         || row.try_get::<Option<String>, _>("nip09_reason")?.as_deref()
             != evidence.map(|value| value.reason.code())
-        || row
-            .try_get::<Option<String>, _>("event_reference_request_id")?
-            .as_deref()
+        || row.try_get::<Option<String>, _>("event_reference_request_id")?
             != evidence
                 .and_then(|value| value.event_reference_request_id.as_ref())
-                .map(RadrootsEventId::as_str)
-        || row
-            .try_get::<Option<String>, _>("address_reference_request_id")?
-            .as_deref()
+                .map(RadrootsEventId::to_hex)
+        || row.try_get::<Option<String>, _>("address_reference_request_id")?
             != evidence
                 .and_then(|value| value.address_reference_request_id.as_ref())
-                .map(RadrootsEventId::as_str)
+                .map(RadrootsEventId::to_hex)
         || stored_cutoff != evidence.and_then(|value| value.address_reference_cutoff)
     {
         return current_visibility_drift(format!(

@@ -63,7 +63,7 @@ fn projects_top_address_with_distinct_optional_relay_hints() {
     else {
         panic!("top-level address");
     };
-    assert_eq!(current_revision.event_id().as_str(), h('e'));
+    assert_eq!(current_revision.event_id().to_hex(), h('e'));
     assert!(reference.relay().is_none());
     assert_eq!(
         current_revision.relay().expect("relay").as_str(),
@@ -110,7 +110,7 @@ fn nested_parent_uses_author_hint_and_keeps_mentions() {
     let RadrootsInboundNip22CommentPosition::Nested { parent } = projection.position() else {
         panic!("nested");
     };
-    assert_eq!(parent.event_id().as_str(), h('c'));
+    assert_eq!(parent.event_id().to_hex(), h('c'));
     assert_eq!(parent.author().pubkey().to_hex(), h('d'));
     assert_eq!(projection.mentions().len(), 1);
     assert_eq!(projection.mentions()[0].pubkey().to_hex(), h('e'));

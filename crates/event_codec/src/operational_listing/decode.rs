@@ -658,7 +658,7 @@ fn decode_operational_listing_from_event_parts(
         TAG_RADROOTS_PRIMARY_BIN,
     ))?;
     let bins = build_bins(bin_drafts)?;
-    if !bins.iter().any(|bin| bin.bin_id == primary_bin_id) {
+    if !bins.iter().any(|bin| bin.bin_id.as_str() == primary_bin_id) {
         return Err(OperationalListingDecodeError::InvalidTag(
             TAG_RADROOTS_PRIMARY_BIN,
         ));
@@ -746,7 +746,7 @@ pub fn data_from_nostr_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedData<RadrootsOperationalListing>, EventParseError> {
     data_from_event(
-        event.id_str().to_string(),
+        event.id_hex(),
         event.author().to_hex().to_string(),
         event.created_at_u64(),
         event.kind_u32(),
@@ -759,13 +759,13 @@ pub fn parsed_from_nostr_event(
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsParsedEvent<RadrootsOperationalListing>, EventParseError> {
     parsed_from_event(
-        event.id_str().to_string(),
+        event.id_hex(),
         event.author().to_hex().to_string(),
         event.created_at_u64(),
         event.kind_u32(),
         event.content().to_string(),
         event.tags_as_vec(),
-        event.sig_str().to_string(),
+        event.signature_hex(),
     )
 }
 

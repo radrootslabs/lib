@@ -564,7 +564,7 @@ fn assert_revision_reference(
     let relay = expected.get("relay").and_then(Value::as_str);
     assert_eq!(actual.raw_event_id(), event_id, "{}", vector_id(vector));
     assert_eq!(
-        actual.event_id().as_str(),
+        actual.event_id().to_hex(),
         event_id.to_ascii_lowercase(),
         "{} normalized revision id",
         vector_id(vector)
@@ -574,7 +574,7 @@ fn assert_revision_reference(
         relay.is_none_or(|relay| radroots_event::ids::RadrootsRelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
-        event_id == actual.event_id().as_str() && canonical_relay,
+        event_id == actual.event_id().to_hex() && canonical_relay,
         "{} revision canonicality",
         vector_id(vector)
     );

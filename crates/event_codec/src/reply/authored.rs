@@ -38,7 +38,7 @@ pub fn authored_nip10_reply_to_wire_parts(
 fn event_tag(reference: &RadrootsNip10ReplyReference, marker: &str) -> Vec<String> {
     vec![
         "e".to_string(),
-        reference.event_id().as_str().to_string(),
+        reference.event_id().to_hex(),
         reference.relay_or_empty().to_string(),
         marker.to_string(),
     ]

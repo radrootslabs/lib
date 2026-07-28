@@ -590,10 +590,10 @@ async fn validate_incremental_cause(
                 "SELECT EXISTS(SELECT 1 FROM radroots_event_store_nip09_event_target WHERE source_generation = ? AND request_event_id = ? AND target_event_id = ?) OR EXISTS(SELECT 1 FROM radroots_event_store_nip09_address_target WHERE source_generation = ? AND request_event_id = ? AND target_kind = ? AND target_pubkey = ? AND target_d_tag = ?)",
             )
             .bind(generation.as_bytes().as_slice())
-            .bind(cause_reference.event_id().as_str())
-            .bind(raw_head.event_id().as_str())
+            .bind(cause_reference.event_id().to_hex())
+            .bind(raw_head.event_id().to_hex())
             .bind(generation.as_bytes().as_slice())
-            .bind(cause_reference.event_id().as_str())
+            .bind(cause_reference.event_id().to_hex())
             .bind(i64::from(coordinate.kind()))
             .bind(coordinate.pubkey().to_hex())
             .bind(coordinate.d_tag())
@@ -863,7 +863,7 @@ async fn load_and_validate_stored_event(
         "SELECT seq, event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms FROM event_envelopes WHERE seq = ? AND event_id = ?",
     )
     .bind(reference.event_seq())
-    .bind(reference.event_id().as_str())
+    .bind(reference.event_id().to_hex())
     .fetch_optional(&mut *connection)
     .await?
     .ok_or_else(|| {
@@ -883,13 +883,13 @@ async fn load_and_validate_stored_event(
             "stored raw event tags cannot be canonicalized: {error}"
         ))
     })?;
-    if stored.event_id != event.id_str()
+    if stored.event_id != event.id_hex()
         || stored.pubkey != event.author().to_hex()
         || stored.created_at != event.created_at_u64()
         || stored.kind != event.kind_u32()
         || stored.tags_json != tags_json
         || stored.content != event.content()
-        || stored.sig != event.sig_str()
+        || stored.sig != event.signature_hex()
     {
         return Err(corruption(format!(
             "stored event `{}` disagrees with its signed raw JSON",
@@ -937,7 +937,7 @@ async fn validate_addressable_reference(
     )
     .bind(generation.as_bytes().as_slice())
     .bind(reference.event_seq())
-    .bind(reference.event_id().as_str())
+    .bind(reference.event_id().to_hex())
     .bind(i64::from(coordinate.kind()))
     .bind(coordinate.pubkey().to_hex())
     .bind(coordinate.d_tag())

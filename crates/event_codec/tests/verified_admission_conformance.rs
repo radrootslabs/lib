@@ -72,7 +72,7 @@ fn conformance_vectors() -> Cow<'static, str> {
 
 fn execute(vector: &Vector) {
     let envelope = event_envelope(&vector.input["event"]);
-    let event_id = envelope.id_str().to_owned();
+    let event_id = envelope.id_hex().to_owned();
     let verified = verify_nip01_event(envelope)
         .unwrap_or_else(|error| panic!("{} fixture is not NIP-01 verified: {error}", vector.id));
     let result = admit_verified_event(verified);
@@ -93,12 +93,12 @@ fn execute(vector: &Vector) {
                 vector.id
             );
             assert_eq!(
-                admitted.event().id_str(),
+                admitted.event().id_hex(),
                 expected_str(vector, "event_id"),
                 "{}",
                 vector.id
             );
-            assert_eq!(admitted.into_verified_event().event().id_str(), event_id);
+            assert_eq!(admitted.into_verified_event().event().id_hex(), event_id);
         }
         "event.admit_verified.invalid" => {
             let error = match result {

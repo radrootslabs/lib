@@ -85,7 +85,7 @@ fn id_verification_rejects_an_out_of_range_kind_before_hashing() {
         kind,
         tags: original.tags_as_vec(),
         content: original.content().to_owned(),
-        sig: original.sig_str().to_owned(),
+        sig: original.signature_hex(),
     })
     .expect("base envelope permits the wider internal kind representation");
 

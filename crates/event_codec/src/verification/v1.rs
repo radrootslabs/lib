@@ -1,7 +1,7 @@
 //! Frozen NIP-01 verification-v1 semantics.
 
 #[cfg(not(feature = "std"))]
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 use core::fmt;
 #[cfg(feature = "nostr")]
@@ -12,7 +12,6 @@ use radroots_event::contract::registry_v7::{
     validate_event_contract_registry_v7 as validate_radroots_event_contract_registry_v7,
 };
 use radroots_event::envelope::RadrootsEventEnvelope;
-use radroots_event::ids::RadrootsEventId;
 use radroots_event::wire::v1::compute_canonical_nip01_event_id_v1;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -139,8 +138,6 @@ pub fn verify_event_id_v1(
             kind: event.kind_u32(),
         }
     })?;
-    RadrootsEventId::parse(event.id_str())
-        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     let expected = compute_canonical_nip01_event_id_v1(
         &event.author().to_hex(),
         event.created_at_u64(),
@@ -148,12 +145,11 @@ pub fn verify_event_id_v1(
         &event.tags_as_vec(),
         event.content(),
     )
-    .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?
-    .into_string();
-    if event.id_str() != expected {
+    .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
+    if event.id() != &expected {
         return Err(RadrootsNip01VerificationError::IdMismatch {
-            expected,
-            actual: event.id_str().to_string(),
+            expected: expected.to_hex(),
+            actual: event.id_hex(),
         });
     }
     Ok(RadrootsIdVerifiedEvent { event })
@@ -230,7 +226,8 @@ pub fn validate_event_contract_registry_v7(
 fn raw_event_from_radroots(
     event: &RadrootsEventEnvelope,
 ) -> Result<nostr::Event, RadrootsNip01VerificationError> {
-    let id = nostr::EventId::from_hex(event.id_str())
+    let event_id = event.id_hex();
+    let id = nostr::EventId::from_hex(event_id.as_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     let public_key = nostr::secp256k1::XOnlyPublicKey::from_str(&event.author().to_hex())
         .map(nostr::PublicKey::from)
@@ -248,7 +245,8 @@ fn raw_event_from_radroots(
                 .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?,
         );
     }
-    let sig = nostr::secp256k1::schnorr::Signature::from_str(event.sig_str())
+    let signature = event.signature_hex();
+    let sig = nostr::secp256k1::schnorr::Signature::from_str(signature.as_str())
         .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
     Ok(nostr::Event::new(
         id,

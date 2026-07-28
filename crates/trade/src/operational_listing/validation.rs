@@ -89,7 +89,7 @@ pub fn validate_operational_listing_model(
     listing: RadrootsOperationalListing,
     seller_pubkey: &PublicKey,
 ) -> Result<RadrootsOperationalListingTradeProjection, OperationalListingValidationError> {
-    let listing_id = listing.d_tag.trim().to_string();
+    let listing_id = listing.d_tag.as_str().trim().to_string();
 
     if listing.farm.pubkey != seller_pubkey.to_hex() {
         return Err(OperationalListingValidationError::InvalidSeller);
@@ -125,11 +125,11 @@ pub fn validate_operational_listing_model(
     if listing.bins.is_empty() {
         return Err(OperationalListingValidationError::MissingBins);
     }
-    let primary_bin_id = listing.primary_bin_id.trim().to_string();
+    let primary_bin_id = listing.primary_bin_id.as_str().trim().to_string();
     let primary_bin_index = listing
         .bins
         .iter()
-        .position(|bin| bin.bin_id == primary_bin_id)
+        .position(|bin| bin.bin_id.as_str() == primary_bin_id)
         .ok_or(OperationalListingValidationError::MissingPrimaryBin)?;
     for (index, bin) in listing.bins.iter().enumerate() {
         if listing.bins[..index]
@@ -736,13 +736,13 @@ mod tests {
         let verified = base_event(&base_listing());
         let event = verified.into_event();
         let tampered = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
-            id: event.id_str().to_owned(),
+            id: event.id_hex(),
             author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind: event.kind_u32(),
             tags: event.tags_as_vec(),
             content: "tampered".to_owned(),
-            sig: event.sig_str().to_owned(),
+            sig: event.signature_hex(),
         })
         .expect("well-shaped tampered envelope");
 

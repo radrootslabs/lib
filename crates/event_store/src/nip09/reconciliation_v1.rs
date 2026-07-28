@@ -404,7 +404,7 @@ impl<'a> RequestIndex<'a> {
         for (index, request) in requests.iter().enumerate() {
             for target in request.projection().event_targets() {
                 event_targets
-                    .entry(target.event_id().as_str().to_owned())
+                    .entry(target.event_id().to_hex().to_owned())
                     .or_default()
                     .push(index);
             }
@@ -432,7 +432,7 @@ impl<'a> RequestIndex<'a> {
     ) -> impl Iterator<Item = &'index RadrootsAdmittedNip09DeletionRequestEventV1> + 'index {
         let event_indices = self
             .event_targets
-            .get(event.id_str())
+            .get(&event.id_hex())
             .map(Vec::as_slice)
             .unwrap_or_default();
         let address_indices = nip01_coordinate_key(event)
@@ -1475,7 +1475,7 @@ async fn load_reconciliation_snapshot(
                 RadrootsEventIngest::from_raw_json_reconciliation_v1(raw_json, inserted_at_ms)
                     .map_err(|_| raw_mismatch(event_id.as_str(), "raw_json"))?;
             let event = ingest.event();
-            compare_raw_field(event.id_str() == event_id, event_id.as_str(), "event_id")?;
+            compare_raw_field(event.id_hex() == event_id, event_id.as_str(), "event_id")?;
             compare_raw_field(
                 event.author().to_hex() == pubkey,
                 event_id.as_str(),
@@ -1499,7 +1499,7 @@ async fn load_reconciliation_snapshot(
                 "tags_json",
             )?;
             compare_raw_field(event.content() == content, event_id.as_str(), "content")?;
-            compare_raw_field(event.sig_str() == sig, event_id.as_str(), "sig")?;
+            compare_raw_field(event.signature_hex() == sig, event_id.as_str(), "sig")?;
             compare_raw_tags(
                 event_id.as_str(),
                 event.tags_as_vec().as_slice(),
@@ -1669,7 +1669,7 @@ async fn update_derived_tags(
                 .find(|candidate| candidate.name == name)
         });
         let tag_index = i64::try_from(index)
-            .map_err(|_| raw_mismatch(event.verified_event.event().id_str(), "tag_index"))?;
+            .map_err(|_| raw_mismatch(&event.verified_event.event().id_hex(), "tag_index"))?;
         sqlx::query(
             "UPDATE event_envelope_tags SET contract_semantic = ?, contract_value_type = ?, relay_indexed = ? WHERE event_id = ? AND tag_index = ?",
         )
@@ -1678,7 +1678,7 @@ async fn update_derived_tags(
         .bind(i64::from(
             contract_tag.map(|tag| tag.relay_indexed).unwrap_or(false),
         ))
-        .bind(event.verified_event.event().id_str())
+        .bind(event.verified_event.event().id_hex())
         .bind(tag_index)
         .execute(&mut *connection)
         .await?;
@@ -1734,7 +1734,7 @@ async fn validate_derived_event_storage(
             {
                 return hook_drift(format!(
                     "derived envelope fields disagree for `{}`",
-                    envelope.id_str()
+                    envelope.id_hex()
                 ));
             }
         }
@@ -1757,7 +1757,7 @@ async fn validate_derived_event_storage(
                     .find(|candidate| candidate.name == name)
             });
             expected_tags.insert((
-                event.verified_event.event().id_str().to_owned(),
+                event.verified_event.event().id_hex().to_owned(),
                 i64_from_usize("tag_index", index)?,
                 contract_tag.map(|tag| tag_semantic_name(tag.semantic).to_owned()),
                 contract_tag.map(|tag| tag_value_type_name(tag.value_type).to_owned()),
@@ -1881,7 +1881,7 @@ async fn rebuild_raw_heads(
                 )
                 .bind(i64::from(*kind))
                 .bind(pubkey.to_hex())
-                .bind(winner.candidate.event_id.as_str())
+                .bind(winner.candidate.event_id.to_hex())
                 .bind(i64_from_u64(
                     "raw_head_created_at",
                     winner.candidate.created_at,
@@ -1901,7 +1901,7 @@ async fn rebuild_raw_heads(
                 .bind(i64::from(*kind))
                 .bind(pubkey.to_hex())
                 .bind(d_tag)
-                .bind(winner.candidate.event_id.as_str())
+                .bind(winner.candidate.event_id.to_hex())
                 .bind(i64_from_u64(
                     "raw_head_created_at",
                     winner.candidate.created_at,
@@ -2062,7 +2062,7 @@ fn event_coordinate_fact(
         return Ok(None);
     };
     Ok(Some(EventCoordinateFact {
-        event_id: envelope.id_str().to_owned(),
+        event_id: envelope.id_hex().to_owned(),
         event_seq: event.seq,
         coordinate_type: coordinate_type.to_owned(),
         kind: i64::from(kind),
@@ -2118,7 +2118,7 @@ async fn persist_nip09_facts(
                 hook_id: NIP09_HOOK_ID,
                 reason: format!(
                     "centrally admitted deletion request `{}` failed typed admission: {}",
-                    event.verified_event.event().id_str(),
+                    event.verified_event.event().id_hex(),
                     error
                 ),
             })?;
@@ -2150,11 +2150,11 @@ async fn validate_nip09_fact_graph(
                 hook_id: NIP09_HOOK_ID,
                 reason: format!(
                     "centrally admitted deletion request `{}` failed typed admission: {error}",
-                    event.verified_event.event().id_str()
+                    event.verified_event.event().id_hex()
                 ),
             })?;
         expected_requests.insert(RequestFact {
-            request_event_id: request.event().id_str().to_owned(),
+            request_event_id: request.event().id_hex().to_owned(),
             request_event_seq: event.seq,
             request_pubkey: request.event().author().to_hex().to_owned(),
             request_created_at: i64_from_u64(
@@ -2166,8 +2166,8 @@ async fn validate_nip09_fact_graph(
             let source_tag_value =
                 request_source_tag_value(request.event(), target.tag_index(), "e")?;
             expected_event_targets.insert(EventTargetFact {
-                request_event_id: request.event().id_str().to_owned(),
-                target_event_id: target.event_id().as_str().to_owned(),
+                request_event_id: request.event().id_hex().to_owned(),
+                target_event_id: target.event_id().to_hex().to_owned(),
                 source_tag_index: i64_from_usize("source_tag_index", target.tag_index())?,
                 source_tag_value: source_tag_value.to_owned(),
             });
@@ -2178,7 +2178,7 @@ async fn validate_nip09_fact_graph(
             let (source_kind_text, source_pubkey_text, source_d_tag) =
                 raw_coordinate_parts(source_tag_value)?;
             expected_address_targets.insert(AddressTargetFact {
-                request_event_id: request.event().id_str().to_owned(),
+                request_event_id: request.event().id_hex().to_owned(),
                 target_kind: i64::from(target.coordinate().kind()),
                 target_pubkey: target.coordinate().pubkey().to_hex(),
                 target_d_tag: target.coordinate().identifier().to_owned(),
@@ -2288,7 +2288,7 @@ async fn synchronize_insert_delta(
             })?;
         persist_request_fact(connection, generation, inserted_seq, &request).await?;
         affected_coordinates.extend(
-            load_request_affected_coordinates(connection, generation, request.event().id_str())
+            load_request_affected_coordinates(connection, generation, &request.event().id_hex())
                 .await?,
         );
     }
@@ -2329,7 +2329,7 @@ async fn persist_request_fact(
         "INSERT INTO radroots_event_store_nip09_request(source_generation, request_event_id, request_event_seq, request_pubkey, request_created_at) VALUES (?, ?, ?, ?, ?)",
     )
     .bind(generation.as_bytes().as_slice())
-    .bind(event.id_str())
+    .bind(event.id_hex())
     .bind(request_seq)
     .bind(event.author().to_hex())
     .bind(i64_from_u64(
@@ -2345,8 +2345,8 @@ async fn persist_request_fact(
             "INSERT INTO radroots_event_store_nip09_event_target(source_generation, request_event_id, target_event_id, source_tag_index, source_tag_value) VALUES (?, ?, ?, ?, ?)",
         )
         .bind(generation.as_bytes().as_slice())
-        .bind(event.id_str())
-        .bind(target.event_id().as_str())
+        .bind(event.id_hex())
+        .bind(target.event_id().to_hex())
         .bind(i64_from_usize("source_tag_index", target.tag_index())?)
         .bind(source_tag_value)
         .execute(&mut *connection)
@@ -2361,7 +2361,7 @@ async fn persist_request_fact(
             "INSERT INTO radroots_event_store_nip09_address_target(source_generation, request_event_id, target_kind, target_pubkey, target_d_tag, inclusive_cutoff, source_tag_index, source_tag_value, source_kind_text, source_pubkey_text, source_d_tag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(generation.as_bytes().as_slice())
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .bind(i64::from(target.coordinate().kind()))
         .bind(target.coordinate().pubkey().to_hex())
         .bind(target.coordinate().identifier())
@@ -2585,7 +2585,7 @@ fn desired_addressable_states(
 ) -> Result<BTreeMap<(i64, String, String), AddressableHeadState>, RadrootsEventStoreError> {
     let event_by_id = events
         .iter()
-        .map(|event| (event.verified_event.event().id_str(), event))
+        .map(|event| (event.verified_event.event().id_hex(), event))
         .collect::<BTreeMap<_, _>>();
     let winners = select_raw_head_winners(events);
     let request_index = RequestIndex::new(requests);
@@ -2600,7 +2600,7 @@ fn desired_addressable_states(
             continue;
         };
         let event = event_by_id
-            .get(winner.candidate.event_id.as_str())
+            .get(&winner.candidate.event_id.to_hex())
             .ok_or_else(|| RadrootsEventStoreError::MigrationHookStateDrift {
                 hook_id: NIP09_HOOK_ID,
                 reason: format!(
@@ -2806,7 +2806,7 @@ fn expected_transition_history(
         .filter(|event| event.seq > source.baseline_raw_high_water_seq);
     let event_by_id = events
         .iter()
-        .map(|event| (event.verified_event.event().id_str(), event))
+        .map(|event| (event.verified_event.event().id_hex(), event))
         .collect::<BTreeMap<_, _>>();
     let mut requests = admitted_nip09_requests(&baseline_events)?;
     let mut winners = select_raw_head_winners(&baseline_events);
@@ -2843,7 +2843,7 @@ fn expected_transition_history(
                     continue;
                 };
                 let target = event_by_id
-                    .get(winner.candidate.event_id.as_str())
+                    .get(&winner.candidate.event_id.to_hex())
                     .ok_or_else(|| RadrootsEventStoreError::MigrationHookStateDrift {
                         hook_id: NIP09_HOOK_ID,
                         reason: format!(
@@ -2893,7 +2893,7 @@ fn expected_transition_history(
                 }
             })?;
             let target = event_by_id
-                .get(winner.candidate.event_id.as_str())
+                .get(&winner.candidate.event_id.to_hex())
                 .ok_or_else(|| RadrootsEventStoreError::MigrationHookStateDrift {
                     hook_id: NIP09_HOOK_ID,
                     reason: format!(
@@ -2924,11 +2924,12 @@ fn expected_transition_history(
                 .map(|prior| (prior.raw_head_event_seq, prior.raw_head_event_id.as_str()));
             next_transition_seq =
                 checked_authority_add(next_transition_seq, 1, "transition sequence")?;
+            let inserted_event_id = event.verified_event.event().id_hex();
             transitions.push(addressable_transition_fact(
                 next_transition_seq,
                 &desired,
                 TransitionOrigin::Incremental,
-                Some((event.seq, event.verified_event.event().id_str())),
+                Some((event.seq, inserted_event_id.as_str())),
                 retracted,
                 raw_head_decision_code(&raw_head_decision),
             ));
@@ -2961,7 +2962,7 @@ fn admitted_nip09_request(
             hook_id: NIP09_HOOK_ID,
             reason: format!(
                 "centrally admitted deletion request `{}` failed typed admission: {error}",
-                event.verified_event.event().id_str()
+                event.verified_event.event().id_hex()
             ),
         }
     })
@@ -3042,9 +3043,9 @@ fn addressable_state_for_event<'a>(
     state.nip09_reason = Some(decision.reason().code().to_owned());
     state.event_reference_request_id = decision
         .event_reference()
-        .map(|evidence| evidence.request_id().as_str().to_owned());
+        .map(|evidence| evidence.request_id().to_hex().to_owned());
     if let Some(evidence) = decision.address_reference() {
-        state.address_reference_request_id = Some(evidence.request_id().as_str().to_owned());
+        state.address_reference_request_id = Some(evidence.request_id().to_hex().to_owned());
         state.address_reference_cutoff = Some(i64_from_u64(
             "address_reference_cutoff",
             evidence.inclusive_cutoff(),
@@ -3115,7 +3116,7 @@ fn addressable_state_base(
         kind,
         pubkey: pubkey.to_owned(),
         d_tag: d_tag.to_owned(),
-        raw_head_event_id: envelope.id_str().to_owned(),
+        raw_head_event_id: envelope.id_hex().to_owned(),
         raw_head_event_seq: event_seq,
         raw_head_created_at: i64_from_u64("raw_head_created_at", envelope.created_at_u64())?,
         admission_status: event.admission.status.as_str().to_owned(),
@@ -3463,7 +3464,7 @@ fn request_source_tag_value<'a>(
             hook_id: NIP09_HOOK_ID,
             reason: format!(
                 "admitted deletion request `{}` has no `{expected_name}` value at source tag {tag_index}",
-                event.id_str()
+                event.id_hex()
             ),
         })?;
     Ok(tag.as_str())
@@ -3654,7 +3655,7 @@ mod tests {
             vec![vec!["d".to_owned(), "rotation".to_owned()]],
             "{}",
         );
-        let target_id = target.id_str().to_owned();
+        let target_id = target.id_hex().to_owned();
         seed_v1_raw_event(&pool, target, 1_000).await;
         seed_v1_raw_event(
             &pool,
@@ -4027,7 +4028,7 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
             request.projection().address_targets().len(),
             RADROOTS_NIP09_DELETION_TAG_MAX_COUNT
         );
-        let request_id = request.event().id_str().to_owned();
+        let request_id = request.event().id_hex().to_owned();
         let requests = vec![request];
         let request_index = RequestIndex::new(&requests);
 
@@ -4105,14 +4106,14 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
             admitted_request(
                 REQUEST_CREATED_AT,
                 vec![
-                    vec!["e".to_owned(), target.id_str().to_owned()],
+                    vec!["e".to_owned(), target.id_hex().to_owned()],
                     vec!["a".to_owned(), target_coordinate.clone()],
                 ],
                 "both",
             ),
             admitted_request(
                 REQUEST_CREATED_AT + 1,
-                vec![vec!["e".to_owned(), target.id_str().to_owned()]],
+                vec![vec!["e".to_owned(), target.id_hex().to_owned()]],
                 "event",
             ),
             admitted_request(
@@ -4128,7 +4129,7 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
         assert_eq!(
             request_index
                 .event_targets
-                .get(target.id_str())
+                .get(&target.id_hex())
                 .expect("event indices")
                 .len(),
             2
@@ -4255,13 +4256,13 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         let inserted = sqlx::query(
             "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?, ?, ?, ?, ?, ?)",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .bind(event.author().to_hex())
         .bind(i64::try_from(event.created_at_u64()).expect("created_at"))
         .bind(i64::from(event.kind_u32()))
         .bind(tags_json)
         .bind(event.content())
-        .bind(event.sig_str())
+        .bind(event.signature_hex())
         .bind(ingest.raw_json())
         .bind(admission.status.as_str())
         .bind(admission.contract.map(|contract| contract.id))
@@ -4288,7 +4289,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
             let inserted = sqlx::query(
                 "INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             )
-            .bind(event.id_str())
+            .bind(event.id_hex())
             .bind(i64::try_from(index).expect("tag index"))
             .bind(name)
             .bind(value)
@@ -4310,13 +4311,13 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         observed_at_ms: i64,
     ) -> RadrootsEventIngest {
         let wire = RadrootsNip01EventWire {
-            id: envelope.id_str().to_owned(),
+            id: envelope.id_hex().to_owned(),
             pubkey: envelope.author().to_hex().to_owned(),
             created_at: envelope.created_at_u64(),
             kind: envelope.kind_u32(),
             tags: envelope.tags_as_vec(),
             content: envelope.content().to_owned(),
-            sig: envelope.sig_str().to_owned(),
+            sig: envelope.signature_hex().to_owned(),
             extra: Default::default(),
         };
         let raw_json = serde_json::to_string(&wire).expect("wire JSON");
@@ -4447,12 +4448,12 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         let inserted = sqlx::query(
             "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, '[]', ?, ?, ?, 'verified', ?, ?, ?, ?, ?, ?)",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .bind(event.author().to_hex())
         .bind(i64::try_from(event.created_at_u64()).expect("created_at"))
         .bind(i64::from(event.kind_u32()))
         .bind(event.content())
-        .bind(event.sig_str())
+        .bind(event.signature_hex())
         .bind(ingest.raw_json())
         .bind(admission.status.as_str())
         .bind(admission.contract.map(|contract| contract.id))
@@ -4474,7 +4475,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
             &ingest,
             &admission,
             inserted_seq,
-            event.id_str(),
+            &event.id_hex(),
             0,
             &RadrootsRawHeadDecision::NotPersisted,
         )
@@ -4546,7 +4547,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         let id =
             compute_canonical_nip01_event_id(author.as_str(), created_at, kind, &tags, content)
                 .expect("event id");
-        let nostr_id = nostr::EventId::from_hex(id.as_str()).expect("Nostr event id");
+        let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
         let message = Message::from_digest(nostr_id.to_bytes());
         let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {

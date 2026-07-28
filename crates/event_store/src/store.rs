@@ -417,7 +417,8 @@ impl RadrootsEventStore {
         let mut tx = self.pool.begin().await?;
         let mut evaluated = BTreeMap::new();
         for (index, event_id) in unique_event_ids.into_iter().enumerate() {
-            let visibility = event_visibility_in_transaction(&mut tx, event_id.as_str()).await?;
+            let event_id_hex = event_id.to_hex();
+            let visibility = event_visibility_in_transaction(&mut tx, &event_id_hex).await?;
             evaluated.insert(event_id, visibility);
             after_evaluation(index + 1).await?;
         }
@@ -933,7 +934,7 @@ impl RadrootsEventStore {
         let row = sqlx::query(
             "SELECT mutation_id, trade_id, root_mutation_id, contract_id, mutation_kind, schema_version, candidate_id, proposal_mutation_id, target_claim_mutation_id, author_pubkey, counterparty_pubkey, buyer_pubkey, seller_pubkey, farm_id, authored_at_unix_s, canonical_payload_bytes, payload_sha256, first_event_seq, first_transport_event_id, inserted_at_ms FROM trade_mutation WHERE mutation_id = ?",
         )
-        .bind(mutation_id.as_str())
+        .bind(mutation_id.to_hex())
         .fetch_optional(&self.pool)
         .await?;
         row.map(trade_mutation_from_row).transpose()
@@ -948,7 +949,7 @@ impl RadrootsEventStore {
         let rows = sqlx::query(
             "SELECT mutation_id, trade_id, root_mutation_id, contract_id, mutation_kind, schema_version, candidate_id, proposal_mutation_id, target_claim_mutation_id, author_pubkey, counterparty_pubkey, buyer_pubkey, seller_pubkey, farm_id, authored_at_unix_s, canonical_payload_bytes, payload_sha256, first_event_seq, first_transport_event_id, inserted_at_ms FROM trade_mutation WHERE trade_id = ? ORDER BY authored_at_unix_s, mutation_id LIMIT ?",
         )
-        .bind(trade_id.as_str())
+        .bind(trade_id.to_hex())
         .bind(i64::from(limit))
         .fetch_all(&self.pool)
         .await?;
@@ -962,7 +963,7 @@ impl RadrootsEventStore {
         let rows = sqlx::query(
             "SELECT mutation_id, parent_mutation_id, parent_index FROM trade_mutation_parent WHERE mutation_id = ? ORDER BY parent_index",
         )
-        .bind(mutation_id.as_str())
+        .bind(mutation_id.to_hex())
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter()
@@ -977,7 +978,7 @@ impl RadrootsEventStore {
         let rows = sqlx::query(
             "SELECT transport_event_id, mutation_id, trade_id, transport_kind, pubkey, created_at, event_seq, payload_sha256, observed_at_ms FROM trade_transport_envelope WHERE mutation_id = ? ORDER BY observed_at_ms, transport_event_id",
         )
-        .bind(mutation_id.as_str())
+        .bind(mutation_id.to_hex())
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter()
@@ -992,7 +993,7 @@ impl RadrootsEventStore {
         let rows = sqlx::query(
             "SELECT trade_id, mutation_id, missing_parent_mutation_id, first_transport_event_id, first_seen_at_ms FROM trade_missing_parent WHERE trade_id = ? ORDER BY first_seen_at_ms, mutation_id, missing_parent_mutation_id",
         )
-        .bind(trade_id.as_str())
+        .bind(trade_id.to_hex())
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter()
@@ -1035,11 +1036,11 @@ impl RadrootsEventStore {
         sqlx::query(
             "INSERT INTO trade_projection_checkpoint(trade_id, reducer_contract_id, reducer_version, projection_digest, root_mutation_id, negotiation_state, agreement_state, evidence_state, conflict_state, private_terms_state, attestation_state, fulfillment_state, payment_state, projection_json, last_mutation_id, last_transport_event_seq, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(trade_id) DO UPDATE SET reducer_contract_id = excluded.reducer_contract_id, reducer_version = excluded.reducer_version, projection_digest = excluded.projection_digest, root_mutation_id = excluded.root_mutation_id, negotiation_state = excluded.negotiation_state, agreement_state = excluded.agreement_state, evidence_state = excluded.evidence_state, conflict_state = excluded.conflict_state, private_terms_state = excluded.private_terms_state, attestation_state = excluded.attestation_state, fulfillment_state = excluded.fulfillment_state, payment_state = excluded.payment_state, projection_json = excluded.projection_json, last_mutation_id = excluded.last_mutation_id, last_transport_event_seq = excluded.last_transport_event_seq, updated_at_ms = excluded.updated_at_ms",
         )
-        .bind(checkpoint.trade_id.as_str())
+        .bind(checkpoint.trade_id.to_hex())
         .bind(checkpoint.reducer_contract_id.as_str())
         .bind(i64::from(checkpoint.reducer_version))
         .bind(checkpoint.projection_digest.as_str())
-        .bind(checkpoint.root_mutation_id.as_ref().map(RadrootsTradeMutationId::as_str))
+        .bind(checkpoint.root_mutation_id.as_ref().map(RadrootsTradeMutationId::to_hex))
         .bind(checkpoint.negotiation_state.as_str())
         .bind(checkpoint.agreement_state.as_str())
         .bind(checkpoint.evidence_state.as_str())
@@ -1049,7 +1050,7 @@ impl RadrootsEventStore {
         .bind(checkpoint.fulfillment_state.as_str())
         .bind(checkpoint.payment_state.as_str())
         .bind(checkpoint.projection_json.as_str())
-        .bind(checkpoint.last_mutation_id.as_ref().map(RadrootsTradeMutationId::as_str))
+        .bind(checkpoint.last_mutation_id.as_ref().map(RadrootsTradeMutationId::to_hex))
         .bind(checkpoint.last_transport_event_seq)
         .bind(checkpoint.updated_at_ms)
         .execute(&self.pool)
@@ -1064,7 +1065,7 @@ impl RadrootsEventStore {
         let row = sqlx::query(
             "SELECT trade_id, reducer_contract_id, reducer_version, projection_digest, root_mutation_id, negotiation_state, agreement_state, evidence_state, conflict_state, private_terms_state, attestation_state, fulfillment_state, payment_state, projection_json, last_mutation_id, last_transport_event_seq, updated_at_ms FROM trade_projection_checkpoint WHERE trade_id = ?",
         )
-        .bind(trade_id.as_str())
+        .bind(trade_id.to_hex())
         .fetch_optional(&self.pool)
         .await?;
         row.map(trade_projection_checkpoint_from_row).transpose()
@@ -1089,8 +1090,7 @@ async fn event_visibility_in_transaction(
                         event_id: event_id.to_owned(),
                     },
                 )?
-                .as_str()
-                .to_owned(),
+                .to_hex(),
         },
         RadrootsCurrentVisibilityDecisionV1::Suppressed => {
             let evidence = current.suppression().ok_or_else(|| {
@@ -2100,12 +2100,14 @@ mod tests {
         let tags = event.tags_as_vec();
         let tags_json = serde_json::to_string(&tags).expect("tags JSON");
         let pubkey = event.pubkey().to_hex();
+        let event_id = event.id_hex();
+        let signature = event.signature_hex();
         let event_bytes = [
-            event.id_str(),
+            event_id.as_str(),
             pubkey.as_str(),
             tags_json.as_str(),
             event.content(),
-            event.sig_str(),
+            signature.as_str(),
             event.raw_json(),
         ]
         .into_iter()
@@ -2115,7 +2117,7 @@ mod tests {
             .iter()
             .map(|tag| {
                 let tag_json = serde_json::to_string(tag).expect("tag JSON");
-                event.id_str().len()
+                event.id_hex().len()
                     + tag.first().map_or(0, String::len)
                     + tag.get(1).map_or(0, String::len)
                     + tag_json.len()
@@ -2730,13 +2732,13 @@ mod tests {
         sqlx::query(
             "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified', 'admitted', 'radroots.post.v1', 'regular', 1, ?, ?)",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .bind(event.author().to_hex())
         .bind(i64::try_from(event.created_at_u64()).expect("created_at"))
         .bind(i64::from(event.kind_u32()))
         .bind(tags_json)
         .bind(event.content())
-        .bind(event.sig_str())
+        .bind(event.signature_hex())
         .bind(ingest.raw_json())
         .bind(observed_at_ms)
         .bind(observed_at_ms)
@@ -2750,7 +2752,7 @@ mod tests {
             sqlx::query(
                 "INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, NULL, NULL, 0)",
             )
-            .bind(event.id_str())
+            .bind(event.id_hex())
             .bind(i64::try_from(tag_index).expect("tag index"))
             .bind(tag_name)
             .bind(tag_value)
@@ -2796,7 +2798,7 @@ mod tests {
         let deletion = deletion_event(
             &fixture_keys(),
             30,
-            vec![vec!["e".to_owned(), target.id_str().to_owned()]],
+            vec![vec!["e".to_owned(), target.id_hex().to_owned()]],
         );
         let target_receipt = store
             .ingest_event(RadrootsEventIngest::new(target.clone(), 2_000))
@@ -2855,7 +2857,7 @@ mod tests {
         assert_ne!(second_generation, first_generation);
         assert_eq!(raw_authority_digest(&store).await, expected_raw_digest);
         let reconciled = store
-            .raw_event(target.id_str())
+            .raw_event(&target.id_hex())
             .await
             .expect("target read")
             .expect("target row");
@@ -3007,7 +3009,7 @@ mod tests {
             .await
             .expect("projection lookup")
             .expect("projection after rebuild");
-        assert_eq!(projected.event_id().as_str(), food.id_str());
+        assert_eq!(projected.event_id().to_hex(), food.id_hex());
         validate_nip09_authority(&store).await;
         store
             .audit_food_availability_projection_v1()
@@ -3137,7 +3139,7 @@ mod tests {
             .await
             .expect("projection lookup")
             .expect("projection");
-        assert_eq!(projected.event_id().as_str(), food.id_str());
+        assert_eq!(projected.event_id().to_hex(), food.id_hex());
         assert_eq!(projected.images().len(), 1);
         assert!(projected.images()[0].qualifies());
         assert_eq!(
@@ -3246,7 +3248,7 @@ mod tests {
             rollback_store_to_v1(&store).await;
             sqlx::query("UPDATE event_envelopes SET seq = ? WHERE event_id = ?")
                 .bind(invalid_seq)
-                .bind(event.id_str())
+                .bind(event.id_hex())
                 .execute(store.pool())
                 .await
                 .expect("install invalid legacy sequence");
@@ -3273,7 +3275,7 @@ mod tests {
             .expect("seed");
         rollback_store_to_v1(&mismatch_store).await;
         sqlx::query("UPDATE event_envelopes SET content = 'forged' WHERE event_id = ?")
-            .bind(mismatch.id_str())
+            .bind(mismatch.id_hex())
             .execute(mismatch_store.pool())
             .await
             .expect("forge immutable content");
@@ -3442,7 +3444,7 @@ mod tests {
         .expect("prior raw event bytes");
         sqlx::query("UPDATE event_envelopes SET pubkey = ? WHERE event_id = ?")
             .bind("f".repeat(4_096))
-            .bind(event.id_str())
+            .bind(event.id_hex())
             .execute(store.pool())
             .await
             .expect("oversized legacy pubkey");
@@ -3540,8 +3542,8 @@ mod tests {
             &fixture_keys(),
             10,
             vec![
-                vec!["e".to_owned(), exact_target.id_str().to_owned()],
-                vec!["e".to_owned(), exact_target.id_str().to_owned()],
+                vec!["e".to_owned(), exact_target.id_hex().to_owned()],
+                vec!["e".to_owned(), exact_target.id_hex().to_owned()],
                 vec!["a".to_owned(), exact_coordinate.clone()],
                 vec!["a".to_owned(), exact_coordinate],
                 vec!["k".to_owned(), KIND_LIST_SET_RELAY.to_string()],
@@ -3589,12 +3591,12 @@ mod tests {
         let wrong_deletion = deletion_event(
             &alternate_keys(),
             50,
-            vec![vec!["e".to_owned(), wrong_target.id_str().to_owned()]],
+            vec![vec!["e".to_owned(), wrong_target.id_hex().to_owned()]],
         );
         let delete_deletion = deletion_event(
             &fixture_keys(),
             60,
-            vec![vec!["e".to_owned(), mixed_deletion.id_str().to_owned()]],
+            vec![vec!["e".to_owned(), mixed_deletion.id_hex().to_owned()]],
         );
         let missing_d = addressable_event(&fixture_keys(), 1, Vec::new(), "{}");
         let valueless_d = addressable_event(&fixture_keys(), 2, vec![vec!["d".to_owned()]], "{}");
@@ -3707,7 +3709,7 @@ mod tests {
             assert_eq!(after_duplicate, before_duplicate);
             assert!(
                 store
-                    .valid_event(delete_deletion.id_str())
+                    .valid_event(&delete_deletion.id_hex())
                     .await
                     .expect("kind-5 query")
                     .is_some()
@@ -3717,14 +3719,14 @@ mod tests {
         let mixed_event_targets: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM radroots_event_store_nip09_event_target WHERE request_event_id = ?",
         )
-        .bind(mixed_deletion.id_str())
+        .bind(mixed_deletion.id_hex())
         .fetch_one(baseline.pool())
         .await
         .expect("mixed event targets");
         let mixed_address_targets: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM radroots_event_store_nip09_address_target WHERE request_event_id = ?",
         )
-        .bind(mixed_deletion.id_str())
+        .bind(mixed_deletion.id_hex())
         .fetch_one(baseline.pool())
         .await
         .expect("mixed address targets");
@@ -3739,7 +3741,7 @@ mod tests {
             let row = sqlx::query(
                 "SELECT raw_d_tag, nip09_matchable, nip09_d_tag FROM radroots_event_store_event_coordinate WHERE event_id = ?",
             )
-            .bind(event.id_str())
+            .bind(event.id_hex())
             .fetch_one(baseline.pool())
             .await
             .expect("coordinate fact");
@@ -3791,7 +3793,7 @@ mod tests {
             state["exact"].2.as_deref(),
             Some("deletion_event_id_reference")
         );
-        assert_eq!(state["cutoff"].0, cutoff_v2.id_str());
+        assert_eq!(state["cutoff"].0, cutoff_v2.id_hex());
         assert_eq!(state["cutoff"].1, "visible");
         assert_eq!(
             state["cutoff"].2.as_deref(),
@@ -4043,7 +4045,7 @@ mod tests {
             &fixture_keys(),
             30,
             vec![
-                vec!["e".to_owned(), target.id_str().to_owned()],
+                vec!["e".to_owned(), target.id_hex().to_owned()],
                 vec!["a".to_owned(), addressable_coordinate("guard")],
             ],
         );
@@ -4205,7 +4207,7 @@ mod tests {
             .await
             .expect("snapshot invalidator");
         let stale_event = signed_event(KIND_POST, 13, Vec::new(), "stale writer");
-        let stale_event_id = stale_event.id_str().to_owned();
+        let stale_event_id = stale_event.id_hex().to_owned();
         let stale_error = store
             .ingest_event_in_transaction(
                 &mut stale_tx,
@@ -4670,14 +4672,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             "UPDATE event_envelopes SET kind = 20001 WHERE event_id = ?",
         ] {
             sqlx::query(statement)
-                .bind(event.id_str())
+                .bind(event.id_hex())
                 .execute(store.pool())
                 .await
                 .expect_err("envelope mutation must be rejected");
         }
 
         let raw = store
-            .raw_event(event.id_str())
+            .raw_event(&event.id_hex())
             .await
             .expect("raw read")
             .expect("stored event");
@@ -4833,7 +4835,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             ],
             "Café-grown carrots 🥕 in Victoria\0",
         );
-        let event_id = event.id_str().to_owned();
+        let event_id = event.id_hex().to_owned();
         let expected_tag_count =
             u64::try_from(event.tags_as_vec().len()).expect("tag count fits u64");
         let (expected_event_bytes, expected_tag_bytes) = raw_source_text_bytes(&event);
@@ -4904,7 +4906,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("capacity after duplicate ingest");
         let stored = store
-            .raw_event(event.id_str())
+            .raw_event(&event.id_hex())
             .await
             .expect("get")
             .expect("stored");
@@ -4932,7 +4934,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(stored.valid_stream_eligible);
         assert_eq!(
             store
-                .tags_for_event(event.id_str())
+                .tags_for_event(&event.id_hex())
                 .await
                 .expect("tags")
                 .len(),
@@ -5054,8 +5056,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(before_race.raw_event_text_bytes(), filler_target);
         filler_store.pool().close().await;
 
-        let contender_a_id = contender_a.id_str().to_owned();
-        let contender_b_id = contender_b.id_str().to_owned();
+        let contender_a_id = contender_a.id_hex().to_owned();
+        let contender_b_id = contender_b.id_hex().to_owned();
         let store_a = RadrootsEventStore::open_file(&path)
             .await
             .expect("first independent store");
@@ -5213,7 +5215,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let observation_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM event_transport_observation WHERE event_id = ?",
         )
-        .bind(retained.id_str())
+        .bind(retained.id_hex())
         .fetch_one(&mut *transaction)
         .await
         .expect("duplicate observation count");
@@ -5265,7 +5267,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let ephemeral_observation_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM event_transport_observation WHERE event_id = ?",
         )
-        .bind(ephemeral.id_str())
+        .bind(ephemeral.id_hex())
         .fetch_one(&mut *transaction)
         .await
         .expect("ephemeral observation count");
@@ -5284,14 +5286,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("roll back exact-bound fixture");
         assert!(
             store
-                .raw_event(unique.id_str())
+                .raw_event(&unique.id_hex())
                 .await
                 .expect("unique raw event after rollback")
                 .is_none()
         );
         assert!(
             store
-                .raw_event(ephemeral.id_str())
+                .raw_event(&ephemeral.id_hex())
                 .await
                 .expect("ephemeral raw event after rollback")
                 .is_none()
@@ -5313,8 +5315,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             vec![vec!["t".to_owned(), "soil".to_owned()]],
             "same event",
         );
-        assert_eq!(first_event.id_str(), second_event.id_str());
-        assert_ne!(first_event.sig_str(), second_event.sig_str());
+        assert_eq!(first_event.id_hex(), second_event.id_hex());
+        assert_ne!(first_event.signature_hex(), second_event.signature_hex());
         assert_ne!(first_event.raw_json(), second_event.raw_json());
 
         store
@@ -5324,14 +5326,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_envelopes SET contract_status = 'unsupported', contract_id = NULL, projection_eligible = 0 WHERE event_id = ?",
         )
-        .bind(first_event.id_str())
+        .bind(first_event.id_hex())
         .execute(store.pool())
         .await
         .expect_err("derived classification mutation must be rejected");
         let before: (String, String, String, i64) = sqlx::query_as(
             "SELECT sig, raw_json, tags_json, updated_at_ms FROM event_envelopes WHERE event_id = ?",
         )
-        .bind(first_event.id_str())
+        .bind(first_event.id_hex())
         .fetch_one(store.pool())
         .await
         .expect("before");
@@ -5347,7 +5349,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let after: (String, String, String, i64) = sqlx::query_as(
             "SELECT sig, raw_json, tags_json, updated_at_ms FROM event_envelopes WHERE event_id = ?",
         )
-        .bind(first_event.id_str())
+        .bind(first_event.id_hex())
         .fetch_one(store.pool())
         .await
         .expect("after");
@@ -5373,11 +5375,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             RadrootsRawHeadDecision::NotHeadSelected
         );
         assert_eq!(after, before);
-        assert_eq!(after.0, first_event.sig_str());
+        assert_eq!(after.0, first_event.signature_hex());
         assert_eq!(after.1, first_event.raw_json());
         assert_eq!(
             store
-                .raw_event(first_event.id_str())
+                .raw_event(&first_event.id_hex())
                 .await
                 .expect("raw event")
                 .expect("stored")
@@ -5386,7 +5388,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(
             store
-                .valid_event(first_event.id_str())
+                .valid_event(&first_event.id_hex())
                 .await
                 .expect("valid event")
                 .is_some()
@@ -5398,8 +5400,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let first_event = signed_event(KIND_POST, 12, Vec::new(), "legacy");
         let second_event = signed_event(KIND_POST, 12, Vec::new(), "legacy");
-        assert_eq!(first_event.id_str(), second_event.id_str());
-        assert_ne!(first_event.sig_str(), second_event.sig_str());
+        assert_eq!(first_event.id_hex(), second_event.id_hex());
+        assert_ne!(first_event.signature_hex(), second_event.signature_hex());
 
         store
             .ingest_event(RadrootsEventIngest::new(first_event.clone(), 1_300))
@@ -5408,14 +5410,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_envelopes SET contract_status = 'supported', event_class = NULL WHERE event_id = ?",
         )
-        .bind(first_event.id_str())
+        .bind(first_event.id_hex())
         .execute(store.pool())
         .await
         .expect_err("legacy classification mutation must be rejected");
         let before: (String, String, String, String, Option<String>, i64) = sqlx::query_as(
             "SELECT sig, raw_json, tags_json, contract_status, event_class, updated_at_ms FROM event_envelopes WHERE event_id = ?",
         )
-        .bind(first_event.id_str())
+        .bind(first_event.id_hex())
         .fetch_one(store.pool())
         .await
         .expect("before");
@@ -5427,7 +5429,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let after: (String, String, String, String, Option<String>, i64) = sqlx::query_as(
             "SELECT sig, raw_json, tags_json, contract_status, event_class, updated_at_ms FROM event_envelopes WHERE event_id = ?",
         )
-        .bind(first_event.id_str())
+        .bind(first_event.id_hex())
         .fetch_one(store.pool())
         .await
         .expect("after");
@@ -5438,25 +5440,25 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             RadrootsEventAdmissionStatus::Admitted
         );
         assert_eq!(after, before);
-        assert_eq!(after.0, first_event.sig_str());
+        assert_eq!(after.0, first_event.signature_hex());
         assert_eq!(after.1, first_event.raw_json());
         assert!(
             store
-                .raw_event(first_event.id_str())
+                .raw_event(&first_event.id_hex())
                 .await
                 .expect("raw event")
                 .is_some()
         );
         assert!(
             store
-                .valid_event(first_event.id_str())
+                .valid_event(&first_event.id_hex())
                 .await
                 .expect("valid event")
                 .is_some()
         );
         assert_eq!(
             store
-                .event_visibility(first_event.id_str())
+                .event_visibility(&first_event.id_hex())
                 .await
                 .expect("visibility"),
             Some(RadrootsEventVisibility::Visible)
@@ -5500,8 +5502,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             sha256_hex(decision.content.as_bytes())
         );
         assert_eq!(
-            stored_decision.first_transport_event_id.as_str(),
-            decision_event.id_str()
+            stored_decision.first_transport_event_id.to_hex(),
+            decision_event.id_hex()
         );
         assert_eq!(
             stored_decision.mutation_kind,
@@ -5577,7 +5579,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             "post-core forged raw authority",
         );
         register_protocol_post_extension_raw_authority_forge(
-            trigger_event.id_str().to_owned(),
+            trigger_event.id_hex().to_owned(),
             RadrootsEventIngest::new(forged_event.clone(), 2_251),
         );
 
@@ -5619,21 +5621,21 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         assert!(
             store
-                .raw_event(prior_event.id_str())
+                .raw_event(&prior_event.id_hex())
                 .await
                 .expect("prior raw event")
                 .is_some()
         );
         assert!(
             store
-                .raw_event(trigger_event.id_str())
+                .raw_event(&trigger_event.id_hex())
                 .await
                 .expect("trigger raw event")
                 .is_none()
         );
         assert!(
             store
-                .raw_event(forged_event.id_str())
+                .raw_event(&forged_event.id_hex())
                 .await
                 .expect("forged raw event")
                 .is_none()
@@ -5758,7 +5760,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let proposal =
             canonical_trade_mutation_content(proposal_envelope).expect("unique proposal");
         let trigger_event = signed_trade_mutation(&proposal);
-        register_protocol_post_extension_schema_forge(trigger_event.id_str().to_owned());
+        register_protocol_post_extension_schema_forge(trigger_event.id_hex().to_owned());
 
         let error = store
             .ingest_event(RadrootsEventIngest::new(trigger_event.clone(), 2_252))
@@ -5771,7 +5773,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         ));
         assert!(
             store
-                .raw_event(trigger_event.id_str())
+                .raw_event(&trigger_event.id_hex())
                 .await
                 .expect("trigger raw event")
                 .is_none()
@@ -5854,7 +5856,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             format!("{} ", proposal.content),
             &fixture_keys(),
         );
-        let malformed_id = malformed.id_str().to_owned();
+        let malformed_id = malformed.id_hex().to_owned();
         let malformed_receipt = store
             .ingest_event(RadrootsEventIngest::new(malformed, 2_400))
             .await
@@ -5886,7 +5888,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let missing_id_content = canonical_jcs_value(&missing_id_value).expect("canonical json");
         let missing_id =
             signed_trade_content_with_keys(&proposal, missing_id_content, &fixture_keys());
-        let missing_id_event_id = missing_id.id_str().to_owned();
+        let missing_id_event_id = missing_id.id_hex().to_owned();
         let missing_id_receipt = store
             .ingest_event(RadrootsEventIngest::new(missing_id, 2_500))
             .await
@@ -5906,7 +5908,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         let mismatched_author =
             signed_trade_content_with_keys(&proposal, proposal.content.clone(), &alternate_keys());
-        let mismatched_author_id = mismatched_author.id_str().to_owned();
+        let mismatched_author_id = mismatched_author.id_hex().to_owned();
         let mismatched_author_receipt = store
             .ingest_event(RadrootsEventIngest::new(mismatched_author, 2_600))
             .await
@@ -6144,7 +6146,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("ingest");
         let stored = store
-            .raw_event(event.id_str())
+            .raw_event(&event.id_hex())
             .await
             .expect("get")
             .expect("stored");
@@ -6180,7 +6182,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(
             store
-                .valid_event(event.id_str())
+                .valid_event(&event.id_hex())
                 .await
                 .expect("valid event")
                 .is_none()
@@ -6211,12 +6213,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     fn test_helpers_cover_signature_and_non_head_branches() {
         let zero_sig = synthetic_signed_event(KIND_POST, 12, Vec::new(), "zero");
         let zero_sig = tamper_signature(&zero_sig);
-        assert!(zero_sig.sig_str().starts_with('0'));
+        assert!(zero_sig.signature_hex().starts_with('0'));
 
         let nonzero_sig = tamper_signature(&signed_event(KIND_POST, 12, Vec::new(), "nonzero"));
         assert_ne!(
-            nonzero_sig.sig_str(),
-            signed_event(KIND_POST, 12, Vec::new(), "nonzero").sig_str()
+            nonzero_sig.signature_hex(),
+            signed_event(KIND_POST, 12, Vec::new(), "nonzero").signature_hex()
         );
     }
 
@@ -6260,7 +6262,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         ));
         assert!(
             store
-                .raw_event(event.id_str())
+                .raw_event(&event.id_hex())
                 .await
                 .expect("raw event")
                 .is_none()
@@ -6292,7 +6294,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         ));
         assert!(
             store
-                .raw_event(event.id_str())
+                .raw_event(&event.id_hex())
                 .await
                 .expect("raw event")
                 .is_none()
@@ -6365,28 +6367,28 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         for event in [&admitted, &unsupported, &invalid] {
             assert!(
                 store
-                    .raw_event(event.id_str())
+                    .raw_event(&event.id_hex())
                     .await
                     .expect("raw event")
                     .is_none()
             );
             assert!(
                 store
-                    .valid_event(event.id_str())
+                    .valid_event(&event.id_hex())
                     .await
                     .expect("valid event")
                     .is_none()
             );
             assert_eq!(
                 store
-                    .event_visibility(event.id_str())
+                    .event_visibility(&event.id_hex())
                     .await
                     .expect("visibility"),
                 None
             );
             assert!(
                 store
-                    .tags_for_event(event.id_str())
+                    .tags_for_event(&event.id_hex())
                     .await
                     .expect("tags")
                     .is_empty()
@@ -6394,7 +6396,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         }
         assert!(
             store
-                .observations_for_event(admitted.id_str())
+                .observations_for_event(&admitted.id_hex())
                 .await
                 .expect("observations")
                 .is_empty()
@@ -6444,7 +6446,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("ingest");
         let stored = store
-            .raw_event(event.id_str())
+            .raw_event(&event.id_hex())
             .await
             .expect("get")
             .expect("stored");
@@ -6468,11 +6470,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("raw head")
                 .expect("stored raw head")
                 .event_id,
-            event.id_str()
+            event.id_hex()
         );
         assert_eq!(
             store
-                .event_visibility(event.id_str())
+                .event_visibility(&event.id_hex())
                 .await
                 .expect("visibility"),
             Some(RadrootsEventVisibility::NotAdmitted)
@@ -6536,14 +6538,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(capacity_after.raw_tag_text_bytes() > capacity_before.raw_tag_text_bytes());
         assert!(
             store
-                .raw_event(event.id_str())
+                .raw_event(&event.id_hex())
                 .await
                 .expect("raw event")
                 .is_some()
         );
         assert!(
             store
-                .valid_event(event.id_str())
+                .valid_event(&event.id_hex())
                 .await
                 .expect("valid event")
                 .is_none()
@@ -6555,11 +6557,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("raw head")
                 .expect("head")
                 .event_id,
-            event.id_str()
+            event.id_hex()
         );
         assert_eq!(
             store
-                .event_visibility(event.id_str())
+                .event_visibility(&event.id_hex())
                 .await
                 .expect("visibility"),
             Some(RadrootsEventVisibility::NotAdmitted)
@@ -6632,7 +6634,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("food lookup")
             .expect("projected carrots");
-        assert_eq!(projected.event_id().as_str(), carrots.id_str());
+        assert_eq!(projected.event_id().to_hex(), carrots.id_hex());
         assert_eq!(projected.title().as_str(), "Nantes Carrots");
         assert_eq!(projected.summary().as_str(), "Fresh bunches");
         assert_eq!(projected.price().amount(), "3");
@@ -6686,7 +6688,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("search");
         assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].event_id().as_str(), carrots.id_str());
+        assert_eq!(matches[0].event_id().to_hex(), carrots.id_hex());
         let summary_query = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Fresh")
             .expect("summary search query");
         let summary_matches = store
@@ -6698,7 +6700,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("summary search");
         assert_eq!(summary_matches.len(), 1);
-        assert_eq!(summary_matches[0].event_id().as_str(), carrots.id_str());
+        assert_eq!(summary_matches[0].event_id().to_hex(), carrots.id_hex());
 
         let sold = food_availability_event(
             220,
@@ -6718,7 +6720,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("replacement lookup")
             .expect("sold projection");
-        assert_eq!(replacement.event_id().as_str(), sold.id_str());
+        assert_eq!(replacement.event_id().to_hex(), sold.id_hex());
         assert_eq!(replacement.status(), RadrootsFoodAvailabilityStatus::Sold);
         assert_eq!(replacement.published_at().as_u64(), 100);
         assert!(replacement.images().is_empty());
@@ -6731,7 +6733,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(replacement_projection_count, 2);
         assert_eq!(
             store
-                .current_event_visibility_v1(carrots.id_str())
+                .current_event_visibility_v1(&carrots.id_hex())
                 .await
                 .expect("old visibility")
                 .expect("stored old revision")
@@ -6740,7 +6742,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert_eq!(
             store
-                .current_event_visibility_v1(sold.id_str())
+                .current_event_visibility_v1(&sold.id_hex())
                 .await
                 .expect("sold visibility")
                 .expect("stored sold revision")
@@ -6753,13 +6755,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("active after replacement");
         assert_eq!(active.len(), 1);
-        assert_eq!(active[0].event_id().as_str(), kale.id_str());
+        assert_eq!(active[0].event_id().to_hex(), kale.id_hex());
         let sold_rows = store
             .recent_food_availability_v1(crate::RadrootsFoodAvailabilityStatusFilterV1::Sold, 10)
             .await
             .expect("sold food");
         assert_eq!(sold_rows.len(), 1);
-        assert_eq!(sold_rows[0].event_id().as_str(), sold.id_str());
+        assert_eq!(sold_rows[0].event_id().to_hex(), sold.id_hex());
 
         let stale_query = crate::RadrootsFoodAvailabilitySearchQueryV1::parse("Fresh bunches")
             .expect("stale query");
@@ -6785,7 +6787,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("replacement search");
         assert_eq!(replacement_matches.len(), 1);
-        assert_eq!(replacement_matches[0].event_id().as_str(), sold.id_str());
+        assert_eq!(replacement_matches[0].event_id().to_hex(), sold.id_hex());
     }
 
     #[tokio::test]
@@ -6854,7 +6856,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let event_seq: i64 = sqlx::query_scalar(
             "SELECT event_seq FROM radroots_event_store_food_availability_projection WHERE event_id = ?",
         )
-        .bind(replacement.id_str())
+        .bind(replacement.id_hex())
         .fetch_one(store.pool())
         .await
         .expect("replacement sequence");
@@ -7099,7 +7101,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         let mut expected_ids = events
             .iter()
-            .map(|event| event.id_str().to_owned())
+            .map(|event| event.id_hex().to_owned())
             .collect::<Vec<_>>();
         expected_ids.sort();
         let recent = store
@@ -7112,7 +7114,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(
             recent
                 .iter()
-                .map(|projection| projection.event_id().as_str())
+                .map(|projection| projection.event_id().to_hex())
                 .collect::<Vec<_>>(),
             expected_ids.iter().map(String::as_str).collect::<Vec<_>>(),
         );
@@ -7122,7 +7124,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .await
                 .expect("minimum-limit recent query")[0]
                 .event_id()
-                .as_str(),
+                .to_hex(),
             expected_ids[0],
         );
         for invalid_limit in [0, RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX + 1] {
@@ -7150,7 +7152,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(
             search
                 .iter()
-                .map(|projection| projection.event_id().as_str())
+                .map(|projection| projection.event_id().to_hex())
                 .collect::<Vec<_>>(),
             expected_ids.iter().map(String::as_str).collect::<Vec<_>>(),
         );
@@ -7293,7 +7295,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         .expect("sealed retracted projection count");
         assert_eq!(retracted_projection_count, 0);
         let suppressed = store
-            .current_event_visibility_v1(sold.id_str())
+            .current_event_visibility_v1(&sold.id_hex())
             .await
             .expect("suppressed visibility")
             .expect("stored sold revision");
@@ -7310,8 +7312,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             evidence
                 .address_reference_request_id()
                 .expect("address deletion id")
-                .as_str(),
-            deletion.id_str()
+                .to_hex(),
+            deletion.id_hex()
         );
         assert_eq!(evidence.address_reference_cutoff(), Some(230));
 
@@ -7332,7 +7334,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert_eq!(
             store
-                .current_event_visibility_v1(older.id_str())
+                .current_event_visibility_v1(&older.id_hex())
                 .await
                 .expect("older visibility")
                 .expect("stored older revision")
@@ -7349,7 +7351,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("recovered lookup")
             .expect("recovered projection");
-        assert_eq!(projection.event_id().as_str(), recovered.id_str());
+        assert_eq!(projection.event_id().to_hex(), recovered.id_hex());
         assert_eq!(projection.status(), RadrootsFoodAvailabilityStatus::Active);
         let recovered_projection_count: i64 = sqlx::query_scalar(
             "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
@@ -7372,8 +7374,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .cause_event()
             .expect("deletion cause metadata");
         assert_eq!(
-            deletion_cause.event().event_id().as_str(),
-            deletion.id_str()
+            deletion_cause.event().event_id().to_hex(),
+            deletion.id_hex()
         );
         assert_eq!(
             &deletion_cause.pubkey().to_hex(),
@@ -7392,8 +7394,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .retracted_event()
                 .expect("sold retraction")
                 .event_id()
-                .as_str(),
-            sold.id_str()
+                .to_hex(),
+            sold.id_hex()
         );
         assert!(page.transitions()[2].visible_event().is_none());
         assert_eq!(
@@ -7408,8 +7410,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event()
                 .expect("recovered canonical event")
                 .event_id()
-                .as_str(),
-            recovered.id_str()
+                .to_hex(),
+            recovered.id_hex()
         );
         assert!(page.transitions()[3].retracted_event().is_none());
         assert_eq!(projection.source_transition_seq(), 4);
@@ -7493,8 +7495,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("restored lookup")
                 .expect("restored projection")
                 .event_id()
-                .as_str(),
-            restored.id_str(),
+                .to_hex(),
+            restored.id_hex(),
         );
         let page = store
             .addressable_transition_page_v1(
@@ -7514,20 +7516,20 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event()
                 .expect("operational transition payload")
                 .event_id()
-                .as_str(),
-            operational.id_str(),
+                .to_hex(),
+            operational.id_hex(),
         );
         assert_eq!(
             page.transitions()[1]
                 .retracted_event()
                 .expect("focused projection retraction")
                 .event_id()
-                .as_str(),
+                .to_hex(),
             page.transitions()[0]
                 .visible_event()
                 .expect("initial focused payload")
                 .event_id()
-                .as_str(),
+                .to_hex(),
         );
     }
 
@@ -7572,7 +7574,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         assert!(
             store
-                .raw_event(event.id_str())
+                .raw_event(&event.id_hex())
                 .await
                 .expect("raw event after rollback")
                 .is_none()
@@ -7608,7 +7610,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("committed projection")
             .expect("projected event");
-        assert_eq!(committed.event_id().as_str(), event.id_str());
+        assert_eq!(committed.event_id().to_hex(), event.id_hex());
         let committed_page = store
             .addressable_transition_page_v1(&scope, Some(&initial_cursor), 64)
             .await
@@ -7636,7 +7638,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let wrong_author_deletion = deletion_event(
             &alternate_keys(),
             210,
-            vec![vec!["e".to_owned(), food.id_str().to_owned()]],
+            vec![vec!["e".to_owned(), food.id_hex().to_owned()]],
         );
         store
             .ingest_event(RadrootsEventIngest::new(
@@ -7653,10 +7655,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("projection lookup")
             .expect("projection remains visible");
-        assert_eq!(projection.event_id().as_str(), food.id_str());
+        assert_eq!(projection.event_id().to_hex(), food.id_hex());
         assert_eq!(projection.source_transition_seq(), 1);
         let visibility = store
-            .current_event_visibility_v1(food.id_str())
+            .current_event_visibility_v1(&food.id_hex())
             .await
             .expect("current visibility")
             .expect("stored event");
@@ -7684,8 +7686,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event()
                 .expect("same visible event")
                 .event_id()
-                .as_str(),
-            food.id_str()
+                .to_hex(),
+            food.id_hex()
         );
         assert!(unchanged.retracted_event().is_none());
         assert_eq!(
@@ -7694,8 +7696,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("deletion cause")
                 .event()
                 .event_id()
-                .as_str(),
-            wrong_author_deletion.id_str()
+                .to_hex(),
+            wrong_author_deletion.id_hex()
         );
     }
 
@@ -7716,9 +7718,9 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let visibilities = store
             .event_visibilities_with_probe(
                 [
-                    event.id_str().to_owned(),
+                    event.id_hex().to_owned(),
                     missing_event_id.clone(),
-                    event.id_str().to_owned(),
+                    event.id_hex().to_owned(),
                 ],
                 move |_| {
                     let probe_count = Arc::clone(&probe_count);
@@ -7742,7 +7744,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         let max = RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX as usize;
         let exact_max = store
-            .event_visibilities(vec![event.id_str().to_owned(); max])
+            .event_visibilities(vec![event.id_hex().to_owned(); max])
             .await
             .expect("maximum visibility batch");
         assert_eq!(exact_max.len(), max);
@@ -7765,13 +7767,13 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(matches!(
             closed
-                .event_visibilities([event.id_str().to_owned(), "not-an-event-id".to_owned(),])
+                .event_visibilities([event.id_hex().to_owned(), "not-an-event-id".to_owned(),])
                 .await,
             Err(RadrootsEventStoreError::IdParse(_))
         ));
         assert!(matches!(
             closed
-                .event_visibilities(vec![event.id_str().to_owned(); max + 1])
+                .event_visibilities(vec![event.id_hex().to_owned(); max + 1])
                 .await,
             Err(RadrootsEventStoreError::EventVisibilityBatchTooLarge {
                 max: actual_max,
@@ -7836,7 +7838,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let committed_new_bob = new_bob.clone();
         let snapshot = store
             .event_visibilities_with_probe(
-                [old_alice.id_str(), old_bob.id_str()],
+                [old_alice.id_hex(), old_bob.id_hex()],
                 move |evaluated| {
                     let concurrent_store = concurrent_store.clone();
                     let new_alice = committed_new_alice.clone();
@@ -7866,11 +7868,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         for (old, new) in [(&old_alice, &new_alice), (&old_bob, &new_bob)] {
             assert_eq!(
                 store
-                    .event_visibility(old.id_str())
+                    .event_visibility(&old.id_hex())
                     .await
                     .expect("post-commit visibility"),
                 Some(RadrootsEventVisibility::NotCurrent {
-                    raw_head_event_id: new.id_str().to_owned(),
+                    raw_head_event_id: new.id_hex().to_owned(),
                 })
             );
         }
@@ -7919,7 +7921,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         }
 
         let regular_current = store
-            .current_event_visibility_v1(regular.id_str())
+            .current_event_visibility_v1(&regular.id_hex())
             .await
             .expect("regular current visibility")
             .expect("regular event");
@@ -7931,14 +7933,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(regular_current.raw_head_event_id().is_none());
         assert_eq!(
             store
-                .event_visibility(regular.id_str())
+                .event_visibility(&regular.id_hex())
                 .await
                 .expect("regular compatibility visibility"),
             Some(RadrootsEventVisibility::Visible)
         );
         assert!(
             store
-                .visible_event(regular.id_str())
+                .visible_event(&regular.id_hex())
                 .await
                 .expect("regular visible event")
                 .is_some()
@@ -7947,27 +7949,27 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         for (event, expected_head, expected_decision) in [
             (
                 &older_profile,
-                newer_profile.id_str(),
+                newer_profile.id_hex(),
                 crate::RadrootsCurrentVisibilityDecisionV1::NotCurrent,
             ),
             (
                 &newer_profile,
-                newer_profile.id_str(),
+                newer_profile.id_hex(),
                 crate::RadrootsCurrentVisibilityDecisionV1::Visible,
             ),
             (
                 &older_food,
-                newer_food.id_str(),
+                newer_food.id_hex(),
                 crate::RadrootsCurrentVisibilityDecisionV1::NotCurrent,
             ),
             (
                 &newer_food,
-                newer_food.id_str(),
+                newer_food.id_hex(),
                 crate::RadrootsCurrentVisibilityDecisionV1::Visible,
             ),
         ] {
             let current = store
-                .current_event_visibility_v1(event.id_str())
+                .current_event_visibility_v1(&event.id_hex())
                 .await
                 .expect("coordinate current visibility")
                 .expect("coordinate event");
@@ -7976,12 +7978,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 current
                     .raw_head_event_id()
                     .expect("coordinate raw head")
-                    .as_str(),
+                    .to_hex(),
                 expected_head
             );
             assert_eq!(
                 store
-                    .visible_event(event.id_str())
+                    .visible_event(&event.id_hex())
                     .await
                     .expect("coordinate visible event")
                     .is_some(),
@@ -7993,20 +7995,20 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event_head(&profile_coordinate())
                 .await
                 .expect("profile visible head")
-                .is_some_and(|head| head.raw_head().event_id == newer_profile.id_str())
+                .is_some_and(|head| head.raw_head().event_id == newer_profile.id_hex())
         );
         assert!(
             store
                 .visible_event_head(&head_coordinate_for_event(&newer_food))
                 .await
                 .expect("food visible head")
-                .is_some_and(|head| head.raw_head().event_id == newer_food.id_str())
+                .is_some_and(|head| head.raw_head().event_id == newer_food.id_hex())
         );
 
         let regular_deletion = deletion_event(
             &fixture_keys(),
             150,
-            vec![vec!["e".to_owned(), regular.id_str().to_owned()]],
+            vec![vec!["e".to_owned(), regular.id_hex().to_owned()]],
         );
         store
             .ingest_event(RadrootsEventIngest::new(regular_deletion.clone(), 37_005))
@@ -8014,7 +8016,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("regular deletion");
         assert_eq!(
             store
-                .current_event_visibility_v1(regular.id_str())
+                .current_event_visibility_v1(&regular.id_hex())
                 .await
                 .expect("suppressed regular visibility")
                 .expect("stored regular event")
@@ -8023,7 +8025,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(matches!(
             store
-                .event_visibility(regular.id_str())
+                .event_visibility(&regular.id_hex())
                 .await
                 .expect("regular compatibility suppression"),
             Some(RadrootsEventVisibility::Suppressed {
@@ -8031,11 +8033,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 event_reference_request_id: Some(request_id),
                 address_reference_request_id: None,
                 address_reference_cutoff: None,
-            }) if request_id.as_str() == regular_deletion.id_str()
+            }) if request_id.to_hex() == regular_deletion.id_hex()
         ));
         assert!(
             store
-                .visible_event(regular.id_str())
+                .visible_event(&regular.id_hex())
                 .await
                 .expect("suppressed regular event")
                 .is_none()
@@ -8044,14 +8046,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let deletion_of_deletion = deletion_event(
             &fixture_keys(),
             160,
-            vec![vec!["e".to_owned(), regular_deletion.id_str().to_owned()]],
+            vec![vec!["e".to_owned(), regular_deletion.id_hex().to_owned()]],
         );
         store
             .ingest_event(RadrootsEventIngest::new(deletion_of_deletion, 37_006))
             .await
             .expect("deletion-of-deletion ingest");
         let immune = store
-            .current_event_visibility_v1(regular_deletion.id_str())
+            .current_event_visibility_v1(&regular_deletion.id_hex())
             .await
             .expect("deletion request visibility")
             .expect("stored deletion request");
@@ -8069,7 +8071,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(immune_evidence.address_reference_cutoff().is_none());
         assert_eq!(
             store
-                .event_visibility(regular_deletion.id_str())
+                .event_visibility(&regular_deletion.id_hex())
                 .await
                 .expect("compatibility deletion-request visibility"),
             Some(RadrootsEventVisibility::Visible)
@@ -8131,8 +8133,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event()
                 .expect("first visible event")
                 .event_id()
-                .as_str(),
-            first.id_str()
+                .to_hex(),
+            first.id_hex()
         );
         assert_eq!(first_page.source_high_water(), 4);
         assert_eq!(first_page.next_cursor().last_transition_seq(), 3);
@@ -8148,8 +8150,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event()
                 .expect("second visible event")
                 .event_id()
-                .as_str(),
-            second.id_str()
+                .to_hex(),
+            second.id_hex()
         );
         assert_eq!(second_page.next_cursor().last_transition_seq(), 4);
         assert!(!second_page.has_more());
@@ -8207,7 +8209,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 vec![vec!["d".to_owned(), format!("page-limit-{index:02}")]],
                 "page-limit fixture",
             );
-            expected_ids.push(event.id_str().to_owned());
+            expected_ids.push(event.id_hex().to_owned());
             store
                 .ingest_event_in_transaction(
                     &mut transaction,
@@ -8237,7 +8239,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             first
                 .transitions()
                 .iter()
-                .map(|transition| transition.raw_head().event_id().as_str())
+                .map(|transition| transition.raw_head().event_id().to_hex())
                 .collect::<Vec<_>>(),
             expected_ids[..usize::try_from(
                 crate::RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1
@@ -8255,8 +8257,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("continued page");
         assert_eq!(second.transitions().len(), 1);
         assert_eq!(
-            second.transitions()[0].raw_head().event_id().as_str(),
-            expected_ids.last().expect("last expected event"),
+            second.transitions()[0].raw_head().event_id().to_hex(),
+            expected_ids.last().expect("last expected event").as_str(),
         );
         assert!(!second.has_more());
     }
@@ -8285,7 +8287,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let transition = &page.transitions()[0];
         assert_eq!(transition.coordinate().kind(), 30_340);
         assert_eq!(transition.coordinate().d_tag(), d_tag);
-        assert_eq!(transition.raw_head().event_id().as_str(), event.id_str());
+        assert_eq!(transition.raw_head().event_id().to_hex(), event.id_hex());
         assert_eq!(transition.raw_head_created_at(), 204);
         assert!(!page.has_more());
     }
@@ -8352,8 +8354,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .visible_event()
                 .expect("FoodAvailability canonical event")
                 .event_id()
-                .as_str(),
-            food.id_str()
+                .to_hex(),
+            food.id_hex()
         );
         assert_eq!(second.next_cursor().last_transition_seq(), 1_025);
         assert!(!second.has_more());
@@ -8373,7 +8375,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 format!("payload-cap-{index:02}").as_str(),
                 content.clone(),
             );
-            expected_ids.push(event.id_str().to_owned());
+            expected_ids.push(event.id_hex().to_owned());
             store
                 .ingest_event_in_transaction(
                     &mut transaction,
@@ -8402,7 +8404,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                         .visible_event()
                         .expect("admitted calendar canonical event")
                         .event_id()
-                        .as_str()
+                        .to_hex()
                         .to_owned(),
                 );
             }
@@ -8547,7 +8549,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("missing raw head")
                 .expect("missing head")
                 .event_id,
-            missing_value.id_str()
+            missing_value.id_hex()
         );
         for (event, expected_d) in [(&opaque, "  opaque/value  "), (&control, "line\nbreak")] {
             let coordinate = head_coordinate_for_event(event);
@@ -8560,11 +8562,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .await
                 .expect("raw head")
                 .expect("head");
-            assert_eq!(head.event_id, event.id_str());
+            assert_eq!(head.event_id, event.id_hex());
             assert_eq!(head.d_tag.as_deref(), Some(expected_d));
         }
         let missing_tags = store
-            .tags_for_event(missing_value.id_str())
+            .tags_for_event(&missing_value.id_hex())
             .await
             .expect("tags");
         assert_eq!(missing_tags[0].tag_name, "d");
@@ -8581,7 +8583,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("kind ingest");
         sqlx::query("UPDATE event_envelope_head SET kind = 10002 WHERE event_id = ?")
-            .bind(kind_event.id_str())
+            .bind(kind_event.id_hex())
             .execute(store.pool())
             .await
             .expect_err("kind mutation must be rejected");
@@ -8594,7 +8596,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let other_pubkey = alternate_keys().public_key().to_hex();
         sqlx::query("UPDATE event_envelope_head SET pubkey = ? WHERE event_id = ?")
             .bind(other_pubkey.as_str())
-            .bind(author_event.id_str())
+            .bind(author_event.id_hex())
             .execute(store.pool())
             .await
             .expect_err("author mutation must be rejected");
@@ -8607,7 +8609,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_envelope_head SET coordinate_type = 'addressable', d_tag = 'wrong-class' WHERE event_id = ?",
         )
-        .bind(class_event.id_str())
+        .bind(class_event.id_hex())
         .execute(store.pool())
         .await
         .expect_err("coordinate-class mutation must be rejected");
@@ -8623,7 +8625,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("d ingest");
         sqlx::query("UPDATE event_envelope_head SET d_tag = 'wrong-d' WHERE event_id = ?")
-            .bind(d_event.id_str())
+            .bind(d_event.id_hex())
             .execute(store.pool())
             .await
             .expect_err("d-tag mutation must be rejected");
@@ -8637,7 +8639,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_envelope_head SET created_at = created_at + 1 WHERE event_id = ?",
         )
-        .bind(created_event.id_str())
+        .bind(created_event.id_hex())
         .execute(store.pool())
         .await
         .expect_err("created-at mutation must be rejected");
@@ -8648,7 +8650,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("raw head")
                 .expect("stored head")
                 .event_id,
-            created_event.id_str()
+            created_event.id_hex()
         );
 
         let reference_event = signed_event(10_006, 45, Vec::new(), "reference");
@@ -8663,8 +8665,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("unrelated ingest");
         sqlx::query("UPDATE event_envelope_head SET event_id = ? WHERE event_id = ?")
-            .bind(unrelated_event.id_str())
-            .bind(reference_event.id_str())
+            .bind(unrelated_event.id_hex())
+            .bind(reference_event.id_hex())
             .execute(store.pool())
             .await
             .expect_err("event reference mutation must be rejected");
@@ -8684,7 +8686,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("missing ingest");
         sqlx::query("UPDATE event_envelope_head SET event_id = ? WHERE event_id = ?")
             .bind(event_id('f'))
-            .bind(missing_event.id_str())
+            .bind(missing_event.id_hex())
             .execute(store.pool())
             .await
             .expect_err("missing event reference mutation must be rejected");
@@ -8727,7 +8729,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         assert_eq!(first.raw_head_decision, RadrootsRawHeadDecision::Applied);
         assert!(matches!(error, RadrootsEventStoreError::EventWire(_)));
-        assert_eq!(head.event_id, original.id_str());
+        assert_eq!(head.event_id, original.id_hex());
     }
 
     #[tokio::test]
@@ -8767,12 +8769,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         ));
         assert!(
             store
-                .raw_event(invalid.id_str())
+                .raw_event(&invalid.id_hex())
                 .await
                 .expect("raw event")
                 .is_none()
         );
-        assert_eq!(head.event_id, original.id_str());
+        assert_eq!(head.event_id, original.id_hex());
     }
 
     #[tokio::test]
@@ -8824,7 +8826,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             second_invalid.raw_head_decision,
             RadrootsRawHeadDecision::SkippedDuplicate
         );
-        assert_eq!(head.event_id, invalid.id_str());
+        assert_eq!(head.event_id, invalid.id_hex());
     }
 
     #[tokio::test]
@@ -8860,7 +8862,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             second.raw_head_decision,
             RadrootsRawHeadDecision::SkippedDuplicate
         );
-        assert_eq!(head.event_id, event.id_str());
+        assert_eq!(head.event_id, event.id_hex());
     }
 
     #[tokio::test]
@@ -8873,7 +8875,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("ingest");
         let stored = store
-            .raw_event(event.id_str())
+            .raw_event(&event.id_hex())
             .await
             .expect("get")
             .expect("stored");
@@ -8890,21 +8892,21 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(stored.valid_stream_eligible);
         assert!(
             store
-                .valid_event(event.id_str())
+                .valid_event(&event.id_hex())
                 .await
                 .expect("valid event")
                 .is_some()
         );
         assert_eq!(
             store
-                .event_visibility(event.id_str())
+                .event_visibility(&event.id_hex())
                 .await
                 .expect("visibility"),
             Some(RadrootsEventVisibility::Visible)
         );
         assert!(
             store
-                .visible_event(event.id_str())
+                .visible_event(&event.id_hex())
                 .await
                 .expect("visible event")
                 .is_some()
@@ -8970,8 +8972,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("tag query");
         assert_eq!(events.len(), 2);
-        assert_eq!(events[0].raw_event().event_id, high_created_at.id_str());
-        assert_eq!(events[1].raw_event().event_id, low_created_at.id_str());
+        assert_eq!(events[0].raw_event().event_id, high_created_at.id_hex());
+        assert_eq!(events[1].raw_event().event_id, low_created_at.id_hex());
         assert!(
             events
                 .iter()
@@ -8983,14 +8985,14 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("raw tag query");
         assert_eq!(raw_events.len(), 3);
-        assert_eq!(raw_events[0].event_id, unsupported.id_str());
+        assert_eq!(raw_events[0].event_id, unsupported.id_hex());
 
         let limited = store
             .valid_stream_by_tag("t", "soil", 1)
             .await
             .expect("limited tag query");
         assert_eq!(limited.len(), 1);
-        assert_eq!(limited[0].raw_event().event_id, high_created_at.id_str());
+        assert_eq!(limited[0].raw_event().event_id, high_created_at.id_hex());
     }
 
     #[tokio::test]
@@ -9066,7 +9068,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("contract tag query");
         assert_eq!(events.len(), 1);
-        assert_eq!(events[0].raw_event().event_id, matching_trade.id_str());
+        assert_eq!(events[0].raw_event().event_id, matching_trade.id_hex());
         assert_eq!(
             events[0].raw_event().contract_id.as_deref(),
             Some(RADROOTS_TRADE_PROPOSAL_CONTRACT_ID)
@@ -9091,7 +9093,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .ingest_event(RadrootsEventIngest::new(event.clone(), 3_000))
             .await
             .expect("ingest");
-        let tags = store.tags_for_event(event.id_str()).await.expect("tags");
+        let tags = store.tags_for_event(&event.id_hex()).await.expect("tags");
 
         assert_eq!(tags[0].tag_index, 0);
         assert_eq!(tags[0].tag_name, "p");
@@ -9115,16 +9117,16 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .ingest_event(RadrootsEventIngest::new(event.clone(), 3_000))
             .await
             .expect("ingest");
-        let before = store.tags_for_event(event.id_str()).await.expect("tags");
+        let before = store.tags_for_event(&event.id_hex()).await.expect("tags");
         sqlx::query(
             "UPDATE event_envelope_tags SET relay_indexed = 2 WHERE event_id = ? AND tag_index = 0",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect_err("non-boolean relay_indexed mutation must be rejected");
 
-        let tags = store.tags_for_event(event.id_str()).await.expect("tags");
+        let tags = store.tags_for_event(&event.id_hex()).await.expect("tags");
         assert_eq!(tags, before);
     }
 
@@ -9138,7 +9140,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .ingest_event(RadrootsEventIngest::new(event.clone(), 3_100))
             .await
             .expect("ingest");
-        let tags = store.tags_for_event(event.id_str()).await.expect("tags");
+        let tags = store.tags_for_event(&event.id_hex()).await.expect("tags");
         let contract_tag = tags
             .iter()
             .find(|tag| tag.tag_name == "contract")
@@ -9160,7 +9162,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert!(!contract_tag.relay_indexed);
         assert_eq!(
             mutation_tag.tag_value.as_deref(),
-            Some(proposal.mutation_id.as_str())
+            Some(proposal.mutation_id.to_hex()).as_deref()
         );
         assert_eq!(
             mutation_tag.contract_semantic.as_deref(),
@@ -9206,7 +9208,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         store.ingest_event(ingest).await.expect("older duplicate");
 
         let observations = store
-            .observations_for_event(event.id_str())
+            .observations_for_event(&event.id_hex())
             .await
             .expect("stale duplicate observations");
         assert_eq!(observations.len(), 1);
@@ -9255,7 +9257,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("newer duplicate without message");
 
         let observations = store
-            .observations_for_event(event.id_str())
+            .observations_for_event(&event.id_hex())
             .await
             .expect("observations");
         assert_eq!(observations.len(), 1);
@@ -9331,11 +9333,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             Err(RadrootsEventStoreError::InvalidStoredTransportEndpointFingerprint {
                 event_id,
                 ..
-            }) if event_id == event.id_str()
+            }) if event_id == event.id_hex()
         ));
         assert!(
             store
-                .raw_event(event.id_str())
+                .raw_event(&event.id_hex())
                 .await
                 .expect("raw event")
                 .is_none()
@@ -9369,12 +9371,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_transport_observation SET observation_count = 0 WHERE event_id = ?",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect("corrupt observation count");
         assert!(matches!(
-            store.observations_for_event(event.id_str()).await,
+            store.observations_for_event(&event.id_hex()).await,
             Err(RadrootsEventStoreError::InvalidStoredTransportObservation {
                 observation_count: 0,
                 ..
@@ -9384,7 +9386,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_transport_observation SET observation_count = 1, first_observed_at_ms = 4_100, last_observed_at_ms = 4_000 WHERE event_id = ?",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect("corrupt observation time order");
@@ -9402,12 +9404,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_transport_observation SET first_observed_at_ms = -1, last_observed_at_ms = 4_000 WHERE event_id = ?",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect("corrupt observation timestamp");
         assert!(matches!(
-            store.observations_for_event(event.id_str()).await,
+            store.observations_for_event(&event.id_hex()).await,
             Err(RadrootsEventStoreError::InvalidStoredTransportObservation {
                 first_observed_at_ms: -1,
                 ..
@@ -9418,29 +9420,29 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             "UPDATE event_transport_observation SET first_observed_at_ms = 4_000, redacted_message = ? WHERE event_id = ?",
         )
         .bind("line\nbreak")
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect("corrupt observation message");
         assert!(matches!(
-            store.observations_for_event(event.id_str()).await,
+            store.observations_for_event(&event.id_hex()).await,
             Err(
                 RadrootsEventStoreError::InvalidStoredTransportObservationMessage {
                     ref event_id,
                     ..
                 }
-            ) if event_id == event.id_str()
+            ) if event_id.as_str() == event.id_hex()
         ));
 
         sqlx::query(
             "UPDATE event_transport_observation SET observation_count = 1, first_observed_at_ms = 4_000, last_observed_at_ms = 4_000, redacted_message = NULL, transport_kind = 'NOSTR' WHERE event_id = ?",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect("corrupt transport kind canonical form");
         assert!(matches!(
-            store.observations_for_event(event.id_str()).await,
+            store.observations_for_event(&event.id_hex()).await,
             Err(RadrootsEventStoreError::Transport(
                 radroots_transport::RadrootsTransportError::InvalidTransportKind
             ))
@@ -9449,12 +9451,12 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         sqlx::query(
             "UPDATE event_transport_observation SET transport_kind = 'nostr', endpoint_fingerprint = upper(endpoint_fingerprint) WHERE event_id = ?",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .execute(store.pool())
         .await
         .expect("corrupt endpoint fingerprint canonical form");
         assert!(matches!(
-            store.observations_for_event(event.id_str()).await,
+            store.observations_for_event(&event.id_hex()).await,
             Err(RadrootsEventStoreError::InvalidStoredTransportEndpointFingerprint { .. })
         ));
     }
@@ -9489,48 +9491,48 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("raw head")
                 .expect("head")
                 .event_id,
-            newer.id_str()
+            newer.id_hex()
         );
         assert!(
             store
-                .valid_event(older.id_str())
+                .valid_event(&older.id_hex())
                 .await
                 .expect("valid")
                 .is_some()
         );
         assert!(
             store
-                .valid_event(newer.id_str())
+                .valid_event(&newer.id_hex())
                 .await
                 .expect("invalid")
                 .is_none()
         );
         assert_eq!(
             store
-                .event_visibility(older.id_str())
+                .event_visibility(&older.id_hex())
                 .await
                 .expect("older visibility"),
             Some(RadrootsEventVisibility::NotCurrent {
-                raw_head_event_id: newer.id_str().to_owned(),
+                raw_head_event_id: newer.id_hex().to_owned(),
             })
         );
         assert_eq!(
             store
-                .event_visibility(newer.id_str())
+                .event_visibility(&newer.id_hex())
                 .await
                 .expect("newer visibility"),
             Some(RadrootsEventVisibility::NotAdmitted)
         );
         assert!(
             store
-                .visible_event(older.id_str())
+                .visible_event(&older.id_hex())
                 .await
                 .expect("older visible")
                 .is_none()
         );
         assert!(
             store
-                .visible_event(newer.id_str())
+                .visible_event(&newer.id_hex())
                 .await
                 .expect("newer visible")
                 .is_none()
@@ -9544,7 +9546,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         let valid_stream = store.valid_stream_after(0, 10).await.expect("valid stream");
         assert_eq!(valid_stream.len(), 1);
-        assert_eq!(valid_stream[0].raw_event().event_id, older.id_str());
+        assert_eq!(valid_stream[0].raw_event().event_id, older.id_hex());
 
         let older_duplicate = store
             .ingest_event(RadrootsEventIngest::new(older, 4_700))
@@ -9589,7 +9591,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 .expect("raw head")
                 .expect("preserved head")
                 .event_id,
-            newer.id_str()
+            newer.id_hex()
         );
     }
 
@@ -9599,7 +9601,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             signed_event(KIND_PROFILE, 20, Vec::new(), "{\"name\":\"a\"}"),
             signed_event(KIND_PROFILE, 20, Vec::new(), "{\"name\":\"b\"}"),
         ];
-        events.sort_by(|left, right| left.id_str().cmp(right.id_str()));
+        events.sort_by(|left, right| left.id_hex().cmp(&right.id_hex()));
         let lower = events[0].clone();
         let higher = events[1].clone();
 
@@ -9620,7 +9622,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
 
         assert_eq!(first.raw_head_decision, RadrootsRawHeadDecision::Applied);
         assert_eq!(second.raw_head_decision, RadrootsRawHeadDecision::Applied);
-        assert_eq!(head.event_id, lower.id_str());
+        assert_eq!(head.event_id, lower.id_hex());
 
         let store = RadrootsEventStore::open_memory().await.expect("open");
         store
@@ -9641,7 +9643,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             second.raw_head_decision,
             RadrootsRawHeadDecision::SkippedSameTimestampHigherEventId
         );
-        assert_eq!(head.event_id, lower.id_str());
+        assert_eq!(head.event_id, lower.id_hex());
     }
 
     #[tokio::test]
@@ -9673,8 +9675,8 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("initial replay");
         assert_eq!(replay.len(), 2);
-        assert_eq!(replay[0].raw_event().event_id, first.id_str());
-        assert_eq!(replay[1].raw_event().event_id, second.id_str());
+        assert_eq!(replay[0].raw_event().event_id, first.id_hex());
+        assert_eq!(replay[1].raw_event().event_id, second.id_hex());
         let first_cursor = RadrootsProjectionCursor {
             projection_id: "social".to_owned(),
             projection_version: 1,
@@ -9703,7 +9705,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("next replay");
         assert_eq!(replay.len(), 1);
-        assert_eq!(replay[0].raw_event().event_id, second.id_str());
+        assert_eq!(replay[0].raw_event().event_id, second.id_hex());
 
         let second_cursor = RadrootsProjectionCursor {
             projection_id: "social".to_owned(),
@@ -9809,7 +9811,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let mutation_plan = explain_query_plan(
             &store,
             "EXPLAIN QUERY PLAN SELECT mutation_id FROM trade_mutation WHERE trade_id = ? ORDER BY authored_at_unix_s, mutation_id LIMIT 10",
-            trade_id().as_str(),
+            trade_id().to_hex().as_str(),
         )
         .await;
         assert!(

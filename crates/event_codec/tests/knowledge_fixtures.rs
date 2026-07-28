@@ -89,7 +89,7 @@ fn event_with_parts(
     sig: String,
 ) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
-        id: event.id_str().to_string(),
+        id: event.id_hex().to_string(),
         author: event.author().to_hex().to_string(),
         created_at: event.created_at_u64(),
         kind: event.kind_u32(),
@@ -107,7 +107,7 @@ fn mutate_tags(event: &mut RadrootsEventEnvelope, update: impl FnOnce(&mut Vec<V
         event,
         tags,
         event.content().to_string(),
-        event.sig_str().to_string(),
+        event.signature_hex().to_string(),
     );
 }
 
@@ -116,7 +116,7 @@ fn replace_content(event: &mut RadrootsEventEnvelope, content: String) {
         event,
         event.tags_as_vec(),
         content,
-        event.sig_str().to_string(),
+        event.signature_hex().to_string(),
     );
 }
 

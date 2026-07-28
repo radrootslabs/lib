@@ -444,7 +444,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
         RadrootsInboundNip22CommentRoot::Event(root) => json!({
             "type": "event",
             "tag_index": root.tag_index(),
-            "event_id": root.event_id().as_str(),
+            "event_id": root.event_id().to_hex(),
             "kind_tag_index": root.kind_tag_index(),
             "kind_raw_tag": root.kind_raw_tag(),
             "kind": root.kind().as_u32(),
@@ -470,7 +470,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
             "type": "top_event",
             "reference": {
                 "tag_index": reference.tag_index(),
-                "event_id": reference.event_id().as_str(),
+                "event_id": reference.event_id().to_hex(),
                 "kind_tag_index": reference.kind_tag_index(),
                 "kind_raw_tag": reference.kind_raw_tag(),
                 "kind": reference.kind(),
@@ -497,7 +497,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
             },
             "current_revision": {
                 "tag_index": current_revision.tag_index(),
-                "event_id": current_revision.event_id().as_str(),
+                "event_id": current_revision.event_id().to_hex(),
                 "relay": current_revision.relay().map(|relay| relay.as_str()),
                 "raw_tag": current_revision.raw_tag(),
             },
@@ -506,7 +506,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
             "type": "nested",
             "parent": {
                 "tag_index": parent.tag_index(),
-                "event_id": parent.event_id().as_str(),
+                "event_id": parent.event_id().to_hex(),
                 "kind_tag_index": parent.kind_tag_index(),
                 "kind_raw_tag": parent.kind_raw_tag(),
                 "kind": parent.kind(),

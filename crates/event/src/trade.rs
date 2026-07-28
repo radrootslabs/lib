@@ -674,7 +674,7 @@ pub fn canonical_trade_mutation_content(
     finalize_body_candidate_ids(&mut envelope.body)?;
     envelope.validate()?;
     let mutation_id = canonical_trade_mutation_id(&envelope)?;
-    envelope.mutation_id = Some(mutation_id.clone());
+    envelope.mutation_id = Some(mutation_id);
     let value = serialize_trade_value(&envelope);
     let content = canonical_jcs_value(&value)?;
     if content.len() > RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES {
@@ -896,13 +896,13 @@ fn validate_parent_mutation_ids(
             actual: parents.len(),
         });
     }
-    let mut previous: Option<&str> = None;
+    let mut previous: Option<&RadrootsTradeMutationId> = None;
     for parent in parents {
         if Some(parent) == mutation_id {
             return Err(RadrootsTradeProtocolError::SelfParent);
         }
         if let Some(previous) = previous {
-            match previous.cmp(parent.as_str()) {
+            match previous.cmp(parent) {
                 core::cmp::Ordering::Greater => {
                     return Err(RadrootsTradeProtocolError::UnsortedParents);
                 }
@@ -912,7 +912,7 @@ fn validate_parent_mutation_ids(
                 core::cmp::Ordering::Less => {}
             }
         }
-        previous = Some(parent.as_str());
+        previous = Some(parent);
     }
     Ok(())
 }
@@ -1244,7 +1244,7 @@ mod tests {
         assert!(canonical.envelope.mutation_id.is_some());
         assert_eq!(
             canonical.mutation_id,
-            canonical.envelope.mutation_id.clone().unwrap()
+            canonical.envelope.mutation_id.unwrap()
         );
         let parsed = trade_mutation_from_canonical_content(&canonical.content).unwrap();
         assert_eq!(parsed.mutation_id, Some(canonical.mutation_id));
@@ -1633,7 +1633,7 @@ mod tests {
             .expect("candidate id"),
             match &canonical.envelope.body {
                 RadrootsTradeMutationBodyV1::Proposal { candidate } => {
-                    candidate.candidate_id.clone().expect("candidate id")
+                    candidate.candidate_id.expect("candidate id")
                 }
                 _ => unreachable!("proposal"),
             }

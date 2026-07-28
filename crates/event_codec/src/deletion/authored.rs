@@ -24,7 +24,7 @@ pub fn authored_nip09_deletion_request_to_wire_parts(
         request
             .event_targets()
             .iter()
-            .map(|target| vec!["e".to_string(), target.event_id().as_str().to_string()]),
+            .map(|target| vec!["e".to_string(), target.event_id().to_hex()]),
     );
     tags.extend(
         request

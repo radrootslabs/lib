@@ -451,6 +451,6 @@ fn report_wrappers_preserve_event_metadata() {
         EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.reported_pubkey, REPORTED);
 }

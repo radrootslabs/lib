@@ -33,8 +33,8 @@ impl<'a> RadrootsNostrEventAdapter<'a> {
 
 impl<'a> JobEventBorrow<'a> for RadrootsNostrEventAdapter<'a> {
     #[inline]
-    fn raw_id(&'a self) -> &'a str {
-        &self.id_hex
+    fn raw_id(&'a self) -> String {
+        self.id_hex.clone()
     }
     #[inline]
     fn raw_author(&'a self) -> String {

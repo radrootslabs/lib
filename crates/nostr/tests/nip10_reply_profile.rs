@@ -86,7 +86,7 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
             .reply_reference()
             .expect("nested parent")
             .event_id()
-            .as_str(),
+            .to_hex(),
         PARENT_EVENT_ID
     );
 }
@@ -124,7 +124,7 @@ fn signed_nip10_reply_is_thread_excluded_before_semantic_reply_admission() {
     );
     assert!(admitted.projection().is_direct());
     assert_eq!(
-        admitted.projection().root().event_id().as_str(),
+        admitted.projection().root().event_id().to_hex(),
         ROOT_EVENT_ID
     );
 }
@@ -152,7 +152,7 @@ fn verified_legacy_positional_nip10_reply_remains_tolerated_inbound() {
     );
     assert!(admitted.projection().is_direct());
     assert_eq!(
-        admitted.projection().root().event_id().as_str(),
+        admitted.projection().root().event_id().to_hex(),
         ROOT_EVENT_ID
     );
 }

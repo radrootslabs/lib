@@ -88,7 +88,7 @@ mod tests {
         sig: String,
     ) -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
-            id: event.id_str().to_owned(),
+            id: event.id_hex(),
             author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind,
@@ -120,7 +120,7 @@ mod tests {
             &original,
             "tampered".to_owned(),
             original.kind_u32(),
-            original.sig_str().to_owned(),
+            original.signature_hex(),
         );
 
         assert_eq!(
@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn reports_signature_invalid_for_valid_id_with_wrong_signature() {
         let original = signed_event();
-        let mut sig = original.sig_str().to_owned();
+        let mut sig = original.signature_hex();
         let replacement = if sig.starts_with('0') { "1" } else { "0" };
         sig.replace_range(0..1, replacement);
         let event = envelope_with(
@@ -155,7 +155,7 @@ mod tests {
             &original,
             original.content().to_owned(),
             u32::from(u16::MAX) + 1,
-            original.sig_str().to_owned(),
+            original.signature_hex(),
         );
 
         assert_eq!(
@@ -188,7 +188,7 @@ mod tests {
             kind,
             tags: original.tags_as_vec(),
             content: original.content().to_owned(),
-            sig: original.sig_str().to_owned(),
+            sig: original.signature_hex(),
         })
         .expect("envelope");
 

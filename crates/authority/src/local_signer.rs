@@ -85,7 +85,7 @@ mod tests {
 
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
-        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.id_str(), draft.expected_event_id_hex());
         assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(
             radroots_nostr_verify_event(&verification_event(&signed)),

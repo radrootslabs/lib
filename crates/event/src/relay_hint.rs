@@ -1,6 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::{String, ToString};
-use core::{borrow::Borrow, fmt, net::Ipv6Addr, ops::Deref, str::FromStr};
+use core::{fmt, net::Ipv6Addr, str::FromStr};
 
 use crate::ids::RadrootsIdParseError;
 
@@ -33,22 +33,6 @@ impl RadrootsNostrRelayHint {
 impl AsRef<str> for RadrootsNostrRelayHint {
     #[inline]
     fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl Deref for RadrootsNostrRelayHint {
-    type Target = str;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.as_str()
-    }
-}
-
-impl Borrow<str> for RadrootsNostrRelayHint {
-    #[inline]
-    fn borrow(&self) -> &str {
         self.as_str()
     }
 }

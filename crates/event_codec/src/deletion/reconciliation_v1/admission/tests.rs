@@ -25,7 +25,7 @@ fn admitted_contract_resolves_registry_entry() {
         content,
     )
     .expect("canonical deletion request id");
-    let nostr_id = nostr::EventId::from_hex(id.as_str()).expect("Nostr event id");
+    let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
     let message = Message::from_digest(nostr_id.to_bytes());
     let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
     let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {

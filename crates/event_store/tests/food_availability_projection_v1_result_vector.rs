@@ -442,7 +442,7 @@ async fn execute_case(case: ProjectionCase) {
             .unwrap_or_else(|error| panic!("{}: search projection: {error}", case.id));
         let event_ids = actual
             .iter()
-            .map(|projection| projection.event_id().as_str())
+            .map(|projection| projection.event_id().to_hex())
             .collect::<Vec<_>>();
         assert_eq!(event_ids, expected.event_ids, "{}: search", case.id);
     }
@@ -666,8 +666,8 @@ async fn execute_case(case: ProjectionCase) {
         );
         assert_eq!(actual.is_raw_head(), expected.is_raw_head, "{}", case.id);
         assert_eq!(
-            actual.raw_head_event_id().map(|event_id| event_id.as_str()),
-            expected.raw_head_event_id.0.as_deref(),
+            actual.raw_head_event_id().map(|event_id| event_id.to_hex()),
+            expected.raw_head_event_id.0.clone(),
             "{}: current raw head",
             case.id
         );
@@ -688,7 +688,7 @@ async fn execute_case(case: ProjectionCase) {
             .visible_event()
             .unwrap_or_else(|| panic!("{}: historical visible payload is absent", case.id));
         assert_eq!(
-            historical_payload.event_id().as_str(),
+            historical_payload.event_id().to_hex(),
             witness.event_id,
             "{}: historical visible payload identity",
             case.id
@@ -749,7 +749,7 @@ fn assert_event_reference(
     actual: &RadrootsAddressableTransitionEventReferenceV1,
 ) {
     assert_eq!(
-        actual.event_id().as_str(),
+        actual.event_id().to_hex(),
         expected.event_id,
         "{case_id}: {label}"
     );
@@ -768,15 +768,15 @@ fn assert_optional_suppression(
             assert_eq!(
                 actual
                     .event_reference_request_id()
-                    .map(|event_id| event_id.as_str()),
-                expected.event_reference_request_id.0.as_deref(),
+                    .map(|event_id| event_id.to_hex()),
+                expected.event_reference_request_id.0.clone(),
                 "{case_id}"
             );
             assert_eq!(
                 actual
                     .address_reference_request_id()
-                    .map(|event_id| event_id.as_str()),
-                expected.address_reference_request_id.0.as_deref(),
+                    .map(|event_id| event_id.to_hex()),
+                expected.address_reference_request_id.0.clone(),
                 "{case_id}"
             );
             assert_eq!(
@@ -804,7 +804,7 @@ fn assert_canonical_visible_event(
         .iter()
         .find(|observed| observed.event.id == expected.event.event_id)
         .unwrap_or_else(|| panic!("{}: expected event is absent from input", case.id));
-    assert_eq!(actual.event_id().as_str(), observed.event.id, "{}", case.id);
+    assert_eq!(actual.event_id().to_hex(), observed.event.id, "{}", case.id);
     assert_eq!(
         actual.pubkey().to_hex(),
         observed.event.pubkey,
@@ -913,7 +913,7 @@ fn assert_projection(
     expected: &ExpectedProjection,
     actual: &RadrootsStoredFoodAvailabilityV1,
 ) {
-    assert_eq!(actual.event_id().as_str(), expected.event_id, "{case_id}");
+    assert_eq!(actual.event_id().to_hex(), expected.event_id, "{case_id}");
     assert_eq!(actual.content().as_str(), expected.content, "{case_id}");
     assert_eq!(actual.title().as_str(), expected.title, "{case_id}");
     assert_eq!(actual.summary().as_str(), expected.summary, "{case_id}");

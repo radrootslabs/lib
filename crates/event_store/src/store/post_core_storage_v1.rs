@@ -66,9 +66,9 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
 
     pub(super) async fn quarantine_trade(
         &mut self,
-        trade_id: Option<&str>,
-        mutation_id: Option<&str>,
-        transport_event_id: Option<&str>,
+        trade_id: Option<String>,
+        mutation_id: Option<String>,
+        transport_event_id: Option<String>,
         reason: &str,
         observed_at_ms: i64,
     ) -> Result<(), RadrootsEventStoreError> {
@@ -93,19 +93,19 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
             .mutation
             .root_mutation_id
             .as_ref()
-            .map(|mutation_id| mutation_id.as_str());
-        let candidate_id = write.candidate_id.map(|candidate_id| candidate_id.as_str());
+            .map(|mutation_id| mutation_id.to_hex());
+        let candidate_id = write.candidate_id.map(|candidate_id| candidate_id.to_hex());
         let proposal_mutation_id = write
             .proposal_mutation_id
-            .map(|mutation_id| mutation_id.as_str());
+            .map(|mutation_id| mutation_id.to_hex());
         let target_claim_mutation_id = write
             .target_claim_mutation_id
-            .map(|mutation_id| mutation_id.as_str());
+            .map(|mutation_id| mutation_id.to_hex());
         sqlx::query(
             "INSERT OR IGNORE INTO trade_mutation(mutation_id, trade_id, root_mutation_id, contract_id, mutation_kind, schema_version, candidate_id, proposal_mutation_id, target_claim_mutation_id, author_pubkey, counterparty_pubkey, buyer_pubkey, seller_pubkey, farm_id, authored_at_unix_s, canonical_payload_bytes, payload_sha256, first_event_seq, first_transport_event_id, inserted_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(write.mutation_id.as_str())
-        .bind(write.mutation.trade_id.as_str())
+        .bind(write.mutation_id.to_hex())
+        .bind(write.mutation.trade_id.to_hex())
         .bind(root_mutation_id)
         .bind(write.mutation.contract_id.as_str())
         .bind(trade_mutation_kind_storage_value(
@@ -127,7 +127,7 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         .bind(write.event.content().as_bytes())
         .bind(write.payload_sha256)
         .bind(write.stored_event_seq)
-        .bind(write.event.id_str())
+        .bind(write.event.id_hex())
         .bind(write.observed_at_ms)
         .execute(&mut **self.tx)
         .await?;
@@ -149,9 +149,10 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         }
 
         #[cfg(test)]
-        self.apply_raw_authority_forge(write.event.id_str()).await?;
+        self.apply_raw_authority_forge(&write.event.id_hex())
+            .await?;
         #[cfg(test)]
-        self.apply_schema_forge(write.event.id_str()).await?;
+        self.apply_schema_forge(&write.event.id_hex()).await?;
         Ok(())
     }
 
@@ -186,8 +187,8 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
             sqlx::query(
                 "INSERT OR IGNORE INTO trade_mutation_parent(mutation_id, parent_mutation_id, parent_index) VALUES (?, ?, ?)",
             )
-            .bind(mutation_id.as_str())
-            .bind(parent.as_str())
+            .bind(mutation_id.to_hex())
+            .bind(parent.to_hex())
             .bind(i64_from_usize("parent_index", index)?)
             .execute(&mut **self.tx)
             .await?;
@@ -202,9 +203,9 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         sqlx::query(
             "INSERT OR IGNORE INTO trade_transport_envelope(transport_event_id, mutation_id, trade_id, transport_kind, pubkey, created_at, event_seq, payload_sha256, observed_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(write.event.id_str())
-        .bind(write.mutation_id.as_str())
-        .bind(write.mutation.trade_id.as_str())
+        .bind(write.event.id_hex())
+        .bind(write.mutation_id.to_hex())
+        .bind(write.mutation.trade_id.to_hex())
         .bind(RadrootsTransportKind::Nostr.canonical_label())
         .bind(write.event.author().to_hex())
         .bind(i64_from_u64("created_at", write.event.created_at_u64())?)
@@ -223,17 +224,17 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         for parent in &write.mutation.parent_mutation_ids {
             let exists: Option<i64> =
                 sqlx::query_scalar("SELECT 1 FROM trade_mutation WHERE mutation_id = ? LIMIT 1")
-                    .bind(parent.as_str())
+                    .bind(parent.to_hex())
                     .fetch_optional(&mut **self.tx)
                     .await?;
             if exists.is_none() {
                 sqlx::query(
                     "INSERT OR IGNORE INTO trade_missing_parent(trade_id, mutation_id, missing_parent_mutation_id, first_transport_event_id, first_seen_at_ms) VALUES (?, ?, ?, ?, ?)",
                 )
-                .bind(write.mutation.trade_id.as_str())
-                .bind(write.mutation_id.as_str())
-                .bind(parent.as_str())
-                .bind(write.event.id_str())
+                .bind(write.mutation.trade_id.to_hex())
+                .bind(write.mutation_id.to_hex())
+                .bind(parent.to_hex())
+                .bind(write.event.id_hex())
                 .bind(write.observed_at_ms)
                 .execute(&mut **self.tx)
                 .await?;
@@ -247,7 +248,7 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
         mutation_id: &RadrootsTradeMutationId,
     ) -> Result<(), RadrootsEventStoreError> {
         sqlx::query("DELETE FROM trade_missing_parent WHERE missing_parent_mutation_id = ?")
-            .bind(mutation_id.as_str())
+            .bind(mutation_id.to_hex())
             .execute(&mut **self.tx)
             .await?;
         Ok(())
@@ -265,9 +266,9 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
             "INSERT OR IGNORE INTO seller_inventory_reservation(reservation_id, trade_id, candidate_id, claim_mutation_id, inventory_authority_pubkey, inventory_epoch, assertion_commitment, reservation_expires_at_unix_s, reservation_json, inserted_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(reservation.reservation_id.as_str())
-        .bind(mutation.trade_id.as_str())
-        .bind(reservation.candidate_id.as_str())
-        .bind(claim_mutation_id.as_str())
+        .bind(mutation.trade_id.to_hex())
+        .bind(reservation.candidate_id.to_hex())
+        .bind(claim_mutation_id.to_hex())
         .bind(reservation.inventory_authority_id.to_hex())
         .bind(i64_from_u64(
             "inventory_epoch",

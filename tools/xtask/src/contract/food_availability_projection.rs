@@ -1813,7 +1813,7 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
                 actual_coordinates.push((
                     projection.pubkey().to_hex(),
                     projection.identifier().as_str().to_owned(),
-                    projection.event_id().as_str().to_owned(),
+                    projection.event_id().to_hex(),
                     projection.event_seq(),
                     i64_from_u64("food.created_at", projection.created_at())?,
                 ));
@@ -1907,7 +1907,7 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
             actual_coordinates.push((
                 projection.pubkey().to_hex(),
                 projection.identifier().as_str().to_owned(),
-                projection.event_id().as_str().to_owned(),
+                projection.event_id().to_hex(),
                 projection.event_seq(),
                 i64_from_u64("food.created_at", projection.created_at())?,
             ));
@@ -2014,10 +2014,10 @@ fn validate_food_projection_audit_authority(source: &str) -> Result<(), String> 
                 .bind(projection.source_generation().as_bytes().as_slice())
                 .bind(projection.pubkey().to_hex())
                 .bind(projection.identifier().as_str())
-                .bind(projection.event_id().as_str())
+                .bind(projection.event_id().to_hex())
                 .bind(projection.event_seq())
                 .bind(i64_from_u64("food.created_at", projection.created_at())?)
-                .bind(projection.event_id().as_str())
+                .bind(projection.event_id().to_hex())
                 .bind(projection.event_seq())
                 .bind(FOOD_AVAILABILITY_CONTRACT_ID)
                 .fetch_one(&mut *connection)

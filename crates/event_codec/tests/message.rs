@@ -287,7 +287,7 @@ fn message_metadata_and_index_from_event_roundtrip() {
     .unwrap();
     assert_eq!(index.event.kind_u32(), KIND_MESSAGE);
     assert_eq!(
-        index.event.sig_str(),
+        index.event.signature_hex(),
         concat!(
             "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

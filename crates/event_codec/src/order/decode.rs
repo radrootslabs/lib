@@ -156,8 +156,8 @@ pub fn order_request_from_event(
     validate_order_binding(
         event,
         &envelope,
-        &envelope.payload.order_id,
-        &envelope.payload.listing_addr,
+        envelope.payload.order_id.as_str(),
+        envelope.payload.listing_addr.as_str(),
         &envelope.payload.buyer_pubkey,
         &envelope.payload.seller_pubkey,
     )?;
@@ -182,8 +182,8 @@ pub fn order_decision_from_event(
     validate_order_binding(
         event,
         &envelope,
-        &envelope.payload.order_id,
-        &envelope.payload.listing_addr,
+        envelope.payload.order_id.as_str(),
+        envelope.payload.listing_addr.as_str(),
         &envelope.payload.seller_pubkey,
         &envelope.payload.buyer_pubkey,
     )?;
@@ -208,8 +208,8 @@ pub fn order_cancellation_from_event(
     validate_order_binding(
         event,
         &envelope,
-        &envelope.payload.order_id,
-        &envelope.payload.listing_addr,
+        envelope.payload.order_id.as_str(),
+        envelope.payload.listing_addr.as_str(),
         &envelope.payload.buyer_pubkey,
         &envelope.payload.seller_pubkey,
     )?;
@@ -587,7 +587,7 @@ mod tests {
             built.tags[2],
             vec![TAG_D.to_string(), "order-1".to_string()]
         );
-        assert_eq!(envelope.payload.economics.quote_id, "quote-1");
+        assert_eq!(envelope.payload.economics.quote_id.as_str(), "quote-1");
         assert_eq!(envelope.payload.economics.total, usd("15"));
         assert!(
             built

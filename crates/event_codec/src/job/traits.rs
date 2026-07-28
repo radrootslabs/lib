@@ -115,27 +115,32 @@ pub trait JobEventLike {
 }
 
 pub trait JobEventBorrow<'a> {
-    fn raw_id(&'a self) -> &'a str;
+    fn raw_id(&'a self) -> String;
     fn raw_author(&'a self) -> String;
     fn raw_content(&'a self) -> &'a str;
     fn raw_kind(&'a self) -> u32;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct BorrowedEventAdapter<'a, E: JobEventBorrow<'a>> {
     inner: &'a E,
     published_at: u64,
     tags: &'a [Vec<String>],
-    sig: &'a str,
+    sig: String,
 }
 
 impl<'a, E: JobEventBorrow<'a>> BorrowedEventAdapter<'a, E> {
-    pub fn new(inner: &'a E, published_at: u64, tags: &'a [Vec<String>], sig: &'a str) -> Self {
+    pub fn new(
+        inner: &'a E,
+        published_at: u64,
+        tags: &'a [Vec<String>],
+        sig: impl Into<String>,
+    ) -> Self {
         Self {
             inner,
             published_at,
             tags,
-            sig,
+            sig: sig.into(),
         }
     }
 }
@@ -143,7 +148,7 @@ impl<'a, E: JobEventBorrow<'a>> BorrowedEventAdapter<'a, E> {
 impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
     #[inline]
     fn raw_id(&self) -> String {
-        self.inner.raw_id().to_owned()
+        self.inner.raw_id()
     }
     #[inline]
     fn raw_author(&self) -> String {
@@ -167,14 +172,14 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
     }
     #[inline]
     fn raw_sig(&self) -> String {
-        self.sig.to_owned()
+        self.sig.clone()
     }
 }
 
 impl<'a> JobEventBorrow<'a> for radroots_event::RadrootsEventEnvelope {
     #[inline]
-    fn raw_id(&'a self) -> &'a str {
-        self.id_str()
+    fn raw_id(&'a self) -> String {
+        self.id_hex()
     }
     #[inline]
     fn raw_author(&'a self) -> String {

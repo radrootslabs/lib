@@ -318,8 +318,8 @@ impl RadrootsEventDraft {
         );
         if actual_event_id != self.expected_event_id {
             return Err(RadrootsDraftError::DraftExpectedEventIdMismatch {
-                expected_event_id: actual_event_id.as_str().to_owned(),
-                actual_event_id: self.expected_event_id_str().to_owned(),
+                expected_event_id: actual_event_id.to_hex(),
+                actual_event_id: self.expected_event_id.to_hex(),
             });
         }
         Ok(())
@@ -380,8 +380,8 @@ impl RadrootsEventDraft {
     }
 
     #[inline]
-    pub fn expected_event_id_str(&self) -> &str {
-        self.expected_event_id.as_str()
+    pub fn expected_event_id_hex(&self) -> String {
+        self.expected_event_id.to_hex()
     }
 }
 
@@ -436,8 +436,8 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventDraft {
         if draft.expected_event_id != value.expected_event_id {
             return Err(serde::de::Error::custom(
                 RadrootsDraftError::DraftExpectedEventIdMismatch {
-                    expected_event_id: draft.expected_event_id_str().to_owned(),
-                    actual_event_id: value.expected_event_id.as_str().to_owned(),
+                    expected_event_id: draft.expected_event_id.to_hex(),
+                    actual_event_id: value.expected_event_id.to_hex(),
                 },
             ));
         }
@@ -655,9 +655,15 @@ impl RadrootsSignedEvent {
         self.envelope.id()
     }
 
+    /// Returns the canonical NIP-01 event-id encoding retained by the wire boundary.
     #[inline]
     pub fn id_str(&self) -> &str {
-        self.envelope.id_str()
+        self.wire.id.as_str()
+    }
+
+    #[inline]
+    pub fn id_hex(&self) -> String {
+        self.envelope.id().to_hex()
     }
 
     #[inline]
@@ -689,9 +695,15 @@ impl RadrootsSignedEvent {
         self.envelope.sig()
     }
 
+    /// Returns the canonical NIP-01 signature encoding retained by the wire boundary.
     #[inline]
     pub fn sig_str(&self) -> &str {
-        self.envelope.sig_str()
+        self.wire.sig.as_str()
+    }
+
+    #[inline]
+    pub fn signature_hex(&self) -> String {
+        self.envelope.sig().to_hex()
     }
 
     #[cfg(feature = "signature")]
@@ -753,10 +765,10 @@ pub fn validate_signed_nostr_event_matches_draft(
             actual_len: signed_event.content().len(),
         });
     }
-    if signed_event.id_str() != draft.expected_event_id_str() {
+    if signed_event.id() != draft.expected_event_id() {
         return Err(RadrootsDraftError::SignedEventIdMismatch {
-            expected_event_id: draft.expected_event_id_str().to_owned(),
-            actual_event_id: signed_event.id_str().to_owned(),
+            expected_event_id: draft.expected_event_id.to_hex(),
+            actual_event_id: signed_event.id().to_hex(),
         });
     }
     let signed_pubkey = signed_event.pubkey().to_hex();
@@ -766,12 +778,11 @@ pub fn validate_signed_nostr_event_matches_draft(
         signed_event.kind(),
         &signed_tags,
         signed_event.content(),
-    )
-    .into_string();
-    if computed_event_id.as_str() != signed_event.id_str() {
+    );
+    if computed_event_id != *signed_event.id() {
         return Err(RadrootsDraftError::SignedEventComputedIdMismatch {
-            expected_event_id: signed_event.id_str().to_owned(),
-            computed_event_id,
+            expected_event_id: signed_event.id().to_hex(),
+            computed_event_id: computed_event_id.to_hex(),
         });
     }
     Ok(())
@@ -783,13 +794,9 @@ fn verify_bip340_signature(
 ) -> Result<(), RadrootsSignatureVerificationError> {
     use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
 
-    let mut event_id = [0u8; 32];
-    hex::decode_to_slice(signed_event.id_str(), &mut event_id)
-        .map_err(|_| RadrootsSignatureVerificationError::InvalidEventId)?;
+    let event_id = *signed_event.id().as_bytes();
     let pubkey = signed_event.pubkey().into_bytes();
-    let mut sig = [0u8; 64];
-    hex::decode_to_slice(signed_event.sig_str(), &mut sig)
-        .map_err(|_| RadrootsSignatureVerificationError::InvalidSignature)?;
+    let sig = *signed_event.sig().as_bytes();
     let message = Message::from_digest(event_id);
     let pubkey = XOnlyPublicKey::from_slice(&pubkey)
         .map_err(|_| RadrootsSignatureVerificationError::InvalidPubkey)?;
@@ -975,7 +982,7 @@ mod tests {
             "[0,\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",1700000000,20000,[],\"hello\"]"
         );
         assert_eq!(
-            draft.expected_event_id_str(),
+            draft.expected_event_id_hex(),
             "07643222c33091b20114d5baf1a32288e808177eac7d87acb2c4f610363a2a7d"
         );
     }
@@ -1022,7 +1029,7 @@ mod tests {
             .expect("event id");
 
         assert_eq!(
-            event_id.as_str(),
+            event_id.to_hex(),
             "679ee570a933961d4f5ee95ed60cbc34d85c9c24a8da5e92f6036462ee0fc852"
         );
     }
@@ -1274,15 +1281,15 @@ mod tests {
         let decoded: RadrootsSignedEvent = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(decoded, signed);
-        assert_eq!(decoded.envelope().id_str(), decoded.id_str());
-        assert_eq!(decoded.wire().id, decoded.id_str());
-        assert_eq!(decoded.id().as_str(), decoded.id_str());
+        assert_eq!(decoded.envelope().id_hex(), decoded.id_hex());
+        assert_eq!(decoded.wire().id, decoded.id_hex());
+        assert_eq!(decoded.id().to_hex(), decoded.id_hex());
         assert_eq!(decoded.pubkey().to_hex(), hex_64('e'));
         assert_eq!(decoded.created_at(), 10);
         assert_eq!(decoded.kind(), KIND_POST);
         assert_eq!(decoded.tags_as_vec(), wire.tags);
         assert_eq!(decoded.content(), "hello");
-        assert_eq!(decoded.sig().as_str(), decoded.sig_str());
+        assert_eq!(decoded.sig().to_hex(), decoded.signature_hex());
         assert_eq!(decoded.raw_json(), raw_json);
     }
 
@@ -1300,9 +1307,9 @@ mod tests {
         let signed = RadrootsSignedEvent::from_wire_verified_id(wire.clone(), raw_json.clone())
             .expect("signed event");
 
-        assert_eq!(signed.id_str(), wire.id);
+        assert_eq!(signed.id_hex(), wire.id);
         assert_eq!(signed.pubkey().to_hex(), hex_64('2'));
-        assert_eq!(signed.sig_str(), hex_128('3'));
+        assert_eq!(signed.signature_hex(), hex_128('3'));
         assert_eq!(signed.raw_json(), raw_json);
 
         let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
@@ -1375,7 +1382,7 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id_str().to_string(),
+                draft.expected_event_id_hex(),
                 hex_64('c'),
                 draft.created_at_u64(),
                 draft.kind_u32(),
@@ -1415,7 +1422,7 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id_str().to_string(),
+                draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
                 draft.created_at_u64() + 1,
                 draft.kind_u32(),
@@ -1435,7 +1442,7 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id_str().to_string(),
+                draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
                 draft.created_at_u64(),
                 KIND_PROFILE,
@@ -1457,7 +1464,7 @@ mod tests {
         tags.push(vec!["p".to_owned(), hex_64('e')]);
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id_str().to_string(),
+                draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
                 draft.created_at_u64(),
                 draft.kind_u32(),
@@ -1477,7 +1484,7 @@ mod tests {
 
         let signed = RadrootsSignedEvent::from_wire_unchecked(
             unchecked_wire(
-                draft.expected_event_id_str().to_string(),
+                draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
                 draft.created_at_u64(),
                 draft.kind_u32(),
@@ -1603,16 +1610,16 @@ mod tests {
         assert_eq!(draft.tags().to_vec(), draft.tags_as_vec());
         assert_eq!(draft.expected_pubkey().to_hex(), hex_64('a'));
         assert_eq!(
-            draft.expected_event_id().as_str(),
-            draft.expected_event_id_str()
+            draft.expected_event_id().to_hex(),
+            draft.expected_event_id_hex()
         );
 
         let signed = signed_event_for_draft(&draft);
-        assert_eq!(signed.envelope().id_str(), signed.id_str());
-        assert_eq!(signed.wire().id, signed.id_str());
-        assert_eq!(signed.id().as_str(), signed.id_str());
+        assert_eq!(signed.envelope().id_hex(), signed.id_hex());
+        assert_eq!(signed.wire().id, signed.id_hex());
+        assert_eq!(signed.id().to_hex(), signed.id_hex());
         assert_eq!(signed.pubkey(), draft.expected_pubkey());
-        assert_eq!(signed.sig().as_str(), signed.sig_str());
+        assert_eq!(signed.sig().to_hex(), signed.signature_hex());
 
         for error in [
             RadrootsSignedEventError::Wire(RadrootsEventWireError::NonCanonicalIdentifier {

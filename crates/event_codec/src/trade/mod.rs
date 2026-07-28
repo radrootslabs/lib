@@ -117,7 +117,7 @@ fn validate_trade_mutation_tags(
         return Err(RadrootsTradeMutationParseError::ContractTagMismatch);
     }
     let trade_id = required_tag_value(tags, TAG_D)?;
-    if trade_id != envelope.trade_id.as_str() {
+    if trade_id != envelope.trade_id.to_hex() {
         return Err(RadrootsTradeMutationParseError::TradeIdTagMismatch);
     }
     let counterparty = required_tag_value(tags, "p")?;

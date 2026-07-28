@@ -103,7 +103,7 @@ impl RadrootsOrderEconomics {
     }
 
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.quote_id, "quote_id")?;
+        validate_required_field(self.quote_id.as_str(), "quote_id")?;
         if self.quote_version == 0 {
             return Err(RadrootsOrderPayloadError::InvalidQuoteVersion);
         }
@@ -152,8 +152,8 @@ pub struct RadrootsOrderRequest {
 
 impl RadrootsOrderRequest {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(self.order_id.as_str(), "order_id")?;
+        validate_required_field(self.listing_addr.as_str(), "listing_addr")?;
         validate_order_items(&self.items)?;
         self.economics.validate()?;
         validate_order_economics_binding(&self.items, &self.economics)
@@ -231,8 +231,8 @@ pub struct RadrootsOrderDecision {
 
 impl RadrootsOrderDecision {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(self.order_id.as_str(), "order_id")?;
+        validate_required_field(self.listing_addr.as_str(), "listing_addr")?;
         self.decision.validate()
     }
 }
@@ -257,8 +257,8 @@ pub struct RadrootsOrderCancellation {
 
 impl RadrootsOrderCancellation {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
-        validate_required_field(&self.order_id, "order_id")?;
-        validate_required_field(&self.listing_addr, "listing_addr")?;
+        validate_required_field(self.order_id.as_str(), "order_id")?;
+        validate_required_field(self.listing_addr.as_str(), "listing_addr")?;
         validate_required_field(&self.reason, "reason")
     }
 }
@@ -517,7 +517,7 @@ fn validate_order_items(items: &[RadrootsOrderItem]) -> Result<(), RadrootsOrder
         return Err(RadrootsOrderPayloadError::MissingItems);
     }
     for (index, item) in items.iter().enumerate() {
-        validate_required_field(&item.bin_id, "bin_id")?;
+        validate_required_field(item.bin_id.as_str(), "bin_id")?;
         if item.bin_count == 0 {
             return Err(RadrootsOrderPayloadError::InvalidItemBinCount { index });
         }
@@ -530,7 +530,7 @@ fn validate_economic_item(
     expected_currency: Currency,
     index: usize,
 ) -> Result<Money, RadrootsOrderPayloadError> {
-    validate_required_field(&item.bin_id, "economics.items.bin_id")?;
+    validate_required_field(item.bin_id.as_str(), "economics.items.bin_id")?;
     if item.bin_count == 0 {
         return Err(RadrootsOrderPayloadError::InvalidEconomicItemBinCount { index });
     }
@@ -574,7 +574,7 @@ fn validate_order_economics_binding(
         return Err(RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field: "items" });
     }
     for (item, economic_item) in order_items.iter().zip(economics.items.iter()) {
-        if item.bin_id != economic_item.bin_id {
+        if item.bin_id != economic_item.bin_id.as_str() {
             return Err(RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
                 field: "items.bin_id",
             });
@@ -599,7 +599,7 @@ fn normalized_order_item_counts(
 ) -> Option<Vec<NormalizedOrderItemCount>> {
     let mut counts: Vec<NormalizedOrderItemCount> = Vec::new();
     for item in items {
-        let bin_id = item.bin_id.trim();
+        let bin_id = item.bin_id.as_str();
         if item.bin_count == 0 {
             return None;
         }
@@ -736,7 +736,7 @@ fn validate_inventory_commitments(
         return Err(RadrootsOrderPayloadError::MissingInventoryCommitments);
     }
     for (index, commitment) in commitments.iter().enumerate() {
-        validate_required_field(&commitment.bin_id, "bin_id")?;
+        validate_required_field(commitment.bin_id.as_str(), "bin_id")?;
         if commitment.bin_count == 0 {
             return Err(RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { index });
         }
@@ -1099,7 +1099,7 @@ mod tests {
         );
 
         let canonical = economics.canonicalized();
-        assert_eq!(canonical.items[0].bin_id, "bin-a");
+        assert_eq!(canonical.items[0].bin_id.as_str(), "bin-a");
         assert_eq!(canonical.discounts[0].id, "discount-a");
         assert_eq!(canonical.adjustments[0].id, "adjustment-a");
         assert_eq!(canonical.subtotal, usd("18"));

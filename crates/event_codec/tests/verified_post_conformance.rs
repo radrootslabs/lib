@@ -578,7 +578,7 @@ fn reply_event_reference_value(reference: &RadrootsInboundNip10EventReference) -
     json!({
         "tag_index": reference.tag_index(),
         "raw_tag": reference.raw_tag(),
-        "event_id": reference.event_id().as_str(),
+        "event_id": reference.event_id().to_hex(),
         "relay": reference.relay().map(|relay| relay.as_str()),
         "author_hint": reference.author_hint().map(|author| author.to_hex()),
     })

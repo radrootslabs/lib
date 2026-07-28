@@ -758,7 +758,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip09DeletionProjection) -> V
         "contract_id": projection.contract_id(),
         "event_targets": projection.event_targets().iter().map(|target| json!({
             "tag_index": target.tag_index(),
-            "event_id": target.event_id().as_str(),
+            "event_id": target.event_id().to_hex(),
             "raw_tag": target.raw_tag(),
         })).collect::<Vec<_>>(),
         "address_targets": projection.address_targets().iter().map(|target| json!({

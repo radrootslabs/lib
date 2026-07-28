@@ -217,8 +217,8 @@ fn article_wrappers_preserve_event_metadata() {
     )
     .unwrap();
 
-    assert_eq!(parsed.event.id_str(), EVENT_ID);
+    assert_eq!(parsed.event.id_hex(), EVENT_ID);
     assert_eq!(parsed.event.author().to_hex(), AUTHOR);
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, VALID_D_TAG);
 }

@@ -82,7 +82,7 @@ pub fn event_head_candidate_for_class(
         RadrootsEventClass::Regular => RadrootsEventHeadCandidateResult::NotHeadSelected,
         RadrootsEventClass::Ephemeral => RadrootsEventHeadCandidateResult::NotPersisted,
         RadrootsEventClass::Replaceable | RadrootsEventClass::Addressable => {
-            let event_id = event.id().clone();
+            let event_id = *event.id();
             let pubkey = *event.author();
             let coordinate = if class == RadrootsEventClass::Replaceable {
                 RadrootsEventHeadCoordinate::Replaceable {
@@ -152,7 +152,7 @@ pub fn event_head_candidate_for_nip01_event_v1(
     };
     RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
         coordinate,
-        event_id: event.id().clone(),
+        event_id: *event.id(),
         created_at: event.created_at_u64(),
     })
 }

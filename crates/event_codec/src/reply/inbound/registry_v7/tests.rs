@@ -70,13 +70,13 @@ fn tolerant_inbound_retains_raw_optional_metadata_and_orders_diagnostics() {
     assert!(!projection.is_direct());
     assert_eq!(projection.root().tag_index(), 0);
     assert_eq!(projection.root().raw_tag(), tags[0]);
-    assert_eq!(projection.root().event_id().as_str(), root_id);
+    assert_eq!(projection.root().event_id().to_hex(), root_id);
     assert!(projection.root().relay().is_none());
     assert!(projection.root().author_hint().is_none());
     let parent = projection.reply_reference().expect("reply reference");
     assert_eq!(parent.tag_index(), 1);
     assert_eq!(parent.raw_tag(), tags[1]);
-    assert_eq!(parent.event_id().as_str(), parent_id);
+    assert_eq!(parent.event_id().to_hex(), parent_id);
     assert_eq!(projection.participants().len(), 1);
     assert_eq!(projection.participants()[0].tag_index(), 4);
     assert_eq!(projection.participants()[0].raw_tag(), tags[4]);
@@ -281,11 +281,11 @@ fn marked_inbound_retains_citations_and_ignores_malformed_supplements() {
     let projection = project_nip10_reply_parts(KIND_POST, &tags, "Reply", 10)
         .expect("supplemental references must not erase a marked Reply");
 
-    assert_eq!(projection.root().event_id().as_str(), root_id);
+    assert_eq!(projection.root().event_id().to_hex(), root_id);
     assert_eq!(projection.citations().len(), 1);
     assert_eq!(projection.citations()[0].tag_index(), 1);
     assert_eq!(projection.citations()[0].raw_tag(), tags[1]);
-    assert_eq!(projection.citations()[0].event_id().as_str(), citation_id);
+    assert_eq!(projection.citations()[0].event_id().to_hex(), citation_id);
     assert_eq!(
         projection.citations()[0]
             .relay()
@@ -391,10 +391,10 @@ fn positional_inbound_accepts_empty_markers_and_tolerates_middle_citations() {
     let nested = project_nip10_reply_parts(KIND_POST, &nested_tags, "Nested", 10)
         .expect("malformed middle citations must not erase positional anchors");
     assert_eq!(nested.style(), RadrootsNip10ReplyStyle::LegacyPositional);
-    assert_eq!(nested.parent().event_id().as_str(), parent_id);
+    assert_eq!(nested.parent().event_id().to_hex(), parent_id);
     assert_eq!(nested.citations().len(), 1);
     assert_eq!(nested.citations()[0].tag_index(), 2);
-    assert_eq!(nested.citations()[0].event_id().as_str(), citation_id);
+    assert_eq!(nested.citations()[0].event_id().to_hex(), citation_id);
     assert_eq!(
         nested
             .diagnostics()

@@ -605,7 +605,7 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
         EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.common().d_tag(), DATE_D_TAG);
 
     let event_reference = RadrootsCalendarEventReference::parse(
@@ -649,7 +649,7 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
         EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.title(), "Farm calendar");
 
     let rsvp = RadrootsAuthoredCalendarEventRsvp::new(
@@ -687,7 +687,7 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
         EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag(), "DDDDDDDDDDDDDDDDDDDDDw");
 }
 

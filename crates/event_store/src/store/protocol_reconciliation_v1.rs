@@ -89,7 +89,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
         return Ok(ProtocolReconciliationV1IngestResult {
             receipt: RadrootsEventIngestReceipt {
                 persistence: RadrootsEventPersistence::NotPersisted,
-                event_id: event.id_str().to_owned(),
+                event_id: event.id_hex().to_owned(),
                 admission_status: admission.status,
                 admission_code: admission.code,
                 contract_id: admission.contract.map(|contract| contract.id.to_owned()),
@@ -103,7 +103,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
     }
     let tags = event.tags_as_vec();
     let tags_json = serde_json::to_string(&tags)?;
-    let event_id = event.id_str().to_owned();
+    let event_id = event.id_hex().to_owned();
     let existing_raw_event: i64 =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM event_envelopes WHERE event_id = ?)")
             .bind(event_id.as_str())
@@ -457,13 +457,13 @@ async fn insert_raw_event(
     let result = sqlx::query(
         "INSERT OR IGNORE INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(event.id_str())
+    .bind(event.id_hex())
     .bind(event.author().to_hex())
     .bind(i64_from_u64("created_at", event.created_at_u64())?)
     .bind(i64::from(event.kind_u32()))
     .bind(tags_json)
     .bind(event.content())
-    .bind(event.sig_str())
+    .bind(event.signature_hex())
     .bind(raw_json)
     .bind("verified")
     .bind(admission.status.as_str())
@@ -475,7 +475,7 @@ async fn insert_raw_event(
     .execute(&mut **tx)
     .await?;
     let inserted = result.rows_affected() > 0;
-    let seq = event_seq(tx, event.id_str()).await?;
+    let seq = event_seq(tx, &event.id_hex()).await?;
     if inserted {
         return Ok(InsertRawEventResult {
             inserted: true,
@@ -486,7 +486,7 @@ async fn insert_raw_event(
         });
     }
 
-    let existing = stored_raw_event_row_in_transaction(tx, event.id_str()).await?;
+    let existing = stored_raw_event_row_in_transaction(tx, &event.id_hex()).await?;
     let stored = stored_raw_event_from_row(existing)?;
     Ok(InsertRawEventResult {
         inserted: false,
@@ -545,7 +545,7 @@ async fn insert_tags(
         sqlx::query(
             "INSERT INTO event_envelope_tags(event_id, tag_index, tag_name, tag_value, tag_json, contract_semantic, contract_value_type, relay_indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(event.id_str())
+        .bind(event.id_hex())
         .bind(i64::try_from(index).map_err(|_| RadrootsEventStoreError::IntegerRange {
             field: "tag_index",
             value: i64::MAX,
@@ -640,7 +640,7 @@ async fn upsert_head(
             )
             .bind(i64::from(*kind))
             .bind(pubkey.to_hex())
-            .bind(candidate.event_id.as_str())
+            .bind(candidate.event_id.to_hex())
             .bind(i64_from_u64("created_at", candidate.created_at)?)
             .bind(updated_at_ms)
             .execute(&mut **tx)
@@ -665,7 +665,7 @@ async fn upsert_head(
             .bind(i64::from(*kind))
             .bind(pubkey.to_hex())
             .bind(d_tag.as_str())
-            .bind(candidate.event_id.as_str())
+            .bind(candidate.event_id.to_hex())
             .bind(i64_from_u64("created_at", candidate.created_at)?)
             .bind(updated_at_ms)
             .execute(&mut **tx)

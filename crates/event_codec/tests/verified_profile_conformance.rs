@@ -104,7 +104,7 @@ fn verify_valid(vector: &Vector) {
     let verified = verify_nip01_event(canonical_envelope(input_str(vector, "event_json")))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
-        verified.event().id_str(),
+        verified.event().id_hex(),
         expected_str(vector, "event_id"),
         "{}",
         vector.id
@@ -160,9 +160,9 @@ fn verify_kind_overflow(vector: &Vector) {
 
 fn profile_admit_valid(vector: &Vector) {
     let admitted = admitted_event(input_str(vector, "event_json"), &vector.id);
-    assert_eq!(admitted.event().id_str(), expected_str(vector, "event_id"));
+    assert_eq!(admitted.event().id_hex(), expected_str(vector, "event_id"));
     assert_eq!(
-        admitted.verified_event().event().id_str(),
+        admitted.verified_event().event().id_hex(),
         expected_str(vector, "event_id")
     );
     assert_eq!(
@@ -175,7 +175,7 @@ fn profile_admit_valid(vector: &Vector) {
         vector.expected["residual_fields"]
     );
     let (verified, metadata) = admitted.into_parts();
-    assert_eq!(verified.event().id_str(), expected_str(vector, "event_id"));
+    assert_eq!(verified.event().id_hex(), expected_str(vector, "event_id"));
     assert!(metadata.name().is_none());
 }
 

@@ -511,7 +511,7 @@ pub fn verify_validator_set_event(
     let address = validator_set_address(event.author(), &validator_set.set_id)?;
     Ok(RadrootsVerifiedValidatorSetV1 {
         set: validator_set,
-        event_id: event.id_str().to_owned(),
+        event_id: event.id_hex(),
         address,
         authority_pubkey: *event.author(),
     })

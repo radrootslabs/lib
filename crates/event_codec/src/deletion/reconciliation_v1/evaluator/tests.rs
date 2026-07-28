@@ -69,7 +69,7 @@ fn nip09_evaluator_deletion_requests_are_immune() {
     let request = admitted_request(
         FIXTURE_ALICE_SECRET_KEY_HEX,
         TARGET_TIME + 1,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "attempt",
     );
 
@@ -96,7 +96,7 @@ fn nip09_evaluator_exact_event_reference_is_time_independent() {
     let request = admitted_request(
         FIXTURE_ALICE_SECRET_KEY_HEX,
         TARGET_TIME - 1,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "exact",
     );
     let request_id = request.event().id().clone();
@@ -181,7 +181,7 @@ fn nip09_evaluator_author_mismatch_and_unrelated_requests_are_distinct() {
     let mismatch = admitted_request(
         FIXTURE_BOB_SECRET_KEY_HEX,
         TARGET_TIME + 1,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "wrong author",
     );
     let unrelated = admitted_request(
@@ -225,7 +225,7 @@ fn nip09_evaluator_authorized_stale_address_precedes_unauthorized_exact_event() 
     let mismatch = admitted_request(
         FIXTURE_BOB_SECRET_KEY_HEX,
         TARGET_TIME + 1,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "wrong author",
     );
 
@@ -251,7 +251,7 @@ fn nip09_evaluator_exact_event_dominates_stale_address_reference() {
     let exact = admitted_request(
         FIXTURE_ALICE_SECRET_KEY_HEX,
         TARGET_TIME - 2,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "exact",
     );
     let stale = admitted_request(
@@ -285,13 +285,13 @@ fn nip09_evaluator_reduction_is_order_and_repeat_invariant() {
     let exact_a = admitted_request(
         FIXTURE_ALICE_SECRET_KEY_HEX,
         TARGET_TIME - 10,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "exact a",
     );
     let exact_b = admitted_request(
         FIXTURE_ALICE_SECRET_KEY_HEX,
         TARGET_TIME + 20,
-        vec![event_reference(target.event().id_str())],
+        vec![event_reference(target.event().id_hex().as_str())],
         "exact b",
     );
     let address_a = admitted_request(
@@ -372,7 +372,7 @@ fn nip09_borrowed_request_iterator_matches_slice_evaluation() {
         admitted_request(
             FIXTURE_ALICE_SECRET_KEY_HEX,
             TARGET_TIME - 1,
-            vec![event_reference(target.event().id_str())],
+            vec![event_reference(target.event().id_hex().as_str())],
             "exact",
         ),
         admitted_request(
@@ -385,7 +385,7 @@ fn nip09_borrowed_request_iterator_matches_slice_evaluation() {
             FIXTURE_ALICE_SECRET_KEY_HEX,
             TARGET_TIME + 3,
             vec![
-                event_reference(target.event().id_str()),
+                event_reference(target.event().id_hex().as_str()),
                 address_reference(coordinate.as_str()),
             ],
             "exact and address",
@@ -544,7 +544,7 @@ fn signed_event(
     let author = keys.public_key().to_string();
     let id = compute_canonical_nip01_event_id(author.as_str(), created_at, kind, &tags, content)
         .expect("canonical event id");
-    let nostr_id = nostr::EventId::from_hex(id.as_str()).expect("Nostr event id");
+    let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
     let message = Message::from_digest(nostr_id.to_bytes());
     let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
 

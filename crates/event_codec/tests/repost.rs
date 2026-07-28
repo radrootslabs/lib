@@ -432,7 +432,7 @@ fn repost_wrappers_preserve_event_metadata() {
         EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
 
     let generic_parts = generic_repost_to_wire_parts(&generic_article_repost()).unwrap();
     let generic_data = generic_repost_data_from_event(

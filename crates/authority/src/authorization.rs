@@ -282,9 +282,8 @@ mod tests {
                 id: self
                     .overrides
                     .event_id
-                    .as_deref()
-                    .unwrap_or(draft.expected_event_id_str())
-                    .to_owned(),
+                    .clone()
+                    .unwrap_or_else(|| draft.expected_event_id_hex()),
                 pubkey: self.pubkey.to_string(),
                 created_at: self.overrides.created_at.unwrap_or(draft.created_at_u64()),
                 kind: self.overrides.kind.unwrap_or(draft.kind_u32()),
@@ -643,7 +642,7 @@ mod tests {
 
         let signed = sign_authorized_draft(&actor, &signer, &draft).expect("signed");
 
-        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.id_str(), draft.expected_event_id_hex());
         assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(signed.kind(), KIND_CLASSIFIED_LISTING);
     }

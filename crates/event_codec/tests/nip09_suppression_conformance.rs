@@ -370,14 +370,14 @@ fn actual_decision(decision: &RadrootsNip09SuppressionDecision) -> ExpectedDecis
         event_reference: decision
             .event_reference()
             .map(|evidence| ExpectedEventReference {
-                request_id: evidence.request_id().as_str().to_owned(),
+                request_id: evidence.request_id().to_hex(),
             }),
         address_reference: decision
             .address_reference()
             .map(|evidence| ExpectedAddressReference {
                 coordinate: evidence.coordinate().as_str().to_owned(),
                 inclusive_cutoff: evidence.inclusive_cutoff(),
-                request_id: evidence.request_id().as_str().to_owned(),
+                request_id: evidence.request_id().to_hex(),
             }),
     }
 }

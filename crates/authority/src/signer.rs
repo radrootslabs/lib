@@ -111,9 +111,8 @@ mod tests {
             }
             let id = self
                 .event_id
-                .as_deref()
-                .unwrap_or(draft.expected_event_id_str())
-                .to_owned();
+                .clone()
+                .unwrap_or_else(|| draft.expected_event_id_hex());
             let wire = RadrootsNip01EventWire {
                 id,
                 pubkey: self.pubkey.to_string(),
@@ -174,7 +173,7 @@ mod tests {
 
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
-        assert_eq!(signed.id_str(), draft.expected_event_id_str());
+        assert_eq!(signed.id_str(), draft.expected_event_id_hex());
         assert_eq!(signed.pubkey().to_hex(), pubkey);
         assert_eq!(signed.kind(), KIND_GEOCHAT);
     }

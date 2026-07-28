@@ -203,7 +203,7 @@ fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
     .expect("parsed profile");
 
     assert_eq!(
-        parsed.event.id_str(),
+        parsed.event.id_hex(),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     );
     assert_eq!(parsed.event.author().to_hex(), AUTHOR);
@@ -211,7 +211,7 @@ fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
     assert_eq!(parsed.event.kind_u32(), KIND_PROFILE);
     assert_eq!(parsed.event.content(), "{\"name\":\"alice\"}");
     assert_eq!(
-        parsed.event.sig_str(),
+        parsed.event.signature_hex(),
         concat!(
             "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

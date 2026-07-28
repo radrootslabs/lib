@@ -204,7 +204,7 @@ mod tests {
             EVENT_SIG.to_string(),
         )
         .expect("parsed event");
-        assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+        assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
         assert_same_manifest(&parsed.data.data, &manifest);
     }
 

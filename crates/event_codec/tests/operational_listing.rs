@@ -1147,17 +1147,17 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
         EVENT_SIG.to_string(),
     )
     .unwrap();
-    assert_eq!(parsed.event.id_str(), EVENT_ID);
+    assert_eq!(parsed.event.id_hex(), EVENT_ID);
     assert_eq!(parsed.event.author().to_hex(), AUTHOR);
     assert_eq!(parsed.event.created_at_u64(), 7);
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
 
     let event = event_envelope(parts.kind, parts.tags, parts.content);
     let data = data_from_nostr_event(&event).unwrap();
     assert_eq!(data.data.d_tag, listing.d_tag);
     let parsed = parsed_from_nostr_event(&event).unwrap();
-    assert_eq!(parsed.event.sig_str(), EVENT_SIG);
+    assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
 
     let err = parsed_from_event(

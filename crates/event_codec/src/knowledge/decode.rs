@@ -377,7 +377,7 @@ fn json_content<T: DeserializeOwned>(content: &str) -> Result<T, EventParseError
 
 fn parsed<T>(event: RadrootsEventEnvelope, data: T) -> RadrootsParsedEvent<T> {
     let parsed_data = RadrootsParsedData::new(
-        event.id_str().to_string(),
+        event.id_hex(),
         event.author().to_hex().to_string(),
         event.created_at_u64(),
         event.kind_u32(),
