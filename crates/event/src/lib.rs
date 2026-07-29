@@ -100,6 +100,7 @@ pub mod tag;
 pub mod tags;
 pub mod trade;
 pub mod trade_validation;
+mod verification;
 pub mod wire;
 
 pub use envelope::{

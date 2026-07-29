@@ -318,6 +318,14 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event/src/envelope.rs",
     },
     SourceSpec {
+        role: "event_verification_typestate_authority",
+        path: "crates/event/src/verification.rs",
+    },
+    SourceSpec {
+        role: "event_admission_typestate_authority",
+        path: "crates/event/src/admission.rs",
+    },
+    SourceSpec {
         role: "event_head_facade",
         path: "crates/event/src/event_head.rs",
     },

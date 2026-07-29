@@ -74,6 +74,36 @@ fn crate_root_declares_every_approved_module() {
 }
 
 #[test]
+fn verification_typestates_are_native_private_and_policy_gated() {
+    let admission = include_str!("../src/admission.rs");
+    let verification = include_str!("../src/verification.rs");
+
+    for state in [
+        "RawEvent",
+        "IdVerifiedEvent",
+        "SignatureVerifiedEvent",
+        "ContractValidatedEvent",
+        "AdmittedEvent",
+        "VisibleEvent",
+    ] {
+        assert!(
+            admission.contains(state) || verification.contains(state),
+            "missing native typestate {state}"
+        );
+    }
+    assert!(ROOT.contains("mod verification;"));
+    assert!(!ROOT.contains("pub mod verification;"));
+    assert!(verification.contains("pub struct IdVerifiedEvent(RadrootsEventEnvelope);"));
+    assert!(verification.contains("pub struct SignatureVerifiedEvent(RadrootsEventEnvelope);"));
+    assert!(admission.contains("policy.admit(&self)?;"));
+    assert!(admission.contains("policy.make_visible(&self)?;"));
+    assert!(!verification.contains("impl From<RawEvent> for IdVerifiedEvent"));
+    assert!(!verification.contains("impl From<IdVerifiedEvent> for SignatureVerifiedEvent"));
+    assert!(!admission.contains("impl From<ContractValidatedEvent> for AdmittedEvent"));
+    assert!(!admission.contains("impl From<AdmittedEvent> for VisibleEvent"));
+}
+
+#[test]
 fn canonical_identifier_api_owns_bytes_and_requires_explicit_text_encoding() {
     let event_id = EventId::parse("A".repeat(64)).expect("event id");
     let signature = EventSignature::parse("B".repeat(128)).expect("event signature");
