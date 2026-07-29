@@ -18,12 +18,12 @@ pub fn authorize_actor_for_contract(
     actor: &RadrootsActorContext,
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsAuthorityError> {
-    if actor.satisfies(contract.author_role) {
+    if actor.satisfies(contract.required_author_role()) {
         Ok(())
     } else {
         Err(RadrootsAuthorityError::ActorRoleUnsatisfied {
             contract_id: contract.id.to_owned(),
-            required_role: contract.author_role,
+            required_role: contract.required_author_role(),
         })
     }
 }
@@ -171,7 +171,7 @@ mod tests {
     use crate::RadrootsSignerError;
     use core::cell::Cell;
     use radroots_event::contract::{
-        RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsActorRole, event_contract,
+        AuthorRole, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, event_contract,
     };
     use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
     use radroots_identity::PublicKey;
@@ -188,11 +188,11 @@ mod tests {
     }
 
     fn seller_actor(pubkey: &str) -> RadrootsActorContext {
-        RadrootsActorContext::explicit_pubkey(pubkey, [RadrootsActorRole::Seller]).expect("seller")
+        RadrootsActorContext::explicit_pubkey(pubkey, [AuthorRole::Seller]).expect("seller")
     }
 
     fn buyer_actor(pubkey: &str) -> RadrootsActorContext {
-        RadrootsActorContext::explicit_pubkey(pubkey, [RadrootsActorRole::Buyer]).expect("buyer")
+        RadrootsActorContext::explicit_pubkey(pubkey, [AuthorRole::Buyer]).expect("buyer")
     }
 
     fn operational_listing_event_draft(pubkey: &str) -> RadrootsEventDraft {
@@ -403,7 +403,10 @@ mod tests {
         let seller = seller_actor(hex_64('a').as_str());
         let buyer = buyer_actor(OTHER_VALID_PUBKEY);
 
-        assert_eq!(operational_listing.author_role, RadrootsActorRole::Seller);
+        assert_eq!(
+            operational_listing.required_author_role(),
+            AuthorRole::Seller
+        );
         assert!(authorize_actor_for_contract(&seller, operational_listing).is_ok());
         assert!(matches!(
             authorize_actor_for_contract(&buyer, operational_listing),
@@ -414,7 +417,7 @@ mod tests {
             authorize_actor_for_contract(&seller, trade_proposal),
             Err(RadrootsAuthorityError::ActorRoleUnsatisfied { .. })
         ));
-        assert_eq!(trade_decision.author_role, RadrootsActorRole::Seller);
+        assert_eq!(trade_decision.required_author_role(), AuthorRole::Seller);
         assert!(authorize_actor_for_contract(&seller, trade_decision).is_ok());
         assert!(matches!(
             authorize_actor_for_contract(&buyer, trade_decision),

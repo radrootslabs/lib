@@ -12,7 +12,7 @@ use std::vec::Vec;
 
 use radroots_authority::RadrootsActorContext;
 use radroots_event::{
-    contract::RadrootsActorRole,
+    contract::AuthorRole,
     ids::{RadrootsClassifiedListingAddress, RadrootsIdParseError, RadrootsInventoryBinId},
     kinds::KIND_CLASSIFIED_LISTING,
     operational_listing::RadrootsOperationalListing,
@@ -93,7 +93,7 @@ pub enum RadrootsOperationalListingEditError {
     InvalidClassifiedListingAddress(RadrootsIdParseError),
     InvalidModel(RadrootsOperationalListingValidationError),
     ActorRoleUnsatisfied {
-        required_role: RadrootsActorRole,
+        required_role: AuthorRole,
     },
     FarmPubkeyMismatch {
         expected_pubkey: PublicKey,
@@ -174,9 +174,9 @@ pub fn canonicalize_operational_listing_edit(
     actor: &RadrootsActorContext,
     mut document: RadrootsOperationalListingEditDocumentV1,
 ) -> Result<RadrootsOperationalListingCanonicalEdit, RadrootsOperationalListingEditError> {
-    if !actor.satisfies(RadrootsActorRole::Seller) {
+    if !actor.satisfies(AuthorRole::Seller) {
         return Err(RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
-            required_role: RadrootsActorRole::Seller,
+            required_role: AuthorRole::Seller,
         });
     }
 
@@ -194,7 +194,7 @@ mod tests {
     use radroots_authority::RadrootsActorContext;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
-        contract::RadrootsActorRole,
+        contract::AuthorRole,
         farm::RadrootsFarmRef,
         ids::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
         kinds::KIND_CLASSIFIED_LISTING,
@@ -279,11 +279,11 @@ mod tests {
     }
 
     fn seller_actor() -> RadrootsActorContext {
-        RadrootsActorContext::explicit_pubkey(SELLER, [RadrootsActorRole::Seller]).expect("actor")
+        RadrootsActorContext::explicit_pubkey(SELLER, [AuthorRole::Seller]).expect("actor")
     }
 
     fn buyer_actor() -> RadrootsActorContext {
-        RadrootsActorContext::explicit_pubkey(SELLER, [RadrootsActorRole::Buyer]).expect("actor")
+        RadrootsActorContext::explicit_pubkey(SELLER, [AuthorRole::Buyer]).expect("actor")
     }
 
     #[test]
@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(
             error,
             RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
-                required_role: RadrootsActorRole::Seller
+                required_role: AuthorRole::Seller
             }
         );
     }

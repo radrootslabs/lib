@@ -8,7 +8,7 @@ use alloc::{
 use radroots_event::{
     classified_listing::RadrootsClassifiedListingPartition,
     contract::{
-        RadrootsActorRole, RadrootsContentSchema, RadrootsEventAuthoringPolicy, RadrootsEventClass,
+        AuthorRole, RadrootsContentSchema, RadrootsEventAuthoringPolicy, RadrootsEventClass,
         RadrootsEventContract, RadrootsEventDiscriminator, RadrootsEventPrivacy,
         RadrootsEventStability, RadrootsKindContract, RadrootsNostrStandard, RadrootsReducer,
         RadrootsTagCardinality, RadrootsTagContract, RadrootsTagSemantic, RadrootsTagValueType,
@@ -379,7 +379,7 @@ fn event_inventory_entry(
         class: class_inventory(contract.class),
         stability: stability_inventory(contract.stability),
         privacy: privacy_inventory(contract.privacy),
-        author_role: actor_role_inventory(contract.author_role),
+        author_role: author_role_inventory(contract.required_author_role()),
         content_schema: content_schema_inventory(contract.content_schema),
         authoring_policy: authoring_policy_inventory(contract.authoring_policy),
         discriminator: discriminator_inventory(&contract.discriminator),
@@ -447,17 +447,17 @@ fn privacy_inventory(value: RadrootsEventPrivacy) -> RadrootsEventContractRegist
     }
 }
 
-fn actor_role_inventory(value: RadrootsActorRole) -> RadrootsEventContractRegistryV7ActorRole {
+fn author_role_inventory(value: AuthorRole) -> RadrootsEventContractRegistryV7ActorRole {
     match value {
-        RadrootsActorRole::Any => RadrootsEventContractRegistryV7ActorRole::Any,
-        RadrootsActorRole::Application => RadrootsEventContractRegistryV7ActorRole::Application,
-        RadrootsActorRole::Buyer => RadrootsEventContractRegistryV7ActorRole::Buyer,
-        RadrootsActorRole::Farmer => RadrootsEventContractRegistryV7ActorRole::Farmer,
-        RadrootsActorRole::Member => RadrootsEventContractRegistryV7ActorRole::Member,
-        RadrootsActorRole::Moderator => RadrootsEventContractRegistryV7ActorRole::Moderator,
-        RadrootsActorRole::Relay => RadrootsEventContractRegistryV7ActorRole::Relay,
-        RadrootsActorRole::Seller => RadrootsEventContractRegistryV7ActorRole::Seller,
-        RadrootsActorRole::Service => RadrootsEventContractRegistryV7ActorRole::Service,
+        AuthorRole::Any => RadrootsEventContractRegistryV7ActorRole::Any,
+        AuthorRole::Application => RadrootsEventContractRegistryV7ActorRole::Application,
+        AuthorRole::Buyer => RadrootsEventContractRegistryV7ActorRole::Buyer,
+        AuthorRole::Farmer => RadrootsEventContractRegistryV7ActorRole::Farmer,
+        AuthorRole::Member => RadrootsEventContractRegistryV7ActorRole::Member,
+        AuthorRole::Moderator => RadrootsEventContractRegistryV7ActorRole::Moderator,
+        AuthorRole::Relay => RadrootsEventContractRegistryV7ActorRole::Relay,
+        AuthorRole::Seller => RadrootsEventContractRegistryV7ActorRole::Seller,
+        AuthorRole::Service => RadrootsEventContractRegistryV7ActorRole::Service,
     }
 }
 

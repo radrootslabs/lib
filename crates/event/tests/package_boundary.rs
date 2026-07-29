@@ -17,6 +17,7 @@ use radroots_identity::PublicKey;
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const IDENTIFIERS: &str = include_str!("../src/ids.rs");
+const CONTRACT_REGISTRY: &str = include_str!("../src/contract/registry_v7.rs");
 const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
 
@@ -101,6 +102,23 @@ fn verification_typestates_are_native_private_and_policy_gated() {
     assert!(!verification.contains("impl From<IdVerifiedEvent> for SignatureVerifiedEvent"));
     assert!(!admission.contains("impl From<ContractValidatedEvent> for AdmittedEvent"));
     assert!(!admission.contains("impl From<AdmittedEvent> for VisibleEvent"));
+}
+
+#[test]
+fn contract_author_roles_are_event_owned_requirements_not_signer_provenance() {
+    let seller =
+        radroots_event::contract::event_contract("radroots.operational_listing.published.v1")
+            .expect("operational listing contract");
+
+    assert_eq!(
+        seller.required_author_role(),
+        radroots_event::contract::AuthorRole::Seller
+    );
+    assert!(!CONTRACT_REGISTRY.contains("RadrootsActorRole"));
+    assert!(!CONTRACT_REGISTRY.contains("pub author_role:"));
+    assert!(!CONTRACT_REGISTRY.contains("radroots_signing"));
+    assert!(!CONTRACT_REGISTRY.contains("RadrootsActorContext"));
+    assert!(!CONTRACT_REGISTRY.contains("AccountId"));
 }
 
 #[test]

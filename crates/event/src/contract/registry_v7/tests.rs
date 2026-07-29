@@ -10,7 +10,7 @@ static AMBIGUOUS_TEST_CONTRACTS: &[RadrootsEventContract] = &[
         "Test",
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Any,
+        AuthorRole::Any,
         RadrootsContentSchema::PlainText,
         RadrootsEventDiscriminator::KindOnly,
         NO_TAGS,
@@ -23,7 +23,7 @@ static AMBIGUOUS_TEST_CONTRACTS: &[RadrootsEventContract] = &[
         "Test",
         RadrootsEventClass::Regular,
         RadrootsEventPrivacy::Public,
-        RadrootsActorRole::Any,
+        AuthorRole::Any,
         RadrootsContentSchema::PlainText,
         RadrootsEventDiscriminator::KindOnly,
         NO_TAGS,
@@ -93,7 +93,7 @@ fn synthetic_event_contract(
         class: RadrootsEventClass::Regular,
         stability: RadrootsEventStability::Experimental,
         privacy: RadrootsEventPrivacy::Public,
-        author_role: RadrootsActorRole::Any,
+        required_author_role: AuthorRole::Any,
         content_schema: RadrootsContentSchema::PlainText,
         authoring_policy: RadrootsEventAuthoringPolicy::GenericDraft,
         discriminator: RadrootsEventDiscriminator::KindOnly,
@@ -111,6 +111,31 @@ fn synthetic_kind_contract(kind: u32) -> RadrootsKindContract {
         standard: RadrootsNostrStandard::Radroots,
         accepted_event_contracts: &[],
     }
+}
+
+#[test]
+fn author_role_catalog_is_event_owned_complete_and_schema_stable() {
+    let declared = AuthorRole::ALL.into_iter().collect::<BTreeSet<_>>();
+    let used = all_event_contracts_registry_v7()
+        .iter()
+        .map(RadrootsEventContract::required_author_role)
+        .collect::<BTreeSet<_>>();
+    let labels = AuthorRole::ALL
+        .into_iter()
+        .map(AuthorRole::as_str)
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(used, declared, "every event author role must be exercised");
+    assert_eq!(labels.len(), AuthorRole::ALL.len());
+    assert!(
+        labels.iter().all(|label| {
+            !label.is_empty()
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
+        }),
+        "author-role manifest labels must remain canonical snake case"
+    );
 }
 
 fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsEventEnvelope {
@@ -551,7 +576,7 @@ fn classified_listing_kind_profiles_are_partitioned_and_explicit() {
     );
     assert_eq!(food.class, RadrootsEventClass::Addressable);
     assert_eq!(food.privacy, RadrootsEventPrivacy::Public);
-    assert_eq!(food.author_role, RadrootsActorRole::Seller);
+    assert_eq!(food.required_author_role(), AuthorRole::Seller);
     assert_eq!(food.content_schema, RadrootsContentSchema::Markdown);
     assert_eq!(
         food.authoring_policy,
@@ -959,7 +984,7 @@ fn nip22_comment_contract_is_typed_and_admission_only() {
     assert_eq!(contract.kind, KIND_COMMENT);
     assert_eq!(contract.class, RadrootsEventClass::Regular);
     assert_eq!(contract.privacy, RadrootsEventPrivacy::Public);
-    assert_eq!(contract.author_role, RadrootsActorRole::Any);
+    assert_eq!(contract.required_author_role(), AuthorRole::Any);
     assert_eq!(contract.content_schema, RadrootsContentSchema::PlainText);
     assert_eq!(
         contract.authoring_policy,
@@ -1020,7 +1045,7 @@ fn nip09_deletion_request_contract_is_typed_and_admission_only() {
     assert_eq!(contract.kind, KIND_DELETION_REQUEST);
     assert_eq!(contract.class, RadrootsEventClass::Regular);
     assert_eq!(contract.privacy, RadrootsEventPrivacy::Public);
-    assert_eq!(contract.author_role, RadrootsActorRole::Any);
+    assert_eq!(contract.required_author_role(), AuthorRole::Any);
     assert_eq!(contract.content_schema, RadrootsContentSchema::PlainText);
     assert_eq!(
         contract.authoring_policy,

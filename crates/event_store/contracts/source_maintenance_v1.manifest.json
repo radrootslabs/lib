@@ -264,8 +264,8 @@
     {
       "role": "event_contract_registry_v7_authority",
       "path": "crates/event/src/contract/registry_v7.rs",
-      "byte_length": 155739,
-      "sha256": "64f5a67f8a54f364287210a3f717d9124bc1cb2b9c5fc67e9ff0e40acd7bd216",
+      "byte_length": 156426,
+      "sha256": "b24fd9cf75279dcd24971fba7d55df1a58f0fc773b68984528bd42e59b838086",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

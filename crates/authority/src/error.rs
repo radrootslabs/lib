@@ -35,7 +35,7 @@ pub enum RadrootsAuthorityError {
 
     ActorRoleUnsatisfied {
         contract_id: String,
-        required_role: radroots_event::contract::RadrootsActorRole,
+        required_role: radroots_event::contract::AuthorRole,
     },
 
     ActorPubkeyMismatch {
@@ -248,7 +248,7 @@ impl std::error::Error for RadrootsSignerError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::contract::RadrootsActorRole;
+    use radroots_event::contract::AuthorRole;
     use std::error::Error as _;
 
     #[test]
@@ -295,7 +295,7 @@ mod tests {
             (
                 RadrootsAuthorityError::ActorRoleUnsatisfied {
                     contract_id: "radroots.operational_listing.published.v1".to_owned(),
-                    required_role: RadrootsActorRole::Seller,
+                    required_role: AuthorRole::Seller,
                 },
                 "actor does not satisfy role Seller for contract `radroots.operational_listing.published.v1`",
             ),

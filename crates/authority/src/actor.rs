@@ -2,7 +2,7 @@
 
 use crate::RadrootsAuthorityError;
 use core::{fmt, str::FromStr};
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 use radroots_identity::PublicKey;
 
 #[cfg(not(feature = "std"))]
@@ -118,14 +118,14 @@ impl RadrootsActorSelector {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsActorResolutionRequest {
     selector: RadrootsActorSelector,
-    required_role: RadrootsActorRole,
+    required_role: AuthorRole,
     contract_id: Option<String>,
 }
 
 impl RadrootsActorResolutionRequest {
     pub fn new(
         selector: RadrootsActorSelector,
-        required_role: RadrootsActorRole,
+        required_role: AuthorRole,
         contract_id: Option<String>,
     ) -> Self {
         Self {
@@ -139,7 +139,7 @@ impl RadrootsActorResolutionRequest {
         &self.selector
     }
 
-    pub fn required_role(&self) -> RadrootsActorRole {
+    pub fn required_role(&self) -> AuthorRole {
         self.required_role
     }
 
@@ -151,7 +151,7 @@ impl RadrootsActorResolutionRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsActorContext {
     pubkey: PublicKey,
-    roles: BTreeSet<RadrootsActorRole>,
+    roles: BTreeSet<AuthorRole>,
     account_id: Option<RadrootsActorAccountId>,
     source: RadrootsActorSource,
 }
@@ -162,7 +162,7 @@ impl RadrootsActorContext {
         roles: I,
     ) -> Result<Self, RadrootsAuthorityError>
     where
-        I: IntoIterator<Item = RadrootsActorRole>,
+        I: IntoIterator<Item = AuthorRole>,
     {
         Self::with_provenance(pubkey, None, RadrootsActorSource::ExplicitPubkey, roles)
     }
@@ -173,7 +173,7 @@ impl RadrootsActorContext {
         roles: I,
     ) -> Result<Self, RadrootsAuthorityError>
     where
-        I: IntoIterator<Item = RadrootsActorRole>,
+        I: IntoIterator<Item = AuthorRole>,
     {
         Self::with_provenance(
             pubkey,
@@ -189,7 +189,7 @@ impl RadrootsActorContext {
         roles: I,
     ) -> Result<Self, RadrootsAuthorityError>
     where
-        I: IntoIterator<Item = RadrootsActorRole>,
+        I: IntoIterator<Item = AuthorRole>,
     {
         Self::with_provenance(
             pubkey,
@@ -205,7 +205,7 @@ impl RadrootsActorContext {
         roles: I,
     ) -> Result<Self, RadrootsAuthorityError>
     where
-        I: IntoIterator<Item = RadrootsActorRole>,
+        I: IntoIterator<Item = AuthorRole>,
     {
         Self::with_provenance(
             pubkey,
@@ -217,7 +217,7 @@ impl RadrootsActorContext {
 
     pub fn test<I>(pubkey: impl AsRef<str>, roles: I) -> Result<Self, RadrootsAuthorityError>
     where
-        I: IntoIterator<Item = RadrootsActorRole>,
+        I: IntoIterator<Item = AuthorRole>,
     {
         Self::with_provenance(pubkey, None, RadrootsActorSource::Test, roles)
     }
@@ -229,7 +229,7 @@ impl RadrootsActorContext {
         roles: I,
     ) -> Result<Self, RadrootsAuthorityError>
     where
-        I: IntoIterator<Item = RadrootsActorRole>,
+        I: IntoIterator<Item = AuthorRole>,
     {
         let pubkey = PublicKey::from_hex(pubkey.as_ref())
             .map_err(|_| RadrootsAuthorityError::InvalidActorPubkey)?;
@@ -245,7 +245,7 @@ impl RadrootsActorContext {
         &self.pubkey
     }
 
-    pub fn roles(&self) -> &BTreeSet<RadrootsActorRole> {
+    pub fn roles(&self) -> &BTreeSet<AuthorRole> {
         &self.roles
     }
 
@@ -257,17 +257,14 @@ impl RadrootsActorContext {
         self.source
     }
 
-    pub fn satisfies(&self, required_role: RadrootsActorRole) -> bool {
+    pub fn satisfies(&self, required_role: AuthorRole) -> bool {
         role_satisfies(&self.roles, required_role)
     }
 }
 
-pub fn role_satisfies(
-    actor_roles: &BTreeSet<RadrootsActorRole>,
-    required_role: RadrootsActorRole,
-) -> bool {
+pub fn role_satisfies(actor_roles: &BTreeSet<AuthorRole>, required_role: AuthorRole) -> bool {
     match required_role {
-        RadrootsActorRole::Any => true,
+        AuthorRole::Any => true,
         role => actor_roles.contains(&role),
     }
 }
@@ -284,37 +281,33 @@ mod tests {
     fn any_is_satisfied_by_any_actor_context() {
         let actor = RadrootsActorContext::test(VALID_PUBKEY, []).expect("actor");
 
-        assert!(actor.satisfies(RadrootsActorRole::Any));
+        assert!(actor.satisfies(AuthorRole::Any));
     }
 
     #[test]
     fn specific_roles_require_explicit_membership() {
-        let actor =
-            RadrootsActorContext::test(VALID_PUBKEY, [RadrootsActorRole::Farmer]).expect("actor");
+        let actor = RadrootsActorContext::test(VALID_PUBKEY, [AuthorRole::Farmer]).expect("actor");
 
-        assert!(actor.satisfies(RadrootsActorRole::Farmer));
-        assert!(!actor.satisfies(RadrootsActorRole::Seller));
+        assert!(actor.satisfies(AuthorRole::Farmer));
+        assert!(!actor.satisfies(AuthorRole::Seller));
     }
 
     #[test]
     fn farmer_does_not_globally_satisfy_seller() {
-        let actor =
-            RadrootsActorContext::test(VALID_PUBKEY, [RadrootsActorRole::Farmer]).expect("actor");
+        let actor = RadrootsActorContext::test(VALID_PUBKEY, [AuthorRole::Farmer]).expect("actor");
 
-        assert!(!actor.satisfies(RadrootsActorRole::Seller));
+        assert!(!actor.satisfies(AuthorRole::Seller));
     }
 
     #[test]
     fn multi_role_actors_satisfy_each_assigned_role() {
-        let actor = RadrootsActorContext::test(
-            VALID_PUBKEY,
-            [RadrootsActorRole::Farmer, RadrootsActorRole::Seller],
-        )
-        .expect("actor");
+        let actor =
+            RadrootsActorContext::test(VALID_PUBKEY, [AuthorRole::Farmer, AuthorRole::Seller])
+                .expect("actor");
 
-        assert!(actor.satisfies(RadrootsActorRole::Farmer));
-        assert!(actor.satisfies(RadrootsActorRole::Seller));
-        assert!(!actor.satisfies(RadrootsActorRole::Buyer));
+        assert!(actor.satisfies(AuthorRole::Farmer));
+        assert!(actor.satisfies(AuthorRole::Seller));
+        assert!(!actor.satisfies(AuthorRole::Buyer));
     }
 
     #[test]
@@ -322,7 +315,7 @@ mod tests {
         let actor = RadrootsActorContext::local_account(
             VALID_PUBKEY,
             "acct-field-01",
-            [RadrootsActorRole::Farmer],
+            [AuthorRole::Farmer],
         )
         .expect("actor");
 
@@ -330,7 +323,7 @@ mod tests {
         assert_eq!(actor.pubkey().to_hex(), VALID_PUBKEY);
         assert_eq!(
             actor.roles().iter().copied().collect::<Vec<_>>(),
-            vec![RadrootsActorRole::Farmer]
+            vec![AuthorRole::Farmer]
         );
         let account_id = actor.account_id().expect("account id");
         assert_eq!(account_id.as_str(), "acct-field-01");
@@ -339,9 +332,8 @@ mod tests {
 
     #[test]
     fn explicit_pubkey_context_has_no_account_id() {
-        let actor =
-            RadrootsActorContext::explicit_pubkey(VALID_PUBKEY, [RadrootsActorRole::Seller])
-                .expect("actor");
+        let actor = RadrootsActorContext::explicit_pubkey(VALID_PUBKEY, [AuthorRole::Seller])
+            .expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::ExplicitPubkey);
         assert_eq!(actor.account_id(), None);
@@ -349,8 +341,7 @@ mod tests {
 
     #[test]
     fn test_context_has_no_account_id() {
-        let actor =
-            RadrootsActorContext::test(VALID_PUBKEY, [RadrootsActorRole::Farmer]).expect("actor");
+        let actor = RadrootsActorContext::test(VALID_PUBKEY, [AuthorRole::Farmer]).expect("actor");
 
         assert_eq!(actor.source(), RadrootsActorSource::Test);
         assert_eq!(actor.account_id(), None);
@@ -358,18 +349,12 @@ mod tests {
 
     #[test]
     fn remote_signer_and_service_contexts_carry_account_ids() {
-        let remote = RadrootsActorContext::remote_signer(
-            VALID_PUBKEY,
-            "acct-remote",
-            [RadrootsActorRole::Buyer],
-        )
-        .expect("remote actor");
-        let service = RadrootsActorContext::service(
-            OTHER_VALID_PUBKEY,
-            "acct-service",
-            [RadrootsActorRole::Any],
-        )
-        .expect("service actor");
+        let remote =
+            RadrootsActorContext::remote_signer(VALID_PUBKEY, "acct-remote", [AuthorRole::Buyer])
+                .expect("remote actor");
+        let service =
+            RadrootsActorContext::service(OTHER_VALID_PUBKEY, "acct-service", [AuthorRole::Any])
+                .expect("service actor");
 
         assert_eq!(remote.source(), RadrootsActorSource::RemoteSigner);
         assert_eq!(
@@ -431,7 +416,7 @@ mod tests {
         let selector = RadrootsActorSelector::account_id("acct-field-01").expect("selector");
         let request = RadrootsActorResolutionRequest::new(
             selector,
-            RadrootsActorRole::Seller,
+            AuthorRole::Seller,
             Some("radroots.operational_listing.published.v1".to_owned()),
         );
 
@@ -439,7 +424,7 @@ mod tests {
             request.selector(),
             &RadrootsActorSelector::account_id("acct-field-01").expect("selector")
         );
-        assert_eq!(request.required_role(), RadrootsActorRole::Seller);
+        assert_eq!(request.required_role(), AuthorRole::Seller);
         assert_eq!(
             request.contract_id(),
             Some("radroots.operational_listing.published.v1")

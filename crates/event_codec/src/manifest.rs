@@ -7,11 +7,11 @@ use alloc::{
 
 use radroots_event::RADROOTS_EVENT_VERSION;
 use radroots_event::contract::{
-    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsActorRole, RadrootsContentSchema,
-    RadrootsContractFamily, RadrootsEventClass, RadrootsEventContract, RadrootsEventDiscriminator,
-    RadrootsEventPrivacy, RadrootsEventStability, RadrootsNostrStandard, RadrootsReducer,
-    RadrootsTagCardinality, RadrootsTagContract, RadrootsTagSemantic, RadrootsTagValueType,
-    all_event_contracts, event_contract_family, kind_contract,
+    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContentSchema, RadrootsContractFamily,
+    RadrootsEventClass, RadrootsEventContract, RadrootsEventDiscriminator, RadrootsEventPrivacy,
+    RadrootsEventStability, RadrootsNostrStandard, RadrootsReducer, RadrootsTagCardinality,
+    RadrootsTagContract, RadrootsTagSemantic, RadrootsTagValueType, all_event_contracts,
+    event_contract_family, kind_contract,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -166,7 +166,7 @@ fn manifest_entry(contract: &RadrootsEventContract) -> RadrootsKnowledgeContract
         standard: standard.to_string(),
         stability: stability_label(contract.stability).to_string(),
         privacy: privacy_label(contract.privacy).to_string(),
-        author_role: actor_role_label(contract.author_role).to_string(),
+        author_role: contract.required_author_role().as_str().to_string(),
         content_schema: content_schema_label(contract.content_schema).to_string(),
         payload_type: contract.payload_type.to_string(),
         discriminators: vec![discriminator_manifest(&contract.discriminator)],
@@ -341,20 +341,6 @@ fn privacy_label(value: RadrootsEventPrivacy) -> &'static str {
         RadrootsEventPrivacy::Encrypted => "encrypted",
         RadrootsEventPrivacy::LocalOnly => "local_only",
         RadrootsEventPrivacy::Secret => "secret",
-    }
-}
-
-fn actor_role_label(value: RadrootsActorRole) -> &'static str {
-    match value {
-        RadrootsActorRole::Any => "any",
-        RadrootsActorRole::Application => "application",
-        RadrootsActorRole::Buyer => "buyer",
-        RadrootsActorRole::Farmer => "farmer",
-        RadrootsActorRole::Member => "member",
-        RadrootsActorRole::Moderator => "moderator",
-        RadrootsActorRole::Relay => "relay",
-        RadrootsActorRole::Seller => "seller",
-        RadrootsActorRole::Service => "service",
     }
 }
 
