@@ -2,15 +2,15 @@ use super::*;
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
-    contract::RadrootsActorRole,
+    contract::AuthorRole,
     farm::RadrootsFarmRef,
-    ids::{RadrootsDTag, RadrootsInventoryBinId},
-    operational_listing::{
+    farm::resource_area::RadrootsResourceAreaRef,
+    id::{RadrootsDTag, RadrootsInventoryBinId},
+    listing::operational::{
         RadrootsOperationalListingAvailability, RadrootsOperationalListingBin,
         RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingProduct,
         RadrootsOperationalListingPublicLocation, RadrootsOperationalListingStatus,
     },
-    resource_area::RadrootsResourceAreaRef,
 };
 
 use crate::fixture_signer::{FixtureSigner, fixture_alice_pubkey, fixture_bob_pubkey};
@@ -28,7 +28,7 @@ fn seller_pubkey() -> &'static str {
 }
 
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
 }
 
 fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
@@ -238,7 +238,7 @@ async fn listing_prepared_plan_rejects_forged_state_before_signing_or_mutation()
     // safe representable substitution for both identity fields.
     let foreign_draft = RadrootsEventDraft::new(
         "radroots.social.geochat.v1",
-        radroots_event::kinds::KIND_GEOCHAT,
+        radroots_event::envelope::kind::KIND_GEOCHAT,
         plan.created_at().unix_seconds(),
         Vec::new(),
         "Foreign draft",
@@ -518,8 +518,7 @@ async fn listing_configured_local_signer_enqueues_publish_without_explicit_signe
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor");
+    let actor = RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor");
 
     let receipt = sdk
         .listings()

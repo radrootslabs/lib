@@ -1,5 +1,5 @@
 use radroots_authority::{RadrootsActorContext, RadrootsActorSource};
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 use serde::{Serialize, ser::SerializeStruct};
 
 pub(crate) struct SdkActorContextJson<'a>(pub(crate) &'a RadrootsActorContext);
@@ -36,17 +36,17 @@ impl serde::Serialize for SdkActorContextJson<'_> {
     }
 }
 
-fn actor_role_code(role: &RadrootsActorRole) -> &'static str {
+fn actor_role_code(role: &AuthorRole) -> &'static str {
     match role {
-        RadrootsActorRole::Any => "any",
-        RadrootsActorRole::Application => "application",
-        RadrootsActorRole::Buyer => "buyer",
-        RadrootsActorRole::Farmer => "farmer",
-        RadrootsActorRole::Member => "member",
-        RadrootsActorRole::Moderator => "moderator",
-        RadrootsActorRole::Relay => "relay",
-        RadrootsActorRole::Seller => "seller",
-        RadrootsActorRole::Service => "service",
+        AuthorRole::Any => "any",
+        AuthorRole::Application => "application",
+        AuthorRole::Buyer => "buyer",
+        AuthorRole::Farmer => "farmer",
+        AuthorRole::Member => "member",
+        AuthorRole::Moderator => "moderator",
+        AuthorRole::Relay => "relay",
+        AuthorRole::Seller => "seller",
+        AuthorRole::Service => "service",
     }
 }
 

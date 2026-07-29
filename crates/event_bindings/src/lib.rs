@@ -7,7 +7,8 @@ pub use model::{constants_module, kinds_module};
 #[cfg(test)]
 mod tests {
     use radroots_event::{
-        kinds, operational_listing::RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS,
+        envelope::kind as kinds,
+        listing::operational::RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS,
     };
 
     use super::{constants_module, kinds_module};

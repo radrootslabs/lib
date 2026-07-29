@@ -1,7 +1,7 @@
 #![cfg(feature = "knowledge")]
 
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-use radroots_event::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::RadrootsEventEnvelopeParts;
 use radroots_identity::PublicKey;
 use radroots_sdk::knowledge::prelude::*;
 use std::sync::LazyLock;

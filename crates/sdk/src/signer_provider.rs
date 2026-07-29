@@ -5,7 +5,7 @@ use radroots_authority::{
     authorize_signer_for_draft, sign_authorized_draft, validate_signed_event_matches_draft,
 };
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION,
     KIND_TRADE_PROPOSAL, KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
 };
@@ -628,9 +628,8 @@ fn signed_event_from_nip46_response(
                         reason: format!("remote signed event is invalid: {error}"),
                     }
                 })?;
-            signed_event
-                .verify_signature()
-                .map(|verified| verified.into_signed_event())
+            radroots_event_codec::verification::verify_nip01_event(signed_event.envelope().clone())
+                .map(|_| signed_event)
                 .map_err(|error| RadrootsSdkError::SignerProtocol {
                     mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),
                     reason: format!("remote signed event signature is invalid: {error}"),

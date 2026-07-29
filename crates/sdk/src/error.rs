@@ -6,7 +6,7 @@ use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(feature = "runtime")]
 use crate::transport::ReticulumBehavior;
 #[cfg(feature = "runtime")]
-use radroots_event::trade_validation::RadrootsOperationalListingValidationError;
+use radroots_event::trade::validation::RadrootsOperationalListingValidationError;
 #[cfg(feature = "runtime")]
 use serde_json::{Value, json};
 

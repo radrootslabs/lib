@@ -13,9 +13,9 @@ use core::fmt;
 
 pub use radroots_event::wire::RadrootsNip01EventWireParts;
 pub use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventRef,
     draft::{RadrootsDraftError, RadrootsEventDraft},
-    kinds::{
+    envelope::RadrootsEventEnvelope,
+    envelope::kind::{
         KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT,
         KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
         KIND_WIKI_MERGE_REQUEST, KIND_WIKI_REDIRECT,
@@ -37,6 +37,7 @@ pub use radroots_event::{
         RadrootsWikiMergeRequest, RadrootsWikiRedirect, normalize_wiki_d_tag,
         validate_knowledge_claim, validate_wiki_article, validate_wiki_d_tag,
     },
+    tag::RadrootsEventRef,
 };
 pub use radroots_event_codec::{
     RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION,

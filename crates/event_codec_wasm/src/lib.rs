@@ -1,55 +1,55 @@
 #![forbid(unsafe_code)]
 
 use radroots_blossom::{BlobDescriptor, BlobUrl, Error, MediaType, Sha256};
-use radroots_event::article::RadrootsArticle;
-use radroots_event::comment::{
-    RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
-    RadrootsNip22CommentParentReference, RadrootsNip22CommentRoot, RadrootsNip22EventRootReference,
+use radroots_event::envelope::{
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
 };
-use radroots_event::coop::RadrootsCoop;
-use radroots_event::document::RadrootsDocument;
 use radroots_event::farm::RadrootsFarm;
-use radroots_event::farm_crdt::RadrootsFarmCrdtChange;
-use radroots_event::farm_file::RadrootsFarmFileMetadata;
-use radroots_event::farm_workspace::RadrootsFarmWorkspaceManifest;
-use radroots_event::file_metadata::RadrootsFileMetadata;
-use radroots_event::follow::RadrootsFollow;
-use radroots_event::gift_wrap::RadrootsGiftWrap;
-use radroots_event::group::{
-    RadrootsGroupAdmins, RadrootsGroupCreateGroup, RadrootsGroupCreateInvite,
-    RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata,
-    RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest, RadrootsGroupMembers,
-    RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser, RadrootsGroupRoles,
-};
-use radroots_event::http_auth::RadrootsHttpAuth;
-use radroots_event::job_feedback::RadrootsJobFeedback;
-use radroots_event::job_request::RadrootsJobRequest;
-use radroots_event::job_result::RadrootsJobResult;
+use radroots_event::farm::coop::RadrootsCoop;
+use radroots_event::farm::crdt::RadrootsFarmCrdtChange;
+use radroots_event::farm::file::RadrootsFarmFileMetadata;
+use radroots_event::farm::plot::RadrootsPlot;
+use radroots_event::farm::workspace::RadrootsFarmWorkspaceManifest;
 use radroots_event::knowledge::{
     RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
     RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
-use radroots_event::list::RadrootsList;
-use radroots_event::list_set::RadrootsListSet;
+use radroots_event::listing::operational::RadrootsOperationalListing;
+use radroots_event::media::file_metadata::RadrootsFileMetadata;
 use radroots_event::media::{RadrootsAuthoredImage, RadrootsAuthoredImageError};
-use radroots_event::message::RadrootsMessage;
-use radroots_event::message_file::RadrootsMessageFile;
-use radroots_event::operational_listing::RadrootsOperationalListing;
-use radroots_event::plot::RadrootsPlot;
+use radroots_event::post::article::RadrootsArticle;
+use radroots_event::post::comment::{
+    RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
+    RadrootsNip22CommentParentReference, RadrootsNip22CommentRoot, RadrootsNip22EventRootReference,
+};
+use radroots_event::post::document::RadrootsDocument;
+use radroots_event::post::reaction::RadrootsReaction;
+use radroots_event::post::report::RadrootsReport;
+use radroots_event::post::repost::{RadrootsGenericRepost, RadrootsRepost};
 use radroots_event::post::{
     RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError,
     RadrootsAuthoredPostImage, RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
 };
-use radroots_event::reaction::RadrootsReaction;
-use radroots_event::relay_auth::RadrootsRelayAuth;
-use radroots_event::report::RadrootsReport;
-use radroots_event::repost::{RadrootsGenericRepost, RadrootsRepost};
-use radroots_event::seal::RadrootsSeal;
-use radroots_event::wire::RadrootsNip01EventWireParts;
-use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
+use radroots_event::social::follow::RadrootsFollow;
+use radroots_event::social::gift_wrap::RadrootsGiftWrap;
+use radroots_event::social::group::{
+    RadrootsGroupAdmins, RadrootsGroupCreateGroup, RadrootsGroupCreateInvite,
+    RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata,
+    RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest, RadrootsGroupMembers,
+    RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser, RadrootsGroupRoles,
 };
+use radroots_event::social::http_auth::RadrootsHttpAuth;
+use radroots_event::social::job_feedback::RadrootsJobFeedback;
+use radroots_event::social::job_request::RadrootsJobRequest;
+use radroots_event::social::job_result::RadrootsJobResult;
+use radroots_event::social::list::RadrootsList;
+use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::social::message::RadrootsMessage;
+use radroots_event::social::message_file::RadrootsMessageFile;
+use radroots_event::social::relay_auth::RadrootsRelayAuth;
+use radroots_event::social::seal::RadrootsSeal;
+use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::article::encode::article_build_tags;
 use radroots_event_codec::comment::authored::authored_nip22_comment_to_wire_parts;
 use radroots_event_codec::coop::encode::coop_build_tags;
@@ -242,7 +242,7 @@ where
 {
     event_type: &'static str,
     contract_id: &'static str,
-    event: &'a radroots_event::RadrootsEventEnvelope,
+    event: &'a radroots_event::envelope::RadrootsEventEnvelope,
     payload: &'a T,
 }
 
@@ -830,32 +830,25 @@ pub fn group_roles_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
 mod tests {
     use super::*;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
+    use radroots_event::envelope::kind::{
+        KIND_FARM_FILE_METADATA, KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE,
+        KIND_WIKI_ARTICLE,
+    };
+    use radroots_event::envelope::{
+        RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
+    };
     use radroots_event::farm::RadrootsFarmRef;
-    use radroots_event::farm_crdt::{
+    use radroots_event::farm::crdt::{
         RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtDocumentKind,
         RadrootsFarmSemanticKind,
     };
-    use radroots_event::farm_file::{
+    use radroots_event::farm::file::{
         RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource,
     };
-    use radroots_event::farm_workspace::{
+    use radroots_event::farm::workspace::{
         RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION, RADROOTS_FARM_WORKSPACE_SCHEMA,
         RadrootsFarmWorkspaceManifest, RadrootsFarmWorkspaceMediaServer, RadrootsFarmWorkspaceRef,
         RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
-    };
-    use radroots_event::group::{
-        RadrootsGroupAdmins, RadrootsGroupCreateGroup, RadrootsGroupCreateInvite,
-        RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata,
-        RadrootsGroupEditableMetadata, RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest,
-        RadrootsGroupMembers, RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser,
-        RadrootsGroupRole, RadrootsGroupRoles, RadrootsGroupUserRef,
-    };
-    use radroots_event::http_auth::RadrootsHttpAuth;
-    use radroots_event::job::JobInputType;
-    use radroots_event::job_request::{RadrootsJobInput, RadrootsJobParam};
-    use radroots_event::kinds::{
-        KIND_FARM_FILE_METADATA, KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE,
-        KIND_WIKI_ARTICLE,
     };
     use radroots_event::knowledge::{
         RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA,
@@ -867,16 +860,23 @@ mod tests {
         RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
         RadrootsWikiArticleVersionRef,
     };
-    use radroots_event::operational_listing::{
+    use radroots_event::listing::operational::{
         RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
     };
-    use radroots_event::relay_auth::RadrootsRelayAuth;
+    use radroots_event::social::group::{
+        RadrootsGroupAdmins, RadrootsGroupCreateGroup, RadrootsGroupCreateInvite,
+        RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata,
+        RadrootsGroupEditableMetadata, RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest,
+        RadrootsGroupMembers, RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser,
+        RadrootsGroupRole, RadrootsGroupRoles, RadrootsGroupUserRef,
+    };
+    use radroots_event::social::http_auth::RadrootsHttpAuth;
+    use radroots_event::social::job::JobInputType;
+    use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam};
+    use radroots_event::social::relay_auth::RadrootsRelayAuth;
     use radroots_event::social::{
         RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialFarmAnchor,
         RadrootsSocialLocation, RadrootsSocialMediaDimensions, RadrootsSocialTarget,
-    };
-    use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
     };
 
     fn sample_listing() -> RadrootsOperationalListing {
@@ -966,8 +966,8 @@ mod tests {
         }
     }
 
-    fn knowledge_event_ref(seed: char, kind: u32) -> radroots_event::RadrootsEventRef {
-        radroots_event::RadrootsEventRef {
+    fn knowledge_event_ref(seed: char, kind: u32) -> radroots_event::tag::RadrootsEventRef {
+        radroots_event::tag::RadrootsEventRef {
             id: synthetic_event_id(seed),
             author: radroots_identity::PublicKey::from_hex(&synthetic_pubkey('a'))
                 .expect("fixture public key"),

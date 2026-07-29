@@ -17,17 +17,16 @@ path = "src/main.rs"
 dto_bindgen_backend_ts = { workspace = true }
 dto_bindgen_core = { workspace = true }
 radroots_core_bindings = { path = "../../crates/core_bindings", version = "=0.1.0-alpha" }
-radroots_event = { workspace = true, features = ["dto-bindgen"] }
 radroots_event_bindings = { path = "../../crates/event_bindings", version = "=0.1.0-alpha" }
 radroots_event_index = { workspace = true, features = ["dto-bindgen"] }
 radroots_identity = { workspace = true }
 radroots_identity_bindings = { path = "../../crates/identity_bindings", version = "=0.1.0-alpha" }
 radroots_replica_schema_bindings = { path = "../../crates/replica_schema_bindings", version = "=0.1.0-alpha" }
 radroots_runtime_contract_v1 = { path = "../../crates/runtime_contract_v1", version = "=0.1.0-alpha" }
-radroots_trade_bindings = { path = "../../crates/trade_bindings", version = "=0.1.0-alpha" }
 flate2 = "1"
 serde_json = "1"
 serde = { workspace = true, features = ["derive"] }
+sha2 = { workspace = true }
 syn = { version = "2", features = ["full", "visit"] }
 tar = "0.4"
 tempfile = { workspace = true }

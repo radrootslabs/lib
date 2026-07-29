@@ -2,9 +2,9 @@ use super::*;
 use nostr::nips::nip44::{self, Version};
 use nostr::{EventBuilder, JsonUtil, Kind, Tag};
 use radroots_authority::RadrootsLocalEventSigner;
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 use radroots_event::draft::RadrootsEventDraft;
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CLASSIFIED_LISTING, KIND_COOP, KIND_FARM, TRADE_MUTATION_EVENT_KINDS,
 };
 use radroots_nostr::prelude::RadrootsNostrEvent;
@@ -47,7 +47,7 @@ fn client_keys() -> RadrootsNostrKeys {
 }
 
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(user_pubkey(), [RadrootsActorRole::Farmer]).expect("actor")
+    RadrootsActorContext::test(user_pubkey(), [AuthorRole::Farmer]).expect("actor")
 }
 
 fn frozen_draft() -> RadrootsEventDraft {
@@ -273,8 +273,8 @@ async fn local_key_provider_returns_progress_sink_errors_without_transport_state
     let signer = local_sdk_signer(user_keys());
     let draft = frozen_draft();
     let actor = actor();
-    let wrong_actor = RadrootsActorContext::test("a".repeat(64), [RadrootsActorRole::Farmer])
-        .expect("wrong actor");
+    let wrong_actor =
+        RadrootsActorContext::test("a".repeat(64), [AuthorRole::Farmer]).expect("wrong actor");
 
     assert!(matches!(
         signer
@@ -645,8 +645,8 @@ async fn myc_nip46_provider_reports_preflight_and_progress_sink_edges() {
     ));
     assert!(transport.published().is_empty());
 
-    let wrong_actor = RadrootsActorContext::test("a".repeat(64), [RadrootsActorRole::Farmer])
-        .expect("wrong actor");
+    let wrong_actor =
+        RadrootsActorContext::test("a".repeat(64), [AuthorRole::Farmer]).expect("wrong actor");
     let actor_error = signer
         .sign(RadrootsSdkSignRequest::new(
             "farm.publish",

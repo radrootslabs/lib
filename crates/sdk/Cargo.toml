@@ -37,7 +37,7 @@ nostr = ["radroots_event_codec/nostr"]
 knowledge = [
   "serde",
   "serde_json",
-  "radroots_event/knowledge-nip54",
+  "radroots_event/knowledge",
   "radroots_event_codec/contract-manifest",
   "radroots_event_codec/knowledge-nip54",
 ]
@@ -67,7 +67,6 @@ signer-adapters = [
   "dep:radroots_nostr_connect",
   "dep:radroots_nostr_signer",
   "dep:tokio",
-  "radroots_event/signature",
   "radroots_nostr/events",
 ]
 runtime = [

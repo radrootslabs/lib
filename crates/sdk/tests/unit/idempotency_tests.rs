@@ -1,6 +1,6 @@
 use super::{SdkIdempotencyKey, SdkTradeIdempotencyRecord};
 use crate::RadrootsSdkError;
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::id::RadrootsEventId;
 use radroots_identity::PublicKey;
 
 use crate::serializer_failure::assert_struct_serialize_error_paths;

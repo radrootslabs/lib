@@ -1,4 +1,7 @@
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts, farm::RadrootsFarm};
+use radroots_event::{
+    envelope::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts},
+    farm::RadrootsFarm,
+};
 use radroots_replica_schema::farm::IFarmFindMany;
 use radroots_replica_store::ReplicaSql;
 use radroots_replica_sync::{RadrootsReplicaIngestOutcome, radroots_replica_ingest_event};

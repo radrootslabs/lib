@@ -4,10 +4,10 @@ use futures::future::BoxFuture;
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
-    contract::RadrootsActorRole,
+    contract::AuthorRole,
     farm::RadrootsFarmRef,
-    ids::{RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId},
-    operational_listing::{
+    id::{RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId},
+    listing::operational::{
         RadrootsOperationalListing, RadrootsOperationalListingAvailability,
         RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
         RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
@@ -385,7 +385,7 @@ impl RadrootsRelayPublishAdapter for RecordingPublishAdapter {
 }
 
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
 }
 
 fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {

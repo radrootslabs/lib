@@ -1,6 +1,6 @@
 use super::{SdkActorContextJson, actor_role_code, actor_source_code};
 use radroots_authority::{RadrootsActorContext, RadrootsActorSource};
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 
 use crate::serializer_failure::assert_struct_serialize_error_paths;
 
@@ -8,18 +8,15 @@ const PUBKEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 #[test]
 fn actor_role_and_source_codes_cover_public_actor_taxonomy() {
-    assert_eq!(actor_role_code(&RadrootsActorRole::Any), "any");
-    assert_eq!(
-        actor_role_code(&RadrootsActorRole::Application),
-        "application"
-    );
-    assert_eq!(actor_role_code(&RadrootsActorRole::Buyer), "buyer");
-    assert_eq!(actor_role_code(&RadrootsActorRole::Farmer), "farmer");
-    assert_eq!(actor_role_code(&RadrootsActorRole::Member), "member");
-    assert_eq!(actor_role_code(&RadrootsActorRole::Moderator), "moderator");
-    assert_eq!(actor_role_code(&RadrootsActorRole::Relay), "relay");
-    assert_eq!(actor_role_code(&RadrootsActorRole::Seller), "seller");
-    assert_eq!(actor_role_code(&RadrootsActorRole::Service), "service");
+    assert_eq!(actor_role_code(&AuthorRole::Any), "any");
+    assert_eq!(actor_role_code(&AuthorRole::Application), "application");
+    assert_eq!(actor_role_code(&AuthorRole::Buyer), "buyer");
+    assert_eq!(actor_role_code(&AuthorRole::Farmer), "farmer");
+    assert_eq!(actor_role_code(&AuthorRole::Member), "member");
+    assert_eq!(actor_role_code(&AuthorRole::Moderator), "moderator");
+    assert_eq!(actor_role_code(&AuthorRole::Relay), "relay");
+    assert_eq!(actor_role_code(&AuthorRole::Seller), "seller");
+    assert_eq!(actor_role_code(&AuthorRole::Service), "service");
 
     assert_eq!(
         actor_source_code(RadrootsActorSource::LocalAccount),
@@ -42,7 +39,7 @@ fn actor_context_json_preserves_source_roles_and_account_id() {
     let actor = RadrootsActorContext::local_account(
         PUBKEY,
         "acct-1",
-        [RadrootsActorRole::Buyer, RadrootsActorRole::Seller],
+        [AuthorRole::Buyer, AuthorRole::Seller],
     )
     .expect("actor");
 
@@ -64,7 +61,7 @@ fn actor_context_json_reports_serializer_failures() {
     let actor = RadrootsActorContext::local_account(
         PUBKEY,
         "acct-1",
-        [RadrootsActorRole::Buyer, RadrootsActorRole::Seller],
+        [AuthorRole::Buyer, AuthorRole::Seller],
     )
     .expect("actor");
 

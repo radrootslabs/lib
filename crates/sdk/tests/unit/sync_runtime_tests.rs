@@ -22,12 +22,12 @@ use radroots_authority::{
     RadrootsActorContext, RadrootsEventSigner, RadrootsSignerError, RadrootsSignerIdentity,
 };
 #[cfg(feature = "radrootsd-execution")]
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::RadrootsEventId;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_event::kinds::KIND_FARM;
+use radroots_event::envelope::kind::KIND_FARM;
+use radroots_event::id::RadrootsEventId;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_identity::PublicKey;
@@ -134,11 +134,8 @@ impl RadrootsRelayPublishAdapter for UnusedPublishAdapter {
 
 #[cfg(feature = "radrootsd-execution")]
 fn radrootsd_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(
-        radrootsd_fixture_signer_pubkey(),
-        [RadrootsActorRole::Farmer],
-    )
-    .expect("actor")
+    RadrootsActorContext::test(radrootsd_fixture_signer_pubkey(), [AuthorRole::Farmer])
+        .expect("actor")
 }
 
 #[cfg(feature = "radrootsd-execution")]

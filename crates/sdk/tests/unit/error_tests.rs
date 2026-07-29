@@ -5,7 +5,7 @@ use super::{
 use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 use crate::transport::ReticulumBehavior;
 use radroots_authority::RadrootsAuthorityError;
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 use radroots_geocoder::{GeoNamesAssetFetcher, GeoNamesBlockingHttpFetcher, GeocoderError};
 use std::collections::BTreeSet;
 
@@ -34,7 +34,7 @@ fn authority_error_conversion_redacts_pubkey_mismatches_and_falls_back() {
 fn listing_and_store_errors_convert_to_sdk_error_classes() {
     let draft = RadrootsSdkError::from(
         radroots_trade::operational_listing::RadrootsOperationalListingEditError::ActorRoleUnsatisfied {
-            required_role: RadrootsActorRole::Seller,
+            required_role: AuthorRole::Seller,
         },
     );
     assert!(matches!(
@@ -56,7 +56,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
 
     let invalid_model = RadrootsSdkError::from(
         radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidModel(
-            radroots_event::trade_validation::RadrootsOperationalListingValidationError::MissingInventory,
+            radroots_event::trade::validation::RadrootsOperationalListingValidationError::MissingInventory,
         ),
     );
     assert!(matches!(

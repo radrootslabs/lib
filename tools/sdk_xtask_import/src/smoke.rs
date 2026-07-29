@@ -120,7 +120,7 @@ fn is_exact_crates_version(version: &str) -> bool {
 }
 
 const CONSUMER_MAIN: &str = r#"use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-use radroots_event::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::RadrootsEventEnvelopeParts;
 use radroots_sdk::knowledge::prelude::*;
 
 const CREATED_AT: u32 = 1_800_000_000;

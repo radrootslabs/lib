@@ -12,7 +12,7 @@ use crate::{
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use crate::{RadrootsdExecutionAuth, RadrootsdExecutionProfile};
 #[cfg(feature = "runtime")]
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::id::RadrootsEventId;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]

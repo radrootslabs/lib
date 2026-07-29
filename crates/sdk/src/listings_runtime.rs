@@ -11,9 +11,9 @@ use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
     draft::RadrootsEventDraft,
-    ids::{RadrootsClassifiedListingAddress, RadrootsEventId},
-    kinds::KIND_CLASSIFIED_LISTING,
-    operational_listing::RadrootsOperationalListing,
+    envelope::kind::KIND_CLASSIFIED_LISTING,
+    id::{RadrootsClassifiedListingAddress, RadrootsEventId},
+    listing::operational::RadrootsOperationalListing,
 };
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutboxEnqueueStatus;

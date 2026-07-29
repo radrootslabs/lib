@@ -2,9 +2,9 @@ use super::*;
 #[cfg(feature = "signer-adapters")]
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
-use radroots_event::kinds::{KIND_FARM, KIND_GEOCHAT};
+use radroots_event::envelope::kind::{KIND_FARM, KIND_GEOCHAT};
 use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 use std::sync::LazyLock;
@@ -281,8 +281,7 @@ async fn enqueue_signed_workflow_rejects_ephemeral_event_before_durable_commit()
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = ephemeral_draft_for(farmer_pubkey());
     let error = enqueue_signed_workflow(
         &sdk,
@@ -340,8 +339,7 @@ async fn enqueue_signed_workflow_rejects_invalid_signer_signature_without_storag
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-invalid-signature");
     let operation_kind = "workflow.invalid-signature.test.v1";
 
@@ -408,8 +406,7 @@ async fn workflow_idempotency_replays_original_receipt_and_conflicts_on_new_comm
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let signer = WorkflowSigner::new();
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-target-policy");
     let first_target_policy = TargetPolicy::try_nostr_relays(
@@ -523,8 +520,7 @@ async fn enqueue_signed_workflow_maps_no_wait_directly_and_allows_local_only_pro
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let signer = WorkflowSigner::new();
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-no-wait");
 
@@ -597,8 +593,7 @@ async fn enqueue_signed_workflow_rejects_missing_explicit_idempotency_key_withou
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-missing-idempotency");
 
     let error = match enqueue_signed_workflow(
@@ -648,8 +643,7 @@ async fn enqueue_signed_workflow_stores_signed_event_and_reports_idempotency_con
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let signer = WorkflowSigner::new();
     let first_draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-success");
     let idempotency_key =
@@ -753,8 +747,7 @@ async fn enqueue_configured_signed_workflow_uses_sdk_signer_provider() {
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for_d_tag(farmer_pubkey(), "workflow-configured");
 
     let receipt = enqueue_configured_signed_workflow(
@@ -794,8 +787,7 @@ async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() 
         0
     );
     sdk._outbox.pool().close().await;
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
         operation_kind: "workflow.test.v1",
@@ -816,8 +808,7 @@ async fn enqueue_signed_workflow_reports_runtime_pool_failure_before_mutation() 
 
 #[tokio::test]
 async fn enqueue_signed_workflow_reports_store_failures() {
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let closed_store_sdk = crate::RadrootsClient::builder()
         .transport_profile(nostr_profile("wss://relay.example.com"))
@@ -852,8 +843,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
         operation_kind: "workflow.test.v1",
@@ -872,8 +862,7 @@ async fn enqueue_signed_workflow_reports_clock_failures() {
 #[tokio::test]
 async fn enqueue_signed_workflow_rejects_transport_profile_targets_without_radrootsd_execution() {
     let sdk = crate::RadrootsClient::builder().build().await.expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
     let draft = frozen_draft_for(farmer_pubkey());
     let request = SdkWorkflowEnqueueRequest {
         operation_kind: "workflow.test.v1",

@@ -5,12 +5,12 @@ use crate::{
 };
 use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_event::{
-    contract::RadrootsActorRole,
-    ids::{
+    contract::AuthorRole,
+    envelope::kind::TRADE_MUTATION_EVENT_KINDS,
+    id::{
         RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
         RadrootsTradeId,
     },
-    kinds::TRADE_MUTATION_EVENT_KINDS,
     trade::{
         RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES,
         RADROOTS_TRADE_MUTATION_CONTRACT_IDS, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
@@ -112,11 +112,11 @@ async fn trade_capabilities_report_canonical_release_product_surface() {
 }
 
 fn buyer_actor(buyer_pubkey: &str) -> RadrootsActorContext {
-    RadrootsActorContext::test(buyer_pubkey, [RadrootsActorRole::Buyer]).expect("buyer")
+    RadrootsActorContext::test(buyer_pubkey, [AuthorRole::Buyer]).expect("buyer")
 }
 
 fn seller_actor(seller_pubkey: &str) -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey, [RadrootsActorRole::Seller]).expect("seller")
+    RadrootsActorContext::test(seller_pubkey, [AuthorRole::Seller]).expect("seller")
 }
 
 fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateTermsV1 {

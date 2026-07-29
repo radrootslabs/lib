@@ -20,8 +20,8 @@ use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
     draft::RadrootsEventDraft,
-    ids::{RadrootsEventId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId},
-    kinds::TRADE_MUTATION_EVENT_KINDS,
+    envelope::kind::TRADE_MUTATION_EVENT_KINDS,
+    id::{RadrootsEventId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId},
     trade::{
         RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES, RADROOTS_TRADE_MUTATION_CONTRACT_IDS,
         RADROOTS_TRADE_SCHEMA_VERSION, RadrootsTradeDecisionV1, RadrootsTradeMutationBodyV1,

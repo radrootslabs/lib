@@ -7,9 +7,9 @@ use crate::{
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event::{
-    RadrootsEventKind, RadrootsEventKindClass,
     draft::{RadrootsEventDraft, RadrootsSignedEvent},
-    ids::RadrootsEventId,
+    envelope::{RadrootsEventKind, RadrootsEventKindClass},
+    id::RadrootsEventId,
 };
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventPersistence, RadrootsEventStoreError,
@@ -137,7 +137,8 @@ async fn enqueue_signed_workflow_event(
     signed_event: RadrootsSignedEvent,
     delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
-    if radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS.contains(&request.frozen_draft.kind_u32())
+    if radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS
+        .contains(&request.frozen_draft.kind_u32())
     {
         return enqueue_signed_trade_workflow_event(sdk, request, signed_event, delivery_plan)
             .await;
@@ -978,7 +979,9 @@ fn frozen_draft_json(frozen_draft: &RadrootsEventDraft) -> Result<String, Radroo
 }
 
 fn mutation_id_from_draft(frozen_draft: &RadrootsEventDraft) -> Option<String> {
-    if !radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS.contains(&frozen_draft.kind_u32()) {
+    if !radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS
+        .contains(&frozen_draft.kind_u32())
+    {
         return None;
     }
     radroots_event::trade::trade_mutation_from_canonical_content(frozen_draft.content())

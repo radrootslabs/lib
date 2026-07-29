@@ -1,8 +1,9 @@
-pub use radroots_trade as upstream;
-
-pub mod dto;
-
-pub use dto::dto_roots;
+//! Private inventory for the quarantined predecessor trade bindings.
+//!
+//! The authenticated TypeScript snapshot remains owned by the SDK generator
+//! until Steps 261-268 replace it from protocol and codec contracts. This
+//! crate intentionally does not activate code generation in a public runtime
+//! crate.
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TradeTypeDisposition {
@@ -123,20 +124,7 @@ const fn json_number_safe_count(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        TRADE_LARGE_INTEGER_POLICIES, TRADE_TYPE_INVENTORY, TradeTypeDisposition, dto_roots,
-    };
-
-    #[test]
-    fn trade_dto_roots_build_registry() {
-        let registry = dto_bindgen_core::build_registry(dto_roots());
-
-        assert!(
-            !registry.has_errors(),
-            "trade binding registry has diagnostics: {:?}",
-            registry.diagnostics
-        );
-    }
+    use super::{TRADE_LARGE_INTEGER_POLICIES, TRADE_TYPE_INVENTORY, TradeTypeDisposition};
 
     #[test]
     fn trade_type_inventory_is_deterministic() {

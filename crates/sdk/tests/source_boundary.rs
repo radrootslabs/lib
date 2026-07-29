@@ -88,7 +88,7 @@ fn active_sources_do_not_import_retired_listing_contracts() {
     for path in active_source_files() {
         let source = read_source(&path);
         for forbidden in [
-            "radroots_event::listing",
+            "radroots_event::operational_listing",
             "radroots_trade::listing",
             "RadrootsListingAddress",
             "KIND_LISTING",

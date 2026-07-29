@@ -3,11 +3,11 @@
 use radroots_authority::RadrootsActorContext;
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
-    contract::RadrootsActorRole,
+    contract::AuthorRole,
+    envelope::kind::KIND_CLASSIFIED_LISTING,
     farm::RadrootsFarmRef,
-    ids::{RadrootsDTag, RadrootsInventoryBinId},
-    kinds::KIND_CLASSIFIED_LISTING,
-    operational_listing::{
+    id::{RadrootsDTag, RadrootsInventoryBinId},
+    listing::operational::{
         RadrootsOperationalListing, RadrootsOperationalListingAvailability,
         RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
         RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
@@ -62,11 +62,11 @@ fn other_pubkey() -> &'static str {
 }
 
 fn actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Seller]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
 }
 
 fn non_seller_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(seller_pubkey(), [RadrootsActorRole::Buyer]).expect("actor")
+    RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Buyer]).expect("actor")
 }
 
 fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {

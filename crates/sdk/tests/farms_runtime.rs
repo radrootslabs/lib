@@ -2,10 +2,10 @@
 
 use radroots_authority::RadrootsActorContext;
 use radroots_event::{
-    contract::RadrootsActorRole,
+    contract::AuthorRole,
+    envelope::kind::{KIND_FARM, KIND_PROFILE},
     farm::RadrootsFarm,
-    ids::RadrootsAddressableCoordinate,
-    kinds::{KIND_FARM, KIND_PROFILE},
+    id::RadrootsAddressableCoordinate,
 };
 use radroots_event_store::RadrootsEventStore;
 use radroots_outbox::{
@@ -53,11 +53,11 @@ fn other_pubkey() -> &'static str {
 }
 
 fn farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor")
+    RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor")
 }
 
 fn non_farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Buyer]).expect("actor")
+    RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Buyer]).expect("actor")
 }
 
 fn farm(d_tag: &str, name: &str) -> RadrootsFarm {

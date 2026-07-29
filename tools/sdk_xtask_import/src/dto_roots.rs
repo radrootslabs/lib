@@ -55,16 +55,8 @@ pub const DTO_PACKAGE_ROOTS: &[DtoPackageRootSet] = &[
         roots: core_roots,
     },
     DtoPackageRootSet {
-        package_key: "event",
-        roots: event_roots,
-    },
-    DtoPackageRootSet {
         package_key: "event_index",
         roots: event_index_roots,
-    },
-    DtoPackageRootSet {
-        package_key: "trade",
-        roots: trade_roots,
     },
 ];
 
@@ -164,23 +156,8 @@ const TRADE_EXTERNAL_OVERRIDES: &[DtoExternalOverride] = &[
 
 const TRADE_REQUIRED_EXTERNAL_PACKAGE_IMPORTS: &[&str] =
     &[CORE_BINDINGS_PACKAGE_NAME, EVENT_BINDINGS_PACKAGE_NAME];
-const RETIRED_ORDER_EVENT_DTO_ROOTS: &[&str] = &[
-    "RadrootsOrderCancellation",
-    "RadrootsOrderDecision",
-    "RadrootsOrderDecisionOutcome",
-    "RadrootsOrderEconomicActor",
-    "RadrootsOrderEconomicEffect",
-    "RadrootsOrderEconomicItem",
-    "RadrootsOrderEconomicLine",
-    "RadrootsOrderEconomicLineKind",
-    "RadrootsOrderEconomicTotals",
-    "RadrootsOrderEconomics",
-    "RadrootsOrderEventType",
-    "RadrootsOrderInventoryCommitment",
-    "RadrootsOrderItem",
-    "RadrootsOrderPricingBasis",
-    "RadrootsOrderRequest",
-];
+const EVENT_BINDINGS_TYPES_TS: &str =
+    include_str!("../../../packages/event-bindings/src/generated/types.ts");
 
 pub fn package_root_set(package_key: &str) -> Option<&'static DtoPackageRootSet> {
     DTO_PACKAGE_ROOTS
@@ -201,15 +178,6 @@ pub fn core_types_module() -> Result<DtoTypesModule, String> {
     ))
 }
 
-pub fn event_types_module() -> Result<DtoTypesModule, String> {
-    let root_set = package_root_set("event").ok_or_else(|| "missing event DTO roots".to_owned())?;
-    let registry = root_set.registry();
-    let options = core_import_options(DtoRegistryRenderOptions::default())?;
-    let rendered = render_registry_types(&registry, &options)?;
-    let rendered = with_additional_type_imports(rendered, CORE_BINDINGS_PACKAGE_NAME, ["Discount"]);
-    Ok(with_event_sdk_wrappers(rendered))
-}
-
 pub fn event_index_types_module() -> Result<DtoTypesModule, String> {
     let root_set = package_root_set("event_index")
         .ok_or_else(|| "missing event-index DTO roots".to_owned())?;
@@ -225,41 +193,12 @@ pub fn replica_schema_types_module() -> Result<DtoTypesModule, String> {
     )
 }
 
-pub fn trade_types_module() -> Result<DtoTypesModule, String> {
-    let root_set = package_root_set("trade").ok_or_else(|| "missing trade DTO roots".to_owned())?;
-    let registry = root_set.registry();
-    let options = trade_import_options(&registry, DtoRegistryRenderOptions::default())?;
-    let rendered = render_registry_types(&registry, &options)?;
-    validate_external_override_usage(&rendered, TRADE_EXTERNAL_OVERRIDES)?;
-    Ok(rendered)
-}
-
 fn core_roots() -> Vec<RootDescriptor> {
     radroots_core_bindings::dto_roots()
 }
 
-fn event_roots() -> Vec<RootDescriptor> {
-    radroots_event::dto::dto_roots()
-        .into_iter()
-        .filter(|root| !retired_order_event_dto_root(root))
-        .collect()
-}
-
 fn event_index_roots() -> Vec<RootDescriptor> {
     radroots_event_index::dto::dto_roots().into_iter().collect()
-}
-
-fn trade_roots() -> Vec<RootDescriptor> {
-    radroots_trade_bindings::dto_roots()
-}
-
-fn retired_order_event_dto_root(root: &RootDescriptor) -> bool {
-    let type_name = root
-        .rust_type_name
-        .rsplit("::")
-        .next()
-        .unwrap_or(root.rust_type_name);
-    RETIRED_ORDER_EVENT_DTO_ROOTS.contains(&type_name)
 }
 
 fn core_import_options(
@@ -313,7 +252,7 @@ fn generated_external_package_exports() -> Result<BTreeMap<&'static str, BTreeSe
         ),
         (
             EVENT_BINDINGS_PACKAGE_KEY,
-            type_exports(event_types_module()?.body_ts()),
+            type_exports(EVENT_BINDINGS_TYPES_TS),
         ),
     ]))
 }
@@ -569,11 +508,11 @@ mod tests {
     use super::{
         CORE_BINDINGS_PACKAGE_KEY, CORE_BINDINGS_PACKAGE_NAME, DTO_PACKAGE_ROOTS,
         DtoExternalOverride, MANUAL_DESCRIPTOR_FAMILIES, SDK_LOCAL_WRAPPER_ALLOWANCES,
-        event_override, imported_type_inventory, package_root_set, trade_import_options,
-        type_exports, validate_external_override_target, validate_external_override_usage,
+        event_override, imported_type_inventory, package_root_set, type_exports,
+        validate_external_override_target, validate_external_override_usage,
         with_additional_type_imports,
     };
-    use dto_bindgen_backend_ts::{DtoRegistryRenderOptions, DtoTypesModule};
+    use dto_bindgen_backend_ts::DtoTypesModule;
 
     const CORE_BINDINGS_TYPES_TS: &str =
         include_str!("../../../packages/core-bindings/src/generated/types.ts");
@@ -781,9 +720,9 @@ mod tests {
     #[test]
     fn package_roots_are_explicit_not_discovered() {
         assert!(package_root_set("core").is_some());
-        assert!(package_root_set("event").is_some());
         assert!(package_root_set("event_index").is_some());
-        assert!(package_root_set("trade").is_some());
+        assert!(package_root_set("event").is_none());
+        assert!(package_root_set("trade").is_none());
     }
 
     #[test]
@@ -803,14 +742,6 @@ mod tests {
                 .shape_family
                 .contains("marketplace, query, projection")
         }));
-    }
-
-    #[test]
-    fn trade_external_override_targets_resolve_to_generated_exports() {
-        let registry = package_root_set("trade").expect("trade roots").registry();
-
-        trade_import_options(&registry, DtoRegistryRenderOptions::default())
-            .expect("trade external overrides validate");
     }
 
     #[test]

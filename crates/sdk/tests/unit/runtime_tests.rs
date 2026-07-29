@@ -213,9 +213,9 @@ fn manifest() -> SdkBackupManifest {
 
 fn private_farm_location_record() -> crate::private_store::SdkPrivateFarmLocationRecord {
     crate::private_store::SdkPrivateFarmLocationRecord {
-        farm_addr: radroots_event::ids::RadrootsAddressableCoordinate::parse(format!(
+        farm_addr: radroots_event::id::RadrootsAddressableCoordinate::parse(format!(
             "{}:{}:{}",
-            radroots_event::kinds::KIND_FARM,
+            radroots_event::envelope::kind::KIND_FARM,
             "a".repeat(64),
             "AAAAAAAAAAAAAAAAAAAAAA"
         ))
@@ -1978,7 +1978,7 @@ async fn restore_archive_private_failures_cover_staging_and_verification_edges()
     let populated_event_keys = radroots_nostr::prelude::RadrootsNostrKeys::generate();
     let populated_event_draft = radroots_event::draft::RadrootsEventDraft::new(
         "radroots.farm.profile.v1",
-        radroots_event::kinds::KIND_FARM,
+        radroots_event::envelope::kind::KIND_FARM,
         1_700_000_002,
         vec![vec!["d".to_owned(), "backup-fixture".to_owned()]],
         "{}",

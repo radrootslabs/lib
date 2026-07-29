@@ -1,9 +1,9 @@
 use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-use radroots_event::contract::RadrootsActorRole;
+use radroots_event::contract::AuthorRole;
 use radroots_event::farm::RadrootsFarmRef;
-use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use radroots_event::operational_listing::{
+use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::listing::operational::{
     RadrootsOperationalListing, RadrootsOperationalListingAvailability,
     RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
     RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .signer_provider(RadrootsSdkSignerProvider::LocalKey(signer))
         .build()
         .await?;
-    let actor = RadrootsActorContext::test(seller.as_str(), [RadrootsActorRole::Seller])?;
+    let actor = RadrootsActorContext::test(seller.as_str(), [AuthorRole::Seller])?;
     let listing = sample_listing(seller.as_str());
     let prepare_request = ListingPreparePublishRequest::new(actor.clone(), listing);
     let target_policy = TargetPolicy::try_nostr_relays([RELAY], NostrRelayUrlPolicy::Public)?;

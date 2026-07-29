@@ -16,7 +16,7 @@ fn farmer_pubkey() -> &'static str {
 }
 
 fn farmer_actor() -> RadrootsActorContext {
-    RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor")
+    RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor")
 }
 
 fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
@@ -119,7 +119,7 @@ async fn fixture_geocoder(tempdir: &tempfile::TempDir, feature_name: Option<&str
 fn farm_publish_plan_rejects_invalid_draft_tags() {
     let actor = RadrootsActorContext::test(
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        [RadrootsActorRole::Farmer],
+        [AuthorRole::Farmer],
     )
     .expect("actor");
     let farm = RadrootsFarm {
@@ -530,7 +530,7 @@ async fn farm_prepared_plan_rejects_forged_state_before_signing_or_mutation() {
     // safe representable substitution for both identity fields.
     let foreign_draft = RadrootsEventDraft::new(
         "radroots.social.geochat.v1",
-        radroots_event::kinds::KIND_GEOCHAT,
+        radroots_event::envelope::kind::KIND_GEOCHAT,
         plan.created_at().unix_seconds(),
         Vec::new(),
         "Foreign draft",
@@ -756,8 +756,7 @@ async fn farm_configured_local_signer_enqueues_publish_without_explicit_signer()
         .build()
         .await
         .expect("sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
 
     let receipt = sdk
         .farms()
@@ -789,8 +788,7 @@ async fn farm_configured_enqueue_reports_prepare_and_signer_errors() {
         .build()
         .await
         .expect("configured sdk");
-    let actor =
-        RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Farmer]).expect("actor");
+    let actor = RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor");
 
     assert!(matches!(
         configured_sdk
@@ -922,8 +920,8 @@ async fn farm_private_location_default_client_and_lookup_report_store_edges() {
         farm_addr(&actor, FARM_B_D_TAG).expect("farm b addr")
     );
 
-    let non_farmer_actor = RadrootsActorContext::test(farmer_pubkey(), [RadrootsActorRole::Buyer])
-        .expect("buyer actor");
+    let non_farmer_actor =
+        RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Buyer]).expect("buyer actor");
     assert!(matches!(
         sdk.farms()
             .clear_private_location(FarmPrivateLocationClearRequest::new(

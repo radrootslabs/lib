@@ -1,8 +1,8 @@
 #![cfg(feature = "runtime")]
 
 use crate::RadrootsSdkError;
-use radroots_event::ids::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts};
-use radroots_event::kinds::KIND_FARM;
+use radroots_event::envelope::kind::KIND_FARM;
+use radroots_event::id::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts};
 use radroots_event::trade::RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES;
 use radroots_protected_store::{RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope};
 use radroots_secret_vault::{RadrootsSecretKeyWrapping, RadrootsSecretVaultAccessError};

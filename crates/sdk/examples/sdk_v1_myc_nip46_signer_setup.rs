@@ -1,4 +1,4 @@
-use radroots_event::kinds::KIND_TRADE_PROPOSAL;
+use radroots_event::envelope::kind::KIND_TRADE_PROPOSAL;
 use radroots_nostr::prelude::{RadrootsNostrEvent, RadrootsNostrKeys};
 use radroots_nostr_connect::prelude::{
     RadrootsNostrConnectClientTarget, RadrootsNostrConnectError,

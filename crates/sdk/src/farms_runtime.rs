@@ -15,12 +15,12 @@ use crate::{
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
-    contract::RadrootsActorRole,
+    contract::AuthorRole,
     draft::RadrootsEventDraft,
+    envelope::kind::KIND_FARM,
     farm::{RadrootsFarm, RadrootsFarmPublicLocation},
-    ids::{RadrootsAddressableCoordinate, RadrootsEventId},
-    kinds::KIND_FARM,
-    operational_listing::RadrootsOperationalListingPublicLocation,
+    id::{RadrootsAddressableCoordinate, RadrootsEventId},
+    listing::operational::RadrootsOperationalListingPublicLocation,
 };
 #[cfg(feature = "runtime")]
 #[cfg(feature = "runtime")]
@@ -840,7 +840,7 @@ fn require_farmer_actor(
     actor: &RadrootsActorContext,
     operation: &'static str,
 ) -> Result<(), RadrootsSdkError> {
-    if actor.satisfies(RadrootsActorRole::Farmer) {
+    if actor.satisfies(AuthorRole::Farmer) {
         Ok(())
     } else {
         Err(RadrootsSdkError::UnauthorizedActor {
