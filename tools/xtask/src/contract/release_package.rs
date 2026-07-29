@@ -602,7 +602,7 @@ fn extract_and_validate_archive(
             extra.join(", ")
         ));
     }
-    for required in ["Cargo.toml", "Cargo.toml.orig", "README"] {
+    for required in ["Cargo.toml", "Cargo.toml.orig", "README.md"] {
         if !archived_files.contains(required) {
             return Err(format!(
                 "package archive for {package} is missing {required}"
@@ -1228,7 +1228,7 @@ version = "=1.0.0-alpha.1"
         .expect("write Cargo manifest");
         fs::write(package_root.join("Cargo.toml.orig"), "original")
             .expect("write original manifest");
-        fs::write(package_root.join("README"), "readme").expect("write README");
+        fs::write(package_root.join("README.md"), "readme").expect("write README");
         fs::write(package_root.join("src/lib.rs"), "pub fn fixture() {}").expect("write source");
         let archive_path = root.path().join("radroots_fixture-1.0.0.crate");
         let status = Command::new("tar")
@@ -1244,7 +1244,7 @@ version = "=1.0.0-alpha.1"
         let expected = BTreeSet::from([
             "Cargo.toml".to_owned(),
             "Cargo.toml.orig".to_owned(),
-            "README".to_owned(),
+            "README.md".to_owned(),
             "src/lib.rs".to_owned(),
         ]);
         let destination = root.path().join("extracted");
@@ -1257,7 +1257,7 @@ version = "=1.0.0-alpha.1"
         )
         .expect("extract exact archive");
         let contents =
-            fs::read_to_string(destination.join("README")).expect("read extracted README");
+            fs::read_to_string(destination.join("README.md")).expect("read extracted README");
         assert_eq!(contents, "readme");
     }
 
