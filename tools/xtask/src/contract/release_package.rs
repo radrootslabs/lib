@@ -816,16 +816,14 @@ fn validate_normalized_manifest(
             "normalized manifest for {expected_package} has wrong package identity"
         ));
     }
-    let publish = package
-        .get("publish")
-        .and_then(toml::Value::as_array)
-        .ok_or_else(|| format!("normalized manifest for {expected_package} has no publish list"))?;
-    let expected_publish = if publication_frozen {
-        Vec::new()
-    } else {
-        vec![toml::Value::String("crates-io".to_owned())]
+    let publish_matches = match package.get("publish") {
+        Some(toml::Value::Boolean(false)) if publication_frozen => true,
+        Some(toml::Value::Array(registries)) if !publication_frozen => {
+            registries.as_slice() == [toml::Value::String("crates-io".to_owned())]
+        }
+        _ => false,
     };
-    if publish != &expected_publish {
+    if !publish_matches {
         return Err(format!(
             "normalized manifest for {expected_package} has publish authority inconsistent with the publication freeze"
         ));
@@ -1203,12 +1201,12 @@ version = "=1.0.0-alpha.1"
     }
 
     #[test]
-    fn frozen_normalized_manifest_requires_an_empty_publish_list() {
+    fn frozen_normalized_manifest_requires_publish_false() {
         let root = tempfile::tempdir().expect("temporary manifest root");
         let manifest = root.path().join("Cargo.toml");
         fs::write(
             &manifest,
-            "[package]\nname = 'radroots_public'\nversion = '0.1.0-alpha'\npublish = []\n",
+            "[package]\nname = 'radroots_public'\nversion = '0.1.0-alpha'\npublish = false\n",
         )
         .expect("write frozen manifest");
         let public = BTreeSet::from(["radroots_public".to_owned()]);
