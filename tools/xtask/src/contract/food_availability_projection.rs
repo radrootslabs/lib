@@ -3906,6 +3906,11 @@ mod tests {
             fs::read_to_string(&executor_path).expect("read successor FoodAvailability executor");
         let predecessor_executor = successor_executor
             .replace(
+                "use radroots_event::food::availability::FoodIdentifier;",
+                "use radroots_event::food_availability::RadrootsFoodIdentifier;",
+            )
+            .replace("FoodIdentifier::parse", "RadrootsFoodIdentifier::parse")
+            .replace(
                 ".map(|projection| projection.event_id().to_hex())",
                 ".map(|projection| projection.event_id().as_str())",
             )

@@ -91,7 +91,7 @@ const EVENT_STORE_STORE_ROOT_BASELINE_SHA256: &str =
 const EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256: &str =
     "69f3c730f8a4f3a4af0028c74f6903126def01ceb63eed8a173e696ce291dc09";
 const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
-    "82e48537344777e00a72c4d93b20d66c7afd5cc5ffd25aa5ae3717b4bbd2f3ae";
+    "7fa8fdbea6ce9a84486d238954cdb19d500dccfe727e3dd8434b6711db6330b1";
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
     "8c29ceccb06abc94279db3257d52e14ad721e2eb302e54fbf26f8856d0db0b53";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
@@ -1331,11 +1331,11 @@ const SOURCE_ROUTE_WITNESS_SPECS: &[SourceRouteWitnessSpec] = &[
         uses: &[
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "draft::EventDraft as EventDraft",
+                path: "draft::EventDraft",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "draft::SignedEvent as SignedEvent",
+                path: "draft::SignedEvent",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
@@ -1343,11 +1343,11 @@ const SOURCE_ROUTE_WITNESS_SPECS: &[SourceRouteWitnessSpec] = &[
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "envelope::EventKind as EventKind",
+                path: "envelope::EventKind",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "envelope::EventTag as EventTag",
+                path: "envelope::EventTag",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
@@ -2775,7 +2775,7 @@ fn describe_frozen_source(
     workspace_root: &Path,
     spec: FrozenSourceSpec,
 ) -> Result<FrozenSourceDescriptor, String> {
-    let bytes = read_regular_file(workspace_root, spec.path)?;
+    let bytes = read_regular_file(workspace_root, successor_source_path(spec.path))?;
     describe_frozen_source_bytes(spec, &bytes)
 }
 
@@ -2789,7 +2789,13 @@ fn describe_frozen_source_bytes(
             .map_err(|error| format!("{} canonical source must be UTF-8: {error}", spec.path))?,
     )
     .map_err(|error| format!("parse canonical {} source: {error}", spec.path))?;
-    validate_compiler_macro_inputs(spec.path, &file, &[])?;
+    let expected_compiler_macro_inputs = match spec.path {
+        "crates/event/src/contract.rs" => {
+            vec![r#"env!("CARGO_PKG_VERSION")"#.to_owned()]
+        }
+        _ => Vec::new(),
+    };
+    validate_compiler_macro_inputs(spec.path, &file, &expected_compiler_macro_inputs)?;
     Ok(FrozenSourceDescriptor {
         role: spec.role.to_owned(),
         path: spec.path.to_owned(),
@@ -9451,8 +9457,8 @@ fn validate_post_core_extension_source(relative: &str, bytes: &[u8]) -> Result<(
         "super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult",
         "crate::error::RadrootsEventStoreError",
         "crate::model::RadrootsEventIngest",
-        "radroots_event::id::TradeCandidateId",
-        "radroots_event::id::TradeMutationId",
+        "radroots_event::id::CandidateId",
+        "radroots_event::id::MutationId",
         "radroots_event::trade::RADROOTS_TRADE_MUTATION_CONTRACT_IDS",
         "radroots_event::trade::SellerReservationAssertionV1",
         "radroots_event::trade::TradeDecisionV1",
@@ -9600,8 +9606,8 @@ fn validate_post_core_storage_source(
         "crate::error::RadrootsEventStoreError",
         "crate::model::RadrootsTransportObservation",
         "radroots_event::envelope::EventEnvelope",
-        "radroots_event::id::TradeCandidateId",
-        "radroots_event::id::TradeMutationId",
+        "radroots_event::id::CandidateId",
+        "radroots_event::id::MutationId",
         "radroots_event::trade::SellerReservationAssertionV1",
         "radroots_event::trade::TradeMutationEnvelopeV1",
         "radroots_event::trade::TradeMutationKindV1",
@@ -14349,7 +14355,7 @@ fn validate_support_source_graph_authority(relative: &str, file: &syn::File) -> 
         _ => Vec::new(),
     };
     let expected_compiler_macro_inputs = match relative {
-        "crates/event/src/lib.rs" => vec![r#"env!("CARGO_PKG_VERSION")"#.to_owned()],
+        "crates/event/src/contract.rs" => vec![r#"env!("CARGO_PKG_VERSION")"#.to_owned()],
         "crates/event_codec/src/manifest.rs" => vec![
             r#"env!("CARGO_PKG_VERSION")"#.to_owned(),
             r#"env!("CARGO_PKG_VERSION")"#.to_owned(),
@@ -17092,6 +17098,88 @@ mod tests {
     }
 
     fn restore_predecessor_compiler_manifest(workspace_root: &Path) {
+        let event_manifest_path = workspace_root.join(EVENT_CARGO_MANIFEST_RELATIVE);
+        let event_source = fs::read_to_string(&event_manifest_path).expect("event Cargo manifest");
+        let mut event_manifest: toml::Value =
+            toml::from_str(&event_source).expect("parse event Cargo manifest");
+        let event_features = event_manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .expect("event features");
+        event_features.insert(
+            "dto-bindgen".to_owned(),
+            toml::Value::Array(
+                ["std", "serde", "knowledge-nip54", "dep:dto_bindgen"]
+                    .into_iter()
+                    .map(|value| toml::Value::String(value.to_owned()))
+                    .collect(),
+            ),
+        );
+        event_features.insert(
+            "knowledge-nip54".to_owned(),
+            toml::Value::Array(vec![toml::Value::String("knowledge".to_owned())]),
+        );
+        event_features.insert(
+            "signature".to_owned(),
+            toml::Value::Array(vec![toml::Value::String("dep:secp256k1".to_owned())]),
+        );
+        let event_dependencies = event_manifest
+            .get_mut("dependencies")
+            .and_then(toml::Value::as_table_mut)
+            .expect("event dependencies");
+        event_dependencies.insert(
+            "dto_bindgen".to_owned(),
+            toml::Value::Table(
+                [
+                    ("workspace".to_owned(), toml::Value::Boolean(true)),
+                    ("optional".to_owned(), toml::Value::Boolean(true)),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        );
+        event_dependencies.insert(
+            "secp256k1".to_owned(),
+            toml::Value::Table(
+                [
+                    ("workspace".to_owned(), toml::Value::Boolean(true)),
+                    ("optional".to_owned(), toml::Value::Boolean(true)),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+        );
+        fs::write(
+            event_manifest_path,
+            toml::to_string_pretty(&event_manifest).expect("serialize predecessor event manifest"),
+        )
+        .expect("restore predecessor event manifest");
+
+        let codec_manifest_path = workspace_root.join(EVENT_CODEC_CARGO_MANIFEST_RELATIVE);
+        let codec_source =
+            fs::read_to_string(&codec_manifest_path).expect("event-codec Cargo manifest");
+        let mut codec_manifest: toml::Value =
+            toml::from_str(&codec_source).expect("parse event-codec Cargo manifest");
+        let codec_features = codec_manifest
+            .get_mut("features")
+            .and_then(toml::Value::as_table_mut)
+            .expect("event-codec features");
+        codec_features.insert(
+            "knowledge-nip54".to_owned(),
+            toml::Value::Array(
+                ["knowledge", "radroots_event/knowledge-nip54"]
+                    .into_iter()
+                    .map(|value| toml::Value::String(value.to_owned()))
+                    .collect(),
+            ),
+        );
+        fs::write(
+            codec_manifest_path,
+            toml::to_string_pretty(&codec_manifest)
+                .expect("serialize predecessor event-codec manifest"),
+        )
+        .expect("restore predecessor event-codec manifest");
+
         let manifest_path = workspace_root.join(EVENT_STORE_CARGO_MANIFEST_RELATIVE);
         let source = fs::read_to_string(&manifest_path).expect("event-store Cargo manifest");
         let mut manifest: toml::Value =
@@ -17162,7 +17250,8 @@ mod tests {
         let destination = destination_root.join(relative);
         fs::create_dir_all(destination.parent().expect("fixture parent"))
             .expect("create fixture parent");
-        fs::copy(source_root.join(relative), destination).expect("copy fixture");
+        fs::copy(source_root.join(relative), destination)
+            .unwrap_or_else(|error| panic!("copy fixture `{relative}`: {error}"));
     }
 
     fn manifest_input_paths() -> Vec<&'static str> {
@@ -17213,7 +17302,11 @@ mod tests {
                 paths.push(mirror);
             }
         }
-        paths.extend(FROZEN_SOURCE_SPECS.iter().map(|source| source.path));
+        paths.extend(
+            FROZEN_SOURCE_SPECS
+                .iter()
+                .map(|source| successor_source_path(source.path)),
+        );
         paths.extend(SOURCE_ROUTE_WITNESS_SPECS.iter().map(|source| source.path));
         paths.extend(SUCCESSOR_08C_EXCLUSIVE_SOURCE_PATHS);
         paths.extend(SUCCESSOR_08D_SOURCE_PATHS);
@@ -20630,7 +20723,8 @@ version = "0.1.0"
         for relative in [
             "crates/core/src/dto.rs",
             "crates/event/src/dto.rs",
-            "crates/event/src/ids.rs",
+            "crates/event/src/id.rs",
+            "crates/event/src/contract.rs",
             "crates/event/src/contract/registry_v7.rs",
             "crates/event/src/lib.rs",
             "crates/event_codec/src/manifest.rs",
@@ -20928,7 +21022,7 @@ version = "0.1.0"
     #[test]
     fn crate_root_routes_reject_unbound_extensions_and_source_injection() {
         for (relative, first_module) in [
-            ("crates/event/src/lib.rs", "pub mod account;"),
+            ("crates/event/src/lib.rs", "pub mod admission;"),
             ("crates/event_codec/src/lib.rs", "pub mod d_tag;"),
             ("crates/blossom/src/lib.rs", "pub mod authorization;"),
         ] {
@@ -21436,9 +21530,10 @@ async fn nip09_reconciliation_v1_result_vector() {
     fn manifest_shape_rejects_generated_frozen_sources() {
         let workspace = synthetic_workspace();
         let mut manifest = immutable_manifest();
+        manifest.entry_points = expected_entry_points();
         manifest.frozen_sources[0].path = GENERATED_DESCRIPTOR_RELATIVE.to_owned();
         let error = validate_manifest_shape(workspace.path(), &manifest)
             .expect_err("generated source must not be frozen");
-        assert!(error.contains("generated or self-describing"));
+        assert!(error.contains("generated or self-describing"), "{error}");
     }
 }

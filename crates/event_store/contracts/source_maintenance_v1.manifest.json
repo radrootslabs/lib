@@ -817,15 +817,15 @@
     {
       "role": "predecessor_successor_governance",
       "path": "tools/xtask/src/contract/food_availability_projection.rs",
-      "byte_length": 198719,
-      "sha256": "11e5628b20839fd88e28abef64d4e35a504d7bd42149691bcce67575cbc17a1c",
+      "byte_length": 198991,
+      "sha256": "36fd3d8b5dda3b0855a06a47dae14cae7f4cc84aaca9902c31477c218859fccc",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 838146,
-      "sha256": "3bfaf8b2cef8a93217b65ba86b914ece93b552e463f8f378ac2659ab31c32c00",
+      "byte_length": 841956,
+      "sha256": "dec55582169c42fc8f8338a9eb82213616e5969c6af9d986748e6df3622510fc",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

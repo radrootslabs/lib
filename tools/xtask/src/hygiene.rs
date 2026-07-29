@@ -417,11 +417,14 @@ fn contains_retired_listing_module_reference(line: &str) -> bool {
 }
 
 fn is_canonical_event_listing_module_reference(rel: &str, line: &str) -> bool {
-    rel == "crates/event/src/lib.rs" && line.trim() == "pub mod listing;"
+    (rel == "crates/event/src/lib.rs" && line.trim() == "pub mod listing;")
+        || (rel.starts_with("crates/event/src/") && line.contains("crate::listing::"))
+        || line.contains("radroots_event::listing::")
 }
 
 fn is_retired_listing_negative_guard(rel: &str, line: &str) -> bool {
-    (rel == "crates/event/src/dto.rs" && line.contains("\"ListingCancel\""))
+    (rel == "crates/event/src/dto.rs"
+        && (line.contains("\"ListingCancel\"") || line.contains("\"RadrootsListingCancel\"")))
         || (rel == "crates/event/src/contract/registry_v7/tests.rs"
             && line.contains("event_contract(\"radroots.listing.published.v1\").is_none()"))
 }
