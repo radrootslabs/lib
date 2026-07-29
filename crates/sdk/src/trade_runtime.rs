@@ -19,14 +19,13 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
-    draft::RadrootsEventDraft,
+    draft::EventDraft,
     envelope::kind::TRADE_MUTATION_EVENT_KINDS,
-    id::{RadrootsEventId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId},
+    id::{CandidateId, EventId, MutationId, TradeId},
     trade::{
         RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES, RADROOTS_TRADE_MUTATION_CONTRACT_IDS,
-        RADROOTS_TRADE_SCHEMA_VERSION, RadrootsTradeDecisionV1, RadrootsTradeMutationBodyV1,
-        RadrootsTradeMutationEnvelopeV1, RadrootsTradePrivateTermsRefV1,
-        trade_mutation_from_canonical_content,
+        RADROOTS_TRADE_SCHEMA_VERSION, TradeDecisionV1, TradeMutationBodyV1,
+        TradeMutationEnvelopeV1, TradePrivateTermsRefV1, trade_mutation_from_canonical_content,
     },
 };
 #[cfg(feature = "runtime")]
@@ -299,7 +298,7 @@ impl<'client> TradesClient<'client> {
 pub struct SubmitProposalRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub envelope: RadrootsTradeMutationEnvelopeV1,
+    pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -309,7 +308,7 @@ pub struct SubmitProposalRequest {
 impl SubmitProposalRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        envelope: RadrootsTradeMutationEnvelopeV1,
+        envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
         Self {
@@ -346,7 +345,7 @@ impl SubmitProposalRequest {
 pub struct ProposeRevisionRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub envelope: RadrootsTradeMutationEnvelopeV1,
+    pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -356,7 +355,7 @@ pub struct ProposeRevisionRequest {
 impl ProposeRevisionRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        envelope: RadrootsTradeMutationEnvelopeV1,
+        envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
         Self {
@@ -385,7 +384,7 @@ impl ProposeRevisionRequest {
 pub struct DecideCandidateRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub envelope: RadrootsTradeMutationEnvelopeV1,
+    pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -396,7 +395,7 @@ pub struct DecideCandidateRequest {
 impl DecideCandidateRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        envelope: RadrootsTradeMutationEnvelopeV1,
+        envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
         Self {
@@ -431,7 +430,7 @@ impl DecideCandidateRequest {
 pub struct CancelTradeRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub envelope: RadrootsTradeMutationEnvelopeV1,
+    pub envelope: TradeMutationEnvelopeV1,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
@@ -441,7 +440,7 @@ pub struct CancelTradeRequest {
 impl CancelTradeRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        envelope: RadrootsTradeMutationEnvelopeV1,
+        envelope: TradeMutationEnvelopeV1,
         target_policy: TargetPolicy,
     ) -> Self {
         Self {
@@ -465,7 +464,7 @@ impl CancelTradeRequest {
 pub struct ResumeOperationRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub envelope: RadrootsTradeMutationEnvelopeV1,
+    pub envelope: TradeMutationEnvelopeV1,
     pub operation_kind: &'static str,
     pub target_policy: TargetPolicy,
     pub satisfaction_policy: SatisfactionPolicy,
@@ -477,7 +476,7 @@ pub struct ResumeOperationRequest {
 impl ResumeOperationRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        envelope: RadrootsTradeMutationEnvelopeV1,
+        envelope: TradeMutationEnvelopeV1,
         operation_kind: &'static str,
         target_policy: TargetPolicy,
     ) -> Self {
@@ -516,10 +515,10 @@ pub struct TradeCommandReceipt {
     pub api_version: u16,
     pub operation_kind: String,
     pub operation_state: TradeCommandLifecycleState,
-    pub trade_id: RadrootsTradeId,
-    pub mutation_id: RadrootsTradeMutationId,
-    pub expected_event_id: RadrootsEventId,
-    pub signed_event_id: RadrootsEventId,
+    pub trade_id: TradeId,
+    pub mutation_id: MutationId,
+    pub expected_event_id: EventId,
+    pub signed_event_id: EventId,
     pub local_event_seq: i64,
     pub outbox_operation_id: i64,
     pub outbox_event_id: i64,
@@ -569,8 +568,8 @@ impl From<SdkPrivateTradeArtifactKind> for TradePrivateArtifactKind {
 #[non_exhaustive]
 pub struct TradePrivateArtifactSealRequest {
     pub artifact_id: String,
-    pub trade_id: RadrootsTradeId,
-    pub candidate_id: Option<RadrootsTradeCandidateId>,
+    pub trade_id: TradeId,
+    pub candidate_id: Option<CandidateId>,
     pub artifact_kind: TradePrivateArtifactKind,
     pub schema_id: String,
     pub plaintext: Vec<u8>,
@@ -582,7 +581,7 @@ pub struct TradePrivateArtifactSealRequest {
 impl TradePrivateArtifactSealRequest {
     pub fn binding_terms(
         artifact_id: impl Into<String>,
-        trade_id: RadrootsTradeId,
+        trade_id: TradeId,
         schema_id: impl Into<String>,
         plaintext: impl Into<Vec<u8>>,
     ) -> Self {
@@ -603,7 +602,7 @@ impl TradePrivateArtifactSealRequest {
         self
     }
 
-    pub fn with_candidate_id(mut self, candidate_id: RadrootsTradeCandidateId) -> Self {
+    pub fn with_candidate_id(mut self, candidate_id: CandidateId) -> Self {
         self.candidate_id = Some(candidate_id);
         self
     }
@@ -618,12 +617,12 @@ impl TradePrivateArtifactSealRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct TradePrivateArtifactSealReceipt {
     pub artifact_id: String,
-    pub trade_id: RadrootsTradeId,
-    pub candidate_id: Option<RadrootsTradeCandidateId>,
+    pub trade_id: TradeId,
+    pub candidate_id: Option<CandidateId>,
     pub artifact_kind: TradePrivateArtifactKind,
     pub schema_id: String,
     pub ciphertext_commitment: String,
-    pub private_terms_ref: Option<RadrootsTradePrivateTermsRefV1>,
+    pub private_terms_ref: Option<TradePrivateTermsRefV1>,
     pub retention_class: String,
     pub created_at_ms: i64,
     pub expires_at_ms: Option<i64>,
@@ -649,8 +648,8 @@ impl TradePrivateArtifactOpenRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct TradePrivateArtifactOpenReceipt {
     pub artifact_id: String,
-    pub trade_id: RadrootsTradeId,
-    pub candidate_id: Option<RadrootsTradeCandidateId>,
+    pub trade_id: TradeId,
+    pub candidate_id: Option<CandidateId>,
     pub artifact_kind: TradePrivateArtifactKind,
     pub schema_id: String,
     pub plaintext: Vec<u8>,
@@ -791,12 +790,12 @@ fn trade_runtime_capabilities() -> TradeRuntimeCapabilityReport {
 #[derive(Clone, Debug, Serialize)]
 #[non_exhaustive]
 pub struct GetTradeRequest {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
 }
 
 #[cfg(feature = "runtime")]
 impl GetTradeRequest {
-    pub fn new(trade_id: RadrootsTradeId) -> Self {
+    pub fn new(trade_id: TradeId) -> Self {
         Self { trade_id }
     }
 }
@@ -805,12 +804,12 @@ impl GetTradeRequest {
 #[derive(Clone, Debug, Serialize)]
 #[non_exhaustive]
 pub struct RefreshTradeEvidenceRequest {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
 }
 
 #[cfg(feature = "runtime")]
 impl RefreshTradeEvidenceRequest {
-    pub fn new(trade_id: RadrootsTradeId) -> Self {
+    pub fn new(trade_id: TradeId) -> Self {
         Self { trade_id }
     }
 }
@@ -819,14 +818,14 @@ impl RefreshTradeEvidenceRequest {
 #[derive(Clone, Debug, Serialize)]
 #[non_exhaustive]
 pub struct InspectEvidenceRequest {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
     pub limit: Option<u32>,
     pub cursor: Option<String>,
 }
 
 #[cfg(feature = "runtime")]
 impl InspectEvidenceRequest {
-    pub fn new(trade_id: RadrootsTradeId) -> Self {
+    pub fn new(trade_id: TradeId) -> Self {
         Self {
             trade_id,
             limit: None,
@@ -966,7 +965,7 @@ pub struct Page<T> {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct TradeStatusView {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
     pub projection: RadrootsTradeProjectionV1,
     pub source_event_count: usize,
     pub private_terms: Vec<TradePrivateTermsAvailabilityView>,
@@ -975,8 +974,8 @@ pub struct TradeStatusView {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct TradeSummaryView {
-    pub trade_id: RadrootsTradeId,
-    pub root_mutation_id: Option<RadrootsTradeMutationId>,
+    pub trade_id: TradeId,
+    pub root_mutation_id: Option<MutationId>,
     pub buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
     pub farm_id: Option<String>,
@@ -996,7 +995,7 @@ pub struct TradeSummaryView {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct TradePrivateTermsAvailabilityView {
-    pub candidate_id: RadrootsTradeCandidateId,
+    pub candidate_id: CandidateId,
     pub artifact_id: Option<String>,
     pub schema_id: Option<String>,
     pub ciphertext_commitment: Option<String>,
@@ -1007,7 +1006,7 @@ pub struct TradePrivateTermsAvailabilityView {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct EvidenceRefreshReceipt {
     pub api_version: u16,
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
     pub evidence_count: usize,
     pub projection_digest: String,
     pub projection_state: RadrootsTradePrivateTermsStateV1,
@@ -1017,8 +1016,8 @@ pub struct EvidenceRefreshReceipt {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct EvidenceView {
     pub artifact_id: String,
-    pub trade_id: RadrootsTradeId,
-    pub candidate_id: Option<RadrootsTradeCandidateId>,
+    pub trade_id: TradeId,
+    pub candidate_id: Option<CandidateId>,
     pub artifact_kind: TradePrivateArtifactKind,
     pub schema_id: String,
     pub ciphertext_commitment: String,
@@ -1034,9 +1033,9 @@ pub struct EvidenceView {
 struct TradeCommandPlan {
     operation_kind: &'static str,
     actor: RadrootsActorContext,
-    frozen_draft: RadrootsEventDraft,
-    trade_id: RadrootsTradeId,
-    mutation_id: RadrootsTradeMutationId,
+    frozen_draft: EventDraft,
+    trade_id: TradeId,
+    mutation_id: MutationId,
     target_policy: TargetPolicy,
     satisfaction_policy: SatisfactionPolicy,
     idempotency_key: Option<SdkIdempotencyKey>,
@@ -1067,7 +1066,7 @@ impl TradeCommandRequest {
         self,
     ) -> (
         RadrootsActorContext,
-        RadrootsTradeMutationEnvelopeV1,
+        TradeMutationEnvelopeV1,
         TargetPolicy,
         SatisfactionPolicy,
         Option<SdkIdempotencyKey>,
@@ -1131,14 +1130,14 @@ struct TradeListCursorPayload {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
 struct TradeListRow {
-    trade_id: RadrootsTradeId,
+    trade_id: TradeId,
     updated_event_seq: i64,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug)]
 struct LastTradeMutationSnapshot {
-    mutation_id: Option<RadrootsTradeMutationId>,
+    mutation_id: Option<MutationId>,
     event_seq: Option<i64>,
 }
 
@@ -1196,7 +1195,7 @@ async fn trade_command_plan(
             "canonical trade mutation is missing mutation id",
         )
     })?;
-    let frozen_draft = RadrootsEventDraft::new(
+    let frozen_draft = EventDraft::new(
         canonical.contract_id.as_str(),
         wire.kind,
         canonical.authored_at_unix_s,
@@ -1248,7 +1247,7 @@ async fn trade_command_receipt(
         operation_state: TradeCommandLifecycleState::Committed,
         trade_id: plan.trade_id,
         mutation_id: plan.mutation_id,
-        expected_event_id: RadrootsEventId::parse(plan.frozen_draft.expected_event_id_hex())
+        expected_event_id: EventId::parse(plan.frozen_draft.expected_event_id_hex())
             .expect("trade workflow draft has a valid expected event id"),
         signed_event_id: enqueue.signed_event_id,
         local_event_seq: enqueue.local_event_seq,
@@ -1265,28 +1264,21 @@ async fn trade_command_receipt(
 #[cfg(feature = "runtime")]
 fn validate_operation_body(
     operation_kind: &'static str,
-    envelope: &RadrootsTradeMutationEnvelopeV1,
+    envelope: &TradeMutationEnvelopeV1,
 ) -> Result<(), RadrootsSdkError> {
     let valid = match operation_kind {
         TRADE_SUBMIT_PROPOSAL_OPERATION_KIND => {
-            matches!(envelope.body, RadrootsTradeMutationBodyV1::Proposal { .. })
+            matches!(envelope.body, TradeMutationBodyV1::Proposal { .. })
         }
         TRADE_PROPOSE_REVISION_OPERATION_KIND => {
-            matches!(
-                envelope.body,
-                RadrootsTradeMutationBodyV1::RevisionProposal { .. }
-            )
+            matches!(envelope.body, TradeMutationBodyV1::RevisionProposal { .. })
         }
         TRADE_DECIDE_CANDIDATE_OPERATION_KIND | TRADE_RESUME_OPERATION_KIND => matches!(
             envelope.body,
-            RadrootsTradeMutationBodyV1::Decision { .. }
-                | RadrootsTradeMutationBodyV1::RevisionDecision { .. }
+            TradeMutationBodyV1::Decision { .. } | TradeMutationBodyV1::RevisionDecision { .. }
         ),
         TRADE_CANCEL_OPERATION_KIND => {
-            matches!(
-                envelope.body,
-                RadrootsTradeMutationBodyV1::Cancellation { .. }
-            )
+            matches!(envelope.body, TradeMutationBodyV1::Cancellation { .. })
         }
         _ => true,
     };
@@ -1305,7 +1297,7 @@ fn validate_operation_body(
 fn validate_actor_matches_envelope(
     operation_kind: &'static str,
     actor: &RadrootsActorContext,
-    envelope: &RadrootsTradeMutationEnvelopeV1,
+    envelope: &TradeMutationEnvelopeV1,
 ) -> Result<(), RadrootsSdkError> {
     if actor.pubkey() == &envelope.author_pubkey {
         Ok(())
@@ -1321,12 +1313,12 @@ fn validate_actor_matches_envelope(
 async fn validate_command_private_terms(
     sdk: &RadrootsClient,
     operation_kind: &'static str,
-    envelope: &RadrootsTradeMutationEnvelopeV1,
+    envelope: &TradeMutationEnvelopeV1,
     private_terms_acknowledged: bool,
 ) -> Result<(), RadrootsSdkError> {
     match &envelope.body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate }
-        | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => {
+        TradeMutationBodyV1::Proposal { candidate }
+        | TradeMutationBodyV1::RevisionProposal { candidate } => {
             let Some(candidate_id) = &candidate.candidate_id else {
                 return Ok(());
             };
@@ -1349,17 +1341,17 @@ async fn validate_command_private_terms(
             }
             Ok(())
         }
-        RadrootsTradeMutationBodyV1::Decision {
+        TradeMutationBodyV1::Decision {
             proposal_mutation_id,
             candidate_id,
             decision,
         }
-        | RadrootsTradeMutationBodyV1::RevisionDecision {
+        | TradeMutationBodyV1::RevisionDecision {
             proposal_mutation_id,
             candidate_id,
             decision,
         } => {
-            if !matches!(decision, RadrootsTradeDecisionV1::Accepted { .. }) {
+            if !matches!(decision, TradeDecisionV1::Accepted { .. }) {
                 return Ok(());
             }
             let Some(candidate_ref) = referenced_candidate_for_decision(
@@ -1400,7 +1392,7 @@ async fn validate_command_private_terms(
             )
             .await
         }
-        RadrootsTradeMutationBodyV1::Cancellation { .. } => Ok(()),
+        TradeMutationBodyV1::Cancellation { .. } => Ok(()),
     }
 }
 
@@ -1408,9 +1400,9 @@ async fn validate_command_private_terms(
 async fn referenced_candidate_for_decision(
     sdk: &RadrootsClient,
     operation_kind: &'static str,
-    proposal_mutation_id: &RadrootsTradeMutationId,
-    candidate_id: &RadrootsTradeCandidateId,
-) -> Result<Option<radroots_event::trade::RadrootsTradeCandidateTermsV1>, RadrootsSdkError> {
+    proposal_mutation_id: &MutationId,
+    candidate_id: &CandidateId,
+) -> Result<Option<radroots_event::trade::TradeCandidateTermsV1>, RadrootsSdkError> {
     let Some(stored) = sdk
         ._event_store
         .get_trade_mutation(proposal_mutation_id)
@@ -1424,8 +1416,8 @@ async fn referenced_candidate_for_decision(
     };
     let envelope = stored_trade_envelope(&stored)?;
     let candidate = match envelope.body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate }
-        | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => candidate,
+        TradeMutationBodyV1::Proposal { candidate }
+        | TradeMutationBodyV1::RevisionProposal { candidate } => candidate,
         _ => {
             return Err(trade_command_error(
                 RadrootsSdkTradeErrorKind::InvalidCommandBody,
@@ -1448,9 +1440,9 @@ async fn referenced_candidate_for_decision(
 async fn ensure_private_terms_ref_available(
     sdk: &RadrootsClient,
     operation_kind: &'static str,
-    trade_id: &RadrootsTradeId,
-    candidate_id: &RadrootsTradeCandidateId,
-    private_ref: &RadrootsTradePrivateTermsRefV1,
+    trade_id: &TradeId,
+    candidate_id: &CandidateId,
+    private_ref: &TradePrivateTermsRefV1,
 ) -> Result<(), RadrootsSdkError> {
     let trade_id_hex = trade_id.to_hex();
     let candidate_id_hex = candidate_id.to_hex();
@@ -1488,10 +1480,7 @@ async fn seal_private_artifact(
     let input = SdkPrivateTradeArtifactInput {
         artifact_id: request.artifact_id,
         trade_id: request.trade_id.to_hex(),
-        candidate_id: request
-            .candidate_id
-            .as_ref()
-            .map(RadrootsTradeCandidateId::to_hex),
+        candidate_id: request.candidate_id.as_ref().map(CandidateId::to_hex),
         artifact_kind: request.artifact_kind.into(),
         schema_id: request.schema_id,
         plaintext: request.plaintext,
@@ -1509,7 +1498,7 @@ fn seal_receipt_from_metadata(
 ) -> TradePrivateArtifactSealReceipt {
     let artifact_kind = TradePrivateArtifactKind::from(metadata.artifact_kind);
     let private_terms_ref = if artifact_kind == TradePrivateArtifactKind::BindingTerms {
-        Some(RadrootsTradePrivateTermsRefV1 {
+        Some(TradePrivateTermsRefV1 {
             artifact_id: metadata.artifact_id.clone(),
             schema_id: metadata.schema_id.clone(),
             ciphertext_commitment: metadata.ciphertext_commitment.clone(),
@@ -1520,7 +1509,7 @@ fn seal_receipt_from_metadata(
     };
     TradePrivateArtifactSealReceipt {
         artifact_id: metadata.artifact_id,
-        trade_id: RadrootsTradeId::parse(metadata.trade_id).expect("stored trade id is valid"),
+        trade_id: TradeId::parse(metadata.trade_id).expect("stored trade id is valid"),
         candidate_id: parse_optional_candidate_id(metadata.candidate_id),
         artifact_kind,
         schema_id: metadata.schema_id,
@@ -1546,7 +1535,7 @@ async fn open_private_artifact(
     };
     Ok(Some(TradePrivateArtifactOpenReceipt {
         artifact_id: record.artifact_id,
-        trade_id: RadrootsTradeId::parse(record.trade_id).expect("stored trade id is valid"),
+        trade_id: TradeId::parse(record.trade_id).expect("stored trade id is valid"),
         candidate_id: parse_optional_candidate_id(record.candidate_id),
         artifact_kind: record.artifact_kind.into(),
         schema_id: record.schema_id,
@@ -1578,7 +1567,7 @@ async fn delete_private_artifact(
 #[cfg(feature = "runtime")]
 async fn trade_status_view(
     sdk: &RadrootsClient,
-    trade_id: &RadrootsTradeId,
+    trade_id: &TradeId,
 ) -> Result<TradeStatusView, RadrootsSdkError> {
     let projection = trade_projection_for_trade(sdk, trade_id).await?;
     let private_terms = private_terms_views_for_trade(sdk, trade_id).await?;
@@ -1598,7 +1587,7 @@ async fn trade_status_view(
 #[cfg(feature = "runtime")]
 async fn trade_projection_for_trade(
     sdk: &RadrootsClient,
-    trade_id: &RadrootsTradeId,
+    trade_id: &TradeId,
 ) -> Result<RadrootsTradeProjectionV1, RadrootsSdkError> {
     let stored = sdk
         ._event_store
@@ -1625,7 +1614,7 @@ async fn trade_projection_for_trade(
 #[cfg(feature = "runtime")]
 async fn private_terms_views_for_trade(
     sdk: &RadrootsClient,
-    trade_id: &RadrootsTradeId,
+    trade_id: &TradeId,
 ) -> Result<Vec<TradePrivateTermsAvailabilityView>, RadrootsSdkError> {
     let stored = sdk
         ._event_store
@@ -1640,7 +1629,7 @@ async fn private_terms_views_for_trade(
         .into_iter()
         .map(|item| (item.candidate_id, item.state))
         .collect::<BTreeMap<_, _>>();
-    let mut views = BTreeMap::<RadrootsTradeCandidateId, TradePrivateTermsAvailabilityView>::new();
+    let mut views = BTreeMap::<CandidateId, TradePrivateTermsAvailabilityView>::new();
     for record in records {
         if let Some((candidate_id, private_ref)) = candidate_private_ref(&record.mutation) {
             let state = evidence_by_candidate
@@ -1664,7 +1653,7 @@ async fn private_terms_views_for_trade(
 #[cfg(feature = "runtime")]
 async fn private_terms_evidence_for_mutations(
     sdk: &RadrootsClient,
-    trade_id: &RadrootsTradeId,
+    trade_id: &TradeId,
     mutations: &[RadrootsTradeMutationRecordV1],
 ) -> Result<Vec<RadrootsTradePrivateTermsEvidenceV1>, RadrootsSdkError> {
     let mut evidence = Vec::new();
@@ -1694,11 +1683,11 @@ async fn private_terms_evidence_for_mutations(
 
 #[cfg(feature = "runtime")]
 fn candidate_private_ref(
-    envelope: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<(RadrootsTradeCandidateId, RadrootsTradePrivateTermsRefV1)> {
+    envelope: &TradeMutationEnvelopeV1,
+) -> Option<(CandidateId, TradePrivateTermsRefV1)> {
     match &envelope.body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate }
-        | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => {
+        TradeMutationBodyV1::Proposal { candidate }
+        | TradeMutationBodyV1::RevisionProposal { candidate } => {
             let candidate_id = candidate.candidate_id?;
             let private_ref = candidate.private_terms.clone()?;
             Some((candidate_id, private_ref))
@@ -1720,7 +1709,7 @@ fn stored_trade_mutation_record(
 #[cfg(feature = "runtime")]
 fn stored_trade_envelope(
     stored: &RadrootsStoredTradeMutation,
-) -> Result<RadrootsTradeMutationEnvelopeV1, RadrootsSdkError> {
+) -> Result<TradeMutationEnvelopeV1, RadrootsSdkError> {
     let content =
         std::str::from_utf8(stored.canonical_payload_bytes.as_slice()).map_err(|error| {
             RadrootsSdkError::Projection {
@@ -1871,7 +1860,7 @@ async fn list_trade_rows(
     rows.into_iter()
         .map(|row| {
             Ok(TradeListRow {
-                trade_id: RadrootsTradeId::parse(
+                trade_id: TradeId::parse(
                     row.try_get::<String, _>("trade_id")
                         .map_err(trade_query_store_error)?,
                 )
@@ -1922,8 +1911,7 @@ async fn inspect_evidence_views(
         };
         items.push(EvidenceView {
             artifact_id: item.artifact_id.clone(),
-            trade_id: RadrootsTradeId::parse(item.trade_id.clone())
-                .expect("stored trade id is valid"),
+            trade_id: TradeId::parse(item.trade_id.clone()).expect("stored trade id is valid"),
             candidate_id: parse_optional_candidate_id(item.candidate_id.clone()),
             artifact_kind: item.artifact_kind.into(),
             schema_id: item.schema_id.clone(),
@@ -1947,7 +1935,7 @@ async fn inspect_evidence_views(
 #[cfg(feature = "runtime")]
 async fn last_trade_mutation_snapshot(
     sdk: &RadrootsClient,
-    trade_id: &RadrootsTradeId,
+    trade_id: &TradeId,
 ) -> Result<LastTradeMutationSnapshot, RadrootsSdkError> {
     let row = sqlx::query(
         "SELECT mutation_id, first_event_seq FROM trade_mutation WHERE trade_id = ? ORDER BY first_event_seq DESC, mutation_id DESC LIMIT 1",
@@ -1959,7 +1947,7 @@ async fn last_trade_mutation_snapshot(
     match row {
         Some(row) => Ok(LastTradeMutationSnapshot {
             mutation_id: Some(
-                RadrootsTradeMutationId::parse(
+                MutationId::parse(
                     row.try_get::<String, _>("mutation_id")
                         .map_err(trade_query_store_error)?,
                 )
@@ -2134,10 +2122,9 @@ fn enum_label<T: Serialize>(value: &T) -> Result<String, RadrootsSdkError> {
 }
 
 #[cfg(feature = "runtime")]
-fn parse_optional_candidate_id(value: Option<String>) -> Option<RadrootsTradeCandidateId> {
-    value.map(|candidate_id| {
-        RadrootsTradeCandidateId::parse(candidate_id).expect("stored candidate id is valid")
-    })
+fn parse_optional_candidate_id(value: Option<String>) -> Option<CandidateId> {
+    value
+        .map(|candidate_id| CandidateId::parse(candidate_id).expect("stored candidate id is valid"))
 }
 
 #[cfg(feature = "runtime")]

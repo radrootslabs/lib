@@ -2,7 +2,7 @@
 
 use crate::RadrootsSdkError;
 use radroots_event::envelope::kind::KIND_FARM;
-use radroots_event::id::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts};
+use radroots_event::id::{AddressableCoordinate, AddressableCoordinateParts};
 use radroots_event::trade::RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES;
 use radroots_protected_store::{RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope};
 use radroots_secret_vault::{RadrootsSecretKeyWrapping, RadrootsSecretVaultAccessError};
@@ -144,7 +144,7 @@ struct SdkPrivateStoreMemoryKeySource;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SdkPrivateFarmLocationRecord {
-    pub farm_addr: RadrootsAddressableCoordinate,
+    pub farm_addr: AddressableCoordinate,
     pub farm_pubkey: String,
     pub farm_d_tag: String,
     pub label: Option<String>,
@@ -385,7 +385,7 @@ impl SdkPrivateStore {
 
     pub async fn farm_location(
         &self,
-        farm_addr: &RadrootsAddressableCoordinate,
+        farm_addr: &AddressableCoordinate,
     ) -> Result<Option<SdkPrivateFarmLocationRecord>, RadrootsSdkError> {
         let parts = farm_location_parts(farm_addr)?;
         let owner_pubkey = parts.pubkey.as_bytes().to_vec();
@@ -408,7 +408,7 @@ impl SdkPrivateStore {
 
     pub async fn delete_farm_location(
         &self,
-        farm_addr: &RadrootsAddressableCoordinate,
+        farm_addr: &AddressableCoordinate,
     ) -> Result<bool, RadrootsSdkError> {
         let parts = farm_location_parts(farm_addr)?;
         let owner_pubkey = parts.pubkey.as_bytes().to_vec();
@@ -761,8 +761,8 @@ impl SdkPrivateStore {
 
     fn private_farm_location_from_row(
         &self,
-        farm_addr: RadrootsAddressableCoordinate,
-        parts: RadrootsAddressableCoordinateParts,
+        farm_addr: AddressableCoordinate,
+        parts: AddressableCoordinateParts,
         row: sqlx::sqlite::SqliteRow,
     ) -> Result<SdkPrivateFarmLocationRecord, RadrootsSdkError> {
         let ciphertext: Vec<u8> = row.try_get("ciphertext").map_err(private_store_error)?;
@@ -904,9 +904,9 @@ async fn query_string(pool: &SqlitePool, sql: &'static str) -> Result<String, Ra
 }
 
 fn farm_location_parts(
-    farm_addr: &RadrootsAddressableCoordinate,
-) -> Result<RadrootsAddressableCoordinateParts, RadrootsSdkError> {
-    let parts = RadrootsAddressableCoordinateParts::parse(farm_addr.as_str()).map_err(|error| {
+    farm_addr: &AddressableCoordinate,
+) -> Result<AddressableCoordinateParts, RadrootsSdkError> {
+    let parts = AddressableCoordinateParts::parse(farm_addr.as_str()).map_err(|error| {
         RadrootsSdkError::InvalidRequest {
             message: format!("farm address is invalid: {error}"),
         }

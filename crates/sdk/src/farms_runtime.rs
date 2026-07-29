@@ -16,11 +16,11 @@ use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
     contract::AuthorRole,
-    draft::RadrootsEventDraft,
+    draft::EventDraft,
     envelope::kind::KIND_FARM,
-    farm::{RadrootsFarm, RadrootsFarmPublicLocation},
-    id::{RadrootsAddressableCoordinate, RadrootsEventId},
-    listing::operational::RadrootsOperationalListingPublicLocation,
+    farm::{Farm, FarmPublicLocation},
+    id::{AddressableCoordinate, EventId},
+    listing::operational::OperationalListingPublicLocation,
 };
 #[cfg(feature = "runtime")]
 #[cfg(feature = "runtime")]
@@ -41,13 +41,13 @@ const GEOHASH_BASE32: &[u8; 32] = b"0123456789bcdefghjkmnpqrstuvwxyz";
 pub struct FarmPreparePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub farm: RadrootsFarm,
+    pub farm: Farm,
     pub created_at: Option<RadrootsSdkTimestamp>,
 }
 
 #[cfg(feature = "runtime")]
 impl FarmPreparePublishRequest {
-    pub fn new(actor: RadrootsActorContext, farm: RadrootsFarm) -> Self {
+    pub fn new(actor: RadrootsActorContext, farm: Farm) -> Self {
         Self {
             actor,
             farm,
@@ -67,7 +67,7 @@ impl FarmPreparePublishRequest {
 pub struct FarmEnqueuePublishRequest {
     #[serde(serialize_with = "crate::actor_json::serialize_actor_context")]
     pub actor: RadrootsActorContext,
-    pub farm: RadrootsFarm,
+    pub farm: Farm,
     pub target_policy: TargetPolicy,
     pub idempotency_key: Option<SdkIdempotencyKey>,
     pub created_at: Option<RadrootsSdkTimestamp>,
@@ -75,11 +75,7 @@ pub struct FarmEnqueuePublishRequest {
 
 #[cfg(feature = "runtime")]
 impl FarmEnqueuePublishRequest {
-    pub fn new(
-        actor: RadrootsActorContext,
-        farm: RadrootsFarm,
-        target_policy: TargetPolicy,
-    ) -> Self {
+    pub fn new(actor: RadrootsActorContext, farm: Farm, target_policy: TargetPolicy) -> Self {
         Self {
             actor,
             farm,
@@ -124,23 +120,23 @@ impl FarmEnqueuePublishRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct FarmPublishPlan {
-    farm_addr: RadrootsAddressableCoordinate,
-    expected_event_id: RadrootsEventId,
-    frozen_draft: RadrootsEventDraft,
+    farm_addr: AddressableCoordinate,
+    expected_event_id: EventId,
+    frozen_draft: EventDraft,
     created_at: RadrootsSdkTimestamp,
 }
 
 #[cfg(feature = "runtime")]
 impl FarmPublishPlan {
-    pub fn farm_addr(&self) -> &RadrootsAddressableCoordinate {
+    pub fn farm_addr(&self) -> &AddressableCoordinate {
         &self.farm_addr
     }
 
-    pub fn expected_event_id(&self) -> &RadrootsEventId {
+    pub fn expected_event_id(&self) -> &EventId {
         &self.expected_event_id
     }
 
-    pub fn frozen_draft(&self) -> &RadrootsEventDraft {
+    pub fn frozen_draft(&self) -> &EventDraft {
         &self.frozen_draft
     }
 
@@ -152,9 +148,9 @@ impl FarmPublishPlan {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct FarmEnqueueReceipt {
-    pub farm_addr: RadrootsAddressableCoordinate,
-    pub expected_event_id: RadrootsEventId,
-    pub signed_event_id: RadrootsEventId,
+    pub farm_addr: AddressableCoordinate,
+    pub expected_event_id: EventId,
+    pub signed_event_id: EventId,
     pub local_event_seq: i64,
     pub outbox_operation_id: i64,
     pub outbox_event_id: i64,
@@ -191,8 +187,8 @@ pub struct SdkPublicLocality {
 
 #[cfg(feature = "runtime")]
 impl SdkPublicLocality {
-    pub fn to_farm_public_location(&self) -> RadrootsFarmPublicLocation {
-        RadrootsFarmPublicLocation {
+    pub fn to_farm_public_location(&self) -> FarmPublicLocation {
+        FarmPublicLocation {
             primary: self.primary.clone(),
             city: self.city.clone(),
             region: self.region.clone(),
@@ -201,8 +197,8 @@ impl SdkPublicLocality {
         }
     }
 
-    pub fn to_listing_public_location(&self) -> RadrootsOperationalListingPublicLocation {
-        RadrootsOperationalListingPublicLocation {
+    pub fn to_listing_public_location(&self) -> OperationalListingPublicLocation {
+        OperationalListingPublicLocation {
             primary: self.primary.clone(),
             city: self.city.clone(),
             region: self.region.clone(),
@@ -375,14 +371,14 @@ impl FarmPrivateLocationClearRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FarmPrivateLocationClearReceipt {
-    pub farm_addr: RadrootsAddressableCoordinate,
+    pub farm_addr: AddressableCoordinate,
     pub cleared: bool,
 }
 
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FarmPrivateLocationReceipt {
-    pub farm_addr: RadrootsAddressableCoordinate,
+    pub farm_addr: AddressableCoordinate,
     pub farm_pubkey: String,
     pub farm_d_tag: String,
     pub label: Option<String>,
@@ -408,7 +404,7 @@ pub struct FarmPrivateLocationLookupCandidate {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FarmPrivateLocationLookupReceipt {
-    pub farm_addr: RadrootsAddressableCoordinate,
+    pub farm_addr: AddressableCoordinate,
     pub farm_pubkey: String,
     pub farm_d_tag: String,
     pub input: FarmPrivateLocationInput,
@@ -693,7 +689,7 @@ impl<'sdk> FarmsClient<'sdk> {
 
     pub async fn private_location(
         &self,
-        farm_addr: &RadrootsAddressableCoordinate,
+        farm_addr: &AddressableCoordinate,
     ) -> Result<Option<FarmPrivateLocationReceipt>, RadrootsSdkError> {
         self.sdk
             ._private_store
@@ -748,8 +744,8 @@ fn farm_enqueue_receipt(
 
 #[cfg(feature = "runtime")]
 struct ValidatedFarmPublishPlanMetadata {
-    farm_addr: RadrootsAddressableCoordinate,
-    expected_event_id: RadrootsEventId,
+    farm_addr: AddressableCoordinate,
+    expected_event_id: EventId,
 }
 
 #[cfg(feature = "runtime")]
@@ -768,7 +764,7 @@ fn validate_farm_publish_plan(
         return Err(invalid("contract or kind does not match Farm publish"));
     }
 
-    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_hex())
+    let expected_event_id = EventId::parse(plan.frozen_draft.expected_event_id_hex())
         .expect("validated frozen draft has a typed event ID");
     if plan.expected_event_id != expected_event_id {
         return Err(invalid("expected event ID does not match frozen draft"));
@@ -788,7 +784,7 @@ fn validate_farm_publish_plan(
     if d_tags.next().is_some() {
         return Err(invalid("frozen draft contains duplicate farm identifiers"));
     }
-    let farm_addr = RadrootsAddressableCoordinate::parse(format!(
+    let farm_addr = AddressableCoordinate::parse(format!(
         "{KIND_FARM}:{}:{d_tag}",
         plan.frozen_draft.expected_pubkey().to_hex()
     ))
@@ -805,7 +801,7 @@ fn validate_farm_publish_plan(
 #[cfg(feature = "runtime")]
 fn farm_publish_plan(
     actor: &RadrootsActorContext,
-    farm_value: RadrootsFarm,
+    farm_value: Farm,
     created_at: RadrootsSdkTimestamp,
 ) -> Result<FarmPublishPlan, RadrootsSdkError> {
     require_farmer_actor(actor, "farm.prepare_publish")?;
@@ -816,7 +812,7 @@ fn farm_publish_plan(
         })?;
     let farm_addr = farm_addr(actor, farm_value.d_tag.as_str())
         .expect("validated farm d tag forms a farm address");
-    let frozen_draft = RadrootsEventDraft::new(
+    let frozen_draft = EventDraft::new(
         FARM_PROFILE_CONTRACT_ID,
         parts.kind,
         created_at_nostr.into(),
@@ -825,7 +821,7 @@ fn farm_publish_plan(
         actor.pubkey().to_hex(),
     )
     .expect("validated farm publish draft freezes");
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_hex())
+    let expected_event_id = EventId::parse(frozen_draft.expected_event_id_hex())
         .expect("frozen farm draft produces a valid event id");
     Ok(FarmPublishPlan {
         farm_addr,
@@ -854,8 +850,8 @@ fn require_farmer_actor(
 fn farm_addr(
     actor: &RadrootsActorContext,
     d_tag: &str,
-) -> Result<RadrootsAddressableCoordinate, RadrootsSdkError> {
-    RadrootsAddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey())).map_err(
+) -> Result<AddressableCoordinate, RadrootsSdkError> {
+    AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey())).map_err(
         |error| RadrootsSdkError::InvalidRequest {
             message: format!("farm address is invalid: {error}"),
         },
@@ -1060,7 +1056,7 @@ fn private_location_receipt_from_record(
 
 #[cfg(feature = "runtime")]
 fn farm_private_location_lookup_receipt(
-    farm_addr: RadrootsAddressableCoordinate,
+    farm_addr: AddressableCoordinate,
     farm_pubkey: &str,
     farm_d_tag: String,
     input: FarmPrivateLocationInput,

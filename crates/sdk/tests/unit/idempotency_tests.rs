@@ -1,6 +1,6 @@
 use super::{SdkIdempotencyKey, SdkTradeIdempotencyRecord};
 use crate::RadrootsSdkError;
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use radroots_identity::PublicKey;
 
 use crate::serializer_failure::assert_struct_serialize_error_paths;
@@ -62,7 +62,7 @@ fn trade_idempotency_record_binds_payload_and_reports_conflicts() {
         digest: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned(),
         canonical_payload_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
             .to_owned(),
-        expected_event_id: RadrootsEventId::parse(
+        expected_event_id: EventId::parse(
             "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         )
         .expect("event id"),

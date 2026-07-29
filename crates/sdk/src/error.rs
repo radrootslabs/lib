@@ -6,7 +6,7 @@ use crate::privacy::{PrivacyPreflightStatus, ProductSensitivityField};
 #[cfg(feature = "runtime")]
 use crate::transport::ReticulumBehavior;
 #[cfg(feature = "runtime")]
-use radroots_event::trade::validation::RadrootsOperationalListingValidationError;
+use radroots_event::trade::validation::OperationalListingValidationError;
 #[cfg(feature = "runtime")]
 use serde_json::{Value, json};
 
@@ -89,54 +89,44 @@ pub enum RadrootsSdkListingValidationErrorKind {
 }
 
 #[cfg(feature = "runtime")]
-impl From<&RadrootsOperationalListingValidationError> for RadrootsSdkListingValidationErrorKind {
-    fn from(error: &RadrootsOperationalListingValidationError) -> Self {
+impl From<&OperationalListingValidationError> for RadrootsSdkListingValidationErrorKind {
+    fn from(error: &OperationalListingValidationError) -> Self {
         match error {
-            RadrootsOperationalListingValidationError::InvalidKind { .. } => Self::InvalidKind,
-            RadrootsOperationalListingValidationError::InvalidProfile => Self::InvalidProfile,
-            RadrootsOperationalListingValidationError::MissingListingId => Self::MissingListingId,
-            RadrootsOperationalListingValidationError::ListingEventNotFound { .. } => {
+            OperationalListingValidationError::InvalidKind { .. } => Self::InvalidKind,
+            OperationalListingValidationError::InvalidProfile => Self::InvalidProfile,
+            OperationalListingValidationError::MissingListingId => Self::MissingListingId,
+            OperationalListingValidationError::ListingEventNotFound { .. } => {
                 Self::ListingEventNotFound
             }
-            RadrootsOperationalListingValidationError::ListingEventFetchFailed { .. } => {
+            OperationalListingValidationError::ListingEventFetchFailed { .. } => {
                 Self::ListingEventFetchFailed
             }
-            RadrootsOperationalListingValidationError::ParseError { .. } => Self::ParseError,
-            RadrootsOperationalListingValidationError::InvalidSeller => Self::InvalidSeller,
-            RadrootsOperationalListingValidationError::MissingFarmProfile => {
-                Self::MissingFarmProfile
-            }
-            RadrootsOperationalListingValidationError::MissingFarmRecord => Self::MissingFarmRecord,
-            RadrootsOperationalListingValidationError::MissingTitle => Self::MissingTitle,
-            RadrootsOperationalListingValidationError::MissingDescription => {
-                Self::MissingDescription
-            }
-            RadrootsOperationalListingValidationError::MissingProductType => {
-                Self::MissingProductType
-            }
-            RadrootsOperationalListingValidationError::MissingBins => Self::MissingBins,
-            RadrootsOperationalListingValidationError::MissingPrimaryBin => Self::MissingPrimaryBin,
-            RadrootsOperationalListingValidationError::InvalidBin => Self::InvalidBin,
-            RadrootsOperationalListingValidationError::MissingPrice => Self::MissingPrice,
-            RadrootsOperationalListingValidationError::InvalidPrice => Self::InvalidPrice,
-            RadrootsOperationalListingValidationError::MissingInventory => Self::MissingInventory,
-            RadrootsOperationalListingValidationError::InvalidInventory => Self::InvalidInventory,
-            RadrootsOperationalListingValidationError::MissingAvailability => {
-                Self::MissingAvailability
-            }
-            RadrootsOperationalListingValidationError::MissingLocation => Self::MissingLocation,
-            RadrootsOperationalListingValidationError::MissingLocationLocality => {
+            OperationalListingValidationError::ParseError { .. } => Self::ParseError,
+            OperationalListingValidationError::InvalidSeller => Self::InvalidSeller,
+            OperationalListingValidationError::MissingFarmProfile => Self::MissingFarmProfile,
+            OperationalListingValidationError::MissingFarmRecord => Self::MissingFarmRecord,
+            OperationalListingValidationError::MissingTitle => Self::MissingTitle,
+            OperationalListingValidationError::MissingDescription => Self::MissingDescription,
+            OperationalListingValidationError::MissingProductType => Self::MissingProductType,
+            OperationalListingValidationError::MissingBins => Self::MissingBins,
+            OperationalListingValidationError::MissingPrimaryBin => Self::MissingPrimaryBin,
+            OperationalListingValidationError::InvalidBin => Self::InvalidBin,
+            OperationalListingValidationError::MissingPrice => Self::MissingPrice,
+            OperationalListingValidationError::InvalidPrice => Self::InvalidPrice,
+            OperationalListingValidationError::MissingInventory => Self::MissingInventory,
+            OperationalListingValidationError::InvalidInventory => Self::InvalidInventory,
+            OperationalListingValidationError::MissingAvailability => Self::MissingAvailability,
+            OperationalListingValidationError::MissingLocation => Self::MissingLocation,
+            OperationalListingValidationError::MissingLocationLocality => {
                 Self::MissingLocationLocality
             }
-            RadrootsOperationalListingValidationError::MissingLocationGeohash => {
+            OperationalListingValidationError::MissingLocationGeohash => {
                 Self::MissingLocationGeohash
             }
-            RadrootsOperationalListingValidationError::InvalidLocationGeohash => {
+            OperationalListingValidationError::InvalidLocationGeohash => {
                 Self::InvalidLocationGeohash
             }
-            RadrootsOperationalListingValidationError::MissingDeliveryMethod => {
-                Self::MissingDeliveryMethod
-            }
+            OperationalListingValidationError::MissingDeliveryMethod => Self::MissingDeliveryMethod,
         }
     }
 }

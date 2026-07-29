@@ -1,7 +1,7 @@
 use core::fmt;
 use core::time::Duration;
 
-use radroots_event::draft::RadrootsSignedEvent;
+use radroots_event::draft::SignedEvent;
 use radroots_protocol::radrootsd::transport_publish::v5::{
     DeliveryPolicy as TransportPublishDeliveryPolicy, Error as TransportPublishProtocolError,
     EventRequest as TransportPublishEventRequest, EventResponse as TransportPublishEventResponse,
@@ -102,7 +102,7 @@ impl RadrootsdPublishAdapter {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsdPublishRequest {
-    pub signed_event: RadrootsSignedEvent,
+    pub signed_event: SignedEvent,
     pub target_policy: TransportPublishTargetPolicy,
     pub delivery_policy: TransportPublishDeliveryPolicy,
     pub idempotency_key: Option<String>,
@@ -129,7 +129,7 @@ struct RadrootsdPublishEventIdentity {
 }
 
 impl RadrootsdPublishEventIdentity {
-    fn from_signed_event(event: &RadrootsSignedEvent) -> Self {
+    fn from_signed_event(event: &SignedEvent) -> Self {
         Self {
             event_id: event.id_str().to_owned(),
             pubkey: event.pubkey().to_hex().to_owned(),

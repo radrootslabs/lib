@@ -4,7 +4,7 @@
 use base64::Engine;
 #[cfg(target_arch = "wasm32")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+use radroots_event::envelope::{EventEnvelope, EventEnvelopeParts};
 #[cfg(any(target_arch = "wasm32", test))]
 use radroots_replica_sync::RadrootsReplicaIngestOutcome;
 use radroots_replica_sync::RadrootsReplicaSyncRequest;
@@ -52,10 +52,10 @@ pub fn parse_request_model(request_json: &str) -> Result<RadrootsReplicaSyncRequ
     serde_json::from_str(request_json).map_err(|error| error.to_string())
 }
 
-pub fn parse_event_model(event_json: &str) -> Result<RadrootsEventEnvelope, String> {
+pub fn parse_event_model(event_json: &str) -> Result<EventEnvelope, String> {
     let envelope: EventEnvelopeInput =
         serde_json::from_str(event_json).map_err(|error| error.to_string())?;
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: envelope.id,
         author: envelope.author,
         created_at: envelope.created_at,

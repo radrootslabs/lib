@@ -3,7 +3,7 @@ use super::*;
 use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_authority::{RadrootsSignerError, RadrootsSignerIdentity};
 use radroots_event::contract::AuthorRole;
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent, RadrootsSignedEventParts};
+use radroots_event::draft::{EventDraft, SignedEvent, SignedEventParts};
 use radroots_event::envelope::kind::{KIND_FARM, KIND_GEOCHAT};
 use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
@@ -60,10 +60,7 @@ impl RadrootsEventSigner for FailIfCalledSigner {
         self.identity.pubkey()
     }
 
-    fn sign_frozen_draft(
-        &self,
-        _draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+    fn sign_frozen_draft(&self, _draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
         panic!("ephemeral workflow preflight must not invoke the signer")
     }
 }
@@ -81,16 +78,13 @@ impl RadrootsEventSigner for InvalidSignatureSigner {
         self.0.pubkey()
     }
 
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
         let signed = self.0.sign_frozen_draft(draft)?;
         let mut wire = signed.wire().clone();
         wire.sig = "0".repeat(128);
         let raw_json =
             serde_json::to_string(&wire).expect("invalid-signature fixture must serialize");
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
+        SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
             }
@@ -103,10 +97,7 @@ impl RadrootsEventSigner for WorkflowSigner {
         self.identity.pubkey()
     }
 
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -115,12 +106,12 @@ impl RadrootsEventSigner for WorkflowSigner {
     }
 }
 
-fn frozen_draft_for(pubkey: &str) -> RadrootsEventDraft {
+fn frozen_draft_for(pubkey: &str) -> EventDraft {
     frozen_draft_for_d_tag(pubkey, "test")
 }
 
-fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsEventDraft {
-    RadrootsEventDraft::new(
+fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> EventDraft {
+    EventDraft::new(
         "radroots.farm.profile.v1",
         KIND_FARM,
         1_700_000_000,
@@ -131,12 +122,12 @@ fn frozen_draft_for_d_tag(pubkey: &str, d_tag: &str) -> RadrootsEventDraft {
     .expect("frozen draft")
 }
 
-fn frozen_draft() -> RadrootsEventDraft {
+fn frozen_draft() -> EventDraft {
     frozen_draft_for("a".repeat(64).as_str())
 }
 
-fn ephemeral_draft_for(pubkey: &str) -> RadrootsEventDraft {
-    RadrootsEventDraft::new(
+fn ephemeral_draft_for(pubkey: &str) -> EventDraft {
+    EventDraft::new(
         "radroots.social.geochat.v1",
         KIND_GEOCHAT,
         1_700_000_000,
@@ -147,7 +138,7 @@ fn ephemeral_draft_for(pubkey: &str) -> RadrootsEventDraft {
     .expect("ephemeral draft")
 }
 
-fn signed_event() -> RadrootsSignedEvent {
+fn signed_event() -> SignedEvent {
     let draft = frozen_draft();
     let sig = "c".repeat(128);
     let raw_json = serde_json::json!({
@@ -160,7 +151,7 @@ fn signed_event() -> RadrootsSignedEvent {
         "sig": sig,
     })
     .to_string();
-    RadrootsSignedEvent::new(RadrootsSignedEventParts {
+    SignedEvent::new(SignedEventParts {
         id: draft.expected_event_id_hex().to_owned(),
         pubkey: draft.expected_pubkey().to_hex().to_owned(),
         created_at: draft.created_at_u64(),
@@ -199,7 +190,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     assert_eq!(digest_prefix("abcdef1234567890"), "abcdef123456");
     assert_eq!(
         parse_event_id("b".repeat(64).as_str(), "event id").expect("event id"),
-        RadrootsEventId::parse("b".repeat(64)).expect("event id")
+        EventId::parse("b".repeat(64)).expect("event id")
     );
     assert!(matches!(
         parse_event_id("not-an-event-id", "signed event id"),
@@ -258,7 +249,7 @@ fn workflow_digest_and_event_helpers_cover_error_and_input_paths() {
     let frozen = frozen_draft_json(&draft).expect("frozen draft json");
     assert!(frozen.contains("\"expected_event_id\""));
     let receipt = SdkWorkflowEnqueueReceipt {
-        signed_event_id: RadrootsEventId::parse(draft.expected_event_id_hex()).expect("event id"),
+        signed_event_id: EventId::parse(draft.expected_event_id_hex()).expect("event id"),
         local_event_seq: 1,
         outbox_operation_id: 2,
         outbox_event_id: 3,

@@ -5,13 +5,12 @@ use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     contract::AuthorRole,
     envelope::kind::KIND_CLASSIFIED_LISTING,
-    farm::RadrootsFarmRef,
-    id::{RadrootsDTag, RadrootsInventoryBinId},
+    farm::FarmRef,
+    id::{DTag, InventoryBinId},
     listing::operational::{
-        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-        RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
-        RadrootsOperationalListingStatus,
+        OperationalListing, OperationalListingAvailability, OperationalListingBin,
+        OperationalListingDeliveryMethod, OperationalListingProduct,
+        OperationalListingPublicLocation, OperationalListingStatus,
     },
 };
 use radroots_event_store::RadrootsEventStore;
@@ -69,15 +68,15 @@ fn non_seller_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Buyer]).expect("actor")
 }
 
-fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
-    RadrootsOperationalListing {
-        d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
+fn listing(d_tag: &str, title: &str) -> OperationalListing {
+    OperationalListing {
+        d_tag: DTag::parse(d_tag).expect("d tag"),
         published_at: None,
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: seller_pubkey().to_owned(),
             d_tag: FARM_D_TAG.to_owned(),
         },
-        product: RadrootsOperationalListingProduct {
+        product: OperationalListingProduct {
             key: "coffee".to_owned(),
             title: title.to_owned(),
             category: "coffee".to_owned(),
@@ -88,9 +87,9 @@ fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-        bins: vec![RadrootsOperationalListingBin {
-            bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+        primary_bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
+        bins: vec![OperationalListingBin {
+            bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
             quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG)
                 .expect("positive fixture quantity"),
             price_per_canonical_unit: QuantityPrice::try_new(
@@ -110,11 +109,11 @@ fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
         plot: None,
         discounts: None,
         inventory_available: Some(Decimal::from(5u32)),
-        availability: Some(RadrootsOperationalListingAvailability::Status {
-            status: RadrootsOperationalListingStatus::Active,
+        availability: Some(OperationalListingAvailability::Status {
+            status: OperationalListingStatus::Active,
         }),
-        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
-        location: Some(RadrootsOperationalListingPublicLocation {
+        delivery_method: Some(OperationalListingDeliveryMethod::Pickup),
+        location: Some(OperationalListingPublicLocation {
             primary: "Victoria".to_owned(),
             city: Some("Victoria".to_owned()),
             region: Some("British Columbia".to_owned()),

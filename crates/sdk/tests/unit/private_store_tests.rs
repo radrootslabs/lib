@@ -1,10 +1,10 @@
 use super::*;
-use radroots_event::id::RadrootsAddressableCoordinate;
+use radroots_event::id::AddressableCoordinate;
 use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
-fn farm_addr_for(d_tag: &str) -> RadrootsAddressableCoordinate {
-    RadrootsAddressableCoordinate::parse(format!(
+fn farm_addr_for(d_tag: &str) -> AddressableCoordinate {
+    AddressableCoordinate::parse(format!(
         "{}:{}:{}",
         radroots_event::envelope::kind::KIND_FARM,
         "a".repeat(64),
@@ -13,7 +13,7 @@ fn farm_addr_for(d_tag: &str) -> RadrootsAddressableCoordinate {
     .expect("farm addr")
 }
 
-fn farm_addr() -> RadrootsAddressableCoordinate {
+fn farm_addr() -> AddressableCoordinate {
     farm_addr_for("AAAAAAAAAAAAAAAAAAAAAA")
 }
 

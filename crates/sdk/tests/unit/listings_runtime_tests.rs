@@ -3,13 +3,12 @@ use crate::{RadrootsSdkLocalKeySigner, RadrootsSdkSignerProvider};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     contract::AuthorRole,
-    farm::RadrootsFarmRef,
-    farm::resource_area::RadrootsResourceAreaRef,
-    id::{RadrootsDTag, RadrootsInventoryBinId},
+    farm::FarmRef,
+    farm::resource_area::ResourceAreaRef,
+    id::{DTag, InventoryBinId},
     listing::operational::{
-        RadrootsOperationalListingAvailability, RadrootsOperationalListingBin,
-        RadrootsOperationalListingDeliveryMethod, RadrootsOperationalListingProduct,
-        RadrootsOperationalListingPublicLocation, RadrootsOperationalListingStatus,
+        OperationalListingAvailability, OperationalListingBin, OperationalListingDeliveryMethod,
+        OperationalListingProduct, OperationalListingPublicLocation, OperationalListingStatus,
     },
 };
 
@@ -31,19 +30,19 @@ fn actor() -> RadrootsActorContext {
     RadrootsActorContext::test(seller_pubkey(), [AuthorRole::Seller]).expect("actor")
 }
 
-fn listing(d_tag: &str, title: &str) -> RadrootsOperationalListing {
+fn listing(d_tag: &str, title: &str) -> OperationalListing {
     listing_for_seller(seller_pubkey(), d_tag, title)
 }
 
-fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsOperationalListing {
-    RadrootsOperationalListing {
-        d_tag: RadrootsDTag::parse(d_tag).expect("d tag"),
+fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> OperationalListing {
+    OperationalListing {
+        d_tag: DTag::parse(d_tag).expect("d tag"),
         published_at: None,
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: seller.to_owned(),
             d_tag: FARM_D_TAG.to_owned(),
         },
-        product: RadrootsOperationalListingProduct {
+        product: OperationalListingProduct {
             key: "lettuce".to_owned(),
             title: title.to_owned(),
             category: "greens".to_owned(),
@@ -54,9 +53,9 @@ fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsOperati
             profile: None,
             year: None,
         },
-        primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-        bins: vec![RadrootsOperationalListingBin {
-            bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+        primary_bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
+        bins: vec![OperationalListingBin {
+            bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
             quantity: Quantity::try_new(Decimal::from(12u32), Unit::Each)
                 .expect("positive fixture quantity"),
             price_per_canonical_unit: QuantityPrice::try_new(
@@ -76,11 +75,11 @@ fn listing_for_seller(seller: &str, d_tag: &str, title: &str) -> RadrootsOperati
         plot: None,
         discounts: None,
         inventory_available: Some(Decimal::from(12u32)),
-        availability: Some(RadrootsOperationalListingAvailability::Status {
-            status: RadrootsOperationalListingStatus::Active,
+        availability: Some(OperationalListingAvailability::Status {
+            status: OperationalListingStatus::Active,
         }),
-        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
-        location: Some(RadrootsOperationalListingPublicLocation {
+        delivery_method: Some(OperationalListingDeliveryMethod::Pickup),
+        location: Some(OperationalListingPublicLocation {
             primary: "Victoria".to_owned(),
             city: Some("Victoria".to_owned()),
             region: Some("British Columbia".to_owned()),
@@ -159,7 +158,7 @@ fn listing_request_builders_reject_invalid_options_and_timestamp_bounds() {
 
     let mut invalid_resource_area_listing =
         listing(LISTING_C_D_TAG, "Invalid Resource Area Greens");
-    invalid_resource_area_listing.resource_area = Some(RadrootsResourceAreaRef {
+    invalid_resource_area_listing.resource_area = Some(ResourceAreaRef {
         pubkey: seller_pubkey().to_owned(),
         d_tag: "bad d tag".to_owned(),
     });
@@ -236,7 +235,7 @@ async fn listing_prepared_plan_rejects_forged_state_before_signing_or_mutation()
     );
     // Frozen drafts enforce registry contract-kind consistency, so a valid foreign pair is the
     // safe representable substitution for both identity fields.
-    let foreign_draft = RadrootsEventDraft::new(
+    let foreign_draft = EventDraft::new(
         "radroots.social.geochat.v1",
         radroots_event::envelope::kind::KIND_GEOCHAT,
         plan.created_at().unix_seconds(),
@@ -255,7 +254,7 @@ async fn listing_prepared_plan_rejects_forged_state_before_signing_or_mutation()
 
     let mut forged_event_id = plan.clone();
     forged_event_id.expected_event_id =
-        RadrootsEventId::parse(fixture_bob_pubkey()).expect("alternate event ID");
+        EventId::parse(fixture_bob_pubkey()).expect("alternate event ID");
     assert!(matches!(
         validate_listing_publish_plan(&forged_event_id),
         Err(RadrootsSdkError::InvalidRequest { ref message })
@@ -263,7 +262,7 @@ async fn listing_prepared_plan_rejects_forged_state_before_signing_or_mutation()
     ));
 
     let mut forged_address = plan.clone();
-    forged_address.public_listing_addr = RadrootsClassifiedListingAddress::parse(format!(
+    forged_address.public_listing_addr = ClassifiedListingAddress::parse(format!(
         "{KIND_CLASSIFIED_LISTING}:{}:{LISTING_B_D_TAG}",
         seller_pubkey()
     ))

@@ -1,5 +1,5 @@
 use super::*;
-use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event::wire::Nip01EventWire;
 use radroots_protocol::radrootsd::transport_publish::v5::{
     DeliveryPolicy as TransportPublishDeliveryPolicy, EventRequest as TransportPublishEventRequest,
     EventResponse as TransportPublishEventResponse, Job as TransportPublishJobView,
@@ -93,8 +93,8 @@ fn spawn_http_server(
     (endpoint, handle)
 }
 
-fn signed_event() -> RadrootsSignedEvent {
-    let mut wire = RadrootsNip01EventWire {
+fn signed_event() -> SignedEvent {
+    let mut wire = Nip01EventWire {
         id: String::new(),
         pubkey: SIGNED_EVENT_PUBLIC_KEY.to_owned(),
         created_at: 1_700_000_000,
@@ -106,7 +106,7 @@ fn signed_event() -> RadrootsSignedEvent {
     };
     wire.id = wire.computed_event_id().expect("event id").into_string();
     let raw_json = serde_json::to_string(&wire).expect("raw event json");
-    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
 fn publish_request() -> TransportPublishEventRequest {

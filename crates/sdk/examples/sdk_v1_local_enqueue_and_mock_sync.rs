@@ -1,13 +1,12 @@
 use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::contract::AuthorRole;
-use radroots_event::farm::RadrootsFarmRef;
-use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::farm::FarmRef;
+use radroots_event::id::{DTag, InventoryBinId};
 use radroots_event::listing::operational::{
-    RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-    RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-    RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
-    RadrootsOperationalListingStatus,
+    OperationalListing, OperationalListingAvailability, OperationalListingBin,
+    OperationalListingDeliveryMethod, OperationalListingProduct, OperationalListingPublicLocation,
+    OperationalListingStatus,
 };
 use radroots_nostr::prelude::RadrootsNostrKeys;
 use radroots_sdk::{
@@ -63,15 +62,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn sample_listing(seller: &str) -> RadrootsOperationalListing {
-    RadrootsOperationalListing {
-        d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAQ").expect("d tag"),
+fn sample_listing(seller: &str) -> OperationalListing {
+    OperationalListing {
+        d_tag: DTag::parse("AAAAAAAAAAAAAAAAAAAAAQ").expect("d tag"),
         published_at: None,
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: seller.to_owned(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
         },
-        product: RadrootsOperationalListingProduct {
+        product: OperationalListingProduct {
             key: "coffee".to_owned(),
             title: "Coffee".to_owned(),
             category: "coffee".to_owned(),
@@ -82,9 +81,9 @@ fn sample_listing(seller: &str) -> RadrootsOperationalListing {
             profile: None,
             year: None,
         },
-        primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-        bins: vec![RadrootsOperationalListingBin {
-            bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+        primary_bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
+        bins: vec![OperationalListingBin {
+            bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
             quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG)
                 .expect("positive example quantity"),
             price_per_canonical_unit: QuantityPrice::try_new(
@@ -104,11 +103,11 @@ fn sample_listing(seller: &str) -> RadrootsOperationalListing {
         plot: None,
         discounts: None,
         inventory_available: Some(Decimal::from(5u32)),
-        availability: Some(RadrootsOperationalListingAvailability::Status {
-            status: RadrootsOperationalListingStatus::Active,
+        availability: Some(OperationalListingAvailability::Status {
+            status: OperationalListingStatus::Active,
         }),
-        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
-        location: Some(RadrootsOperationalListingPublicLocation {
+        delivery_method: Some(OperationalListingDeliveryMethod::Pickup),
+        location: Some(OperationalListingPublicLocation {
             primary: "Victoria".to_owned(),
             city: Some("Victoria".to_owned()),
             region: Some("British Columbia".to_owned()),

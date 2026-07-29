@@ -3,7 +3,7 @@ use nostr::nips::nip44::{self, Version};
 use nostr::{EventBuilder, JsonUtil, Kind, Tag};
 use radroots_authority::RadrootsLocalEventSigner;
 use radroots_event::contract::AuthorRole;
-use radroots_event::draft::RadrootsEventDraft;
+use radroots_event::draft::EventDraft;
 use radroots_event::envelope::kind::{
     KIND_CLASSIFIED_LISTING, KIND_COOP, KIND_FARM, TRADE_MUTATION_EVENT_KINDS,
 };
@@ -50,7 +50,7 @@ fn actor() -> RadrootsActorContext {
     RadrootsActorContext::test(user_pubkey(), [AuthorRole::Farmer]).expect("actor")
 }
 
-fn frozen_draft() -> RadrootsEventDraft {
+fn frozen_draft() -> EventDraft {
     frozen_draft_with(
         "radroots.farm.profile.v1",
         user_pubkey(),
@@ -68,8 +68,8 @@ fn frozen_draft_with(
     created_at: u32,
     tags: Vec<Vec<String>>,
     content: &str,
-) -> RadrootsEventDraft {
-    RadrootsEventDraft::new(
+) -> EventDraft {
+    EventDraft::new(
         contract_id,
         kind,
         u64::from(created_at),
@@ -80,7 +80,7 @@ fn frozen_draft_with(
     .expect("frozen draft")
 }
 
-fn sign_event(keys: &RadrootsNostrKeys, draft: &RadrootsEventDraft) -> RadrootsNostrEvent {
+fn sign_event(keys: &RadrootsNostrKeys, draft: &EventDraft) -> RadrootsNostrEvent {
     let signed =
         radroots_nostr::prelude::radroots_nostr_sign_frozen_draft(keys, draft).expect("signed");
     RadrootsNostrEvent::from_json(signed.raw_json()).expect("event")

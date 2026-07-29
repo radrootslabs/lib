@@ -56,7 +56,7 @@ fn listing_and_store_errors_convert_to_sdk_error_classes() {
 
     let invalid_model = RadrootsSdkError::from(
         radroots_trade::operational_listing::RadrootsOperationalListingEditError::InvalidModel(
-            radroots_event::trade::validation::RadrootsOperationalListingValidationError::MissingInventory,
+            radroots_event::trade::validation::OperationalListingValidationError::MissingInventory,
         ),
     );
     assert!(matches!(

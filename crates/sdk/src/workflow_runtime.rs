@@ -7,9 +7,9 @@ use crate::{
 };
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner, sign_authorized_draft};
 use radroots_event::{
-    draft::{RadrootsEventDraft, RadrootsSignedEvent},
-    envelope::{RadrootsEventKind, RadrootsEventKindClass},
-    id::RadrootsEventId,
+    draft::{EventDraft, SignedEvent},
+    envelope::{EventKind, EventKindClass},
+    id::EventId,
 };
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventPersistence, RadrootsEventStoreError,
@@ -31,7 +31,7 @@ const SDK_RUNTIME_CONTRACT_VERSION: &str = "1";
 pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
     pub(crate) operation_kind: &'static str,
     pub(crate) actor: &'a RadrootsActorContext,
-    pub(crate) frozen_draft: &'a RadrootsEventDraft,
+    pub(crate) frozen_draft: &'a EventDraft,
     pub(crate) target_policy: TargetPolicy,
     pub(crate) satisfaction_policy: SatisfactionPolicy,
     pub(crate) idempotency_key: Option<SdkIdempotencyKey>,
@@ -39,7 +39,7 @@ pub(crate) struct SdkWorkflowEnqueueRequest<'a> {
 
 #[derive(Debug)]
 pub(crate) struct SdkWorkflowEnqueueReceipt {
-    pub(crate) signed_event_id: RadrootsEventId,
+    pub(crate) signed_event_id: EventId,
     pub(crate) local_event_seq: i64,
     pub(crate) outbox_operation_id: i64,
     pub(crate) outbox_event_id: i64,
@@ -134,7 +134,7 @@ pub(crate) async fn enqueue_configured_signed_workflow(
 async fn enqueue_signed_workflow_event(
     sdk: &RadrootsClient,
     request: &SdkWorkflowEnqueueRequest<'_>,
-    signed_event: RadrootsSignedEvent,
+    signed_event: SignedEvent,
     delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     if radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS
@@ -154,7 +154,7 @@ async fn enqueue_signed_workflow_event(
                 ),
             })?;
     let observed_at_ms = sdk_now_ms(sdk)?;
-    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_hex())
+    let signed_event_id = EventId::parse(request.frozen_draft.expected_event_id_hex())
         .expect("frozen workflow draft has a valid expected event id");
     let delivery_plan_value = delivery_plan.delivery_plan;
     let mut tx =
@@ -219,7 +219,7 @@ async fn enqueue_signed_workflow_event(
 async fn enqueue_signed_trade_workflow_event(
     sdk: &RadrootsClient,
     request: &SdkWorkflowEnqueueRequest<'_>,
-    signed_event: RadrootsSignedEvent,
+    signed_event: SignedEvent,
     delivery_plan: SdkResolvedDeliveryPlan,
 ) -> Result<SdkWorkflowEnqueueReceipt, RadrootsSdkError> {
     let idempotency_key =
@@ -233,7 +233,7 @@ async fn enqueue_signed_trade_workflow_event(
                 ),
             })?;
     let observed_at_ms = sdk_now_ms(sdk)?;
-    let signed_event_id = RadrootsEventId::parse(request.frozen_draft.expected_event_id_hex())
+    let signed_event_id = EventId::parse(request.frozen_draft.expected_event_id_hex())
         .expect("frozen workflow draft has a valid expected event id");
     let delivery_plan_value = delivery_plan.delivery_plan;
     let mut tx =
@@ -436,9 +436,7 @@ fn digest_prefix(digest: &str) -> String {
 fn ensure_durable_workflow_kind(
     request: &SdkWorkflowEnqueueRequest<'_>,
 ) -> Result<(), RadrootsSdkError> {
-    if RadrootsEventKind::new(request.frozen_draft.kind_u32()).class()
-        == RadrootsEventKindClass::Ephemeral
-    {
+    if EventKind::new(request.frozen_draft.kind_u32()).class() == EventKindClass::Ephemeral {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
                 "{} cannot enqueue ephemeral event kind {} into a durable workflow",
@@ -452,7 +450,7 @@ fn ensure_durable_workflow_kind(
 
 fn workflow_event_ingest(
     operation_kind: &str,
-    signed_event: RadrootsSignedEvent,
+    signed_event: SignedEvent,
     observed_at_ms: i64,
 ) -> Result<RadrootsEventIngest, RadrootsSdkError> {
     RadrootsEventIngest::from_signed_event(signed_event, observed_at_ms).map_err(
@@ -525,16 +523,16 @@ struct PreparedRuntimeOperation {
 }
 
 #[cfg(test)]
-fn parse_event_id(value: &str, field: &str) -> Result<RadrootsEventId, RadrootsSdkError> {
-    RadrootsEventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
+fn parse_event_id(value: &str, field: &str) -> Result<EventId, RadrootsSdkError> {
+    EventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
         message: format!("{field} is invalid: {error}"),
     })
 }
 
 fn signed_outbox_input(
     operation_kind: &'static str,
-    frozen_draft: &RadrootsEventDraft,
-    signed_event: RadrootsSignedEvent,
+    frozen_draft: &EventDraft,
+    signed_event: SignedEvent,
     delivery_plan: RadrootsOutboxDeliveryPlanInput,
     idempotency_key: SdkIdempotencyKey,
     event_store_inserted: bool,
@@ -554,8 +552,8 @@ fn signed_outbox_input(
 
 fn signed_trade_outbox_input(
     operation_kind: &'static str,
-    frozen_draft: &RadrootsEventDraft,
-    signed_event: RadrootsSignedEvent,
+    frozen_draft: &EventDraft,
+    signed_event: SignedEvent,
     delivery_plan: RadrootsOutboxDeliveryPlanInput,
     idempotency_key: SdkIdempotencyKey,
     event_store_inserted: bool,
@@ -930,7 +928,7 @@ fn workflow_receipt_from_result_json(
         })?
         .to_owned();
     Ok(SdkWorkflowEnqueueReceipt {
-        signed_event_id: RadrootsEventId::parse(signed_event_id).map_err(|error| {
+        signed_event_id: EventId::parse(signed_event_id).map_err(|error| {
             RadrootsSdkError::EventStore {
                 message: error.to_string(),
             }
@@ -962,7 +960,7 @@ fn outbox_enqueue_status_from_str(
     }
 }
 
-fn frozen_draft_json(frozen_draft: &RadrootsEventDraft) -> Result<String, RadrootsSdkError> {
+fn frozen_draft_json(frozen_draft: &EventDraft) -> Result<String, RadrootsSdkError> {
     serde_json::to_string(&serde_json::json!({
         "contract_id": frozen_draft.contract_id(),
         "contract_registry_version": frozen_draft.contract_registry_version(),
@@ -978,7 +976,7 @@ fn frozen_draft_json(frozen_draft: &RadrootsEventDraft) -> Result<String, Radroo
     })
 }
 
-fn mutation_id_from_draft(frozen_draft: &RadrootsEventDraft) -> Option<String> {
+fn mutation_id_from_draft(frozen_draft: &EventDraft) -> Option<String> {
     if !radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS
         .contains(&frozen_draft.kind_u32())
     {

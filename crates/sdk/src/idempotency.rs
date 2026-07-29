@@ -1,6 +1,6 @@
 use crate::RadrootsSdkError;
 use core::fmt;
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use radroots_identity::PublicKey;
 use serde::ser::SerializeStruct;
 
@@ -73,7 +73,7 @@ pub struct SdkTradeIdempotencyRecord {
     pub actor_pubkey: PublicKey,
     pub digest: String,
     pub canonical_payload_hash: String,
-    pub expected_event_id: RadrootsEventId,
+    pub expected_event_id: EventId,
     pub outbox_operation_id: i64,
 }
 

@@ -1,5 +1,5 @@
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-use radroots_event::envelope::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::EventEnvelopeParts;
 use radroots_identity::PublicKey;
 use radroots_sdk::knowledge::prelude::*;
 
@@ -36,9 +36,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn sign_parts(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
     keys: &Keys,
-) -> Result<RadrootsEventEnvelope, Box<dyn std::error::Error>> {
+) -> Result<EventEnvelope, Box<dyn std::error::Error>> {
     let tags = parts
         .tags
         .into_iter()
@@ -48,7 +48,7 @@ fn sign_parts(
         .tags(tags)
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
         .sign_with_keys(keys)?;
-    Ok(RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    Ok(EventEnvelope::new(EventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs(),
@@ -68,8 +68,8 @@ fn hex_64(character: char) -> String {
     character.to_string().repeat(64)
 }
 
-fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
-    RadrootsEventRef {
+fn event_ref(character: char, kind: u32) -> EventRef {
+    EventRef {
         id: hex_64(character),
         author: PublicKey::from_hex(
             "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
@@ -85,7 +85,7 @@ fn claim_builder() -> RadrootsKnowledgeClaimBuilder {
     RadrootsKnowledgeClaimBuilder::new()
         .claim_type("practice_effect")
         .text("Cover crops improve soil structure.")
-        .citation_span(RadrootsKnowledgeCitationSpan {
+        .citation_span(KnowledgeCitationSpan {
             source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
             artifact_ref: None,
             page_start: Some(12),

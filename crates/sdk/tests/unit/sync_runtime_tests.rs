@@ -24,10 +24,10 @@ use radroots_authority::{
 #[cfg(feature = "radrootsd-execution")]
 use radroots_event::contract::AuthorRole;
 #[cfg(feature = "radrootsd-execution")]
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{EventDraft, SignedEvent};
 #[cfg(feature = "radrootsd-execution")]
 use radroots_event::envelope::kind::KIND_FARM;
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use radroots_event_store::RadrootsEventStoreStatusSummary;
 #[cfg(feature = "radrootsd-execution")]
 use radroots_identity::PublicKey;
@@ -110,10 +110,7 @@ impl RadrootsEventSigner for RadrootsdFixtureSigner {
         self.identity.pubkey()
     }
 
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -139,8 +136,8 @@ fn radrootsd_actor() -> RadrootsActorContext {
 }
 
 #[cfg(feature = "radrootsd-execution")]
-fn radrootsd_frozen_draft(d_tag: &str) -> RadrootsEventDraft {
-    RadrootsEventDraft::new(
+fn radrootsd_frozen_draft(d_tag: &str) -> EventDraft {
+    EventDraft::new(
         "radroots.farm.profile.v1",
         KIND_FARM,
         1_700_000_000,
@@ -399,7 +396,7 @@ fn push_event_receipt_parses_typed_event_id() {
 
     assert_eq!(
         receipt.event_id,
-        RadrootsEventId::parse(event_id).expect("event id")
+        EventId::parse(event_id).expect("event id")
     );
     assert_eq!(receipt.targets.len(), 1);
     assert_eq!(receipt.targets[0].transport_kind, "nostr");
@@ -1112,7 +1109,7 @@ async fn radrootsd_push_reports_missing_signed_claim_before_daemon_publish() {
         state: RadrootsOutboxEventState::Signed,
         claim_token: "claim-token".to_owned(),
         active_delivery_plan_id: Some(1),
-        draft: RadrootsEventDraft::new(
+        draft: EventDraft::new(
             "radroots.farm.profile.v1",
             KIND_FARM,
             1_700_000_000,
@@ -1760,7 +1757,7 @@ impl OutboxPublishReceiptFixture for RadrootsOutboxPublishReceipt {
 
 fn push_receipt(final_state: PushOutboxEventState) -> PushOutboxEventReceipt {
     PushOutboxEventReceipt {
-        event_id: RadrootsEventId::parse("a".repeat(64)).expect("event id"),
+        event_id: EventId::parse("a".repeat(64)).expect("event id"),
         outbox_event_id: 1,
         final_state,
         attempted_count: 0,

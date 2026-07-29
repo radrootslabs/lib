@@ -11,33 +11,30 @@ use std::{
 
 use core::fmt;
 
-pub use radroots_event::wire::RadrootsNip01EventWireParts;
+pub use radroots_event::wire::Nip01EventWireParts;
 pub use radroots_event::{
-    draft::{RadrootsDraftError, RadrootsEventDraft},
-    envelope::RadrootsEventEnvelope,
+    draft::{DraftError, EventDraft},
+    envelope::EventEnvelope,
     envelope::kind::{
         KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT,
         KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
         KIND_WIKI_MERGE_REQUEST, KIND_WIKI_REDIRECT,
     },
     knowledge::{
+        AddressableRef, ContributionAttestation, EvidenceBounty, KnowledgeChangeProposal,
+        KnowledgeCitationSpan, KnowledgeClaim, KnowledgeFieldContext, KnowledgeFieldReport,
+        KnowledgeLocation, KnowledgeLocationPrecision, KnowledgeNodeRef, KnowledgeObservation,
+        KnowledgeObservationValue, KnowledgeRelation, KnowledgeReview, KnowledgeReviewScope,
+        KnowledgeReviewScore, KnowledgeReviewTarget, KnowledgeSource, KnowledgeValidationError,
         RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA, RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
         RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
         RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
         RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RADROOTS_WIKI_D_TAG_MAX_LEN, RadrootsAddressableRef,
-        RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
-        RadrootsKnowledgeCitationSpan, RadrootsKnowledgeClaim, RadrootsKnowledgeFieldContext,
-        RadrootsKnowledgeFieldReport, RadrootsKnowledgeLocation,
-        RadrootsKnowledgeLocationPrecision, RadrootsKnowledgeNodeRef, RadrootsKnowledgeObservation,
-        RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation, RadrootsKnowledgeReview,
-        RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
-        RadrootsKnowledgeSource, RadrootsKnowledgeValidationError, RadrootsRightsAssertion,
-        RadrootsWikiArticle, RadrootsWikiArticleVersionRef, RadrootsWikiDTagError,
-        RadrootsWikiMergeRequest, RadrootsWikiRedirect, normalize_wiki_d_tag,
-        validate_knowledge_claim, validate_wiki_article, validate_wiki_d_tag,
+        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RADROOTS_WIKI_D_TAG_MAX_LEN, RightsAssertion,
+        WikiArticle, WikiArticleVersionRef, WikiDTagError, WikiMergeRequest, WikiRedirect,
+        normalize_wiki_d_tag, validate_knowledge_claim, validate_wiki_article, validate_wiki_d_tag,
     },
-    tag::RadrootsEventRef,
+    tag::EventRef,
 };
 pub use radroots_event_codec::{
     RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION,
@@ -82,7 +79,7 @@ pub const KNOWLEDGE_FIELD_REPORT_CONTRACT_ID: &str = RADROOTS_KNOWLEDGE_FIELD_RE
 pub enum RadrootsSdkKnowledgeError {
     Builder(RadrootsKnowledgeBuilderError),
     Encode(RadrootsEncodeError),
-    Draft(RadrootsDraftError),
+    Draft(DraftError),
     Decode(RadrootsDecodeError),
     Manifest(serde_json::Error),
 }
@@ -186,8 +183,8 @@ impl From<RadrootsEncodeError> for RadrootsSdkKnowledgeError {
     }
 }
 
-impl From<RadrootsDraftError> for RadrootsSdkKnowledgeError {
-    fn from(value: RadrootsDraftError) -> Self {
+impl From<DraftError> for RadrootsSdkKnowledgeError {
+    fn from(value: DraftError) -> Self {
         Self::Draft(value)
     }
 }
@@ -211,9 +208,9 @@ pub struct RadrootsWikiArticleBuilder {
     content_djot: Option<String>,
     summary: Option<String>,
     topics: Vec<String>,
-    references: Vec<RadrootsEventRef>,
-    forked_from: Vec<RadrootsWikiArticleVersionRef>,
-    deferred_to: Option<RadrootsWikiArticleVersionRef>,
+    references: Vec<EventRef>,
+    forked_from: Vec<WikiArticleVersionRef>,
+    deferred_to: Option<WikiArticleVersionRef>,
 }
 
 impl RadrootsWikiArticleBuilder {
@@ -244,23 +241,23 @@ impl RadrootsWikiArticleBuilder {
         self
     }
 
-    pub fn reference(mut self, reference: RadrootsEventRef) -> Self {
+    pub fn reference(mut self, reference: EventRef) -> Self {
         self.references.push(reference);
         self
     }
 
-    pub fn forked_from(mut self, version_ref: RadrootsWikiArticleVersionRef) -> Self {
+    pub fn forked_from(mut self, version_ref: WikiArticleVersionRef) -> Self {
         self.forked_from.push(version_ref);
         self
     }
 
-    pub fn deferred_to(mut self, version_ref: RadrootsWikiArticleVersionRef) -> Self {
+    pub fn deferred_to(mut self, version_ref: WikiArticleVersionRef) -> Self {
         self.deferred_to = Some(version_ref);
         self
     }
 
-    pub fn build(self) -> Result<RadrootsWikiArticle, RadrootsKnowledgeBuilderError> {
-        let article = RadrootsWikiArticle {
+    pub fn build(self) -> Result<WikiArticle, RadrootsKnowledgeBuilderError> {
+        let article = WikiArticle {
             d_tag: self.d_tag,
             title: self.title,
             content_djot: builder_required_string(self.content_djot, "content_djot")?,
@@ -273,7 +270,7 @@ impl RadrootsWikiArticleBuilder {
         builder_validated(article, validate_wiki_article)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_wiki_article_event(&self.build()?)
     }
 
@@ -281,7 +278,7 @@ impl RadrootsWikiArticleBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_wiki_article_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
@@ -289,7 +286,7 @@ impl RadrootsWikiArticleBuilder {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsWikiRedirectBuilder {
     d_tag: String,
-    target: Option<RadrootsAddressableRef>,
+    target: Option<AddressableRef>,
 }
 
 impl RadrootsWikiRedirectBuilder {
@@ -300,20 +297,20 @@ impl RadrootsWikiRedirectBuilder {
         }
     }
 
-    pub fn target(mut self, target: RadrootsAddressableRef) -> Self {
+    pub fn target(mut self, target: AddressableRef) -> Self {
         self.target = Some(target);
         self
     }
 
-    pub fn build(self) -> Result<RadrootsWikiRedirect, RadrootsKnowledgeBuilderError> {
-        let redirect = RadrootsWikiRedirect {
+    pub fn build(self) -> Result<WikiRedirect, RadrootsKnowledgeBuilderError> {
+        let redirect = WikiRedirect {
             d_tag: self.d_tag,
             target: builder_required(self.target, "target")?,
         };
         builder_validated(redirect, validate_wiki_redirect)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_wiki_redirect_event(&self.build()?)
     }
 
@@ -321,14 +318,14 @@ impl RadrootsWikiRedirectBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_wiki_redirect_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsWikiMergeRequestBuilder {
-    target_article: Option<RadrootsAddressableRef>,
+    target_article: Option<AddressableRef>,
     destination_pubkey: Option<String>,
     base_version_event_id: Option<String>,
     source_version_event_id: Option<String>,
@@ -346,7 +343,7 @@ impl RadrootsWikiMergeRequestBuilder {
         }
     }
 
-    pub fn target_article(mut self, target_article: RadrootsAddressableRef) -> Self {
+    pub fn target_article(mut self, target_article: AddressableRef) -> Self {
         self.target_article = Some(target_article);
         self
     }
@@ -371,8 +368,8 @@ impl RadrootsWikiMergeRequestBuilder {
         self
     }
 
-    pub fn build(self) -> Result<RadrootsWikiMergeRequest, RadrootsKnowledgeBuilderError> {
-        let request = RadrootsWikiMergeRequest {
+    pub fn build(self) -> Result<WikiMergeRequest, RadrootsKnowledgeBuilderError> {
+        let request = WikiMergeRequest {
             target_article: builder_required(self.target_article, "target_article")?,
             destination_pubkey: builder_required_string(
                 self.destination_pubkey,
@@ -388,7 +385,7 @@ impl RadrootsWikiMergeRequestBuilder {
         builder_validated(request, validate_wiki_merge_request)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_wiki_merge_request_event(&self.build()?)
     }
 
@@ -396,7 +393,7 @@ impl RadrootsWikiMergeRequestBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_wiki_merge_request_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
@@ -411,8 +408,8 @@ pub struct RadrootsKnowledgeSourceBuilder {
     publication_year: Option<u16>,
     edition: Option<String>,
     canonical_url: Option<String>,
-    artifact_refs: Vec<RadrootsEventRef>,
-    author_asserted_rights: Option<RadrootsRightsAssertion>,
+    artifact_refs: Vec<EventRef>,
+    author_asserted_rights: Option<RightsAssertion>,
     topics: Vec<String>,
     summary: Option<String>,
 }
@@ -460,12 +457,12 @@ impl RadrootsKnowledgeSourceBuilder {
         self
     }
 
-    pub fn artifact_ref(mut self, artifact_ref: RadrootsEventRef) -> Self {
+    pub fn artifact_ref(mut self, artifact_ref: EventRef) -> Self {
         self.artifact_refs.push(artifact_ref);
         self
     }
 
-    pub fn author_asserted_rights(mut self, rights: RadrootsRightsAssertion) -> Self {
+    pub fn author_asserted_rights(mut self, rights: RightsAssertion) -> Self {
         self.author_asserted_rights = Some(rights);
         self
     }
@@ -480,8 +477,8 @@ impl RadrootsKnowledgeSourceBuilder {
         self
     }
 
-    pub fn build(self) -> Result<RadrootsKnowledgeSource, RadrootsKnowledgeBuilderError> {
-        let source = RadrootsKnowledgeSource {
+    pub fn build(self) -> Result<KnowledgeSource, RadrootsKnowledgeBuilderError> {
+        let source = KnowledgeSource {
             schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             d_tag: self.d_tag,
@@ -500,7 +497,7 @@ impl RadrootsKnowledgeSourceBuilder {
         builder_validated(source, validate_knowledge_source)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_source_event(&self.build()?)
     }
 
@@ -508,7 +505,7 @@ impl RadrootsKnowledgeSourceBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_source_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
@@ -517,11 +514,11 @@ impl RadrootsKnowledgeSourceBuilder {
 pub struct RadrootsKnowledgeClaimBuilder {
     claim_type: Option<String>,
     text: Option<String>,
-    citation_spans: Vec<RadrootsKnowledgeCitationSpan>,
+    citation_spans: Vec<KnowledgeCitationSpan>,
     topics: Vec<String>,
     applies_to: Vec<String>,
     author_asserted_confidence: Option<String>,
-    supersedes: Vec<RadrootsEventRef>,
+    supersedes: Vec<EventRef>,
 }
 
 impl RadrootsKnowledgeClaimBuilder {
@@ -547,7 +544,7 @@ impl RadrootsKnowledgeClaimBuilder {
         self
     }
 
-    pub fn citation_span(mut self, citation_span: RadrootsKnowledgeCitationSpan) -> Self {
+    pub fn citation_span(mut self, citation_span: KnowledgeCitationSpan) -> Self {
         self.citation_spans.push(citation_span);
         self
     }
@@ -570,13 +567,13 @@ impl RadrootsKnowledgeClaimBuilder {
         self
     }
 
-    pub fn supersedes(mut self, supersedes: RadrootsEventRef) -> Self {
+    pub fn supersedes(mut self, supersedes: EventRef) -> Self {
         self.supersedes.push(supersedes);
         self
     }
 
-    pub fn build(self) -> Result<RadrootsKnowledgeClaim, RadrootsKnowledgeBuilderError> {
-        let claim = RadrootsKnowledgeClaim {
+    pub fn build(self) -> Result<KnowledgeClaim, RadrootsKnowledgeBuilderError> {
+        let claim = KnowledgeClaim {
             schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             claim_type: builder_required_string(self.claim_type, "claim_type")?,
@@ -590,7 +587,7 @@ impl RadrootsKnowledgeClaimBuilder {
         builder_validated(claim, validate_knowledge_claim)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_claim_event(&self.build()?)
     }
 
@@ -598,19 +595,19 @@ impl RadrootsKnowledgeClaimBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_claim_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsKnowledgeRelationBuilder {
-    subject: Option<RadrootsKnowledgeNodeRef>,
+    subject: Option<KnowledgeNodeRef>,
     predicate: Option<String>,
-    object: Option<RadrootsKnowledgeNodeRef>,
-    support_refs: Vec<RadrootsEventRef>,
+    object: Option<KnowledgeNodeRef>,
+    support_refs: Vec<EventRef>,
     author_asserted_confidence: Option<String>,
-    supersedes: Vec<RadrootsEventRef>,
+    supersedes: Vec<EventRef>,
 }
 
 impl RadrootsKnowledgeRelationBuilder {
@@ -625,7 +622,7 @@ impl RadrootsKnowledgeRelationBuilder {
         }
     }
 
-    pub fn subject(mut self, subject: RadrootsKnowledgeNodeRef) -> Self {
+    pub fn subject(mut self, subject: KnowledgeNodeRef) -> Self {
         self.subject = Some(subject);
         self
     }
@@ -635,12 +632,12 @@ impl RadrootsKnowledgeRelationBuilder {
         self
     }
 
-    pub fn object(mut self, object: RadrootsKnowledgeNodeRef) -> Self {
+    pub fn object(mut self, object: KnowledgeNodeRef) -> Self {
         self.object = Some(object);
         self
     }
 
-    pub fn support_ref(mut self, support_ref: RadrootsEventRef) -> Self {
+    pub fn support_ref(mut self, support_ref: EventRef) -> Self {
         self.support_refs.push(support_ref);
         self
     }
@@ -653,13 +650,13 @@ impl RadrootsKnowledgeRelationBuilder {
         self
     }
 
-    pub fn supersedes(mut self, supersedes: RadrootsEventRef) -> Self {
+    pub fn supersedes(mut self, supersedes: EventRef) -> Self {
         self.supersedes.push(supersedes);
         self
     }
 
-    pub fn build(self) -> Result<RadrootsKnowledgeRelation, RadrootsKnowledgeBuilderError> {
-        let relation = RadrootsKnowledgeRelation {
+    pub fn build(self) -> Result<KnowledgeRelation, RadrootsKnowledgeBuilderError> {
+        let relation = KnowledgeRelation {
             schema: RADROOTS_KNOWLEDGE_RELATION_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             subject: builder_required(self.subject, "subject")?,
@@ -672,7 +669,7 @@ impl RadrootsKnowledgeRelationBuilder {
         builder_validated(relation, validate_knowledge_relation)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_relation_event(&self.build()?)
     }
 
@@ -680,19 +677,19 @@ impl RadrootsKnowledgeRelationBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_relation_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsKnowledgeReviewBuilder {
-    target: Option<RadrootsKnowledgeReviewTarget>,
+    target: Option<KnowledgeReviewTarget>,
     reviewer_role: Option<String>,
     verdict: Option<String>,
-    scores: Vec<RadrootsKnowledgeReviewScore>,
+    scores: Vec<KnowledgeReviewScore>,
     notes: Option<String>,
-    evidence_refs: Vec<RadrootsEventRef>,
+    evidence_refs: Vec<EventRef>,
 }
 
 impl RadrootsKnowledgeReviewBuilder {
@@ -707,7 +704,7 @@ impl RadrootsKnowledgeReviewBuilder {
         }
     }
 
-    pub fn target(mut self, target: RadrootsKnowledgeReviewTarget) -> Self {
+    pub fn target(mut self, target: KnowledgeReviewTarget) -> Self {
         self.target = Some(target);
         self
     }
@@ -722,7 +719,7 @@ impl RadrootsKnowledgeReviewBuilder {
         self
     }
 
-    pub fn score(mut self, score: RadrootsKnowledgeReviewScore) -> Self {
+    pub fn score(mut self, score: KnowledgeReviewScore) -> Self {
         self.scores.push(score);
         self
     }
@@ -732,13 +729,13 @@ impl RadrootsKnowledgeReviewBuilder {
         self
     }
 
-    pub fn evidence_ref(mut self, evidence_ref: RadrootsEventRef) -> Self {
+    pub fn evidence_ref(mut self, evidence_ref: EventRef) -> Self {
         self.evidence_refs.push(evidence_ref);
         self
     }
 
-    pub fn build(self) -> Result<RadrootsKnowledgeReview, RadrootsKnowledgeBuilderError> {
-        let review = RadrootsKnowledgeReview {
+    pub fn build(self) -> Result<KnowledgeReview, RadrootsKnowledgeBuilderError> {
+        let review = KnowledgeReview {
             schema: RADROOTS_KNOWLEDGE_REVIEW_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             target: builder_required(self.target, "target")?,
@@ -751,7 +748,7 @@ impl RadrootsKnowledgeReviewBuilder {
         builder_validated(review, validate_knowledge_review)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_review_event(&self.build()?)
     }
 
@@ -759,7 +756,7 @@ impl RadrootsKnowledgeReviewBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_review_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
@@ -769,10 +766,10 @@ pub struct RadrootsKnowledgeFieldReportBuilder {
     report_type: Option<String>,
     title: Option<String>,
     summary: Option<String>,
-    context: Option<RadrootsKnowledgeFieldContext>,
-    observations: Vec<RadrootsKnowledgeObservation>,
-    artifact_refs: Vec<RadrootsEventRef>,
-    related_refs: Vec<RadrootsEventRef>,
+    context: Option<KnowledgeFieldContext>,
+    observations: Vec<KnowledgeObservation>,
+    artifact_refs: Vec<EventRef>,
+    related_refs: Vec<EventRef>,
     limitations: Vec<String>,
 }
 
@@ -805,22 +802,22 @@ impl RadrootsKnowledgeFieldReportBuilder {
         self
     }
 
-    pub fn context(mut self, context: RadrootsKnowledgeFieldContext) -> Self {
+    pub fn context(mut self, context: KnowledgeFieldContext) -> Self {
         self.context = Some(context);
         self
     }
 
-    pub fn observation(mut self, observation: RadrootsKnowledgeObservation) -> Self {
+    pub fn observation(mut self, observation: KnowledgeObservation) -> Self {
         self.observations.push(observation);
         self
     }
 
-    pub fn artifact_ref(mut self, artifact_ref: RadrootsEventRef) -> Self {
+    pub fn artifact_ref(mut self, artifact_ref: EventRef) -> Self {
         self.artifact_refs.push(artifact_ref);
         self
     }
 
-    pub fn related_ref(mut self, related_ref: RadrootsEventRef) -> Self {
+    pub fn related_ref(mut self, related_ref: EventRef) -> Self {
         self.related_refs.push(related_ref);
         self
     }
@@ -830,8 +827,8 @@ impl RadrootsKnowledgeFieldReportBuilder {
         self
     }
 
-    pub fn build(self) -> Result<RadrootsKnowledgeFieldReport, RadrootsKnowledgeBuilderError> {
-        let report = RadrootsKnowledgeFieldReport {
+    pub fn build(self) -> Result<KnowledgeFieldReport, RadrootsKnowledgeBuilderError> {
+        let report = KnowledgeFieldReport {
             schema: RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             report_type: builder_required_string(self.report_type, "report_type")?,
@@ -846,7 +843,7 @@ impl RadrootsKnowledgeFieldReportBuilder {
         builder_validated(report, validate_knowledge_field_report)
     }
 
-    pub fn build_event(self) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    pub fn build_event(self) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_field_report_event(&self.build()?)
     }
 
@@ -854,7 +851,7 @@ impl RadrootsKnowledgeFieldReportBuilder {
         self,
         expected_pubkey: impl AsRef<str>,
         created_at: u32,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_field_report_draft(&self.build()?, expected_pubkey, created_at)
     }
 }
@@ -869,57 +866,57 @@ impl KnowledgeEventBuilder {
 
     pub fn wiki_article(
         &self,
-        article: &RadrootsWikiArticle,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        article: &WikiArticle,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_wiki_article_event(article)
     }
 
     pub fn wiki_redirect(
         &self,
-        redirect: &RadrootsWikiRedirect,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        redirect: &WikiRedirect,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_wiki_redirect_event(redirect)
     }
 
     pub fn wiki_merge_request(
         &self,
-        request: &RadrootsWikiMergeRequest,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        request: &WikiMergeRequest,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_wiki_merge_request_event(request)
     }
 
     pub fn knowledge_source(
         &self,
-        source: &RadrootsKnowledgeSource,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        source: &KnowledgeSource,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_source_event(source)
     }
 
     pub fn knowledge_claim(
         &self,
-        claim: &RadrootsKnowledgeClaim,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        claim: &KnowledgeClaim,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_claim_event(claim)
     }
 
     pub fn knowledge_relation(
         &self,
-        relation: &RadrootsKnowledgeRelation,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        relation: &KnowledgeRelation,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_relation_event(relation)
     }
 
     pub fn knowledge_review(
         &self,
-        review: &RadrootsKnowledgeReview,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        review: &KnowledgeReview,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_review_event(review)
     }
 
     pub fn knowledge_field_report(
         &self,
-        report: &RadrootsKnowledgeFieldReport,
-    ) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+        report: &KnowledgeFieldReport,
+    ) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
         build_knowledge_field_report_event(report)
     }
 }
@@ -948,57 +945,57 @@ impl KnowledgeDraftBuilder {
 
     pub fn wiki_article(
         &self,
-        article: &RadrootsWikiArticle,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        article: &WikiArticle,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_wiki_article_draft(article, self.expected_pubkey(), self.created_at)
     }
 
     pub fn wiki_redirect(
         &self,
-        redirect: &RadrootsWikiRedirect,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        redirect: &WikiRedirect,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_wiki_redirect_draft(redirect, self.expected_pubkey(), self.created_at)
     }
 
     pub fn wiki_merge_request(
         &self,
-        request: &RadrootsWikiMergeRequest,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        request: &WikiMergeRequest,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_wiki_merge_request_draft(request, self.expected_pubkey(), self.created_at)
     }
 
     pub fn knowledge_source(
         &self,
-        source: &RadrootsKnowledgeSource,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        source: &KnowledgeSource,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_source_draft(source, self.expected_pubkey(), self.created_at)
     }
 
     pub fn knowledge_claim(
         &self,
-        claim: &RadrootsKnowledgeClaim,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        claim: &KnowledgeClaim,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_claim_draft(claim, self.expected_pubkey(), self.created_at)
     }
 
     pub fn knowledge_relation(
         &self,
-        relation: &RadrootsKnowledgeRelation,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        relation: &KnowledgeRelation,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_relation_draft(relation, self.expected_pubkey(), self.created_at)
     }
 
     pub fn knowledge_review(
         &self,
-        review: &RadrootsKnowledgeReview,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        review: &KnowledgeReview,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_review_draft(review, self.expected_pubkey(), self.created_at)
     }
 
     pub fn knowledge_field_report(
         &self,
-        report: &RadrootsKnowledgeFieldReport,
-    ) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+        report: &KnowledgeFieldReport,
+    ) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
         prepare_knowledge_field_report_draft(report, self.expected_pubkey(), self.created_at)
     }
 }
@@ -1013,7 +1010,7 @@ impl KnowledgeCodec {
 
     pub fn verify_and_decode_radroots_event(
         &self,
-        event: RadrootsEventEnvelope,
+        event: EventEnvelope,
     ) -> Result<RadrootsDecodedEvent, RadrootsSdkKnowledgeError> {
         verify_and_decode_radroots_event(event)
     }
@@ -1032,58 +1029,58 @@ impl KnowledgeCodec {
 }
 
 pub fn build_wiki_article_event(
-    article: &RadrootsWikiArticle,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    article: &WikiArticle,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(wiki_article_to_wire_parts(article)?)
 }
 
 pub fn build_wiki_redirect_event(
-    redirect: &RadrootsWikiRedirect,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    redirect: &WikiRedirect,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(wiki_redirect_to_wire_parts(redirect)?)
 }
 
 pub fn build_wiki_merge_request_event(
-    request: &RadrootsWikiMergeRequest,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    request: &WikiMergeRequest,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(wiki_merge_request_to_wire_parts(request)?)
 }
 
 pub fn build_knowledge_source_event(
-    source: &RadrootsKnowledgeSource,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    source: &KnowledgeSource,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(knowledge_source_to_wire_parts(source)?)
 }
 
 pub fn build_knowledge_claim_event(
-    claim: &RadrootsKnowledgeClaim,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    claim: &KnowledgeClaim,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(knowledge_claim_to_wire_parts(claim)?)
 }
 
 pub fn build_knowledge_relation_event(
-    relation: &RadrootsKnowledgeRelation,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    relation: &KnowledgeRelation,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(knowledge_relation_to_wire_parts(relation)?)
 }
 
 pub fn build_knowledge_review_event(
-    review: &RadrootsKnowledgeReview,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    review: &KnowledgeReview,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(knowledge_review_to_wire_parts(review)?)
 }
 
 pub fn build_knowledge_field_report_event(
-    report: &RadrootsKnowledgeFieldReport,
-) -> Result<RadrootsNip01EventWireParts, RadrootsSdkKnowledgeError> {
+    report: &KnowledgeFieldReport,
+) -> Result<Nip01EventWireParts, RadrootsSdkKnowledgeError> {
     Ok(knowledge_field_report_to_wire_parts(report)?)
 }
 
 pub fn prepare_wiki_article_draft(
-    article: &RadrootsWikiArticle,
+    article: &WikiArticle,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_wiki_article_event(article)?,
         WIKI_ARTICLE_CONTRACT_ID,
@@ -1093,10 +1090,10 @@ pub fn prepare_wiki_article_draft(
 }
 
 pub fn prepare_wiki_redirect_draft(
-    redirect: &RadrootsWikiRedirect,
+    redirect: &WikiRedirect,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_wiki_redirect_event(redirect)?,
         WIKI_REDIRECT_CONTRACT_ID,
@@ -1106,10 +1103,10 @@ pub fn prepare_wiki_redirect_draft(
 }
 
 pub fn prepare_wiki_merge_request_draft(
-    request: &RadrootsWikiMergeRequest,
+    request: &WikiMergeRequest,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_wiki_merge_request_event(request)?,
         WIKI_MERGE_REQUEST_CONTRACT_ID,
@@ -1119,10 +1116,10 @@ pub fn prepare_wiki_merge_request_draft(
 }
 
 pub fn prepare_knowledge_source_draft(
-    source: &RadrootsKnowledgeSource,
+    source: &KnowledgeSource,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_knowledge_source_event(source)?,
         KNOWLEDGE_SOURCE_CONTRACT_ID,
@@ -1132,10 +1129,10 @@ pub fn prepare_knowledge_source_draft(
 }
 
 pub fn prepare_knowledge_claim_draft(
-    claim: &RadrootsKnowledgeClaim,
+    claim: &KnowledgeClaim,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_knowledge_claim_event(claim)?,
         KNOWLEDGE_CLAIM_CONTRACT_ID,
@@ -1145,10 +1142,10 @@ pub fn prepare_knowledge_claim_draft(
 }
 
 pub fn prepare_knowledge_relation_draft(
-    relation: &RadrootsKnowledgeRelation,
+    relation: &KnowledgeRelation,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_knowledge_relation_event(relation)?,
         KNOWLEDGE_RELATION_CONTRACT_ID,
@@ -1158,10 +1155,10 @@ pub fn prepare_knowledge_relation_draft(
 }
 
 pub fn prepare_knowledge_review_draft(
-    review: &RadrootsKnowledgeReview,
+    review: &KnowledgeReview,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_knowledge_review_event(review)?,
         KNOWLEDGE_REVIEW_CONTRACT_ID,
@@ -1171,10 +1168,10 @@ pub fn prepare_knowledge_review_draft(
 }
 
 pub fn prepare_knowledge_field_report_draft(
-    report: &RadrootsKnowledgeFieldReport,
+    report: &KnowledgeFieldReport,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
     prepare_draft(
         build_knowledge_field_report_event(report)?,
         KNOWLEDGE_FIELD_REPORT_CONTRACT_ID,
@@ -1184,7 +1181,7 @@ pub fn prepare_knowledge_field_report_draft(
 }
 
 pub fn verify_and_decode_radroots_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsDecodedEvent, RadrootsSdkKnowledgeError> {
     Ok(codec_verify_and_decode(event)?)
 }
@@ -1202,12 +1199,12 @@ pub fn contract_manifest_sha256() -> Result<String, RadrootsSdkKnowledgeError> {
 }
 
 fn prepare_draft(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
     contract_id: &'static str,
     expected_pubkey: impl AsRef<str>,
     created_at: u32,
-) -> Result<RadrootsEventDraft, RadrootsSdkKnowledgeError> {
-    Ok(RadrootsEventDraft::new(
+) -> Result<EventDraft, RadrootsSdkKnowledgeError> {
+    Ok(EventDraft::new(
         contract_id,
         parts.kind,
         u64::from(created_at),
@@ -1217,33 +1214,25 @@ fn prepare_draft(
     )?)
 }
 
-fn draft_error_code(error: &RadrootsDraftError) -> &'static str {
+fn draft_error_code(error: &DraftError) -> &'static str {
     match error {
-        RadrootsDraftError::UnknownContract(_) => "unknown_contract",
-        RadrootsDraftError::ContractNotDraftAuthorable { .. } => "contract_not_draft_authorable",
-        RadrootsDraftError::ContractRegistryVersionMismatch { .. } => {
-            "contract_registry_version_mismatch"
-        }
-        RadrootsDraftError::DraftExpectedEventIdMismatch { .. } => {
-            "draft_expected_event_id_mismatch"
-        }
-        RadrootsDraftError::ContractKindMismatch { .. } => "contract_kind_mismatch",
-        RadrootsDraftError::ContractShape { error, .. } => error.code(),
-        RadrootsDraftError::SignedEventPubkeyMismatch { .. } => "signed_event_pubkey_mismatch",
-        RadrootsDraftError::SignedEventIdMismatch { .. } => "signed_event_id_mismatch",
-        RadrootsDraftError::SignedEventCreatedAtMismatch { .. } => {
-            "signed_event_created_at_mismatch"
-        }
-        RadrootsDraftError::SignedEventKindMismatch { .. } => "signed_event_kind_mismatch",
-        RadrootsDraftError::SignedEventTagsMismatch { .. } => "signed_event_tags_mismatch",
-        RadrootsDraftError::SignedEventContentMismatch { .. } => "signed_event_content_mismatch",
-        RadrootsDraftError::SignedEventComputedIdMismatch { .. } => {
-            "signed_event_computed_id_mismatch"
-        }
-        RadrootsDraftError::IdParse(_) => "id_parse",
-        RadrootsDraftError::CanonicalEventId(_) => "canonical_event_id",
-        RadrootsDraftError::Envelope(_) => "event_envelope",
-        RadrootsDraftError::SignedEvent(_) => "signed_event",
+        DraftError::UnknownContract(_) => "unknown_contract",
+        DraftError::ContractNotDraftAuthorable { .. } => "contract_not_draft_authorable",
+        DraftError::ContractRegistryVersionMismatch { .. } => "contract_registry_version_mismatch",
+        DraftError::DraftExpectedEventIdMismatch { .. } => "draft_expected_event_id_mismatch",
+        DraftError::ContractKindMismatch { .. } => "contract_kind_mismatch",
+        DraftError::ContractShape { error, .. } => error.code(),
+        DraftError::SignedEventPubkeyMismatch { .. } => "signed_event_pubkey_mismatch",
+        DraftError::SignedEventIdMismatch { .. } => "signed_event_id_mismatch",
+        DraftError::SignedEventCreatedAtMismatch { .. } => "signed_event_created_at_mismatch",
+        DraftError::SignedEventKindMismatch { .. } => "signed_event_kind_mismatch",
+        DraftError::SignedEventTagsMismatch { .. } => "signed_event_tags_mismatch",
+        DraftError::SignedEventContentMismatch { .. } => "signed_event_content_mismatch",
+        DraftError::SignedEventComputedIdMismatch { .. } => "signed_event_computed_id_mismatch",
+        DraftError::IdParse(_) => "id_parse",
+        DraftError::CanonicalEventId(_) => "canonical_event_id",
+        DraftError::Envelope(_) => "event_envelope",
+        DraftError::SignedEvent(_) => "signed_event",
     }
 }
 
@@ -1272,14 +1261,12 @@ fn builder_non_empty_string(
     }
 }
 
-fn builder_validation_error(
-    error: RadrootsKnowledgeValidationError,
-) -> RadrootsKnowledgeBuilderError {
+fn builder_validation_error(error: KnowledgeValidationError) -> RadrootsKnowledgeBuilderError {
     match error {
-        RadrootsKnowledgeValidationError::EmptyField(field) => {
+        KnowledgeValidationError::EmptyField(field) => {
             RadrootsKnowledgeBuilderError::MissingField(field)
         }
-        RadrootsKnowledgeValidationError::InvalidField(field) => {
+        KnowledgeValidationError::InvalidField(field) => {
             RadrootsKnowledgeBuilderError::InvalidField(field)
         }
     }
@@ -1287,7 +1274,7 @@ fn builder_validation_error(
 
 fn builder_validated<T>(
     value: T,
-    validate: fn(&T) -> Result<(), RadrootsKnowledgeValidationError>,
+    validate: fn(&T) -> Result<(), KnowledgeValidationError>,
 ) -> Result<T, RadrootsKnowledgeBuilderError> {
     validate(&value).map_err(builder_validation_error)?;
     Ok(value)
@@ -1295,40 +1282,38 @@ fn builder_validated<T>(
 
 pub mod prelude {
     pub use super::{
-        KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT,
-        KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
-        KIND_WIKI_MERGE_REQUEST, KIND_WIKI_REDIRECT, KNOWLEDGE_CLAIM_CONTRACT_ID,
-        KNOWLEDGE_FIELD_REPORT_CONTRACT_ID, KNOWLEDGE_RELATION_CONTRACT_ID,
-        KNOWLEDGE_REVIEW_CONTRACT_ID, KNOWLEDGE_SOURCE_CONTRACT_ID, KnowledgeCodec,
-        KnowledgeDraftBuilder, KnowledgeEventBuilder, RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA,
+        AddressableRef, DraftError, EventDraft, EventEnvelope, EventRef, KIND_FILE_METADATA,
+        KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION,
+        KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE, KIND_WIKI_MERGE_REQUEST,
+        KIND_WIKI_REDIRECT, KNOWLEDGE_CLAIM_CONTRACT_ID, KNOWLEDGE_FIELD_REPORT_CONTRACT_ID,
+        KNOWLEDGE_RELATION_CONTRACT_ID, KNOWLEDGE_REVIEW_CONTRACT_ID, KNOWLEDGE_SOURCE_CONTRACT_ID,
+        KnowledgeChangeProposal, KnowledgeCitationSpan, KnowledgeClaim, KnowledgeCodec,
+        KnowledgeDraftBuilder, KnowledgeEventBuilder, KnowledgeFieldContext, KnowledgeFieldReport,
+        KnowledgeLocation, KnowledgeLocationPrecision, KnowledgeNodeRef, KnowledgeObservation,
+        KnowledgeObservationValue, KnowledgeRelation, KnowledgeReview, KnowledgeReviewScope,
+        KnowledgeReviewScore, KnowledgeReviewTarget, KnowledgeSource, KnowledgeValidationError,
+        Nip01EventWireParts, RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA,
         RADROOTS_EVIDENCE_BOUNTY_SCHEMA, RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA,
         RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION,
         RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
         RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RADROOTS_WIKI_D_TAG_MAX_LEN, RadrootsAddressableRef,
+        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RADROOTS_WIKI_D_TAG_MAX_LEN,
         RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
-        RadrootsDraftError, RadrootsEncodeError, RadrootsEventDraft, RadrootsEventEnvelope,
-        RadrootsEventRef, RadrootsIdVerifiedEvent, RadrootsKnowledgeBuilderError,
-        RadrootsKnowledgeChangeProposal, RadrootsKnowledgeCitationSpan, RadrootsKnowledgeClaim,
+        RadrootsEncodeError, RadrootsIdVerifiedEvent, RadrootsKnowledgeBuilderError,
         RadrootsKnowledgeClaimBuilder, RadrootsKnowledgeContractManifest,
-        RadrootsKnowledgeContractManifestEntry, RadrootsKnowledgeFieldContext,
-        RadrootsKnowledgeFieldReport, RadrootsKnowledgeFieldReportBuilder,
-        RadrootsKnowledgeLocation, RadrootsKnowledgeLocationPrecision,
+        RadrootsKnowledgeContractManifestEntry, RadrootsKnowledgeFieldReportBuilder,
         RadrootsKnowledgeManifestCodecSupport, RadrootsKnowledgeManifestDiscriminator,
-        RadrootsKnowledgeManifestTagContract, RadrootsKnowledgeNodeRef,
-        RadrootsKnowledgeObservation, RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation,
-        RadrootsKnowledgeRelationBuilder, RadrootsKnowledgeReview, RadrootsKnowledgeReviewBuilder,
-        RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
-        RadrootsKnowledgeSource, RadrootsKnowledgeSourceBuilder, RadrootsKnowledgeValidationError,
-        RadrootsNip01EventWireParts, RadrootsNip01VerificationError, RadrootsRightsAssertion,
-        RadrootsSdkKnowledgeError, RadrootsSignatureVerifiedEvent, RadrootsWikiArticle,
-        RadrootsWikiArticleBuilder, RadrootsWikiArticleVersionRef, RadrootsWikiDTagError,
-        RadrootsWikiMergeRequest, RadrootsWikiMergeRequestBuilder, RadrootsWikiRedirect,
-        RadrootsWikiRedirectBuilder, WIKI_ARTICLE_CONTRACT_ID, WIKI_MERGE_REQUEST_CONTRACT_ID,
-        WIKI_REDIRECT_CONTRACT_ID, build_knowledge_claim_event, build_knowledge_field_report_event,
-        build_knowledge_relation_event, build_knowledge_review_event, build_knowledge_source_event,
-        build_wiki_article_event, build_wiki_merge_request_event, build_wiki_redirect_event,
-        contract_manifest, contract_manifest_json, contract_manifest_sha256, normalize_wiki_d_tag,
+        RadrootsKnowledgeManifestTagContract, RadrootsKnowledgeRelationBuilder,
+        RadrootsKnowledgeReviewBuilder, RadrootsKnowledgeSourceBuilder,
+        RadrootsNip01VerificationError, RadrootsSdkKnowledgeError, RadrootsSignatureVerifiedEvent,
+        RadrootsWikiArticleBuilder, RadrootsWikiMergeRequestBuilder, RadrootsWikiRedirectBuilder,
+        RightsAssertion, WIKI_ARTICLE_CONTRACT_ID, WIKI_MERGE_REQUEST_CONTRACT_ID,
+        WIKI_REDIRECT_CONTRACT_ID, WikiArticle, WikiArticleVersionRef, WikiDTagError,
+        WikiMergeRequest, WikiRedirect, build_knowledge_claim_event,
+        build_knowledge_field_report_event, build_knowledge_relation_event,
+        build_knowledge_review_event, build_knowledge_source_event, build_wiki_article_event,
+        build_wiki_merge_request_event, build_wiki_redirect_event, contract_manifest,
+        contract_manifest_json, contract_manifest_sha256, normalize_wiki_d_tag,
         prepare_knowledge_claim_draft, prepare_knowledge_field_report_draft,
         prepare_knowledge_relation_draft, prepare_knowledge_review_draft,
         prepare_knowledge_source_draft, prepare_wiki_article_draft,

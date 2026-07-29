@@ -6,7 +6,7 @@ use radroots_transport::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
     RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
 };
-use radroots_transport_nostr::{RadrootsRelayUrl, RadrootsRelayUrlPolicy};
+use radroots_transport_nostr::{RadrootsRelayUrlPolicy, RelayUrl};
 use serde::ser::{SerializeStruct, Serializer};
 use std::collections::BTreeSet;
 
@@ -765,7 +765,7 @@ fn normalized_nostr_relay_url(
     value: &str,
     policy: NostrRelayUrlPolicy,
 ) -> Result<String, RadrootsSdkError> {
-    let relay = RadrootsRelayUrl::parse(value, policy.nostr_transport_policy())?;
+    let relay = RelayUrl::parse(value, policy.nostr_transport_policy())?;
     Ok(relay.into_string())
 }
 

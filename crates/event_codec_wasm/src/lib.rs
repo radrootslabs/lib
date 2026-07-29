@@ -1,55 +1,51 @@
 #![forbid(unsafe_code)]
 
 use radroots_blossom::{BlobDescriptor, BlobUrl, Error, MediaType, Sha256};
-use radroots_event::envelope::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
-};
-use radroots_event::farm::RadrootsFarm;
-use radroots_event::farm::coop::RadrootsCoop;
-use radroots_event::farm::crdt::RadrootsFarmCrdtChange;
-use radroots_event::farm::file::RadrootsFarmFileMetadata;
-use radroots_event::farm::plot::RadrootsPlot;
-use radroots_event::farm::workspace::RadrootsFarmWorkspaceManifest;
+use radroots_event::envelope::{EventEnvelope, EventEnvelopeError, EventEnvelopeParts};
+use radroots_event::farm::Farm;
+use radroots_event::farm::coop::Coop;
+use radroots_event::farm::crdt::FarmCrdtChange;
+use radroots_event::farm::file::FarmFileMetadata;
+use radroots_event::farm::plot::Plot;
+use radroots_event::farm::workspace::FarmWorkspaceManifest;
 use radroots_event::knowledge::{
-    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
-    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    KnowledgeClaim, KnowledgeFieldReport, KnowledgeRelation, KnowledgeReview, KnowledgeSource,
+    WikiArticle, WikiMergeRequest, WikiRedirect,
 };
-use radroots_event::listing::operational::RadrootsOperationalListing;
-use radroots_event::media::file_metadata::RadrootsFileMetadata;
-use radroots_event::media::{RadrootsAuthoredImage, RadrootsAuthoredImageError};
-use radroots_event::post::article::RadrootsArticle;
+use radroots_event::listing::operational::OperationalListing;
+use radroots_event::media::file_metadata::FileMetadata;
+use radroots_event::media::{AuthoredImage, AuthoredImageError};
+use radroots_event::post::article::Article;
 use radroots_event::post::comment::{
-    RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
-    RadrootsNip22CommentParentReference, RadrootsNip22CommentRoot, RadrootsNip22EventRootReference,
+    AuthoredNip22Comment, Nip22AddressRootReference, Nip22CommentError,
+    Nip22CommentParentReference, Nip22CommentRoot, Nip22EventRootReference,
 };
-use radroots_event::post::document::RadrootsDocument;
-use radroots_event::post::reaction::RadrootsReaction;
-use radroots_event::post::report::RadrootsReport;
-use radroots_event::post::repost::{RadrootsGenericRepost, RadrootsRepost};
+use radroots_event::post::document::Document;
+use radroots_event::post::reaction::Reaction;
+use radroots_event::post::report::Report;
+use radroots_event::post::repost::{GenericRepost, Repost};
 use radroots_event::post::{
-    RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError,
-    RadrootsAuthoredPostImage, RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
+    AuthoredAsk, AuthoredPhotoUpdate, AuthoredPostError, AuthoredPostImage, AuthoredUpdate,
+    PostImageDimensions,
 };
-use radroots_event::social::follow::RadrootsFollow;
-use radroots_event::social::gift_wrap::RadrootsGiftWrap;
+use radroots_event::social::follow::Follow;
+use radroots_event::social::gift_wrap::GiftWrap;
 use radroots_event::social::group::{
-    RadrootsGroupAdmins, RadrootsGroupCreateGroup, RadrootsGroupCreateInvite,
-    RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata,
-    RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest, RadrootsGroupMembers,
-    RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser, RadrootsGroupRoles,
+    GroupAdmins, GroupCreateGroup, GroupCreateInvite, GroupDeleteEvent, GroupDeleteGroup,
+    GroupEditMetadata, GroupJoinRequest, GroupLeaveRequest, GroupMembers, GroupMetadata,
+    GroupPutUser, GroupRemoveUser, GroupRoles,
 };
-use radroots_event::social::http_auth::RadrootsHttpAuth;
-use radroots_event::social::job_feedback::RadrootsJobFeedback;
-use radroots_event::social::job_request::RadrootsJobRequest;
-use radroots_event::social::job_result::RadrootsJobResult;
-use radroots_event::social::list::RadrootsList;
-use radroots_event::social::list_set::RadrootsListSet;
-use radroots_event::social::message::RadrootsMessage;
-use radroots_event::social::message_file::RadrootsMessageFile;
-use radroots_event::social::relay_auth::RadrootsRelayAuth;
-use radroots_event::social::seal::RadrootsSeal;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::social::http_auth::HttpAuth;
+use radroots_event::social::job_feedback::JobFeedback;
+use radroots_event::social::job_request::JobRequest;
+use radroots_event::social::job_result::JobResult;
+use radroots_event::social::list::List;
+use radroots_event::social::list_set::ListSet;
+use radroots_event::social::message::Message;
+use radroots_event::social::message_file::MessageFile;
+use radroots_event::social::relay_auth::RelayAuth;
+use radroots_event::social::seal::Seal;
+use radroots_event::wire::Nip01EventWireParts;
 use radroots_event_codec::article::encode::article_build_tags;
 use radroots_event_codec::comment::authored::authored_nip22_comment_to_wire_parts;
 use radroots_event_codec::coop::encode::coop_build_tags;
@@ -147,19 +143,19 @@ fn blossom_authored_error(error: Error) -> RadrootsJsValue {
     authored_error(error.code())
 }
 
-fn post_authored_error(error: RadrootsAuthoredPostError) -> RadrootsJsValue {
+fn post_authored_error(error: AuthoredPostError) -> RadrootsJsValue {
     authored_error(error.code())
 }
 
-fn image_authored_error(error: RadrootsAuthoredImageError) -> RadrootsJsValue {
+fn image_authored_error(error: AuthoredImageError) -> RadrootsJsValue {
     authored_error(error.code())
 }
 
-fn comment_authored_error(error: RadrootsNip22CommentError) -> RadrootsJsValue {
+fn comment_authored_error(error: Nip22CommentError) -> RadrootsJsValue {
     authored_error(error.code())
 }
 
-fn wire_parts_to_json(parts: &RadrootsNip01EventWireParts) -> Result<String, RadrootsJsValue> {
+fn wire_parts_to_json(parts: &Nip01EventWireParts) -> Result<String, RadrootsJsValue> {
     serde_json::to_string(parts)
         .map_err(|_| error_json("internal_error", Some("wire_parts_serialization")))
 }
@@ -180,29 +176,29 @@ struct EventEnvelopeInput {
     sig: String,
 }
 
-fn envelope_error_code(error: &RadrootsEventEnvelopeError) -> &'static str {
+fn envelope_error_code(error: &EventEnvelopeError) -> &'static str {
     match error {
-        RadrootsEventEnvelopeError::InvalidId(_) => "id_invalid",
-        RadrootsEventEnvelopeError::InvalidAuthor(_) => "author_invalid",
-        RadrootsEventEnvelopeError::InvalidSignature(_) => "signature_invalid",
-        RadrootsEventEnvelopeError::NonCanonicalId => "id_non_canonical",
-        RadrootsEventEnvelopeError::NonCanonicalAuthor => "author_non_canonical",
-        RadrootsEventEnvelopeError::NonCanonicalSignature => "signature_non_canonical",
-        RadrootsEventEnvelopeError::EmptyTag { .. } => "tag_empty",
-        RadrootsEventEnvelopeError::EmptyTagKey { .. } => "tag_key_empty",
-        RadrootsEventEnvelopeError::ControlCharacterTagKey { .. } => "tag_key_control_character",
-        RadrootsEventEnvelopeError::ContentTooLarge { .. } => "content_too_large",
-        RadrootsEventEnvelopeError::TooManyTags { .. } => "too_many_tags",
-        RadrootsEventEnvelopeError::TooManyTagElements { .. } => "too_many_tag_elements",
-        RadrootsEventEnvelopeError::TagElementTooLarge { .. } => "tag_element_too_large",
-        RadrootsEventEnvelopeError::TagsTooLarge { .. } => "tags_too_large",
+        EventEnvelopeError::InvalidId(_) => "id_invalid",
+        EventEnvelopeError::InvalidAuthor(_) => "author_invalid",
+        EventEnvelopeError::InvalidSignature(_) => "signature_invalid",
+        EventEnvelopeError::NonCanonicalId => "id_non_canonical",
+        EventEnvelopeError::NonCanonicalAuthor => "author_non_canonical",
+        EventEnvelopeError::NonCanonicalSignature => "signature_non_canonical",
+        EventEnvelopeError::EmptyTag { .. } => "tag_empty",
+        EventEnvelopeError::EmptyTagKey { .. } => "tag_key_empty",
+        EventEnvelopeError::ControlCharacterTagKey { .. } => "tag_key_control_character",
+        EventEnvelopeError::ContentTooLarge { .. } => "content_too_large",
+        EventEnvelopeError::TooManyTags { .. } => "too_many_tags",
+        EventEnvelopeError::TooManyTagElements { .. } => "too_many_tag_elements",
+        EventEnvelopeError::TagElementTooLarge { .. } => "tag_element_too_large",
+        EventEnvelopeError::TagsTooLarge { .. } => "tags_too_large",
     }
 }
 
-fn parse_event_json(input: &str) -> Result<RadrootsEventEnvelope, RadrootsJsValue> {
+fn parse_event_json(input: &str) -> Result<EventEnvelope, RadrootsJsValue> {
     let envelope: EventEnvelopeInput =
         serde_json::from_str(input).map_err(|_| error_json("invalid_json", Some("event_json")))?;
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: envelope.id,
         author: envelope.author,
         created_at: envelope.created_at,
@@ -242,7 +238,7 @@ where
 {
     event_type: &'static str,
     contract_id: &'static str,
-    event: &'a radroots_event::envelope::RadrootsEventEnvelope,
+    event: &'a radroots_event::envelope::EventEnvelope,
     payload: &'a T,
 }
 
@@ -325,7 +321,7 @@ fn decode_error_json(error: RadrootsDecodeError) -> RadrootsJsValue {
 
 #[derive(serde::Deserialize)]
 struct FarmCrdtTagsInput {
-    change: RadrootsFarmCrdtChange,
+    change: FarmCrdtChange,
     author_pubkey: String,
 }
 
@@ -403,13 +399,11 @@ struct AuthoredCommentParentInput {
 
 fn authored_post_images(
     inputs: Vec<AuthoredImageInput>,
-) -> Result<Vec<RadrootsAuthoredPostImage>, RadrootsJsValue> {
+) -> Result<Vec<AuthoredPostImage>, RadrootsJsValue> {
     inputs.into_iter().map(authored_post_image).collect()
 }
 
-fn authored_post_image(
-    input: AuthoredImageInput,
-) -> Result<RadrootsAuthoredPostImage, RadrootsJsValue> {
+fn authored_post_image(input: AuthoredImageInput) -> Result<AuthoredPostImage, RadrootsJsValue> {
     let media_type = MediaType::parse(&input.media_type).map_err(blossom_authored_error)?;
     let sha256 = Sha256::digest(&input.bytes);
     let size = u64::try_from(input.bytes.len())
@@ -426,12 +420,12 @@ fn authored_post_image(
     .map_err(blossom_authored_error)?
     .verify_bytes(&input.bytes, &media_type)
     .map_err(blossom_authored_error)?;
-    let image = RadrootsAuthoredImage::try_from_verified_descriptor(descriptor)
-        .map_err(image_authored_error)?;
+    let image =
+        AuthoredImage::try_from_verified_descriptor(descriptor).map_err(image_authored_error)?;
     let dimensions =
-        RadrootsPostImageDimensions::new(input.width, input.height).map_err(post_authored_error)?;
-    let mut authored = RadrootsAuthoredPostImage::new(image, dimensions, input.alt)
-        .map_err(post_authored_error)?;
+        PostImageDimensions::new(input.width, input.height).map_err(post_authored_error)?;
+    let mut authored =
+        AuthoredPostImage::new(image, dimensions, input.alt).map_err(post_authored_error)?;
     for fallback in input.fallbacks {
         let fallback = BlobUrl::parse(&fallback)
             .map_err(blossom_authored_error)?
@@ -446,15 +440,15 @@ fn authored_post_image(
 
 fn authored_comment_from_input(
     input: AuthoredCommentInput,
-) -> Result<RadrootsAuthoredNip22Comment, RadrootsJsValue> {
+) -> Result<AuthoredNip22Comment, RadrootsJsValue> {
     let root = match input.root {
         AuthoredCommentRootInput::Event {
             event_id,
             author,
             kind,
             relay,
-        } => RadrootsNip22CommentRoot::Event(
-            RadrootsNip22EventRootReference::parse(event_id, author, kind, relay.as_deref())
+        } => Nip22CommentRoot::Event(
+            Nip22EventRootReference::parse(event_id, author, kind, relay.as_deref())
                 .map_err(comment_authored_error)?,
         ),
         AuthoredCommentRootInput::Address {
@@ -463,7 +457,7 @@ fn authored_comment_from_input(
             kind,
             relay,
         } => {
-            let root = RadrootsNip22AddressRootReference::parse(coordinate, relay.as_deref())
+            let root = Nip22AddressRootReference::parse(coordinate, relay.as_deref())
                 .map_err(comment_authored_error)?;
             if root.author().to_hex() != author {
                 return Err(authored_error("comment_root_author_mismatch"));
@@ -471,32 +465,28 @@ fn authored_comment_from_input(
             if root.kind().as_u32() != kind {
                 return Err(authored_error("comment_root_kind_mismatch"));
             }
-            RadrootsNip22CommentRoot::Address(root)
+            Nip22CommentRoot::Address(root)
         }
     };
 
     match (root, input.position) {
-        (RadrootsNip22CommentRoot::Event(root), AuthoredCommentPositionInput::TopEvent) => {
-            RadrootsAuthoredNip22Comment::top_level_event(input.content, root)
+        (Nip22CommentRoot::Event(root), AuthoredCommentPositionInput::TopEvent) => {
+            AuthoredNip22Comment::top_level_event(input.content, root)
                 .map_err(comment_authored_error)
         }
         (
-            RadrootsNip22CommentRoot::Address(root),
+            Nip22CommentRoot::Address(root),
             AuthoredCommentPositionInput::TopAddress { current_revision },
-        ) => RadrootsAuthoredNip22Comment::parse_top_level_address(
-            input.content,
-            root,
-            current_revision,
-        )
-        .map_err(comment_authored_error),
+        ) => AuthoredNip22Comment::parse_top_level_address(input.content, root, current_revision)
+            .map_err(comment_authored_error),
         (root, AuthoredCommentPositionInput::Nested { parent }) => {
-            let parent = RadrootsNip22CommentParentReference::parse(
+            let parent = Nip22CommentParentReference::parse(
                 parent.event_id,
                 parent.author,
                 parent.relay.as_deref(),
             )
             .map_err(comment_authored_error)?;
-            RadrootsAuthoredNip22Comment::nested(input.content, root, parent)
+            AuthoredNip22Comment::nested(input.content, root, parent)
                 .map_err(comment_authored_error)
         }
         _ => Err(authored_error("comment_root_position_incompatible")),
@@ -510,7 +500,7 @@ fn authored_comment_from_input(
 )]
 pub fn social_update_build_authored_draft(input_json: &str) -> Result<String, RadrootsJsValue> {
     let input = parse_authored_json::<AuthoredUpdateInput>(input_json)?;
-    let update = RadrootsAuthoredUpdate::new(input.content).map_err(post_authored_error)?;
+    let update = AuthoredUpdate::new(input.content).map_err(post_authored_error)?;
     wire_parts_to_json(&authored_update_to_wire_parts(&update))
 }
 
@@ -524,8 +514,7 @@ pub fn social_photo_update_build_authored_draft(
 ) -> Result<String, RadrootsJsValue> {
     let input = parse_authored_json::<AuthoredMediaPostInput>(input_json)?;
     let images = authored_post_images(input.images)?;
-    let photo =
-        RadrootsAuthoredPhotoUpdate::new(input.content, images).map_err(post_authored_error)?;
+    let photo = AuthoredPhotoUpdate::new(input.content, images).map_err(post_authored_error)?;
     wire_parts_to_json(&authored_photo_update_to_wire_parts(&photo))
 }
 
@@ -537,7 +526,7 @@ pub fn social_photo_update_build_authored_draft(
 pub fn social_ask_build_authored_draft(input_json: &str) -> Result<String, RadrootsJsValue> {
     let input = parse_authored_json::<AuthoredMediaPostInput>(input_json)?;
     let images = authored_post_images(input.images)?;
-    let ask = RadrootsAuthoredAsk::new(input.content, images).map_err(post_authored_error)?;
+    let ask = AuthoredAsk::new(input.content, images).map_err(post_authored_error)?;
     wire_parts_to_json(&authored_ask_to_wire_parts(&ask))
 }
 
@@ -557,7 +546,7 @@ pub fn social_comment_build_authored_draft(input_json: &str) -> Result<String, R
     wasm_bindgen(js_name = operational_listing_tags)
 )]
 pub fn operational_listing_tags(listing_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsOperationalListing, _, _>(listing_json, operational_listing_tags_impl)
+    build_tags_json::<OperationalListing, _, _>(listing_json, operational_listing_tags_impl)
 }
 
 #[cfg_attr(
@@ -565,58 +554,52 @@ pub fn operational_listing_tags(listing_json: &str) -> Result<String, RadrootsJs
     wasm_bindgen(js_name = operational_listing_tags_full)
 )]
 pub fn operational_listing_tags_full(listing_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsOperationalListing, _, _>(
-        listing_json,
-        operational_listing_tags_full_impl,
-    )
+    build_tags_json::<OperationalListing, _, _>(listing_json, operational_listing_tags_full_impl)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = article_tags))]
 pub fn article_tags(article_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsArticle, _, _>(article_json, article_build_tags)
+    build_tags_json::<Article, _, _>(article_json, article_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = wiki_article_tags))]
 pub fn wiki_article_tags(article_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsWikiArticle, _, _>(article_json, wiki_article_build_tags)
+    build_tags_json::<WikiArticle, _, _>(article_json, wiki_article_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = wiki_redirect_tags))]
 pub fn wiki_redirect_tags(redirect_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsWikiRedirect, _, _>(redirect_json, wiki_redirect_build_tags)
+    build_tags_json::<WikiRedirect, _, _>(redirect_json, wiki_redirect_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = wiki_merge_request_tags))]
 pub fn wiki_merge_request_tags(request_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsWikiMergeRequest, _, _>(request_json, wiki_merge_request_build_tags)
+    build_tags_json::<WikiMergeRequest, _, _>(request_json, wiki_merge_request_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = knowledge_source_tags))]
 pub fn knowledge_source_tags(source_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsKnowledgeSource, _, _>(source_json, knowledge_source_build_tags)
+    build_tags_json::<KnowledgeSource, _, _>(source_json, knowledge_source_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = knowledge_claim_tags))]
 pub fn knowledge_claim_tags(claim_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsKnowledgeClaim, _, _>(claim_json, knowledge_claim_build_tags)
+    build_tags_json::<KnowledgeClaim, _, _>(claim_json, knowledge_claim_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = knowledge_relation_tags))]
 pub fn knowledge_relation_tags(relation_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsKnowledgeRelation, _, _>(relation_json, knowledge_relation_build_tags)
+    build_tags_json::<KnowledgeRelation, _, _>(relation_json, knowledge_relation_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = knowledge_review_tags))]
 pub fn knowledge_review_tags(review_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsKnowledgeReview, _, _>(review_json, knowledge_review_build_tags)
+    build_tags_json::<KnowledgeReview, _, _>(review_json, knowledge_review_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = knowledge_field_report_tags))]
 pub fn knowledge_field_report_tags(report_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsKnowledgeFieldReport, _, _>(
-        report_json,
-        knowledge_field_report_build_tags,
-    )
+    build_tags_json::<KnowledgeFieldReport, _, _>(report_json, knowledge_field_report_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = verify_and_decode_event_json))]
@@ -634,97 +617,97 @@ pub fn contract_manifest_json() -> Result<String, RadrootsJsValue> {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = file_metadata_tags))]
 pub fn file_metadata_tags(metadata_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsFileMetadata, _, _>(metadata_json, file_metadata_build_tags)
+    build_tags_json::<FileMetadata, _, _>(metadata_json, file_metadata_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = repost_tags))]
 pub fn repost_tags(repost_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsRepost, _, _>(repost_json, repost_build_tags)
+    build_tags_json::<Repost, _, _>(repost_json, repost_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = generic_repost_tags))]
 pub fn generic_repost_tags(repost_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGenericRepost, _, _>(repost_json, generic_repost_build_tags)
+    build_tags_json::<GenericRepost, _, _>(repost_json, generic_repost_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = report_tags))]
 pub fn report_tags(report_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsReport, _, _>(report_json, report_build_tags)
+    build_tags_json::<Report, _, _>(report_json, report_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = follow_tags))]
 pub fn follow_tags(follow_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsFollow, _, _>(follow_json, follow_build_tags)
+    build_tags_json::<Follow, _, _>(follow_json, follow_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = document_tags))]
 pub fn document_tags(document_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsDocument, _, _>(document_json, document_build_tags)
+    build_tags_json::<Document, _, _>(document_json, document_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = coop_tags))]
 pub fn coop_tags(coop_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsCoop, _, _>(coop_json, coop_build_tags)
+    build_tags_json::<Coop, _, _>(coop_json, coop_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_tags))]
 pub fn farm_tags(farm_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsFarm, _, _>(farm_json, farm_build_tags)
+    build_tags_json::<Farm, _, _>(farm_json, farm_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = list_tags))]
 pub fn list_tags(list_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsList, _, _>(list_json, list_build_tags)
+    build_tags_json::<List, _, _>(list_json, list_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = list_set_tags))]
 pub fn list_set_tags(list_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsListSet, _, _>(list_json, list_set_build_tags)
+    build_tags_json::<ListSet, _, _>(list_json, list_set_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = plot_tags))]
 pub fn plot_tags(plot_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsPlot, _, _>(plot_json, plot_build_tags)
+    build_tags_json::<Plot, _, _>(plot_json, plot_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = job_request_tags))]
 pub fn job_request_tags(job_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json_infallible::<RadrootsJobRequest, _>(job_json, job_request_build_tags)
+    build_tags_json_infallible::<JobRequest, _>(job_json, job_request_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = job_result_tags))]
 pub fn job_result_tags(job_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json_infallible::<RadrootsJobResult, _>(job_json, job_result_build_tags)
+    build_tags_json_infallible::<JobResult, _>(job_json, job_result_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = job_feedback_tags))]
 pub fn job_feedback_tags(job_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json_infallible::<RadrootsJobFeedback, _>(job_json, job_feedback_build_tags)
+    build_tags_json_infallible::<JobFeedback, _>(job_json, job_feedback_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = reaction_tags))]
 pub fn reaction_tags(reaction_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsReaction, _, _>(reaction_json, reaction_build_tags)
+    build_tags_json::<Reaction, _, _>(reaction_json, reaction_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = message_tags))]
 pub fn message_tags(message_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsMessage, _, _>(message_json, message_build_tags)
+    build_tags_json::<Message, _, _>(message_json, message_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = message_file_tags))]
 pub fn message_file_tags(message_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsMessageFile, _, _>(message_json, message_file_build_tags)
+    build_tags_json::<MessageFile, _, _>(message_json, message_file_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = seal_tags))]
 pub fn seal_tags(seal_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsSeal, _, _>(seal_json, seal_build_tags)
+    build_tags_json::<Seal, _, _>(seal_json, seal_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = gift_wrap_tags))]
 pub fn gift_wrap_tags(gift_wrap_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGiftWrap, _, _>(gift_wrap_json, gift_wrap_build_tags)
+    build_tags_json::<GiftWrap, _, _>(gift_wrap_json, gift_wrap_build_tags)
 }
 
 #[cfg_attr(
@@ -732,10 +715,7 @@ pub fn gift_wrap_tags(gift_wrap_json: &str) -> Result<String, RadrootsJsValue> {
     wasm_bindgen(js_name = farm_workspace_manifest_tags)
 )]
 pub fn farm_workspace_manifest_tags(workspace_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsFarmWorkspaceManifest, _, _>(
-        workspace_json,
-        farm_workspace_build_tags,
-    )
+    build_tags_json::<FarmWorkspaceManifest, _, _>(workspace_json, farm_workspace_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_crdt_change_tags))]
@@ -748,82 +728,82 @@ pub fn farm_crdt_change_tags(input_json: &str) -> Result<String, RadrootsJsValue
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = farm_file_metadata_tags))]
 pub fn farm_file_metadata_tags(file_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsFarmFileMetadata, _, _>(file_json, farm_file_metadata_build_tags)
+    build_tags_json::<FarmFileMetadata, _, _>(file_json, farm_file_metadata_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = relay_auth_tags))]
 pub fn relay_auth_tags(auth_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsRelayAuth, _, _>(auth_json, relay_auth_build_tags)
+    build_tags_json::<RelayAuth, _, _>(auth_json, relay_auth_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = http_auth_tags))]
 pub fn http_auth_tags(auth_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsHttpAuth, _, _>(auth_json, http_auth_build_tags)
+    build_tags_json::<HttpAuth, _, _>(auth_json, http_auth_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_put_user_tags))]
 pub fn group_put_user_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupPutUser, _, _>(group_json, group_put_user_build_tags)
+    build_tags_json::<GroupPutUser, _, _>(group_json, group_put_user_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_remove_user_tags))]
 pub fn group_remove_user_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupRemoveUser, _, _>(group_json, group_remove_user_build_tags)
+    build_tags_json::<GroupRemoveUser, _, _>(group_json, group_remove_user_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_create_group_tags))]
 pub fn group_create_group_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupCreateGroup, _, _>(group_json, group_create_group_build_tags)
+    build_tags_json::<GroupCreateGroup, _, _>(group_json, group_create_group_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_edit_metadata_tags))]
 pub fn group_edit_metadata_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupEditMetadata, _, _>(group_json, group_edit_metadata_build_tags)
+    build_tags_json::<GroupEditMetadata, _, _>(group_json, group_edit_metadata_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_delete_group_tags))]
 pub fn group_delete_group_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupDeleteGroup, _, _>(group_json, group_delete_group_build_tags)
+    build_tags_json::<GroupDeleteGroup, _, _>(group_json, group_delete_group_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_delete_event_tags))]
 pub fn group_delete_event_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupDeleteEvent, _, _>(group_json, group_delete_event_build_tags)
+    build_tags_json::<GroupDeleteEvent, _, _>(group_json, group_delete_event_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_create_invite_tags))]
 pub fn group_create_invite_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupCreateInvite, _, _>(group_json, group_create_invite_build_tags)
+    build_tags_json::<GroupCreateInvite, _, _>(group_json, group_create_invite_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_join_request_tags))]
 pub fn group_join_request_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupJoinRequest, _, _>(group_json, group_join_request_build_tags)
+    build_tags_json::<GroupJoinRequest, _, _>(group_json, group_join_request_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_leave_request_tags))]
 pub fn group_leave_request_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupLeaveRequest, _, _>(group_json, group_leave_request_build_tags)
+    build_tags_json::<GroupLeaveRequest, _, _>(group_json, group_leave_request_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_metadata_tags))]
 pub fn group_metadata_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupMetadata, _, _>(group_json, group_metadata_build_tags)
+    build_tags_json::<GroupMetadata, _, _>(group_json, group_metadata_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_admins_tags))]
 pub fn group_admins_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupAdmins, _, _>(group_json, group_admins_build_tags)
+    build_tags_json::<GroupAdmins, _, _>(group_json, group_admins_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_members_tags))]
 pub fn group_members_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupMembers, _, _>(group_json, group_members_build_tags)
+    build_tags_json::<GroupMembers, _, _>(group_json, group_members_build_tags)
 }
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(js_name = group_roles_tags))]
 pub fn group_roles_tags(group_json: &str) -> Result<String, RadrootsJsValue> {
-    build_tags_json::<RadrootsGroupRoles, _, _>(group_json, group_roles_build_tags)
+    build_tags_json::<GroupRoles, _, _>(group_json, group_roles_build_tags)
 }
 
 #[cfg(test)]
@@ -834,52 +814,43 @@ mod tests {
         KIND_FARM_FILE_METADATA, KIND_FILE_METADATA, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE,
         KIND_WIKI_ARTICLE,
     };
-    use radroots_event::envelope::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
-    };
-    use radroots_event::farm::RadrootsFarmRef;
+    use radroots_event::envelope::{EventEnvelope, EventEnvelopeLimits, EventEnvelopeParts};
+    use radroots_event::farm::FarmRef;
     use radroots_event::farm::crdt::{
-        RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtDocumentKind,
-        RadrootsFarmSemanticKind,
+        CrdtBackend, FarmCrdtDocumentKind, FarmSemanticKind, RADROOTS_FARM_CRDT_CHANGE_SCHEMA,
     };
-    use radroots_event::farm::file::{
-        RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource,
-    };
+    use radroots_event::farm::file::{FarmFileDimensions, FarmFileMetadata, FarmFileSource};
     use radroots_event::farm::workspace::{
-        RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION, RADROOTS_FARM_WORKSPACE_SCHEMA,
-        RadrootsFarmWorkspaceManifest, RadrootsFarmWorkspaceMediaServer, RadrootsFarmWorkspaceRef,
-        RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
+        FarmWorkspaceManifest, FarmWorkspaceMediaServer, FarmWorkspaceRef, FarmWorkspaceRelay,
+        FarmWorkspaceRelayMode, RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION,
+        RADROOTS_FARM_WORKSPACE_SCHEMA,
     };
     use radroots_event::knowledge::{
-        RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA,
-        RADROOTS_KNOWLEDGE_RELATION_SCHEMA, RADROOTS_KNOWLEDGE_REVIEW_SCHEMA,
-        RADROOTS_KNOWLEDGE_SCHEMA_VERSION, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA,
-        RadrootsAddressableRef, RadrootsKnowledgeCitationSpan, RadrootsKnowledgeFieldContext,
-        RadrootsKnowledgeLocation, RadrootsKnowledgeLocationPrecision, RadrootsKnowledgeNodeRef,
-        RadrootsKnowledgeObservation, RadrootsKnowledgeObservationValue,
-        RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore, RadrootsKnowledgeReviewTarget,
-        RadrootsWikiArticleVersionRef,
+        AddressableRef, KnowledgeCitationSpan, KnowledgeFieldContext, KnowledgeLocation,
+        KnowledgeLocationPrecision, KnowledgeNodeRef, KnowledgeObservation,
+        KnowledgeObservationValue, KnowledgeReviewScope, KnowledgeReviewScore,
+        KnowledgeReviewTarget, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
+        RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
+        RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
+        RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, WikiArticleVersionRef,
     };
-    use radroots_event::listing::operational::{
-        RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
-    };
+    use radroots_event::listing::operational::{OperationalListingBin, OperationalListingProduct};
     use radroots_event::social::group::{
-        RadrootsGroupAdmins, RadrootsGroupCreateGroup, RadrootsGroupCreateInvite,
-        RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata,
-        RadrootsGroupEditableMetadata, RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest,
-        RadrootsGroupMembers, RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser,
-        RadrootsGroupRole, RadrootsGroupRoles, RadrootsGroupUserRef,
+        GroupAdmins, GroupCreateGroup, GroupCreateInvite, GroupDeleteEvent, GroupDeleteGroup,
+        GroupEditMetadata, GroupEditableMetadata, GroupJoinRequest, GroupLeaveRequest,
+        GroupMembers, GroupMetadata, GroupPutUser, GroupRemoveUser, GroupRole, GroupRoles,
+        GroupUserRef,
     };
-    use radroots_event::social::http_auth::RadrootsHttpAuth;
+    use radroots_event::social::http_auth::HttpAuth;
     use radroots_event::social::job::JobInputType;
-    use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam};
-    use radroots_event::social::relay_auth::RadrootsRelayAuth;
+    use radroots_event::social::job_request::{JobInput, JobParam};
+    use radroots_event::social::relay_auth::RelayAuth;
     use radroots_event::social::{
-        RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialFarmAnchor,
-        RadrootsSocialLocation, RadrootsSocialMediaDimensions, RadrootsSocialTarget,
+        ReportFileTarget, ReportType, SocialFarmAnchor, SocialLocation, SocialMediaDimensions,
+        SocialTarget,
     };
 
-    fn sample_listing() -> RadrootsOperationalListing {
+    fn sample_listing() -> OperationalListing {
         let quantity =
             Quantity::try_new(Decimal::from(1u32), Unit::Each).expect("positive fixture quantity");
         let price = QuantityPrice::try_new(
@@ -889,14 +860,14 @@ mod tests {
         )
         .expect("non-zero fixture pricing quantity");
 
-        RadrootsOperationalListing {
+        OperationalListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".parse().expect("listing d tag"),
             published_at: None,
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsOperationalListingProduct {
+            product: OperationalListingProduct {
                 key: "sku".to_string(),
                 title: "widget".to_string(),
                 category: "tools".to_string(),
@@ -908,7 +879,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: "bin-1".parse().expect("primary bin id"),
-            bins: vec![RadrootsOperationalListingBin {
+            bins: vec![OperationalListingBin {
                 bin_id: "bin-1".parse().expect("bin id"),
                 quantity,
                 price_per_canonical_unit: price,
@@ -937,9 +908,9 @@ mod tests {
         seed.to_string().repeat(64)
     }
 
-    fn social_farm_anchor() -> RadrootsSocialFarmAnchor {
-        RadrootsSocialFarmAnchor {
-            farm: RadrootsFarmRef {
+    fn social_farm_anchor() -> SocialFarmAnchor {
+        SocialFarmAnchor {
+            farm: FarmRef {
                 pubkey: synthetic_pubkey('a'),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
@@ -947,8 +918,8 @@ mod tests {
         }
     }
 
-    fn event_target(kind: u32, seed: char) -> RadrootsSocialTarget {
-        RadrootsSocialTarget::Event {
+    fn event_target(kind: u32, seed: char) -> SocialTarget {
+        SocialTarget::Event {
             id: synthetic_event_id(seed),
             author: Some(synthetic_pubkey('b')),
             event_kind: Some(kind),
@@ -956,9 +927,9 @@ mod tests {
         }
     }
 
-    fn address_target(kind: u32, d_tag: &str) -> RadrootsSocialTarget {
+    fn address_target(kind: u32, d_tag: &str) -> SocialTarget {
         let author = synthetic_pubkey('c');
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address: format!("{kind}:{author}:{d_tag}"),
             author: Some(author),
             event_kind: Some(kind),
@@ -966,8 +937,8 @@ mod tests {
         }
     }
 
-    fn knowledge_event_ref(seed: char, kind: u32) -> radroots_event::tag::RadrootsEventRef {
-        radroots_event::tag::RadrootsEventRef {
+    fn knowledge_event_ref(seed: char, kind: u32) -> radroots_event::tag::EventRef {
+        radroots_event::tag::EventRef {
             id: synthetic_event_id(seed),
             author: radroots_identity::PublicKey::from_hex(&synthetic_pubkey('a'))
                 .expect("fixture public key"),
@@ -977,8 +948,8 @@ mod tests {
         }
     }
 
-    fn knowledge_address_ref() -> RadrootsAddressableRef {
-        RadrootsAddressableRef {
+    fn knowledge_address_ref() -> AddressableRef {
+        AddressableRef {
             kind: KIND_WIKI_ARTICLE,
             pubkey: synthetic_pubkey('a'),
             d_tag: "soil-health".to_string(),
@@ -986,15 +957,15 @@ mod tests {
         }
     }
 
-    fn sample_wiki_article() -> RadrootsWikiArticle {
-        RadrootsWikiArticle {
+    fn sample_wiki_article() -> WikiArticle {
+        WikiArticle {
             d_tag: "soil-health".to_string(),
             title: Some("Soil health".to_string()),
             content_djot: "# Soil health".to_string(),
             summary: Some("Living soil basics".to_string()),
             topics: vec!["soil".to_string()],
             references: vec![knowledge_event_ref('1', KIND_KNOWLEDGE_SOURCE)],
-            forked_from: vec![RadrootsWikiArticleVersionRef {
+            forked_from: vec![WikiArticleVersionRef {
                 event_id: synthetic_event_id('b'),
                 address_ref: knowledge_address_ref(),
             }],
@@ -1002,15 +973,15 @@ mod tests {
         }
     }
 
-    fn sample_wiki_redirect() -> RadrootsWikiRedirect {
-        RadrootsWikiRedirect {
+    fn sample_wiki_redirect() -> WikiRedirect {
+        WikiRedirect {
             d_tag: "soil".to_string(),
             target: knowledge_address_ref(),
         }
     }
 
-    fn sample_wiki_merge_request() -> RadrootsWikiMergeRequest {
-        RadrootsWikiMergeRequest {
+    fn sample_wiki_merge_request() -> WikiMergeRequest {
+        WikiMergeRequest {
             target_article: knowledge_address_ref(),
             destination_pubkey: synthetic_pubkey('a'),
             base_version_event_id: Some(synthetic_event_id('e')),
@@ -1019,8 +990,8 @@ mod tests {
         }
     }
 
-    fn sample_knowledge_source() -> RadrootsKnowledgeSource {
-        RadrootsKnowledgeSource {
+    fn sample_knowledge_source() -> KnowledgeSource {
+        KnowledgeSource {
             schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             d_tag: "soil-source".to_string(),
@@ -1038,13 +1009,13 @@ mod tests {
         }
     }
 
-    fn sample_knowledge_claim() -> RadrootsKnowledgeClaim {
-        RadrootsKnowledgeClaim {
+    fn sample_knowledge_claim() -> KnowledgeClaim {
+        KnowledgeClaim {
             schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             claim_type: "practice_effect".to_string(),
             text: "Cover crops improve soil structure.".to_string(),
-            citation_spans: vec![RadrootsKnowledgeCitationSpan {
+            citation_spans: vec![KnowledgeCitationSpan {
                 source_ref: knowledge_event_ref('4', KIND_KNOWLEDGE_SOURCE),
                 artifact_ref: None,
                 page_start: Some(12),
@@ -1060,8 +1031,8 @@ mod tests {
         }
     }
 
-    fn sample_knowledge_node_ref(label: &str) -> RadrootsKnowledgeNodeRef {
-        RadrootsKnowledgeNodeRef {
+    fn sample_knowledge_node_ref(label: &str) -> KnowledgeNodeRef {
+        KnowledgeNodeRef {
             node_type: "event".to_string(),
             event_ref: Some(knowledge_event_ref('6', KIND_KNOWLEDGE_CLAIM)),
             address_ref: None,
@@ -1070,8 +1041,8 @@ mod tests {
         }
     }
 
-    fn sample_knowledge_relation() -> RadrootsKnowledgeRelation {
-        RadrootsKnowledgeRelation {
+    fn sample_knowledge_relation() -> KnowledgeRelation {
+        KnowledgeRelation {
             schema: RADROOTS_KNOWLEDGE_RELATION_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             subject: sample_knowledge_node_ref("cover crops"),
@@ -1083,21 +1054,21 @@ mod tests {
         }
     }
 
-    fn sample_knowledge_review() -> RadrootsKnowledgeReview {
-        RadrootsKnowledgeReview {
+    fn sample_knowledge_review() -> KnowledgeReview {
+        KnowledgeReview {
             schema: RADROOTS_KNOWLEDGE_REVIEW_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-            target: RadrootsKnowledgeReviewTarget {
+            target: KnowledgeReviewTarget {
                 event_id: synthetic_event_id('8'),
                 author_pubkey: synthetic_pubkey('a'),
                 kind: KIND_KNOWLEDGE_CLAIM,
                 address: None,
                 relays: vec!["wss://relay.example.test".to_string()],
-                review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+                review_scope: KnowledgeReviewScope::SpecificVersion,
             },
             reviewer_role: "peer".to_string(),
             verdict: "needs_more_evidence".to_string(),
-            scores: vec![RadrootsKnowledgeReviewScore {
+            scores: vec![KnowledgeReviewScore {
                 dimension: "evidence".to_string(),
                 value: "partial".to_string(),
                 note: None,
@@ -1107,16 +1078,16 @@ mod tests {
         }
     }
 
-    fn sample_knowledge_field_report() -> RadrootsKnowledgeFieldReport {
-        RadrootsKnowledgeFieldReport {
+    fn sample_knowledge_field_report() -> KnowledgeFieldReport {
+        KnowledgeFieldReport {
             schema: RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             report_type: "observation".to_string(),
             title: "Field observation".to_string(),
             summary: Some("Observed cover crop residue.".to_string()),
-            context: RadrootsKnowledgeFieldContext {
-                location_precision: RadrootsKnowledgeLocationPrecision::CoarseGeohash,
-                public_location: Some(RadrootsKnowledgeLocation {
+            context: KnowledgeFieldContext {
+                location_precision: KnowledgeLocationPrecision::CoarseGeohash,
+                public_location: Some(KnowledgeLocation {
                     label: Some("watershed".to_string()),
                     region: Some("synthetic-region".to_string()),
                     locality: None,
@@ -1126,11 +1097,11 @@ mod tests {
                 topics: vec!["field".to_string()],
                 context_tags: vec!["observation".to_string()],
             },
-            observations: vec![RadrootsKnowledgeObservation {
+            observations: vec![KnowledgeObservation {
                 observation_type: "residue".to_string(),
                 text: "Residue was visible across beds.".to_string(),
                 observed_at: Some("2026-07-05".to_string()),
-                values: vec![RadrootsKnowledgeObservationValue {
+                values: vec![KnowledgeObservationValue {
                     key: "coverage".to_string(),
                     value: "medium".to_string(),
                     unit: None,
@@ -1160,7 +1131,7 @@ mod tests {
                 .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
                 .sign_with_keys(&keys)
                 .expect("signed event");
-        let envelope = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let envelope = EventEnvelope::new(EventEnvelopeParts {
             id: event.id.to_hex(),
             author: event.pubkey.to_hex(),
             created_at: event.created_at.as_secs(),
@@ -1178,15 +1149,15 @@ mod tests {
         serde_json::to_string(&envelope).expect("event json")
     }
 
-    fn social_location() -> RadrootsSocialLocation {
-        RadrootsSocialLocation {
+    fn social_location() -> SocialLocation {
+        SocialLocation {
             name: Some("field edge".to_string()),
             geohash: Some("c23nb62w20st".to_string()),
         }
     }
 
-    fn sample_article() -> RadrootsArticle {
-        RadrootsArticle {
+    fn sample_article() -> Article {
+        Article {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
             title: "soil notes".to_string(),
             content: "# soil notes".to_string(),
@@ -1199,8 +1170,8 @@ mod tests {
         }
     }
 
-    fn sample_public_file_metadata() -> RadrootsFileMetadata {
-        RadrootsFileMetadata {
+    fn sample_public_file_metadata() -> FileMetadata {
+        FileMetadata {
             url: "https://media.example.test/public.jpg".to_string(),
             mime_type: "image/jpeg".to_string(),
             sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
@@ -1208,7 +1179,7 @@ mod tests {
                 "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".to_string(),
             ),
             size: Some(4096),
-            dimensions: Some(RadrootsSocialMediaDimensions {
+            dimensions: Some(SocialMediaDimensions {
                 width: 1200,
                 height: 800,
             }),
@@ -1224,34 +1195,34 @@ mod tests {
         }
     }
 
-    fn sample_reaction() -> RadrootsReaction {
-        RadrootsReaction {
+    fn sample_reaction() -> Reaction {
+        Reaction {
             target: address_target(30023, "AAAAAAAAAAAAAAAAAAAAAg"),
             content: String::new(),
         }
     }
 
-    fn sample_repost() -> RadrootsRepost {
-        RadrootsRepost {
+    fn sample_repost() -> Repost {
+        Repost {
             target: event_target(1, 'b'),
             content: Some("field update".to_string()),
         }
     }
 
-    fn sample_generic_repost() -> RadrootsGenericRepost {
-        RadrootsGenericRepost {
+    fn sample_generic_repost() -> GenericRepost {
+        GenericRepost {
             target: address_target(30023, "AAAAAAAAAAAAAAAAAAAAAg"),
             target_kind: 30023,
             content: Some("article share".to_string()),
         }
     }
 
-    fn sample_report() -> RadrootsReport {
-        RadrootsReport {
+    fn sample_report() -> Report {
+        Report {
             reported_pubkey: synthetic_pubkey('b'),
-            report_type: RadrootsReportType::Spam,
+            report_type: ReportType::Spam,
             event: Some(event_target(1, 'c')),
-            file: Some(RadrootsReportFileTarget {
+            file: Some(ReportFileTarget {
                 sha256: Some(
                     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
                 ),
@@ -1262,17 +1233,17 @@ mod tests {
         }
     }
 
-    fn sample_job_request() -> RadrootsJobRequest {
-        RadrootsJobRequest {
+    fn sample_job_request() -> JobRequest {
+        JobRequest {
             kind: 5100,
-            inputs: vec![RadrootsJobInput {
+            inputs: vec![JobInput {
                 data: "alpha".to_string(),
                 input_type: JobInputType::Text,
                 relay: None,
                 marker: None,
             }],
             output: None,
-            params: vec![RadrootsJobParam {
+            params: vec![JobParam {
                 key: "mode".to_string(),
                 value: "fast".to_string(),
             }],
@@ -1284,22 +1255,22 @@ mod tests {
         }
     }
 
-    fn sample_workspace_manifest() -> RadrootsFarmWorkspaceManifest {
-        RadrootsFarmWorkspaceManifest {
+    fn sample_workspace_manifest() -> FarmWorkspaceManifest {
+        FarmWorkspaceManifest {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             schema: RADROOTS_FARM_WORKSPACE_SCHEMA.to_string(),
             farm_group_id: "field-group".to_string(),
             name: "Small Regen Farm".to_string(),
             owner_pubkey: "workspace_owner_pubkey".to_string(),
-            farm: Some(RadrootsFarmRef {
+            farm: Some(FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             }),
-            relays: vec![RadrootsFarmWorkspaceRelay {
+            relays: vec![FarmWorkspaceRelay {
                 url: "wss://relay.example.invalid/farm/field-group".to_string(),
-                mode: RadrootsFarmWorkspaceRelayMode::ReadWrite,
+                mode: FarmWorkspaceRelayMode::ReadWrite,
             }],
-            media_servers: vec![RadrootsFarmWorkspaceMediaServer {
+            media_servers: vec![FarmWorkspaceMediaServer {
                 url: "https://media.example.invalid/farm/field-group".to_string(),
                 service: "RadrootsPrivateMedia".to_string(),
             }],
@@ -1310,51 +1281,51 @@ mod tests {
         }
     }
 
-    fn sample_crdt_change() -> RadrootsFarmCrdtChange {
-        RadrootsFarmCrdtChange {
+    fn sample_crdt_change() -> FarmCrdtChange {
+        FarmCrdtChange {
             schema: RADROOTS_FARM_CRDT_CHANGE_SCHEMA.to_string(),
-            workspace: RadrootsFarmWorkspaceRef {
+            workspace: FarmWorkspaceRef {
                 pubkey: "workspace_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             farm_group_id: "field-group".to_string(),
             document_id: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
-            document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
-            crdt_backend: RadrootsCrdtBackend::Automerge,
+            document_kind: FarmCrdtDocumentKind::FarmTask,
+            crdt_backend: CrdtBackend::Automerge,
             crdt_backend_version: Some("0.x".to_string()),
             actor_id: "actor_abc".to_string(),
             change_hash: "crdt_hash_abc".to_string(),
             dependencies: Vec::new(),
             encoded_change: "abc-DEF_012".to_string(),
-            semantic_kind: RadrootsFarmSemanticKind::FarmTaskCreate,
+            semantic_kind: FarmSemanticKind::FarmTaskCreate,
             business_time_ms: 1_780_000_000_000,
             author_member_id: Some("member_abc".to_string()),
             app_version: Some("0.1.0".to_string()),
         }
     }
 
-    fn sample_file_metadata() -> RadrootsFarmFileMetadata {
-        RadrootsFarmFileMetadata {
+    fn sample_file_metadata() -> FarmFileMetadata {
+        FarmFileMetadata {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            workspace: RadrootsFarmWorkspaceRef {
+            workspace: FarmWorkspaceRef {
                 pubkey: "workspace_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             farm_group_id: "field-group".to_string(),
             owner_document_id: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
-            owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+            owner_document_kind: FarmCrdtDocumentKind::FarmTask,
             caption: Some("Tomatoes harvested from Patch Y.".to_string()),
             url: "https://media.example.invalid/blob/sha256".to_string(),
             mime_type: "image/jpeg".to_string(),
             sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
             original_sha256: None,
             size_bytes: Some(123_456),
-            dimensions: Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 }),
+            dimensions: Some(FarmFileDimensions { w: 1600, h: 1200 }),
             blurhash: None,
-            thumb: Some(RadrootsFarmFileSource {
+            thumb: Some(FarmFileSource {
                 url: "https://media.example.invalid/thumb/sha256".to_string(),
                 mime_type: Some("image/jpeg".to_string()),
-                dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 240 }),
+                dimensions: Some(FarmFileDimensions { w: 320, h: 240 }),
             }),
             image: None,
             alt: Some("Harvested tomatoes in a crate".to_string()),
@@ -1362,8 +1333,8 @@ mod tests {
         }
     }
 
-    fn sample_group_metadata() -> RadrootsGroupEditableMetadata {
-        RadrootsGroupEditableMetadata {
+    fn sample_group_metadata() -> GroupEditableMetadata {
+        GroupEditableMetadata {
             name: Some("Small Regen Farm".to_string()),
             about: Some("Field app group".to_string()),
             picture: Some("https://media.example.invalid/group.png".to_string()),
@@ -1375,15 +1346,15 @@ mod tests {
         }
     }
 
-    fn sample_group_user(role: &str) -> RadrootsGroupUserRef {
-        RadrootsGroupUserRef {
+    fn sample_group_user(role: &str) -> GroupUserRef {
+        GroupUserRef {
             pubkey: format!("{role}_pubkey"),
             roles: vec![role.to_string()],
         }
     }
 
-    fn sample_group_role() -> RadrootsGroupRole {
-        RadrootsGroupRole {
+    fn sample_group_role() -> GroupRole {
+        GroupRole {
             name: "member".to_string(),
             description: Some("can read and write group events".to_string()),
             permissions: vec!["read".to_string(), "write".to_string()],
@@ -1626,8 +1597,7 @@ mod tests {
             &serde_json::to_string(&input).expect("media request"),
         )
         .expect("byte-verified PhotoUpdate");
-        let encoded: RadrootsNip01EventWireParts =
-            serde_json::from_str(&encoded).expect("wire parts");
+        let encoded: Nip01EventWireParts = serde_json::from_str(&encoded).expect("wire parts");
         assert_eq!(encoded.tags.len(), 1);
         assert!(encoded.tags[0].contains(&format!("x {hash}")));
         assert!(encoded.tags[0].contains(&"size 4".to_owned()));
@@ -1674,7 +1644,7 @@ mod tests {
     fn ask_allows_zero_media_while_photo_update_requires_media() {
         let ask = social_ask_build_authored_draft(r#"{"content":"When is harvest?","images":[]}"#)
             .expect("Ask without media");
-        let ask: RadrootsNip01EventWireParts = serde_json::from_str(&ask).expect("Ask wire parts");
+        let ask: Nip01EventWireParts = serde_json::from_str(&ask).expect("Ask wire parts");
         assert_eq!(
             ask.tags,
             vec![vec!["t".to_owned(), "radroots-ask".to_owned()]]
@@ -1731,7 +1701,7 @@ mod tests {
         assert!(article_tags(&serde_json::to_string(&article).expect("article json")).is_err());
 
         let mut reaction = sample_reaction();
-        reaction.target = RadrootsSocialTarget::External {
+        reaction.target = SocialTarget::External {
             id: "https://example.test/object".to_string(),
             external_kind: "web".to_string(),
             hint: None,
@@ -1919,7 +1889,7 @@ mod tests {
         let mut oversized: serde_json::Value =
             serde_json::from_str(&signed_claim_event_json()).expect("event json");
         oversized["content"] = serde_json::Value::String(
-            "x".repeat(RadrootsEventEnvelopeLimits::default().max_content_bytes + 1),
+            "x".repeat(EventEnvelopeLimits::default().max_content_bytes + 1),
         );
         let oversized_error =
             verify_and_decode_event_json(&oversized.to_string()).expect_err("oversized content");
@@ -1965,14 +1935,14 @@ mod tests {
         let file_json = serde_json::to_string(&sample_file_metadata()).expect("file json");
         assert_tags_json(farm_file_metadata_tags(&file_json));
 
-        let relay_auth_json = serde_json::to_string(&RadrootsRelayAuth {
+        let relay_auth_json = serde_json::to_string(&RelayAuth {
             relay: "wss://relay.example.invalid/farm/field-group".to_string(),
             challenge: "relay-provided-challenge".to_string(),
         })
         .expect("relay auth json");
         assert_tags_json(relay_auth_tags(&relay_auth_json));
 
-        let http_auth_json = serde_json::to_string(&RadrootsHttpAuth {
+        let http_auth_json = serde_json::to_string(&HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(
@@ -1998,7 +1968,7 @@ mod tests {
     fn group_bindings_encode_to_json_when_input_is_valid() {
         let metadata = sample_group_metadata();
         assert_tags_json(group_put_user_tags(
-            &serde_json::to_string(&RadrootsGroupPutUser {
+            &serde_json::to_string(&GroupPutUser {
                 group_id: "field-group".to_string(),
                 message: Some("add member".to_string()),
                 pubkey: "member_pubkey".to_string(),
@@ -2007,7 +1977,7 @@ mod tests {
             .expect("put user json"),
         ));
         assert_tags_json(group_remove_user_tags(
-            &serde_json::to_string(&RadrootsGroupRemoveUser {
+            &serde_json::to_string(&GroupRemoveUser {
                 group_id: "field-group".to_string(),
                 message: Some("remove member".to_string()),
                 pubkey: "member_pubkey".to_string(),
@@ -2015,7 +1985,7 @@ mod tests {
             .expect("remove user json"),
         ));
         assert_tags_json(group_create_group_tags(
-            &serde_json::to_string(&RadrootsGroupCreateGroup {
+            &serde_json::to_string(&GroupCreateGroup {
                 group_id: "field-group".to_string(),
                 message: Some("create group".to_string()),
                 metadata: metadata.clone(),
@@ -2023,7 +1993,7 @@ mod tests {
             .expect("create group json"),
         ));
         assert_tags_json(group_edit_metadata_tags(
-            &serde_json::to_string(&RadrootsGroupEditMetadata {
+            &serde_json::to_string(&GroupEditMetadata {
                 group_id: "field-group".to_string(),
                 message: Some("edit metadata".to_string()),
                 metadata: metadata.clone(),
@@ -2031,14 +2001,14 @@ mod tests {
             .expect("edit metadata json"),
         ));
         assert_tags_json(group_delete_group_tags(
-            &serde_json::to_string(&RadrootsGroupDeleteGroup {
+            &serde_json::to_string(&GroupDeleteGroup {
                 group_id: "field-group".to_string(),
                 message: Some("delete group".to_string()),
             })
             .expect("delete group json"),
         ));
         assert_tags_json(group_delete_event_tags(
-            &serde_json::to_string(&RadrootsGroupDeleteEvent {
+            &serde_json::to_string(&GroupDeleteEvent {
                 group_id: "field-group".to_string(),
                 message: Some("delete event".to_string()),
                 event_id: "event_id".to_string(),
@@ -2046,7 +2016,7 @@ mod tests {
             .expect("delete event json"),
         ));
         let invite_tags = tags_json(group_create_invite_tags(
-            &serde_json::to_string(&RadrootsGroupCreateInvite {
+            &serde_json::to_string(&GroupCreateInvite {
                 group_id: "field-group".to_string(),
                 message: Some("join the field group".to_string()),
                 code: "invite-code".to_string(),
@@ -2055,7 +2025,7 @@ mod tests {
         ));
         assert!(invite_tags.contains(&vec!["code".to_string(), "invite-code".to_string()]));
         assert_tags_json(group_join_request_tags(
-            &serde_json::to_string(&RadrootsGroupJoinRequest {
+            &serde_json::to_string(&GroupJoinRequest {
                 group_id: "field-group".to_string(),
                 message: Some("requesting access".to_string()),
                 code: Some("invite-code".to_string()),
@@ -2063,14 +2033,14 @@ mod tests {
             .expect("join json"),
         ));
         assert_tags_json(group_leave_request_tags(
-            &serde_json::to_string(&RadrootsGroupLeaveRequest {
+            &serde_json::to_string(&GroupLeaveRequest {
                 group_id: "field-group".to_string(),
                 message: Some("leaving".to_string()),
             })
             .expect("leave json"),
         ));
         let metadata_tags = tags_json(group_metadata_tags(
-            &serde_json::to_string(&RadrootsGroupMetadata {
+            &serde_json::to_string(&GroupMetadata {
                 d_tag: "field-group".to_string(),
                 metadata,
             })
@@ -2084,7 +2054,7 @@ mod tests {
             KIND_FARM_FILE_METADATA.to_string()
         ]));
         assert_tags_json(group_admins_tags(
-            &serde_json::to_string(&RadrootsGroupAdmins {
+            &serde_json::to_string(&GroupAdmins {
                 d_tag: "field-group".to_string(),
                 description: Some("group admins".to_string()),
                 admins: vec![sample_group_user("admin")],
@@ -2092,7 +2062,7 @@ mod tests {
             .expect("admins json"),
         ));
         assert_tags_json(group_members_tags(
-            &serde_json::to_string(&RadrootsGroupMembers {
+            &serde_json::to_string(&GroupMembers {
                 d_tag: "field-group".to_string(),
                 description: Some("group members".to_string()),
                 members: vec![sample_group_user("member")],
@@ -2100,7 +2070,7 @@ mod tests {
             .expect("members json"),
         ));
         assert_tags_json(group_roles_tags(
-            &serde_json::to_string(&RadrootsGroupRoles {
+            &serde_json::to_string(&GroupRoles {
                 d_tag: "field-group".to_string(),
                 description: Some("group roles".to_string()),
                 roles: vec![sample_group_role()],

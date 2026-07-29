@@ -10,10 +10,10 @@ use crate::{
 use radroots_authority::{RadrootsActorContext, RadrootsEventSigner};
 #[cfg(feature = "runtime")]
 use radroots_event::{
-    draft::RadrootsEventDraft,
+    draft::EventDraft,
     envelope::kind::KIND_CLASSIFIED_LISTING,
-    id::{RadrootsClassifiedListingAddress, RadrootsEventId},
-    listing::operational::RadrootsOperationalListing,
+    id::{ClassifiedListingAddress, EventId},
+    listing::operational::OperationalListing,
 };
 #[cfg(feature = "runtime")]
 use radroots_outbox::RadrootsOutboxEnqueueStatus;
@@ -41,7 +41,7 @@ pub struct ListingPreparePublishRequest {
 
 #[cfg(feature = "runtime")]
 impl ListingPreparePublishRequest {
-    pub fn new(actor: RadrootsActorContext, listing: RadrootsOperationalListing) -> Self {
+    pub fn new(actor: RadrootsActorContext, listing: OperationalListing) -> Self {
         Self {
             actor,
             document: RadrootsOperationalListingEditDocumentV1::new(listing),
@@ -82,7 +82,7 @@ pub struct ListingEnqueuePublishRequest {
 impl ListingEnqueuePublishRequest {
     pub fn new(
         actor: RadrootsActorContext,
-        listing: RadrootsOperationalListing,
+        listing: OperationalListing,
         target_policy: TargetPolicy,
     ) -> Self {
         Self::from_document(
@@ -141,23 +141,23 @@ impl ListingEnqueuePublishRequest {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListingPublishPlan {
-    public_listing_addr: RadrootsClassifiedListingAddress,
-    expected_event_id: RadrootsEventId,
-    frozen_draft: RadrootsEventDraft,
+    public_listing_addr: ClassifiedListingAddress,
+    expected_event_id: EventId,
+    frozen_draft: EventDraft,
     created_at: RadrootsSdkTimestamp,
 }
 
 #[cfg(feature = "runtime")]
 impl ListingPublishPlan {
-    pub fn public_listing_addr(&self) -> &RadrootsClassifiedListingAddress {
+    pub fn public_listing_addr(&self) -> &ClassifiedListingAddress {
         &self.public_listing_addr
     }
 
-    pub fn expected_event_id(&self) -> &RadrootsEventId {
+    pub fn expected_event_id(&self) -> &EventId {
         &self.expected_event_id
     }
 
-    pub fn frozen_draft(&self) -> &RadrootsEventDraft {
+    pub fn frozen_draft(&self) -> &EventDraft {
         &self.frozen_draft
     }
 
@@ -188,9 +188,9 @@ impl From<RadrootsOutboxEnqueueStatus> for SdkMutationState {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListingEnqueueReceipt {
-    pub public_listing_addr: RadrootsClassifiedListingAddress,
-    pub expected_event_id: RadrootsEventId,
-    pub signed_event_id: RadrootsEventId,
+    pub public_listing_addr: ClassifiedListingAddress,
+    pub expected_event_id: EventId,
+    pub signed_event_id: EventId,
     pub local_event_seq: i64,
     pub outbox_operation_id: i64,
     pub outbox_event_id: i64,
@@ -345,8 +345,8 @@ fn canonical_listing_edit(
 
 #[cfg(feature = "runtime")]
 struct ValidatedListingPublishPlanMetadata {
-    public_listing_addr: RadrootsClassifiedListingAddress,
-    expected_event_id: RadrootsEventId,
+    public_listing_addr: ClassifiedListingAddress,
+    expected_event_id: EventId,
 }
 
 #[cfg(feature = "runtime")]
@@ -367,7 +367,7 @@ fn validate_listing_publish_plan(
         ));
     }
 
-    let expected_event_id = RadrootsEventId::parse(plan.frozen_draft.expected_event_id_hex())
+    let expected_event_id = EventId::parse(plan.frozen_draft.expected_event_id_hex())
         .expect("validated frozen draft has a typed event ID");
     if plan.expected_event_id != expected_event_id {
         return Err(invalid("expected event ID does not match frozen draft"));
@@ -389,7 +389,7 @@ fn validate_listing_publish_plan(
             "frozen draft contains duplicate listing identifiers",
         ));
     }
-    let public_listing_addr = RadrootsClassifiedListingAddress::parse(format!(
+    let public_listing_addr = ClassifiedListingAddress::parse(format!(
         "{KIND_CLASSIFIED_LISTING}:{}:{d_tag}",
         plan.frozen_draft.expected_pubkey().to_hex()
     ))
@@ -415,7 +415,7 @@ fn listing_publish_plan(
     let mutation = RadrootsOperationalListingMutation::publish(canonical);
     let frozen_draft =
         build_operational_listing_mutation_draft(&mutation, u64::from(created_at_nostr))?;
-    let expected_event_id = RadrootsEventId::parse(frozen_draft.expected_event_id_hex())
+    let expected_event_id = EventId::parse(frozen_draft.expected_event_id_hex())
         .expect("frozen listing edit produces a valid event id");
     Ok(ListingPublishPlan {
         public_listing_addr,

@@ -19,8 +19,8 @@ fn farmer_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Farmer]).expect("actor")
 }
 
-fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
-    RadrootsFarm {
+fn farm(d_tag: &str, name: &str) -> Farm {
+    Farm {
         d_tag: d_tag.to_owned(),
         name: name.to_owned(),
         about: Some("Vegetable farm".to_owned()),
@@ -122,7 +122,7 @@ fn farm_publish_plan_rejects_invalid_draft_tags() {
         [AuthorRole::Farmer],
     )
     .expect("actor");
-    let farm = RadrootsFarm {
+    let farm = Farm {
         d_tag: "AAAAAAAAAAAAAAAAAAAAA!".to_owned(),
         name: "Invalid Farm".to_owned(),
         about: None,
@@ -528,7 +528,7 @@ async fn farm_prepared_plan_rejects_forged_state_before_signing_or_mutation() {
     );
     // Frozen drafts enforce registry contract-kind consistency, so a valid foreign pair is the
     // safe representable substitution for both identity fields.
-    let foreign_draft = RadrootsEventDraft::new(
+    let foreign_draft = EventDraft::new(
         "radroots.social.geochat.v1",
         radroots_event::envelope::kind::KIND_GEOCHAT,
         plan.created_at().unix_seconds(),
@@ -547,7 +547,7 @@ async fn farm_prepared_plan_rejects_forged_state_before_signing_or_mutation() {
 
     let mut forged_event_id = plan.clone();
     forged_event_id.expected_event_id =
-        RadrootsEventId::parse(fixture_bob_pubkey()).expect("alternate event ID");
+        EventId::parse(fixture_bob_pubkey()).expect("alternate event ID");
     assert!(matches!(
         validate_farm_publish_plan(&forged_event_id),
         Err(RadrootsSdkError::InvalidRequest { ref message })
@@ -555,11 +555,9 @@ async fn farm_prepared_plan_rejects_forged_state_before_signing_or_mutation() {
     ));
 
     let mut forged_address = plan.clone();
-    forged_address.farm_addr = RadrootsAddressableCoordinate::parse(format!(
-        "{KIND_FARM}:{}:{FARM_B_D_TAG}",
-        farmer_pubkey()
-    ))
-    .expect("alternate farm address");
+    forged_address.farm_addr =
+        AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{FARM_B_D_TAG}", farmer_pubkey()))
+            .expect("alternate farm address");
     assert!(matches!(
         validate_farm_publish_plan(&forged_address),
         Err(RadrootsSdkError::InvalidRequest { ref message })

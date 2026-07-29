@@ -7,19 +7,15 @@ use radroots_authority::{RadrootsActorContext, RadrootsLocalEventSigner};
 use radroots_event::{
     contract::AuthorRole,
     envelope::kind::TRADE_MUTATION_EVENT_KINDS,
-    id::{
-        RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
-        RadrootsTradeId,
-    },
+    id::{ClassifiedListingAddress, DTag, EventId, InventoryBinId, TradeId},
     trade::{
-        RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES,
-        RADROOTS_TRADE_MUTATION_CONTRACT_IDS, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
-        RADROOTS_TRADE_SCHEMA_VERSION, RadrootsFulfillmentProfileV1,
-        RadrootsSellerReservationAssertionV1, RadrootsSellerReservationLineV1,
-        RadrootsTradeCancellationProfileV1, RadrootsTradeCandidateLineV1,
-        RadrootsTradeCandidateTermsV1, RadrootsTradeDecisionV1, RadrootsTradeEconomicAdjustmentV1,
-        RadrootsTradeEconomicsProfileV1, RadrootsTradeMutationBodyV1,
-        RadrootsTradeMutationEnvelopeV1, canonical_trade_mutation_content,
+        FulfillmentProfileV1, RADROOTS_TRADE_DECISION_CONTRACT_ID,
+        RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES, RADROOTS_TRADE_MUTATION_CONTRACT_IDS,
+        RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
+        SellerReservationAssertionV1, SellerReservationLineV1, TradeCancellationProfileV1,
+        TradeCandidateLineV1, TradeCandidateTermsV1, TradeDecisionV1, TradeEconomicAdjustmentV1,
+        TradeEconomicsProfileV1, TradeMutationBodyV1, TradeMutationEnvelopeV1,
+        canonical_trade_mutation_content,
     },
 };
 use radroots_identity::PublicKey;
@@ -33,12 +29,12 @@ fn pubkey(value: &str) -> PublicKey {
     PublicKey::from_hex(value).expect("pubkey")
 }
 
-fn event_id(marker: char) -> RadrootsEventId {
-    RadrootsEventId::parse(std::iter::repeat_n(marker, 64).collect::<String>()).expect("event id")
+fn event_id(marker: char) -> EventId {
+    EventId::parse(std::iter::repeat_n(marker, 64).collect::<String>()).expect("event id")
 }
 
-fn trade_id() -> RadrootsTradeId {
-    RadrootsTradeId::parse("11111111111111111111111111111111").expect("trade id")
+fn trade_id() -> TradeId {
+    TradeId::parse("11111111111111111111111111111111").expect("trade id")
 }
 
 fn local_signer() -> (String, RadrootsLocalEventSigner) {
@@ -119,18 +115,18 @@ fn seller_actor(seller_pubkey: &str) -> RadrootsActorContext {
     RadrootsActorContext::test(seller_pubkey, [AuthorRole::Seller]).expect("seller")
 }
 
-fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateTermsV1 {
-    RadrootsTradeCandidateTermsV1 {
+fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> TradeCandidateTermsV1 {
+    TradeCandidateTermsV1 {
         candidate_id: None,
         schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
         base_candidate_id: None,
         supersession_intent: None,
         buyer_pubkey: pubkey(buyer_pubkey),
         seller_pubkey: pubkey(seller_pubkey),
-        farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
-        lines: vec![RadrootsTradeCandidateLineV1 {
-            line_id: RadrootsDTag::parse("line-1").expect("line id"),
-            listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+        farm_id: DTag::parse("farm-1").expect("farm id"),
+        lines: vec![TradeCandidateLineV1 {
+            line_id: DTag::parse("line-1").expect("line id"),
+            listing_addr: ClassifiedListingAddress::parse(format!(
                 "30402:{seller_pubkey}:listing-1"
             ))
             .expect("listing address"),
@@ -138,7 +134,7 @@ fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateT
             listing_snapshot_sha256: "d".repeat(64),
             product_id: "carrots".to_owned(),
             option_id: None,
-            bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+            bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
             quantity_mantissa: "2".to_owned(),
             quantity_scale: 0,
             unit_code: "count".to_owned(),
@@ -149,7 +145,7 @@ fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateT
             replaces_line_id: None,
         }],
         line_tombstones: Vec::new(),
-        economics: RadrootsTradeEconomicsProfileV1 {
+        economics: TradeEconomicsProfileV1 {
             profile_id: "mvp-fixed".to_owned(),
             currency_code: "USD".to_owned(),
             currency_exponent: 2,
@@ -158,9 +154,9 @@ fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateT
             discount_total_mantissa: "0".to_owned(),
             adjustment_total_mantissa: "0".to_owned(),
             total_mantissa: "1000".to_owned(),
-            adjustments: Vec::<RadrootsTradeEconomicAdjustmentV1>::new(),
+            adjustments: Vec::<TradeEconomicAdjustmentV1>::new(),
         },
-        fulfillment: RadrootsFulfillmentProfileV1 {
+        fulfillment: FulfillmentProfileV1 {
             profile_id: "market-pickup".to_owned(),
             method: "pickup".to_owned(),
             starts_at_unix_s: 1_800_000_000,
@@ -171,7 +167,7 @@ fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateT
             location_class: "farmstand".to_owned(),
             requires_private_terms: true,
         },
-        cancellation: RadrootsTradeCancellationProfileV1 {
+        cancellation: TradeCancellationProfileV1 {
             profile_id: "buyer-pre-agreement".to_owned(),
             buyer_pre_agreement: true,
             post_agreement_cutoff_unix_s: None,
@@ -182,11 +178,11 @@ fn candidate(buyer_pubkey: &str, seller_pubkey: &str) -> RadrootsTradeCandidateT
 }
 
 fn proposal(
-    candidate: RadrootsTradeCandidateTermsV1,
+    candidate: TradeCandidateTermsV1,
     buyer_pubkey: &str,
     seller_pubkey: &str,
-) -> RadrootsTradeMutationEnvelopeV1 {
-    RadrootsTradeMutationEnvelopeV1 {
+) -> TradeMutationEnvelopeV1 {
+    TradeMutationEnvelopeV1 {
         mutation_id: None,
         contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_owned(),
         schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
@@ -194,28 +190,28 @@ fn proposal(
         root_mutation_id: None,
         buyer_pubkey: pubkey(buyer_pubkey),
         seller_pubkey: pubkey(seller_pubkey),
-        farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+        farm_id: DTag::parse("farm-1").expect("farm id"),
         parent_mutation_ids: Vec::new(),
         author_pubkey: pubkey(buyer_pubkey),
         counterparty_pubkey: pubkey(seller_pubkey),
         authored_at_unix_s: 1_799_000_000,
-        body: RadrootsTradeMutationBodyV1::Proposal { candidate },
+        body: TradeMutationBodyV1::Proposal { candidate },
     }
 }
 
 fn reservation(
-    candidate: &RadrootsTradeCandidateTermsV1,
+    candidate: &TradeCandidateTermsV1,
     seller_pubkey: &str,
-) -> RadrootsSellerReservationAssertionV1 {
-    RadrootsSellerReservationAssertionV1 {
-        reservation_id: RadrootsDTag::parse("reservation-1").expect("reservation id"),
+) -> SellerReservationAssertionV1 {
+    SellerReservationAssertionV1 {
+        reservation_id: DTag::parse("reservation-1").expect("reservation id"),
         inventory_authority_id: pubkey(seller_pubkey),
         inventory_epoch: 42,
         candidate_id: candidate.candidate_id.expect("candidate id"),
         commitments: candidate
             .lines
             .iter()
-            .map(|line| RadrootsSellerReservationLineV1 {
+            .map(|line| SellerReservationLineV1 {
                 line_id: line.line_id.clone(),
                 bin_id: line.bin_id.clone(),
                 quantity_mantissa: line.quantity_mantissa.clone(),
@@ -229,16 +225,16 @@ fn reservation(
 }
 
 fn accepted_decision(
-    proposal: &RadrootsTradeMutationEnvelopeV1,
+    proposal: &TradeMutationEnvelopeV1,
     buyer_pubkey: &str,
     seller_pubkey: &str,
-) -> RadrootsTradeMutationEnvelopeV1 {
+) -> TradeMutationEnvelopeV1 {
     let proposal_id = proposal.mutation_id.expect("proposal id");
     let candidate = match &proposal.body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
+        TradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
         _ => unreachable!(),
     };
-    RadrootsTradeMutationEnvelopeV1 {
+    TradeMutationEnvelopeV1 {
         mutation_id: None,
         contract_id: RADROOTS_TRADE_DECISION_CONTRACT_ID.to_owned(),
         schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
@@ -246,15 +242,15 @@ fn accepted_decision(
         root_mutation_id: Some(proposal_id),
         buyer_pubkey: pubkey(buyer_pubkey),
         seller_pubkey: pubkey(seller_pubkey),
-        farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+        farm_id: DTag::parse("farm-1").expect("farm id"),
         parent_mutation_ids: vec![proposal_id],
         author_pubkey: pubkey(seller_pubkey),
         counterparty_pubkey: pubkey(buyer_pubkey),
         authored_at_unix_s: 1_799_000_060,
-        body: RadrootsTradeMutationBodyV1::Decision {
+        body: TradeMutationBodyV1::Decision {
             proposal_mutation_id: proposal_id,
             candidate_id: candidate.candidate_id.expect("candidate id"),
-            decision: RadrootsTradeDecisionV1::Accepted {
+            decision: TradeDecisionV1::Accepted {
                 reservation_assertion: Some(reservation(&candidate, seller_pubkey)),
             },
         },

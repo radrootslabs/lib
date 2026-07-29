@@ -1,6 +1,6 @@
 use radroots_event::{
-    envelope::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts},
-    farm::RadrootsFarm,
+    envelope::{EventEnvelope, EventEnvelopeParts},
+    farm::Farm,
 };
 use radroots_replica_schema::farm::IFarmFindMany;
 use radroots_replica_store::ReplicaSql;
@@ -19,8 +19,8 @@ fn sdk_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: format!("{id:064x}"),
         author: author.to_owned(),
         created_at: u64::from(created_at),
@@ -32,8 +32,8 @@ fn sdk_event(
     .expect("sdk event envelope")
 }
 
-fn sample_farm() -> RadrootsFarm {
-    RadrootsFarm {
+fn sample_farm() -> Farm {
+    Farm {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".into(),
         name: "North Farm".into(),
         about: Some("Organic coffee".into()),
@@ -57,7 +57,7 @@ fn open_replica() -> (TempDir, ReplicaSql<SqlxSqliteExecutor>) {
     (dir, replica)
 }
 
-fn ingest_farm(replica: &ReplicaSql<SqlxSqliteExecutor>) -> RadrootsEventEnvelope {
+fn ingest_farm(replica: &ReplicaSql<SqlxSqliteExecutor>) -> EventEnvelope {
     let farm_value = sample_farm();
     let author = seller_pubkey();
     let parts = radroots_event_codec::farm::encode::to_wire_parts(&farm_value).expect("farm draft");

@@ -4,8 +4,8 @@ use radroots_authority::RadrootsActorContext;
 use radroots_event::{
     contract::AuthorRole,
     envelope::kind::{KIND_FARM, KIND_PROFILE},
-    farm::RadrootsFarm,
-    id::RadrootsAddressableCoordinate,
+    farm::Farm,
+    id::AddressableCoordinate,
 };
 use radroots_event_store::RadrootsEventStore;
 use radroots_outbox::{
@@ -60,8 +60,8 @@ fn non_farmer_actor() -> RadrootsActorContext {
     RadrootsActorContext::test(farmer_pubkey(), [AuthorRole::Buyer]).expect("actor")
 }
 
-fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
-    RadrootsFarm {
+fn farm(d_tag: &str, name: &str) -> Farm {
+    Farm {
         d_tag: d_tag.to_owned(),
         name: name.to_owned(),
         about: Some("Vegetable farm".to_owned()),
@@ -73,8 +73,8 @@ fn farm(d_tag: &str, name: &str) -> RadrootsFarm {
     }
 }
 
-fn farm_addr(actor: &RadrootsActorContext, d_tag: &str) -> RadrootsAddressableCoordinate {
-    RadrootsAddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey()))
+fn farm_addr(actor: &RadrootsActorContext, d_tag: &str) -> AddressableCoordinate {
+    AddressableCoordinate::parse(format!("{KIND_FARM}:{}:{d_tag}", actor.pubkey()))
         .expect("farm addr")
 }
 

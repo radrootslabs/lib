@@ -1,7 +1,7 @@
 #![cfg(feature = "knowledge")]
 
 use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-use radroots_event::envelope::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::EventEnvelopeParts;
 use radroots_identity::PublicKey;
 use radroots_sdk::knowledge::prelude::*;
 use std::sync::LazyLock;
@@ -161,13 +161,13 @@ fn fluent_builders_reject_core_invalid_nested_models() {
         RadrootsKnowledgeBuilderError::InvalidField("support_refs")
     );
 
-    let zero_kind_target = RadrootsKnowledgeReviewTarget {
+    let zero_kind_target = KnowledgeReviewTarget {
         event_id: hex_64('8'),
         author_pubkey: hex_64('a'),
         kind: 0,
         address: None,
         relays: vec![RELAY.to_owned()],
-        review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+        review_scope: KnowledgeReviewScope::SpecificVersion,
     };
     let zero_kind_error = review_builder()
         .target(zero_kind_target)
@@ -178,13 +178,13 @@ fn fluent_builders_reject_core_invalid_nested_models() {
         RadrootsKnowledgeBuilderError::InvalidField("review_target")
     );
 
-    let malformed_pubkey_target = RadrootsKnowledgeReviewTarget {
+    let malformed_pubkey_target = KnowledgeReviewTarget {
         event_id: hex_64('8'),
         author_pubkey: "bad".to_owned(),
         kind: KIND_KNOWLEDGE_CLAIM,
         address: None,
         relays: vec![RELAY.to_owned()],
-        review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+        review_scope: KnowledgeReviewScope::SpecificVersion,
     };
     let malformed_pubkey_error = review_builder()
         .target(malformed_pubkey_target)
@@ -196,7 +196,7 @@ fn fluent_builders_reject_core_invalid_nested_models() {
     );
 
     let blank_score_dimension_error = review_builder()
-        .score(RadrootsKnowledgeReviewScore {
+        .score(KnowledgeReviewScore {
             dimension: " ".to_owned(),
             value: "partial".to_owned(),
             note: None,
@@ -209,8 +209,8 @@ fn fluent_builders_reject_core_invalid_nested_models() {
     );
 
     let exact_private_without_ref_error = field_report_builder()
-        .context(RadrootsKnowledgeFieldContext {
-            location_precision: RadrootsKnowledgeLocationPrecision::ExactPrivateReference,
+        .context(KnowledgeFieldContext {
+            location_precision: KnowledgeLocationPrecision::ExactPrivateReference,
             public_location: None,
             private_location_ref: None,
             topics: vec!["field".to_owned()],
@@ -224,7 +224,7 @@ fn fluent_builders_reject_core_invalid_nested_models() {
     );
 
     let blank_observation_error = field_report_builder()
-        .observation(RadrootsKnowledgeObservation {
+        .observation(KnowledgeObservation {
             observation_type: " ".to_owned(),
             text: "Residue was visible across beds.".to_owned(),
             observed_at: Some("2026-07-05".to_owned()),
@@ -400,7 +400,7 @@ fn knowledge_errors_expose_stable_codes() {
     assert_eq!(error.inner_code(), "invalid_field");
     assert!(!error.to_string().contains(article.content_djot.as_str()));
 
-    let draft_error: RadrootsSdkKnowledgeError = RadrootsEventDraft::new(
+    let draft_error: RadrootsSdkKnowledgeError = EventDraft::new(
         KNOWLEDGE_CLAIM_CONTRACT_ID,
         KIND_KNOWLEDGE_CLAIM,
         u64::from(CREATED_AT),
@@ -415,20 +415,20 @@ fn knowledge_errors_expose_stable_codes() {
 
     let draft_errors = [
         (
-            RadrootsDraftError::ContractNotDraftAuthorable {
+            DraftError::ContractNotDraftAuthorable {
                 contract_id: KNOWLEDGE_CLAIM_CONTRACT_ID.to_owned(),
             },
             "contract_not_draft_authorable",
         ),
         (
-            RadrootsDraftError::ContractRegistryVersionMismatch {
+            DraftError::ContractRegistryVersionMismatch {
                 expected: 2,
                 actual: 1,
             },
             "contract_registry_version_mismatch",
         ),
         (
-            RadrootsDraftError::DraftExpectedEventIdMismatch {
+            DraftError::DraftExpectedEventIdMismatch {
                 expected_event_id: hex_64('a'),
                 actual_event_id: hex_64('b'),
             },
@@ -443,7 +443,7 @@ fn knowledge_errors_expose_stable_codes() {
     }
 }
 
-fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
+fn sign_parts(parts: Nip01EventWireParts) -> EventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -455,7 +455,7 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
         .custom_created_at(Timestamp::from_secs(u64::from(CREATED_AT)))
         .sign_with_keys(&KNOWLEDGE_KEYS)
         .expect("signed event");
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs(),
@@ -480,8 +480,8 @@ fn hex_64(character: char) -> String {
     character.to_string().repeat(64)
 }
 
-fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
-    RadrootsEventRef {
+fn event_ref(character: char, kind: u32) -> EventRef {
+    EventRef {
         id: hex_64(character),
         author: PublicKey::from_hex(&public_key_hex()).expect("fixture public key"),
         kind,
@@ -490,14 +490,14 @@ fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
     }
 }
 
-fn malformed_event_ref(kind: u32) -> RadrootsEventRef {
+fn malformed_event_ref(kind: u32) -> EventRef {
     let mut reference = event_ref('f', kind);
     reference.id = "bad".to_owned();
     reference
 }
 
-fn address_ref() -> RadrootsAddressableRef {
-    RadrootsAddressableRef {
+fn address_ref() -> AddressableRef {
+    AddressableRef {
         kind: KIND_WIKI_ARTICLE,
         pubkey: hex_64('a'),
         d_tag: "soil-health".to_owned(),
@@ -505,8 +505,8 @@ fn address_ref() -> RadrootsAddressableRef {
     }
 }
 
-fn wiki_article() -> RadrootsWikiArticle {
-    RadrootsWikiArticle {
+fn wiki_article() -> WikiArticle {
+    WikiArticle {
         d_tag: "soil-health".to_owned(),
         title: Some("Soil health".to_owned()),
         content_djot: "# Soil health".to_owned(),
@@ -518,22 +518,22 @@ fn wiki_article() -> RadrootsWikiArticle {
     }
 }
 
-fn wiki_redirect() -> RadrootsWikiRedirect {
-    RadrootsWikiRedirect {
+fn wiki_redirect() -> WikiRedirect {
+    WikiRedirect {
         d_tag: "soil".to_owned(),
         target: address_ref(),
     }
 }
 
-fn article_version_ref() -> RadrootsWikiArticleVersionRef {
-    RadrootsWikiArticleVersionRef {
+fn article_version_ref() -> WikiArticleVersionRef {
+    WikiArticleVersionRef {
         event_id: hex_64('b'),
         address_ref: address_ref(),
     }
 }
 
-fn wiki_merge_request() -> RadrootsWikiMergeRequest {
-    RadrootsWikiMergeRequest {
+fn wiki_merge_request() -> WikiMergeRequest {
+    WikiMergeRequest {
         target_article: address_ref(),
         destination_pubkey: hex_64('a'),
         base_version_event_id: Some(hex_64('e')),
@@ -583,7 +583,7 @@ fn claim_builder() -> RadrootsKnowledgeClaimBuilder {
     RadrootsKnowledgeClaimBuilder::new()
         .claim_type("practice_effect")
         .text("Cover crops improve soil structure.")
-        .citation_span(RadrootsKnowledgeCitationSpan {
+        .citation_span(KnowledgeCitationSpan {
             source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
             artifact_ref: None,
             page_start: Some(12),
@@ -608,17 +608,17 @@ fn relation_builder() -> RadrootsKnowledgeRelationBuilder {
 
 fn review_builder() -> RadrootsKnowledgeReviewBuilder {
     RadrootsKnowledgeReviewBuilder::new()
-        .target(RadrootsKnowledgeReviewTarget {
+        .target(KnowledgeReviewTarget {
             event_id: hex_64('8'),
             author_pubkey: hex_64('a'),
             kind: KIND_KNOWLEDGE_CLAIM,
             address: None,
             relays: vec![RELAY.to_owned()],
-            review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+            review_scope: KnowledgeReviewScope::SpecificVersion,
         })
         .reviewer_role("peer")
         .verdict("needs_more_evidence")
-        .score(RadrootsKnowledgeReviewScore {
+        .score(KnowledgeReviewScore {
             dimension: "evidence".to_owned(),
             value: "partial".to_owned(),
             note: None,
@@ -632,9 +632,9 @@ fn field_report_builder() -> RadrootsKnowledgeFieldReportBuilder {
         .report_type("observation")
         .title("Field observation")
         .summary("Observed cover crop residue.")
-        .context(RadrootsKnowledgeFieldContext {
-            location_precision: RadrootsKnowledgeLocationPrecision::CoarseGeohash,
-            public_location: Some(RadrootsKnowledgeLocation {
+        .context(KnowledgeFieldContext {
+            location_precision: KnowledgeLocationPrecision::CoarseGeohash,
+            public_location: Some(KnowledgeLocation {
                 label: Some("watershed".to_owned()),
                 region: Some("synthetic-region".to_owned()),
                 locality: None,
@@ -644,11 +644,11 @@ fn field_report_builder() -> RadrootsKnowledgeFieldReportBuilder {
             topics: vec!["field".to_owned()],
             context_tags: vec!["observation".to_owned()],
         })
-        .observation(RadrootsKnowledgeObservation {
+        .observation(KnowledgeObservation {
             observation_type: "residue".to_owned(),
             text: "Residue was visible across beds.".to_owned(),
             observed_at: Some("2026-07-05".to_owned()),
-            values: vec![RadrootsKnowledgeObservationValue {
+            values: vec![KnowledgeObservationValue {
                 key: "coverage".to_owned(),
                 value: "medium".to_owned(),
                 unit: None,
@@ -659,8 +659,8 @@ fn field_report_builder() -> RadrootsKnowledgeFieldReportBuilder {
         .limitation("single observer")
 }
 
-fn knowledge_source() -> RadrootsKnowledgeSource {
-    RadrootsKnowledgeSource {
+fn knowledge_source() -> KnowledgeSource {
+    KnowledgeSource {
         schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_owned(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         d_tag: "soil-source".to_owned(),
@@ -678,13 +678,13 @@ fn knowledge_source() -> RadrootsKnowledgeSource {
     }
 }
 
-fn knowledge_claim() -> RadrootsKnowledgeClaim {
-    RadrootsKnowledgeClaim {
+fn knowledge_claim() -> KnowledgeClaim {
+    KnowledgeClaim {
         schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_owned(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         claim_type: "practice_effect".to_owned(),
         text: "Cover crops improve soil structure.".to_owned(),
-        citation_spans: vec![RadrootsKnowledgeCitationSpan {
+        citation_spans: vec![KnowledgeCitationSpan {
             source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
             artifact_ref: None,
             page_start: Some(12),
@@ -700,8 +700,8 @@ fn knowledge_claim() -> RadrootsKnowledgeClaim {
     }
 }
 
-fn knowledge_node_ref(label: &str) -> RadrootsKnowledgeNodeRef {
-    RadrootsKnowledgeNodeRef {
+fn knowledge_node_ref(label: &str) -> KnowledgeNodeRef {
+    KnowledgeNodeRef {
         node_type: "event".to_owned(),
         event_ref: Some(event_ref('6', KIND_KNOWLEDGE_CLAIM)),
         address_ref: None,
@@ -710,8 +710,8 @@ fn knowledge_node_ref(label: &str) -> RadrootsKnowledgeNodeRef {
     }
 }
 
-fn knowledge_relation() -> RadrootsKnowledgeRelation {
-    RadrootsKnowledgeRelation {
+fn knowledge_relation() -> KnowledgeRelation {
+    KnowledgeRelation {
         schema: RADROOTS_KNOWLEDGE_RELATION_SCHEMA.to_owned(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         subject: knowledge_node_ref("cover crops"),
@@ -723,21 +723,21 @@ fn knowledge_relation() -> RadrootsKnowledgeRelation {
     }
 }
 
-fn knowledge_review() -> RadrootsKnowledgeReview {
-    RadrootsKnowledgeReview {
+fn knowledge_review() -> KnowledgeReview {
+    KnowledgeReview {
         schema: RADROOTS_KNOWLEDGE_REVIEW_SCHEMA.to_owned(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-        target: RadrootsKnowledgeReviewTarget {
+        target: KnowledgeReviewTarget {
             event_id: hex_64('8'),
             author_pubkey: hex_64('a'),
             kind: KIND_KNOWLEDGE_CLAIM,
             address: None,
             relays: vec![RELAY.to_owned()],
-            review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+            review_scope: KnowledgeReviewScope::SpecificVersion,
         },
         reviewer_role: "peer".to_owned(),
         verdict: "needs_more_evidence".to_owned(),
-        scores: vec![RadrootsKnowledgeReviewScore {
+        scores: vec![KnowledgeReviewScore {
             dimension: "evidence".to_owned(),
             value: "partial".to_owned(),
             note: None,
@@ -747,16 +747,16 @@ fn knowledge_review() -> RadrootsKnowledgeReview {
     }
 }
 
-fn knowledge_field_report() -> RadrootsKnowledgeFieldReport {
-    RadrootsKnowledgeFieldReport {
+fn knowledge_field_report() -> KnowledgeFieldReport {
+    KnowledgeFieldReport {
         schema: RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA.to_owned(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         report_type: "observation".to_owned(),
         title: "Field observation".to_owned(),
         summary: Some("Observed cover crop residue.".to_owned()),
-        context: RadrootsKnowledgeFieldContext {
-            location_precision: RadrootsKnowledgeLocationPrecision::CoarseGeohash,
-            public_location: Some(RadrootsKnowledgeLocation {
+        context: KnowledgeFieldContext {
+            location_precision: KnowledgeLocationPrecision::CoarseGeohash,
+            public_location: Some(KnowledgeLocation {
                 label: Some("watershed".to_owned()),
                 region: Some("synthetic-region".to_owned()),
                 locality: None,
@@ -766,11 +766,11 @@ fn knowledge_field_report() -> RadrootsKnowledgeFieldReport {
             topics: vec!["field".to_owned()],
             context_tags: vec!["observation".to_owned()],
         },
-        observations: vec![RadrootsKnowledgeObservation {
+        observations: vec![KnowledgeObservation {
             observation_type: "residue".to_owned(),
             text: "Residue was visible across beds.".to_owned(),
             observed_at: Some("2026-07-05".to_owned()),
-            values: vec![RadrootsKnowledgeObservationValue {
+            values: vec![KnowledgeObservationValue {
                 key: "coverage".to_owned(),
                 value: "medium".to_owned(),
                 unit: None,

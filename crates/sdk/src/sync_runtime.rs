@@ -12,7 +12,7 @@ use crate::{
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use crate::{RadrootsdExecutionAuth, RadrootsdExecutionProfile};
 #[cfg(feature = "runtime")]
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RADROOTS_EVENT_STORE_QUERY_LIMIT_MAX, RadrootsEventStoreStatusSummary};
 #[cfg(all(feature = "runtime", feature = "transport-nostr-runtime"))]
@@ -503,7 +503,7 @@ impl PushOutboxReceipt {
 #[cfg(feature = "runtime")]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct PushOutboxEventReceipt {
-    pub event_id: RadrootsEventId,
+    pub event_id: EventId,
     pub outbox_event_id: i64,
     pub final_state: PushOutboxEventState,
     pub attempted_count: usize,
@@ -1696,7 +1696,7 @@ fn radrootsd_error_message(error: &RadrootsdError) -> String {
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 fn radrootsd_transport_error_receipt(
     claimed: &RadrootsOutboxClaimedEvent,
-    event: &radroots_event::draft::RadrootsSignedEvent,
+    event: &radroots_event::draft::SignedEvent,
     delivery_policy: &TransportPublishDeliveryPolicy,
     message: String,
 ) -> Result<PushOutboxEventReceipt, RadrootsSdkError> {
@@ -1923,8 +1923,8 @@ fn push_event_receipt(
 }
 
 #[cfg(feature = "runtime")]
-fn push_receipt_event_id(value: &str, field: &str) -> Result<RadrootsEventId, RadrootsSdkError> {
-    RadrootsEventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
+fn push_receipt_event_id(value: &str, field: &str) -> Result<EventId, RadrootsSdkError> {
+    EventId::parse(value).map_err(|error| RadrootsSdkError::InvalidRequest {
         message: format!("{field} is invalid: {error}"),
     })
 }
