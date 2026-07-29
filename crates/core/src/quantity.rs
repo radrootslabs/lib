@@ -1,34 +1,58 @@
+//! Non-negative measured quantities and deterministic unit conversion.
+
 use core::fmt;
 
-use crate::RadrootsCoreDecimal;
-use crate::unit::{RadrootsCoreUnit, RadrootsCoreUnitConvertError, convert_unit_decimal};
+use crate::Decimal;
+use crate::unit::{ConvertError, Unit, convert_unit_decimal};
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 #[cfg(feature = "std")]
 use std::string::String;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsCoreQuantity {
+pub struct Quantity {
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_ext::decimal_str"))]
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub amount: RadrootsCoreDecimal,
-    pub unit: RadrootsCoreUnit,
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
+    amount: Decimal,
+    unit: Unit,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub label: Option<String>,
+    label: Option<String>,
 }
 
-impl RadrootsCoreQuantity {
+impl Quantity {
     #[inline]
-    pub fn new(amount: RadrootsCoreDecimal, unit: RadrootsCoreUnit) -> Self {
-        Self {
-            amount,
+    pub fn try_new(amount: Decimal, unit: Unit) -> Result<Self, Error> {
+        if amount.is_sign_negative() && !amount.is_zero() {
+            return Err(Error::NegativeAmount);
+        }
+        Ok(Self {
+            amount: if amount.is_zero() {
+                Decimal::ZERO
+            } else {
+                amount
+            },
             unit,
             label: None,
-        }
+        })
+    }
+
+    #[inline]
+    pub const fn amount(&self) -> Decimal {
+        self.amount
+    }
+
+    #[inline]
+    pub const fn unit(&self) -> Unit {
+        self.unit
+    }
+
+    #[inline]
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
     }
 
     #[inline]
@@ -50,9 +74,9 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn zero(unit: RadrootsCoreUnit) -> Self {
+    pub fn zero(unit: Unit) -> Self {
         Self {
-            amount: RadrootsCoreDecimal::ZERO,
+            amount: Decimal::ZERO,
             unit,
             label: None,
         }
@@ -69,20 +93,17 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn canonical_unit(&self) -> RadrootsCoreUnit {
+    pub fn canonical_unit(&self) -> Unit {
         self.unit.canonical_unit()
     }
 
     #[inline]
-    pub fn try_convert_to(
-        &self,
-        unit: RadrootsCoreUnit,
-    ) -> Result<RadrootsCoreQuantity, RadrootsCoreUnitConvertError> {
+    pub fn try_convert_to(&self, unit: Unit) -> Result<Quantity, ConvertError> {
         if self.unit == unit {
             return Ok(self.clone());
         }
         let amount = convert_unit_decimal(self.amount, self.unit, unit)?;
-        Ok(RadrootsCoreQuantity {
+        Ok(Quantity {
             amount,
             unit,
             label: self.label.clone(),
@@ -90,98 +111,101 @@ impl RadrootsCoreQuantity {
     }
 
     #[inline]
-    pub fn to_canonical(&self) -> Result<RadrootsCoreQuantity, RadrootsCoreUnitConvertError> {
+    pub fn to_canonical(&self) -> Result<Quantity, ConvertError> {
         self.try_convert_to(self.unit.canonical_unit())
     }
 
     #[inline]
-    pub fn ensure_non_negative(&self) -> Result<(), RadrootsCoreQuantityInvariantError> {
-        if self.amount.is_sign_negative() {
-            return Err(RadrootsCoreQuantityInvariantError::NegativeAmount);
+    pub(crate) fn ensure_non_negative(&self) -> Result<(), Error> {
+        if self.amount.is_sign_negative() && !self.amount.is_zero() {
+            return Err(Error::NegativeAmount);
         }
         Ok(())
     }
 
     #[inline]
-    pub fn with_scale(mut self, scale: u32) -> Self {
-        self.amount.rescale(scale);
-        self
-    }
-
-    #[inline]
-    pub fn try_add(
-        &self,
-        rhs: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreQuantity, RadrootsCoreQuantityInvariantError> {
+    pub fn try_add(&self, rhs: &Quantity) -> Result<Quantity, Error> {
         if self.unit != rhs.unit {
-            return Err(RadrootsCoreQuantityInvariantError::UnitMismatch);
+            return Err(Error::UnitMismatch);
         }
-        Ok(RadrootsCoreQuantity {
-            amount: self.amount + rhs.amount,
+        Ok(Quantity {
+            amount: self.amount.checked_add(rhs.amount)?,
             unit: self.unit,
             label: self.label.clone(),
         })
     }
 
     #[inline]
-    pub fn try_sub(
-        &self,
-        rhs: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreQuantity, RadrootsCoreQuantityInvariantError> {
+    pub fn try_sub(&self, rhs: &Quantity) -> Result<Quantity, Error> {
         if self.unit != rhs.unit {
-            return Err(RadrootsCoreQuantityInvariantError::UnitMismatch);
+            return Err(Error::UnitMismatch);
         }
-        Ok(RadrootsCoreQuantity {
-            amount: self.amount - rhs.amount,
+        let amount = self.amount.checked_sub(rhs.amount)?;
+        if amount.is_sign_negative() {
+            return Err(Error::NegativeAmount);
+        }
+        Ok(Quantity {
+            amount,
             unit: self.unit,
             label: self.label.clone(),
         })
     }
 
-    pub fn checked_add(&self, rhs: &RadrootsCoreQuantity) -> Option<RadrootsCoreQuantity> {
-        if self.unit == rhs.unit {
-            Some(RadrootsCoreQuantity {
-                amount: self.amount + rhs.amount,
-                unit: self.unit,
-                label: self.label.clone(),
-            })
-        } else {
-            None
-        }
+    pub fn checked_add(&self, rhs: &Quantity) -> Option<Quantity> {
+        self.try_add(rhs).ok()
     }
 
-    pub fn checked_sub(&self, rhs: &RadrootsCoreQuantity) -> Option<RadrootsCoreQuantity> {
-        if self.unit == rhs.unit {
-            Some(RadrootsCoreQuantity {
-                amount: self.amount - rhs.amount,
-                unit: self.unit,
-                label: self.label.clone(),
-            })
-        } else {
-            None
-        }
+    pub fn checked_sub(&self, rhs: &Quantity) -> Option<Quantity> {
+        self.try_sub(rhs).ok()
     }
 
     #[inline]
-    pub fn mul_decimal(&self, factor: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
-            amount: self.amount * factor,
+    pub fn checked_mul_decimal(&self, factor: Decimal) -> Result<Quantity, Error> {
+        let amount = self.amount.checked_mul(factor)?;
+        if amount.is_sign_negative() {
+            return Err(Error::NegativeAmount);
+        }
+        Ok(Quantity {
+            amount,
             unit: self.unit,
             label: self.label.clone(),
-        }
+        })
     }
 
     #[inline]
-    pub fn div_decimal(&self, divisor: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
-            amount: self.amount / divisor,
+    pub fn checked_div_decimal(&self, divisor: Decimal) -> Result<Quantity, Error> {
+        let amount = self.amount.checked_div(divisor)?;
+        if amount.is_sign_negative() {
+            return Err(Error::NegativeAmount);
+        }
+        Ok(Quantity {
+            amount,
             unit: self.unit,
             label: self.label.clone(),
-        }
+        })
     }
 }
 
-impl fmt::Display for RadrootsCoreQuantity {
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Quantity {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            #[serde(with = "crate::serde_ext::decimal_str")]
+            amount: Decimal,
+            unit: Unit,
+            #[serde(default)]
+            label: Option<String>,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        Self::try_new(wire.amount, wire.unit)
+            .map(|quantity| quantity.with_optional_label(wire.label))
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+impl fmt::Display for Quantity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {}", self.amount.normalize(), self.unit)?;
         if let Some(label) = &self.label {
@@ -193,47 +217,36 @@ impl fmt::Display for RadrootsCoreQuantity {
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCoreQuantityInvariantError {
+pub enum Error {
     NegativeAmount,
     UnitMismatch,
+    ArithmeticOverflow,
+    DivisionByZero,
 }
 
-impl fmt::Display for RadrootsCoreQuantityInvariantError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RadrootsCoreQuantityInvariantError::NegativeAmount => {
+            Error::NegativeAmount => {
                 write!(f, "quantity amount must be ≥ 0")
             }
-            RadrootsCoreQuantityInvariantError::UnitMismatch => {
+            Error::UnitMismatch => {
                 write!(f, "quantity unit mismatch")
             }
+            Error::ArithmeticOverflow => write!(f, "quantity arithmetic overflow"),
+            Error::DivisionByZero => write!(f, "quantity division by zero"),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCoreQuantityInvariantError {}
+impl std::error::Error for Error {}
 
-use core::ops::{Div, Mul};
-
-impl Mul<RadrootsCoreDecimal> for RadrootsCoreQuantity {
-    type Output = RadrootsCoreQuantity;
-    fn mul(self, rhs: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
-            amount: self.amount * rhs,
-            unit: self.unit,
-            label: self.label,
-        }
-    }
-}
-
-impl Div<RadrootsCoreDecimal> for RadrootsCoreQuantity {
-    type Output = RadrootsCoreQuantity;
-    fn div(self, rhs: RadrootsCoreDecimal) -> RadrootsCoreQuantity {
-        RadrootsCoreQuantity {
-            amount: self.amount / rhs,
-            unit: self.unit,
-            label: self.label,
+impl From<crate::decimal::Error> for Error {
+    fn from(error: crate::decimal::Error) -> Self {
+        match error {
+            crate::decimal::Error::DivisionByZero => Self::DivisionByZero,
+            _ => Self::ArithmeticOverflow,
         }
     }
 }

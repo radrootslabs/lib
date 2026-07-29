@@ -65,7 +65,7 @@ remain present when `display_name` is used. The scoped optional fields are
 `display_name`, `about`, `nip05`, `bot`, `picture`, and `banner`; `bot` is a
 Boolean. NIP-05 values enter only through `RadrootsNip05Identifier`. Picture and
 banner values enter through the shared `RadrootsAuthoredImage`, which can wrap
-only an `image/*` `RadrootsBlossomByteVerifiedDescriptor`. There is no raw-string
+only an `image/*` `ByteVerifiedDescriptor`. There is no raw-string
 media setter or unchecked deserialization path. Generic `website`, `lud06`, and
 `lud16` strings remain outside this strict authored operation.
 

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use radroots_blossom::RadrootsBlossomSha256;
-use radroots_event::{food_availability::RadrootsFoodIdentifier, ids::RadrootsPublicKey};
+use radroots_blossom::Sha256;
+use radroots_event::food_availability::RadrootsFoodIdentifier;
 use radroots_event_store::{
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
     RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1,
@@ -12,8 +12,9 @@ use radroots_event_store::{
     RadrootsStoreProducedCanonicalEventV1, RadrootsStoredFoodAvailabilityV1,
     RadrootsStoredRawEvent,
 };
+use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256 as Sha256Hasher};
 
 const RESULT_VECTOR_EXECUTOR_ID: &str =
     "radroots_event_store.food_availability_projection_v1.result_vector_executor.v1";
@@ -304,7 +305,7 @@ async fn food_availability_projection_v1_result_vector() {
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
+    hex::encode(Sha256Hasher::digest(bytes))
 }
 
 fn raw_head_decision_code(decision: &RadrootsRawHeadDecision) -> &'static str {
@@ -401,7 +402,7 @@ async fn execute_case(case: ProjectionCase) {
         .unwrap_or_else(|error| panic!("{}: active source generation: {error}", case.id));
 
     assert_eq!(case.expected.coordinate.kind, 30_402, "{}", case.id);
-    let public_key = RadrootsPublicKey::parse(&case.expected.coordinate.pubkey)
+    let public_key = PublicKey::from_hex(&case.expected.coordinate.pubkey)
         .unwrap_or_else(|error| panic!("{}: expected public key: {error}", case.id));
     let identifier = RadrootsFoodIdentifier::parse(&case.expected.coordinate.d_tag)
         .unwrap_or_else(|error| panic!("{}: expected identifier: {error}", case.id));
@@ -513,7 +514,7 @@ async fn execute_case(case: ProjectionCase) {
             case.id
         );
         assert_eq!(
-            actual.coordinate().pubkey().as_str(),
+            actual.coordinate().pubkey().to_hex(),
             expected.coordinate.pubkey,
             "{}",
             case.id
@@ -563,7 +564,7 @@ async fn execute_case(case: ProjectionCase) {
         match (expected.cause_event.0.as_ref(), actual.cause_event()) {
             (Some(expected), Some(actual)) => {
                 assert_event_reference(&case.id, "cause", &expected.event, actual.event());
-                assert_eq!(actual.pubkey().as_str(), expected.pubkey, "{}", case.id);
+                assert_eq!(actual.pubkey().to_hex(), expected.pubkey, "{}", case.id);
                 assert_eq!(actual.created_at(), expected.created_at, "{}", case.id);
                 assert_eq!(actual.kind(), expected.kind, "{}", case.id);
                 assert_eq!(
@@ -805,7 +806,7 @@ fn assert_canonical_visible_event(
         .unwrap_or_else(|| panic!("{}: expected event is absent from input", case.id));
     assert_eq!(actual.event_id().as_str(), observed.event.id, "{}", case.id);
     assert_eq!(
-        actual.pubkey().as_str(),
+        actual.pubkey().to_hex(),
         observed.event.pubkey,
         "{}",
         case.id
@@ -968,7 +969,7 @@ fn assert_projection(
             "{case_id}"
         );
         let expected_blossom_sha256 = expected.blossom_sha256.0.as_deref().map(|value| {
-            RadrootsBlossomSha256::from_hex(value)
+            Sha256::from_hex(value)
                 .unwrap_or_else(|error| panic!("{case_id}: expected Blossom digest: {error}"))
         });
         assert_eq!(

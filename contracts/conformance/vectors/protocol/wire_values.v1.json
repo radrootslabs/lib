@@ -1,0 +1,153 @@
+{
+  "suite": "protocol_wire_values_v1",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "protocol_capability_transport_kind_001",
+      "kind": "protocol.capability.transport_kind",
+      "input": "reticulum",
+      "expected": "reticulum"
+    },
+    {
+      "id": "protocol_capability_reticulum_target_002",
+      "kind": "protocol.capability.reticulum_target",
+      "input": {
+        "destination": { "canonical": "a1b2c3d4" },
+        "mesh_scope": { "value": "farm.mesh-1" }
+      },
+      "expected": {
+        "destination": { "canonical": "a1b2c3d4" },
+        "mesh_scope": { "value": "farm.mesh-1" }
+      }
+    },
+    {
+      "id": "protocol_event_class_003",
+      "kind": "protocol.event.event_class",
+      "input": "unsigned_rumor",
+      "expected": "unsigned_rumor"
+    },
+    {
+      "id": "protocol_trade_state_004",
+      "kind": "protocol.event.trade_state",
+      "input": "agreed_pending_validation",
+      "expected": "agreed_pending_validation"
+    },
+    {
+      "id": "protocol_runtime_operation_id_005",
+      "kind": "protocol.runtime.operation_id",
+      "input": "sync.push",
+      "expected": "sync.push"
+    },
+    {
+      "id": "protocol_runtime_risk_006",
+      "kind": "protocol.runtime.risk",
+      "input": "critical",
+      "expected": "critical"
+    },
+    {
+      "id": "protocol_runtime_transport_route_007",
+      "kind": "protocol.runtime.transport_route",
+      "input": {
+        "local": true,
+        "nostr": true,
+        "reticulum": false,
+        "deliver": true,
+        "fetch": false,
+        "synchronize": true,
+        "diagnostics": false
+      },
+      "expected": {
+        "local": true,
+        "nostr": true,
+        "reticulum": false,
+        "deliver": true,
+        "fetch": false,
+        "synchronize": true,
+        "diagnostics": false
+      }
+    },
+    {
+      "id": "protocol_daemon_target_policy_008",
+      "kind": "protocol.radrootsd.target_policy",
+      "input": {
+        "kind": "nostr",
+        "source_policy": "explicit_only",
+        "relay_urls": []
+      },
+      "expected": {
+        "kind": "nostr",
+        "source_policy": "explicit_only",
+        "relay_urls": []
+      }
+    },
+    {
+      "id": "protocol_daemon_delivery_policy_009",
+      "kind": "protocol.radrootsd.delivery_policy",
+      "input": { "mode": "quorum", "quorum": 2 },
+      "expected": { "mode": "quorum", "quorum": 2 }
+    },
+    {
+      "id": "protocol_error_report_010",
+      "kind": "protocol.error.report",
+      "input": {
+        "schema_version": 1,
+        "code": "relay_rate_limited",
+        "class": "network",
+        "retryable": true,
+        "recovery_actions": ["retry_after_transport_failure"],
+        "operation_id": "sync.push",
+        "capability_id": "nostr",
+        "message": "Relay rate limit requires a later retry",
+        "details": []
+      },
+      "expected": {
+        "schema_version": 1,
+        "code": "relay_rate_limited",
+        "class": "network",
+        "retryable": true,
+        "recovery_actions": ["retry_after_transport_failure"],
+        "operation_id": "sync.push",
+        "capability_id": "nostr",
+        "message": "Relay rate limit requires a later retry",
+        "details": []
+      }
+    },
+    {
+      "id": "protocol_runtime_unknown_operation_011",
+      "kind": "protocol.runtime.operation_id",
+      "input": "runtime.unknown",
+      "expected_error_contains": "unknown operation id"
+    },
+    {
+      "id": "protocol_runtime_route_unknown_field_012",
+      "kind": "protocol.runtime.transport_route",
+      "input": {
+        "local": true,
+        "nostr": false,
+        "reticulum": false,
+        "deliver": false,
+        "fetch": false,
+        "synchronize": false,
+        "diagnostics": false,
+        "executor": "forbidden"
+      },
+      "expected_error_contains": "unknown field"
+    },
+    {
+      "id": "protocol_error_report_version_013",
+      "kind": "protocol.error.report",
+      "input": {
+        "schema_version": 2,
+        "code": "relay_rate_limited",
+        "class": "network",
+        "retryable": true,
+        "recovery_actions": ["retry_after_transport_failure"],
+        "operation_id": "sync.push",
+        "capability_id": "nostr",
+        "message": "Relay rate limit requires a later retry",
+        "details": []
+      },
+      "expected_error_contains": "unsupported error report schema version 2"
+    }
+  ]
+}

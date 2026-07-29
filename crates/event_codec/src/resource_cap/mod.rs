@@ -7,7 +7,7 @@ pub mod encode;
 mod tests {
     use crate::error::EventEncodeError;
     use crate::resource_cap::encode::resource_harvest_cap_build_tags;
-    use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
+    use radroots_core::{Decimal, Quantity, Unit};
     use radroots_event::resource_area::RadrootsResourceAreaRef;
     use radroots_event::resource_cap::{
         RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
@@ -27,10 +27,7 @@ mod tests {
             },
             start: 1735689600,
             end: 1767225600,
-            cap_quantity: RadrootsCoreQuantity::new(
-                RadrootsCoreDecimal::from(100000u32),
-                RadrootsCoreUnit::MassG,
-            ),
+            cap_quantity: Quantity::try_new(Decimal::from(100000u32), Unit::MassG).unwrap(),
             display_amount: None,
             display_unit: None,
             display_label: None,
@@ -74,10 +71,7 @@ mod tests {
             },
             start: 1735689600,
             end: 1767225600,
-            cap_quantity: RadrootsCoreQuantity::new(
-                RadrootsCoreDecimal::from(100000u32),
-                RadrootsCoreUnit::MassG,
-            ),
+            cap_quantity: Quantity::try_new(Decimal::from(100000u32), Unit::MassG).unwrap(),
             display_amount: None,
             display_unit: None,
             display_label: None,

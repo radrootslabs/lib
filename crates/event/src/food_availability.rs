@@ -4,7 +4,7 @@ use alloc::{string::String, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::{fmt, str::FromStr};
-use radroots_blossom::hash::{RadrootsBlossomHashPath, RadrootsBlossomSha256};
+use radroots_blossom::hash::{HashPath, Sha256};
 use unicode_general_category::{GeneralCategory, get_general_category};
 use url_nostd::{Host, Url};
 
@@ -797,14 +797,12 @@ pub fn food_media_http_url_is_valid(value: &str) -> bool {
 ///
 /// A `None` result does not invalidate a standard inbound NIP-58 image URL; it
 /// only means duplicate-digest diagnostics cannot be derived from its path.
-pub fn food_media_blossom_digest(value: &str) -> Option<RadrootsBlossomSha256> {
+pub fn food_media_blossom_digest(value: &str) -> Option<Sha256> {
     if !food_media_http_url_is_valid(value) {
         return None;
     }
     let url = Url::parse(value).ok()?;
-    RadrootsBlossomHashPath::parse(url.path())
-        .ok()
-        .map(|path| path.hash())
+    HashPath::parse(url.path()).ok().map(|path| path.hash())
 }
 
 fn raw_food_media_host_and_path(value: &str) -> Option<(&str, &str)> {
@@ -898,10 +896,7 @@ fn is_control_or_format(character: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_blossom::{
-        RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-        RadrootsBlossomSha256,
-    };
+    use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 
     #[test]
     fn error_codes_and_messages_are_stable_for_every_variant() {
@@ -1021,7 +1016,7 @@ mod tests {
 
     #[test]
     fn inbound_food_media_urls_are_structural_without_claiming_blossom() {
-        let hash = RadrootsBlossomSha256::digest(b"carrots").to_string();
+        let hash = Sha256::digest(b"carrots").to_string();
         for valid in [
             format!("https://media.example/{hash}.webp"),
             format!("http://media.example:0/{hash}?download=1"),
@@ -1043,7 +1038,7 @@ mod tests {
         let blossom = format!("https://media.example/{hash}.webp?download=1");
         assert_eq!(
             food_media_blossom_digest(&blossom),
-            Some(RadrootsBlossomSha256::from_hex(&hash).unwrap())
+            Some(Sha256::from_hex(&hash).unwrap())
         );
         assert_eq!(
             food_media_blossom_digest("https://media.example/not-a-hash.jpg"),
@@ -1371,10 +1366,10 @@ mod tests {
         bytes: &[u8],
         dimensions: RadrootsFoodImageDimensions,
     ) -> RadrootsFoodAvailabilityImage {
-        let hash = RadrootsBlossomSha256::digest(bytes);
-        let media_type = RadrootsBlossomMediaType::parse("image/webp").unwrap();
-        let descriptor = RadrootsBlossomBlobDescriptor::new(
-            RadrootsBlossomBlobUrl::parse(&format!("{origin}/{hash}.webp")).unwrap(),
+        let hash = Sha256::digest(bytes);
+        let media_type = MediaType::parse("image/webp").unwrap();
+        let descriptor = BlobDescriptor::new(
+            BlobUrl::parse(&format!("{origin}/{hash}.webp")).unwrap(),
             hash,
             bytes.len() as u64,
             media_type.clone(),

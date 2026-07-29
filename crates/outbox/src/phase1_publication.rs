@@ -1261,10 +1261,10 @@ impl RadrootsOutbox {
         let expected_event_id = blob32(&row, "expected_event_id")?;
         let stored_policy_digest = blob32(&row, "target_policy_digest")?;
         let artifact = ready_artifact.artifact();
+        let expected_author_hex = artifact.expected_author().to_hex();
         if artifact_digest != *artifact.artifact_digest().as_bytes()
             || readiness_digest != *ready_artifact.binding_digest().as_bytes()
-            || expected_author
-                != decode_hex32(artifact.expected_author().as_str(), "expected_author")?
+            || expected_author != decode_hex32(&expected_author_hex, "expected_author")?
             || expected_event_id
                 != decode_hex32(artifact.expected_event_id().as_str(), "expected_event_id")?
             || stored_policy_digest != target_policy.digest
@@ -1664,7 +1664,8 @@ impl RadrootsOutbox {
         let signed_event_id = decode_hex32(verified.signed_event().id_str(), "signed_event_id")?;
         let artifact = preflight.ready_artifact.artifact();
         let artifact_json = artifact.to_canonical_json();
-        let expected_author = decode_hex32(artifact.expected_author().as_str(), "expected_author")?;
+        let expected_author_hex = artifact.expected_author().to_hex();
+        let expected_author = decode_hex32(&expected_author_hex, "expected_author")?;
         let expected_event_id =
             decode_hex32(artifact.expected_event_id().as_str(), "expected_event_id")?;
         let affected = sqlx::query(
@@ -2312,7 +2313,8 @@ fn prepare_publication(
     let artifact = ready.artifact();
     let artifact_digest = *artifact.artifact_digest().as_bytes();
     let readiness_digest = *ready.binding_digest().as_bytes();
-    let expected_author = decode_hex32(artifact.expected_author().as_str(), "expected_author")?;
+    let expected_author_hex = artifact.expected_author().to_hex();
+    let expected_author = decode_hex32(&expected_author_hex, "expected_author")?;
     let expected_event_id =
         decode_hex32(artifact.expected_event_id().as_str(), "expected_event_id")?;
     let operation_digest = operation_digest_for(
@@ -2339,7 +2341,7 @@ fn validate_signed_matches_artifact(
 ) -> Result<(), RadrootsPhase1PublicationError> {
     let artifact = ready.artifact();
     let draft = artifact.draft();
-    if signed.pubkey_str() != artifact.expected_author().as_str()
+    if signed.pubkey() != artifact.expected_author()
         || signed.id_str() != artifact.expected_event_id().as_str()
         || signed.created_at() != draft.created_at()
         || signed.kind() != draft.kind()

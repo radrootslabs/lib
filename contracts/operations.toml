@@ -20,36 +20,36 @@ domains = [
 
 [shared_types]
 public = [
-  "RadrootsBlossomSha256",
-  "RadrootsBlossomFileExtension",
-  "RadrootsBlossomHashPath",
-  "RadrootsBlossomBlobUrl",
-  "RadrootsBlossomApprovedBlobUrl",
-  "RadrootsBlossomMediaType",
-  "RadrootsBlossomBlobDescriptor",
-  "RadrootsBlossomApprovedDescriptor",
-  "RadrootsBlossomByteCommitment",
-  "RadrootsBlossomByteVerifiedDescriptor",
-  "RadrootsBlossomBud02UploadStatus",
-  "RadrootsBlossomBud02UploadObservation",
-  "RadrootsBlossomBud01HeadObservation",
-  "RadrootsBlossomBud01GetCollector",
-  "RadrootsBlossomBud01GetObservation",
-  "RadrootsBlossomRasterFormat",
-  "RadrootsBlossomRasterDimensions",
-  "RadrootsBlossomAuthoredRasterDimensions",
-  "RadrootsBlossomPublicationReadinessEvidenceDigest",
-  "RadrootsBlossomPublicationReadinessEvidence",
-  "RadrootsBlossomAuthorizationAction",
-  "RadrootsBlossomAuthorizationContent",
-  "RadrootsBlossomServerDomain",
-  "RadrootsBlossomAuthorizationTarget",
-  "RadrootsBlossomServerScopeRequirement",
-  "RadrootsBlossomAuthorizationValidation",
-  "RadrootsBlossomParsedAuthorizationClaim",
-  "RadrootsBlossomValidatedAuthorizationClaim",
-  "RadrootsBlossomAuthorizationWireParts",
-  "RadrootsBlossomAuthoredUploadClaim",
+  "Sha256",
+  "FileExtension",
+  "HashPath",
+  "BlobUrl",
+  "ApprovedBlobUrl",
+  "MediaType",
+  "BlobDescriptor",
+  "ApprovedDescriptor",
+  "ByteCommitment",
+  "ByteVerifiedDescriptor",
+  "Bud02UploadStatus",
+  "Bud02UploadObservation",
+  "Bud01HeadObservation",
+  "Bud01GetCollector",
+  "Bud01GetObservation",
+  "RasterFormat",
+  "RasterDimensions",
+  "AuthoredRasterDimensions",
+  "PublicationReadinessEvidenceDigest",
+  "PublicationReadinessEvidence",
+  "AuthorizationAction",
+  "AuthorizationContent",
+  "ServerDomain",
+  "AuthorizationTarget",
+  "ServerScopeRequirement",
+  "AuthorizationValidation",
+  "AuthorizationClaim",
+  "ValidatedAuthorizationClaim",
+  "AuthorizationWireParts",
+  "AuthoredUploadClaim",
   "RadrootsNostrSignedBlossomAuthorization",
   "RadrootsNostrBlossomAuthorizationHeader",
   "RadrootsNostrVerifiedBlossomAuthorization",
@@ -308,7 +308,7 @@ domain = "blossom"
 id = "blossom.parse_hash_path"
 stability = "beta"
 inputs = ["String"]
-outputs = ["RadrootsBlossomHashPath"]
+outputs = ["HashPath"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -317,9 +317,9 @@ transport = "none"
 [operations.blossom_parse_hash_path.implementation]
 rust_modules = ["crates/blossom/src/hash.rs"]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomFileExtension",
-  "radroots_blossom::RadrootsBlossomHashPath",
-  "radroots_blossom::RadrootsBlossomSha256",
+  "radroots_blossom::FileExtension",
+  "radroots_blossom::HashPath",
+  "radroots_blossom::Sha256",
 ]
 
 [operations.blossom_parse_hash_path.conformance]
@@ -329,8 +329,8 @@ vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json
 domain = "blossom"
 id = "blossom.approve_descriptor_reference"
 stability = "beta"
-inputs = ["RadrootsBlossomBlobDescriptor"]
-outputs = ["RadrootsBlossomApprovedDescriptor"]
+inputs = ["BlobDescriptor"]
+outputs = ["ApprovedDescriptor"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -339,8 +339,8 @@ transport = "none"
 [operations.blossom_approve_descriptor_reference.implementation]
 rust_modules = ["crates/blossom/src/descriptor.rs", "crates/blossom/src/url.rs"]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomApprovedDescriptor",
-  "radroots_blossom::RadrootsBlossomBlobDescriptor",
+  "radroots_blossom::ApprovedDescriptor",
+  "radroots_blossom::BlobDescriptor",
 ]
 
 [operations.blossom_approve_descriptor_reference.conformance]
@@ -350,12 +350,8 @@ vector = "contracts/conformance/vectors/blossom/hash_path_and_descriptor.v1.json
 domain = "blossom"
 id = "blossom.verify_descriptor_bytes"
 stability = "beta"
-inputs = [
-  "RadrootsBlossomApprovedDescriptor",
-  "Bytes",
-  "RadrootsBlossomMediaType",
-]
-outputs = ["RadrootsBlossomByteVerifiedDescriptor"]
+inputs = ["ApprovedDescriptor", "Bytes", "MediaType"]
+outputs = ["ByteVerifiedDescriptor"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -367,10 +363,10 @@ rust_modules = [
   "crates/blossom/src/hash.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomApprovedDescriptor",
-  "radroots_blossom::RadrootsBlossomByteCommitment",
-  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
-  "radroots_blossom::RadrootsBlossomMediaType",
+  "radroots_blossom::ApprovedDescriptor",
+  "radroots_blossom::ByteCommitment",
+  "radroots_blossom::ByteVerifiedDescriptor",
+  "radroots_blossom::MediaType",
 ]
 
 [operations.blossom_verify_descriptor_bytes.conformance]
@@ -381,14 +377,14 @@ domain = "blossom"
 id = "blossom.verify_publication_readiness"
 stability = "beta"
 inputs = [
-  "RadrootsBlossomByteVerifiedDescriptor",
+  "ByteVerifiedDescriptor",
   "Bytes",
-  "RadrootsBlossomAuthoredRasterDimensions",
-  "RadrootsBlossomBud02UploadObservation",
-  "RadrootsBlossomBud01HeadObservation",
-  "RadrootsBlossomBud01GetObservation",
+  "AuthoredRasterDimensions",
+  "Bud02UploadObservation",
+  "Bud01HeadObservation",
+  "Bud01GetObservation",
 ]
-outputs = ["RadrootsBlossomPublicationReadinessEvidence"]
+outputs = ["PublicationReadinessEvidence"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -397,12 +393,12 @@ transport = "none"
 [operations.blossom_verify_publication_readiness.implementation]
 rust_modules = ["crates/blossom/src/publication_readiness.rs"]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomAuthoredRasterDimensions",
-  "radroots_blossom::RadrootsBlossomBud01GetCollector",
-  "radroots_blossom::RadrootsBlossomBud01GetObservation",
-  "radroots_blossom::RadrootsBlossomBud01HeadObservation",
-  "radroots_blossom::RadrootsBlossomBud02UploadObservation",
-  "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+  "radroots_blossom::AuthoredRasterDimensions",
+  "radroots_blossom::Bud01GetCollector",
+  "radroots_blossom::Bud01GetObservation",
+  "radroots_blossom::Bud01HeadObservation",
+  "radroots_blossom::Bud02UploadObservation",
+  "radroots_blossom::PublicationReadinessEvidence",
 ]
 
 [operations.blossom_verify_publication_readiness.conformance]
@@ -416,7 +412,7 @@ case_kinds = [
 domain = "blossom"
 id = "blossom.publication_readiness_evidence.to_canonical_json"
 stability = "beta"
-inputs = ["RadrootsBlossomPublicationReadinessEvidence"]
+inputs = ["PublicationReadinessEvidence"]
 outputs = ["CanonicalJsonBytes"]
 error_class = "encode_error"
 deterministic = true
@@ -425,7 +421,7 @@ transport = "none"
 
 [operations.blossom_publication_readiness_evidence_to_canonical_json.implementation]
 rust_modules = ["crates/blossom/src/publication_readiness.rs"]
-rust_types = ["radroots_blossom::RadrootsBlossomPublicationReadinessEvidence"]
+rust_types = ["radroots_blossom::PublicationReadinessEvidence"]
 
 [operations.blossom_publication_readiness_evidence_to_canonical_json.conformance]
 vector = "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json"
@@ -436,7 +432,7 @@ domain = "blossom"
 id = "blossom.publication_readiness_evidence.from_canonical_json"
 stability = "beta"
 inputs = ["CanonicalJsonBytes"]
-outputs = ["RadrootsBlossomPublicationReadinessEvidence"]
+outputs = ["PublicationReadinessEvidence"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -444,7 +440,7 @@ transport = "none"
 
 [operations.blossom_publication_readiness_evidence_from_canonical_json.implementation]
 rust_modules = ["crates/blossom/src/publication_readiness.rs"]
-rust_types = ["radroots_blossom::RadrootsBlossomPublicationReadinessEvidence"]
+rust_types = ["radroots_blossom::PublicationReadinessEvidence"]
 
 [operations.blossom_publication_readiness_evidence_from_canonical_json.conformance]
 vector = "contracts/conformance/vectors/blossom/publication_readiness_persistence.v1.json"
@@ -458,16 +454,13 @@ domain = "blossom"
 id = "blossom.build_upload_authorization_claim"
 stability = "beta"
 inputs = [
-  "RadrootsBlossomAuthorizationContent",
-  "RadrootsBlossomServerDomain",
-  "RadrootsBlossomSha256",
+  "AuthorizationContent",
+  "ServerDomain",
+  "Sha256",
   "CreatedAt",
   "LifetimeSeconds",
 ]
-outputs = [
-  "RadrootsBlossomAuthoredUploadClaim",
-  "RadrootsBlossomAuthorizationWireParts",
-]
+outputs = ["AuthoredUploadClaim", "AuthorizationWireParts"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -476,8 +469,8 @@ transport = "none"
 [operations.blossom_build_upload_authorization_claim.implementation]
 rust_modules = ["crates/blossom/src/authorization.rs"]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomAuthorizationWireParts",
-  "radroots_blossom::RadrootsBlossomAuthoredUploadClaim",
+  "radroots_blossom::AuthorizationWireParts",
+  "radroots_blossom::AuthoredUploadClaim",
 ]
 
 [operations.blossom_build_upload_authorization_claim.conformance]
@@ -488,7 +481,7 @@ domain = "blossom"
 id = "blossom.parse_authorization_claim"
 stability = "beta"
 inputs = ["String", "CreatedAt", "NostrTags"]
-outputs = ["RadrootsBlossomParsedAuthorizationClaim"]
+outputs = ["AuthorizationClaim"]
 error_class = "parse_error"
 deterministic = true
 signing = "none"
@@ -496,7 +489,7 @@ transport = "none"
 
 [operations.blossom_parse_authorization_claim.implementation]
 rust_modules = ["crates/blossom/src/authorization.rs"]
-rust_types = ["radroots_blossom::RadrootsBlossomParsedAuthorizationClaim"]
+rust_types = ["radroots_blossom::AuthorizationClaim"]
 
 [operations.blossom_parse_authorization_claim.conformance]
 vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
@@ -505,11 +498,8 @@ vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
 domain = "blossom"
 id = "blossom.validate_authorization_claim"
 stability = "beta"
-inputs = [
-  "RadrootsBlossomParsedAuthorizationClaim",
-  "RadrootsBlossomAuthorizationValidation",
-]
-outputs = ["RadrootsBlossomValidatedAuthorizationClaim"]
+inputs = ["AuthorizationClaim", "AuthorizationValidation"]
+outputs = ["ValidatedAuthorizationClaim"]
 error_class = "validation_error"
 deterministic = true
 signing = "none"
@@ -518,8 +508,8 @@ transport = "none"
 [operations.blossom_validate_authorization_claim.implementation]
 rust_modules = ["crates/blossom/src/authorization.rs"]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomAuthorizationValidation",
-  "radroots_blossom::RadrootsBlossomValidatedAuthorizationClaim",
+  "radroots_blossom::AuthorizationValidation",
+  "radroots_blossom::ValidatedAuthorizationClaim",
 ]
 
 [operations.blossom_validate_authorization_claim.conformance]
@@ -529,7 +519,7 @@ vector = "contracts/conformance/vectors/blossom/bud11_claims.v1.json"
 domain = "blossom"
 id = "blossom.decode_verify_authorization_header"
 stability = "beta"
-inputs = ["String", "RadrootsBlossomAuthorizationValidation"]
+inputs = ["String", "AuthorizationValidation"]
 outputs = ["RadrootsNostrVerifiedBlossomAuthorization"]
 error_class = "decode_error"
 deterministic = true
@@ -542,7 +532,7 @@ rust_modules = [
   "crates/nostr/src/blossom.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomAuthorizationValidation",
+  "radroots_blossom::AuthorizationValidation",
   "radroots_nostr::blossom::RadrootsNostrVerifiedBlossomAuthorization",
 ]
 
@@ -641,7 +631,7 @@ rust_modules = [
   "crates/event_codec/src/food_availability/authored.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_blossom::ByteVerifiedDescriptor",
   "radroots_event::food_availability::RadrootsFoodAvailabilityDetails",
   "radroots_event::food_availability::RadrootsFoodAvailabilityDetailsParts",
   "radroots_event::food_availability::RadrootsFoodAvailabilityError",
@@ -1066,7 +1056,7 @@ id = "publication_media_readiness.bind"
 stability = "beta"
 inputs = [
   "RadrootsPhase1AllowlistedPublicationArtifact",
-  "RadrootsBlossomPublicationReadinessEvidence",
+  "PublicationReadinessEvidence",
 ]
 outputs = ["RadrootsPhase1MediaReadyPublicationArtifact"]
 error_class = "validation_error"
@@ -1081,7 +1071,7 @@ rust_modules = [
   "crates/event_codec/src/wire/publication/media_readiness.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+  "radroots_blossom::PublicationReadinessEvidence",
   "radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact",
   "radroots_event_codec::wire::publication::RadrootsPhase1PublicationMediaReadinessError",
 ]
@@ -1133,7 +1123,7 @@ rust_modules = [
   "crates/event_codec/src/wire/publication/media_readiness.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+  "radroots_blossom::PublicationReadinessEvidence",
   "radroots_event_codec::wire::publication::RadrootsPhase1MediaReadyPublicationArtifact",
   "radroots_event_codec::wire::publication::RadrootsPhase1PublicationMediaReadinessError",
 ]
@@ -1184,7 +1174,7 @@ rust_modules = [
   "crates/event_codec/src/profile/authored.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_blossom::ByteVerifiedDescriptor",
   "radroots_event::media::RadrootsAuthoredImage",
   "radroots_event::media::RadrootsAuthoredImageError",
   "radroots_event::profile::RadrootsAuthoredProfile",
@@ -1379,8 +1369,8 @@ rust_modules = [
   "crates/event_codec/src/post/authored.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomApprovedBlobUrl",
-  "radroots_blossom::RadrootsBlossomByteVerifiedDescriptor",
+  "radroots_blossom::ApprovedBlobUrl",
+  "radroots_blossom::ByteVerifiedDescriptor",
   "radroots_event::media::RadrootsAuthoredImage",
   "radroots_event::post::RadrootsAuthoredPhotoUpdate",
   "radroots_event::post::RadrootsAuthoredPostError",
@@ -2117,7 +2107,7 @@ rust_modules = [
   "crates/event_codec/src/calendar/decode.rs",
 ]
 rust_types = [
-  "radroots_blossom::RadrootsBlossomBlobUrl",
+  "radroots_blossom::BlobUrl",
   "radroots_event::calendar::RadrootsAdmittedCalendar",
   "radroots_event::calendar::RadrootsCalendarAdmissionError",
   "radroots_event::calendar::RadrootsCalendarEventReference",

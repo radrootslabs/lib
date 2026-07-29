@@ -3,13 +3,16 @@ name = "radroots_transport_nostr"
 publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Nostr transport layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_transport_nostr"
 
 [features]
 default = ["std", "client", "storage", "runtime-tokio"]
@@ -79,6 +82,7 @@ url = { workspace = true }
 radroots_authority = { workspace = true, features = ["local_signer"] }
 radroots_blossom = { workspace = true, features = ["serde", "std"] }
 radroots_event_codec = { workspace = true, features = ["serde_json"] }
+radroots_identity = { workspace = true, features = ["std"] }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
@@ -93,5 +97,5 @@ name = "transport"
 path = "tests/transport.rs"
 required-features = ["runtime-tokio"]
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

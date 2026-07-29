@@ -1,6 +1,6 @@
 [package]
 name = "radroots_nostr_accounts"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
@@ -16,6 +16,7 @@ exclude = ["src/nostrdb_bridge.rs"]
 [features]
 default = ["std", "file-store", "memory-vault"]
 std = [
+  "dep:nostr",
   "dep:serde",
   "dep:serde_json",
   "dep:radroots_identity",
@@ -29,9 +30,10 @@ memory-vault = ["std", "radroots_secret_vault/memory-vault"]
 os-keyring = ["std", "radroots_secret_vault/os-keyring"]
 
 [dependencies]
+nostr = { workspace = true, optional = true }
 radroots_identity = { workspace = true, optional = true, default-features = false, features = [
   "std",
-  "json-file",
+  "serde",
 ] }
 radroots_nostr_signer = { workspace = true, optional = true }
 radroots_protected_store = { workspace = true, optional = true, default-features = false, features = [

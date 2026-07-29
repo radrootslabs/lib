@@ -3,7 +3,7 @@ hash_algorithm = "rust_production_ast_sha256_v1"
 
 [[sources]]
 path = "crates/event_store/src/error.rs"
-sha256 = "4cced9506c8c0c78d7826460a3aba0a0466ab739974fa26de2f78b46f19d5d6b"
+sha256 = "978c09292779c967a299ba5ea45d10ecb942755c592b3959c4cf771d8dbc9bf2"
 
 [[sources]]
 path = "crates/event_store/src/lib.rs"
@@ -15,11 +15,11 @@ sha256 = "097bca46604d381fdb047b059a51c759988038e0b98e60e7b75828fd4d4f4276"
 
 [[sources]]
 path = "crates/event_store/src/model.rs"
-sha256 = "dd56f9285e3b11248f3d9b28171d1a02861d1578a2ff607cbe593bd2c649b2a2"
+sha256 = "efc97799fb2f2f27d3762d7fb34ba932623df3fe0b5c64ef3cc50bb7b9fe8ee5"
 
 [[sources]]
 path = "crates/event_store/src/model/addressable_transition_feed_v1.rs"
-sha256 = "bf0ed43e03af0d45f9406f2ca2463b7ab740b0582191c9ba44a36cdc77de3f4e"
+sha256 = "052e744e85e89f0fa89b847cbe0a953b283d8cb92f65e5c04a86a22a782db31e"
 
 [[sources]]
 path = "crates/event_store/src/model/current_visibility_v1.rs"
@@ -27,7 +27,7 @@ sha256 = "f7ac71596075fe1bff6556d0eb0b63cc0fc0a20a8aca567f77fb05796f0c3d1c"
 
 [[sources]]
 path = "crates/event_store/src/model/food_availability_projection_v1.rs"
-sha256 = "4403608130b68f5fb1398dd46aa14147e315fa101cb7c9ffc3f9ed1791413889"
+sha256 = "1434a7329042157be0ca4ec940f74f88350b6d57df5719b9b34d09613e6083da"
 
 [[sources]]
 path = "crates/event_store/src/model/ingest_reconciliation_v1.rs"
@@ -47,7 +47,7 @@ sha256 = "fbd8a3b36d7f36e7b0d301aee0847d42c3908659f066cafcae3e247d67a75845"
 
 [[sources]]
 path = "crates/event_store/src/nip09/reconciliation_v1.rs"
-sha256 = "4b7f9fb91eb6ac0bffa97d0efa4c2c4eb7842dccb0a6209d752979d3b274c88c"
+sha256 = "6e4855a06457d89d29d9cb442a90b9123e81fc4a472c9a50065c4e8f4cf8e25e"
 
 [[sources]]
 path = "crates/event_store/src/nip09/reconciliation_v1/raw_source_rebuild.rs"
@@ -55,7 +55,7 @@ sha256 = "30a465f5df9a37654d15df2a92ee445037ef41c6f5a5b31e216879f4903b3d6c"
 
 [[sources]]
 path = "crates/event_store/src/nip09/reconciliation_v1/visibility_oracle_v1.rs"
-sha256 = "9a9f3e12bd0eebf0e7ce570daa812cca0c3ffe1d0bd84a4a6f81b0d1452a4679"
+sha256 = "0c7f3d5bb0a2210a17a000c329914be94834a71d21d3713e9100b06588b635d4"
 
 [[sources]]
 path = "crates/event_store/src/schema.rs"
@@ -63,15 +63,15 @@ sha256 = "2095b5d6bcdbfc2a1c6eaf7a5e43ff8cd7b6375b29f46fad174f82fcc7ede8e4"
 
 [[sources]]
 path = "crates/event_store/src/source_maintenance_v1.rs"
-sha256 = "423872e2fcb98a14ddf86e2582ba9783261e78950f15d4260c0f138398eb1bae"
+sha256 = "e7e96dae1f1993f021e42199ec47f6e9e79a0d6eb1043b80227b950c8938ac42"
 
 [[sources]]
 path = "crates/event_store/src/store.rs"
-sha256 = "47949ce741c8a13e517a375d82fc6fe004824f76bfa655c3ae3184c152302ab7"
+sha256 = "24a1b7da93b73043bb488e524043d638537885172836611506a2a5dd4a1c3b74"
 
 [[sources]]
 path = "crates/event_store/src/store/addressable_transition_feed_v1.rs"
-sha256 = "3903af04bd966ba6d19e2c2cd098478d269566676572d1385abdc23353962c91"
+sha256 = "9893ccbfdb879185e66752afa7e1ac7cd9dc6dce67644f599e1ec8e3c5752f1a"
 
 [[sources]]
 path = "crates/event_store/src/store/current_visibility_v1.rs"
@@ -79,7 +79,7 @@ sha256 = "93129c02bf55858aa52e538ef50bf920d35719696183d339443e5c4060d2d4a3"
 
 [[sources]]
 path = "crates/event_store/src/store/food_availability_projection_v1.rs"
-sha256 = "f14f14605fb6843d9f99e76b67202d802d0fbc9fefae1739bfc0477a6a22c96d"
+sha256 = "eb274ea78401a9fab61e32f9316f8618f581a78a4876a2a80baa53c3467302dd"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_extension_capabilities.rs"
@@ -91,7 +91,7 @@ sha256 = "1a5569a1a29849db3eeebc92316aeea26db4b2dc58b7b7f297349fcb89b0ca34"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_extensions_v1.rs"
-sha256 = "03829790c0bdbd7dea13099b24f1f0edae2361e5e5f5eaf93d763bd7d018706b"
+sha256 = "8615ef2aad2b0777d1cf8e3fb571692d8041eee99e71df6966fac90f1e25740b"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_extensions_v2.rs"
@@ -99,7 +99,7 @@ sha256 = "9a1e1e576c5e82a87b26a20cc95a18ee57dda200d50a7e7c51150465e28815b4"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_storage_v1.rs"
-sha256 = "3febcfc52c52e027764c29c11ab38b148328f829525b6c8cb37cd1ca5c173811"
+sha256 = "224f65c7349d11a38cea9a82994ede167f04b5ada7cdd1cab5677356570cc181"
 
 [[sources]]
 path = "crates/event_store/src/store/post_core_storage_v2.rs"
@@ -107,8 +107,8 @@ sha256 = "5ebd237e8f475184480938472e472ff8f4a7ea7b9f46f9d6100520d1c2d643c4"
 
 [[sources]]
 path = "crates/event_store/src/store/protocol_reconciliation_v1.rs"
-sha256 = "cadc558979750f4b75d7e89847af63a728c963334f2aa7b553bdf0a297524ec4"
+sha256 = "62481efecc6c0465c3e572cba8b688ea721b4d932fb8c2b971b867352743878b"
 
 [[sources]]
 path = "crates/event_store/src/store/protocol_storage_v1.rs"
-sha256 = "e9a1041f7083962dc95c706d06da232abb1f0547b64351838ad6898f4209bdeb"
+sha256 = "cb59367edc3ef6b2cc147b1fd62a1f11b3782c04dd473adf61bebed4ad96986b"

@@ -1,36 +1,46 @@
 [package]
 name = "radroots_event"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Domain event model for Radroots"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots_event"
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_event"
 
 [features]
 default = ["std", "serde"]
-dto-bindgen = [
-  "std",
-  "serde",
-  "knowledge-nip54",
-  "dep:dto_bindgen",
-  "radroots_core/dto-bindgen",
-]
+dto-bindgen = ["std", "serde", "knowledge-nip54", "dep:dto_bindgen"]
 knowledge = []
 knowledge-nip54 = ["knowledge"]
 signature = ["dep:secp256k1"]
-std = ["radroots_blossom/std", "radroots_core/std", "url_nostd/std"]
-serde = ["dep:serde", "radroots_core/serde"]
+std = [
+  "radroots_blossom/std",
+  "radroots_core/std",
+  "radroots_identity/std",
+  "radroots_protocol/std",
+  "url_nostd/std",
+]
+serde = [
+  "dep:serde",
+  "radroots_core/serde",
+  "radroots_identity/serde",
+  "radroots_protocol/serde",
+]
 
 [dependencies]
 dto_bindgen = { workspace = true, optional = true }
 radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
+radroots_identity = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 jiff-tzdb = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
@@ -55,5 +65,5 @@ serde = { workspace = true, default-features = false, features = [
   "derive",
 ] }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

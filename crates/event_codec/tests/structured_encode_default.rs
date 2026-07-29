@@ -3,10 +3,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
 use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
@@ -110,12 +107,12 @@ fn sample_gcs() -> RadrootsGcsLocation {
 }
 
 fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
-    let quantity =
-        RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
-    let price = RadrootsCoreQuantityPrice::new(
-        RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
+    let quantity = Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap();
+    let price = QuantityPrice::try_new(
+        Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
         quantity.clone(),
-    );
+    )
+    .unwrap();
     RadrootsOperationalListing {
         d_tag: listing_d_tag(d_tag),
         published_at: None,
@@ -260,10 +257,7 @@ fn sample_resource_cap() -> RadrootsResourceHarvestCap {
         },
         start: 1,
         end: 2,
-        cap_quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from(1000u32),
-            RadrootsCoreUnit::MassG,
-        ),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -571,10 +565,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         },
         start: 1,
         end: 2,
-        cap_quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from(1000u32),
-            RadrootsCoreUnit::MassG,
-        ),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -831,10 +822,7 @@ fn structured_build_tags_cover_required_field_errors() {
         },
         start: 1,
         end: 2,
-        cap_quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from(1000u32),
-            RadrootsCoreUnit::MassG,
-        ),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,

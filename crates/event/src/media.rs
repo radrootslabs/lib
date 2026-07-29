@@ -1,6 +1,6 @@
 use core::fmt;
 
-use radroots_blossom::descriptor::RadrootsBlossomByteVerifiedDescriptor;
+use radroots_blossom::ByteVerifiedDescriptor;
 
 /// Errors raised while constructing strict authored image media.
 #[non_exhaustive]
@@ -36,11 +36,11 @@ impl std::error::Error for RadrootsAuthoredImageError {}
 /// This typestate does not prove upload completion, network availability, or
 /// image format safety. Owning runtimes remain responsible for those policies.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredImage(RadrootsBlossomByteVerifiedDescriptor);
+pub struct RadrootsAuthoredImage(ByteVerifiedDescriptor);
 
 impl RadrootsAuthoredImage {
     pub fn try_from_verified_descriptor(
-        descriptor: RadrootsBlossomByteVerifiedDescriptor,
+        descriptor: ByteVerifiedDescriptor,
     ) -> Result<Self, RadrootsAuthoredImageError> {
         if !descriptor.media_type().as_str().starts_with("image/") {
             return Err(RadrootsAuthoredImageError::MediaTypeNotImage);
@@ -48,15 +48,15 @@ impl RadrootsAuthoredImage {
         Ok(Self(descriptor))
     }
 
-    pub fn descriptor(&self) -> &RadrootsBlossomByteVerifiedDescriptor {
+    pub fn descriptor(&self) -> &ByteVerifiedDescriptor {
         &self.0
     }
 }
 
-impl TryFrom<RadrootsBlossomByteVerifiedDescriptor> for RadrootsAuthoredImage {
+impl TryFrom<ByteVerifiedDescriptor> for RadrootsAuthoredImage {
     type Error = RadrootsAuthoredImageError;
 
-    fn try_from(value: RadrootsBlossomByteVerifiedDescriptor) -> Result<Self, Self::Error> {
+    fn try_from(value: ByteVerifiedDescriptor) -> Result<Self, Self::Error> {
         Self::try_from_verified_descriptor(value)
     }
 }
@@ -64,10 +64,7 @@ impl TryFrom<RadrootsBlossomByteVerifiedDescriptor> for RadrootsAuthoredImage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_blossom::{
-        RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-        RadrootsBlossomSha256,
-    };
+    use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 
     #[test]
     fn authored_image_requires_a_byte_verified_image_descriptor() {
@@ -94,16 +91,12 @@ mod tests {
         );
     }
 
-    fn verified_descriptor(
-        media_type: &str,
-        extension: &str,
-    ) -> RadrootsBlossomByteVerifiedDescriptor {
+    fn verified_descriptor(media_type: &str, extension: &str) -> ByteVerifiedDescriptor {
         let bytes = b"hello";
-        let hash = RadrootsBlossomSha256::digest(bytes);
-        let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-        RadrootsBlossomBlobDescriptor::new(
-            RadrootsBlossomBlobUrl::parse(&format!("https://media.example/{hash}.{extension}"))
-                .unwrap(),
+        let hash = Sha256::digest(bytes);
+        let media_type = MediaType::parse(media_type).unwrap();
+        BlobDescriptor::new(
+            BlobUrl::parse(&format!("https://media.example/{hash}.{extension}")).unwrap(),
             hash,
             bytes.len() as u64,
             media_type.clone(),

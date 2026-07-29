@@ -1,0 +1,78 @@
+schema_version = 1
+spec_id = "radroots.crates.release.v1"
+direction = "same_or_lower"
+enforced_dependency_kinds = ["normal", "dev", "build"]
+
+[[tier]]
+id = "foundation"
+rank = 0
+packages = [
+  "radroots_core",
+  "radroots_identity",
+  "radroots_blossom",
+  "radroots_protocol",
+]
+
+[[tier]]
+id = "domain"
+rank = 1
+packages = ["radroots_event", "radroots_event_codec", "radroots_trade"]
+
+[[tier]]
+id = "spi"
+rank = 2
+packages = [
+  "radroots_signing",
+  "radroots_transport",
+  "radroots_secrets",
+  "radroots_storage",
+]
+
+[[tier]]
+id = "adapter"
+rank = 3
+packages = [
+  "radroots_nostr",
+  "radroots_nostr_connect",
+  "radroots_storage_sqlite",
+  "radroots_transport_nostr",
+  "radroots_geonames",
+]
+
+[[tier]]
+id = "orchestration"
+rank = 4
+packages = ["radroots_sync"]
+
+[[tier]]
+id = "sdk"
+rank = 5
+packages = ["radroots_sdk"]
+
+[[tier]]
+id = "facade"
+rank = 6
+packages = ["radroots"]
+
+# These exact development-only edges predate the final trade boundary and are
+# removed by the manifest-alignment checkpoint. Normal, build, target, or
+# feature-broadened forms remain forbidden.
+[[temporary_exception]]
+owner = "radroots_trade"
+dependency = "radroots_nostr"
+kind = "dev"
+target = "all"
+features = ["events", "std"]
+uses_default_features = false
+removal_step = 88
+rationale = "Existing trade conformance tests consume Nostr vectors until the Step 088 package boundary alignment."
+
+[[temporary_exception]]
+owner = "radroots_trade"
+dependency = "radroots_transport"
+kind = "dev"
+target = "all"
+features = []
+uses_default_features = false
+removal_step = 88
+rationale = "Existing trade workflow tests use transport test types until the Step 088 package boundary alignment."

@@ -4,8 +4,8 @@
   "authority_id": "blossom_raster_decoder_security_v1",
   "manifest_schema": {
     "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.schema.json",
-    "byte_length": 19177,
-    "sha256": "8efaeddcfd209deaa0d60732cfe094a915e6ba1569cb3b09c8c1af9de66fe16e",
+    "byte_length": 19378,
+    "sha256": "94f9e8b44f911d46064a7549eb223d8436ea51f0571cb90e02d983ad931c0586",
     "hash_algorithm": "sha256_bytes_v1"
   },
   "predecessors": [
@@ -79,6 +79,20 @@
           "hash_algorithm": "sha256_bytes_v1"
         }
       ],
+      "artifact_supersessions": [
+        {
+          "path": "crates/blossom/tests/publication_readiness.rs",
+          "byte_length": 31933,
+          "sha256": "48796d2e4c171187fbf2efc66c5dd14e0510fc724baab5ffbd1dc156ba762c4b",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/publication_readiness_persistence.rs",
+          "byte_length": 11410,
+          "sha256": "57c8576a1121c66996492eff79beada9f6a7287ec5fede295411dbb821ec4fad",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      ],
       "source_supersessions": [
         "CHANGELOG.md",
         "contracts/releases/1.0.0-alpha.1.toml",
@@ -86,6 +100,8 @@
         "crates/blossom/src/error.rs",
         "crates/blossom/src/publication_readiness.rs",
         "crates/blossom/src/publication_readiness/sequential_jpeg.rs",
+        "crates/blossom/tests/publication_readiness.rs",
+        "crates/blossom/tests/publication_readiness_persistence.rs",
         "tools/xtask/src/contract.rs",
         "tools/xtask/src/main.rs"
       ]
@@ -338,14 +354,14 @@
   "fuzz_campaign": {
     "project_manifest": {
       "path": "fuzz/Cargo.toml",
-      "byte_length": 628,
-      "sha256": "d73bb44034df2f083fa2f1f6d437639fa7d1fede4c563fc0864d9859a03d01cb",
+      "byte_length": 634,
+      "sha256": "c9c3fede6c3b0c0e39c5655bb163bd13f0ca738cef0d6b7ffced852424f9e692",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "project_lockfile": {
       "path": "fuzz/Cargo.lock",
-      "byte_length": 19011,
-      "sha256": "2bfa3270800d5763aadb4884ac8cc9a0a5ed5dcf94b80c00d1345607b1cb2ee3",
+      "byte_length": 19017,
+      "sha256": "81ced0ce90c1fbcbd066588f230dfbd8477d3b3fbf34ac8ed767e451efce5427",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "toolchain": {
@@ -363,8 +379,8 @@
     "sanitizer": "address",
     "common_harness": {
       "path": "fuzz/fuzz_targets/common.rs",
-      "byte_length": 2024,
-      "sha256": "bde259afbc894af9cf60f160e6664350430e4b0af90b293112b6e768c0127d2d",
+      "byte_length": 1780,
+      "sha256": "bb388c3389eff6eb11407463770f8c87a5f1481ce5e189502d92133ade77fd02",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "targets": [
@@ -860,8 +876,8 @@
     },
     "executor": {
       "path": "crates/blossom/tests/decoder_security.rs",
-      "byte_length": 19240,
-      "sha256": "fe940ca7d26280d7bcc1f1c4dd0b1b36d8ab60dcdbfe54413ceed837bbbe4b71",
+      "byte_length": 18881,
+      "sha256": "93bf4e0facf5cdbc6250741ec9303c78ce43238626f8c6cf7d71d51bae5c0be1",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "executor_tests": [

@@ -171,7 +171,7 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &input.draft,
         );
 
@@ -179,7 +179,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation_for_pool(
                 &self.pool,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -187,7 +187,7 @@ impl RadrootsOutbox {
         {
             return Err(RadrootsOutboxError::IdempotencyConflict {
                 operation_kind: input.operation_kind.clone(),
-                expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                 idempotency_key: idempotency_key.to_owned(),
                 existing_digest: existing.operation_idempotency_digest,
                 new_digest: operation_digest,
@@ -215,14 +215,14 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = trade_mutation_operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &semantic,
         );
 
         if let Some(existing) = existing_trade_mutation_operation_for_pool(
             &self.pool,
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             input.mutation_id.as_str(),
         )
         .await?
@@ -230,7 +230,7 @@ impl RadrootsOutbox {
         {
             return Err(RadrootsOutboxError::IdempotencyConflict {
                 operation_kind: input.operation_kind.clone(),
-                expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                 idempotency_key: input.mutation_id.to_string(),
                 existing_digest: existing.operation_idempotency_digest,
                 new_digest: operation_digest,
@@ -241,7 +241,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation_for_pool(
                 &self.pool,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -249,7 +249,7 @@ impl RadrootsOutbox {
         {
             return Err(RadrootsOutboxError::IdempotencyConflict {
                 operation_kind: input.operation_kind.clone(),
-                expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                 idempotency_key: idempotency_key.to_owned(),
                 existing_digest: existing.operation_idempotency_digest,
                 new_digest: operation_digest,
@@ -271,7 +271,7 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &input.draft,
         );
         let mut tx = self.pool.begin().await?;
@@ -280,7 +280,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -288,7 +288,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -321,7 +321,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
@@ -336,7 +336,7 @@ impl RadrootsOutbox {
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
         .bind(input.created_at_ms)
@@ -370,7 +370,7 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &input.draft,
         );
         let mut tx = self.pool.begin().await?;
@@ -379,7 +379,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -387,7 +387,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -426,7 +426,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
@@ -442,7 +442,7 @@ impl RadrootsOutbox {
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
         .bind(input.signed_event.signed_event().raw_json())
@@ -485,7 +485,7 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = trade_mutation_operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &semantic,
         );
         let mut tx = self.pool.begin().await?;
@@ -493,7 +493,7 @@ impl RadrootsOutbox {
         if let Some(existing) = existing_trade_mutation_operation(
             &mut tx,
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             input.mutation_id.as_str(),
         )
         .await?
@@ -501,7 +501,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: input.mutation_id.to_string(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -534,7 +534,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -542,7 +542,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -575,7 +575,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'trade_mutation', ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(input.trade_id.as_str())
         .bind(input.mutation_id.as_str())
         .bind(input.canonical_payload_sha256.as_str())
@@ -593,7 +593,7 @@ impl RadrootsOutbox {
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(RadrootsOutboxEventState::DraftQueued.as_str())
         .bind(input.created_at_ms)
@@ -632,7 +632,7 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = trade_mutation_operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &semantic,
         );
         let mut tx = self.pool.begin().await?;
@@ -640,7 +640,7 @@ impl RadrootsOutbox {
         if let Some(existing) = existing_trade_mutation_operation(
             &mut tx,
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             input.mutation_id.as_str(),
         )
         .await?
@@ -648,7 +648,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: input.mutation_id.to_string(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -687,7 +687,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 &mut tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -695,7 +695,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -734,7 +734,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'trade_mutation', ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(input.trade_id.as_str())
         .bind(input.mutation_id.as_str())
         .bind(input.canonical_payload_sha256.as_str())
@@ -753,7 +753,7 @@ impl RadrootsOutbox {
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
         .bind(input.signed_event.signed_event().raw_json())
@@ -793,7 +793,7 @@ impl RadrootsOutbox {
             prepare_delivery_plan(input.draft.expected_event_id_str(), &input.delivery_plan)?;
         let operation_digest = operation_idempotency_digest(
             input.operation_kind.as_str(),
-            input.draft.expected_pubkey_str(),
+            &input.draft.expected_pubkey().to_hex(),
             &input.draft,
         );
 
@@ -801,7 +801,7 @@ impl RadrootsOutbox {
             && let Some(existing) = existing_idempotent_operation(
                 tx,
                 input.operation_kind.as_str(),
-                input.draft.expected_pubkey_str(),
+                &input.draft.expected_pubkey().to_hex(),
                 idempotency_key,
             )
             .await?
@@ -809,7 +809,7 @@ impl RadrootsOutbox {
             if existing.operation_idempotency_digest != operation_digest {
                 return Err(RadrootsOutboxError::IdempotencyConflict {
                     operation_kind: input.operation_kind,
-                    expected_pubkey: input.draft.expected_pubkey_str().to_owned(),
+                    expected_pubkey: input.draft.expected_pubkey().to_hex().to_owned(),
                     idempotency_key: idempotency_key.to_owned(),
                     existing_digest: existing.operation_idempotency_digest,
                     new_digest: operation_digest,
@@ -846,7 +846,7 @@ impl RadrootsOutbox {
             "INSERT INTO outbox_operations(operation_kind, expected_pubkey, semantic_scope, trade_id, mutation_id, canonical_payload_sha256, idempotency_key, operation_idempotency_digest, status, created_at_ms, updated_at_ms) VALUES (?, ?, 'generic_event', NULL, NULL, NULL, ?, ?, ?, ?, ?)",
         )
         .bind(input.operation_kind.as_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(input.idempotency_key.as_deref())
         .bind(operation_digest.as_str())
         .bind(RadrootsOutboxOperationStatus::Queued.as_str())
@@ -862,7 +862,7 @@ impl RadrootsOutbox {
         )
         .bind(operation_id)
         .bind(input.draft.expected_event_id_str())
-        .bind(input.draft.expected_pubkey_str())
+        .bind(input.draft.expected_pubkey().to_hex())
         .bind(draft_json.as_str())
         .bind(signed_event_json.as_str())
         .bind(input.signed_event.signed_event().raw_json())
@@ -3096,7 +3096,7 @@ fn validate_trade_mutation_input(
     }
     let parsed = trade_mutation_from_canonical_content(draft.content())
         .map_err(|_| RadrootsOutboxError::TradeMutationMetadataMismatch { field: "content" })?;
-    if parsed.author_pubkey.as_str() != draft.expected_pubkey_str() {
+    if parsed.author_pubkey != *draft.expected_pubkey() {
         return Err(RadrootsOutboxError::TradeMutationMetadataMismatch {
             field: "author_pubkey",
         });
@@ -3328,7 +3328,7 @@ mod tests {
     use super::*;
     use radroots_event::ids::{
         RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
-        RadrootsPublicKey, RadrootsTradeId,
+        RadrootsTradeId,
     };
     use radroots_event::kinds::{
         KIND_CLASSIFIED_LISTING, KIND_FOLLOW, KIND_GEOCHAT, KIND_HTTP_AUTH, KIND_RELAY_AUTH,
@@ -3341,6 +3341,7 @@ mod tests {
         RadrootsTradeEconomicsProfileV1, RadrootsTradeMutationBodyV1,
         RadrootsTradeMutationEnvelopeV1, canonical_jcs_value, canonical_trade_mutation_content,
     };
+    use radroots_identity::PublicKey;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };
@@ -3349,6 +3350,8 @@ mod tests {
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
     const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
         "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+    const FIXTURE_BOB_PUBLIC_KEY_HEX: &str =
+        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
     const NOSTR_PRIMARY_WSS: &str = "wss://relay.example.com";
     const NOSTR_SECONDARY_WSS: &str = "wss://relay-2.example.com";
 
@@ -3360,11 +3363,13 @@ mod tests {
         std::iter::repeat_n(character, 32).collect()
     }
 
-    fn public_key(character: char) -> RadrootsPublicKey {
-        if character == 'a' {
-            return RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("alice pubkey");
-        }
-        RadrootsPublicKey::parse(hex_64(character)).expect("pubkey")
+    fn public_key(character: char) -> PublicKey {
+        let public_key_hex = match character {
+            'a' => FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            'b' => FIXTURE_BOB_PUBLIC_KEY_HEX,
+            _ => panic!("unsupported fixture public key label: {character}"),
+        };
+        PublicKey::from_hex(public_key_hex).expect("fixture pubkey")
     }
 
     fn generic_draft(expected_pubkey: &str, content: &str) -> RadrootsEventDraft {
@@ -3500,7 +3505,7 @@ mod tests {
             canonical.envelope.authored_at_unix_s,
             tags,
             canonical.content.clone(),
-            canonical.envelope.author_pubkey.as_str(),
+            canonical.envelope.author_pubkey.to_hex(),
         )
         .expect("trade mutation draft")
     }
@@ -3895,7 +3900,7 @@ mod tests {
         ));
 
         let author_mismatch =
-            proposal_draft_with_content(canonical.content.clone(), hex_64('b').as_str());
+            proposal_draft_with_content(canonical.content.clone(), FIXTURE_BOB_PUBLIC_KEY_HEX);
         assert!(matches!(
             validate_trade_mutation_input(
                 canonical.envelope.trade_id.as_str(),

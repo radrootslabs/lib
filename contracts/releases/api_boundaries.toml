@@ -1,0 +1,213 @@
+schema_version = 1
+spec_id = "radroots.crates.release.v1"
+forbidden_public_paths = [
+  "core_foundation",
+  "dispatch",
+  "jni",
+  "keyring",
+  "libc",
+  "mach2",
+  "nostr",
+  "nostr_sdk",
+  "objc",
+  "reqwest",
+  "security_framework",
+  "sqlx",
+  "std::os",
+  "tokio",
+  "wasm_bindgen",
+  "web_sys",
+  "windows",
+  "windows_core",
+  "windows_sys",
+]
+
+[[package]]
+name = "radroots_core"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_identity"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_blossom"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_protocol"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_event"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_event_codec"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_trade"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_signing"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_transport"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_nostr"
+allowed_public_paths = ["nostr"]
+
+[[package]]
+name = "radroots_nostr_connect"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_secrets"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_storage"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_storage_sqlite"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_transport_nostr"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_sync"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_geonames"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_sdk"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots"
+allowed_public_paths = []
+[[exception]]
+id = "RCRV1-API-003"
+package = "radroots_nostr"
+source = "src/client.rs"
+forbidden_path = "nostr_sdk"
+items = [
+  "client::RadrootsNostrClient::from_inner",
+  "client::RadrootsNostrClient::into_inner",
+]
+observed_paths = ["nostr_sdk::Client"]
+adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
+removal_step = 124
+rationale = "Legacy client ownership remains visible only until the Nostr package removes live relay-client dependencies."
+
+[[exception]]
+id = "RCRV1-API-004"
+package = "radroots_nostr"
+source = "src/error.rs"
+forbidden_path = "nostr_sdk"
+items = ["error::RadrootsNostrError"]
+observed_paths = [
+  "nostr_sdk::client::Error",
+  "nostr_sdk::prelude::DatabaseError",
+]
+adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
+removal_step = 124
+rationale = "Legacy SDK error variants remain exact-scoped until normalized adapter errors replace them."
+
+[[exception]]
+id = "RCRV1-API-005"
+package = "radroots_nostr"
+source = "src/types.rs"
+forbidden_path = "nostr_sdk"
+items = [
+  "types::RadrootsNostrEventStream",
+  "types::RadrootsNostrMonitor",
+  "types::RadrootsNostrMonitorNotification",
+  "types::RadrootsNostrOutput",
+  "types::RadrootsNostrRelay",
+  "types::RadrootsNostrRelayPoolNotification",
+  "types::RadrootsNostrRelayStatus",
+  "types::RadrootsNostrSubscribeAutoCloseOptions",
+]
+observed_paths = [
+  "nostr_sdk::Relay",
+  "nostr_sdk::RelayPoolNotification",
+  "nostr_sdk::RelayStatus",
+  "nostr_sdk::SubscribeAutoCloseOptions",
+  "nostr_sdk::pool::stream::BoxedStream",
+  "nostr_sdk::prelude::Monitor",
+  "nostr_sdk::prelude::MonitorNotification",
+  "nostr_sdk::prelude::Output",
+]
+adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
+removal_step = 124
+rationale = "Broad live-client aliases are frozen and must be removed with the Nostr client dependency at Step 124."
+
+[[exception]]
+id = "RCRV1-API-006"
+package = "radroots_nostr_connect"
+source = "src/client.rs"
+forbidden_path = "nostr"
+items = [
+  "client::RadrootsNostrConnectClientTarget",
+  "client::RadrootsNostrConnectClientTarget::new",
+  "client::RadrootsNostrConnectClientTransport",
+  "client::build_request_event",
+  "client::execute_request_with_transport",
+  "client::parse_response_event",
+]
+observed_paths = [
+  "nostr::Event",
+  "nostr::Keys",
+  "nostr::PublicKey",
+  "nostr::RelayUrl",
+]
+adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
+removal_step = 140
+rationale = "Legacy client state-machine signatures retain exact protocol types until the Nostr Connect transport split and conformance gate."
+
+[[exception]]
+id = "RCRV1-API-007"
+package = "radroots_nostr_connect"
+source = "src/message.rs"
+forbidden_path = "nostr"
+items = [
+  "message::RadrootsNostrConnectPendingConnectionPollOutcome",
+  "message::RadrootsNostrConnectRemoteSessionCapability",
+  "message::RadrootsNostrConnectRequest",
+  "message::RadrootsNostrConnectResponse",
+]
+observed_paths = [
+  "nostr::Event",
+  "nostr::PublicKey",
+  "nostr::RelayUrl",
+  "nostr::UnsignedEvent",
+]
+adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
+removal_step = 140
+rationale = "Legacy request and response envelopes retain exact Nostr values until canonical package-owned envelopes are complete."
+
+[[exception]]
+id = "RCRV1-API-008"
+package = "radroots_nostr_connect"
+source = "src/uri.rs"
+forbidden_path = "nostr"
+items = [
+  "uri::RadrootsNostrConnectBunkerUri",
+  "uri::RadrootsNostrConnectClientUri",
+]
+observed_paths = ["nostr::PublicKey", "nostr::RelayUrl"]
+adr = "docs/decisions/0001-public-api-leakage-migration-baseline.md"
+removal_step = 140
+rationale = "Legacy URI wrappers retain exact upstream value types until URI normalization and the package conformance gate."

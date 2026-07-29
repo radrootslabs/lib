@@ -54,26 +54,23 @@ mod tests {
         RadrootsNip09DeletionEventTarget,
     };
 
+    fn h(character: char) -> String {
+        crate::test_fixtures::fixture_public_key_hex(character)
+    }
+
     #[test]
     fn emits_exact_canonical_two_element_target_and_kind_tags() {
         let request = RadrootsAuthoredNip09DeletionRequest::new(
             "superseded",
             vec![
-                RadrootsNip09DeletionEventTarget::parse("f".repeat(64), 30_402)
-                    .expect("event target"),
-                RadrootsNip09DeletionEventTarget::parse("a".repeat(64), 1).expect("event target"),
+                RadrootsNip09DeletionEventTarget::parse(h('f'), 30_402).expect("event target"),
+                RadrootsNip09DeletionEventTarget::parse(h('a'), 1).expect("event target"),
             ],
             vec![
-                RadrootsNip09DeletionAddressTarget::parse(format!(
-                    "31923:{}:market",
-                    "e".repeat(64)
-                ))
-                .expect("address target"),
-                RadrootsNip09DeletionAddressTarget::parse(format!(
-                    "30402:{}:produce",
-                    "b".repeat(64)
-                ))
-                .expect("address target"),
+                RadrootsNip09DeletionAddressTarget::parse(format!("31923:{}:market", h('e')))
+                    .expect("address target"),
+                RadrootsNip09DeletionAddressTarget::parse(format!("30402:{}:produce", h('b')))
+                    .expect("address target"),
             ],
         )
         .expect("deletion request");
@@ -84,10 +81,10 @@ mod tests {
         assert_eq!(
             parts.tags,
             vec![
-                vec!["e".to_string(), "a".repeat(64)],
-                vec!["e".to_string(), "f".repeat(64)],
-                vec!["a".to_string(), format!("30402:{}:produce", "b".repeat(64))],
-                vec!["a".to_string(), format!("31923:{}:market", "e".repeat(64))],
+                vec!["e".to_string(), h('a')],
+                vec!["e".to_string(), h('f')],
+                vec!["a".to_string(), format!("30402:{}:produce", h('b'))],
+                vec!["a".to_string(), format!("31923:{}:market", h('e'))],
                 vec!["k".to_string(), "1".to_string()],
                 vec!["k".to_string(), "30402".to_string()],
                 vec!["k".to_string(), "31923".to_string()],
@@ -98,8 +95,7 @@ mod tests {
 
     #[test]
     fn core_wire_estimator_matches_emitted_json_at_the_strict_boundary() {
-        let target =
-            RadrootsNip09DeletionEventTarget::parse("a".repeat(64), 1).expect("event target");
+        let target = RadrootsNip09DeletionEventTarget::parse(h('a'), 1).expect("event target");
         let mut lower = 0usize;
         let mut upper = radroots_event::deletion::RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES;
         while lower < upper {
@@ -142,11 +138,11 @@ mod tests {
     fn strict_wire_size_equals_independent_max_u64_serialization_with_escaping() {
         let request = RadrootsAuthoredNip09DeletionRequest::new(
             "reason \"quoted\" \\\n\u{0001} 🌱",
-            vec![RadrootsNip09DeletionEventTarget::parse("A".repeat(64), 5).expect("event target")],
+            vec![RadrootsNip09DeletionEventTarget::parse(h('A'), 5).expect("event target")],
             vec![
                 RadrootsNip09DeletionAddressTarget::parse(format!(
                     "30000:{}:victoria:\"crop\\row:\u{0002}:雪",
-                    "B".repeat(64)
+                    h('B')
                 ))
                 .expect("address target"),
             ],

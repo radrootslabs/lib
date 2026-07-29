@@ -288,7 +288,7 @@ fn push_calendar_author_reference(
     tags: &mut Vec<Vec<String>>,
     reference: &RadrootsCalendarEventAuthorReference,
 ) {
-    let mut tag = vec![TAG_P.to_string(), reference.pubkey().as_str().to_string()];
+    let mut tag = vec![TAG_P.to_string(), reference.pubkey().to_hex()];
     if let Some(relay) = reference.relay() {
         tag.push(relay.to_string());
     }

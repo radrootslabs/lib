@@ -7,8 +7,8 @@ use core::fmt;
 
 use crate::RadrootsEventRef;
 use crate::ids::{
-    RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsPublicKey,
-    RadrootsRelayUrl,
+    RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsRelayUrl,
+    parse_public_key,
 };
 use crate::kinds::KIND_WIKI_ARTICLE;
 
@@ -185,7 +185,7 @@ fn validate_pubkey(
     if value.trim().is_empty() {
         return Err(RadrootsKnowledgeValidationError::EmptyField(field));
     }
-    RadrootsPublicKey::parse(value)
+    parse_public_key(value)
         .map(|_| ())
         .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))
 }
@@ -915,7 +915,7 @@ mod tests {
     use super::*;
 
     fn hex_64(character: char) -> String {
-        core::iter::repeat_n(character, 64).collect()
+        crate::test_valid_hex_64(character)
     }
 
     fn event_ref() -> RadrootsEventRef {
@@ -925,7 +925,7 @@ mod tests {
     fn event_ref_with_kind(kind: u32) -> RadrootsEventRef {
         RadrootsEventRef {
             id: "0".repeat(64),
-            author: "1".repeat(64),
+            author: crate::test_valid_hex_64('1'),
             kind,
             d_tag: None,
             relays: None,

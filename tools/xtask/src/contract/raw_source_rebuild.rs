@@ -5,7 +5,9 @@ use super::nip09_reconciliation::{
     validate_current_event_store_successor_authority,
     validate_raw_source_rebuild_successor_compiler_inputs,
 };
-use super::source_maintenance::validate_source_maintenance_manifest_under_lock;
+use super::source_maintenance::{
+    predecessor_superseded_source_paths, validate_source_maintenance_manifest_under_lock,
+};
 use quote::ToTokens;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -44,13 +46,13 @@ const VISIBILITY_ORACLE: &str = "pure_verified_raw_snapshot_direct_indexed_evide
 const VISIBILITY_ORACLE_EXPECTED_VISIBILITY_AST_SHA256: &str =
     "88155fb497668bc65d1adb107c8692483c44f8be1be7dea4663772aa6df23897";
 const VISIBILITY_ORACLE_DECISION_AST_SHA256: &str =
-    "be2034bc552829af7cb8f8f77ce7c0b97e2e23b94551994f6463877ef87c9404";
+    "4dd437fa4342716e02306f01b6d971b7bd272e05c4e5be397dfc8425a01a630c";
 const RECONCILIATION_REQUEST_INDEX_INSERT_AST_SHA256: &str =
-    "81d1e02d42dda1b34fd6ab30873765072d7030abf0bb42f7dc117b88eb206933";
+    "c30fc073c990f16b75b28e31c316742812b72e313bae9e649e15df04cb9e49a6";
 const RECONCILIATION_REQUEST_INDEX_DECISION_AST_SHA256: &str =
-    "2920383a13dc1f7f701039147cb3e5595797a5fe68217a7de6d26cb27715add1";
+    "c27ce0bd2830a016b9f08a8a099f3d1edfa1e148396017a25037b1e33617f5c6";
 const RECONCILIATION_AFFECTED_COORDINATES_AST_SHA256: &str =
-    "8b1aca89e5a20be8f5eb44e08e205e693ba6f2ea0cf4e3a5bd25910f5f4e25cf";
+    "ba549c79645b92962a97de8aaa75ecf28a87cb93b91fe25afbb8ca357effaa99";
 const EVENT_STORE_SUCCESSOR_COMPILER_TABLES_SHA256: &str =
     "10e6177bb51094e1775994e1cb3c7c72d01d71890ce45df6c3129ff3d7ee301c";
 const SCOPED_INTEGRITY_MODE: &str = "event_store_owned_tables_and_indices_v1";
@@ -116,7 +118,6 @@ const XTASK_FORBIDDEN_AUTO_TARGET_PATHS: &[&str] = &[
     "tools/xtask/src/lib.rs",
     "tools/xtask/src/bin.rs",
     "tools/xtask/src/bin",
-    "tools/xtask/tests",
     "tools/xtask/examples",
     "tools/xtask/benches",
 ];
@@ -595,7 +596,7 @@ const DELEGATED_COMPILER_SOURCE_PINS: &[(&str, &str)] = &[
     ),
     (
         FLAKE_LOCK_RELATIVE,
-        "41b569739bfa0c488625326f4f0a874561601787951cdf7a3f171e60572fa20e",
+        "eee23520f8cb4243871707bd57c225b378a79ad75a0358a719fa4a346e523b7d",
     ),
     (
         CONTRACT_APP_SOURCE_RELATIVE,
@@ -611,11 +612,11 @@ const DELEGATED_COMPILER_SOURCE_PINS: &[(&str, &str)] = &[
     ),
     (
         RUST_TOOLCHAIN_RELATIVE,
-        "c33aa38292bab6513bf79ed2f69c1525b736dd738b15ca78af713b70b29265c9",
+        "52093bb43b3e219e5346bd2a2d56f7ce5845f3a89d0e55c3b75609397f093572",
     ),
     (
         XTASK_MANIFEST_RELATIVE,
-        "63b32e8981247bfec6aceb5925f6754d8f6360b73e57e73a57d2d1149701f6c5",
+        "11b796cd1dec34a36dcd0431e93c0f88d100ed8cba2d3aff74dc858848aaa1ce",
     ),
 ];
 
@@ -906,6 +907,16 @@ const TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
     "crates/event_store/src/store/protocol_storage_v1.rs",
 ];
+
+pub(super) fn transitive_predecessor_superseded_paths() -> Vec<&'static str> {
+    predecessor_superseded_source_paths()
+        .iter()
+        .copied()
+        .chain(TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS.iter().copied())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
 const BLOSSOM_READINESS_SUCCESSOR_TRANSITIVE_PATHS: &[&str] = &[
     "Cargo.toml",
     "crates/blossom/Cargo.toml",
@@ -1206,9 +1217,8 @@ pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_l
         }
     }
 
-    let transitive = TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS
-        .iter()
-        .copied()
+    let transitive = transitive_predecessor_superseded_paths()
+        .into_iter()
         .chain(transitive_superseded_paths.iter().copied())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -1216,6 +1226,7 @@ pub(super) fn validate_raw_source_rebuild_predecessor_production_sources_under_l
     validate_food_availability_projection_predecessor_production_sources_under_lock(
         workspace_root,
         &transitive,
+        &["crates/event_store/tests/food_availability_projection_v1_result_vector.rs"],
     )
 }
 
@@ -1956,6 +1967,34 @@ fn validate_xtask_manifest_authority(workspace_root: &Path) -> Result<(), String
             }
         }
     }
+    let fixture_root = workspace_root.join("tools/xtask/tests");
+    match fs::symlink_metadata(&fixture_root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err(
+                "tools/xtask/tests must be an ordinary directory containing only fixtures"
+                    .to_owned(),
+            );
+        }
+        Ok(_) => {
+            for entry in fs::read_dir(&fixture_root)
+                .map_err(|error| format!("read tools/xtask/tests: {error}"))?
+            {
+                let entry = entry.map_err(|error| format!("read tools/xtask/tests: {error}"))?;
+                let file_type = entry
+                    .file_type()
+                    .map_err(|error| format!("inspect tools/xtask/tests entry: {error}"))?;
+                if entry.file_name() != "fixtures" || file_type.is_symlink() || !file_type.is_dir()
+                {
+                    return Err(
+                        "delegated xtask compiler authority permits only the non-target tools/xtask/tests/fixtures directory"
+                            .to_owned(),
+                    );
+                }
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("inspect tools/xtask/tests: {error}")),
+    }
     Ok(())
 }
 
@@ -2165,6 +2204,7 @@ fn validate_predecessor_source_supersession(
     validate_food_availability_projection_predecessor_production_sources_under_lock(
         workspace_root,
         TRANSITIVE_PREDECESSOR_SUPERSEDED_PATHS,
+        &["crates/event_store/tests/food_availability_projection_v1_result_vector.rs"],
     )?;
     Ok(())
 }
@@ -2522,7 +2562,7 @@ fn validate_error_authority(workspace_root: &Path) -> Result<(), String> {
     }
     let errors = exact_enum(&file, "RadrootsEventStoreError")?;
     const EXPECTED_ERROR_ENUM_SHA256: &str =
-        "dcb9416ca05bda35845f8708fe73132df7137b0c0e002e8ba6d709989bc31939";
+        "f644778f99add959dc4e0e10afbf29ad275e1babfb7915a4bd9c03e64f30b870";
     let actual_error_enum_sha256 = sha256_hex(compact_tokens(errors).as_bytes());
     if actual_error_enum_sha256 != EXPECTED_ERROR_ENUM_SHA256 {
         return Err(format!(
@@ -3134,10 +3174,10 @@ fn validate_reconciliation_direct_request_index_authority(
         }
     }
     for marker in [
-        "request_id<current.as_str()",
+        "request_id.as_str()<current.as_str()",
         "request_event.created_at_u64()>current.created_at",
         "request_event.created_at_u64()==current.created_at",
-        "request_id<current.request_id.as_str()",
+        "request_id.as_str()<current.request_id.as_str()",
         "evidence.unauthorized=true",
     ] {
         if !insert.contains(marker) {
@@ -3157,7 +3197,7 @@ fn validate_reconciliation_direct_request_index_authority(
     let decision = compact_tokens(decision_function);
     for marker in [
         "self.event_targets.get(event.id_str())",
-        "by_author.get(event.author_str())",
+        "by_author.get(&event.author().to_hex())",
         "self.address_targets.get(coordinate)",
         "RadrootsNip09SuppressionReason::DeletionRequestImmune",
         "RadrootsNip09SuppressionReason::NoAuthorizedReference",
@@ -3341,7 +3381,7 @@ fn validate_visibility_oracle_index_authority(
     let decision = compact_tokens(decision_function);
     for marker in [
         "self.event_targets.get(event.id_str())",
-        "by_author.get(event.author_str())",
+        "by_author.get(&event.author().to_hex())",
         "self.address_targets.get(coordinate)",
         "self.requests[index].event()",
         "RadrootsNip09SuppressionReason::DeletionRequestImmune",
@@ -7569,11 +7609,16 @@ mod tests {
     #[test]
     fn source_maintenance_predecessor_identity_is_frozen() {
         let root = workspace_root();
-        let bytes = read_regular_file(&root, PREDECESSOR_MANIFEST_RELATIVE)
-            .expect("SourceMaintenance predecessor manifest");
-        validate_predecessor_identity(&bytes).expect("frozen predecessor identity");
-        validate_predecessor_source_supersession(&root, &bytes)
-            .expect("changed predecessor sources are superseded");
+        validate_source_maintenance_manifest_under_lock(&root)
+            .expect("current refactor SourceMaintenance predecessor");
+        let raw_bytes = read_regular_file(&root, MANIFEST_RELATIVE).expect("raw manifest");
+        let raw: RawSourceRebuildManifest =
+            serde_json::from_slice(&raw_bytes).expect("typed raw manifest");
+        assert_eq!(
+            raw.predecessor.manifest.byte_length,
+            PREDECESSOR_MANIFEST_BYTE_LENGTH as u64
+        );
+        assert_eq!(raw.predecessor.manifest.sha256, PREDECESSOR_MANIFEST_SHA256);
     }
 
     #[test]

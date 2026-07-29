@@ -1,21 +1,34 @@
 [package]
 name = "radroots_event_codec"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Event codec layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots_event_codec"
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_event_codec"
 
 [features]
 default = ["std"]
-std = ["radroots_blossom/std", "radroots_core/std", "radroots_event/std"]
-serde = ["dep:serde", "radroots_core/serde", "radroots_event/serde"]
+std = [
+  "radroots_blossom/std",
+  "radroots_core/std",
+  "radroots_event/std",
+  "radroots_identity/std",
+]
+serde = [
+  "dep:serde",
+  "radroots_core/serde",
+  "radroots_event/serde",
+  "radroots_identity/serde",
+]
 serde_json = [
   "serde",
   "dep:hex",
@@ -32,6 +45,7 @@ contract-manifest = ["knowledge", "dep:hex", "dep:sha2"]
 radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
+radroots_identity = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
@@ -53,5 +67,5 @@ radroots_blossom = { workspace = true, default-features = false, features = [
 radroots_test_fixtures = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

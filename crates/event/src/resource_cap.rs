@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
+use radroots_core::{Decimal, Quantity, Unit};
 
 use crate::resource_area::RadrootsResourceAreaRef;
 
@@ -34,9 +34,12 @@ pub struct RadrootsResourceHarvestCap {
     pub start: u64,
     #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
     pub end: u64,
-    pub cap_quantity: RadrootsCoreQuantity,
-    pub display_amount: Option<RadrootsCoreDecimal>,
-    pub display_unit: Option<RadrootsCoreUnit>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Quantity")))]
+    pub cap_quantity: Quantity,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Decimal")))]
+    pub display_amount: Option<Decimal>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Unit")))]
+    pub display_unit: Option<Unit>,
     pub display_label: Option<String>,
     pub tags: Option<Vec<String>>,
 }

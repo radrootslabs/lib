@@ -336,10 +336,7 @@ impl RadrootsAuthoredProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_blossom::{
-        RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl,
-        RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomMediaType, RadrootsBlossomSha256,
-    };
+    use radroots_blossom::{BlobDescriptor, BlobUrl, ByteVerifiedDescriptor, MediaType, Sha256};
 
     #[test]
     fn maps_profile_type_to_tag_value() {
@@ -535,16 +532,12 @@ mod tests {
         }
     }
 
-    fn verified_descriptor(
-        media_type: &str,
-        extension: &str,
-    ) -> RadrootsBlossomByteVerifiedDescriptor {
+    fn verified_descriptor(media_type: &str, extension: &str) -> ByteVerifiedDescriptor {
         let bytes = b"hello";
-        let hash = RadrootsBlossomSha256::digest(bytes);
-        let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-        RadrootsBlossomBlobDescriptor::new(
-            RadrootsBlossomBlobUrl::parse(&format!("https://media.example/{hash}.{extension}"))
-                .unwrap(),
+        let hash = Sha256::digest(bytes);
+        let media_type = MediaType::parse(media_type).unwrap();
+        BlobDescriptor::new(
+            BlobUrl::parse(&format!("https://media.example/{hash}.{extension}")).unwrap(),
             hash,
             bytes.len() as u64,
             media_type.clone(),

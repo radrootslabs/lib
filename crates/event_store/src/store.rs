@@ -1961,14 +1961,16 @@ fn bool_from_i64(field: &'static str, value: i64) -> Result<bool, RadrootsEventS
 
 fn parse_id<T>(value: String) -> Result<T, RadrootsEventStoreError>
 where
-    T: TryFrom<String, Error = radroots_event::ids::RadrootsIdParseError>,
+    T: TryFrom<String>,
+    T::Error: Into<RadrootsEventStoreError>,
 {
     T::try_from(value).map_err(Into::into)
 }
 
 fn parse_optional_id<T>(value: Option<String>) -> Result<Option<T>, RadrootsEventStoreError>
 where
-    T: TryFrom<String, Error = radroots_event::ids::RadrootsIdParseError>,
+    T: TryFrom<String>,
+    T::Error: Into<RadrootsEventStoreError>,
 {
     value.map(parse_id).transpose()
 }
@@ -2027,9 +2029,7 @@ mod tests {
     use radroots_event::food_availability::{
         RadrootsFoodAvailabilityStatus, RadrootsFoodIdentifier,
     };
-    use radroots_event::ids::{
-        RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsPublicKey,
-    };
+    use radroots_event::ids::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId};
     use radroots_event::kinds::{
         KIND_CALENDAR_DATE_EVENT, KIND_CLASSIFIED_LISTING, KIND_DELETION_REQUEST, KIND_FARM,
         KIND_GEOCHAT, KIND_LIST_SET_RELAY, KIND_POST, KIND_PROFILE, KIND_RELAY_AUTH,
@@ -2049,12 +2049,15 @@ mod tests {
         compute_canonical_nip01_event_id,
     };
     use radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic;
+    use radroots_identity::PublicKey;
     use std::sync::Arc;
 
     const FIXTURE_ALICE_SECRET_KEY_HEX: &str =
         "10c5304d6c9ae3a1a16f7860f1cc8f5e3a76225a2663b3a989a0d775919b7df5";
     const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
         "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+    const FIXTURE_BOB_PUBLIC_KEY_HEX: &str =
+        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 
     struct FixedGeneration([u8; 32]);
 
@@ -2133,11 +2136,13 @@ mod tests {
         RadrootsTradeId::parse("1".repeat(32)).expect("trade id")
     }
 
-    fn public_key(character: char) -> RadrootsPublicKey {
-        if character == 'a' {
-            return RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("alice pubkey");
-        }
-        RadrootsPublicKey::parse(event_id(character)).expect("pubkey")
+    fn public_key(character: char) -> PublicKey {
+        let public_key_hex = match character {
+            'a' => FIXTURE_ALICE_PUBLIC_KEY_HEX,
+            'b' => FIXTURE_BOB_PUBLIC_KEY_HEX,
+            _ => panic!("unsupported fixture public key label: {character}"),
+        };
+        PublicKey::from_hex(public_key_hex).expect("fixture pubkey")
     }
 
     fn candidate_terms() -> RadrootsTradeCandidateTermsV1 {
@@ -2278,7 +2283,7 @@ mod tests {
         content: String,
         keys: &RadrootsNostrKeys,
     ) -> RadrootsSignedEvent {
-        let counterparty = canonical.envelope.counterparty_pubkey.as_str().to_owned();
+        let counterparty = canonical.envelope.counterparty_pubkey.to_hex();
         let mut tags = vec![
             vec![
                 "contract".to_owned(),
@@ -2334,9 +2339,10 @@ mod tests {
     fn raw_source_text_bytes(event: &RadrootsSignedEvent) -> (u64, u64) {
         let tags = event.tags_as_vec();
         let tags_json = serde_json::to_string(&tags).expect("tags JSON");
+        let pubkey = event.pubkey().to_hex();
         let event_bytes = [
             event.id_str(),
-            event.pubkey_str(),
+            pubkey.as_str(),
             tags_json.as_str(),
             event.content(),
             event.sig_str(),
@@ -2524,7 +2530,7 @@ mod tests {
     fn profile_coordinate() -> RadrootsEventHeadCoordinate {
         RadrootsEventHeadCoordinate::Replaceable {
             kind: KIND_PROFILE,
-            pubkey: RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("pubkey"),
+            pubkey: PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("pubkey"),
         }
     }
 
@@ -3134,7 +3140,7 @@ mod tests {
             "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified', 'admitted', 'radroots.post.v1', 'regular', 1, ?, ?)",
         )
         .bind(event.id_str())
-        .bind(event.author_str())
+        .bind(event.author().to_hex())
         .bind(i64::try_from(event.created_at_u64()).expect("created_at"))
         .bind(i64::from(event.kind_u32()))
         .bind(tags_json)
@@ -3404,7 +3410,7 @@ mod tests {
         assert_eq!(cursor_generation, target_generation);
         let projected = store
             .food_availability_v1(
-                &RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
+                &PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
                 &RadrootsFoodIdentifier::parse("v4-rebuild-carrots").expect("identifier"),
             )
             .await
@@ -3534,7 +3540,7 @@ mod tests {
         let raw_digest = raw_authority_digest(&store).await;
         let projected = store
             .food_availability_v1(
-                &RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
+                &PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
                 &RadrootsFoodIdentifier::parse("migration-carrots").expect("identifier"),
             )
             .await
@@ -3546,7 +3552,7 @@ mod tests {
         assert_eq!(
             projected.images()[0].blossom_sha256(),
             Some(
-                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                radroots_blossom::Sha256::from_hex(
                     "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
                 )
                 .expect("Blossom digest"),
@@ -3586,7 +3592,7 @@ mod tests {
             assert_eq!(raw_authority_digest(&store).await, raw_digest);
             let rebuilt = store
                 .food_availability_v1(
-                    &RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
+                    &PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
                     &RadrootsFoodIdentifier::parse("migration-carrots").expect("identifier"),
                 )
                 .await
@@ -6799,7 +6805,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(seller_reservation_for_mutation(&revision_decision).is_some());
         assert!(seller_reservation_for_mutation(&cancellation).is_none());
-        assert_eq!(public_key('b').as_str(), event_id('b'));
+        assert_eq!(public_key('b').to_hex(), FIXTURE_BOB_PUBLIC_KEY_HEX);
 
         for kind in [
             RadrootsTradeMutationKindV1::Proposal,
@@ -7536,7 +7542,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         .expect("sealed projection count");
         assert_eq!(initial_projection_count, 2);
 
-        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
         let carrot_id = RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier");
         let projected = store
             .food_availability_v1(&author, &carrot_id)
@@ -7564,7 +7570,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(
             projected.images()[0].blossom_sha256(),
             Some(
-                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                radroots_blossom::Sha256::from_hex(
                     "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
                 )
                 .expect("Blossom digest"),
@@ -7574,7 +7580,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(
             projected.images()[1].blossom_sha256(),
             Some(
-                radroots_blossom::RadrootsBlossomSha256::from_hex(
+                radroots_blossom::Sha256::from_hex(
                     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 )
                 .expect("Blossom digest"),
@@ -7734,7 +7740,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
                 if reason.contains("image index exceeds")
         ));
 
-        let author = RadrootsPublicKey::parse(event.pubkey_str()).expect("author");
+        let author = event.pubkey().clone();
         let event_id = RadrootsEventId::parse(event.id_str()).expect("event id");
         for (event_seq, source_transition_seq, expected_reason) in [
             (0, 1, "event sequence must be positive"),
@@ -8408,7 +8414,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             "active",
             Vec::new(),
         );
-        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
         let identifier = RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier");
 
         for (observed_at_ms, event) in [(20_000, &active), (20_001, &sold)] {
@@ -8519,7 +8525,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             deletion.id_str()
         );
         assert_eq!(
-            deletion_cause.pubkey().as_str(),
+            &deletion_cause.pubkey().to_hex(),
             FIXTURE_ALICE_PUBLIC_KEY_HEX
         );
         assert_eq!(deletion_cause.created_at(), 230);
@@ -8570,7 +8576,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let store = RadrootsEventStore::open_memory().await.expect("open");
         let identifier =
             RadrootsFoodIdentifier::parse("AAAAAAAAAAAAAAAAAAAAAg").expect("identifier");
-        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
         let food = food_availability_event(
             200,
             identifier.as_str(),
@@ -8693,7 +8699,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             "active",
             Vec::new(),
         );
-        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
         let identifier = RadrootsFoodIdentifier::parse("rollback-carrots").expect("identifier");
 
         let mut transaction = store.begin_write_transaction().await.expect("transaction");
@@ -8789,7 +8795,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .await
             .expect("wrong-author deletion remains a valid event");
 
-        let author = RadrootsPublicKey::parse(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
+        let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
         let identifier = RadrootsFoodIdentifier::parse("protected-carrots").expect("identifier");
         let projection = store
             .food_availability_v1(&author, &identifier)

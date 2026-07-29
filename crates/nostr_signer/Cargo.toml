@@ -1,6 +1,6 @@
 [package]
 name = "radroots_nostr_signer"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
@@ -20,6 +20,7 @@ native = ["dep:radroots_sql_core", "radroots_sql_core/native"]
 hex = { workspace = true }
 nostr = { workspace = true }
 radroots_identity = { workspace = true, default-features = false, features = [
+  "serde",
   "std",
 ] }
 radroots_nostr = { workspace = true, features = ["std"] }

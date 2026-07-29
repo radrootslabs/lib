@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fs, path::Path};
 
-use radroots_blossom::{RadrootsBlossomBlobDescriptor, RadrootsBlossomByteVerifiedDescriptor};
+use radroots_blossom::{BlobDescriptor, ByteVerifiedDescriptor};
 use radroots_event::{
     media::{RadrootsAuthoredImage, RadrootsAuthoredImageError},
     profile::{
@@ -52,7 +52,7 @@ struct AuthoredProfileInput {
 #[serde(deny_unknown_fields)]
 struct AuthoredMediaInput {
     bytes_utf8: String,
-    descriptor: RadrootsBlossomBlobDescriptor,
+    descriptor: BlobDescriptor,
 }
 
 #[test]
@@ -266,10 +266,7 @@ fn authored_image(input: &AuthoredMediaInput, vector_id: &str) -> RadrootsAuthor
         .unwrap_or_else(|error| panic!("{vector_id} Profile image failed: {error}"))
 }
 
-fn verified_descriptor(
-    input: &AuthoredMediaInput,
-    vector_id: &str,
-) -> RadrootsBlossomByteVerifiedDescriptor {
+fn verified_descriptor(input: &AuthoredMediaInput, vector_id: &str) -> ByteVerifiedDescriptor {
     let media_type = input.descriptor.media_type().clone();
     input
         .descriptor

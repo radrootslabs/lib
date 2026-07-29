@@ -1,7 +1,5 @@
-use radroots_core::{
-    RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreMoney, RadrootsCoreQuantity,
-    RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::pricing::Discount;
+use radroots_core::{Decimal, Money, Quantity, QuantityPrice, Unit};
 
 use crate::farm::RadrootsFarmRef;
 use crate::ids::{RadrootsDTag, RadrootsInventoryBinId};
@@ -127,8 +125,10 @@ pub struct RadrootsOperationalListing {
     pub bins: Vec<RadrootsOperationalListingBin>,
     pub resource_area: Option<RadrootsResourceAreaRef>,
     pub plot: Option<RadrootsPlotRef>,
-    pub discounts: Option<Vec<RadrootsCoreDiscount>>,
-    pub inventory_available: Option<RadrootsCoreDecimal>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<Discount>")))]
+    pub discounts: Option<Vec<Discount>>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Decimal")))]
+    pub inventory_available: Option<Decimal>,
     pub availability: Option<RadrootsOperationalListingAvailability>,
     pub delivery_method: Option<RadrootsOperationalListingDeliveryMethod>,
     pub location: Option<RadrootsOperationalListingPublicLocation>,
@@ -169,13 +169,19 @@ pub struct RadrootsOperationalListingProductTagKeys;
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingBin {
     pub bin_id: RadrootsInventoryBinId,
-    pub quantity: RadrootsCoreQuantity,
-    pub price_per_canonical_unit: RadrootsCoreQuantityPrice,
-    pub display_amount: Option<RadrootsCoreDecimal>,
-    pub display_unit: Option<RadrootsCoreUnit>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Quantity")))]
+    pub quantity: Quantity,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "QuantityPrice")))]
+    pub price_per_canonical_unit: QuantityPrice,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Decimal")))]
+    pub display_amount: Option<Decimal>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Unit")))]
+    pub display_unit: Option<Unit>,
     pub display_label: Option<String>,
-    pub display_price: Option<RadrootsCoreMoney>,
-    pub display_price_unit: Option<RadrootsCoreUnit>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Money")))]
+    pub display_price: Option<Money>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Unit")))]
+    pub display_price_unit: Option<Unit>,
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]

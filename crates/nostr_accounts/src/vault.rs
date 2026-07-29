@@ -1,4 +1,4 @@
-use radroots_identity::RadrootsIdentityId;
+use radroots_identity::AccountId;
 
 #[cfg(feature = "memory-vault")]
 pub use radroots_secret_vault::RadrootsSecretVaultMemory as RadrootsNostrSecretVaultMemory;
@@ -7,6 +7,6 @@ pub use radroots_secret_vault::RadrootsSecretVaultOsKeyring as RadrootsNostrSecr
 pub use radroots_secret_vault::{RadrootsSecretVault, RadrootsSecretVaultAccessError};
 
 #[must_use]
-pub fn account_secret_slot(account_id: &RadrootsIdentityId) -> String {
+pub fn account_secret_slot(account_id: &AccountId) -> String {
     account_id.to_string()
 }

@@ -346,7 +346,7 @@ fn authored_comment(
                 object_optional_str(root, "relay", &vector.id),
             )?;
             assert_eq!(
-                root_reference.author().as_str(),
+                root_reference.author().to_hex(),
                 object_str(root, "author", &vector.id),
                 "{} declared address author drifted",
                 vector.id
@@ -449,7 +449,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
             "kind_raw_tag": root.kind_raw_tag(),
             "kind": root.kind().as_u32(),
             "relay": root.relay().map(|relay| relay.as_str()),
-            "author_hint": root.author_hint().map(|author| author.as_str()),
+            "author_hint": root.author_hint().map(|author| author.to_hex()),
             "author": participant_snapshot(root.author()),
             "raw_tag": root.raw_tag(),
         }),
@@ -475,7 +475,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
                 "kind_raw_tag": reference.kind_raw_tag(),
                 "kind": reference.kind(),
                 "relay": reference.relay().map(|relay| relay.as_str()),
-                "author_hint": reference.author_hint().map(|author| author.as_str()),
+                "author_hint": reference.author_hint().map(|author| author.to_hex()),
                 "author": participant_snapshot(reference.author()),
                 "raw_tag": reference.raw_tag(),
             },
@@ -511,7 +511,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
                 "kind_raw_tag": parent.kind_raw_tag(),
                 "kind": parent.kind(),
                 "relay": parent.relay().map(|relay| relay.as_str()),
-                "author_hint": parent.author_hint().map(|author| author.as_str()),
+                "author_hint": parent.author_hint().map(|author| author.to_hex()),
                 "author": participant_snapshot(parent.author()),
                 "raw_tag": parent.raw_tag(),
             },
@@ -543,7 +543,7 @@ fn projection_snapshot(projection: &RadrootsInboundNip22CommentProjection) -> Va
 fn participant_snapshot(participant: &RadrootsInboundNip22Participant) -> Value {
     json!({
         "tag_index": participant.tag_index(),
-        "pubkey": participant.pubkey().as_str(),
+        "pubkey": participant.pubkey().to_hex(),
         "relay": participant.relay().map(|relay| relay.as_str()),
         "raw_tag": participant.raw_tag(),
     })

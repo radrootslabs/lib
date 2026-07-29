@@ -1,3 +1,11 @@
+//! Structural Blossom blob URLs and the Radroots-approved reference state.
+//!
+//! [`BlobUrl`] preserves received HTTP or HTTPS references after strict
+//! structural parsing. [`BlobUrl::approve`] produces [`ApprovedBlobUrl`] only
+//! for HTTPS and loopback HTTP references. Approval permits a caller to consider
+//! the reference for transport; it does not perform a request or establish host
+//! reputation, byte integrity, authenticity, or application media safety.
+
 #[cfg(feature = "serde")]
 use alloc::string::String;
 use alloc::string::ToString;
@@ -5,41 +13,41 @@ use core::{fmt, str::FromStr};
 use unicode_general_category::{GeneralCategory, get_general_category};
 use url_nostd::{Host, Url};
 
-use crate::{error::RadrootsBlossomError, hash::RadrootsBlossomHashPath};
+use crate::{error::Error, hash::HashPath};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RadrootsBlossomBlobUrl {
+pub struct BlobUrl {
     url: Url,
-    hash_path: RadrootsBlossomHashPath,
+    hash_path: HashPath,
 }
 
-impl RadrootsBlossomBlobUrl {
-    pub fn parse(value: &str) -> Result<Self, RadrootsBlossomError> {
+impl BlobUrl {
+    pub fn parse(value: &str) -> Result<Self, Error> {
         if !value.contains("://") || !raw_url_text_is_valid(value) {
-            return Err(RadrootsBlossomError::InvalidBlobUrl);
+            return Err(Error::InvalidBlobUrl);
         }
-        let url = Url::parse(value).map_err(|_| RadrootsBlossomError::InvalidBlobUrl)?;
+        let url = Url::parse(value).map_err(|_| Error::InvalidBlobUrl)?;
         if url.scheme() != "http" && url.scheme() != "https" {
-            return Err(RadrootsBlossomError::UnsupportedBlobUrlScheme);
+            return Err(Error::UnsupportedBlobUrlScheme);
         }
         if raw_authority(value).contains('@') {
-            return Err(RadrootsBlossomError::BlobUrlCredentialsForbidden);
+            return Err(Error::BlobUrlCredentialsForbidden);
         }
         if url.query().is_some() {
-            return Err(RadrootsBlossomError::BlobUrlQueryForbidden);
+            return Err(Error::BlobUrlQueryForbidden);
         }
         if url.fragment().is_some() {
-            return Err(RadrootsBlossomError::BlobUrlFragmentForbidden);
+            return Err(Error::BlobUrlFragmentForbidden);
         }
         if value.contains('\\')
             || value.contains('%')
             || value.contains("/./")
             || value.contains("/../")
         {
-            return Err(RadrootsBlossomError::InvalidBlobUrl);
+            return Err(Error::InvalidBlobUrl);
         }
         validate_authority(value, &url)?;
-        let hash_path = RadrootsBlossomHashPath::parse(url.path())?;
+        let hash_path = HashPath::parse(url.path())?;
         Ok(Self { url, hash_path })
     }
 
@@ -61,7 +69,7 @@ impl RadrootsBlossomBlobUrl {
         self.url.port()
     }
 
-    pub fn hash_path(&self) -> &RadrootsBlossomHashPath {
+    pub fn hash_path(&self) -> &HashPath {
         &self.hash_path
     }
 
@@ -73,22 +81,22 @@ impl RadrootsBlossomBlobUrl {
         self.url.scheme() == "http" && self.url.host().is_some_and(host_is_loopback)
     }
 
-    pub fn approve(self) -> Result<RadrootsBlossomApprovedBlobUrl, RadrootsBlossomError> {
+    pub fn approve(self) -> Result<ApprovedBlobUrl, Error> {
         if !self.is_https() && !self.is_loopback_http() {
-            return Err(RadrootsBlossomError::InsecureBlobUrl);
+            return Err(Error::InsecureBlobUrl);
         }
-        Ok(RadrootsBlossomApprovedBlobUrl(self))
+        Ok(ApprovedBlobUrl(self))
     }
 }
 
-impl fmt::Display for RadrootsBlossomBlobUrl {
+impl fmt::Display for BlobUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl FromStr for RadrootsBlossomBlobUrl {
-    type Err = RadrootsBlossomError;
+impl FromStr for BlobUrl {
+    type Err = Error;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -96,7 +104,7 @@ impl FromStr for RadrootsBlossomBlobUrl {
 }
 
 #[cfg(feature = "serde")]
-impl serde::Serialize for RadrootsBlossomBlobUrl {
+impl serde::Serialize for BlobUrl {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -106,7 +114,7 @@ impl serde::Serialize for RadrootsBlossomBlobUrl {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsBlossomBlobUrl {
+impl<'de> serde::Deserialize<'de> for BlobUrl {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -117,10 +125,10 @@ impl<'de> serde::Deserialize<'de> for RadrootsBlossomBlobUrl {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RadrootsBlossomApprovedBlobUrl(RadrootsBlossomBlobUrl);
+pub struct ApprovedBlobUrl(BlobUrl);
 
-impl RadrootsBlossomApprovedBlobUrl {
-    pub fn as_blob_url(&self) -> &RadrootsBlossomBlobUrl {
+impl ApprovedBlobUrl {
+    pub fn as_blob_url(&self) -> &BlobUrl {
         &self.0
     }
 
@@ -128,12 +136,12 @@ impl RadrootsBlossomApprovedBlobUrl {
         self.0.as_str()
     }
 
-    pub fn into_blob_url(self) -> RadrootsBlossomBlobUrl {
+    pub fn into_blob_url(self) -> BlobUrl {
         self.0
     }
 }
 
-impl fmt::Display for RadrootsBlossomApprovedBlobUrl {
+impl fmt::Display for ApprovedBlobUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
@@ -152,23 +160,23 @@ fn host_is_loopback(host: Host<&str>) -> bool {
     }
 }
 
-fn validate_authority(value: &str, url: &Url) -> Result<(), RadrootsBlossomError> {
+fn validate_authority(value: &str, url: &Url) -> Result<(), Error> {
     let raw_host = raw_authority_host(value);
     if let Some(port) = raw_authority_port(value) {
         match port.parse::<u16>() {
             Ok(1..) => {}
-            Ok(0) | Err(_) => return Err(RadrootsBlossomError::InvalidBlobUrl),
+            Ok(0) | Err(_) => return Err(Error::InvalidBlobUrl),
         }
     }
     match url.host() {
         Some(Host::Domain(_)) if !raw_dns_host_is_valid(raw_host) => {
-            return Err(RadrootsBlossomError::InvalidBlobUrl);
+            return Err(Error::InvalidBlobUrl);
         }
         Some(Host::Ipv4(address)) if raw_host != address.to_string() => {
-            return Err(RadrootsBlossomError::InvalidBlobUrl);
+            return Err(Error::InvalidBlobUrl);
         }
         Some(_) => {}
-        None => return Err(RadrootsBlossomError::InvalidBlobUrl),
+        None => return Err(Error::InvalidBlobUrl),
     }
     Ok(())
 }
@@ -249,7 +257,7 @@ mod tests {
 
     #[test]
     fn https_reference_is_structural_and_approved() {
-        let parsed = RadrootsBlossomBlobUrl::parse(&url("https://cdn.example.com")).unwrap();
+        let parsed = BlobUrl::parse(&url("https://cdn.example.com")).unwrap();
         assert!(parsed.is_https());
         assert!(!parsed.is_loopback_http());
         assert_eq!(parsed.hash_path().hash().to_string(), HASH);
@@ -271,7 +279,7 @@ mod tests {
             "http://[::1]:3000",
             "http://[0:0:0:0:0:0:0:1]",
         ] {
-            let parsed = RadrootsBlossomBlobUrl::parse(&url(origin)).unwrap();
+            let parsed = BlobUrl::parse(&url(origin)).unwrap();
             assert!(parsed.is_loopback_http(), "{origin}");
             let canonical = parsed.as_str().to_string();
             let approved = parsed.approve().unwrap();
@@ -290,14 +298,10 @@ mod tests {
             "http://10.0.0.2",
             "http://[::]",
         ] {
-            let parsed = RadrootsBlossomBlobUrl::parse(&url(origin)).unwrap();
+            let parsed = BlobUrl::parse(&url(origin)).unwrap();
             assert!(!parsed.is_https());
             assert!(!parsed.is_loopback_http());
-            assert_eq!(
-                parsed.approve(),
-                Err(RadrootsBlossomError::InsecureBlobUrl),
-                "{origin}"
-            );
+            assert_eq!(parsed.approve(), Err(Error::InsecureBlobUrl), "{origin}");
         }
     }
 
@@ -306,39 +310,35 @@ mod tests {
         let cases = [
             (
                 url("ftp://cdn.example.com"),
-                RadrootsBlossomError::UnsupportedBlobUrlScheme,
+                Error::UnsupportedBlobUrlScheme,
             ),
             (
                 format!("https://user@cdn.example.com/{HASH}.txt"),
-                RadrootsBlossomError::BlobUrlCredentialsForbidden,
+                Error::BlobUrlCredentialsForbidden,
             ),
             (
                 format!("https://:password@cdn.example.com/{HASH}.txt"),
-                RadrootsBlossomError::BlobUrlCredentialsForbidden,
+                Error::BlobUrlCredentialsForbidden,
             ),
             (
                 format!("https://@cdn.example.com/{HASH}.txt"),
-                RadrootsBlossomError::BlobUrlCredentialsForbidden,
+                Error::BlobUrlCredentialsForbidden,
             ),
             (
                 format!("https://:@cdn.example.com/{HASH}.txt"),
-                RadrootsBlossomError::BlobUrlCredentialsForbidden,
+                Error::BlobUrlCredentialsForbidden,
             ),
             (
                 format!("https://cdn.example.com/{HASH}.txt?a=1"),
-                RadrootsBlossomError::BlobUrlQueryForbidden,
+                Error::BlobUrlQueryForbidden,
             ),
             (
                 format!("https://cdn.example.com/{HASH}.txt#x"),
-                RadrootsBlossomError::BlobUrlFragmentForbidden,
+                Error::BlobUrlFragmentForbidden,
             ),
         ];
         for (value, expected) in cases {
-            assert_eq!(
-                RadrootsBlossomBlobUrl::parse(&value),
-                Err(expected),
-                "{value}"
-            );
+            assert_eq!(BlobUrl::parse(&value), Err(expected), "{value}");
         }
     }
 
@@ -352,37 +352,29 @@ mod tests {
             format!("https://cdn.example.com/{HASH}/../{HASH}.txt"),
             format!("https://cdn.example.com/{HASH}\\x"),
         ] {
-            assert!(RadrootsBlossomBlobUrl::parse(&value).is_err(), "{value}");
+            assert!(BlobUrl::parse(&value).is_err(), "{value}");
         }
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn blob_url_serde_revalidates_structure() {
-        let parsed = RadrootsBlossomBlobUrl::parse(&url("https://cdn.example.com")).unwrap();
+        let parsed = BlobUrl::parse(&url("https://cdn.example.com")).unwrap();
         let json = serde_json::to_string(&parsed).unwrap();
-        assert_eq!(
-            serde_json::from_str::<RadrootsBlossomBlobUrl>(&json).unwrap(),
-            parsed
-        );
-        assert!(serde_json::from_str::<RadrootsBlossomBlobUrl>("false").is_err());
+        assert_eq!(serde_json::from_str::<BlobUrl>(&json).unwrap(), parsed);
+        assert!(serde_json::from_str::<BlobUrl>("false").is_err());
         assert!(
-            serde_json::from_str::<RadrootsBlossomBlobUrl>(
-                "\"https://cdn.example.com/not-a-hash.png\""
-            )
-            .is_err()
+            serde_json::from_str::<BlobUrl>("\"https://cdn.example.com/not-a-hash.png\"").is_err()
         );
     }
 
     #[test]
     fn malformed_url_is_rejected() {
-        assert_eq!(
-            RadrootsBlossomBlobUrl::from_str("not a url"),
-            Err(RadrootsBlossomError::InvalidBlobUrl)
-        );
-        assert!(RadrootsBlossomBlobUrl::parse(&format!("https:///{HASH}.txt")).is_err());
-        assert!(RadrootsBlossomBlobUrl::parse(&url("https://cdn.example.com:0")).is_err());
-        assert!(RadrootsBlossomBlobUrl::parse(&url("https://cdn.example.com:00")).is_err());
-        assert!(RadrootsBlossomBlobUrl::parse(&url("https://cdn.example.com:")).is_err());
+        assert_eq!(BlobUrl::from_str("not a url"), Err(Error::InvalidBlobUrl));
+        assert!(BlobUrl::parse(&format!("https:///{HASH}.txt")).is_err());
+        assert!(BlobUrl::parse(&url("https://cdn.example.com:0")).is_err());
+        assert!(BlobUrl::parse(&url("https://cdn.example.com:00")).is_err());
+        assert!(BlobUrl::parse(&url("https://cdn.example.com:")).is_err());
         for value in [
             format!(" https://cdn.example.com/{HASH}.txt"),
             format!("https://cdn.example.com/{HASH}.txt\n"),
@@ -392,8 +384,8 @@ mod tests {
             format!("https://media\u{2060}.example/{HASH}.txt"),
         ] {
             assert_eq!(
-                RadrootsBlossomBlobUrl::parse(&value),
-                Err(RadrootsBlossomError::InvalidBlobUrl),
+                BlobUrl::parse(&value),
+                Err(Error::InvalidBlobUrl),
                 "{value:?}"
             );
         }
@@ -404,8 +396,8 @@ mod tests {
             "https://2130706433",
         ] {
             assert_eq!(
-                RadrootsBlossomBlobUrl::parse(&url(origin)),
-                Err(RadrootsBlossomError::InvalidBlobUrl),
+                BlobUrl::parse(&url(origin)),
+                Err(Error::InvalidBlobUrl),
                 "{origin}"
             );
         }
@@ -423,16 +415,16 @@ mod tests {
             "https://example.",
         ] {
             assert_eq!(
-                RadrootsBlossomBlobUrl::parse(&url(origin)),
-                Err(RadrootsBlossomError::InvalidBlobUrl),
+                BlobUrl::parse(&url(origin)),
+                Err(Error::InvalidBlobUrl),
                 "{origin}"
             );
         }
 
         let label_too_long = "a".repeat(64);
         assert_eq!(
-            RadrootsBlossomBlobUrl::parse(&url(&format!("https://{label_too_long}.example"))),
-            Err(RadrootsBlossomError::InvalidBlobUrl)
+            BlobUrl::parse(&url(&format!("https://{label_too_long}.example"))),
+            Err(Error::InvalidBlobUrl)
         );
         let host_too_long = format!(
             "{}.{}.{}.{}",
@@ -443,8 +435,8 @@ mod tests {
         );
         assert!(host_too_long.len() > 253);
         assert_eq!(
-            RadrootsBlossomBlobUrl::parse(&url(&format!("https://{host_too_long}"))),
-            Err(RadrootsBlossomError::InvalidBlobUrl)
+            BlobUrl::parse(&url(&format!("https://{host_too_long}"))),
+            Err(Error::InvalidBlobUrl)
         );
 
         let maximum_host = format!(
@@ -455,8 +447,8 @@ mod tests {
             "d".repeat(61)
         );
         assert_eq!(maximum_host.len(), 253);
-        assert!(RadrootsBlossomBlobUrl::parse(&url(&format!("https://{maximum_host}"))).is_ok());
-        assert!(RadrootsBlossomBlobUrl::parse(&url("https://xn--mdia-9oa.example")).is_ok());
+        assert!(BlobUrl::parse(&url(&format!("https://{maximum_host}"))).is_ok());
+        assert!(BlobUrl::parse(&url("https://xn--mdia-9oa.example")).is_ok());
     }
 
     #[test]
@@ -467,7 +459,7 @@ mod tests {
         let hostless = Url::parse("file:///blob").unwrap();
         assert_eq!(
             validate_authority("file:///blob", &hostless),
-            Err(RadrootsBlossomError::InvalidBlobUrl)
+            Err(Error::InvalidBlobUrl)
         );
     }
 }

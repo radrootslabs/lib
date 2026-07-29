@@ -4596,6 +4596,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "radroots_event",
  "radroots_event_codec",
+ "radroots_identity",
  "radroots_nostr",
  "serde_json",
 ]
@@ -4624,7 +4625,6 @@ version = "0.1.0-alpha"
 dependencies = [
  "dto_bindgen",
  "rust_decimal",
- "rust_decimal_macros",
  "serde",
  "serde_json",
 ]
@@ -4638,6 +4638,8 @@ dependencies = [
  "jiff-tzdb",
  "radroots_blossom",
  "radroots_core",
+ "radroots_identity",
+ "radroots_protocol",
  "secp256k1",
  "serde",
  "serde_json",
@@ -4655,6 +4657,7 @@ dependencies = [
  "radroots_blossom",
  "radroots_core",
  "radroots_event",
+ "radroots_identity",
  "radroots_test_fixtures",
  "serde",
  "serde_json",
@@ -4682,6 +4685,7 @@ dependencies = [
  "radroots_blossom",
  "radroots_event",
  "radroots_event_codec",
+ "radroots_identity",
  "radroots_transport",
  "serde",
  "serde_json",
@@ -4710,21 +4714,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_geonames"
+version = "0.1.0-alpha"
+
+[[package]]
 name = "radroots_identity"
 version = "0.1.0-alpha"
 dependencies = [
- "nostr",
- "radroots_protected_store",
- "radroots_runtime",
- "radroots_runtime_paths",
- "radroots_secret_vault",
- "secrecy",
+ "k256",
  "serde",
  "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tracing",
- "zeroize",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4813,6 +4813,7 @@ dependencies = [
 name = "radroots_nostr_accounts"
 version = "0.1.0-alpha"
 dependencies = [
+ "nostr",
  "radroots_identity",
  "radroots_nostr_signer",
  "radroots_protected_store",
@@ -4893,6 +4894,7 @@ dependencies = [
  "radroots_event",
  "radroots_event_codec",
  "radroots_event_store",
+ "radroots_identity",
  "radroots_nostr",
  "radroots_transport",
  "serde",
@@ -4919,11 +4921,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_protocol"
+version = "0.1.0-alpha"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "radroots_protocol_contract_v1"
 version = "0.1.0-alpha"
 dependencies = [
- "dto_bindgen",
+ "radroots_protocol",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -5039,6 +5050,14 @@ version = "0.1.0-alpha"
 dependencies = [
  "keyring",
 ]
+
+[[package]]
+name = "radroots_secrets"
+version = "0.1.0-alpha"
+
+[[package]]
+name = "radroots_signing"
+version = "0.1.0-alpha"
 
 [[package]]
 name = "radroots_simplex_agent_proto"
@@ -5167,6 +5186,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_storage"
+version = "0.1.0-alpha"
+
+[[package]]
+name = "radroots_storage_sqlite"
+version = "0.1.0-alpha"
+
+[[package]]
+name = "radroots_sync"
+version = "0.1.0-alpha"
+
+[[package]]
 name = "radroots_test_fixtures"
 version = "0.1.0-alpha"
 dependencies = [
@@ -5185,6 +5216,8 @@ dependencies = [
  "radroots_core",
  "radroots_event",
  "radroots_event_codec",
+ "radroots_event_store",
+ "radroots_identity",
  "radroots_nostr",
  "radroots_test_fixtures",
  "radroots_transport",
@@ -5250,6 +5283,7 @@ dependencies = [
  "radroots_event",
  "radroots_event_codec",
  "radroots_event_store",
+ "radroots_identity",
  "radroots_nostr",
  "radroots_outbox",
  "radroots_transport",
@@ -5268,6 +5302,7 @@ dependencies = [
 name = "radroots_transport_publish_protocol"
 version = "0.1.0-alpha"
 dependencies = [
+ "radroots_protocol",
  "radroots_transport",
  "serde",
  "serde_json",
@@ -5664,16 +5699,6 @@ dependencies = [
  "arrayvec",
  "num-traits",
  "serde",
-]
-
-[[package]]
-name = "rust_decimal_macros"
-version = "1.40.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74a5a6f027e892c7a035c6fddb50435a1fbf5a734ffc0c2a9fed4d0221440519"
-dependencies = [
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -9117,7 +9142,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "radroots_event_codec",
- "radroots_protocol_contract_v1",
+ "radroots_protocol",
  "semver",
  "serde",
  "serde_json",

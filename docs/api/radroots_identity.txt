@@ -1,0 +1,378 @@
+pub mod radroots_identity
+pub mod radroots_identity::account
+#[non_exhaustive] pub enum radroots_identity::account::Status
+pub radroots_identity::account::Status::NotConfigured
+pub radroots_identity::account::Status::PublicOnly
+pub radroots_identity::account::Status::PublicOnly::account: radroots_identity::account::Record
+pub radroots_identity::account::Status::Ready
+pub radroots_identity::account::Status::Ready::account: radroots_identity::account::Record
+impl radroots_identity::account::Status
+pub const fn radroots_identity::account::Status::account(&self) -> core::option::Option<&radroots_identity::account::Record>
+pub const fn radroots_identity::account::Status::is_ready(&self) -> bool
+#[repr(transparent)] pub struct radroots_identity::account::AccountId(_)
+impl radroots_identity::account::AccountId
+pub const radroots_identity::account::AccountId::BYTE_LENGTH: usize
+pub const radroots_identity::account::AccountId::HEX_LENGTH: usize
+pub const fn radroots_identity::account::AccountId::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_identity::account::AccountId::from_bytes([u8; 32]) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::account::AccountId::from_hex(&str) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::account::AccountId::from_slice(&[u8]) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::account::AccountId::into_bytes(self) -> [u8; 32]
+pub fn radroots_identity::account::AccountId::to_hex(self) -> alloc::string::String
+impl radroots_identity::account::AccountId
+pub const fn radroots_identity::account::AccountId::from_identity_id(radroots_identity::key::IdentityId) -> Self
+pub const fn radroots_identity::account::AccountId::from_public_identity(&radroots_identity::profile::PublicIdentity) -> Self
+impl core::convert::AsRef<[u8]> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::as_ref(&self) -> &[u8]
+impl core::convert::From<&radroots_identity::profile::PublicIdentity> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(&radroots_identity::profile::PublicIdentity) -> Self
+impl core::convert::From<radroots_identity::key::IdentityId> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(radroots_identity::key::IdentityId) -> Self
+impl core::convert::TryFrom<&[u8]> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from(&[u8]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<&str> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<[u8; 32]> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from([u8; 32]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Err = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_identity::account::Record
+impl radroots_identity::account::Record
+pub const fn radroots_identity::account::Record::created_at_unix(&self) -> u64
+pub const fn radroots_identity::account::Record::id(&self) -> radroots_identity::account::AccountId
+pub fn radroots_identity::account::Record::label(&self) -> core::option::Option<&str>
+pub fn radroots_identity::account::Record::new(radroots_identity::profile::PublicIdentity, core::option::Option<alloc::string::String>, u64) -> Self
+pub const fn radroots_identity::account::Record::public_identity(&self) -> &radroots_identity::profile::PublicIdentity
+pub fn radroots_identity::account::Record::set_label(&mut self, core::option::Option<alloc::string::String>)
+pub fn radroots_identity::account::Record::touch_updated(&mut self, u64) -> core::result::Result<(), radroots_identity::Error>
+pub fn radroots_identity::account::Record::try_from_parts(radroots_identity::account::AccountId, radroots_identity::profile::PublicIdentity, core::option::Option<alloc::string::String>, u64, u64) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::account::Record::updated_at_unix(&self) -> u64
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::account::Record
+pub fn radroots_identity::account::Record::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub mod radroots_identity::key
+#[repr(transparent)] pub struct radroots_identity::key::IdentityId(_)
+impl radroots_identity::key::IdentityId
+pub const radroots_identity::key::IdentityId::BYTE_LENGTH: usize
+pub const radroots_identity::key::IdentityId::HEX_LENGTH: usize
+pub const fn radroots_identity::key::IdentityId::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_identity::key::IdentityId::from_bytes([u8; 32]) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::IdentityId::from_hex(&str) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::IdentityId::from_slice(&[u8]) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::key::IdentityId::into_bytes(self) -> [u8; 32]
+pub fn radroots_identity::key::IdentityId::to_hex(self) -> alloc::string::String
+impl radroots_identity::key::IdentityId
+pub const fn radroots_identity::key::IdentityId::from_public_key(radroots_identity::key::PublicKey) -> Self
+impl core::convert::AsRef<[u8]> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::as_ref(&self) -> &[u8]
+impl core::convert::From<radroots_identity::key::IdentityId> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(radroots_identity::key::IdentityId) -> Self
+impl core::convert::From<radroots_identity::key::PublicKey> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::from(radroots_identity::key::PublicKey) -> Self
+impl core::convert::TryFrom<&[u8]> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from(&[u8]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<&str> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<[u8; 32]> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from([u8; 32]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Err = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+#[repr(transparent)] pub struct radroots_identity::key::PublicKey(_)
+impl radroots_identity::key::PublicKey
+pub const radroots_identity::key::PublicKey::BYTE_LENGTH: usize
+pub const radroots_identity::key::PublicKey::HEX_LENGTH: usize
+pub const fn radroots_identity::key::PublicKey::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_identity::key::PublicKey::from_bytes([u8; 32]) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::PublicKey::from_hex(&str) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::PublicKey::from_slice(&[u8]) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::key::PublicKey::into_bytes(self) -> [u8; 32]
+pub fn radroots_identity::key::PublicKey::to_hex(self) -> alloc::string::String
+impl core::convert::AsRef<[u8]> for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::as_ref(&self) -> &[u8]
+impl core::convert::From<radroots_identity::key::PublicKey> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::from(radroots_identity::key::PublicKey) -> Self
+impl core::convert::TryFrom<&[u8]> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from(&[u8]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<&str> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<[u8; 32]> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from([u8; 32]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Err = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub mod radroots_identity::profile
+pub struct radroots_identity::profile::Profile
+impl radroots_identity::profile::Profile
+pub const fn radroots_identity::profile::Profile::is_empty(&self) -> bool
+pub const fn radroots_identity::profile::Profile::new() -> Self
+pub fn radroots_identity::profile::Profile::username(&self) -> core::option::Option<&radroots_identity::username::Username>
+pub fn radroots_identity::profile::Profile::with_username(self, radroots_identity::username::Username) -> Self
+pub struct radroots_identity::profile::PublicIdentity
+impl radroots_identity::profile::PublicIdentity
+pub const fn radroots_identity::profile::PublicIdentity::id(&self) -> radroots_identity::key::IdentityId
+pub const fn radroots_identity::profile::PublicIdentity::new(radroots_identity::key::PublicKey) -> Self
+pub fn radroots_identity::profile::PublicIdentity::profile(&self) -> core::option::Option<&radroots_identity::profile::Profile>
+pub const fn radroots_identity::profile::PublicIdentity::public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_identity::profile::PublicIdentity::try_from_parts(radroots_identity::key::IdentityId, radroots_identity::key::PublicKey, core::option::Option<radroots_identity::profile::Profile>) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::profile::PublicIdentity::with_profile(self, radroots_identity::profile::Profile) -> Self
+impl core::convert::From<&radroots_identity::profile::PublicIdentity> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(&radroots_identity::profile::PublicIdentity) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::profile::PublicIdentity
+pub fn radroots_identity::profile::PublicIdentity::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub mod radroots_identity::username
+#[repr(transparent)] pub struct radroots_identity::username::Username(_)
+impl radroots_identity::username::Username
+pub fn radroots_identity::username::Username::as_str(&self) -> &str
+pub fn radroots_identity::username::Username::into_string(self) -> alloc::string::String
+pub fn radroots_identity::username::Username::parse(&str) -> core::result::Result<Self, radroots_identity::Error>
+impl core::convert::AsRef<str> for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::as_ref(&self) -> &str
+impl core::convert::TryFrom<&str> for radroots_identity::username::Username
+pub type radroots_identity::username::Username::Error = radroots_identity::Error
+pub fn radroots_identity::username::Username::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::username::Username
+pub type radroots_identity::username::Username::Error = radroots_identity::Error
+pub fn radroots_identity::username::Username::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::username::Username
+pub type radroots_identity::username::Username::Err = radroots_identity::Error
+pub fn radroots_identity::username::Username::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub const radroots_identity::username::MAX_LENGTH: usize
+pub const radroots_identity::username::MIN_LENGTH: usize
+#[non_exhaustive] pub enum radroots_identity::Error
+pub radroots_identity::Error::AccountIdMismatch
+pub radroots_identity::Error::AccountUpdateRegressed
+pub radroots_identity::Error::AccountUpdateRegressed::current_updated_at_unix: u64
+pub radroots_identity::Error::AccountUpdateRegressed::proposed_updated_at_unix: u64
+pub radroots_identity::Error::AccountUpdatedBeforeCreated
+pub radroots_identity::Error::AccountUpdatedBeforeCreated::created_at_unix: u64
+pub radroots_identity::Error::AccountUpdatedBeforeCreated::updated_at_unix: u64
+pub radroots_identity::Error::IdentityIdMismatch
+pub radroots_identity::Error::InvalidByteLength
+pub radroots_identity::Error::InvalidByteLength::actual: usize
+pub radroots_identity::Error::InvalidByteLength::expected: usize
+pub radroots_identity::Error::InvalidHexCharacter
+pub radroots_identity::Error::InvalidHexCharacter::index: usize
+pub radroots_identity::Error::InvalidHexLength
+pub radroots_identity::Error::InvalidHexLength::actual: usize
+pub radroots_identity::Error::InvalidHexLength::expected: usize
+pub radroots_identity::Error::InvalidPublicKeyBytes
+pub radroots_identity::Error::InvalidUsernameCharacter
+pub radroots_identity::Error::InvalidUsernameCharacter::index: usize
+pub radroots_identity::Error::InvalidUsernameDotPlacement
+pub radroots_identity::Error::InvalidUsernameLength
+pub radroots_identity::Error::InvalidUsernameLength::actual: usize
+pub radroots_identity::Error::InvalidUsernameLength::max: usize
+pub radroots_identity::Error::InvalidUsernameLength::min: usize
+#[repr(transparent)] pub struct radroots_identity::AccountId(_)
+impl radroots_identity::account::AccountId
+pub const radroots_identity::account::AccountId::BYTE_LENGTH: usize
+pub const radroots_identity::account::AccountId::HEX_LENGTH: usize
+pub const fn radroots_identity::account::AccountId::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_identity::account::AccountId::from_bytes([u8; 32]) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::account::AccountId::from_hex(&str) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::account::AccountId::from_slice(&[u8]) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::account::AccountId::into_bytes(self) -> [u8; 32]
+pub fn radroots_identity::account::AccountId::to_hex(self) -> alloc::string::String
+impl radroots_identity::account::AccountId
+pub const fn radroots_identity::account::AccountId::from_identity_id(radroots_identity::key::IdentityId) -> Self
+pub const fn radroots_identity::account::AccountId::from_public_identity(&radroots_identity::profile::PublicIdentity) -> Self
+impl core::convert::AsRef<[u8]> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::as_ref(&self) -> &[u8]
+impl core::convert::From<&radroots_identity::profile::PublicIdentity> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(&radroots_identity::profile::PublicIdentity) -> Self
+impl core::convert::From<radroots_identity::key::IdentityId> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(radroots_identity::key::IdentityId) -> Self
+impl core::convert::TryFrom<&[u8]> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from(&[u8]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<&str> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<[u8; 32]> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from([u8; 32]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Error = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::account::AccountId
+pub type radroots_identity::account::AccountId::Err = radroots_identity::Error
+pub fn radroots_identity::account::AccountId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+#[repr(transparent)] pub struct radroots_identity::IdentityId(_)
+impl radroots_identity::key::IdentityId
+pub const radroots_identity::key::IdentityId::BYTE_LENGTH: usize
+pub const radroots_identity::key::IdentityId::HEX_LENGTH: usize
+pub const fn radroots_identity::key::IdentityId::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_identity::key::IdentityId::from_bytes([u8; 32]) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::IdentityId::from_hex(&str) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::IdentityId::from_slice(&[u8]) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::key::IdentityId::into_bytes(self) -> [u8; 32]
+pub fn radroots_identity::key::IdentityId::to_hex(self) -> alloc::string::String
+impl radroots_identity::key::IdentityId
+pub const fn radroots_identity::key::IdentityId::from_public_key(radroots_identity::key::PublicKey) -> Self
+impl core::convert::AsRef<[u8]> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::as_ref(&self) -> &[u8]
+impl core::convert::From<radroots_identity::key::IdentityId> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(radroots_identity::key::IdentityId) -> Self
+impl core::convert::From<radroots_identity::key::PublicKey> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::from(radroots_identity::key::PublicKey) -> Self
+impl core::convert::TryFrom<&[u8]> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from(&[u8]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<&str> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<[u8; 32]> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from([u8; 32]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Error = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::key::IdentityId
+pub type radroots_identity::key::IdentityId::Err = radroots_identity::Error
+pub fn radroots_identity::key::IdentityId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+pub struct radroots_identity::Profile
+impl radroots_identity::profile::Profile
+pub const fn radroots_identity::profile::Profile::is_empty(&self) -> bool
+pub const fn radroots_identity::profile::Profile::new() -> Self
+pub fn radroots_identity::profile::Profile::username(&self) -> core::option::Option<&radroots_identity::username::Username>
+pub fn radroots_identity::profile::Profile::with_username(self, radroots_identity::username::Username) -> Self
+pub struct radroots_identity::PublicIdentity
+impl radroots_identity::profile::PublicIdentity
+pub const fn radroots_identity::profile::PublicIdentity::id(&self) -> radroots_identity::key::IdentityId
+pub const fn radroots_identity::profile::PublicIdentity::new(radroots_identity::key::PublicKey) -> Self
+pub fn radroots_identity::profile::PublicIdentity::profile(&self) -> core::option::Option<&radroots_identity::profile::Profile>
+pub const fn radroots_identity::profile::PublicIdentity::public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_identity::profile::PublicIdentity::try_from_parts(radroots_identity::key::IdentityId, radroots_identity::key::PublicKey, core::option::Option<radroots_identity::profile::Profile>) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::profile::PublicIdentity::with_profile(self, radroots_identity::profile::Profile) -> Self
+impl core::convert::From<&radroots_identity::profile::PublicIdentity> for radroots_identity::account::AccountId
+pub fn radroots_identity::account::AccountId::from(&radroots_identity::profile::PublicIdentity) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::profile::PublicIdentity
+pub fn radroots_identity::profile::PublicIdentity::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+#[repr(transparent)] pub struct radroots_identity::PublicKey(_)
+impl radroots_identity::key::PublicKey
+pub const radroots_identity::key::PublicKey::BYTE_LENGTH: usize
+pub const radroots_identity::key::PublicKey::HEX_LENGTH: usize
+pub const fn radroots_identity::key::PublicKey::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_identity::key::PublicKey::from_bytes([u8; 32]) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::PublicKey::from_hex(&str) -> core::result::Result<Self, radroots_identity::Error>
+pub fn radroots_identity::key::PublicKey::from_slice(&[u8]) -> core::result::Result<Self, radroots_identity::Error>
+pub const fn radroots_identity::key::PublicKey::into_bytes(self) -> [u8; 32]
+pub fn radroots_identity::key::PublicKey::to_hex(self) -> alloc::string::String
+impl core::convert::AsRef<[u8]> for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::as_ref(&self) -> &[u8]
+impl core::convert::From<radroots_identity::key::PublicKey> for radroots_identity::key::IdentityId
+pub fn radroots_identity::key::IdentityId::from(radroots_identity::key::PublicKey) -> Self
+impl core::convert::TryFrom<&[u8]> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from(&[u8]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<&str> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<[u8; 32]> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from([u8; 32]) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Error = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::key::PublicKey
+pub type radroots_identity::key::PublicKey::Err = radroots_identity::Error
+pub fn radroots_identity::key::PublicKey::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::key::PublicKey
+pub fn radroots_identity::key::PublicKey::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+#[repr(transparent)] pub struct radroots_identity::Username(_)
+impl radroots_identity::username::Username
+pub fn radroots_identity::username::Username::as_str(&self) -> &str
+pub fn radroots_identity::username::Username::into_string(self) -> alloc::string::String
+pub fn radroots_identity::username::Username::parse(&str) -> core::result::Result<Self, radroots_identity::Error>
+impl core::convert::AsRef<str> for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::as_ref(&self) -> &str
+impl core::convert::TryFrom<&str> for radroots_identity::username::Username
+pub type radroots_identity::username::Username::Error = radroots_identity::Error
+pub fn radroots_identity::username::Username::try_from(&str) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<alloc::string::String> for radroots_identity::username::Username
+pub type radroots_identity::username::Username::Error = radroots_identity::Error
+pub fn radroots_identity::username::Username::try_from(alloc::string::String) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_identity::username::Username
+pub type radroots_identity::username::Username::Err = radroots_identity::Error
+pub fn radroots_identity::username::Username::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_identity::username::Username
+pub fn radroots_identity::username::Username::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>

@@ -6,11 +6,11 @@
       "id": "nip01_wire_profile_minimal_001",
       "kind": "event.nip01_wire.valid",
       "input": {
-        "raw_json": "{\"id\":\"2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde\",\"pubkey\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"client\":\"radroots-test\"}"
+        "raw_json": "{\"id\":\"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"client\":\"radroots-test\"}"
       },
       "expected": {
-        "canonical_id_preimage": "[0,\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",1700000001,0,[],\"{}\"]",
-        "computed_event_id": "2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde",
+        "canonical_id_preimage": "[0,\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",1700000001,0,[],\"{}\"]",
+        "computed_event_id": "56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0",
         "extra_fields": [
           "client"
         ]
@@ -31,7 +31,7 @@
       "id": "nip01_wire_id_mismatch_003",
       "kind": "event.nip01_wire.invalid",
       "input": {
-        "raw_json": "{\"id\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"pubkey\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
+        "raw_json": "{\"id\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
       },
       "expected": {
         "error": "event_id_mismatch"
@@ -51,7 +51,7 @@
       "id": "nip01_wire_missing_content_005",
       "kind": "event.nip01_wire.invalid",
       "input": {
-        "raw_json": "{\"id\":\"2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde\",\"pubkey\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
+        "raw_json": "{\"id\":\"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
       },
       "expected": {
         "error": "missing_content"
@@ -61,7 +61,7 @@
       "id": "nip01_wire_empty_tag_006",
       "kind": "event.nip01_wire.invalid",
       "input": {
-        "raw_json": "{\"id\":\"2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde\",\"pubkey\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"created_at\":1700000001,\"kind\":0,\"tags\":[[]],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
+        "raw_json": "{\"id\":\"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0\",\"pubkey\":\"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df\",\"created_at\":1700000001,\"kind\":0,\"tags\":[[]],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
       },
       "expected": {
         "error": "empty_tag"
@@ -71,7 +71,7 @@
       "id": "nip01_wire_noncanonical_pubkey_007",
       "kind": "event.nip01_wire.invalid",
       "input": {
-        "raw_json": "{\"id\":\"2a15e33622a155ae231b28bebe390869e67a0e228f77ecfcd652b1ce180a9dde\",\"pubkey\":\"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
+        "raw_json": "{\"id\":\"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0\",\"pubkey\":\"585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF\",\"created_at\":1700000001,\"kind\":0,\"tags\":[],\"content\":\"{}\",\"sig\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}"
       },
       "expected": {
         "error": "noncanonical_pubkey"

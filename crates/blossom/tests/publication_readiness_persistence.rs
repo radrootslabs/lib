@@ -1,9 +1,8 @@
 #![cfg(feature = "serde")]
 
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
+    PublicationReadinessEvidence, RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
     RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES,
-    RadrootsBlossomPublicationReadinessEvidence,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -93,9 +92,8 @@ fn publication_readiness_persistence_vector_executes_every_case() {
         let bytes = mutated_evidence(&vector.input.mutation);
         match vector.kind.as_str() {
             "blossom.publication_readiness_evidence.from_canonical_json.valid" => {
-                let evidence =
-                    RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&bytes)
-                        .unwrap_or_else(|error| panic!("{}: {error}", vector.id));
+                let evidence = PublicationReadinessEvidence::from_canonical_json(&bytes)
+                    .unwrap_or_else(|error| panic!("{}: {error}", vector.id));
                 assert_eq!(
                     Some(evidence.schema_version()),
                     vector.expected.schema_version
@@ -108,9 +106,8 @@ fn publication_readiness_persistence_vector_executes_every_case() {
                 assert!(vector.expected.error.is_none(), "{}", vector.id);
             }
             "blossom.publication_readiness_evidence.to_canonical_json.valid" => {
-                let evidence =
-                    RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&bytes)
-                        .unwrap_or_else(|error| panic!("{}: {error}", vector.id));
+                let evidence = PublicationReadinessEvidence::from_canonical_json(&bytes)
+                    .unwrap_or_else(|error| panic!("{}: {error}", vector.id));
                 assert_eq!(evidence.to_canonical_json().unwrap(), bytes);
                 assert_eq!(
                     Some(evidence.schema_version()),
@@ -123,9 +120,7 @@ fn publication_readiness_persistence_vector_executes_every_case() {
                 assert!(vector.expected.error.is_none(), "{}", vector.id);
             }
             "blossom.publication_readiness_evidence.from_canonical_json.invalid" => {
-                let error =
-                    RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&bytes)
-                        .unwrap_err();
+                let error = PublicationReadinessEvidence::from_canonical_json(&bytes).unwrap_err();
                 assert_eq!(
                     Some(error.code()),
                     vector.expected.error.as_deref(),

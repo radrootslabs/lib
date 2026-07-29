@@ -6,7 +6,7 @@ mod test_fixtures;
 mod common;
 
 use common::{EVENT_ID, EVENT_SIG};
-use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
+use radroots_core::{Decimal, Quantity, Unit};
 use radroots_event::coop::RadrootsCoop;
 use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
@@ -176,10 +176,7 @@ fn sample_resource_cap(d_tag: &str) -> RadrootsResourceHarvestCap {
         },
         start: 100,
         end: 200,
-        cap_quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from(1000u32),
-            RadrootsCoreUnit::MassG,
-        ),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -577,7 +574,7 @@ fn plot_metadata_and_index_decode_roundtrip() {
         EVENT_SIG.to_string(),
     )
     .expect("plot index");
-    assert_eq!(index.event.author_str(), TEST_PUBKEY_HEX);
+    assert_eq!(index.event.author().to_hex(), TEST_PUBKEY_HEX);
     assert_eq!(index.data.data.d_tag, d_tag);
 }
 

@@ -15,9 +15,7 @@ use std::{collections::BTreeMap, string::String, vec::Vec};
 use crate::envelope::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
 };
-use crate::ids::{
-    RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, RadrootsPublicKey,
-};
+use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use core::fmt;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -376,8 +374,8 @@ pub fn canonical_nip01_event_id_preimage_v1(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<String, RadrootsCanonicalEventIdError> {
-    let pubkey =
-        RadrootsPublicKey::parse(pubkey).map_err(RadrootsCanonicalEventIdError::InvalidPubkey)?;
+    let pubkey = parse_public_key(pubkey).map_err(RadrootsCanonicalEventIdError::InvalidPubkey)?;
+    let pubkey = pubkey.to_hex();
     let mut preimage = String::new();
     preimage.push_str("[0,");
     push_canonical_json_string(&mut preimage, pubkey.as_str());
@@ -453,13 +451,13 @@ fn take_canonical_pubkey(
     object: &mut Map<String, Value>,
 ) -> Result<String, RadrootsEventWireError> {
     let raw = take_string(object, "pubkey")?;
-    let parsed = RadrootsPublicKey::parse(raw.as_str()).map_err(|error| {
+    let parsed = parse_public_key(raw.as_str()).map_err(|error| {
         RadrootsEventWireError::InvalidIdentifier {
             field: "pubkey",
             error,
         }
     })?;
-    canonical_identifier_string("pubkey", raw, parsed.into_string())
+    canonical_identifier_string("pubkey", raw, parsed.to_hex())
 }
 
 fn take_canonical_signature(

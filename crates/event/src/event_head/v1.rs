@@ -9,18 +9,18 @@ use crate::contract::registry_v7::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
 use crate::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass, RadrootsEventTag};
-use crate::ids::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey};
+use crate::ids::{PublicKey, RadrootsDTag, RadrootsEventId, RadrootsIdParseError};
 use crate::tags::TAG_D;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RadrootsEventHeadCoordinate {
     Replaceable {
         kind: u32,
-        pubkey: RadrootsPublicKey,
+        pubkey: PublicKey,
     },
     Addressable {
         kind: u32,
-        pubkey: RadrootsPublicKey,
+        pubkey: PublicKey,
         d_tag: String,
     },
 }
@@ -83,7 +83,7 @@ pub fn event_head_candidate_for_class(
         RadrootsEventClass::Ephemeral => RadrootsEventHeadCandidateResult::NotPersisted,
         RadrootsEventClass::Replaceable | RadrootsEventClass::Addressable => {
             let event_id = event.id().clone();
-            let pubkey = event.author().clone();
+            let pubkey = *event.author();
             let coordinate = if class == RadrootsEventClass::Replaceable {
                 RadrootsEventHeadCoordinate::Replaceable {
                     kind: event.kind_u32(),
@@ -142,11 +142,11 @@ pub fn event_head_candidate_for_nip01_event_v1(
         }
         RadrootsEventKindClass::Replaceable => RadrootsEventHeadCoordinate::Replaceable {
             kind: event.kind_u32(),
-            pubkey: event.author().clone(),
+            pubkey: *event.author(),
         },
         RadrootsEventKindClass::Addressable => RadrootsEventHeadCoordinate::Addressable {
             kind: event.kind_u32(),
-            pubkey: event.author().clone(),
+            pubkey: *event.author(),
             d_tag: String::from(first_tag_value(event.tag_slices(), TAG_D).unwrap_or("")),
         },
     };

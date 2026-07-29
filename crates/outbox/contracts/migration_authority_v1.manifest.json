@@ -215,10 +215,10 @@
   "source_files": [
     {
       "file": {
-        "byte_length": 1856,
+        "byte_length": 1948,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/Cargo.toml",
-        "sha256": "f643aa30ee5d9ada9ef43bfeae7517ccacb234f237953a35175fc6b8a4b5bbaa"
+        "sha256": "b41ec65ece0ca32031906f10e25973714a8eb910f82ea59d0d54f3bbea70a866"
       },
       "role": "outbox_package_manifest"
     },
@@ -278,10 +278,10 @@
     },
     {
       "file": {
-        "byte_length": 323369,
+        "byte_length": 323791,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "crates/outbox/src/store.rs",
-        "sha256": "2cfd5994923edd45e990f56a5e021152016611ba70e297858e187bb840a17216"
+        "sha256": "db68c92cf2722b5deb06b0cf8e41c917db4887dca6a17451fdb7772ae87c0f14"
       },
       "role": "store_integration"
     },
@@ -305,37 +305,37 @@
     },
     {
       "file": {
-        "byte_length": 510144,
+        "byte_length": 536956,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "c08947646a9769e4278d8a044b3474026fd71b3a2315babccae992b2ae55c368"
+        "sha256": "226461c98773687d9e39c502785655ae8b9f831b79fbd8d824f709c13715690c"
       },
       "role": "contract_dispatch"
     },
     {
       "file": {
-        "byte_length": 24835,
+        "byte_length": 27184,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "tools/xtask/src/main.rs",
-        "sha256": "0c75609e8a3612ff17ce8b99d6fafba84994865e1863535ac818d9a54678bf90"
+        "sha256": "83a8ac80c188802474e147444e7af890a188dd2103822ffbda607cd0b4b26044"
       },
       "role": "xtask_dispatch"
     },
     {
       "file": {
-        "byte_length": 22002,
+        "byte_length": 23243,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "build/nix/common.nix",
-        "sha256": "6ba87f6039ee7a7e06c1179293bb46cf2b5137a6aaa4f0fecbe61e27caa2259e"
+        "sha256": "cb32dfd36ea53ab5ef6b004dd87f0b276b5a6f020c5b19a0af95b9d8d0650bb1"
       },
       "role": "nix_feature_executor"
     },
     {
       "file": {
-        "byte_length": 5378,
+        "byte_length": 10719,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "build/nix/checks.nix",
-        "sha256": "ce66cbf81365342c87ba5b994d69c6b4d55e2f4d9c9f823b8b53575a8eebe758"
+        "sha256": "47c715898776c3a8ed8d93e13f86d9380df164fc3d4c2a7bad9bf04f57a200a0"
       },
       "role": "nix_feature_check"
     },
@@ -350,10 +350,10 @@
     },
     {
       "file": {
-        "byte_length": 27103,
+        "byte_length": 27107,
         "hash_algorithm": "sha256_bytes_v1",
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "f12cc739f3253b6847556e5659c4cba061bf18265435b2af39f6961ba6bb86e5"
+        "sha256": "8168ed38dfce1c8e1b3a8262da0eb8088d50287fcae93f05cd1103fb02b446bf"
       },
       "role": "release_record"
     },

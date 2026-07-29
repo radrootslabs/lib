@@ -91,11 +91,11 @@ const EVENT_STORE_STORE_ROOT_BASELINE_SHA256: &str =
 const EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256: &str =
     "69f3c730f8a4f3a4af0028c74f6903126def01ceb63eed8a173e696ce291dc09";
 const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
-    "8d39ce65fa4cfe5157a9e57d4bc40ad911dc3cc827e718a920a59cbfd79ef6cd";
+    "ec032e602c1afaebc5a998e74cd1e70066afd9a07b82bce2d0d7307caac15cd6";
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
     "8c29ceccb06abc94279db3257d52e14ad721e2eb302e54fbf26f8856d0db0b53";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
-    "679b7a82807461fa142f0fcb38719a2f2b84bf69569b3e74075719c735f1f4ea";
+    "5066faee05fad71a94be757767f67bf99a10e5637acc41522cefe7a37eb0b4e4";
 const ROUTE_FACADE_BASELINE_SHA256: &str =
     "8891c7824e4db6de269f2b833f2cb25510967034145423acdbac559b3ad5a52d";
 const ROUTE_FACADE_BASELINE_SOURCES: [&str; 17] = [
@@ -184,7 +184,7 @@ const CORE_CARGO_MANIFEST_RELATIVE: &str = "crates/core/Cargo.toml";
 const BLOSSOM_CARGO_MANIFEST_RELATIVE: &str = "crates/blossom/Cargo.toml";
 const TRANSPORT_CARGO_MANIFEST_RELATIVE: &str = "crates/transport/Cargo.toml";
 const CARGO_CONFIG_RELATIVE: &str = ".cargo/config.toml";
-const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 24] = [
+const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 23] = [
     "dto_bindgen",
     "futures",
     "getrandom",
@@ -198,7 +198,6 @@ const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 24] = [
     "radroots_event_codec",
     "radroots_transport",
     "rust_decimal",
-    "rust_decimal_macros",
     "secp256k1",
     "serde",
     "serde_json",
@@ -213,23 +212,23 @@ const GOVERNED_WORKSPACE_DEPENDENCY_NAMES: [&str; 24] = [
 const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     (
         CORE_CARGO_MANIFEST_RELATIVE,
-        "36ec909334f7bf1d8353753bcc0651f66f808307e30f4d7441595c7bd51f7d3d",
+        "79f6cee54c1a4f7ca0d029c6cc6ef1493ee9d441e231634a04885ac85d793759",
     ),
     (
         EVENT_CARGO_MANIFEST_RELATIVE,
-        "46f1af7d20b6a040ed3fd9fcad8c151d1edfb6eb1558ff0042b3bf9bea9bfddf",
+        "d37e85cb3be5a72471b9bdf3ed405433dd558cb546c24a63f9c420529eaede5a",
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
-        "b4ae0cfe31e089ad5ee69d398e69be36e7f24d0c101ec3d0a00a34aa109e9f06",
+        "7f34026a9d53ab8e2bb2dcf79d00850790b19f82b218dc9b9f25e3a4999a32be",
     ),
     (
         BLOSSOM_CARGO_MANIFEST_RELATIVE,
-        "03bd2a20057d4be04f2d0ec613ec65536b42eb6be4f8cd396fdf8b05e5b856fa",
+        "5029df69fa04b89850e4411c3a57ead718bbad42bac43404602eddb7b24e8b16",
     ),
     (
         EVENT_STORE_CARGO_MANIFEST_RELATIVE,
-        "3f34cc54eebaad1ae414905a5376bc3e4eb97369bab62479f365c40c26743531",
+        "8ecd900f34ea701429e326911dff0ed49364b4b5aee654ee9f68b0c1e1bf7cbf",
     ),
     (
         TRANSPORT_CARGO_MANIFEST_RELATIVE,
@@ -237,7 +236,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         "Cargo.toml#governed-workspace-dependencies",
-        "5d43b9baf1b1f354296cb6bde5024e779189d121f69cc3bb364989dd645a94de",
+        "4407cc5e0b79b323d98d1ec8988c3e597315d435463758793a4f3df886e62997",
     ),
 ];
 
@@ -303,8 +302,8 @@ const IMMUTABLE_PREDECESSOR_ARTIFACTS: [ImmutableArtifactSpec; 11] = [
     },
     ImmutableArtifactSpec {
         relative: RESULT_VECTOR_EXECUTOR_RELATIVE,
-        byte_length: 18_446,
-        sha256: "ca2a2bf54062aa6ddf2e553fd624c7217a01ad56309487ce73fa58c47c06c208",
+        byte_length: 18_451,
+        sha256: "9e9cc8d2f2382da6c73e78d73d41015559a5a3649b797cce13d7aafa9bbcc8d7",
     },
     ImmutableArtifactSpec {
         relative: MIGRATION_V1_UP_RELATIVE,
@@ -597,7 +596,11 @@ const RUNTIME_DEPENDENCY_ROOTS: [RuntimeDependencyRootSpec; 10] = [
 
 #[derive(Clone, Copy)]
 struct CargoPackageFeatureSpec {
+    // The reconciliation manifest predates the Cargo package-name migration and
+    // records the Rust crate identifier. Keep that immutable identifier separate
+    // from the package name validated in the current Cargo manifest.
     package: &'static str,
+    cargo_package_name: &'static str,
     manifest_path: &'static str,
     default_features_enabled: bool,
     selected_features: &'static [&'static str],
@@ -607,6 +610,7 @@ struct CargoPackageFeatureSpec {
 const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     CargoPackageFeatureSpec {
         package: "radroots_core",
+        cargo_package_name: "radroots_core",
         manifest_path: CORE_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["serde", "std"],
@@ -614,6 +618,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event_store",
+        cargo_package_name: "radroots_event_store",
         manifest_path: EVENT_STORE_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: true,
         selected_features: &["runtime-tokio", "sqlite"],
@@ -621,6 +626,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event_codec",
+        cargo_package_name: "radroots_event_codec",
         manifest_path: EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["nostr", "serde", "serde_json", "std"],
@@ -628,6 +634,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_event",
+        cargo_package_name: "radroots_event",
         manifest_path: EVENT_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["serde", "std"],
@@ -635,6 +642,7 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
     },
     CargoPackageFeatureSpec {
         package: "radroots_blossom",
+        cargo_package_name: "radroots_blossom",
         manifest_path: BLOSSOM_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
         selected_features: &["std"],
@@ -5330,6 +5338,7 @@ fn validate_raw_crate_attributes(relative: &str, source: &str) -> Result<(), Str
             "#![forbid(unsafe_code)]",
         ],
         "crates/blossom/src/lib.rs" => &[
+            "#![doc=include_str!(\"../README.md\")]",
             "#![cfg_attr(not(feature=\"std\"),no_std)]",
             "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
             "#![forbid(unsafe_code)]",
@@ -12991,7 +13000,7 @@ fn validate_source_maintenance_runtime_token_authority(
     workspace_root: &Path,
 ) -> Result<(), String> {
     const SOURCE_RUNTIME_AST_SHA256: &str =
-        "181576a5de365cf664b8a87091c30b0389ce0be90e7d1cc16fd7170342f6c2bc";
+        "c52b1acee9261d45590d8b443f10ad4fdd539fa8d6227e4ca8bc09c593c4c2b6";
     const FUNCTION_SPECS: [(&str, &str, &str); 4] = [
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
@@ -14597,7 +14606,7 @@ fn validate_governed_compiler_inputs_with_event_store_successor(
     let expected_toolchain: toml::Value = toml::from_str(
         r#"
 [toolchain]
-channel = "1.97.0"
+channel = "1.97.1"
 components = ["clippy", "rust-analyzer", "rust-src", "rustfmt"]
 targets = ["wasm32-unknown-unknown"]
 "#,
@@ -14605,7 +14614,7 @@ targets = ["wasm32-unknown-unknown"]
     .map_err(|error| format!("parse governed Rust toolchain expectation: {error}"))?;
     if toolchain != expected_toolchain {
         return Err(format!(
-            "{RUST_TOOLCHAIN_RELATIVE} must remain the exact governed Rust 1.97.0 toolchain document"
+            "{RUST_TOOLCHAIN_RELATIVE} must remain the exact governed Rust 1.97.1 toolchain document"
         ));
     }
     for legacy_relative in ["rust-toolchain", ".cargo/config"] {
@@ -14652,22 +14661,54 @@ xtask = "run -q -p xtask --"
     }
 
     let governed_packages = [
-        (CORE_CARGO_MANIFEST_RELATIVE, "radroots_core"),
-        (EVENT_CARGO_MANIFEST_RELATIVE, "radroots_event"),
-        (EVENT_CODEC_CARGO_MANIFEST_RELATIVE, "radroots_event_codec"),
-        (BLOSSOM_CARGO_MANIFEST_RELATIVE, "radroots_blossom"),
-        (EVENT_STORE_CARGO_MANIFEST_RELATIVE, "radroots_event_store"),
-        (TRANSPORT_CARGO_MANIFEST_RELATIVE, "radroots_transport"),
+        (
+            CORE_CARGO_MANIFEST_RELATIVE,
+            "radroots_core",
+            "0.1.0-alpha",
+            Some("radroots_core"),
+        ),
+        (
+            EVENT_CARGO_MANIFEST_RELATIVE,
+            "radroots_event",
+            "0.1.0-alpha",
+            Some("radroots_event"),
+        ),
+        (
+            EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
+            "radroots_event_codec",
+            "0.1.0-alpha",
+            Some("radroots_event_codec"),
+        ),
+        (
+            BLOSSOM_CARGO_MANIFEST_RELATIVE,
+            "radroots_blossom",
+            "0.1.0-alpha",
+            Some("radroots_blossom"),
+        ),
+        (
+            EVENT_STORE_CARGO_MANIFEST_RELATIVE,
+            "radroots_event_store",
+            "0.1.0-alpha",
+            None,
+        ),
+        (
+            TRANSPORT_CARGO_MANIFEST_RELATIVE,
+            "radroots_transport",
+            "0.1.0-alpha",
+            Some("radroots_transport"),
+        ),
     ];
     let mut actual_identities = Vec::new();
-    for (relative, expected_package_name) in governed_packages {
+    for (relative, expected_package_name, expected_version, expected_crate_name) in
+        governed_packages
+    {
         let manifest = parse_cargo_manifest(workspace_root, relative)?;
         let package = manifest
             .get("package")
             .and_then(toml::Value::as_table)
             .ok_or_else(|| format!("{relative} must declare [package]"))?;
         if package.get("name").and_then(toml::Value::as_str) != Some(expected_package_name)
-            || package.get("version").and_then(toml::Value::as_str) != Some("0.1.0-alpha")
+            || package.get("version").and_then(toml::Value::as_str) != Some(expected_version)
             || package
                 .get("edition")
                 .and_then(toml::Value::as_table)
@@ -14682,8 +14723,21 @@ xtask = "run -q -p xtask --"
                 != Some(true)
         {
             return Err(format!(
-                "{relative} compiler package identity must remain {expected_package_name} 0.1.0-alpha with workspace edition and rust-version"
+                "{relative} compiler package identity must remain {expected_package_name} {expected_version} with workspace edition and rust-version"
             ));
+        }
+        match (expected_crate_name, manifest.get("lib")) {
+            (None, None) => {}
+            (Some(expected), Some(lib))
+                if lib.as_table().is_some_and(|lib| {
+                    lib.len() == 1
+                        && lib.get("name").and_then(toml::Value::as_str) == Some(expected)
+                }) => {}
+            _ => {
+                return Err(format!(
+                    "{relative} must preserve its exact Rust crate name without target-path authority"
+                ));
+            }
         }
         if [
             "build",
@@ -14703,7 +14757,6 @@ xtask = "run -q -p xtask --"
         if [
             "build-dependencies",
             "target",
-            "lib",
             "bin",
             "example",
             "test",
@@ -14815,7 +14868,7 @@ xtask = "run -q -p xtask --"
             "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must not exclude or narrow the default governed workspace member graph beyond the governed fuzz exclusion"
         ));
     }
-    if workspace.get("resolver").and_then(toml::Value::as_str) != Some("2")
+    if workspace.get("resolver").and_then(toml::Value::as_str) != Some("3")
         || workspace_package
             .get("edition")
             .and_then(toml::Value::as_str)
@@ -14823,10 +14876,10 @@ xtask = "run -q -p xtask --"
         || workspace_package
             .get("rust-version")
             .and_then(toml::Value::as_str)
-            != Some("1.97.0")
+            != Some("1.97.1")
     {
         return Err(format!(
-            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must retain resolver 2, edition 2024, and rust-version 1.97.0 compiler authority"
+            "{WORKSPACE_CARGO_MANIFEST_RELATIVE} must retain resolver 3, edition 2024, and rust-version 1.97.1 compiler authority"
         ));
     }
     if workspace_manifest.get("replace").is_some()
@@ -14956,10 +15009,10 @@ fn describe_cargo_package_features(
         .and_then(|package| package.get("name"))
         .and_then(toml::Value::as_str)
         .ok_or_else(|| format!("{} must declare package.name", spec.manifest_path))?;
-    if package_name != spec.package {
+    if package_name != spec.cargo_package_name {
         return Err(format!(
             "{} package.name must be {}",
-            spec.manifest_path, spec.package
+            spec.manifest_path, spec.cargo_package_name
         ));
     }
     let feature_table = manifest
@@ -20820,44 +20873,60 @@ pub(crate) fn migration_for_version"#,
     fn predecessor_impl_resolution_projection_is_fail_closed() {
         let workspace = synthetic_workspace();
         let manifest = immutable_manifest();
+        let superseded_paths =
+            super::super::source_maintenance::predecessor_superseded_source_paths()
+                .iter()
+                .copied()
+                .chain(
+                    RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS
+                        .iter()
+                        .copied(),
+                )
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
         validate_predecessor_impl_resolution_authority(
             workspace.path(),
             &manifest,
-            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+            &superseded_paths,
         )
         .expect("current successor must preserve predecessor impl authority");
-        let unchanged_relative = "crates/event_codec/src/deletion/reconciliation_v1.rs";
+        let unchanged_relative = "crates/event_codec/src/error.rs";
         let unchanged_path = workspace.path().join(unchanged_relative);
         let unchanged = fs::read_to_string(&unchanged_path).expect("unchanged predecessor source");
 
         fs::write(
             &unchanged_path,
             format!(
-                "{unchanged}\ntrait UnexpectedPredecessorResolution {{}}\nimpl UnexpectedPredecessorResolution for RadrootsNip09SuppressionDecision {{}}\n"
+                "{unchanged}\ntrait UnexpectedPredecessorResolution {{}}\nimpl UnexpectedPredecessorResolution for EventEncodeError {{}}\n"
             ),
         )
         .expect("add unexpected predecessor impl authority");
         let error = validate_predecessor_impl_resolution_authority(
             workspace.path(),
             &manifest,
-            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+            &superseded_paths,
         )
         .expect_err("new predecessor-bound impl authority must fail closed");
         assert!(error.contains("unexpected ["), "{error}");
         assert!(error.contains("UnexpectedPredecessorResolution"), "{error}");
 
-        let changed = unchanged.replacen("self.address_reference.as_ref()", "None", 1);
+        let changed = unchanged.replacen(
+            "failed to serialize JSON",
+            "failed to serialize canonical JSON",
+            1,
+        );
         assert_ne!(changed, unchanged, "expected impl fixture must mutate");
         fs::write(&unchanged_path, changed).expect("change expected predecessor impl authority");
         let error = validate_predecessor_impl_resolution_authority(
             workspace.path(),
             &manifest,
-            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+            &superseded_paths,
         )
         .expect_err("changed predecessor-bound impl authority must fail closed");
         assert!(error.contains("missing ["), "{error}");
         assert!(error.contains("unexpected ["), "{error}");
-        assert!(error.matches("address_reference").count() >= 2, "{error}");
+        assert!(error.matches("EventEncodeError").count() >= 2, "{error}");
         fs::write(&unchanged_path, unchanged).expect("restore unchanged predecessor source");
 
         let successor_relative =
@@ -20874,7 +20943,7 @@ pub(crate) fn migration_for_version"#,
         validate_predecessor_impl_resolution_authority(
             workspace.path(),
             &manifest,
-            &RAW_SOURCE_REBUILD_PREDECESSOR_SUPERSEDED_PATHS,
+            &superseded_paths,
         )
         .expect("successor-only authority must not rotate predecessor projection");
     }
@@ -21075,7 +21144,7 @@ version = "0.1.0"
             ),
             (
                 format!(
-                    "{original}\nmacro_rules! inject_impl {{ () => {{ impl Drop for RadrootsBlossomSha256 {{ fn drop(&mut self) {{}} }} }} }}\ninject_impl!();\n"
+                    "{original}\nmacro_rules! inject_impl {{ () => {{ impl Drop for Sha256 {{ fn drop(&mut self) {{}} }} }} }}\ninject_impl!();\n"
                 ),
                 "unapproved production item-macro authority",
             ),
@@ -21609,12 +21678,12 @@ async fn nip09_reconciliation_v1_result_vector() {
         let toolchain = fs::read_to_string(&toolchain_path).expect("Rust toolchain");
         fs::write(
             &toolchain_path,
-            toolchain.replacen("channel = \"1.97.0\"", "channel = \"nightly\"", 1),
+            toolchain.replacen("channel = \"1.97.1\"", "channel = \"nightly\"", 1),
         )
         .expect("write toolchain mutation");
         let error = validate_governed_compiler_inputs(workspace.path())
             .expect_err("Rust toolchain mutation must fail");
-        assert!(error.contains("exact governed Rust 1.97.0"), "{error}");
+        assert!(error.contains("exact governed Rust 1.97.1"), "{error}");
         fs::write(&toolchain_path, toolchain).expect("restore Rust toolchain");
 
         let legacy_toolchain_path = workspace.path().join("rust-toolchain");
@@ -21741,7 +21810,7 @@ async fn nip09_reconciliation_v1_result_vector() {
         for (label, mutation) in [
             (
                 "resolver",
-                workspace_manifest.replacen("resolver = \"2\"", "resolver = \"1\"", 1),
+                workspace_manifest.replacen("resolver = \"3\"", "resolver = \"1\"", 1),
             ),
             (
                 "edition",
@@ -21754,7 +21823,7 @@ async fn nip09_reconciliation_v1_result_vector() {
             let error = validate_governed_compiler_inputs(workspace.path())
                 .expect_err("workspace compiler authority mutation must fail");
             assert!(
-                error.contains("resolver 2, edition 2024, and rust-version 1.97.0"),
+                error.contains("resolver 3, edition 2024, and rust-version 1.97.1"),
                 "{label} produced unexpected error: {error}"
             );
             fs::write(&workspace_manifest_path, &workspace_manifest)

@@ -12,7 +12,11 @@ homepage.workspace = true
 
 [features]
 default = ["std"]
-std = ["radroots_event/std", "radroots_event_codec/std"]
+std = [
+  "radroots_event/std",
+  "radroots_event_codec/std",
+  "radroots_identity/std",
+]
 local_signer = [
   "std",
   "dep:radroots_nostr",
@@ -27,6 +31,7 @@ radroots_event = { workspace = true, default-features = false, features = [
 radroots_event_codec = { workspace = true, default-features = false, features = [
   "serde_json",
 ] }
+radroots_identity = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, optional = true, default-features = false }
 
 [dev-dependencies]

@@ -11,7 +11,7 @@ use base64::Engine;
 #[cfg(feature = "std")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-use radroots_core::RadrootsCoreDecimal;
+use radroots_core::Decimal;
 #[cfg(test)]
 use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_event::contract::RadrootsEventClass;
@@ -253,7 +253,7 @@ fn ingest_profile_event(
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let data_result = profile_decode::data_from_event(
         event.id_str().to_owned(),
-        event.author_str().to_owned(),
+        event.author().to_hex().to_owned(),
         event.created_at_u64(),
         event.kind_u32(),
         event.content().to_owned(),
@@ -355,7 +355,7 @@ fn ingest_farm_event(
         created_at: None,
         updated_at: None,
         d_tag: Some(farm.d_tag.clone()),
-        pubkey: Some(event.author_str().to_owned()),
+        pubkey: Some(event.author().to_hex().to_owned()),
         name: None,
         about: None,
         website: None,
@@ -379,7 +379,7 @@ fn ingest_farm_event(
     let farm_id = if let Some(row) = existing.results.first() {
         let fields = IFarmFieldsPartial {
             d_tag: Some(Value::from(farm.d_tag.clone())),
-            pubkey: Some(Value::from(event.author_str().to_owned())),
+            pubkey: Some(Value::from(event.author().to_hex().to_owned())),
             name: Some(Value::from(farm.name.clone())),
             about: to_value_opt(farm.about.clone()),
             website: to_value_opt(farm.website.clone()),
@@ -402,7 +402,7 @@ fn ingest_farm_event(
     } else {
         let fields = IFarmFields {
             d_tag: farm.d_tag.clone(),
-            pubkey: event.author_str().to_owned(),
+            pubkey: event.author().to_hex().to_owned(),
             name: farm.name.clone(),
             about: farm.about.clone(),
             website: farm.website.clone(),
@@ -622,7 +622,7 @@ fn ingest_list_set_event(
         if !decision.apply {
             return Ok(RadrootsReplicaIngestOutcome::Skipped);
         }
-        upsert_member_claims(exec, event.author_str(), &list_set)?;
+        upsert_member_claims(exec, &event.author().to_hex(), &list_set)?;
         upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
     }
@@ -642,7 +642,7 @@ fn ingest_list_set_event(
         if !decision.apply {
             return Ok(RadrootsReplicaIngestOutcome::Skipped);
         }
-        let farm = find_farm_by_ref(exec, event.author_str(), &farm_d_tag)?;
+        let farm = find_farm_by_ref(exec, &event.author().to_hex(), &farm_d_tag)?;
         upsert_farm_members(exec, &farm.id, role, &list_set)?;
         upsert_event_head(exec, &decision)?;
         return Ok(RadrootsReplicaIngestOutcome::Applied);
@@ -667,8 +667,9 @@ fn trade_product_fields_from_listing(
     listing_addr: &str,
 ) -> Result<ITradeProductFields, RadrootsReplicaEventsError> {
     let bin = primary_listing_bin(listing)?;
-    let qty_amt = decimal_to_f64(&bin.quantity.amount, "listing primary bin quantity")?;
-    let qty_amt_exact = bin.quantity.amount.to_string();
+    let quantity_amount = bin.quantity.amount();
+    let qty_amt = decimal_to_f64(&quantity_amount, "listing primary bin quantity")?;
+    let qty_amt_exact = quantity_amount.to_string();
     let qty_avail = listing
         .inventory_available
         .as_ref()
@@ -677,30 +678,30 @@ fn trade_product_fields_from_listing(
     let price_source = bin
         .display_price
         .as_ref()
-        .unwrap_or(&bin.price_per_canonical_unit.amount);
-    let Some(price_amt) = price_source.amount.to_f64_lossy() else {
+        .unwrap_or(bin.price_per_canonical_unit.amount());
+    let Some(price_amt) = price_source.amount().to_f64_lossy() else {
         return Err(RadrootsReplicaEventsError::InvalidData(
             "listing price amount out of range".to_string(),
         ));
     };
-    let price_amt_exact = price_source.amount.to_string();
-    let price_currency = price_source.currency.as_str().to_string();
+    let price_amt_exact = price_source.amount().to_string();
+    let price_currency = price_source.currency().as_str().to_string();
     let price_qty_amt = if bin.display_price.is_some() {
         1.0
     } else {
         decimal_to_f64(
-            &bin.price_per_canonical_unit.quantity.amount,
+            &bin.price_per_canonical_unit.quantity().amount(),
             "listing price quantity",
         )?
     };
     let price_qty_amt_exact = if bin.display_price.is_some() {
         "1".to_string()
     } else {
-        bin.price_per_canonical_unit.quantity.amount.to_string()
+        bin.price_per_canonical_unit.quantity().amount().to_string()
     };
     let price_qty_unit = bin
         .display_price_unit
-        .unwrap_or(bin.price_per_canonical_unit.quantity.unit)
+        .unwrap_or(bin.price_per_canonical_unit.quantity().unit())
         .to_string();
 
     Ok(ITradeProductFields {
@@ -719,11 +720,11 @@ fn trade_product_fields_from_listing(
             .unwrap_or_default(),
         qty_amt,
         qty_amt_exact,
-        qty_unit: bin.quantity.unit.to_string(),
+        qty_unit: bin.quantity.unit().to_string(),
         qty_label: bin
             .display_label
             .clone()
-            .or_else(|| bin.quantity.label.clone()),
+            .or_else(|| bin.quantity.label().map(ToOwned::to_owned)),
         qty_avail,
         price_amt,
         price_amt_exact,
@@ -770,10 +771,7 @@ fn primary_listing_bin(
         })
 }
 
-fn decimal_to_i64(
-    value: &RadrootsCoreDecimal,
-    field: &str,
-) -> Result<i64, RadrootsReplicaEventsError> {
+fn decimal_to_i64(value: &Decimal, field: &str) -> Result<i64, RadrootsReplicaEventsError> {
     let value = decimal_to_u64(value, field)?;
     match i64::try_from(value) {
         Ok(value) => Ok(value),
@@ -783,10 +781,7 @@ fn decimal_to_i64(
     }
 }
 
-fn decimal_to_f64(
-    value: &RadrootsCoreDecimal,
-    field: &str,
-) -> Result<f64, RadrootsReplicaEventsError> {
+fn decimal_to_f64(value: &Decimal, field: &str) -> Result<f64, RadrootsReplicaEventsError> {
     match value.to_f64_lossy() {
         Some(value) => Ok(value),
         None => Err(RadrootsReplicaEventsError::InvalidData(format!(
@@ -795,10 +790,7 @@ fn decimal_to_f64(
     }
 }
 
-fn decimal_to_u64(
-    value: &RadrootsCoreDecimal,
-    field: &str,
-) -> Result<u64, RadrootsReplicaEventsError> {
+fn decimal_to_u64(value: &Decimal, field: &str) -> Result<u64, RadrootsReplicaEventsError> {
     match value.to_u64_exact() {
         Some(value) => Ok(value),
         None => Err(RadrootsReplicaEventsError::InvalidData(format!(
@@ -1028,7 +1020,7 @@ fn event_head_decision(
                 apply: false,
                 key: String::new(),
                 kind: event.kind_u32(),
-                pubkey: event.author_str().to_owned(),
+                pubkey: event.author().to_hex().to_owned(),
                 d_tag: String::new(),
                 last_event_id: event.id_str().to_owned(),
                 last_created_at: event.created_at_u64(),
@@ -1631,10 +1623,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreQuantityPrice,
-        RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
     use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
     use radroots_event::kinds::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
@@ -1667,6 +1656,14 @@ mod tests {
     use radroots_sql_core::{ExecOutcome, SqlExecutor, SqlxSqliteExecutor};
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX};
 
+    fn test_public_key_hex(seed: u8) -> String {
+        let secret_key = format!("{:064x}", u16::from(seed) + 1);
+        Keys::parse(&secret_key)
+            .expect("deterministic test secret key")
+            .public_key()
+            .to_hex()
+    }
+
     fn test_event_envelope(
         id: u64,
         author: &str,
@@ -1695,7 +1692,7 @@ mod tests {
     ) -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event.id_str().to_owned(),
-            author: event.author_str().to_owned(),
+            author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind,
             tags,
@@ -2129,11 +2126,11 @@ mod tests {
         )
     }
 
-    fn listing_decimal(raw: &str) -> RadrootsCoreDecimal {
+    fn listing_decimal(raw: &str) -> Decimal {
         raw.parse().expect("decimal")
     }
 
-    fn listing_currency() -> RadrootsCoreCurrency {
+    fn listing_currency() -> Currency {
         "USD".parse().expect("currency")
     }
 
@@ -2142,7 +2139,7 @@ mod tests {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".parse().expect("d tag"),
             published_at: Some(1),
             farm: RadrootsFarmRef {
-                pubkey: "c".repeat(64),
+                pubkey: test_public_key_hex(0xc),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAZ".to_string(),
             },
             product: RadrootsOperationalListingProduct {
@@ -2159,12 +2156,14 @@ mod tests {
             primary_bin_id: "bin-a".parse().expect("primary bin id"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: "bin-a".parse().expect("bin id"),
-                quantity: RadrootsCoreQuantity::new(listing_decimal("12"), RadrootsCoreUnit::Each)
+                quantity: Quantity::try_new(listing_decimal("12"), Unit::Each)
+                    .unwrap()
                     .with_label("unit label"),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
-                    RadrootsCoreMoney::new(listing_decimal("6"), listing_currency()),
-                    RadrootsCoreQuantity::new(listing_decimal("1"), RadrootsCoreUnit::Each),
-                ),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(listing_decimal("6"), listing_currency()).unwrap(),
+                    Quantity::try_new(listing_decimal("1"), Unit::Each).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,
@@ -2219,7 +2218,7 @@ mod tests {
             updated_at: "2026-01-01T00:00:00Z".to_string(),
             key: "profile".to_string(),
             kind: KIND_PROFILE,
-            pubkey: "a".repeat(64),
+            pubkey: test_public_key_hex(0xa),
             d_tag: String::new(),
             last_event_id: "not-an-event-id".to_string(),
             last_created_at: 1,
@@ -2227,7 +2226,7 @@ mod tests {
         };
         let coordinate = RadrootsEventHeadCoordinate::Replaceable {
             kind: KIND_PROFILE,
-            pubkey: "a".repeat(64).parse().expect("pubkey"),
+            pubkey: test_public_key_hex(0xa).parse().expect("pubkey"),
         };
 
         let err = current_event_head_from_row(&row, &coordinate)
@@ -2241,7 +2240,7 @@ mod tests {
             exec,
             &IFarmFields {
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
-                pubkey: "f".repeat(64),
+                pubkey: test_public_key_hex(0xf),
                 name: "farm".to_string(),
                 about: None,
                 website: None,
@@ -2337,7 +2336,7 @@ mod tests {
             exec,
             &IFarmMemberFields {
                 farm_id: farm_row.id.clone(),
-                member_pubkey: "6".repeat(64),
+                member_pubkey: test_public_key_hex(0x6),
                 role: "member".to_string(),
             },
         )
@@ -2345,7 +2344,7 @@ mod tests {
         let _ = farm_member_claim::create(
             exec,
             &IFarmMemberClaimFields {
-                member_pubkey: "6".repeat(64),
+                member_pubkey: test_public_key_hex(0x6),
                 farm_pubkey: farm_row.pubkey.clone(),
             },
         )
@@ -2368,7 +2367,7 @@ mod tests {
         };
         let event = test_event_envelope(
             1,
-            &"a".repeat(64),
+            &test_public_key_hex(0xa),
             1,
             KIND_LIST_SET_FOLLOW,
             Vec::new(),
@@ -2413,7 +2412,14 @@ mod tests {
             commit_err: None,
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
-        let unsupported = test_event_envelope(2, &"a".repeat(64), 2, 42, Vec::new(), String::new());
+        let unsupported = test_event_envelope(
+            2,
+            &test_public_key_hex(0xa),
+            2,
+            42,
+            Vec::new(),
+            String::new(),
+        );
         let err = radroots_replica_ingest_event_with_factory(
             &rollback_executor,
             &unsupported,
@@ -2454,7 +2460,7 @@ mod tests {
         };
         let event = test_event_envelope(
             3,
-            &"a".repeat(64),
+            &test_public_key_hex(0xa),
             3,
             KIND_CALENDAR,
             Vec::new(),
@@ -2480,7 +2486,7 @@ mod tests {
         let factory = RadrootsReplicaDefaultIdFactory;
         assert_eq!(factory.new_d_tag().len(), 22);
 
-        let profile_pubkey = "9".repeat(64);
+        let profile_pubkey = test_public_key_hex(0x9);
         let profile = profile_event(
             10,
             &profile_pubkey,
@@ -2539,7 +2545,7 @@ mod tests {
         let decision = event_head_decision(&exec, &profile_same_time_lower_id).expect("decision");
         assert!(decision.apply);
 
-        let farm_pubkey = "f".repeat(64);
+        let farm_pubkey = test_public_key_hex(0xf);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let farm = farm_event(
             20,
@@ -2628,12 +2634,15 @@ mod tests {
             RadrootsReplicaIngestOutcome::Skipped
         );
 
-        let members = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)])
-            .expect("members");
+        let members =
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec![test_public_key_hex(0x6)])
+                .expect("members");
         let owners =
-            farm_list_sets::farm_owners_list_set(farm_d_tag, vec!["8".repeat(64)]).expect("owners");
-        let workers = farm_list_sets::farm_workers_list_set(farm_d_tag, vec!["0".repeat(64)])
-            .expect("workers");
+            farm_list_sets::farm_owners_list_set(farm_d_tag, vec![test_public_key_hex(0x8)])
+                .expect("owners");
+        let workers =
+            farm_list_sets::farm_workers_list_set(farm_d_tag, vec![test_public_key_hex(0x0)])
+                .expect("workers");
         let plots = farm_list_sets::farm_plots_list_set(
             farm_d_tag,
             &farm_pubkey,
@@ -3222,7 +3231,7 @@ mod tests {
             &exec,
             &IFarmFields {
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
-                pubkey: "f".repeat(64),
+                pubkey: test_public_key_hex(0xf),
                 name: "farm-none".to_string(),
                 about: None,
                 website: None,
@@ -3323,7 +3332,7 @@ mod tests {
         );
 
         let members_list_set =
-            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["7".repeat(64)])
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec![test_public_key_hex(0x7)])
                 .expect("members");
         assert!(
             upsert_farm_members(&exec, &farm_id, ListSetRole::Members, &members_list_set).is_ok()
@@ -3334,7 +3343,7 @@ mod tests {
             err: SqlError::NotFound("farm_member".to_string()),
         };
         let not_found_members_list_set =
-            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["a".repeat(64)])
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec![test_public_key_hex(0xa)])
                 .expect("not found members");
         assert!(
             upsert_farm_members(
@@ -3356,18 +3365,24 @@ mod tests {
         );
 
         let member_claims =
-            farm_list_sets::member_of_farms_list_set(vec!["3".repeat(64)]).expect("claims");
-        assert!(upsert_member_claims(&exec, &"6".repeat(64), &member_claims).is_ok());
+            farm_list_sets::member_of_farms_list_set(vec![test_public_key_hex(0x3)])
+                .expect("claims");
+        assert!(upsert_member_claims(&exec, &test_public_key_hex(0x6), &member_claims).is_ok());
         let not_found_claims = DeleteErrorExecutor {
             inner: &exec,
             table_name: "farm_member_claim",
             err: SqlError::NotFound("farm_member_claim".to_string()),
         };
         let not_found_member_claims =
-            farm_list_sets::member_of_farms_list_set(vec!["2".repeat(64)]).expect("claims nf");
+            farm_list_sets::member_of_farms_list_set(vec![test_public_key_hex(0x2)])
+                .expect("claims nf");
         assert!(
-            upsert_member_claims(&not_found_claims, &"6".repeat(64), &not_found_member_claims)
-                .is_ok()
+            upsert_member_claims(
+                &not_found_claims,
+                &test_public_key_hex(0x6),
+                &not_found_member_claims
+            )
+            .is_ok()
         );
         assert!(not_found_claims.begin().is_ok());
         assert!(not_found_claims.commit().is_ok());
@@ -3441,7 +3456,10 @@ mod tests {
             table_name: "farm_member_claim",
             err: SqlError::Internal,
         };
-        assert!(upsert_member_claims(&internal_claims, &"6".repeat(64), &member_claims).is_err());
+        assert!(
+            upsert_member_claims(&internal_claims, &test_public_key_hex(0x6), &member_claims)
+                .is_err()
+        );
     }
 
     #[test]
@@ -3461,8 +3479,8 @@ mod tests {
         migrations::run_all_up(&exec).expect("migrations");
         let pass = PassExecutor { inner: &exec };
 
-        let profile_pubkey = "9".repeat(64);
-        let farm_pubkey = "f".repeat(64);
+        let profile_pubkey = test_public_key_hex(0x9);
+        let farm_pubkey = test_public_key_hex(0xf);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
 
@@ -3528,7 +3546,8 @@ mod tests {
         );
 
         let members =
-            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)]).expect("list");
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec![test_public_key_hex(0x6)])
+                .expect("list");
         let members_event = list_set_event(503, &farm_pubkey, 53, KIND_LIST_SET_GENERIC, &members);
         assert_eq!(
             ingest_list_set_event(&pass, &members_event).expect("members list set"),
@@ -3554,7 +3573,7 @@ mod tests {
                 },
                 RadrootsListEntry {
                     tag: "p".to_string(),
-                    values: vec!["6".repeat(64)],
+                    values: vec![test_public_key_hex(0x6)],
                 },
             ],
             title: None,
@@ -3611,7 +3630,7 @@ mod tests {
         let exec = SqlxSqliteExecutor::open_memory().expect("db");
         migrations::run_all_up(&exec).expect("migrations");
 
-        let farm_pubkey = "f".repeat(64);
+        let farm_pubkey = test_public_key_hex(0xf);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let farm_create = farm_event(
             600,
@@ -3702,7 +3721,7 @@ mod tests {
             rollback_count: Arc::new(AtomicUsize::new(0)),
         };
 
-        let profile_pubkey = "9".repeat(64);
+        let profile_pubkey = test_public_key_hex(0x9);
         let profile_event_row = profile_event(
             700,
             &profile_pubkey,
@@ -3728,7 +3747,7 @@ mod tests {
             RadrootsReplicaIngestOutcome::Skipped
         );
 
-        let farm_pubkey = "f".repeat(64);
+        let farm_pubkey = test_public_key_hex(0xf);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let farm_event_row = farm_event(
             701,
@@ -3803,14 +3822,17 @@ mod tests {
             .is_ok()
         );
         let members_list =
-            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)]).expect("list");
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec![test_public_key_hex(0x6)])
+                .expect("list");
         assert!(
             upsert_farm_members(&pass_txn, &farm_row.id, ListSetRole::Members, &members_list)
                 .is_ok()
         );
         let member_of_list =
             farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
-        assert!(upsert_member_claims(&pass_txn, &"6".repeat(64), &member_of_list).is_ok());
+        assert!(
+            upsert_member_claims(&pass_txn, &test_public_key_hex(0x6), &member_of_list).is_ok()
+        );
 
         let rollback_count = Arc::new(AtomicUsize::new(0));
         let txn = TxnExecutor {
@@ -3854,7 +3876,7 @@ mod tests {
             .is_err()
         );
         assert!(upsert_farm_members(&txn, "farm-id", ListSetRole::Members, &members_list).is_err());
-        assert!(upsert_member_claims(&txn, &"6".repeat(64), &member_of_list).is_err());
+        assert!(upsert_member_claims(&txn, &test_public_key_hex(0x6), &member_of_list).is_err());
     }
 
     #[test]
@@ -3879,10 +3901,10 @@ mod tests {
         let _ = pass_through.rollback();
         let _ = pass_through.commit();
 
-        let farm_pubkey = "f".repeat(64);
+        let farm_pubkey = test_public_key_hex(0xf);
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
-        let profile_pubkey = "9".repeat(64);
+        let profile_pubkey = test_public_key_hex(0x9);
 
         let profile = profile_event(
             800,
@@ -3926,7 +3948,7 @@ mod tests {
         };
         let profile_new = profile_event(
             802,
-            &"7".repeat(64),
+            &test_public_key_hex(0x7),
             82,
             Some(RadrootsProfileType::Individual),
             "profile-new",
@@ -3940,7 +3962,7 @@ mod tests {
         };
         let profile_state_event = profile_event(
             803,
-            &"c".repeat(64),
+            &test_public_key_hex(0xc),
             83,
             Some(RadrootsProfileType::Individual),
             "profile-state",
@@ -3977,7 +3999,7 @@ mod tests {
         };
         let farm_query_event = farm_event(
             811,
-            &"a".repeat(64),
+            &test_public_key_hex(0xa),
             91,
             farm_d_tag,
             "farm-query",
@@ -4009,7 +4031,7 @@ mod tests {
         };
         let farm_create = farm_event(
             813,
-            &"c".repeat(64),
+            &test_public_key_hex(0xc),
             93,
             farm_d_tag,
             "farm-create",
@@ -4025,7 +4047,7 @@ mod tests {
         };
         let farm_tag_event = farm_event(
             814,
-            &"d".repeat(64),
+            &test_public_key_hex(0xd),
             94,
             farm_d_tag,
             "farm-tag",
@@ -4041,7 +4063,7 @@ mod tests {
         };
         let farm_gcs_event = farm_event(
             815,
-            &"0".repeat(64),
+            &test_public_key_hex(0x0),
             95,
             farm_d_tag,
             "farm-gcs",
@@ -4066,7 +4088,7 @@ mod tests {
         };
         let farm_rel_event = farm_event(
             816,
-            &"b".repeat(64),
+            &test_public_key_hex(0xb),
             96,
             farm_d_tag,
             "farm-rel",
@@ -4091,7 +4113,7 @@ mod tests {
         };
         let farm_state_event = farm_event(
             817,
-            &"0".repeat(64),
+            &test_public_key_hex(0x0),
             97,
             farm_d_tag,
             "farm-state",
@@ -4102,7 +4124,7 @@ mod tests {
 
         let farm_public_location = farm_event(
             818,
-            &"1".repeat(64),
+            &test_public_key_hex(0x1),
             98,
             farm_d_tag,
             "farm-public-location",
@@ -4123,7 +4145,7 @@ mod tests {
 
         let farm_public_locality = farm_event(
             819,
-            &"2".repeat(64),
+            &test_public_key_hex(0x2),
             99,
             farm_d_tag,
             "farm-public-locality",
@@ -4336,8 +4358,9 @@ mod tests {
         );
         assert!(ingest_list_set_event(&exec, &list_decode_fail).is_err());
 
-        let members_list = farm_list_sets::farm_members_list_set(farm_d_tag, vec!["6".repeat(64)])
-            .expect("members list");
+        let members_list =
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec![test_public_key_hex(0x6)])
+                .expect("members list");
         let member_event =
             list_set_event(831, &farm_pubkey, 109, KIND_LIST_SET_GENERIC, &members_list);
         let list_decision_fail = QueryFailExecutor {
@@ -4349,8 +4372,13 @@ mod tests {
 
         let member_of =
             farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member-of");
-        let member_of_event =
-            list_set_event(832, &"6".repeat(64), 110, KIND_LIST_SET_GENERIC, &member_of);
+        let member_of_event = list_set_event(
+            832,
+            &test_public_key_hex(0x6),
+            110,
+            KIND_LIST_SET_GENERIC,
+            &member_of,
+        );
         let claims_fail = QueryFailExecutor {
             inner: &exec,
             needle: "farm_member_claim",
@@ -4381,10 +4409,11 @@ mod tests {
         assert!(ingest_list_set_event(&plots_state_fail, &plots_event).is_err());
 
         let missing_farm_members =
-            farm_list_sets::farm_members_list_set(farm_d_tag, vec!["7".repeat(64)]).expect("list");
+            farm_list_sets::farm_members_list_set(farm_d_tag, vec![test_public_key_hex(0x7)])
+                .expect("list");
         let missing_farm_event = list_set_event(
             834,
-            &"3".repeat(64),
+            &test_public_key_hex(0x3),
             112,
             KIND_LIST_SET_GENERIC,
             &missing_farm_members,
@@ -4423,7 +4452,7 @@ mod tests {
         };
         let profile_update = profile_event(
             808,
-            &"9".repeat(64),
+            &test_public_key_hex(0x9),
             101,
             Some(RadrootsProfileType::Individual),
             "profile-update-error",
@@ -4438,7 +4467,7 @@ mod tests {
 
         let profile = profile_event(
             900,
-            &"e".repeat(64),
+            &test_public_key_hex(0xe),
             120,
             Some(RadrootsProfileType::Individual),
             "profile-state-insert",
@@ -4452,7 +4481,7 @@ mod tests {
 
         let farm_state = farm_event(
             901,
-            &"a".repeat(64),
+            &test_public_key_hex(0xa),
             121,
             "AAAAAAAAAAAAAAAAAAAAAQ",
             "farm-state-insert",
@@ -4476,8 +4505,9 @@ mod tests {
         );
         assert!(ingest_plot_event(&state_insert_fail, &plot_state, &FixedFactory).is_err());
 
-        let members_set = farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["7".repeat(64)])
-            .expect("members");
+        let members_set =
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec![test_public_key_hex(0x7)])
+                .expect("members");
         let members_event =
             list_set_event(903, &farm_pubkey, 123, KIND_LIST_SET_GENERIC, &members_set);
         assert!(ingest_list_set_event(&state_insert_fail, &members_event).is_err());
@@ -4495,7 +4525,7 @@ mod tests {
             farm_list_sets::member_of_farms_list_set(vec![farm_pubkey.clone()]).expect("member_of");
         let member_of_event = list_set_event(
             905,
-            &"7".repeat(64),
+            &test_public_key_hex(0x7),
             125,
             KIND_LIST_SET_GENERIC,
             &member_of_set,
@@ -4608,7 +4638,12 @@ mod tests {
             err: SqlError::Internal,
         };
         assert!(
-            upsert_member_claims(&claims_insert_fail, &"7".repeat(64), &member_of_set).is_err()
+            upsert_member_claims(
+                &claims_insert_fail,
+                &test_public_key_hex(0x7),
+                &member_of_set
+            )
+            .is_err()
         );
 
         super::failpoints::set_gcs_point_serialize_error();
@@ -4625,7 +4660,7 @@ mod tests {
         let exec = SqlxSqliteExecutor::open_memory().expect("db");
         let (farm_id, farm_pubkey, _, _) = seed_rows(&exec);
 
-        let member_pubkey = "6".repeat(64);
+        let member_pubkey = test_public_key_hex(0x6);
         let member_list_set = RadrootsListSet {
             d_tag: "farm:AAAAAAAAAAAAAAAAAAAAAQ:members".to_string(),
             content: String::new(),
@@ -4670,7 +4705,7 @@ mod tests {
         upsert_farm_members(&exec, &farm_id, ListSetRole::Plots, &member_list_set)
             .expect("plots is no-op");
 
-        let claimant_pubkey = "7".repeat(64);
+        let claimant_pubkey = test_public_key_hex(0x7);
         let claims_list_set = RadrootsListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
@@ -4722,7 +4757,7 @@ mod tests {
             220,
             &plot_d_tag,
             RadrootsFarmRef {
-                pubkey: "1".repeat(64),
+                pubkey: test_public_key_hex(0x1),
                 d_tag: farm_d_tag.clone(),
             },
             "plot-missing-farm",
@@ -4736,7 +4771,7 @@ mod tests {
         bad_member_of.entries[0].tag = "x".to_string();
         let bad_member_of_event = list_set_event(
             951,
-            &"7".repeat(64),
+            &test_public_key_hex(0x7),
             221,
             KIND_LIST_SET_GENERIC,
             &bad_member_of,
@@ -4755,7 +4790,7 @@ mod tests {
         assert!(ingest_list_set_event(&exec, &bad_plots_event).is_err());
 
         let mut bad_members =
-            farm_list_sets::farm_members_list_set(&farm_d_tag, vec!["6".repeat(64)])
+            farm_list_sets::farm_members_list_set(&farm_d_tag, vec![test_public_key_hex(0x6)])
                 .expect("members");
         bad_members.entries[0].tag = "a".to_string();
         let bad_members_event =

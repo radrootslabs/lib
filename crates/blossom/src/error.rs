@@ -2,7 +2,7 @@ use core::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum RadrootsBlossomError {
+pub enum Error {
     InvalidSha256,
     InvalidFileExtension,
     InvalidHashPath,
@@ -86,7 +86,7 @@ pub enum RadrootsBlossomError {
     PublicationReadinessEvidenceSerialization,
 }
 
-impl RadrootsBlossomError {
+impl Error {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidSha256 => "invalid_sha256",
@@ -214,7 +214,7 @@ impl RadrootsBlossomError {
     }
 }
 
-impl fmt::Display for RadrootsBlossomError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidSha256 => {
@@ -466,137 +466,221 @@ impl fmt::Display for RadrootsBlossomError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsBlossomError {}
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {
-    use super::RadrootsBlossomError;
+    use super::Error;
     use alloc::format;
 
     #[test]
     fn error_codes_and_messages_are_stable() {
         let errors = [
-            RadrootsBlossomError::InvalidSha256,
-            RadrootsBlossomError::InvalidFileExtension,
-            RadrootsBlossomError::InvalidHashPath,
-            RadrootsBlossomError::InvalidBlobUrl,
-            RadrootsBlossomError::UnsupportedBlobUrlScheme,
-            RadrootsBlossomError::BlobUrlCredentialsForbidden,
-            RadrootsBlossomError::BlobUrlQueryForbidden,
-            RadrootsBlossomError::BlobUrlFragmentForbidden,
-            RadrootsBlossomError::InsecureBlobUrl,
-            RadrootsBlossomError::DescriptorExtensionRequired,
-            RadrootsBlossomError::DescriptorHashMismatch,
-            RadrootsBlossomError::InvalidMediaType,
-            RadrootsBlossomError::BlobHashMismatch,
-            RadrootsBlossomError::BlobSizeMismatch {
+            Error::InvalidSha256,
+            Error::InvalidFileExtension,
+            Error::InvalidHashPath,
+            Error::InvalidBlobUrl,
+            Error::UnsupportedBlobUrlScheme,
+            Error::BlobUrlCredentialsForbidden,
+            Error::BlobUrlQueryForbidden,
+            Error::BlobUrlFragmentForbidden,
+            Error::InsecureBlobUrl,
+            Error::DescriptorExtensionRequired,
+            Error::DescriptorHashMismatch,
+            Error::InvalidMediaType,
+            Error::BlobHashMismatch,
+            Error::BlobSizeMismatch {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::BlobMediaTypeMismatch,
-            RadrootsBlossomError::InvalidBud02UploadStatus { actual: 202 },
-            RadrootsBlossomError::InvalidBud01HeadStatus { actual: 204 },
-            RadrootsBlossomError::InvalidBud01GetStatus { actual: 206 },
-            RadrootsBlossomError::PublicationReadinessUrlTooLarge { max: 1, actual: 2 },
-            RadrootsBlossomError::PublicationRasterEmpty,
-            RadrootsBlossomError::PublicationRasterByteLimitExceeded {
+            Error::BlobMediaTypeMismatch,
+            Error::InvalidBud02UploadStatus { actual: 202 },
+            Error::InvalidBud01HeadStatus { actual: 204 },
+            Error::InvalidBud01GetStatus { actual: 206 },
+            Error::PublicationReadinessUrlTooLarge { max: 1, actual: 2 },
+            Error::PublicationRasterEmpty,
+            Error::PublicationRasterByteLimitExceeded {
                 declared: 2,
                 maximum: 1,
             },
-            RadrootsBlossomError::PublicationGetBodyAllocationFailed,
-            RadrootsBlossomError::PublicationGetBodyLengthOverflow,
-            RadrootsBlossomError::PublicationGetBodyMissing,
-            RadrootsBlossomError::PublicationGetBodyShort {
+            Error::PublicationGetBodyAllocationFailed,
+            Error::PublicationGetBodyLengthOverflow,
+            Error::PublicationGetBodyMissing,
+            Error::PublicationGetBodyShort {
                 declared: 2,
                 actual: 1,
             },
-            RadrootsBlossomError::PublicationGetBodyTrailing {
+            Error::PublicationGetBodyTrailing {
                 declared: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationAuthoredBytesSizeMismatch {
+            Error::PublicationAuthoredBytesSizeMismatch {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationAuthoredBytesHashMismatch,
-            RadrootsBlossomError::PublicationUploadUrlMismatch,
-            RadrootsBlossomError::PublicationUploadHashMismatch,
-            RadrootsBlossomError::PublicationUploadSizeMismatch {
+            Error::PublicationAuthoredBytesHashMismatch,
+            Error::PublicationUploadUrlMismatch,
+            Error::PublicationUploadHashMismatch,
+            Error::PublicationUploadSizeMismatch {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationUploadMediaTypeMismatch,
-            RadrootsBlossomError::PublicationHeadUrlMismatch,
-            RadrootsBlossomError::PublicationHeadSizeMismatch {
+            Error::PublicationUploadMediaTypeMismatch,
+            Error::PublicationHeadUrlMismatch,
+            Error::PublicationHeadSizeMismatch {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationHeadMediaTypeMismatch,
-            RadrootsBlossomError::PublicationGetUrlMismatch,
-            RadrootsBlossomError::PublicationGetDeclaredSizeMismatch {
+            Error::PublicationHeadMediaTypeMismatch,
+            Error::PublicationGetUrlMismatch,
+            Error::PublicationGetDeclaredSizeMismatch {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationRetrievedBytesHashMismatch,
-            RadrootsBlossomError::PublicationRetrievedBytesMismatch,
-            RadrootsBlossomError::UnsupportedPublicationRasterMediaType,
-            RadrootsBlossomError::InvalidPublicationRaster,
-            RadrootsBlossomError::PublicationJpegProcessForbidden,
-            RadrootsBlossomError::PublicationRasterProcessForbidden,
-            RadrootsBlossomError::PublicationRasterAnimationForbidden,
-            RadrootsBlossomError::PublicationRasterDimensionsOutOfRange {
+            Error::PublicationRetrievedBytesHashMismatch,
+            Error::PublicationRetrievedBytesMismatch,
+            Error::UnsupportedPublicationRasterMediaType,
+            Error::InvalidPublicationRaster,
+            Error::PublicationJpegProcessForbidden,
+            Error::PublicationRasterProcessForbidden,
+            Error::PublicationRasterAnimationForbidden,
+            Error::PublicationRasterDimensionsOutOfRange {
                 width: 0,
                 height: 1,
             },
-            RadrootsBlossomError::PublicationRasterPixelLimitExceeded { pixels: 20_000_001 },
-            RadrootsBlossomError::PublicationRasterDecodedByteLimitExceeded {
+            Error::PublicationRasterPixelLimitExceeded { pixels: 20_000_001 },
+            Error::PublicationRasterDecodedByteLimitExceeded {
                 decoded: 2,
                 maximum: 1,
             },
-            RadrootsBlossomError::PublicationRasterDecodeAllocationFailed,
-            RadrootsBlossomError::PublicationRasterDecodeFailed,
-            RadrootsBlossomError::PublicationRasterContainerDimensionMismatch,
-            RadrootsBlossomError::PublicationAuthoredRasterDimensionMismatch,
-            RadrootsBlossomError::PublicationReadinessEvidenceTooLarge { max: 1, actual: 2 },
-            RadrootsBlossomError::PublicationReadinessEvidenceInvalidJson,
-            RadrootsBlossomError::PublicationReadinessEvidenceUnsupportedSchemaVersion {
+            Error::PublicationRasterDecodeAllocationFailed,
+            Error::PublicationRasterDecodeFailed,
+            Error::PublicationRasterContainerDimensionMismatch,
+            Error::PublicationAuthoredRasterDimensionMismatch,
+            Error::PublicationReadinessEvidenceTooLarge { max: 1, actual: 2 },
+            Error::PublicationReadinessEvidenceInvalidJson,
+            Error::PublicationReadinessEvidenceUnsupportedSchemaVersion {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationReadinessEvidenceUnsupportedPolicyVersion {
+            Error::PublicationReadinessEvidenceUnsupportedPolicyVersion {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsBlossomError::PublicationReadinessEvidenceInvalidField { field: "url" },
-            RadrootsBlossomError::PublicationReadinessEvidenceDigestMismatch,
-            RadrootsBlossomError::PublicationReadinessEvidenceNonCanonicalJson,
-            RadrootsBlossomError::PublicationReadinessEvidenceSerialization,
-            RadrootsBlossomError::InvalidAuthorizationContent,
-            RadrootsBlossomError::InvalidAuthorizationAction,
-            RadrootsBlossomError::InvalidAuthorizationServerDomain,
-            RadrootsBlossomError::MissingAuthorizationActionTag,
-            RadrootsBlossomError::DuplicateAuthorizationActionTag,
-            RadrootsBlossomError::MalformedAuthorizationActionTag,
-            RadrootsBlossomError::MissingAuthorizationExpirationTag,
-            RadrootsBlossomError::DuplicateAuthorizationExpirationTag,
-            RadrootsBlossomError::MalformedAuthorizationExpirationTag,
-            RadrootsBlossomError::MalformedAuthorizationServerTag,
-            RadrootsBlossomError::MalformedAuthorizationHashTag,
-            RadrootsBlossomError::InvalidAuthorizationCreatedAge,
-            RadrootsBlossomError::InvalidAuthorizationLifetime,
-            RadrootsBlossomError::AuthorizationTimestampOverflow,
-            RadrootsBlossomError::AuthorizationCreatedInFuture,
-            RadrootsBlossomError::AuthorizationStale,
-            RadrootsBlossomError::AuthorizationExpired,
-            RadrootsBlossomError::AuthorizationActionMismatch,
-            RadrootsBlossomError::AuthorizationServerRequired,
-            RadrootsBlossomError::AuthorizationServerMismatch,
-            RadrootsBlossomError::AuthorizationHashRequired,
-            RadrootsBlossomError::AuthorizationHashMismatch,
+            Error::PublicationReadinessEvidenceInvalidField { field: "url" },
+            Error::PublicationReadinessEvidenceDigestMismatch,
+            Error::PublicationReadinessEvidenceNonCanonicalJson,
+            Error::PublicationReadinessEvidenceSerialization,
+            Error::InvalidAuthorizationContent,
+            Error::InvalidAuthorizationAction,
+            Error::InvalidAuthorizationServerDomain,
+            Error::MissingAuthorizationActionTag,
+            Error::DuplicateAuthorizationActionTag,
+            Error::MalformedAuthorizationActionTag,
+            Error::MissingAuthorizationExpirationTag,
+            Error::DuplicateAuthorizationExpirationTag,
+            Error::MalformedAuthorizationExpirationTag,
+            Error::MalformedAuthorizationServerTag,
+            Error::MalformedAuthorizationHashTag,
+            Error::InvalidAuthorizationCreatedAge,
+            Error::InvalidAuthorizationLifetime,
+            Error::AuthorizationTimestampOverflow,
+            Error::AuthorizationCreatedInFuture,
+            Error::AuthorizationStale,
+            Error::AuthorizationExpired,
+            Error::AuthorizationActionMismatch,
+            Error::AuthorizationServerRequired,
+            Error::AuthorizationServerMismatch,
+            Error::AuthorizationHashRequired,
+            Error::AuthorizationHashMismatch,
         ];
         for error in errors {
             assert!(!error.code().is_empty());
             assert!(!format!("{error}").is_empty());
+        }
+        let cases = [
+            (
+                Error::InvalidSha256,
+                "invalid_sha256",
+                "sha256 must be 64 lowercase hexadecimal characters",
+            ),
+            (
+                Error::InvalidFileExtension,
+                "invalid_file_extension",
+                "invalid Blossom file extension",
+            ),
+            (
+                Error::InvalidHashPath,
+                "invalid_hash_path",
+                "invalid Blossom root hash path",
+            ),
+            (
+                Error::InvalidBlobUrl,
+                "invalid_blob_url",
+                "invalid Blossom blob URL",
+            ),
+            (
+                Error::UnsupportedBlobUrlScheme,
+                "unsupported_blob_url_scheme",
+                "Blossom blob URL scheme must be http or https",
+            ),
+            (
+                Error::BlobUrlCredentialsForbidden,
+                "blob_url_credentials_forbidden",
+                "Blossom blob URL credentials are forbidden",
+            ),
+            (
+                Error::BlobUrlQueryForbidden,
+                "blob_url_query_forbidden",
+                "Blossom blob URL query is forbidden",
+            ),
+            (
+                Error::BlobUrlFragmentForbidden,
+                "blob_url_fragment_forbidden",
+                "Blossom blob URL fragment is forbidden",
+            ),
+            (
+                Error::InsecureBlobUrl,
+                "insecure_blob_url",
+                "Radroots blob references require HTTPS or loopback HTTP",
+            ),
+            (
+                Error::DescriptorExtensionRequired,
+                "descriptor_extension_required",
+                "BUD-02 descriptor URL requires a file extension",
+            ),
+            (
+                Error::DescriptorHashMismatch,
+                "descriptor_hash_mismatch",
+                "descriptor URL hash does not match descriptor sha256",
+            ),
+            (
+                Error::InvalidMediaType,
+                "invalid_media_type",
+                "invalid media type",
+            ),
+            (
+                Error::BlobHashMismatch,
+                "blob_hash_mismatch",
+                "blob bytes do not match descriptor sha256",
+            ),
+            (
+                Error::BlobSizeMismatch {
+                    expected: 1,
+                    actual: 2,
+                },
+                "blob_size_mismatch",
+                "blob size mismatch: expected 1, got 2",
+            ),
+            (
+                Error::BlobMediaTypeMismatch,
+                "blob_media_type_mismatch",
+                "descriptor media type does not match the approved media type",
+            ),
+        ];
+        for (error, code, message) in cases {
+            assert_eq!(error.code(), code);
+            assert_eq!(format!("{error}"), message);
         }
     }
 
@@ -604,112 +688,112 @@ mod tests {
     fn authorization_error_codes_and_messages_are_stable() {
         let cases = [
             (
-                RadrootsBlossomError::InvalidAuthorizationContent,
+                Error::InvalidAuthorizationContent,
                 "invalid_authorization_content",
                 "Blossom authorization content must be bounded human-readable text",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationAction,
+                Error::InvalidAuthorizationAction,
                 "invalid_authorization_action",
                 "invalid Blossom authorization action",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationServerDomain,
+                Error::InvalidAuthorizationServerDomain,
                 "invalid_authorization_server_domain",
                 "invalid Blossom authorization server domain",
             ),
             (
-                RadrootsBlossomError::MissingAuthorizationActionTag,
+                Error::MissingAuthorizationActionTag,
                 "missing_authorization_action_tag",
                 "Blossom authorization is missing a t action tag",
             ),
             (
-                RadrootsBlossomError::DuplicateAuthorizationActionTag,
+                Error::DuplicateAuthorizationActionTag,
                 "duplicate_authorization_action_tag",
                 "Blossom authorization has more than one t action tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationActionTag,
+                Error::MalformedAuthorizationActionTag,
                 "malformed_authorization_action_tag",
                 "malformed Blossom authorization t action tag",
             ),
             (
-                RadrootsBlossomError::MissingAuthorizationExpirationTag,
+                Error::MissingAuthorizationExpirationTag,
                 "missing_authorization_expiration_tag",
                 "Blossom authorization is missing an expiration tag",
             ),
             (
-                RadrootsBlossomError::DuplicateAuthorizationExpirationTag,
+                Error::DuplicateAuthorizationExpirationTag,
                 "duplicate_authorization_expiration_tag",
                 "Blossom authorization has more than one expiration tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationExpirationTag,
+                Error::MalformedAuthorizationExpirationTag,
                 "malformed_authorization_expiration_tag",
                 "malformed Blossom authorization expiration tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationServerTag,
+                Error::MalformedAuthorizationServerTag,
                 "malformed_authorization_server_tag",
                 "malformed Blossom authorization server tag",
             ),
             (
-                RadrootsBlossomError::MalformedAuthorizationHashTag,
+                Error::MalformedAuthorizationHashTag,
                 "malformed_authorization_hash_tag",
                 "malformed Blossom authorization x hash tag",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationCreatedAge,
+                Error::InvalidAuthorizationCreatedAge,
                 "invalid_authorization_created_age",
                 "Blossom authorization maximum created age must not exceed 300 seconds",
             ),
             (
-                RadrootsBlossomError::InvalidAuthorizationLifetime,
+                Error::InvalidAuthorizationLifetime,
                 "invalid_authorization_lifetime",
                 "Blossom authorization lifetime must be between 1 and 300 seconds",
             ),
             (
-                RadrootsBlossomError::AuthorizationTimestampOverflow,
+                Error::AuthorizationTimestampOverflow,
                 "authorization_timestamp_overflow",
                 "Blossom authorization expiration timestamp overflows u64",
             ),
             (
-                RadrootsBlossomError::AuthorizationCreatedInFuture,
+                Error::AuthorizationCreatedInFuture,
                 "authorization_created_in_future",
                 "Blossom authorization must be created in the past",
             ),
             (
-                RadrootsBlossomError::AuthorizationStale,
+                Error::AuthorizationStale,
                 "authorization_stale",
                 "Blossom authorization is outside the accepted creation-age window",
             ),
             (
-                RadrootsBlossomError::AuthorizationExpired,
+                Error::AuthorizationExpired,
                 "authorization_expired",
                 "Blossom authorization is expired",
             ),
             (
-                RadrootsBlossomError::AuthorizationActionMismatch,
+                Error::AuthorizationActionMismatch,
                 "authorization_action_mismatch",
                 "Blossom authorization action does not match the target endpoint",
             ),
             (
-                RadrootsBlossomError::AuthorizationServerRequired,
+                Error::AuthorizationServerRequired,
                 "authorization_server_required",
                 "Blossom authorization requires a server scope",
             ),
             (
-                RadrootsBlossomError::AuthorizationServerMismatch,
+                Error::AuthorizationServerMismatch,
                 "authorization_server_mismatch",
                 "Blossom authorization does not include the target server",
             ),
             (
-                RadrootsBlossomError::AuthorizationHashRequired,
+                Error::AuthorizationHashRequired,
                 "authorization_hash_required",
                 "Blossom authorization requires an x hash scope",
             ),
             (
-                RadrootsBlossomError::AuthorizationHashMismatch,
+                Error::AuthorizationHashMismatch,
                 "authorization_hash_mismatch",
                 "Blossom authorization does not include the target blob hash",
             ),

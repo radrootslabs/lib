@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use super::{
-    JpegContainerInspection, PUBLICATION_RASTER_MAX_CONTAINER_RECORDS, RadrootsBlossomError,
-    RadrootsBlossomRasterDimensions, is_jpeg_start_of_frame,
+    Error, JpegContainerInspection, PUBLICATION_RASTER_MAX_CONTAINER_RECORDS, RasterDimensions,
+    is_jpeg_start_of_frame,
 };
 
 const MAX_SEQUENTIAL_JPEG_SCANS: u8 = 4;
@@ -17,7 +17,7 @@ struct SequentialJpegComponent {
 }
 
 struct SequentialJpegFrame {
-    dimensions: RadrootsBlossomRasterDimensions,
+    dimensions: RasterDimensions,
     components: Vec<SequentialJpegComponent>,
     maximum_horizontal_sampling: u8,
     maximum_vertical_sampling: u8,
@@ -41,7 +41,7 @@ struct SequentialJpegHuffmanTable {
 }
 
 impl SequentialJpegHuffmanTable {
-    fn new(class: u8, code_counts: [u8; 16], values: &[u8]) -> Result<Self, RadrootsBlossomError> {
+    fn new(class: u8, code_counts: [u8; 16], values: &[u8]) -> Result<Self, Error> {
         if class > 1 {
             return invalid_entropy();
         }
@@ -93,7 +93,7 @@ impl SequentialJpegHuffmanTable {
         let mut owned_values = Vec::new();
         owned_values
             .try_reserve_exact(values.len())
-            .map_err(|_| RadrootsBlossomError::PublicationRasterDecodeAllocationFailed)?;
+            .map_err(|_| Error::PublicationRasterDecodeAllocationFailed)?;
         owned_values.extend_from_slice(values);
         Ok(Self {
             first_codes,
@@ -103,10 +103,7 @@ impl SequentialJpegHuffmanTable {
         })
     }
 
-    fn decode_symbol(
-        &self,
-        reader: &mut SequentialJpegEntropyReader<'_>,
-    ) -> Result<u8, RadrootsBlossomError> {
+    fn decode_symbol(&self, reader: &mut SequentialJpegEntropyReader<'_>) -> Result<u8, Error> {
         let mut code = 0_u32;
         for index in 0..16 {
             code = (code << 1) | u32::from(reader.read_bit()?);
@@ -118,7 +115,7 @@ impl SequentialJpegHuffmanTable {
                     .values
                     .get(offset)
                     .copied()
-                    .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed);
+                    .ok_or(Error::PublicationRasterDecodeFailed);
             }
         }
         invalid_entropy()
@@ -147,11 +144,11 @@ impl<'a> SequentialJpegEntropyReader<'a> {
         }
     }
 
-    fn read_bit(&mut self) -> Result<u8, RadrootsBlossomError> {
+    fn read_bit(&mut self) -> Result<u8, Error> {
         self.bit_reads_remaining = self
             .bit_reads_remaining
             .checked_sub(1)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         if self.bits_remaining == 0 {
             self.current_byte = self.read_entropy_byte()?;
             self.bits_remaining = 8;
@@ -160,18 +157,18 @@ impl<'a> SequentialJpegEntropyReader<'a> {
         Ok((self.current_byte >> self.bits_remaining) & 1)
     }
 
-    fn discard_bits(&mut self, count: u8) -> Result<(), RadrootsBlossomError> {
+    fn discard_bits(&mut self, count: u8) -> Result<(), Error> {
         for _ in 0..count {
             self.read_bit()?;
         }
         Ok(())
     }
 
-    fn read_entropy_byte(&mut self) -> Result<u8, RadrootsBlossomError> {
+    fn read_entropy_byte(&mut self) -> Result<u8, Error> {
         let byte = *self
             .bytes
             .get(self.position)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         self.position += 1;
         if byte != 0xff {
             return Ok(byte);
@@ -183,7 +180,7 @@ impl<'a> SequentialJpegEntropyReader<'a> {
         invalid_entropy()
     }
 
-    fn finish_restart(&mut self, expected: u8) -> Result<(), RadrootsBlossomError> {
+    fn finish_restart(&mut self, expected: u8) -> Result<(), Error> {
         if expected > 7 {
             return invalid_entropy();
         }
@@ -196,7 +193,7 @@ impl<'a> SequentialJpegEntropyReader<'a> {
         Ok(())
     }
 
-    fn finish_scan(mut self) -> Result<usize, RadrootsBlossomError> {
+    fn finish_scan(mut self) -> Result<usize, Error> {
         self.finish_padding()?;
         let (marker, _) = strict_marker(self.bytes, self.position)?;
         if matches!(marker, 0xd0..=0xd7) {
@@ -205,7 +202,7 @@ impl<'a> SequentialJpegEntropyReader<'a> {
         Ok(self.position)
     }
 
-    fn finish_padding(&mut self) -> Result<(), RadrootsBlossomError> {
+    fn finish_padding(&mut self) -> Result<(), Error> {
         if self.bits_remaining != 0 {
             let mask = (1_u16 << self.bits_remaining) - 1;
             if u16::from(self.current_byte) & mask != mask {
@@ -232,35 +229,32 @@ impl SequentialJpegWorkBudget {
         }
     }
 
-    fn charge_scan(&mut self) -> Result<(), RadrootsBlossomError> {
+    fn charge_scan(&mut self) -> Result<(), Error> {
         self.scans_remaining = self
             .scans_remaining
             .checked_sub(1)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         Ok(())
     }
 
-    fn charge_block(&mut self) -> Result<(), RadrootsBlossomError> {
+    fn charge_block(&mut self) -> Result<(), Error> {
         self.blocks_remaining = self
             .blocks_remaining
             .checked_sub(1)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         Ok(())
     }
 
-    fn charge_coefficient_step(&mut self) -> Result<(), RadrootsBlossomError> {
+    fn charge_coefficient_step(&mut self) -> Result<(), Error> {
         self.coefficient_steps_remaining = self
             .coefficient_steps_remaining
             .checked_sub(1)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         Ok(())
     }
 }
 
-pub(super) fn validate(
-    bytes: &[u8],
-    container: JpegContainerInspection,
-) -> Result<(), RadrootsBlossomError> {
+pub(super) fn validate(bytes: &[u8], container: JpegContainerInspection) -> Result<(), Error> {
     if !bytes.starts_with(b"\xff\xd8") {
         return invalid_entropy();
     }
@@ -276,16 +270,14 @@ pub(super) fn validate(
     loop {
         records = records
             .checked_add(1)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         if records > PUBLICATION_RASTER_MAX_CONTAINER_RECORDS {
             return invalid_entropy();
         }
         let (marker, after_marker) = strict_marker(bytes, position)?;
         match marker {
             0xd9 => {
-                let current_frame = frame
-                    .as_ref()
-                    .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+                let current_frame = frame.as_ref().ok_or(Error::PublicationRasterDecodeFailed)?;
                 if after_marker != bytes.len() {
                     return invalid_entropy();
                 }
@@ -310,13 +302,13 @@ pub(super) fn validate(
                 if parsed.dimensions != container.dimensions
                     || parsed.components.len() != usize::from(container.components)
                 {
-                    return Err(RadrootsBlossomError::PublicationRasterContainerDimensionMismatch);
+                    return Err(Error::PublicationRasterContainerDimensionMismatch);
                 }
                 frame = Some(parsed);
                 position = next;
             }
             marker if is_jpeg_start_of_frame(marker) || marker == 0xcc => {
-                return Err(RadrootsBlossomError::PublicationJpegProcessForbidden);
+                return Err(Error::PublicationJpegProcessForbidden);
             }
             0xc4 => {
                 let (payload, next) = strict_segment(bytes, after_marker)?;
@@ -333,9 +325,7 @@ pub(super) fn validate(
             }
             0xda => {
                 work_budget.charge_scan()?;
-                let current_frame = frame
-                    .as_ref()
-                    .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+                let current_frame = frame.as_ref().ok_or(Error::PublicationRasterDecodeFailed)?;
                 let (payload, entropy_start) = strict_segment(bytes, after_marker)?;
                 let scan_result = parse_scan(
                     payload,
@@ -370,7 +360,7 @@ pub(super) fn validate(
     }
 }
 
-fn strict_marker(bytes: &[u8], position: usize) -> Result<(u8, usize), RadrootsBlossomError> {
+fn strict_marker(bytes: &[u8], position: usize) -> Result<(u8, usize), Error> {
     if bytes.get(position) != Some(&0xff) {
         return invalid_entropy();
     }
@@ -380,7 +370,7 @@ fn strict_marker(bytes: &[u8], position: usize) -> Result<(u8, usize), RadrootsB
     }
     let marker = *bytes
         .get(code_position)
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     if marker == 0x00 {
         return invalid_entropy();
     }
@@ -388,30 +378,27 @@ fn strict_marker(bytes: &[u8], position: usize) -> Result<(u8, usize), RadrootsB
     Ok((marker, after_marker))
 }
 
-fn strict_segment(
-    bytes: &[u8],
-    after_marker: usize,
-) -> Result<(&[u8], usize), RadrootsBlossomError> {
+fn strict_segment(bytes: &[u8], after_marker: usize) -> Result<(&[u8], usize), Error> {
     let payload_start = after_marker
         .checked_add(2)
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     let length_bytes = bytes
         .get(after_marker..payload_start)
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     let length = usize::from(u16::from_be_bytes([length_bytes[0], length_bytes[1]]));
     if length < 2 {
         return invalid_entropy();
     }
     let end = after_marker
         .checked_add(length)
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     let payload = bytes
         .get(payload_start..end)
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     Ok((payload, end))
 }
 
-fn parse_frame(payload: &[u8]) -> Result<SequentialJpegFrame, RadrootsBlossomError> {
+fn parse_frame(payload: &[u8]) -> Result<SequentialJpegFrame, Error> {
     if payload.len() < 6 || payload[0] != 8 {
         return invalid_entropy();
     }
@@ -420,14 +407,14 @@ fn parse_frame(payload: &[u8]) -> Result<SequentialJpegFrame, RadrootsBlossomErr
     if !matches!(component_count, 1 | 3 | 4) || payload.len() != expected_length {
         return invalid_entropy();
     }
-    let dimensions = RadrootsBlossomRasterDimensions::new(
+    let dimensions = RasterDimensions::new(
         u32::from(u16::from_be_bytes([payload[3], payload[4]])),
         u32::from(u16::from_be_bytes([payload[1], payload[2]])),
     )?;
     let mut components = Vec::new();
     components
         .try_reserve_exact(component_count)
-        .map_err(|_| RadrootsBlossomError::PublicationRasterDecodeAllocationFailed)?;
+        .map_err(|_| Error::PublicationRasterDecodeAllocationFailed)?;
     let mut maximum_horizontal_sampling = 0_u8;
     let mut maximum_vertical_sampling = 0_u8;
     let mut sampling_product_sum = 0_u8;
@@ -467,12 +454,12 @@ fn parse_huffman_tables(
     payload: &[u8],
     dc_tables: &mut [Option<SequentialJpegHuffmanTable>; 4],
     ac_tables: &mut [Option<SequentialJpegHuffmanTable>; 4],
-) -> Result<(), RadrootsBlossomError> {
+) -> Result<(), Error> {
     let mut position = 0_usize;
     while position < payload.len() {
         let selector = *payload
             .get(position)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         position += 1;
         let class = selector >> 4;
         let destination = usize::from(selector & 0x0f);
@@ -482,10 +469,10 @@ fn parse_huffman_tables(
         let counts_end = position + 16;
         let counts_slice = payload
             .get(position..counts_end)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         let code_counts: [u8; 16] = counts_slice
             .try_into()
-            .map_err(|_| RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .map_err(|_| Error::PublicationRasterDecodeFailed)?;
         position = counts_end;
         let value_count: usize = code_counts.iter().map(|count| usize::from(*count)).sum();
         if value_count > 256 {
@@ -494,7 +481,7 @@ fn parse_huffman_tables(
         let values_end = position + value_count;
         let values = payload
             .get(position..values_end)
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         position = values_end;
         let table = SequentialJpegHuffmanTable::new(class, code_counts, values)?;
         if class == 0 {
@@ -512,7 +499,7 @@ fn parse_scan(
     seen_components: &[bool; 4],
     dc_tables: &[Option<SequentialJpegHuffmanTable>; 4],
     ac_tables: &[Option<SequentialJpegHuffmanTable>; 4],
-) -> Result<SequentialJpegScan, RadrootsBlossomError> {
+) -> Result<SequentialJpegScan, Error> {
     let component_count = payload.first().copied().map_or(0, usize::from);
     let expected_length = component_count * 2 + 4;
     if component_count == 0
@@ -526,13 +513,13 @@ fn parse_scan(
     let mut components = Vec::new();
     components
         .try_reserve_exact(component_count)
-        .map_err(|_| RadrootsBlossomError::PublicationRasterDecodeAllocationFailed)?;
+        .map_err(|_| Error::PublicationRasterDecodeAllocationFailed)?;
     for data in payload[1..selectors_end].chunks_exact(2) {
         let frame_index = frame
             .components
             .iter()
             .position(|component| component.id == data[0])
-            .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+            .ok_or(Error::PublicationRasterDecodeFailed)?;
         let dc_table = usize::from(data[1] >> 4);
         let ac_table = usize::from(data[1] & 0x0f);
         if components
@@ -565,7 +552,7 @@ fn validate_scan_entropy(
     ac_tables: &[Option<SequentialJpegHuffmanTable>; 4],
     restart_interval: usize,
     work_budget: &mut SequentialJpegWorkBudget,
-) -> Result<usize, RadrootsBlossomError> {
+) -> Result<usize, Error> {
     let interleaved = scan.components.len() > 1;
     let mcu_count = scan_mcu_count(frame, scan, interleaved)?;
     let mut reader = SequentialJpegEntropyReader::new(bytes, entropy_start);
@@ -580,7 +567,7 @@ fn validate_scan_entropy(
                 .components
                 .get(scan_component.frame_index)
                 .copied()
-                .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+                .ok_or(Error::PublicationRasterDecodeFailed)?;
             let blocks = if interleaved {
                 usize::from(frame_component.horizontal_sampling)
                     * usize::from(frame_component.vertical_sampling)
@@ -590,11 +577,11 @@ fn validate_scan_entropy(
             let dc_table = dc_tables
                 .get(scan_component.dc_table)
                 .and_then(Option::as_ref)
-                .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+                .ok_or(Error::PublicationRasterDecodeFailed)?;
             let ac_table = ac_tables
                 .get(scan_component.ac_table)
                 .and_then(Option::as_ref)
-                .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+                .ok_or(Error::PublicationRasterDecodeFailed)?;
             for _ in 0..blocks {
                 work_budget.charge_block()?;
                 validate_block(&mut reader, dc_table, ac_table, work_budget)?;
@@ -608,7 +595,7 @@ fn scan_mcu_count(
     frame: &SequentialJpegFrame,
     scan: &SequentialJpegScan,
     interleaved: bool,
-) -> Result<usize, RadrootsBlossomError> {
+) -> Result<usize, Error> {
     let width = frame.dimensions.width() as usize;
     let height = frame.dimensions.height() as usize;
     if interleaved {
@@ -619,11 +606,11 @@ fn scan_mcu_count(
     let scan_component = scan
         .components
         .first()
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     let component = frame
         .components
         .get(scan_component.frame_index)
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)?;
+        .ok_or(Error::PublicationRasterDecodeFailed)?;
     if frame.maximum_horizontal_sampling == 0 || frame.maximum_vertical_sampling == 0 {
         return invalid_entropy();
     }
@@ -639,7 +626,7 @@ fn checked_mcu_grid_count(
     height: usize,
     mcu_width: usize,
     mcu_height: usize,
-) -> Result<usize, RadrootsBlossomError> {
+) -> Result<usize, Error> {
     if width == 0 {
         return invalid_entropy();
     }
@@ -655,7 +642,7 @@ fn checked_mcu_grid_count(
     width
         .div_ceil(mcu_width)
         .checked_mul(height.div_ceil(mcu_height))
-        .ok_or(RadrootsBlossomError::PublicationRasterDecodeFailed)
+        .ok_or(Error::PublicationRasterDecodeFailed)
 }
 
 fn validate_block(
@@ -663,7 +650,7 @@ fn validate_block(
     dc_table: &SequentialJpegHuffmanTable,
     ac_table: &SequentialJpegHuffmanTable,
     work_budget: &mut SequentialJpegWorkBudget,
-) -> Result<(), RadrootsBlossomError> {
+) -> Result<(), Error> {
     let dc_magnitude = dc_table.decode_symbol(reader)?;
     reader.discard_bits(dc_magnitude)?;
     let mut coefficient = 1_usize;
@@ -692,8 +679,8 @@ fn validate_block(
     Ok(())
 }
 
-fn invalid_entropy<T>() -> Result<T, RadrootsBlossomError> {
-    Err(RadrootsBlossomError::PublicationRasterDecodeFailed)
+fn invalid_entropy<T>() -> Result<T, Error> {
+    Err(Error::PublicationRasterDecodeFailed)
 }
 
 #[cfg(test)]
@@ -702,7 +689,7 @@ mod tests {
 
     use super::*;
 
-    fn assert_decode_failed<T>(result: Result<T, RadrootsBlossomError>) {
+    fn assert_decode_failed<T>(result: Result<T, Error>) {
         let error = result
             .err()
             .expect("expected publication raster decode failure");
@@ -762,7 +749,7 @@ mod tests {
 
     fn container(width: u32, components: u8) -> JpegContainerInspection {
         JpegContainerInspection {
-            dimensions: RadrootsBlossomRasterDimensions::new(width, 1).unwrap(),
+            dimensions: RasterDimensions::new(width, 1).unwrap(),
             components,
         }
     }
@@ -1217,7 +1204,7 @@ mod tests {
         assert_decode_failed(checked_mcu_grid_count(usize::MAX, usize::MAX, 1, 1));
 
         let frame = SequentialJpegFrame {
-            dimensions: RadrootsBlossomRasterDimensions::new(17, 17).unwrap(),
+            dimensions: RasterDimensions::new(17, 17).unwrap(),
             components: vec![SequentialJpegComponent {
                 id: 1,
                 horizontal_sampling: 1,
@@ -1253,7 +1240,7 @@ mod tests {
         assert_decode_failed(scan_mcu_count(&frame, &invalid_index, false));
 
         let zero_horizontal_maximum = SequentialJpegFrame {
-            dimensions: RadrootsBlossomRasterDimensions::new(1, 1).unwrap(),
+            dimensions: RasterDimensions::new(1, 1).unwrap(),
             components: vec![SequentialJpegComponent {
                 id: 1,
                 horizontal_sampling: 1,

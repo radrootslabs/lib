@@ -14,10 +14,7 @@ mod tests {
         farm_members_list_set, farm_operational_listings_list_set_from_listings,
         farm_plots_list_set_from_plots, member_of_farms_list_set,
     };
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
     use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
     #[cfg(feature = "serde_json")]
@@ -31,7 +28,7 @@ mod tests {
     #[cfg(feature = "serde_json")]
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     #[cfg(feature = "serde_json")]
-    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     #[cfg(feature = "serde_json")]
     const EVENT_SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -499,20 +496,12 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1u32),
-                    RadrootsCoreUnit::Each,
-                ),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
-                    RadrootsCoreMoney::new(
-                        RadrootsCoreDecimal::from(10u32),
-                        RadrootsCoreCurrency::USD,
-                    ),
-                    RadrootsCoreQuantity::new(
-                        RadrootsCoreDecimal::from(1u32),
-                        RadrootsCoreUnit::Each,
-                    ),
-                ),
+                quantity: Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,

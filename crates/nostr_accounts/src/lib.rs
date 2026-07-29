@@ -16,10 +16,7 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use crate::manager::RadrootsNostrAccountsManager;
     #[cfg(feature = "std")]
-    pub use crate::model::{
-        RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION, RadrootsNostrAccountRecord,
-        RadrootsNostrAccountStatus, RadrootsNostrAccountStoreState,
-    };
+    pub use crate::model::{RADROOTS_NOSTR_ACCOUNTS_STORE_VERSION, RadrootsNostrAccountStoreState};
     #[cfg(feature = "std")]
     pub use crate::store::{
         RadrootsNostrAccountStore, RadrootsNostrFileAccountStore, RadrootsNostrMemoryAccountStore,

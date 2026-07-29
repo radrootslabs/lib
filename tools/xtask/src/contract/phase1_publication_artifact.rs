@@ -85,7 +85,7 @@ const EXPLICIT_SOURCE_SPECS: &[(&str, &str)] = &[
         "event_codec_manifest_authority",
         "crates/event_codec/Cargo.toml",
     ),
-    ("event_codec_documentation", "crates/event_codec/README"),
+    ("event_codec_documentation", "crates/event_codec/README.md"),
     (
         "event_store_manifest_authority",
         "crates/event_store/Cargo.toml",
@@ -127,13 +127,26 @@ const BLOSSOM_READINESS_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "Cargo.lock",
     "Cargo.toml",
     "build/nix/common.nix",
+    "crates/event_store/src/generated/food_availability_projection_manifest.rs",
+    "crates/event_store/src/generated/source_maintenance_manifest.rs",
+    "crates/event_store/src/nip09/reconciliation_v1/result_vector_executor.rs",
     "tools/xtask/src/contract/food_availability_projection.rs",
     "tools/xtask/src/contract/source_maintenance.rs",
 ];
-const RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] =
-    &["build/nix/apps.nix", "build/nix/toolchains.nix"];
-const RUST_CRATE_VERSION_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] =
-    &["crates/event_store/Cargo.toml", "tools/xtask/Cargo.toml"];
+const RASTER_DECODER_SECURITY_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    "build/nix/apps.nix",
+    "build/nix/toolchains.nix",
+    "flake.lock",
+];
+const RUST_CRATE_VERSION_RAW_PREDECESSOR_SUPERSEDED_PATHS: &[&str] = &[
+    "crates/event_store/Cargo.toml",
+    "rust-toolchain.toml",
+    "tools/xtask/Cargo.toml",
+];
+const RAW_PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS: &[&str] = &[
+    "crates/event_store/contracts/source_maintenance_v1.manifest.json",
+    "crates/event_store/migrations/0004_source_maintenance.up.sql",
+];
 
 const PUBLIC_TYPES: &[&str] = &[
     "RadrootsPhase1PublicationEventVariant",
@@ -291,6 +304,7 @@ const PUBLICATION_IMMUTABLE_ARTIFACTS: &[ImmutableArtifactSpec] = &[
         "7a31169eac4217a38cb3ef25eb9213f2f89e11fb17e76ceaf7449b34225e98af",
     ),
 ];
+const PUBLICATION_SUCCESSOR_SUPERSEDED_ARTIFACT_PATHS: &[&str] = &[VECTOR_EXECUTOR_RELATIVE];
 
 pub(super) const PUBLICATION_SUCCESSOR_SUPERSEDED_PATHS: &[&str] = &[
     "Cargo.lock",
@@ -675,8 +689,29 @@ fn validate_manifest_under_lock(workspace_root: &Path) -> Result<(), String> {
 pub(super) fn validate_immutable_phase1_publication_artifact_predecessor_under_lock(
     workspace_root: &Path,
 ) -> Result<(), String> {
+    let superseded_artifacts = PUBLICATION_SUCCESSOR_SUPERSEDED_ARTIFACT_PATHS
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if superseded_artifacts.len() != PUBLICATION_SUCCESSOR_SUPERSEDED_ARTIFACT_PATHS.len() {
+        return Err(
+            "publication predecessor artifact supersession paths must be unique".to_owned(),
+        );
+    }
+    if let Some(path) = superseded_artifacts.iter().find(|path| {
+        !PUBLICATION_IMMUTABLE_ARTIFACTS
+            .iter()
+            .any(|artifact| artifact.relative == **path)
+    }) {
+        return Err(format!(
+            "publication predecessor artifact supersession path {path} is not predecessor-bound"
+        ));
+    }
     for spec in PUBLICATION_IMMUTABLE_ARTIFACTS {
         let bytes = read_regular_file(workspace_root, spec.relative)?;
+        if superseded_artifacts.contains(spec.relative) {
+            continue;
+        }
         if bytes.len() != spec.byte_length || sha256_hex(&bytes) != spec.sha256 {
             return Err(format!(
                 "immutable Phase 1 publication artifact predecessor {} drifted",
@@ -1462,7 +1497,10 @@ fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Resul
         .and_then(Value::as_array)
         .ok_or_else(|| format!("{RAW_MANIFEST_RELATIVE} has no migration inventory"))?
     {
-        validate_value_descriptor(workspace_root, descriptor, "raw migration")?;
+        let path = descriptor_path(descriptor, "raw migration")?;
+        if !RAW_PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS.contains(&path) {
+            validate_value_descriptor(workspace_root, descriptor, "raw migration")?;
+        }
     }
     validate_value_descriptor(
         workspace_root,
@@ -1471,13 +1509,17 @@ fn validate_immutable_raw_predecessor_under_lock(workspace_root: &Path) -> Resul
             .ok_or_else(|| format!("{RAW_MANIFEST_RELATIVE} has no manifest_schema"))?,
         "raw manifest schema",
     )?;
-    validate_value_descriptor(
-        workspace_root,
-        manifest
-            .pointer("/predecessor/manifest")
-            .ok_or_else(|| format!("{RAW_MANIFEST_RELATIVE} has no predecessor manifest"))?,
-        "raw predecessor manifest",
-    )?;
+    let predecessor_manifest = manifest
+        .pointer("/predecessor/manifest")
+        .ok_or_else(|| format!("{RAW_MANIFEST_RELATIVE} has no predecessor manifest"))?;
+    let predecessor_path = descriptor_path(predecessor_manifest, "raw predecessor manifest")?;
+    if !RAW_PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS.contains(&predecessor_path) {
+        validate_value_descriptor(
+            workspace_root,
+            predecessor_manifest,
+            "raw predecessor manifest",
+        )?;
+    }
     let executor = json!({
         "path": RAW_VECTOR_EXECUTOR_RELATIVE,
         "byte_length": manifest.pointer("/result_vector/executor_byte_length"),

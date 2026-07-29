@@ -4,10 +4,7 @@ use std::{borrow::Cow, collections::BTreeSet, fs, path::Path};
 
 use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-    RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::food_availability::{
     RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityDetailsParts,
     RadrootsFoodAvailabilityError, RadrootsFoodAvailabilityImage, RadrootsFoodAvailabilityStatus,
@@ -392,11 +389,11 @@ fn strict_details(
 
 fn strict_image(input: &ImageInput, vector_id: &str) -> RadrootsFoodAvailabilityImage {
     let bytes = input.bytes_utf8.as_bytes();
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse(&input.media_type)
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse(&input.media_type)
         .unwrap_or_else(|error| panic!("{vector_id} image media type failed: {error}"));
-    let verified = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&input.url)
+    let verified = BlobDescriptor::new(
+        BlobUrl::parse(&input.url)
             .unwrap_or_else(|error| panic!("{vector_id} image URL failed: {error}")),
         hash,
         bytes.len() as u64,

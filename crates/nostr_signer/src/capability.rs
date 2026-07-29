@@ -1,6 +1,6 @@
 use crate::model::{RadrootsNostrSignerConnectionId, RadrootsNostrSignerConnectionRecord};
 use nostr::RelayUrl;
-use radroots_identity::{RadrootsIdentityId, RadrootsIdentityPublic};
+use radroots_identity::{AccountId, PublicIdentity};
 use radroots_nostr_connect::prelude::RadrootsNostrConnectPermissions;
 use serde::{Deserialize, Serialize};
 
@@ -12,16 +12,16 @@ pub enum RadrootsNostrLocalSignerAvailability {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrLocalSignerCapability {
-    pub account_id: RadrootsIdentityId,
-    pub public_identity: RadrootsIdentityPublic,
+    pub account_id: AccountId,
+    pub public_identity: PublicIdentity,
     pub availability: RadrootsNostrLocalSignerAvailability,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RadrootsNostrRemoteSessionSignerCapability {
     pub connection_id: RadrootsNostrSignerConnectionId,
-    pub signer_identity: RadrootsIdentityPublic,
-    pub user_identity: RadrootsIdentityPublic,
+    pub signer_identity: PublicIdentity,
+    pub user_identity: PublicIdentity,
     pub relays: Vec<RelayUrl>,
     pub permissions: RadrootsNostrConnectPermissions,
 }
@@ -32,16 +32,14 @@ pub enum RadrootsNostrSignerCapability {
     RemoteSession(Box<RadrootsNostrRemoteSessionSignerCapability>),
 }
 
-fn public_identity_eq(left: &RadrootsIdentityPublic, right: &RadrootsIdentityPublic) -> bool {
-    left.id == right.id
-        && left.public_key_hex == right.public_key_hex
-        && left.public_key_npub == right.public_key_npub
+fn public_identity_eq(left: &PublicIdentity, right: &PublicIdentity) -> bool {
+    left == right
 }
 
 impl RadrootsNostrLocalSignerCapability {
     pub fn new(
-        account_id: RadrootsIdentityId,
-        public_identity: RadrootsIdentityPublic,
+        account_id: AccountId,
+        public_identity: PublicIdentity,
         availability: RadrootsNostrLocalSignerAvailability,
     ) -> Self {
         Self {
@@ -59,8 +57,8 @@ impl RadrootsNostrLocalSignerCapability {
 impl RadrootsNostrRemoteSessionSignerCapability {
     pub fn new(
         connection_id: RadrootsNostrSignerConnectionId,
-        signer_identity: RadrootsIdentityPublic,
-        user_identity: RadrootsIdentityPublic,
+        signer_identity: PublicIdentity,
+        user_identity: PublicIdentity,
     ) -> Self {
         Self {
             connection_id,
@@ -83,7 +81,7 @@ impl RadrootsNostrRemoteSessionSignerCapability {
 }
 
 impl RadrootsNostrSignerCapability {
-    pub fn public_identity(&self) -> &RadrootsIdentityPublic {
+    pub fn public_identity(&self) -> &PublicIdentity {
         match self {
             Self::LocalAccount(capability) => &capability.public_identity,
             Self::RemoteSession(capability) => &capability.user_identity,
@@ -171,18 +169,13 @@ mod tests {
         fixture_alice_identity, fixture_bob_identity, fixture_carol_identity,
         fixture_diego_public_key, primary_relay, secondary_relay,
     };
-    use radroots_identity::RadrootsIdentityPublic;
+    use radroots_identity::PublicIdentity;
     use radroots_nostr_connect::prelude::{
         RadrootsNostrConnectMethod, RadrootsNostrConnectPermission,
     };
 
-    fn assert_public_identity_matches(
-        actual: &RadrootsIdentityPublic,
-        expected: &RadrootsIdentityPublic,
-    ) {
-        assert_eq!(actual.id, expected.id);
-        assert_eq!(actual.public_key_hex, expected.public_key_hex);
-        assert_eq!(actual.public_key_npub, expected.public_key_npub);
+    fn assert_public_identity_matches(actual: &PublicIdentity, expected: &PublicIdentity) {
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -190,7 +183,7 @@ mod tests {
         let public_identity = fixture_alice_identity();
         let capability = RadrootsNostrSignerCapability::LocalAccount(Box::new(
             RadrootsNostrLocalSignerCapability::new(
-                public_identity.id.clone(),
+                AccountId::from_public_identity(&public_identity),
                 public_identity.clone(),
                 RadrootsNostrLocalSignerAvailability::SecretBacked,
             ),
@@ -260,46 +253,37 @@ mod tests {
     #[test]
     fn capability_equality_accounts_for_identity_fields_and_variant_kind() {
         let alice = fixture_alice_identity();
-        let mut alice_with_different_hex = alice.clone();
-        alice_with_different_hex.public_key_hex = fixture_bob_identity().public_key_hex;
-        let mut alice_with_different_npub = alice.clone();
-        alice_with_different_npub.public_key_npub = fixture_bob_identity().public_key_npub;
+        let bob = fixture_bob_identity();
 
         let local = RadrootsNostrLocalSignerCapability::new(
-            alice.id.clone(),
+            AccountId::from_public_identity(&alice),
             alice.clone(),
             RadrootsNostrLocalSignerAvailability::SecretBacked,
         );
         let local_same = RadrootsNostrLocalSignerCapability::new(
-            alice.id.clone(),
+            AccountId::from_public_identity(&alice),
             alice.clone(),
             RadrootsNostrLocalSignerAvailability::SecretBacked,
         );
         let local_changed_account = RadrootsNostrLocalSignerCapability::new(
-            fixture_bob_identity().id,
+            AccountId::from_public_identity(&bob),
             alice.clone(),
             RadrootsNostrLocalSignerAvailability::SecretBacked,
         );
         let local_changed_availability = RadrootsNostrLocalSignerCapability::new(
-            alice.id.clone(),
+            AccountId::from_public_identity(&alice),
             alice.clone(),
             RadrootsNostrLocalSignerAvailability::PublicOnly,
         );
-        let local_changed_hex = RadrootsNostrLocalSignerCapability::new(
-            alice.id.clone(),
-            alice_with_different_hex,
-            RadrootsNostrLocalSignerAvailability::SecretBacked,
-        );
-        let local_changed = RadrootsNostrLocalSignerCapability::new(
-            alice.id.clone(),
-            alice_with_different_npub,
+        let local_changed_identity = RadrootsNostrLocalSignerCapability::new(
+            AccountId::from_public_identity(&alice),
+            bob,
             RadrootsNostrLocalSignerAvailability::SecretBacked,
         );
         assert_eq!(local, local_same);
         assert_ne!(local, local_changed_account);
         assert_ne!(local, local_changed_availability);
-        assert_ne!(local, local_changed_hex);
-        assert_ne!(local, local_changed);
+        assert_ne!(local, local_changed_identity);
 
         let remote = RadrootsNostrRemoteSessionSignerCapability::new(
             RadrootsNostrSignerConnectionId::new_v7(),
@@ -323,16 +307,15 @@ mod tests {
             .into(),
         );
         let mut remote_changed_signer = remote.clone();
-        remote_changed_signer.signer_identity.public_key_hex =
-            fixture_alice_identity().public_key_hex;
-        let mut remote_changed = remote.clone();
-        remote_changed.user_identity.public_key_npub = fixture_alice_identity().public_key_npub;
+        remote_changed_signer.signer_identity = fixture_alice_identity();
+        let mut remote_changed_user = remote.clone();
+        remote_changed_user.user_identity = fixture_alice_identity();
         assert_eq!(remote, remote_same);
         assert_ne!(remote, remote_changed_connection);
         assert_ne!(remote, remote_changed_relays);
         assert_ne!(remote, remote_changed_permissions);
         assert_ne!(remote, remote_changed_signer);
-        assert_ne!(remote, remote_changed);
+        assert_ne!(remote, remote_changed_user);
 
         assert_eq!(
             RadrootsNostrSignerCapability::LocalAccount(Box::new(local.clone())),
@@ -344,27 +327,16 @@ mod tests {
         );
         assert_ne!(
             RadrootsNostrSignerCapability::LocalAccount(Box::new(local)),
-            RadrootsNostrSignerCapability::RemoteSession(Box::new(remote_changed))
+            RadrootsNostrSignerCapability::RemoteSession(Box::new(remote_changed_user))
         );
     }
 
     #[test]
-    fn public_identity_eq_covers_field_level_short_circuits() {
+    fn public_identity_eq_compares_invariant_checked_values() {
         let alice = fixture_alice_identity();
         let bob = fixture_bob_identity();
 
-        let mut different_id = alice.clone();
-        different_id.id = bob.id.clone();
-        assert!(!public_identity_eq(&alice, &different_id));
-
-        let mut different_hex = alice.clone();
-        different_hex.public_key_hex = bob.public_key_hex.clone();
-        assert!(!public_identity_eq(&alice, &different_hex));
-
-        let mut different_npub = alice.clone();
-        different_npub.public_key_npub = bob.public_key_npub.clone();
-        assert!(!public_identity_eq(&alice, &different_npub));
-
+        assert!(!public_identity_eq(&alice, &bob));
         assert!(public_identity_eq(&alice, &alice));
     }
 }

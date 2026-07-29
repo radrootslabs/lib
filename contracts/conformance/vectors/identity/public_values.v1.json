@@ -1,0 +1,166 @@
+{
+  "suite": "identity_public_values",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "identity_public_key_canonical_hex_001",
+      "kind": "identity.public_key.serde",
+      "input": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+      "expected": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+    },
+    {
+      "id": "identity_identity_id_canonical_hex_002",
+      "kind": "identity.identity_id.serde",
+      "input": "E0266E3CFB0D2886F91C73F5F868F3B98273713E5FCD97C081663F5518A4B3AF",
+      "expected": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af"
+    },
+    {
+      "id": "identity_account_id_canonical_hex_003",
+      "kind": "identity.account_id.serde",
+      "input": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+      "expected": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+    },
+    {
+      "id": "identity_username_canonical_text_004",
+      "kind": "identity.username.serde",
+      "input": "  Alice.Farm  ",
+      "expected": "alice.farm"
+    },
+    {
+      "id": "identity_profile_canonical_username_005",
+      "kind": "identity.profile.serde",
+      "input": {
+        "username": "Alice.Farm"
+      },
+      "expected": {
+        "username": "alice.farm"
+      }
+    },
+    {
+      "id": "identity_public_identity_discards_empty_profile_006",
+      "kind": "identity.public_identity.serde",
+      "input": {
+        "id": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+        "public_key": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+        "profile": {}
+      },
+      "expected": {
+        "id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+      }
+    },
+    {
+      "id": "identity_account_record_canonical_nested_values_007",
+      "kind": "identity.account_record.serde",
+      "input": {
+        "account_id": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+        "public_identity": {
+          "id": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+          "public_key": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF"
+        },
+        "label": "primary",
+        "created_at_unix": 10,
+        "updated_at_unix": 12
+      },
+      "expected": {
+        "account_id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "public_identity": {
+          "id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+        },
+        "label": "primary",
+        "created_at_unix": 10,
+        "updated_at_unix": 12
+      }
+    },
+    {
+      "id": "identity_account_status_canonical_ready_008",
+      "kind": "identity.account_status.serde",
+      "input": {
+        "ready": {
+          "account": {
+            "account_id": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+            "public_identity": {
+              "id": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF",
+              "public_key": "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF"
+            },
+            "created_at_unix": 10,
+            "updated_at_unix": 10
+          }
+        }
+      },
+      "expected": {
+        "ready": {
+          "account": {
+            "account_id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+            "public_identity": {
+              "id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+              "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+            },
+            "created_at_unix": 10,
+            "updated_at_unix": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "identity_public_key_rejects_invalid_curve_point_009",
+      "kind": "identity.public_key.invalid",
+      "input": "0000000000000000000000000000000000000000000000000000000000000000",
+      "expected_error_contains": "valid secp256k1"
+    },
+    {
+      "id": "identity_public_identity_rejects_mismatched_id_010",
+      "kind": "identity.public_identity.invalid",
+      "input": {
+        "id": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+        "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+      },
+      "expected_error_contains": "does not match its public key"
+    },
+    {
+      "id": "identity_account_record_rejects_mismatched_id_011",
+      "kind": "identity.account_record.invalid",
+      "input": {
+        "account_id": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
+        "public_identity": {
+          "id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+        },
+        "created_at_unix": 10,
+        "updated_at_unix": 10
+      },
+      "expected_error_contains": "does not match its public identity"
+    },
+    {
+      "id": "identity_account_record_rejects_time_reversal_012",
+      "kind": "identity.account_record.invalid",
+      "input": {
+        "account_id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "public_identity": {
+          "id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+          "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+        },
+        "created_at_unix": 10,
+        "updated_at_unix": 9
+      },
+      "expected_error_contains": "precedes created timestamp"
+    },
+    {
+      "id": "identity_username_rejects_dot_placement_013",
+      "kind": "identity.username.invalid",
+      "input": ".alice",
+      "expected_error_contains": "dots cannot be"
+    },
+    {
+      "id": "identity_public_identity_rejects_unknown_field_014",
+      "kind": "identity.public_identity.invalid",
+      "input": {
+        "id": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "public_key": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
+        "secret_key": "forbidden"
+      },
+      "expected_error_contains": "unknown field"
+    }
+  ]
+}

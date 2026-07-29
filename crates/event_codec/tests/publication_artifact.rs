@@ -1,9 +1,6 @@
 #![cfg(feature = "serde_json")]
 
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomByteVerifiedDescriptor,
-    RadrootsBlossomMediaType, RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, ByteVerifiedDescriptor, MediaType, Sha256};
 use radroots_event::{
     RadrootsAuthoredImage,
     calendar::{
@@ -136,7 +133,7 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     case.id
                 );
                 assert_eq!(
-                    RadrootsBlossomSha256::digest(&artifact.to_canonical_json()).to_hex(),
+                    Sha256::digest(&artifact.to_canonical_json()).to_hex(),
                     case.expected.canonical_json_sha256.unwrap(),
                     "{}",
                     case.id
@@ -167,7 +164,7 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     case.id
                 );
                 assert_eq!(
-                    RadrootsBlossomSha256::digest(&bytes).to_hex(),
+                    Sha256::digest(&bytes).to_hex(),
                     case.expected.canonical_json_sha256.unwrap(),
                     "{}",
                     case.id
@@ -185,7 +182,7 @@ fn publication_artifact_conformance_vector_executes_every_case() {
                     case.id
                 );
                 assert_eq!(
-                    RadrootsBlossomSha256::digest(&reloaded.to_canonical_json()).to_hex(),
+                    Sha256::digest(&reloaded.to_canonical_json()).to_hex(),
                     case.expected.canonical_json_sha256.unwrap(),
                     "{}",
                     case.id
@@ -284,7 +281,7 @@ fn publication_artifact_round_trips_every_closed_variant() {
         assert_eq!(artifact.semantic_variant(), variant);
         assert_eq!(artifact.authored_operation_id(), operation);
         assert_eq!(artifact.event_contract_id(), contract);
-        assert_eq!(artifact.expected_author().as_str(), AUTHOR);
+        assert_eq!(artifact.expected_author().to_hex(), AUTHOR);
         assert_eq!(artifact.draft().kind(), kind);
         assert_eq!(artifact.media_references().len(), media_count);
         let canonical_json = artifact.to_canonical_json();
@@ -573,7 +570,7 @@ fn publication_artifact_reload_accepts_extensionless_post_fallback() {
         "image/webp",
     );
     let hash = image.descriptor().sha256();
-    let fallback = RadrootsBlossomBlobUrl::parse(&format!("https://backup.example/{hash}"))
+    let fallback = BlobUrl::parse(&format!("https://backup.example/{hash}"))
         .unwrap()
         .approve()
         .unwrap();
@@ -864,7 +861,7 @@ fn all_artifacts() -> Vec<RadrootsPhase1PublicationArtifact> {
 fn authored_post_image(bytes: &[u8]) -> RadrootsAuthoredPostImage {
     let image = authored_image(bytes, "media.example", "webp", "image/webp");
     let hash = image.descriptor().sha256();
-    let fallback = RadrootsBlossomBlobUrl::parse(&format!("https://backup.example/{hash}.webp"))
+    let fallback = BlobUrl::parse(&format!("https://backup.example/{hash}.webp"))
         .unwrap()
         .approve()
         .unwrap();
@@ -918,11 +915,11 @@ fn verified_descriptor(
     host: &str,
     extension: &str,
     media_type: &str,
-) -> RadrootsBlossomByteVerifiedDescriptor {
-    let sha256 = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-    RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://{host}/{sha256}.{extension}")).unwrap(),
+) -> ByteVerifiedDescriptor {
+    let sha256 = Sha256::digest(bytes);
+    let media_type = MediaType::parse(media_type).unwrap();
+    BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://{host}/{sha256}.{extension}")).unwrap(),
         sha256,
         bytes.len() as u64,
         media_type.clone(),

@@ -273,7 +273,7 @@ fn message_metadata_and_index_from_event_roundtrip() {
 
     let index = parsed_from_event(
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+        test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
         77,
         KIND_MESSAGE,
         "hello".to_string(),

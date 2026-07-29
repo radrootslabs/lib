@@ -60,6 +60,7 @@ fn builder_from_wire_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_fixtures::FIXTURE_BOB_PUBLIC_KEY_HEX;
     use radroots_event::{
         comment::{RadrootsAuthoredNip22Comment, RadrootsNip22EventRootReference},
         kinds::{KIND_CLASSIFIED_LISTING, KIND_COMMENT},
@@ -69,7 +70,7 @@ mod tests {
     fn typed_comment_builder_signs_exact_kind_and_tags() {
         let root = RadrootsNip22EventRootReference::parse(
             "a".repeat(64),
-            "b".repeat(64),
+            FIXTURE_BOB_PUBLIC_KEY_HEX,
             KIND_CLASSIFIED_LISTING,
             None,
         )

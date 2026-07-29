@@ -1,0 +1,18 @@
+[package]
+name = "radroots_geonames"
+description = "GeoNames-backed geocoding for Radroots"
+version = "0.1.0-alpha"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+name = "radroots_geonames"
+
+[lints]
+workspace = true

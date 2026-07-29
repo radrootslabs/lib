@@ -9,7 +9,33 @@ use alloc::{string::String, vec::Vec};
 
 pub const RADROOTS_EVENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+#[cfg(test)]
+/// Returns deterministic 64-character fixtures that are also valid secp256k1
+/// x-only public keys; labels without a curve point are remapped.
+pub(crate) fn test_valid_hex_64(character: char) -> String {
+    if matches!(character, 'b' | 'B') {
+        let value = "2f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4";
+        return if character.is_ascii_uppercase() {
+            value.to_ascii_uppercase()
+        } else {
+            value.to_owned()
+        };
+    }
+    let character = match character {
+        '0' => '7',
+        '1' => '8',
+        '5' => 'd',
+        '6' => 'e',
+        '9' => 'a',
+        'c' | 'C' => '3',
+        'f' | 'F' => '4',
+        other => other,
+    };
+    core::iter::repeat_n(character, 64).collect()
+}
+
 pub mod account;
+pub mod admission;
 pub mod app_data;
 pub mod article;
 pub mod calendar;
@@ -30,12 +56,14 @@ pub mod farm_file;
 pub mod farm_workspace;
 pub mod file_metadata;
 pub mod follow;
+pub mod food;
 pub mod food_availability;
 pub mod gcs;
 pub mod geochat;
 pub mod gift_wrap;
 pub mod group;
 pub mod http_auth;
+pub mod id;
 pub mod ids;
 pub mod job;
 pub mod job_feedback;
@@ -46,6 +74,7 @@ pub mod kinds;
 pub mod knowledge;
 pub mod list;
 pub mod list_set;
+pub mod listing;
 pub mod location;
 pub mod media;
 pub mod message;
@@ -67,6 +96,7 @@ pub mod resource_area;
 pub mod resource_cap;
 pub mod seal;
 pub mod social;
+pub mod tag;
 pub mod tags;
 pub mod trade;
 pub mod trade_validation;

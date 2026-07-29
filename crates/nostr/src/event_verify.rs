@@ -89,7 +89,7 @@ mod tests {
     ) -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: event.id_str().to_owned(),
-            author: event.author_str().to_owned(),
+            author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
             kind,
             tags: event.tags_as_vec(),
@@ -173,7 +173,7 @@ mod tests {
         let original = signed_event();
         let kind = u32::from(u16::MAX) + 1;
         let id = compute_canonical_nip01_event_id(
-            original.author_str(),
+            &original.author().to_hex(),
             original.created_at_u64(),
             kind,
             &original.tags_as_vec(),
@@ -183,7 +183,7 @@ mod tests {
         .into_string();
         let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id,
-            author: original.author_str().to_owned(),
+            author: original.author().to_hex().to_owned(),
             created_at: original.created_at_u64(),
             kind,
             tags: original.tags_as_vec(),

@@ -95,7 +95,7 @@ mod tests {
     use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     const SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -162,7 +162,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(out.event.id_str(), EVENT_ID);
-        assert_eq!(out.event.author_str(), AUTHOR);
+        assert_eq!(out.event.author().to_hex(), AUTHOR);
         assert_eq!(out.event.created_at_u64(), 77);
         assert_eq!(out.event.kind_u32(), 1111);
         assert_eq!(out.event.content(), "hello");

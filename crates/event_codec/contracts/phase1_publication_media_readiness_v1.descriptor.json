@@ -7,22 +7,22 @@
   },
   "contract_id": "radroots_event_codec.phase1_publication_media_readiness_v1",
   "manifest": {
-    "byte_length": 14193,
+    "byte_length": 15240,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.json",
-    "sha256": "97bcb8b03defd0e6058bddf1b9714347e3917e1188e6fdd1513f236cc11e95d9"
+    "sha256": "2f9644668cc1e736c0f42f5c9566b6fb74af557d4e29a424d5ccc06af4e6fa82"
   },
   "manifest_schema": {
-    "byte_length": 2628,
+    "byte_length": 2845,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.schema.json",
-    "sha256": "7c0a9ec9aa36959dbf705dbf4273e254351a0e286d1bbadf0980f4fd883e2f7d"
+    "sha256": "5ba2b98ab59deb24b2d07f3df763560a421f47a68ea9973b72689d91bb790239"
   },
   "manifest_sidecar": {
     "byte_length": 65,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.sha256",
-    "sha256": "78980b567981907d6bd4be58584cd60e53010badc2c9868be2a70300e335114c"
+    "sha256": "9d5841c2eae8d2ffb1172a4944b182bdf7a6292a877adc1fcc58ac3c3b4d1c74"
   },
   "predecessor_contract_ids": [
     "radroots_event_codec.phase1_publication_allowlist_v1",

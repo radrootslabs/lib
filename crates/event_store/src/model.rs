@@ -41,10 +41,11 @@ pub use raw_source_rebuild_v1::{
 use crate::RadrootsEventStoreError;
 use radroots_event::RadrootsEventKind;
 use radroots_event::ids::{
-    RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsPublicKey,
-    RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
+    RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsTradeCandidateId,
+    RadrootsTradeId, RadrootsTradeMutationId,
 };
 use radroots_event::trade::RadrootsTradeMutationKindV1;
+use radroots_identity::PublicKey;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetUri,
@@ -514,10 +515,10 @@ pub struct RadrootsStoredTradeMutation {
     pub candidate_id: Option<RadrootsTradeCandidateId>,
     pub proposal_mutation_id: Option<RadrootsTradeMutationId>,
     pub target_claim_mutation_id: Option<RadrootsTradeMutationId>,
-    pub author_pubkey: RadrootsPublicKey,
-    pub counterparty_pubkey: RadrootsPublicKey,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    pub author_pubkey: PublicKey,
+    pub counterparty_pubkey: PublicKey,
+    pub buyer_pubkey: PublicKey,
+    pub seller_pubkey: PublicKey,
     pub farm_id: RadrootsDTag,
     pub authored_at_unix_s: u64,
     pub canonical_payload_bytes: Vec<u8>,
@@ -549,7 +550,7 @@ pub struct RadrootsStoredTradeTransportEnvelope {
     pub mutation_id: RadrootsTradeMutationId,
     pub trade_id: RadrootsTradeId,
     pub transport_kind: String,
-    pub pubkey: RadrootsPublicKey,
+    pub pubkey: PublicKey,
     pub created_at: u64,
     pub event_seq: i64,
     pub payload_sha256: String,
@@ -562,7 +563,7 @@ pub struct RadrootsStoredSellerReservation {
     pub trade_id: RadrootsTradeId,
     pub candidate_id: RadrootsTradeCandidateId,
     pub claim_mutation_id: RadrootsTradeMutationId,
-    pub inventory_authority_pubkey: RadrootsPublicKey,
+    pub inventory_authority_pubkey: PublicKey,
     pub inventory_epoch: u64,
     pub assertion_commitment: String,
     pub reservation_expires_at_unix_s: u64,
@@ -611,7 +612,8 @@ mod tests {
     use radroots_event::event_head::{
         RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     };
-    use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+    use radroots_event::ids::RadrootsEventId;
+    use radroots_identity::PublicKey;
 
     #[test]
     fn admission_status_event_class_and_observation_values_roundtrip() {
@@ -910,7 +912,7 @@ mod tests {
     fn head_decisions_and_tag_metadata_names_cover_all_variants() {
         let coordinate = RadrootsEventHeadCoordinate::Addressable {
             kind: 30_023,
-            pubkey: RadrootsPublicKey::parse(
+            pubkey: PublicKey::from_hex(
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             )
             .expect("pubkey"),

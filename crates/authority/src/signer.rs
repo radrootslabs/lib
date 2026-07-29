@@ -2,30 +2,31 @@
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
 #[cfg(test)]
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_event_codec::wire::publication::RadrootsPhase1PublicationDraft;
+use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignerIdentity {
-    pub pubkey: RadrootsPublicKey,
+    pub pubkey: PublicKey,
 }
 
 impl RadrootsSignerIdentity {
     pub fn new(pubkey: impl AsRef<str>) -> Result<Self, RadrootsAuthorityError> {
-        let pubkey = RadrootsPublicKey::parse(pubkey.as_ref())
+        let pubkey = PublicKey::from_hex(pubkey.as_ref())
             .map_err(|_| RadrootsAuthorityError::InvalidSignerPubkey)?;
         Ok(Self { pubkey })
     }
 
-    pub fn pubkey(&self) -> &RadrootsPublicKey {
+    pub fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 }
 
 pub trait RadrootsEventSigner {
-    fn pubkey(&self) -> &RadrootsPublicKey;
+    fn pubkey(&self) -> &PublicKey;
 
     fn sign_frozen_draft(
         &self,
@@ -41,7 +42,7 @@ pub trait RadrootsPhase1PublicationSigner: RadrootsEventSigner {
     fn sign_phase1_publication_draft(
         &self,
         draft: &RadrootsPhase1PublicationDraft,
-        expected_pubkey: &RadrootsPublicKey,
+        expected_pubkey: &PublicKey,
         expected_event_id: &RadrootsEventId,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError>;
 }
@@ -72,7 +73,7 @@ mod tests {
     }
 
     struct MockSigner {
-        pubkey: RadrootsPublicKey,
+        pubkey: PublicKey,
         failure: Option<RadrootsSignerError>,
         event_id: Option<String>,
     }
@@ -80,7 +81,7 @@ mod tests {
     impl MockSigner {
         fn new(pubkey: &str) -> Self {
             Self {
-                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                pubkey: PublicKey::from_hex(pubkey).expect("pubkey"),
                 failure: None,
                 event_id: None,
             }
@@ -88,7 +89,7 @@ mod tests {
 
         fn failing(pubkey: &str, failure: RadrootsSignerError) -> Self {
             Self {
-                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                pubkey: PublicKey::from_hex(pubkey).expect("pubkey"),
                 failure: Some(failure),
                 event_id: None,
             }
@@ -96,7 +97,7 @@ mod tests {
 
         fn with_event_id(pubkey: &str, event_id: String) -> Self {
             Self {
-                pubkey: RadrootsPublicKey::parse(pubkey).expect("pubkey"),
+                pubkey: PublicKey::from_hex(pubkey).expect("pubkey"),
                 failure: None,
                 event_id: Some(event_id),
             }
@@ -104,7 +105,7 @@ mod tests {
     }
 
     impl RadrootsEventSigner for MockSigner {
-        fn pubkey(&self) -> &RadrootsPublicKey {
+        fn pubkey(&self) -> &PublicKey {
             &self.pubkey
         }
 
@@ -165,14 +166,14 @@ mod tests {
         let pubkey = hex_64('a');
         let signer = MockSigner::new(pubkey.as_str());
 
-        assert_eq!(signer.pubkey().as_str(), pubkey);
+        assert_eq!(signer.pubkey().to_hex(), pubkey);
     }
 
     #[test]
     fn signer_identity_validates_public_key() {
         let pubkey = hex_64('a');
         let identity = RadrootsSignerIdentity::new(pubkey.as_str()).expect("identity");
-        assert_eq!(identity.pubkey().as_str(), pubkey);
+        assert_eq!(identity.pubkey().to_hex(), pubkey);
 
         assert!(matches!(
             RadrootsSignerIdentity::new("bad-pubkey"),
@@ -189,7 +190,7 @@ mod tests {
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
-        assert_eq!(signed.pubkey_str(), pubkey);
+        assert_eq!(signed.pubkey().to_hex(), pubkey);
         assert_eq!(signed.kind(), KIND_GEOCHAT);
     }
 

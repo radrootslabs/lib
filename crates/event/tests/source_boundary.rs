@@ -8,6 +8,10 @@ struct ForbiddenEventName {
 
 const FORBIDDEN_EVENT_NAMES: &[ForbiddenEventName] = &[
     ForbiddenEventName {
+        pattern: "RadrootsPublicKey",
+        reason: "public author keys must use radroots_identity::PublicKey",
+    },
+    ForbiddenEventName {
         pattern: "pub fn from_wire_unchecked",
         reason: "unchecked signed-event construction must not be public API",
     },

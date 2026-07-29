@@ -1,16 +1,22 @@
 [package]
 name = "radroots_nostr"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Nostr integration layer for Radroots"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots_nostr"
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_nostr"
+
+[lints]
+workspace = true
 
 [features]
 default = ["std"]
@@ -21,6 +27,7 @@ codec = ["dep:radroots_event_codec", "radroots_event_codec/nostr"]
 events = [
   "std",
   "dep:radroots_event_codec",
+  "dep:radroots_identity",
   "radroots_event/std",
   "radroots_event/serde",
   "radroots_event_codec/nostr",

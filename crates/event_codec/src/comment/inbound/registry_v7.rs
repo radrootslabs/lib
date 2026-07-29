@@ -13,11 +13,12 @@ use radroots_event::{
     },
     ids::{
         RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
-        RadrootsIdParseError, RadrootsPublicKey,
+        RadrootsIdParseError,
     },
     kinds::KIND_COMMENT,
     relay_hint::RadrootsNostrRelayHint,
 };
+use radroots_identity::PublicKey;
 
 use crate::verification::v1::RadrootsSignatureVerifiedEvent;
 
@@ -127,7 +128,7 @@ impl RadrootsNip22CommentDiagnostic {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22Participant {
     tag_index: usize,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     relay: Option<RadrootsNostrRelayHint>,
     raw_tag: Vec<String>,
 }
@@ -137,7 +138,7 @@ impl RadrootsInboundNip22Participant {
         self.tag_index
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -158,7 +159,7 @@ pub struct RadrootsInboundNip22EventRoot {
     kind_raw_tag: Vec<String>,
     kind: RadrootsNip22CommentRootKind,
     relay: Option<RadrootsNostrRelayHint>,
-    author_hint: Option<RadrootsPublicKey>,
+    author_hint: Option<PublicKey>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
 }
@@ -188,7 +189,7 @@ impl RadrootsInboundNip22EventRoot {
         self.relay.as_ref()
     }
 
-    pub const fn author_hint(&self) -> Option<&RadrootsPublicKey> {
+    pub const fn author_hint(&self) -> Option<&PublicKey> {
         self.author_hint.as_ref()
     }
 
@@ -277,7 +278,7 @@ pub struct RadrootsInboundNip22CommentParent {
     kind_raw_tag: Vec<String>,
     kind: u32,
     relay: Option<RadrootsNostrRelayHint>,
-    author_hint: Option<RadrootsPublicKey>,
+    author_hint: Option<PublicKey>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
 }
@@ -307,7 +308,7 @@ impl RadrootsInboundNip22CommentParent {
         self.relay.as_ref()
     }
 
-    pub const fn author_hint(&self) -> Option<&RadrootsPublicKey> {
+    pub const fn author_hint(&self) -> Option<&PublicKey> {
         self.author_hint.as_ref()
     }
 
@@ -354,7 +355,7 @@ pub struct RadrootsInboundNip22TopLevelEventReference {
     kind_raw_tag: Vec<String>,
     kind: u32,
     relay: Option<RadrootsNostrRelayHint>,
-    author_hint: Option<RadrootsPublicKey>,
+    author_hint: Option<PublicKey>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
 }
@@ -430,7 +431,7 @@ impl RadrootsInboundNip22TopLevelEventReference {
         self.relay.as_ref()
     }
 
-    pub const fn author_hint(&self) -> Option<&RadrootsPublicKey> {
+    pub const fn author_hint(&self) -> Option<&PublicKey> {
         self.author_hint.as_ref()
     }
 
@@ -1092,12 +1093,12 @@ type IndexedTag<'a> = (usize, &'a Vec<String>);
 struct ParsedEventReference {
     event_id: RadrootsEventId,
     relay: Option<RadrootsNostrRelayHint>,
-    author_hint: Option<RadrootsPublicKey>,
+    author_hint: Option<PublicKey>,
 }
 
 struct ParsedAddressReference {
     coordinate: RadrootsAddressableCoordinate,
-    author: RadrootsPublicKey,
+    author: PublicKey,
     kind: RadrootsNip22CommentRootKind,
     relay: Option<RadrootsNostrRelayHint>,
 }
@@ -1255,7 +1256,7 @@ fn parse_required_root_author(
     if !matches!(tag.len(), 2 | 3) {
         return Err(RadrootsNip22CommentProjectionError::RootAuthorInvalid { tag_index });
     }
-    let pubkey = RadrootsPublicKey::parse(&tag[1])
+    let pubkey = PublicKey::from_hex(&tag[1])
         .map_err(|_| RadrootsNip22CommentProjectionError::RootAuthorInvalid { tag_index })?;
     let relay = project_relay(tag_index, tag, 2, RelayRole::RootAuthor, diagnostics);
     Ok(RadrootsInboundNip22Participant {
@@ -1279,7 +1280,7 @@ fn project_participants(
             });
             continue;
         }
-        let Ok(pubkey) = RadrootsPublicKey::parse(&tag[1]) else {
+        let Ok(pubkey) = PublicKey::from_hex(&tag[1]) else {
             diagnostics.push(RadrootsNip22CommentDiagnostic::ParentAuthorInvalidIgnored {
                 tag_index,
                 raw_tag: tag.clone(),
@@ -1322,7 +1323,7 @@ fn parse_event_reference(
     let relay = project_relay(tag_index, tag, 2, role.relay_role(), diagnostics);
     let author_hint = tag
         .get(3)
-        .and_then(|value| match RadrootsPublicKey::parse(value) {
+        .and_then(|value| match PublicKey::from_hex(value) {
             Ok(author) => Some(author),
             Err(_) => {
                 diagnostics.push(role.author_hint_diagnostic(tag_index, tag.clone()));
@@ -1407,8 +1408,8 @@ fn require_parent_cardinality(
 
 fn select_direct_parent_author(
     mut participants: Vec<RadrootsInboundNip22Participant>,
-    expected_author: &RadrootsPublicKey,
-    author_hint: Option<&RadrootsPublicKey>,
+    expected_author: &PublicKey,
+    author_hint: Option<&PublicKey>,
 ) -> Result<
     (
         RadrootsInboundNip22Participant,
@@ -1434,7 +1435,7 @@ fn select_direct_parent_author(
 
 fn select_nested_parent_author(
     mut participants: Vec<RadrootsInboundNip22Participant>,
-    author_hint: Option<&RadrootsPublicKey>,
+    author_hint: Option<&PublicKey>,
 ) -> Result<
     (
         RadrootsInboundNip22Participant,

@@ -26,7 +26,7 @@ mod tests {
     const OWNER_DOCUMENT_ID: &str = "AAAAAAAAAAAAAAAAAAAAAg";
     const GROUP_ID: &str = "field-group";
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     const EVENT_SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"

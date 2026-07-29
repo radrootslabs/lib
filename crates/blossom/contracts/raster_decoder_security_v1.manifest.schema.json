@@ -440,6 +440,13 @@
     "predecessor": {
       "additionalProperties": false,
       "properties": {
+        "artifact_supersessions": {
+          "items": {
+            "$ref": "#/$defs/file"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
         "contract_id": {
           "const": "radroots_blossom.publication_readiness_v1"
         },
@@ -463,6 +470,7 @@
       "required": [
         "contract_id",
         "immutable_artifacts",
+        "artifact_supersessions",
         "source_supersessions"
       ],
       "type": "object"

@@ -13,6 +13,8 @@ use radroots_event_codec::profile::decode::{
     data_from_event, parsed_from_event, profile_from_content,
 };
 
+const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+
 #[test]
 fn profile_from_content_parses_bot_boolean() {
     let content = r#"{"name":"alice","bot":true}"#;
@@ -184,7 +186,7 @@ fn profile_metadata_ignores_short_unknown_and_unrelated_profile_type_tags() {
 fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
     let parsed = parsed_from_event(
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+        AUTHOR.to_string(),
         42,
         KIND_PROFILE,
         "{\"name\":\"alice\"}".to_string(),
@@ -204,10 +206,7 @@ fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
         parsed.event.id_str(),
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     );
-    assert_eq!(
-        parsed.event.author_str(),
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    );
+    assert_eq!(parsed.event.author().to_hex(), AUTHOR);
     assert_eq!(parsed.event.created_at_u64(), 42);
     assert_eq!(parsed.event.kind_u32(), KIND_PROFILE);
     assert_eq!(parsed.event.content(), "{\"name\":\"alice\"}");

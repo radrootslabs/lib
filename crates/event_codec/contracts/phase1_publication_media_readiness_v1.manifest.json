@@ -4,8 +4,8 @@
   "authority_id": "phase1_publication_media_readiness_v1",
   "manifest_schema": {
     "path": "crates/event_codec/contracts/phase1_publication_media_readiness_v1.manifest.schema.json",
-    "byte_length": 2628,
-    "sha256": "7c0a9ec9aa36959dbf705dbf4273e254351a0e286d1bbadf0980f4fd883e2f7d",
+    "byte_length": 2845,
+    "sha256": "5ba2b98ab59deb24b2d07f3df763560a421f47a68ea9973b72689d91bb790239",
     "hash_algorithm": "sha256_bytes_v1"
   },
   "predecessors": [
@@ -55,12 +55,21 @@
           "hash_algorithm": "sha256_bytes_v1"
         }
       ],
+      "artifact_supersessions": [
+        {
+          "path": "crates/event_codec/tests/publication_artifact.rs",
+          "byte_length": 34346,
+          "sha256": "0e6d8b67b1793d66f4030d657cf09f86f66ad75226a19c4ef2a1fa2154534e14",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      ],
       "source_supersessions": [
         "CHANGELOG.md",
         "contracts/operations.toml",
         "contracts/releases/1.0.0-alpha.1.toml",
         "crates/event_codec/Cargo.toml",
         "crates/event_codec/src/wire/publication.rs",
+        "crates/event_codec/tests/publication_artifact.rs",
         "tools/xtask/src/contract.rs",
         "tools/xtask/src/contract/nip09_reconciliation.rs",
         "tools/xtask/src/contract/phase1_publication_artifact.rs",
@@ -138,10 +147,26 @@
           "hash_algorithm": "sha256_bytes_v1"
         }
       ],
+      "artifact_supersessions": [
+        {
+          "path": "crates/blossom/tests/publication_readiness.rs",
+          "byte_length": 31933,
+          "sha256": "48796d2e4c171187fbf2efc66c5dd14e0510fc724baab5ffbd1dc156ba762c4b",
+          "hash_algorithm": "sha256_bytes_v1"
+        },
+        {
+          "path": "crates/blossom/tests/publication_readiness_persistence.rs",
+          "byte_length": 11410,
+          "sha256": "57c8576a1121c66996492eff79beada9f6a7287ec5fede295411dbb821ec4fad",
+          "hash_algorithm": "sha256_bytes_v1"
+        }
+      ],
       "source_supersessions": [
         "CHANGELOG.md",
         "contracts/operations.toml",
         "contracts/releases/1.0.0-alpha.1.toml",
+        "crates/blossom/tests/publication_readiness.rs",
+        "crates/blossom/tests/publication_readiness_persistence.rs",
         "tools/xtask/src/contract.rs",
         "tools/xtask/src/contract/nip09_reconciliation.rs",
         "tools/xtask/src/contract/phase1_publication_artifact.rs",
@@ -286,8 +311,8 @@
     "hash_algorithm": "sha256_bytes_v1",
     "executor": {
       "path": "crates/event_codec/tests/publication_media_readiness.rs",
-      "byte_length": 22995,
-      "sha256": "3de03a5aa1d8b37083efabac44c423659b263ebf8597831b056fdd257f333b85",
+      "byte_length": 22915,
+      "sha256": "773cd2b34348c3014b2a7ca4518116782cd8f35d444aea4f3a345f96025f23fa",
       "hash_algorithm": "sha256_bytes_v1"
     },
     "executor_test": "phase1_publication_media_readiness_vector_executes_every_case",

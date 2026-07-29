@@ -148,10 +148,9 @@ impl Net {
     pub fn selected_nostr_keys(&self) -> Option<radroots_nostr::prelude::RadrootsNostrKeys> {
         let signer = self.selected_nostr_signer()?;
         self.accounts
-            .resolve_signing_identity_for_signer(&signer)
+            .resolve_signing_keys_for_signer(&signer)
             .ok()
             .flatten()
-            .map(|identity| identity.into_keys())
     }
 }
 
@@ -172,12 +171,22 @@ impl NetHandle {
 mod tests {
     use crate::builder::NetBuilder;
     #[cfg(feature = "nostr-client")]
-    use radroots_identity::RadrootsIdentity;
+    use radroots_identity::{PublicIdentity, PublicKey};
+    #[cfg(feature = "nostr-client")]
+    use radroots_nostr::prelude::RadrootsNostrKeys;
     #[cfg(feature = "nostr-client")]
     use radroots_nostr_signer::prelude::{
         RadrootsNostrRemoteSessionSignerCapability, RadrootsNostrSignerCapability,
         RadrootsNostrSignerConnectionId,
     };
+
+    #[cfg(feature = "nostr-client")]
+    fn public_identity() -> PublicIdentity {
+        let keys = RadrootsNostrKeys::generate();
+        PublicIdentity::new(
+            PublicKey::from_hex(&keys.public_key().to_hex()).expect("public identity"),
+        )
+    }
 
     #[test]
     fn builds_minimal() {
@@ -217,7 +226,7 @@ mod tests {
         assert!(net.selected_nostr_signer().is_none());
 
         net.accounts
-            .generate_identity(Some("primary".into()), true)
+            .generate_keys(Some("primary".into()), true)
             .expect("generate account");
         assert!(net.selected_nostr_keys().is_some());
         assert!(net.selected_nostr_signer().is_some());
@@ -225,8 +234,8 @@ mod tests {
         let remote = RadrootsNostrSignerCapability::RemoteSession(Box::new(
             RadrootsNostrRemoteSessionSignerCapability::new(
                 RadrootsNostrSignerConnectionId::new_v7(),
-                RadrootsIdentity::generate().to_public(),
-                RadrootsIdentity::generate().to_public(),
+                public_identity(),
+                public_identity(),
             ),
         ));
         net.set_nostr_signer(Some(remote.clone()));

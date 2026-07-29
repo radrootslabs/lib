@@ -7,7 +7,7 @@ use core::fmt;
 use std::collections::BTreeSet;
 
 use radroots_event::{
-    ids::{RadrootsEventId, RadrootsIdParseError, RadrootsPublicKey},
+    ids::{RadrootsEventId, RadrootsIdParseError},
     kinds::KIND_POST,
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
@@ -15,6 +15,7 @@ use radroots_event::{
     },
     relay_hint::RadrootsNostrRelayHint,
 };
+use radroots_identity::{Error as PublicKeyError, PublicKey};
 
 use crate::verification::v1::RadrootsSignatureVerifiedEvent;
 
@@ -54,7 +55,7 @@ pub enum RadrootsNip10ReplyDiagnostic {
     ReferenceAuthorIgnored {
         tag_index: usize,
         raw_tag: Vec<String>,
-        error: RadrootsIdParseError,
+        error: PublicKeyError,
     },
     CitationShapeIgnored {
         tag_index: usize,
@@ -76,7 +77,7 @@ pub enum RadrootsNip10ReplyDiagnostic {
     ReplyAuthorIgnored {
         tag_index: usize,
         raw_tag: Vec<String>,
-        error: RadrootsIdParseError,
+        error: PublicKeyError,
     },
     ReplyAuthorRelayIgnored {
         tag_index: usize,
@@ -149,7 +150,7 @@ pub struct RadrootsInboundNip10EventReference {
     raw_tag: Vec<String>,
     event_id: RadrootsEventId,
     relay: Option<RadrootsNostrRelayHint>,
-    author_hint: Option<RadrootsPublicKey>,
+    author_hint: Option<PublicKey>,
 }
 
 impl RadrootsInboundNip10EventReference {
@@ -169,7 +170,7 @@ impl RadrootsInboundNip10EventReference {
         self.relay.as_ref()
     }
 
-    pub const fn author_hint(&self) -> Option<&RadrootsPublicKey> {
+    pub const fn author_hint(&self) -> Option<&PublicKey> {
         self.author_hint.as_ref()
     }
 }
@@ -178,7 +179,7 @@ impl RadrootsInboundNip10EventReference {
 pub struct RadrootsInboundNip10Participant {
     tag_index: usize,
     raw_tag: Vec<String>,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     relay: Option<RadrootsNostrRelayHint>,
 }
 
@@ -191,7 +192,7 @@ impl RadrootsInboundNip10Participant {
         &self.raw_tag
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -575,7 +576,7 @@ fn parse_event_reference(
         }
     };
     let author_hint = if tag.len() == 5 {
-        match RadrootsPublicKey::parse(&tag[4]) {
+        match PublicKey::from_hex(&tag[4]) {
             Ok(author) => Some(author),
             Err(error) => {
                 diagnostics.push(RadrootsNip10ReplyDiagnostic::ReferenceAuthorIgnored {
@@ -651,7 +652,7 @@ fn project_supplemental_reference(
         }
     };
     let author_hint = if tag.len() == 5 {
-        match RadrootsPublicKey::parse(&tag[4]) {
+        match PublicKey::from_hex(&tag[4]) {
             Ok(author) => Some(author),
             Err(error) => {
                 diagnostics.push(RadrootsNip10ReplyDiagnostic::ReferenceAuthorIgnored {
@@ -705,7 +706,7 @@ fn project_participants(
                 continue;
             }
         }
-        let pubkey = match RadrootsPublicKey::parse(&tag[1]) {
+        let pubkey = match PublicKey::from_hex(&tag[1]) {
             Ok(pubkey) => pubkey,
             Err(error) => {
                 diagnostics.push(RadrootsNip10ReplyDiagnostic::ReplyAuthorIgnored {
@@ -727,7 +728,7 @@ fn project_participants(
                 None
             }
         };
-        if !seen.insert(pubkey.clone()) {
+        if !seen.insert(pubkey) {
             diagnostics.push(RadrootsNip10ReplyDiagnostic::ReplyAuthorDuplicateIgnored {
                 tag_index,
                 raw_tag: tag.clone(),

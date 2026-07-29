@@ -9,7 +9,7 @@ use alloc::{
 #[cfg(test)]
 use crate::ids::RadrootsOrderQuoteId;
 use crate::ids::{
-    RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId, RadrootsPublicKey,
+    PublicKey, RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId,
 };
 use crate::kinds::*;
 #[cfg(test)]
@@ -17,7 +17,7 @@ use crate::operational_listing::RadrootsOperationalListingParseError;
 pub use crate::order_economics::*;
 #[cfg(test)]
 use crate::trade_validation::RadrootsOperationalListingValidationError;
-use radroots_core::{RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney};
+use radroots_core::{Currency, Decimal, Money};
 
 pub const RADROOTS_COMMERCIAL_LISTING_DOMAIN: &str = "trade:listing";
 pub const RADROOTS_ORDER_ENVELOPE_VERSION: u16 = 1;
@@ -48,13 +48,13 @@ impl RadrootsOrderEconomics {
             return Err(RadrootsOrderPayloadError::MissingEconomicItems);
         }
 
-        let mut subtotal = RadrootsCoreMoney::zero(self.currency);
+        let mut subtotal = Money::zero(self.currency);
         for (index, item) in self.items.iter().enumerate() {
             let line_subtotal = validate_economic_item(item, self.currency, index)?;
             subtotal = checked_money_add(&subtotal, &line_subtotal, "subtotal")?;
         }
 
-        let mut discount_total = RadrootsCoreMoney::zero(self.currency);
+        let mut discount_total = Money::zero(self.currency);
         for (index, line) in self.discounts.iter().enumerate() {
             validate_economic_line(line, self.currency, "discounts", index)?;
             if line.kind != RadrootsOrderEconomicLineKind::ListingDiscount {
@@ -72,7 +72,7 @@ impl RadrootsOrderEconomics {
             discount_total = checked_money_add(&discount_total, &line.amount, "discount_total")?;
         }
 
-        let mut adjustment_total = RadrootsCoreMoney::zero(self.currency);
+        let mut adjustment_total = Money::zero(self.currency);
         let mut total = checked_money_sub_non_negative(&subtotal, &discount_total, "total")?;
         for (index, line) in self.adjustments.iter().enumerate() {
             validate_economic_line(line, self.currency, "adjustments", index)?;
@@ -142,8 +142,10 @@ impl RadrootsOrderEconomics {
 pub struct RadrootsOrderRequest {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
 }
@@ -152,8 +154,6 @@ impl RadrootsOrderRequest {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
         validate_required_field(&self.order_id, "order_id")?;
         validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         validate_order_items(&self.items)?;
         self.economics.validate()?;
         validate_order_economics_binding(&self.items, &self.economics)
@@ -222,8 +222,10 @@ impl RadrootsOrderDecisionOutcome {
 pub struct RadrootsOrderDecision {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
     pub decision: RadrootsOrderDecisionOutcome,
 }
 
@@ -231,8 +233,6 @@ impl RadrootsOrderDecision {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
         validate_required_field(&self.order_id, "order_id")?;
         validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         self.decision.validate()
     }
 }
@@ -248,8 +248,10 @@ impl RadrootsOrderDecision {
 pub struct RadrootsOrderCancellation {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    pub buyer_pubkey: RadrootsPublicKey,
-    pub seller_pubkey: RadrootsPublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub buyer_pubkey: PublicKey,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    pub seller_pubkey: PublicKey,
     pub reason: String,
 }
 
@@ -257,8 +259,6 @@ impl RadrootsOrderCancellation {
     pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
         validate_required_field(&self.order_id, "order_id")?;
         validate_required_field(&self.listing_addr, "listing_addr")?;
-        validate_required_field(&self.buyer_pubkey, "buyer_pubkey")?;
-        validate_required_field(&self.seller_pubkey, "seller_pubkey")?;
         validate_required_field(&self.reason, "reason")
     }
 }
@@ -527,9 +527,9 @@ fn validate_order_items(items: &[RadrootsOrderItem]) -> Result<(), RadrootsOrder
 
 fn validate_economic_item(
     item: &RadrootsOrderEconomicItem,
-    expected_currency: RadrootsCoreCurrency,
+    expected_currency: Currency,
     index: usize,
-) -> Result<RadrootsCoreMoney, RadrootsOrderPayloadError> {
+) -> Result<Money, RadrootsOrderPayloadError> {
     validate_required_field(&item.bin_id, "economics.items.bin_id")?;
     if item.bin_count == 0 {
         return Err(RadrootsOrderPayloadError::InvalidEconomicItemBinCount { index });
@@ -551,14 +551,11 @@ fn validate_economic_item(
         "items.line_subtotal",
     )?;
 
-    let quantity_total = checked_decimal_mul(
-        item.quantity_amount,
-        RadrootsCoreDecimal::from(item.bin_count),
-    )
-    .ok_or(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index })?;
+    let quantity_total = checked_decimal_mul(item.quantity_amount, Decimal::from(item.bin_count))
+        .ok_or(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index })?;
     let expected_subtotal = checked_decimal_mul(item.unit_price_amount, quantity_total)
         .ok_or(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index })?;
-    if item.line_subtotal.amount != expected_subtotal {
+    if item.line_subtotal.amount() != expected_subtotal {
         return Err(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index });
     }
     Ok(item.line_subtotal.clone())
@@ -621,16 +618,16 @@ fn normalized_order_item_counts(
 
 fn validate_economic_line(
     line: &RadrootsOrderEconomicLine,
-    expected_currency: RadrootsCoreCurrency,
+    expected_currency: Currency,
     field: &'static str,
     index: usize,
 ) -> Result<(), RadrootsOrderPayloadError> {
     validate_required_field(&line.id, "economics.line.id")?;
     validate_required_field(&line.reason, "economics.line.reason")?;
-    if line.amount.currency != expected_currency {
+    if line.amount.currency() != expected_currency {
         return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
     }
-    if line.amount.amount.is_zero() || line.amount.amount.is_sign_negative() {
+    if line.amount.amount().is_zero() || line.amount.amount().is_sign_negative() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicLineAmount { field, index });
     }
     Ok(())
@@ -662,81 +659,74 @@ fn validate_economic_line_order(
 }
 
 fn validate_total_money(
-    money: &RadrootsCoreMoney,
-    expected_currency: RadrootsCoreCurrency,
+    money: &Money,
+    expected_currency: Currency,
     field: &'static str,
 ) -> Result<(), RadrootsOrderPayloadError> {
-    if money.currency != expected_currency {
+    if money.currency() != expected_currency {
         return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
     }
-    if money.amount.is_sign_negative() {
+    if money.amount().is_sign_negative() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicTotal { field });
     }
     Ok(())
 }
 
 fn validate_total_matches(
-    actual: &RadrootsCoreMoney,
-    expected: &RadrootsCoreMoney,
+    actual: &Money,
+    expected: &Money,
     field: &'static str,
 ) -> Result<(), RadrootsOrderPayloadError> {
-    if actual.currency != expected.currency {
+    if actual.currency() != expected.currency() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
     }
-    if actual.amount != expected.amount {
+    if actual.amount() != expected.amount() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicTotal { field });
     }
     Ok(())
 }
 
-fn checked_decimal_add(
-    left: RadrootsCoreDecimal,
-    right: RadrootsCoreDecimal,
-) -> Option<RadrootsCoreDecimal> {
-    left.0.checked_add(right.0).map(RadrootsCoreDecimal)
+fn checked_decimal_add(left: Decimal, right: Decimal) -> Option<Decimal> {
+    left.checked_add(right).ok()
 }
 
-fn checked_decimal_sub(
-    left: RadrootsCoreDecimal,
-    right: RadrootsCoreDecimal,
-) -> Option<RadrootsCoreDecimal> {
-    left.0.checked_sub(right.0).map(RadrootsCoreDecimal)
+fn checked_decimal_sub(left: Decimal, right: Decimal) -> Option<Decimal> {
+    left.checked_sub(right).ok()
 }
 
-fn checked_decimal_mul(
-    left: RadrootsCoreDecimal,
-    right: RadrootsCoreDecimal,
-) -> Option<RadrootsCoreDecimal> {
-    left.0.checked_mul(right.0).map(RadrootsCoreDecimal)
+fn checked_decimal_mul(left: Decimal, right: Decimal) -> Option<Decimal> {
+    left.checked_mul(right).ok()
 }
 
 fn checked_money_add(
-    left: &RadrootsCoreMoney,
-    right: &RadrootsCoreMoney,
+    left: &Money,
+    right: &Money,
     field: &'static str,
-) -> Result<RadrootsCoreMoney, RadrootsOrderPayloadError> {
-    if left.currency != right.currency {
+) -> Result<Money, RadrootsOrderPayloadError> {
+    if left.currency() != right.currency() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
     }
-    let amount = checked_decimal_add(left.amount, right.amount)
+    let amount = checked_decimal_add(left.amount(), right.amount())
         .ok_or(RadrootsOrderPayloadError::InvalidEconomicTotal { field })?;
-    Ok(RadrootsCoreMoney::new(amount, left.currency))
+    Money::try_new(amount, left.currency())
+        .map_err(|_| RadrootsOrderPayloadError::InvalidEconomicTotal { field })
 }
 
 fn checked_money_sub_non_negative(
-    left: &RadrootsCoreMoney,
-    right: &RadrootsCoreMoney,
+    left: &Money,
+    right: &Money,
     field: &'static str,
-) -> Result<RadrootsCoreMoney, RadrootsOrderPayloadError> {
-    if left.currency != right.currency {
+) -> Result<Money, RadrootsOrderPayloadError> {
+    if left.currency() != right.currency() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
     }
-    let amount = checked_decimal_sub(left.amount, right.amount)
+    let amount = checked_decimal_sub(left.amount(), right.amount())
         .ok_or(RadrootsOrderPayloadError::InvalidEconomicTotal { field })?;
     if amount.is_sign_negative() {
         return Err(RadrootsOrderPayloadError::InvalidEconomicTotal { field });
     }
-    Ok(RadrootsCoreMoney::new(amount, left.currency))
+    Money::try_new(amount, left.currency())
+        .map_err(|_| RadrootsOrderPayloadError::InvalidEconomicTotal { field })
 }
 
 fn validate_inventory_commitments(
@@ -757,22 +747,17 @@ fn validate_inventory_commitments(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Unit};
 
-    fn pubkey(character: char) -> RadrootsPublicKey {
-        core::iter::repeat_n(character, 64)
-            .collect::<String>()
-            .parse()
-            .unwrap()
+    fn pubkey(character: char) -> PublicKey {
+        crate::test_valid_hex_64(character).parse().unwrap()
     }
 
-    fn buyer_pubkey() -> RadrootsPublicKey {
+    fn buyer_pubkey() -> PublicKey {
         pubkey('b')
     }
 
-    fn seller_pubkey() -> RadrootsPublicKey {
+    fn seller_pubkey() -> PublicKey {
         pubkey('a')
     }
 
@@ -808,12 +793,16 @@ mod tests {
         }
     }
 
-    fn decimal(raw: &str) -> RadrootsCoreDecimal {
+    fn decimal(raw: &str) -> Decimal {
         raw.parse().unwrap()
     }
 
-    fn usd(raw: &str) -> RadrootsCoreMoney {
-        RadrootsCoreMoney::new(decimal(raw), RadrootsCoreCurrency::USD)
+    fn usd(raw: &str) -> Money {
+        money(raw, Currency::USD)
+    }
+
+    fn money(raw: &str, currency: Currency) -> Money {
+        Money::try_new(decimal(raw), currency).unwrap()
     }
 
     fn sample_order_economics() -> RadrootsOrderEconomics {
@@ -821,24 +810,24 @@ mod tests {
             quote_id: quote_id("quote-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
-            currency: RadrootsCoreCurrency::USD,
+            currency: Currency::USD,
             items: vec![
                 RadrootsOrderEconomicItem {
                     bin_id: bin_id("bin-a"),
                     bin_count: 2,
                     quantity_amount: decimal("1.5"),
-                    quantity_unit: RadrootsCoreUnit::Each,
+                    quantity_unit: Unit::Each,
                     unit_price_amount: decimal("4"),
-                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    unit_price_currency: Currency::USD,
                     line_subtotal: usd("12"),
                 },
                 RadrootsOrderEconomicItem {
                     bin_id: bin_id("bin-b"),
                     bin_count: 1,
                     quantity_amount: decimal("2"),
-                    quantity_unit: RadrootsCoreUnit::Each,
+                    quantity_unit: Unit::Each,
                     unit_price_amount: decimal("3"),
-                    unit_price_currency: RadrootsCoreCurrency::USD,
+                    unit_price_currency: Currency::USD,
                     line_subtotal: usd("6"),
                 },
             ],
@@ -880,14 +869,14 @@ mod tests {
             quote_id: quote_id("quote-bound-1"),
             quote_version: 1,
             pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
-            currency: RadrootsCoreCurrency::USD,
+            currency: Currency::USD,
             items: vec![RadrootsOrderEconomicItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 2,
                 quantity_amount: decimal("1"),
-                quantity_unit: RadrootsCoreUnit::Each,
+                quantity_unit: Unit::Each,
                 unit_price_amount: decimal("5"),
-                unit_price_currency: RadrootsCoreCurrency::USD,
+                unit_price_currency: Currency::USD,
                 line_subtotal: usd("10"),
             }],
             discounts: Vec::new(),
@@ -1128,7 +1117,7 @@ mod tests {
     #[test]
     fn order_economics_validation_rejects_mixed_currency() {
         let mut economics = sample_order_economics();
-        economics.items[0].unit_price_currency = RadrootsCoreCurrency::EUR;
+        economics.items[0].unit_price_currency = Currency::EUR;
         assert_eq!(
             economics.validate().unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency {
@@ -1137,8 +1126,7 @@ mod tests {
         );
 
         let mut economics = sample_order_economics();
-        economics.adjustments[0].amount =
-            RadrootsCoreMoney::new(decimal("2"), RadrootsCoreCurrency::EUR);
+        economics.adjustments[0].amount = money("2", Currency::EUR);
         assert_eq!(
             economics.validate().unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency {
@@ -1164,8 +1152,7 @@ mod tests {
         );
 
         let mut economics = sample_order_economics();
-        economics.items[0].line_subtotal =
-            RadrootsCoreMoney::new(decimal("12"), RadrootsCoreCurrency::EUR);
+        economics.items[0].line_subtotal = money("12", Currency::EUR);
         assert_eq!(
             economics.validate().unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency {
@@ -1222,17 +1209,10 @@ mod tests {
         );
 
         let mut economics = sample_order_economics();
-        economics.subtotal = RadrootsCoreMoney::new(decimal("18"), RadrootsCoreCurrency::EUR);
+        economics.subtotal = money("18", Currency::EUR);
         assert_eq!(
             economics.validate().unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "subtotal" }
-        );
-
-        let mut economics = sample_order_economics();
-        economics.subtotal = usd("-1");
-        assert_eq!(
-            economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicTotal { field: "subtotal" }
         );
 
         let mut economics = sample_order_economics();
@@ -1335,49 +1315,21 @@ mod tests {
                 index: 0
             }
         );
-
-        let mut economics = sample_order_economics();
-        economics.adjustments[0].amount = usd("-1");
-        assert_eq!(
-            economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicLineAmount {
-                field: "adjustments",
-                index: 0
-            }
-        );
     }
 
     #[test]
     fn order_economics_helpers_cover_currency_error_paths() {
         assert_eq!(
-            validate_total_money(&usd("-1"), RadrootsCoreCurrency::USD, "subtotal").unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicTotal { field: "subtotal" }
-        );
-        assert_eq!(
-            validate_total_matches(
-                &usd("1"),
-                &RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::EUR),
-                "total"
-            )
-            .unwrap_err(),
+            validate_total_matches(&usd("1"), &money("1", Currency::EUR), "total").unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "total" }
         );
         assert_eq!(
-            checked_money_add(
-                &usd("1"),
-                &RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::EUR),
-                "subtotal"
-            )
-            .unwrap_err(),
+            checked_money_add(&usd("1"), &money("1", Currency::EUR), "subtotal").unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "subtotal" }
         );
         assert_eq!(
-            checked_money_sub_non_negative(
-                &usd("1"),
-                &RadrootsCoreMoney::new(decimal("1"), RadrootsCoreCurrency::EUR),
-                "total"
-            )
-            .unwrap_err(),
+            checked_money_sub_non_negative(&usd("1"), &money("1", Currency::EUR), "total")
+                .unwrap_err(),
             RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "total" }
         );
     }

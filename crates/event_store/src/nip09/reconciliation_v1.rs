@@ -569,24 +569,24 @@ impl RequestIndex {
 
     fn insert(&mut self, request: &RadrootsAdmittedNip09DeletionRequestEventV1) {
         let request_event = request.event();
-        let request_author = request_event.author_str();
-        let request_id = request_event.id_str();
+        let request_author = request_event.author().to_hex();
+        let request_id = request_event.id_str().to_owned();
         for target in request.projection().event_targets() {
             self.event_targets
                 .entry(target.event_id().as_str().to_owned())
                 .or_default()
-                .entry(request_author.to_owned())
+                .entry(request_author.clone())
                 .and_modify(|current| {
-                    if request_id < current.as_str() {
-                        *current = request_id.to_owned();
+                    if request_id.as_str() < current.as_str() {
+                        *current = request_id.clone();
                     }
                 })
-                .or_insert_with(|| request_id.to_owned());
+                .or_insert_with(|| request_id.clone());
         }
         for target in request.projection().address_targets() {
             let coordinate = (
                 i64::from(target.coordinate().kind()),
-                target.coordinate().pubkey().as_str().to_owned(),
+                target.coordinate().pubkey().to_hex(),
                 target.coordinate().identifier().to_owned(),
             );
             let evidence = self.address_targets.entry(coordinate.clone()).or_default();
@@ -594,11 +594,11 @@ impl RequestIndex {
                 let replace = evidence.authorized.as_ref().is_none_or(|current| {
                     request_event.created_at_u64() > current.created_at
                         || (request_event.created_at_u64() == current.created_at
-                            && request_id < current.request_id.as_str())
+                            && request_id.as_str() < current.request_id.as_str())
                 });
                 if replace {
                     evidence.authorized = Some(IndexedRequestEvidence {
-                        request_id: request_id.to_owned(),
+                        request_id: request_id.clone(),
                         created_at: request_event.created_at_u64(),
                     });
                 }
@@ -626,7 +626,7 @@ impl RequestIndex {
             .event_targets
             .get(event.id_str())
             .map_or((None, false), |by_author| {
-                let authorized = by_author.get(event.author_str()).cloned();
+                let authorized = by_author.get(&event.author().to_hex()).cloned();
                 let unauthorized = by_author.len() > usize::from(authorized.is_some());
                 (authorized, unauthorized)
             });
@@ -1775,7 +1775,11 @@ async fn load_reconciliation_snapshot(
                     .map_err(|_| raw_mismatch(event_id.as_str(), "raw_json"))?;
             let event = ingest.event();
             compare_raw_field(event.id_str() == event_id, event_id.as_str(), "event_id")?;
-            compare_raw_field(event.author_str() == pubkey, event_id.as_str(), "pubkey")?;
+            compare_raw_field(
+                event.author().to_hex() == pubkey,
+                event_id.as_str(),
+                "pubkey",
+            )?;
             let created_at: i64 = row.try_get("created_at")?;
             compare_raw_field(
                 i64::try_from(event.created_at_u64()).ok() == Some(created_at),
@@ -2227,7 +2231,7 @@ async fn rebuild_raw_heads(
                     "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('replaceable', ?, ?, NULL, ?, ?, ?)",
                 )
                 .bind(i64::from(*kind))
-                .bind(pubkey.as_str())
+                .bind(pubkey.to_hex())
                 .bind(winner.candidate.event_id.as_str())
                 .bind(i64_from_u64(
                     "raw_head_created_at",
@@ -2246,7 +2250,7 @@ async fn rebuild_raw_heads(
                     "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('addressable', ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(i64::from(*kind))
-                .bind(pubkey.as_str())
+                .bind(pubkey.to_hex())
                 .bind(d_tag)
                 .bind(winner.candidate.event_id.as_str())
                 .bind(i64_from_u64(
@@ -2384,35 +2388,36 @@ fn event_coordinate_fact(
 ) -> Result<Option<EventCoordinateFact>, RadrootsEventStoreError> {
     let envelope = event.verified_event.event();
     let kind = envelope.kind_u32();
-    let (coordinate_type, raw_d_tag, nip09_d_tag) =
-        if matches!(kind, 0 | 3) || (10_000..=19_999).contains(&kind) {
-            ("replaceable", String::new(), Some(String::new()))
-        } else if (30_000..=39_999).contains(&kind) {
-            let raw_d_tag_value = envelope
-                .tag_slices()
-                .iter()
-                .find(|tag| tag.as_slice().first().is_some_and(|name| name == "d"))
-                .and_then(|tag| tag.as_slice().get(1))
-                .cloned();
-            let nip09_d_tag = raw_d_tag_value.as_ref().and_then(|d_tag| {
-                RadrootsNip01Coordinate::parse(format!("{kind}:{}:{d_tag}", envelope.author_str()))
-                    .ok()
-                    .map(|coordinate| coordinate.identifier().to_owned())
-            });
-            (
-                "addressable",
-                raw_d_tag_value.unwrap_or_default(),
-                nip09_d_tag,
-            )
-        } else {
-            return Ok(None);
-        };
+    let (coordinate_type, raw_d_tag, nip09_d_tag) = if matches!(kind, 0 | 3)
+        || (10_000..=19_999).contains(&kind)
+    {
+        ("replaceable", String::new(), Some(String::new()))
+    } else if (30_000..=39_999).contains(&kind) {
+        let raw_d_tag_value = envelope
+            .tag_slices()
+            .iter()
+            .find(|tag| tag.as_slice().first().is_some_and(|name| name == "d"))
+            .and_then(|tag| tag.as_slice().get(1))
+            .cloned();
+        let nip09_d_tag = raw_d_tag_value.as_ref().and_then(|d_tag| {
+            RadrootsNip01Coordinate::parse(format!("{kind}:{}:{d_tag}", envelope.author().to_hex()))
+                .ok()
+                .map(|coordinate| coordinate.identifier().to_owned())
+        });
+        (
+            "addressable",
+            raw_d_tag_value.unwrap_or_default(),
+            nip09_d_tag,
+        )
+    } else {
+        return Ok(None);
+    };
     Ok(Some(EventCoordinateFact {
         event_id: envelope.id_str().to_owned(),
         event_seq: event.seq,
         coordinate_type: coordinate_type.to_owned(),
         kind: i64::from(kind),
-        pubkey: envelope.author_str().to_owned(),
+        pubkey: envelope.author().to_hex().to_owned(),
         created_at: i64_from_u64("created_at", envelope.created_at_u64())?,
         inserted_at_ms: event.inserted_at_ms,
         admission_status: event.admission.status.as_str().to_owned(),
@@ -2502,7 +2507,7 @@ async fn validate_nip09_fact_graph(
         expected_requests.insert(RequestFact {
             request_event_id: request.event().id_str().to_owned(),
             request_event_seq: event.seq,
-            request_pubkey: request.event().author_str().to_owned(),
+            request_pubkey: request.event().author().to_hex().to_owned(),
             request_created_at: i64_from_u64(
                 "request_created_at",
                 request.event().created_at_u64(),
@@ -2526,7 +2531,7 @@ async fn validate_nip09_fact_graph(
             expected_address_targets.insert(AddressTargetFact {
                 request_event_id: request.event().id_str().to_owned(),
                 target_kind: i64::from(target.coordinate().kind()),
-                target_pubkey: target.coordinate().pubkey().as_str().to_owned(),
+                target_pubkey: target.coordinate().pubkey().to_hex(),
                 target_d_tag: target.coordinate().identifier().to_owned(),
                 inclusive_cutoff: i64_from_u64(
                     "inclusive_cutoff",
@@ -2677,7 +2682,7 @@ async fn persist_request_fact(
     .bind(generation.as_bytes().as_slice())
     .bind(event.id_str())
     .bind(request_seq)
-    .bind(event.author_str())
+    .bind(event.author().to_hex())
     .bind(i64_from_u64(
         "request_created_at",
         event.created_at_u64(),
@@ -2709,7 +2714,7 @@ async fn persist_request_fact(
         .bind(generation.as_bytes().as_slice())
         .bind(event.id_str())
         .bind(i64::from(target.coordinate().kind()))
-        .bind(target.coordinate().pubkey().as_str())
+        .bind(target.coordinate().pubkey().to_hex())
         .bind(target.coordinate().identifier())
         .bind(i64_from_u64("inclusive_cutoff", event.created_at_u64())?)
         .bind(i64_from_usize("source_tag_index", target.tag_index())?)
@@ -2956,7 +2961,7 @@ fn desired_addressable_states(
             })?;
         let state = addressable_state_for_event(
             i64::from(kind),
-            pubkey.as_str(),
+            &pubkey.to_hex(),
             d_tag.as_str(),
             winner.event_seq,
             event,
@@ -3215,7 +3220,7 @@ fn expected_transition_history(
                     field: "transition.kind",
                     value: kind,
                 })?,
-                pubkey: radroots_event::ids::RadrootsPublicKey::parse(pubkey.as_str())?,
+                pubkey: radroots_identity::PublicKey::from_hex(pubkey.as_str())?,
                 d_tag: d_tag.clone(),
             };
             let winner = winners.get(&coordinate).ok_or_else(|| {
@@ -3344,7 +3349,7 @@ fn request_affected_addressable_coordinates<'a>(
         if winners.contains_key(&coordinate) {
             affected.insert((
                 i64::from(kind),
-                target.coordinate().pubkey().as_str().to_owned(),
+                target.coordinate().pubkey().to_hex(),
                 target.coordinate().identifier().to_owned(),
             ));
         }
@@ -4454,7 +4459,7 @@ mod tests {
                 event_seq: 1,
                 coordinate_type: "regular".to_owned(),
                 kind: i64::from(KIND_DELETION_REQUEST),
-                pubkey: deletion.author_str().to_owned(),
+                pubkey: deletion.author().to_hex(),
                 created_at: i64::try_from(deletion.created_at_u64()).expect("created_at"),
                 inserted_at_ms: 1,
                 admission_status: "admitted".to_owned(),
@@ -5365,7 +5370,7 @@ INSERT INTO radroots_event_store_owned_child_probe(id, parent_id) VALUES (1, 999
                     .iter()
                     .any(|address_target| {
                         i64::from(address_target.coordinate().kind()) == coordinate_key.0
-                            && address_target.coordinate().pubkey().as_str()
+                            && address_target.coordinate().pubkey().to_hex()
                                 == coordinate_key.1.as_str()
                             && address_target.coordinate().identifier() == coordinate_key.2.as_str()
                     })
@@ -5703,7 +5708,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
             "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?, ?, ?, ?, ?, ?)",
         )
         .bind(event.id_str())
-        .bind(event.author_str())
+        .bind(event.author().to_hex())
         .bind(i64::try_from(event.created_at_u64()).expect("created_at"))
         .bind(i64::from(event.kind_u32()))
         .bind(tags_json)
@@ -5758,7 +5763,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
     ) -> RadrootsEventIngest {
         let wire = RadrootsNip01EventWire {
             id: envelope.id_str().to_owned(),
-            pubkey: envelope.author_str().to_owned(),
+            pubkey: envelope.author().to_hex().to_owned(),
             created_at: envelope.created_at_u64(),
             kind: envelope.kind_u32(),
             tags: envelope.tags_as_vec(),
@@ -5895,7 +5900,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
             "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, '[]', ?, ?, ?, 'verified', ?, ?, ?, ?, ?, ?)",
         )
         .bind(event.id_str())
-        .bind(event.author_str())
+        .bind(event.author().to_hex())
         .bind(i64::try_from(event.created_at_u64()).expect("created_at"))
         .bind(i64::from(event.kind_u32()))
         .bind(event.content())

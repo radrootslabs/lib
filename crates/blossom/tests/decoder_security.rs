@@ -1,12 +1,9 @@
 #![cfg(feature = "raster-decode")]
 
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
-    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES, RadrootsBlossomAuthoredRasterDimensions,
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomBud01GetObservation,
-    RadrootsBlossomBud01HeadObservation, RadrootsBlossomBud02UploadObservation,
-    RadrootsBlossomError, RadrootsBlossomMediaType, RadrootsBlossomSha256,
-    verify_publication_readiness,
+    AuthoredRasterDimensions, BlobDescriptor, BlobUrl, Bud01GetObservation, Bud01HeadObservation,
+    Bud02UploadObservation, Error, MediaType, RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
+    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_DECODED_BYTES, Sha256, verify_publication_readiness,
 };
 use serde::Deserialize;
 use std::{env, fs, io::Write, path::PathBuf, process::Command};
@@ -222,13 +219,13 @@ fn png_chunk(kind: [u8; 4], data: &[u8]) -> Vec<u8> {
     output
 }
 
-fn verify(bytes: &[u8], format: &str) -> Result<(u32, u32), RadrootsBlossomError> {
+fn verify(bytes: &[u8], format: &str) -> Result<(u32, u32), Error> {
     let (media_type, extension) = media(format);
-    let hash = RadrootsBlossomSha256::digest(bytes);
+    let hash = Sha256::digest(bytes);
     let url = format!("https://cdn.example/{hash}.{extension}");
-    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&url).unwrap(),
+    let media_type = MediaType::parse(media_type).unwrap();
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&url).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),
@@ -238,24 +235,16 @@ fn verify(bytes: &[u8], format: &str) -> Result<(u32, u32), RadrootsBlossomError
         .clone()
         .approve_reference()?
         .verify_bytes(bytes, &media_type)?;
-    let upload = RadrootsBlossomBud02UploadObservation::new(201, descriptor)?;
-    let approved_url = RadrootsBlossomBlobUrl::parse(&url)?.approve()?;
-    let head = RadrootsBlossomBud01HeadObservation::new(
-        200,
-        approved_url.clone(),
-        bytes.len() as u64,
-        media_type,
-    )?;
-    let get = RadrootsBlossomBud01GetObservation::from_complete_body(
-        200,
-        approved_url,
-        bytes.len() as u64,
-        bytes,
-    )?;
+    let upload = Bud02UploadObservation::new(201, descriptor)?;
+    let approved_url = BlobUrl::parse(&url)?.approve()?;
+    let head =
+        Bud01HeadObservation::new(200, approved_url.clone(), bytes.len() as u64, media_type)?;
+    let get =
+        Bud01GetObservation::from_complete_body(200, approved_url, bytes.len() as u64, bytes)?;
     let evidence = verify_publication_readiness(
         &authored,
         bytes,
-        RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        AuthoredRasterDimensions::Unspecified,
         &upload,
         &head,
         &get,

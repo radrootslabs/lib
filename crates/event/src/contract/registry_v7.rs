@@ -17,11 +17,11 @@ use crate::{
     envelope::RadrootsEventEnvelope,
     ids::{
         RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsNip01Coordinate,
-        RadrootsPublicKey, relay_url_is_valid,
+        parse_public_key, relay_url_is_valid,
     },
     kinds::*,
 };
-use radroots_blossom::url::RadrootsBlossomBlobUrl;
+use radroots_blossom::BlobUrl;
 
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 7;
 
@@ -4175,7 +4175,7 @@ fn tag_value_is_valid_in_registry(
         RadrootsTagValueType::IanaTimeZoneId => RadrootsIanaTimeZoneId::parse(value).is_ok(),
         RadrootsTagValueType::Kind => value.parse::<u32>().is_ok(),
         RadrootsTagValueType::Nip01Coordinate => RadrootsNip01Coordinate::parse(value).is_ok(),
-        RadrootsTagValueType::PublicKey => RadrootsPublicKey::parse(value).is_ok(),
+        RadrootsTagValueType::PublicKey => parse_public_key(value).is_ok(),
         RadrootsTagValueType::RelayUrl => relay_url_is_valid(value),
         RadrootsTagValueType::Text => visible_text_is_valid(value),
         RadrootsTagValueType::UnixTimestamp => value.parse::<u64>().is_ok(),
@@ -4195,7 +4195,7 @@ fn event_pointer_tag_is_valid(tag: &[String]) -> bool {
     let kind = tag[3].as_str();
     let d_tag = tag[4].as_str();
     RadrootsEventId::parse(id).is_ok()
-        && RadrootsPublicKey::parse(author).is_ok()
+        && parse_public_key(author).is_ok()
         && kind.parse::<u32>().is_ok()
         && (d_tag.is_empty() || RadrootsDTag::parse(d_tag).is_ok())
         && tag
@@ -4335,9 +4335,9 @@ fn validate_calendar_rsvp_contract(
         })
         .map(|parts| parts.pubkey);
     if let Some(author_hint) = tag_value(tags, "p") {
-        let hint = RadrootsPublicKey::parse(author_hint).ok();
+        let hint = parse_public_key(author_hint).ok();
         if hint.as_ref() != event_author.as_ref()
-            || hint.as_ref().is_none_or(|key| key.as_str() != author_hint)
+            || hint.as_ref().is_none_or(|key| key.to_hex() != author_hint)
         {
             return Err(calendar_tag_mismatch(
                 contract,
@@ -4390,7 +4390,7 @@ fn validate_calendar_rsvp_pointer_tag(
             if event_id {
                 RadrootsEventId::parse(value).is_ok_and(|parsed| parsed.as_str() == value)
             } else {
-                RadrootsPublicKey::parse(value).is_ok_and(|parsed| parsed.as_str() == value)
+                parse_public_key(value).is_ok_and(|parsed| parsed.to_hex() == *value)
             }
         });
         let relay_is_valid = tag
@@ -4443,7 +4443,7 @@ fn validate_calendar_blossom_image(
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsContractValidationError> {
     if let Some(image) = tag_value(tags, "image")
-        && RadrootsBlossomBlobUrl::parse(image).is_err()
+        && BlobUrl::parse(image).is_err()
     {
         return Err(calendar_tag_mismatch(
             contract,
@@ -4605,7 +4605,7 @@ fn validate_calendar_participant_tags(
         .filter(|tag| tag.first().map(String::as_str) == Some("p"))
     {
         let pubkey_is_canonical = tag.get(1).is_some_and(|value| {
-            RadrootsPublicKey::parse(value).is_ok_and(|pubkey| pubkey.as_str() == value.as_str())
+            parse_public_key(value).is_ok_and(|pubkey| pubkey.to_hex() == *value)
         });
         let relay_is_valid = tag
             .get(2)
@@ -4669,7 +4669,7 @@ fn canonical_calendar_coordinate_is_valid(value: &str) -> bool {
     let Ok(parts) = crate::ids::RadrootsAddressableCoordinateParts::parse(value) else {
         return false;
     };
-    kind == "31924" && pubkey == parts.pubkey.as_str() && d_tag == parts.d_tag.as_str()
+    kind == "31924" && pubkey == parts.pubkey.to_hex() && d_tag == parts.d_tag.as_str()
 }
 
 fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
@@ -4686,7 +4686,7 @@ fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
         parts.kind,
         KIND_CALENDAR_DATE_EVENT | KIND_CALENDAR_TIME_EVENT
     ) && matches!(kind, "31922" | "31923")
-        && pubkey == parts.pubkey.as_str()
+        && pubkey == parts.pubkey.to_hex()
         && d_tag == parts.d_tag.as_str()
 }
 
@@ -4723,7 +4723,7 @@ fn validate_canonical_calendar_common_tags(
         ));
     }
     if let Some(image) = tag_value(tags, "image")
-        && RadrootsBlossomBlobUrl::parse(image).is_err()
+        && BlobUrl::parse(image).is_err()
     {
         return Err(calendar_tag_mismatch(
             contract,

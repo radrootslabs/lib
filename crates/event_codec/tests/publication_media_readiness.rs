@@ -1,7 +1,7 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES, RadrootsBlossomPublicationReadinessEvidence,
+    PublicationReadinessEvidence, RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
 };
 use radroots_event::wire::compute_canonical_nip01_event_id;
 use radroots_event_codec::wire::publication::{
@@ -370,7 +370,7 @@ fn artifact_canonical_json(fixture: &str) -> Vec<u8> {
 fn evidence_for_fixture(
     fixture: &str,
     media: &[RadrootsPhase1PublicationMediaReference],
-) -> Vec<RadrootsBlossomPublicationReadinessEvidence> {
+) -> Vec<PublicationReadinessEvidence> {
     let dimensions = expected_dimensions(fixture);
     assert_eq!(dimensions.len(), media.len());
     media
@@ -397,7 +397,7 @@ fn evidence_for_reference(
     reference: &RadrootsPhase1PublicationMediaReference,
     dimensions: (u32, u32),
     size: u64,
-) -> RadrootsBlossomPublicationReadinessEvidence {
+) -> PublicationReadinessEvidence {
     let media_type = reference.media_type().as_str();
     let (raster_format, format_code) = match media_type {
         "image/jpeg" => ("jpeg", 1),
@@ -434,10 +434,7 @@ fn evidence_for_reference(
         uploaded,
         evidence_digest,
     };
-    RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(
-        &serde_json::to_vec(&wire).unwrap(),
-    )
-    .unwrap()
+    PublicationReadinessEvidence::from_canonical_json(&serde_json::to_vec(&wire).unwrap()).unwrap()
 }
 
 fn evidence_digest(

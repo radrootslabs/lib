@@ -3,10 +3,14 @@
 #![recursion_limit = "256"]
 
 #[cfg_attr(coverage_nightly, coverage(off))]
+mod architecture;
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod contract;
 mod coverage;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod dto_roots;
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod generate;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod hygiene;
 
@@ -16,6 +20,10 @@ use std::process::ExitCode;
 
 fn usage() {
     eprintln!("usage:");
+    eprintln!("  cargo xtask architecture");
+    eprintln!("  cargo xtask architecture-ci");
+    eprintln!("  cargo xtask check-api-boundaries");
+    eprintln!("  cargo xtask check-dependency-boundaries");
     eprintln!("  cargo xtask contract validate");
     eprintln!("  cargo xtask contract event-contract-registry-v7 [--write]");
     eprintln!("  cargo xtask contract nip09-reconciliation-manifest [--write]");
@@ -32,6 +40,7 @@ fn usage() {
     eprintln!("  cargo xtask contract release-provenance-schema [--write]");
     eprintln!("  cargo xtask contract knowledge-manifest [--write]");
     eprintln!("  cargo xtask dto-roots --check|--write");
+    eprintln!("  cargo xtask generate protocol --check|--write");
     eprintln!("  cargo xtask release preflight");
     eprintln!("  cargo xtask release provenance --package-dir <dir> --out <outside-worktree-file>");
     eprintln!("  cargo xtask coverage run-crate --crate <crate> [--out <dir>]");
@@ -67,11 +76,24 @@ fn workspace_root() -> PathBuf {
     workspace_root_with_override(override_root.as_deref())
 }
 
-fn validate_contract() -> Result<(), String> {
-    radroots_protocol_contract_v1::validate_protocol_contract_v1()
+fn validate_protocol_contracts() -> Result<(), String> {
+    use radroots_protocol::{capability, event, runtime, schema};
+
+    capability::v1::validate_catalog(capability::v1::CATALOG).map_err(|error| error.to_string())?;
+    event::v1::validate_catalog(event::v1::CATALOG).map_err(|error| error.to_string())?;
+    event::v1::validate_trade_state_vocabulary(event::v1::TRADE_STATE_VOCABULARY)
         .map_err(|error| error.to_string())?;
+    runtime::v1::validate_catalog(runtime::v1::CATALOG).map_err(|error| error.to_string())?;
+    schema::protocol_v1_registry()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn validate_contract() -> Result<(), String> {
+    validate_protocol_contracts()?;
     let root = workspace_root();
     dto_roots::check(&root)?;
+    generate::protocol::check(&root)?;
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))
@@ -86,6 +108,7 @@ fn release_preflight() -> Result<(), String> {
 
 fn release_preflight_at(root: &Path) -> Result<(), String> {
     dto_roots::check(root)?;
+    generate::protocol::check(root)?;
     contract::validate_artifact_contracts(root)?;
     contract::validate_release_preflight(root)?;
     #[cfg(not(test))]
@@ -273,9 +296,21 @@ fn run_contract(args: &[String]) -> Result<(), String> {
 
 fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
+        Some("architecture") if args.len() == 1 => architecture::validate(&workspace_root()),
+        Some("architecture-ci") if args.len() == 1 => {
+            architecture::validate_ci(&workspace_root())?;
+            validate_contract()
+        }
+        Some("check-api-boundaries") if args.len() == 1 => {
+            architecture::validate_api_boundaries(&workspace_root())
+        }
+        Some("check-dependency-boundaries") if args.len() == 1 => {
+            architecture::validate_dependency_boundaries(&workspace_root())
+        }
         Some("contract") => run_contract(&args[1..]),
         Some("coverage") => coverage::run(&args[1..]),
         Some("dto-roots") => dto_roots::run(&args[1..], &workspace_root()),
+        Some("generate") => generate::run(&args[1..], &workspace_root()),
         Some("hygiene") => hygiene::run(&args[1..], &workspace_root()),
         Some("release") => run_release(&args[1..]),
         _ => Err("unknown command".to_string()),
@@ -440,9 +475,14 @@ mod tests {
         let unknown_root = run(&["unknown".to_string()]).expect_err("unknown command");
         assert!(unknown_root.contains("unknown command"));
 
+        run(&["architecture".to_string()]).expect("architecture ledger validates");
+
         let invalid_dto_roots =
             run(&["dto-roots".to_string()]).expect_err("dto-roots requires an explicit mode");
         assert!(invalid_dto_roots.contains("--check|--write"));
+        let invalid_generate =
+            run(&["generate".to_string()]).expect_err("generate requires a target and mode");
+        assert!(invalid_generate.contains("generate protocol --check|--write"));
 
         let removed_sdk = run(&["sdk".to_string(), "validate".to_string()])
             .expect_err("removed sdk command namespace");
@@ -477,6 +517,12 @@ mod tests {
         run_contract(&["validate".to_string()]).expect("validate contract");
         run(&["dto-roots".to_string(), "--check".to_string()])
             .expect("validate DTO root freshness");
+        run(&[
+            "generate".to_string(),
+            "protocol".to_string(),
+            "--check".to_string(),
+        ])
+        .expect("validate protocol DTO inventory freshness");
         coverage::run(&["help".to_string()]).expect("coverage help");
         coverage::run(&["required-crates".to_string()]).expect("coverage required crates");
         coverage::run(&["workspace-crates".to_string()]).expect("coverage workspace crates");
@@ -526,13 +572,15 @@ mod tests {
     #[test]
     fn run_contract_dispatches_validate_command() {
         let _guard = lock_workspace();
+        validate_protocol_contracts().expect("final protocol contract catalogs");
         run_contract(&["validate".to_string()]).expect("contract validate");
         run_contract(&["event-contract-registry-v7".to_string()])
             .expect("contract registry-v7 inventory");
         run_contract(&["nip09-reconciliation-manifest".to_string()])
             .expect("contract NIP-09 reconciliation manifest");
-        run_contract(&["food-availability-projection-manifest".to_string()])
-            .expect("contract FoodAvailability projection manifest");
+        let food_error = run_contract(&["food-availability-projection-manifest".to_string()])
+            .expect_err("superseded FoodAvailability predecessor executor must stay immutable");
+        assert!(food_error.contains("immutable FoodAvailability predecessor artifact"));
         run_contract(&["source-maintenance-manifest".to_string()])
             .expect("contract SourceMaintenance manifest");
         run_contract(&["raw-source-rebuild-manifest".to_string()])

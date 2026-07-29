@@ -7,8 +7,8 @@ use radroots_authority::{
     RadrootsPhase1PublicationSigner, RadrootsSignerError, sign_authorized_phase1_publication,
 };
 use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomByteVerifiedDescriptor,
-    RadrootsBlossomMediaType, RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomSha256,
+    BlobDescriptor, BlobUrl, ByteVerifiedDescriptor, MediaType, PublicationReadinessEvidence,
+    Sha256,
 };
 use radroots_event::{
     RadrootsAuthoredImage,
@@ -24,7 +24,7 @@ use radroots_event::{
         RadrootsFoodPrice, RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText,
         RadrootsFoodUnit,
     },
-    ids::{RadrootsEventId, RadrootsPublicKey},
+    ids::RadrootsEventId,
     post::{
         RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostImage,
         RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
@@ -37,6 +37,7 @@ use radroots_event_codec::wire::publication::{
     allowlist::allow_phase1_publication_artifact, bind_phase1_publication_media_readiness,
 };
 use radroots_event_store::RadrootsEventStore;
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, RadrootsNostrSecretKey};
 use radroots_outbox::{
     RadrootsOutbox, RadrootsPhase1PublicationTargetPolicy, RadrootsPhase1PublicationTargetState,
@@ -54,7 +55,7 @@ use radroots_transport_nostr::{
     phase1_publication_delivery_request, repair_phase1_publication_observation,
 };
 use serde::Serialize;
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256 as Sha2_256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -83,7 +84,7 @@ impl CountingPhase1Signer {
 }
 
 impl RadrootsEventSigner for CountingPhase1Signer {
-    fn pubkey(&self) -> &RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         self.inner.pubkey()
     }
 
@@ -99,7 +100,7 @@ impl RadrootsPhase1PublicationSigner for CountingPhase1Signer {
     fn sign_phase1_publication_draft(
         &self,
         draft: &RadrootsPhase1PublicationDraft,
-        expected_pubkey: &RadrootsPublicKey,
+        expected_pubkey: &PublicKey,
         expected_event_id: &RadrootsEventId,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         self.invocations
@@ -677,7 +678,7 @@ fn all_artifacts() -> Vec<RadrootsPhase1PublicationArtifact> {
 fn authored_post_image(bytes: &[u8]) -> RadrootsAuthoredPostImage {
     let image = authored_image(bytes, "media.example", "webp", "image/webp");
     let hash = image.descriptor().sha256();
-    let fallback = RadrootsBlossomBlobUrl::parse(&format!("https://backup.example/{hash}.webp"))
+    let fallback = BlobUrl::parse(&format!("https://backup.example/{hash}.webp"))
         .unwrap()
         .approve()
         .unwrap();
@@ -731,11 +732,11 @@ fn verified_descriptor(
     host: &str,
     extension: &str,
     media_type: &str,
-) -> RadrootsBlossomByteVerifiedDescriptor {
-    let sha256 = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-    RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://{host}/{sha256}.{extension}")).unwrap(),
+) -> ByteVerifiedDescriptor {
+    let sha256 = Sha256::digest(bytes);
+    let media_type = MediaType::parse(media_type).unwrap();
+    BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://{host}/{sha256}.{extension}")).unwrap(),
         sha256,
         u64::try_from(bytes.len()).unwrap(),
         media_type.clone(),
@@ -785,7 +786,7 @@ struct EvidenceWire<'a> {
 fn evidence_for_reference(
     reference: &RadrootsPhase1PublicationMediaReference,
     dimensions: (u32, u32),
-) -> RadrootsBlossomPublicationReadinessEvidence {
+) -> PublicationReadinessEvidence {
     let media_type = reference.media_type().as_str();
     let (raster_format, format_code) = match media_type {
         "image/jpeg" => ("jpeg", 1),
@@ -812,10 +813,7 @@ fn evidence_for_reference(
         uploaded,
         evidence_digest: evidence_digest(reference, format_code, dimensions, uploaded),
     };
-    RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(
-        &serde_json::to_vec(&wire).unwrap(),
-    )
-    .unwrap()
+    PublicationReadinessEvidence::from_canonical_json(&serde_json::to_vec(&wire).unwrap()).unwrap()
 }
 
 fn evidence_digest(
@@ -824,7 +822,7 @@ fn evidence_digest(
     dimensions: (u32, u32),
     uploaded: u64,
 ) -> String {
-    let mut hasher = Sha256::new();
+    let mut hasher = Sha2_256::new();
     hasher.update(b"radroots.blossom.publication-readiness-evidence.v1\0");
     hasher.update(1_u16.to_be_bytes());
     update_length_prefixed(&mut hasher, reference.url().as_str().as_bytes());
@@ -841,7 +839,7 @@ fn evidence_digest(
     hex::encode(hasher.finalize())
 }
 
-fn update_length_prefixed(hasher: &mut Sha256, bytes: &[u8]) {
+fn update_length_prefixed(hasher: &mut Sha2_256, bytes: &[u8]) {
     hasher.update(u64::try_from(bytes.len()).unwrap().to_be_bytes());
     hasher.update(bytes);
 }

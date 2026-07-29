@@ -317,7 +317,8 @@ mod tests {
     mod signed {
         use super::*;
         use crate::{
-            test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX, verification::verify_nip01_event,
+            test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX},
+            verification::verify_nip01_event,
         };
         use nostr::secp256k1::Message;
         use nostr::{Keys, SECP256K1};
@@ -506,12 +507,22 @@ mod tests {
 
         fn comment_tags() -> Vec<Vec<String>> {
             vec![
-                vec!["E".into(), "a".repeat(64), String::new(), "b".repeat(64)],
+                vec![
+                    "E".into(),
+                    "a".repeat(64),
+                    String::new(),
+                    FIXTURE_ALICE_PUBLIC_KEY_HEX.into(),
+                ],
                 vec!["K".into(), KIND_CLASSIFIED_LISTING.to_string()],
-                vec!["P".into(), "b".repeat(64)],
-                vec!["e".into(), "a".repeat(64), String::new(), "b".repeat(64)],
+                vec!["P".into(), FIXTURE_ALICE_PUBLIC_KEY_HEX.into()],
+                vec![
+                    "e".into(),
+                    "a".repeat(64),
+                    String::new(),
+                    FIXTURE_ALICE_PUBLIC_KEY_HEX.into(),
+                ],
                 vec!["k".into(), KIND_CLASSIFIED_LISTING.to_string()],
-                vec!["p".into(), "b".repeat(64)],
+                vec!["p".into(), FIXTURE_ALICE_PUBLIC_KEY_HEX.into()],
             ]
         }
 

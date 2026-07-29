@@ -5,9 +5,10 @@ use crate::events::radroots_nostr_build_event_unchecked;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_event_codec::wire::publication::RadrootsPhase1PublicationDraft;
+use radroots_identity::PublicKey;
 
 pub fn radroots_nostr_sign_frozen_draft(
     keys: &RadrootsNostrKeys,
@@ -15,9 +16,9 @@ pub fn radroots_nostr_sign_frozen_draft(
 ) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
     draft.validate_for_signing()?;
     let actual_pubkey = keys.public_key().to_hex();
-    if actual_pubkey != draft.expected_pubkey_str() {
+    if actual_pubkey != draft.expected_pubkey().to_hex() {
         return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
-            expected_pubkey: draft.expected_pubkey_str().to_owned(),
+            expected_pubkey: draft.expected_pubkey().to_hex().to_owned(),
             actual_pubkey,
         });
     }
@@ -45,13 +46,14 @@ pub fn radroots_nostr_sign_frozen_draft(
 pub fn radroots_nostr_sign_phase1_publication_draft(
     keys: &RadrootsNostrKeys,
     draft: &RadrootsPhase1PublicationDraft,
-    expected_pubkey: &RadrootsPublicKey,
+    expected_pubkey: &PublicKey,
     expected_event_id: &RadrootsEventId,
 ) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
     let actual_pubkey = keys.public_key().to_hex();
-    if actual_pubkey != expected_pubkey.as_str() {
+    let expected_pubkey = expected_pubkey.to_hex();
+    if actual_pubkey != expected_pubkey {
         return Err(RadrootsNostrError::FrozenDraftPubkeyMismatch {
-            expected_pubkey: expected_pubkey.as_str().to_owned(),
+            expected_pubkey,
             actual_pubkey,
         });
     }
@@ -110,7 +112,7 @@ mod tests {
         let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed event");
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
-        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
+        assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(signed.created_at(), draft.created_at_u64());
         assert_eq!(signed.kind(), draft.kind_u32());
         assert_eq!(signed.tags_as_vec(), draft.tags_as_vec());

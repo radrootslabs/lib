@@ -2,19 +2,20 @@ use super::{
     RADROOTS_ADDRESSABLE_TRANSITION_PAGE_LIMIT_MAX_V1, RadrootsEventStoreSourceGeneration,
 };
 use crate::RadrootsEventStoreError;
-use radroots_blossom::RadrootsBlossomSha256;
+use radroots_blossom::Sha256;
 use radroots_event::{
     food_availability::{
         RADROOTS_FOOD_IMAGE_MAX_COUNT, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
         RadrootsFoodIdentifier, RadrootsFoodImageDimensions, RadrootsFoodPrice,
         RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText, food_media_blossom_digest,
     },
-    ids::{RadrootsEventId, RadrootsPublicKey},
+    ids::RadrootsEventId,
 };
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsInboundFoodAvailabilityImage,
     RadrootsInboundFoodAvailabilityProjection,
 };
+use radroots_identity::PublicKey;
 
 pub const RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1: u32 = 1;
 pub const RADROOTS_FOOD_AVAILABILITY_PROJECTION_APPLY_PAGE_LIMIT_V1: u32 =
@@ -159,7 +160,7 @@ pub struct RadrootsStoredFoodAvailabilityImageV1 {
     raw_tag: Vec<String>,
     url: Option<String>,
     dimensions: Option<RadrootsFoodImageDimensions>,
-    blossom_sha256: Option<RadrootsBlossomSha256>,
+    blossom_sha256: Option<Sha256>,
     diagnostics: Vec<RadrootsFoodAvailabilityImageDiagnostic>,
 }
 
@@ -207,7 +208,7 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
         self.dimensions
     }
 
-    pub const fn blossom_sha256(&self) -> Option<RadrootsBlossomSha256> {
+    pub const fn blossom_sha256(&self) -> Option<Sha256> {
         self.blossom_sha256
     }
 
@@ -228,7 +229,7 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredFoodAvailabilityV1 {
     source_generation: RadrootsEventStoreSourceGeneration,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     identifier: RadrootsFoodIdentifier,
     event_id: RadrootsEventId,
     event_seq: i64,
@@ -250,7 +251,7 @@ impl RadrootsStoredFoodAvailabilityV1 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_projection(
         source_generation: RadrootsEventStoreSourceGeneration,
-        pubkey: RadrootsPublicKey,
+        pubkey: PublicKey,
         event_id: RadrootsEventId,
         event_seq: i64,
         created_at: u64,
@@ -307,7 +308,7 @@ impl RadrootsStoredFoodAvailabilityV1 {
         self.source_generation
     }
 
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 

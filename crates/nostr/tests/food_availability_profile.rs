@@ -1,7 +1,4 @@
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-    RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::food_availability::{
     RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityDetailsParts,
     RadrootsFoodAvailabilityImage, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
@@ -213,11 +210,10 @@ fn details_with_images(
 
 fn blossom_image() -> RadrootsFoodAvailabilityImage {
     let bytes = b"victoria-carrots-image-fixture";
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse("image/webp").expect("image media type");
-    let verified = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://media.example/{hash}.webp"))
-            .expect("Blossom URL"),
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse("image/webp").expect("image media type");
+    let verified = BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://media.example/{hash}.webp")).expect("Blossom URL"),
         hash,
         bytes.len() as u64,
         media_type.clone(),

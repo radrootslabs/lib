@@ -1,248 +1,156 @@
 mod common;
 
 use radroots_core::{
-    RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreQuantityPriceOps,
-    RadrootsCoreUnit,
+    Currency, Decimal, Money, Quantity, QuantityPrice, Unit,
+    pricing::{Error, QuantityPriceOps},
 };
 
-#[test]
-fn cost_for_scales_by_ratio() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassKg),
-    );
-    let cost = price.cost_for(&common::qty("2", RadrootsCoreUnit::MassKg));
-    assert_eq!(cost.amount, common::dec("20"));
+fn unit_price(amount: &str, per: &str, unit: Unit) -> QuantityPrice {
+    QuantityPrice::try_new(common::money(amount, "USD"), common::qty(per, unit))
+        .expect("valid price")
 }
 
 #[test]
-fn cost_for_returns_zero_on_unit_mismatch() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassKg),
-    );
-    let cost = price.cost_for(&common::qty("1", RadrootsCoreUnit::Each));
-    assert!(cost.amount.is_zero());
+fn checked_cost_scales_by_ratio_and_rounds_deterministically() {
+    let price = unit_price("10", "1", Unit::MassKg);
+    let cost = price.try_cost_for(&common::qty("2", Unit::MassKg)).unwrap();
+    assert_eq!(cost.amount(), common::dec("20"));
+
+    let rounded = unit_price("1.005", "1", Unit::Each)
+        .try_cost_for_rounded(&common::qty("2", Unit::Each))
+        .unwrap();
+    assert_eq!(rounded.amount(), common::dec("2.01"));
 }
 
 #[test]
-fn cost_for_rounded_and_quantized_price_differ() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("1.005", "USD"),
-        common::qty("1", RadrootsCoreUnit::Each),
-    );
-    let qty = common::qty("2", RadrootsCoreUnit::Each);
-    let rounded = price.cost_for_rounded(&qty);
-    let quantized = price.cost_for_with_quantized_price(&qty);
-
-    assert_eq!(rounded.amount, common::dec("2.01"));
-    assert_eq!(quantized.amount, common::dec("2.02"));
-}
-
-#[test]
-fn try_cost_for_validates_quantity_and_units() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::Each),
-    );
-    let zero_price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("0", RadrootsCoreUnit::Each),
-    );
-
+fn checked_constructor_rejects_zero_per_quantity() {
     assert_eq!(
-        zero_price.try_cost_for(&common::qty("1", RadrootsCoreUnit::Each)),
-        Err(RadrootsCoreQuantityPriceError::PerQuantityZero)
+        QuantityPrice::try_new(common::money("1", "USD"), Quantity::zero(Unit::Each)),
+        Err(Error::PerQuantityZero)
+    );
+}
+
+#[test]
+fn checked_cost_never_silently_converts_failures_to_zero() {
+    let price = unit_price("10", "1", Unit::Each);
+    assert_eq!(
+        price.try_cost_for(&common::qty("1", Unit::MassKg)),
+        Err(Error::UnitMismatch {
+            have: Unit::MassKg,
+            want: Unit::Each,
+        })
     );
     assert_eq!(
-        price.try_cost_for(&common::qty("1", RadrootsCoreUnit::MassKg)),
-        Err(RadrootsCoreQuantityPriceError::UnitMismatch {
-            have: RadrootsCoreUnit::MassKg,
-            want: RadrootsCoreUnit::Each
+        price.try_cost_for_amount_in(common::dec("-1"), Unit::Each),
+        Err(Error::NegativeRequestedQuantity)
+    );
+    assert_eq!(
+        price.try_cost_for_rounded(&common::qty("1", Unit::MassKg)),
+        Err(Error::UnitMismatch {
+            have: Unit::MassKg,
+            want: Unit::Each,
         })
     );
 }
 
 #[test]
-fn try_cost_for_rounded_error_path_is_exercised() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::Each),
+fn checked_cost_reports_arithmetic_overflow() {
+    let price = QuantityPrice::try_new(
+        Money::try_new(Decimal::MAX, Currency::USD).unwrap(),
+        Quantity::try_new(Decimal::ONE, Unit::Each).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        price.try_cost_for(&Quantity::try_new(Decimal::from(2u32), Unit::Each).unwrap()),
+        Err(Error::ArithmeticOverflow)
+    );
+}
+
+#[test]
+fn amount_and_quantity_conversion_support_mass_and_volume() {
+    let mass = unit_price("10", "1", Unit::MassKg);
+    assert_eq!(
+        mass.try_cost_for_amount_in(common::dec("500"), Unit::MassG)
+            .unwrap()
+            .amount(),
+        common::dec("5")
     );
     assert_eq!(
-        price.try_cost_for_rounded(&common::qty("1", RadrootsCoreUnit::MassKg)),
-        Err(RadrootsCoreQuantityPriceError::UnitMismatch {
-            have: RadrootsCoreUnit::MassKg,
-            want: RadrootsCoreUnit::Each
+        mass.try_cost_for_quantity_in(&common::qty("250", Unit::MassG))
+            .unwrap()
+            .amount(),
+        common::dec("2.5")
+    );
+    assert_eq!(
+        mass.try_cost_for_amount_in(common::dec("1"), Unit::Each),
+        Err(Error::NonConvertibleUnits {
+            from: Unit::Each,
+            to: Unit::MassKg,
         })
     );
-}
 
-#[test]
-fn try_cost_for_amount_in_converts_mass_units() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassKg),
-    );
-    let cost = price
-        .try_cost_for_amount_in(common::dec("500"), RadrootsCoreUnit::MassG)
-        .unwrap();
-    assert_eq!(cost.amount, common::dec("5"));
-}
-
-#[test]
-fn try_cost_for_amount_in_converts_volume_units() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::VolumeL),
-    );
-    let cost = price
-        .try_cost_for_amount_in(common::dec("500"), RadrootsCoreUnit::VolumeMl)
-        .unwrap();
-    assert_eq!(cost.amount, common::dec("5"));
-}
-
-#[test]
-fn try_cost_for_amount_in_rejects_non_convertible_units() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassKg),
-    );
+    let volume = unit_price("10", "1", Unit::VolumeL);
     assert_eq!(
-        price.try_cost_for_amount_in(common::dec("1"), RadrootsCoreUnit::Each),
-        Err(RadrootsCoreQuantityPriceError::NonConvertibleUnits {
-            from: RadrootsCoreUnit::Each,
-            to: RadrootsCoreUnit::MassKg
+        volume
+            .try_cost_for_amount_in(common::dec("500"), Unit::VolumeMl)
+            .unwrap()
+            .amount(),
+        common::dec("5")
+    );
+}
+
+#[test]
+fn unit_price_conversion_is_checked_and_uses_accessors() {
+    let base = unit_price("5", "2", Unit::MassKg);
+    let same = base.try_to_unit_price(Unit::MassKg).unwrap();
+    assert_eq!(same.quantity().unit(), Unit::MassKg);
+    assert_eq!(same.quantity().amount(), Decimal::ONE);
+    assert_eq!(same.amount().amount(), common::dec("2.5"));
+    assert_eq!(
+        base.try_to_unit_price(Unit::VolumeMl),
+        Err(Error::NonConvertibleUnits {
+            from: Unit::MassKg,
+            to: Unit::VolumeMl,
         })
     );
-}
 
-#[test]
-fn try_cost_for_amount_in_same_unit_path_is_exercised() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("4", "USD"),
-        common::qty("1", RadrootsCoreUnit::Each),
-    );
-    let out = price
-        .try_cost_for_amount_in(common::dec("3"), RadrootsCoreUnit::Each)
+    let canonical = unit_price("6.99", "1", Unit::MassLb)
+        .try_to_canonical_unit_price()
         .unwrap();
-    assert_eq!(out.amount, common::dec("12"));
+    assert_eq!(canonical.quantity().unit(), Unit::MassG);
+    assert_eq!(canonical.quantity().amount(), Decimal::ONE);
+    assert!(canonical.is_price_per_canonical_unit());
 }
 
 #[test]
-fn try_cost_for_quantity_in_path_is_exercised() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassKg),
+fn unit_price_conversion_detects_precision_underflow() {
+    let tiny = unit_price("1", "0.0000000000000000000000000001", Unit::VolumeMl);
+    assert_eq!(
+        tiny.try_to_unit_price(Unit::VolumeL),
+        Err(Error::PerQuantityZero)
     );
-    let qty = common::qty("250", RadrootsCoreUnit::MassG);
-    let out = price.try_cost_for_quantity_in(&qty).unwrap();
-    assert_eq!(out.amount, common::dec("2.5"));
 }
 
 #[test]
-fn try_to_unit_price_error_and_same_unit_paths_are_exercised() {
-    let zero = RadrootsCoreQuantityPrice::new(
-        common::money("10", "USD"),
-        common::qty("0", RadrootsCoreUnit::MassKg),
+fn pricing_error_messages_are_stable() {
+    assert_eq!(
+        Error::PerQuantityZero.to_string(),
+        "price quantity must be greater than zero"
     );
     assert_eq!(
-        zero.try_to_unit_price(RadrootsCoreUnit::MassG),
-        Err(RadrootsCoreQuantityPriceError::PerQuantityZero)
+        Error::PerQuantityNegative.to_string(),
+        "price quantity must not be negative"
     );
-
-    let base = RadrootsCoreQuantityPrice::new(
-        common::money("5", "USD"),
-        common::qty("2", RadrootsCoreUnit::MassKg),
-    );
-    let same = base.try_to_unit_price(RadrootsCoreUnit::MassKg).unwrap();
-    assert_eq!(same.quantity.unit, RadrootsCoreUnit::MassKg);
-    assert_eq!(same.quantity.amount, common::dec("1"));
-    assert_eq!(same.amount.amount, common::dec("2.5"));
-
-    let err = base
-        .try_to_unit_price(RadrootsCoreUnit::VolumeMl)
-        .unwrap_err();
     assert_eq!(
-        err,
-        RadrootsCoreQuantityPriceError::NonConvertibleUnits {
-            from: RadrootsCoreUnit::MassKg,
-            to: RadrootsCoreUnit::VolumeMl
-        }
+        Error::NegativePrice.to_string(),
+        "price amount must not be negative"
     );
-}
-
-#[test]
-fn cost_for_and_quantized_price_zero_paths_are_exercised() {
-    let p = RadrootsCoreQuantityPrice::new(
-        common::money("3.33", "USD"),
-        common::qty("1", RadrootsCoreUnit::Each),
+    assert_eq!(
+        Error::NegativeRequestedQuantity.to_string(),
+        "requested quantity must not be negative"
     );
-    let zero_qty = common::qty("0", RadrootsCoreUnit::Each);
-    assert!(p.cost_for(&zero_qty).amount.is_zero());
-    assert!(p.cost_for_with_quantized_price(&zero_qty).amount.is_zero());
-
-    let zero_per = RadrootsCoreQuantityPrice::new(
-        common::money("3.33", "USD"),
-        common::qty("0", RadrootsCoreUnit::Each),
+    assert_eq!(
+        Error::ArithmeticOverflow.to_string(),
+        "price arithmetic overflow"
     );
-    assert!(
-        zero_per
-            .cost_for(&common::qty("1", RadrootsCoreUnit::Each))
-            .amount
-            .is_zero()
-    );
-    assert!(
-        zero_per
-            .cost_for_with_quantized_price(&common::qty("1", RadrootsCoreUnit::Each))
-            .amount
-            .is_zero()
-    );
-
-    let mismatch_qty = common::qty("1", RadrootsCoreUnit::MassG);
-    assert!(
-        p.cost_for_with_quantized_price(&mismatch_qty)
-            .amount
-            .is_zero()
-    );
-}
-
-#[test]
-fn try_to_unit_price_detects_underflow_to_zero_normalized_amount() {
-    let tiny = RadrootsCoreQuantityPrice::new(
-        common::money("1", "USD"),
-        common::qty("0.0000000000000000000000000001", RadrootsCoreUnit::VolumeMl),
-    );
-    let err = tiny
-        .try_to_unit_price(RadrootsCoreUnit::VolumeL)
-        .unwrap_err();
-    assert_eq!(err, RadrootsCoreQuantityPriceError::PerQuantityZero);
-}
-
-#[test]
-fn try_to_canonical_unit_price_converts_units() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("6.99", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassLb),
-    );
-    let canonical = price.try_to_canonical_unit_price().unwrap();
-    assert_eq!(canonical.quantity.unit, RadrootsCoreUnit::MassG);
-    assert_eq!(canonical.quantity.amount, common::dec("1"));
-    let expected = common::dec("6.99") / common::dec("453.59237");
-    assert_eq!(canonical.amount.amount, expected);
-}
-
-#[test]
-fn is_price_per_canonical_unit_detects_canonical() {
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("1.00", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassG),
-    );
-    assert!(price.is_price_per_canonical_unit());
-
-    let price = RadrootsCoreQuantityPrice::new(
-        common::money("1.00", "USD"),
-        common::qty("1", RadrootsCoreUnit::MassKg),
-    );
-    assert!(!price.is_price_per_canonical_unit());
 }

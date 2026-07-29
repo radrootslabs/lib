@@ -1,22 +1,22 @@
 {
   "contract_id": "radroots_blossom.raster_decoder_security_v1",
   "manifest": {
-    "byte_length": 31555,
+    "byte_length": 32243,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.json",
-    "sha256": "c38a07006be45e02a1b2eb73b5b2b10d23826c28e9381ccd080dea2fe9c2dc64"
+    "sha256": "1a27473aeae2f1b8dce59992f7571c1c0cdaa6c3caef896a544114a2b09bc680"
   },
   "manifest_schema": {
-    "byte_length": 19177,
+    "byte_length": 19378,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.schema.json",
-    "sha256": "8efaeddcfd209deaa0d60732cfe094a915e6ba1569cb3b09c8c1af9de66fe16e"
+    "sha256": "94f9e8b44f911d46064a7549eb223d8436ea51f0571cb90e02d983ad931c0586"
   },
   "manifest_sidecar": {
     "byte_length": 65,
     "hash_algorithm": "sha256_bytes_v1",
     "path": "crates/blossom/contracts/raster_decoder_security_v1.manifest.sha256",
-    "sha256": "bdac8f2b6288b3711ba8b025ae4cc74cf929a25862cf8acb4fcee469231d1b5e"
+    "sha256": "6cc60e5e73c1d02eb9c0785a14de44f422d4ab224890f1487775d7d51944cdcb"
   },
   "predecessor_contract_ids": [
     "radroots_blossom.publication_readiness_v1"

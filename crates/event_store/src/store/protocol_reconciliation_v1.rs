@@ -426,7 +426,7 @@ async fn insert_raw_event(
         "INSERT OR IGNORE INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(event.id_str())
-    .bind(event.author_str())
+    .bind(event.author().to_hex())
     .bind(i64_from_u64("created_at", event.created_at_u64())?)
     .bind(i64::from(event.kind_u32()))
     .bind(tags_json)
@@ -603,14 +603,14 @@ async fn upsert_head(
                 "DELETE FROM event_envelope_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
             )
             .bind(i64::from(*kind))
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .execute(&mut **tx)
             .await?;
             sqlx::query(
                 "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('replaceable', ?, ?, NULL, ?, ?, ?)",
             )
             .bind(i64::from(*kind))
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .bind(candidate.event_id.as_str())
             .bind(i64_from_u64("created_at", candidate.created_at)?)
             .bind(updated_at_ms)
@@ -626,7 +626,7 @@ async fn upsert_head(
                 "DELETE FROM event_envelope_head WHERE coordinate_type = 'addressable' AND kind = ? AND pubkey = ? AND d_tag = ?",
             )
             .bind(i64::from(*kind))
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .bind(d_tag.as_str())
             .execute(&mut **tx)
             .await?;
@@ -634,7 +634,7 @@ async fn upsert_head(
                 "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('addressable', ?, ?, ?, ?, ?, ?)",
             )
             .bind(i64::from(*kind))
-            .bind(pubkey.as_str())
+            .bind(pubkey.to_hex())
             .bind(d_tag.as_str())
             .bind(candidate.event_id.as_str())
             .bind(i64_from_u64("created_at", candidate.created_at)?)

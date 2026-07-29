@@ -1,74 +1,55 @@
 use thiserror::Error;
 
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
+/// Errors produced while validating public identity values.
+#[non_exhaustive]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum Error {
+    #[error("identifier byte representation must contain {expected} bytes, but contained {actual}")]
+    InvalidByteLength { expected: usize, actual: usize },
 
-#[cfg(all(feature = "std", feature = "json-file"))]
-use radroots_runtime::RuntimeJsonError;
-#[cfg(feature = "std")]
-use std::{io, path::PathBuf};
-
-#[derive(Debug, Error)]
-pub enum IdentityError {
-    #[cfg(feature = "std")]
-    #[error("identity file missing at {0}")]
-    NotFound(PathBuf),
-
-    #[cfg(feature = "std")]
     #[error(
-        "identity file missing at {0} and generation is not permitted \
-        (pass --allow-generate-identity)"
+        "identifier hexadecimal representation must contain {expected} bytes, but contained {actual}"
     )]
-    GenerationNotAllowed(PathBuf),
+    InvalidHexLength { expected: usize, actual: usize },
 
-    #[cfg(feature = "std")]
-    #[error("failed to read identity file at {0}: {1}")]
-    Read(PathBuf, #[source] io::Error),
+    #[error("identifier contains non-hexadecimal data at byte {index}")]
+    InvalidHexCharacter { index: usize },
 
-    #[cfg(feature = "std")]
-    #[error("failed to create identity directory {0}: {1}")]
-    CreateDir(PathBuf, #[source] io::Error),
+    #[error("public key bytes are not a valid secp256k1 x-only public key")]
+    InvalidPublicKeyBytes,
 
-    #[cfg(feature = "std")]
-    #[error("failed to write identity file at {0}: {1}")]
-    Write(PathBuf, #[source] io::Error),
+    #[error("public identity identifier does not match its public key")]
+    IdentityIdMismatch,
 
-    #[error("invalid identity JSON: {0}")]
-    InvalidJson(#[from] serde_json::Error),
+    #[error("account identifier does not match its public identity")]
+    AccountIdMismatch,
 
-    #[error("invalid secret key: {0}")]
-    InvalidSecretKey(#[from] nostr::key::Error),
+    #[error(
+        "account updated timestamp {updated_at_unix} precedes created timestamp {created_at_unix}"
+    )]
+    AccountUpdatedBeforeCreated {
+        created_at_unix: u64,
+        updated_at_unix: u64,
+    },
 
-    #[cfg(feature = "nip49")]
-    #[error("failed to encrypt secret key: {0}")]
-    EncryptSecretKey(String),
+    #[error(
+        "account update timestamp {proposed_updated_at_unix} precedes current timestamp {current_updated_at_unix}"
+    )]
+    AccountUpdateRegressed {
+        current_updated_at_unix: u64,
+        proposed_updated_at_unix: u64,
+    },
 
-    #[cfg(feature = "nip49")]
-    #[error("invalid encrypted secret key: {0}")]
-    InvalidEncryptedSecretKey(String),
+    #[error("username length must be between {min} and {max} ASCII bytes, but was {actual}")]
+    InvalidUsernameLength {
+        min: usize,
+        max: usize,
+        actual: usize,
+    },
 
-    #[cfg(feature = "nip49")]
-    #[error("failed to decrypt encrypted secret key: {0}")]
-    DecryptEncryptedSecretKey(String),
+    #[error("username contains an invalid character at byte {index}")]
+    InvalidUsernameCharacter { index: usize },
 
-    #[error("invalid public key: {0}")]
-    InvalidPublicKey(String),
-
-    #[error("public key does not match secret key")]
-    PublicKeyMismatch,
-
-    #[error("unsupported identity file format")]
-    InvalidIdentityFormat,
-
-    #[cfg(all(feature = "std", feature = "json-file"))]
-    #[error(transparent)]
-    Store(#[from] RuntimeJsonError),
-
-    #[cfg(feature = "std")]
-    #[error(transparent)]
-    Paths(#[from] radroots_runtime_paths::RadrootsRuntimePathsError),
-
-    #[cfg(feature = "std")]
-    #[error("protected identity storage error at {path}: {message}")]
-    ProtectedStorage { path: PathBuf, message: String },
+    #[error("username dots cannot be leading, trailing, or consecutive")]
+    InvalidUsernameDotPlacement,
 }

@@ -2,15 +2,13 @@
 
 use image::{ExtendedColorType, ImageEncoder, codecs::webp::WebPEncoder};
 use radroots_blossom::{
+    ApprovedBlobUrl, AuthoredRasterDimensions, BlobDescriptor, BlobUrl, Bud01GetObservation,
+    Bud01HeadObservation, Bud02UploadObservation, Error, MediaType, PublicationReadinessEvidence,
     RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
     RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_SCHEMA_VERSION,
     RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION,
-    RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES, RadrootsBlossomApprovedBlobUrl,
-    RadrootsBlossomAuthoredRasterDimensions, RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl,
-    RadrootsBlossomBud01GetObservation, RadrootsBlossomBud01HeadObservation,
-    RadrootsBlossomBud02UploadObservation, RadrootsBlossomError, RadrootsBlossomMediaType,
-    RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomRasterDimensions,
-    RadrootsBlossomRasterFormat, RadrootsBlossomSha256, verify_publication_readiness,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES, RasterDimensions, RasterFormat, Sha256,
+    verify_publication_readiness,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -48,17 +46,12 @@ fn publication_readiness_vectors_execute_against_public_api() {
 #[test]
 fn publication_readiness_accepts_public_jpeg_and_still_webp() {
     for (bytes, media_type, extension, format) in [
-        (
-            encoded_jpeg(),
-            "image/jpeg",
-            "jpg",
-            RadrootsBlossomRasterFormat::Jpeg,
-        ),
+        (encoded_jpeg(), "image/jpeg", "jpg", RasterFormat::Jpeg),
         (
             encoded_still_webp(),
             "image/webp",
             "webp",
-            RadrootsBlossomRasterFormat::StillWebP,
+            RasterFormat::StillWebP,
         ),
     ] {
         let bytes = bytes.as_slice();
@@ -66,9 +59,7 @@ fn publication_readiness_accepts_public_jpeg_and_still_webp() {
             bytes,
             media_type,
             extension,
-            RadrootsBlossomAuthoredRasterDimensions::Exact(
-                RadrootsBlossomRasterDimensions::new(1, 1).unwrap(),
-            ),
+            AuthoredRasterDimensions::Exact(RasterDimensions::new(1, 1).unwrap()),
         )
         .unwrap();
 
@@ -90,15 +81,13 @@ fn publication_readiness_evidence_round_trips_only_through_strict_canonical_json
         &bytes,
         "image/png",
         "png",
-        RadrootsBlossomAuthoredRasterDimensions::Exact(
-            RadrootsBlossomRasterDimensions::new(1, 1).unwrap(),
-        ),
+        AuthoredRasterDimensions::Exact(RasterDimensions::new(1, 1).unwrap()),
     )
     .unwrap();
     let canonical = evidence.to_canonical_json().unwrap();
     assert!(canonical.len() <= RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES);
 
-    let reloaded = RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&canonical)
+    let reloaded = PublicationReadinessEvidence::from_canonical_json(&canonical)
         .expect("canonical evidence must reload");
     assert_eq!(reloaded, evidence);
     assert_eq!(
@@ -116,7 +105,7 @@ fn publication_readiness_evidence_round_trips_only_through_strict_canonical_json
     )
     .unwrap();
     assert_eq!(
-        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&pretty)
+        PublicationReadinessEvidence::from_canonical_json(&pretty)
             .unwrap_err()
             .code(),
         "publication_readiness_evidence_json_non_canonical"
@@ -126,7 +115,7 @@ fn publication_readiness_evidence_round_trips_only_through_strict_canonical_json
     unknown.pop();
     unknown.extend_from_slice(br#","authorization":"Nostr token"}"#);
     assert_eq!(
-        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&unknown)
+        PublicationReadinessEvidence::from_canonical_json(&unknown)
             .unwrap_err()
             .code(),
         "publication_readiness_evidence_invalid_json"
@@ -134,7 +123,7 @@ fn publication_readiness_evidence_round_trips_only_through_strict_canonical_json
 
     let oversized = vec![b' '; RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES + 1];
     assert_eq!(
-        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&oversized)
+        PublicationReadinessEvidence::from_canonical_json(&oversized)
             .unwrap_err()
             .code(),
         "publication_readiness_evidence_too_large"
@@ -147,7 +136,7 @@ fn publication_readiness_evidence_revalidates_every_persisted_fact() {
         &canonical_png(),
         "image/png",
         "png",
-        RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        AuthoredRasterDimensions::Unspecified,
     )
     .unwrap();
     let canonical = evidence.to_canonical_json().unwrap();
@@ -209,7 +198,7 @@ fn publication_readiness_evidence_revalidates_every_persisted_fact() {
         wire[field] = value;
         let mutated = serde_json::to_vec(&wire).unwrap();
         assert_eq!(
-            RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(&mutated)
+            PublicationReadinessEvidence::from_canonical_json(&mutated)
                 .unwrap_err()
                 .code(),
             expected,
@@ -220,7 +209,7 @@ fn publication_readiness_evidence_revalidates_every_persisted_fact() {
     let mut dimensions: Value = serde_json::from_slice(&canonical).unwrap();
     dimensions["dimensions"]["width"] = serde_json::json!(0);
     assert_eq!(
-        RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(
+        PublicationReadinessEvidence::from_canonical_json(
             &serde_json::to_vec(&dimensions).unwrap(),
         )
         .unwrap_err()
@@ -231,11 +220,11 @@ fn publication_readiness_evidence_revalidates_every_persisted_fact() {
 
 #[test]
 fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
-    let empty_hash = RadrootsBlossomSha256::digest(&[]);
+    let empty_hash = Sha256::digest(&[]);
     let empty_url = format!("https://cdn.example/{empty_hash}.png");
-    let empty_media_type = RadrootsBlossomMediaType::parse("image/png").unwrap();
-    let empty_descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&empty_url).unwrap(),
+    let empty_media_type = MediaType::parse("image/png").unwrap();
+    let empty_descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&empty_url).unwrap(),
         empty_hash,
         0,
         empty_media_type.clone(),
@@ -246,10 +235,10 @@ fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
     .unwrap()
     .verify_bytes(&[], &empty_media_type)
     .unwrap();
-    let empty_upload = RadrootsBlossomBud02UploadObservation::new(
+    let empty_upload = Bud02UploadObservation::new(
         201,
-        RadrootsBlossomBlobDescriptor::new(
-            RadrootsBlossomBlobUrl::parse(&empty_url).unwrap(),
+        BlobDescriptor::new(
+            BlobUrl::parse(&empty_url).unwrap(),
             empty_hash,
             0,
             empty_media_type.clone(),
@@ -258,25 +247,16 @@ fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
         .unwrap(),
     )
     .unwrap();
-    let empty_approved_url = RadrootsBlossomBlobUrl::parse(&empty_url)
-        .unwrap()
-        .approve()
-        .unwrap();
-    let empty_head = RadrootsBlossomBud01HeadObservation::new(
-        200,
-        empty_approved_url.clone(),
-        0,
-        empty_media_type,
-    )
-    .unwrap();
+    let empty_approved_url = BlobUrl::parse(&empty_url).unwrap().approve().unwrap();
+    let empty_head =
+        Bud01HeadObservation::new(200, empty_approved_url.clone(), 0, empty_media_type).unwrap();
     let nonempty_get =
-        RadrootsBlossomBud01GetObservation::from_complete_body(200, empty_approved_url, 1, &[0])
-            .unwrap();
+        Bud01GetObservation::from_complete_body(200, empty_approved_url, 1, &[0]).unwrap();
     assert_eq!(
         verify_publication_readiness(
             &empty_descriptor,
             &[],
-            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            AuthoredRasterDimensions::Unspecified,
             &empty_upload,
             &empty_head,
             &nonempty_get,
@@ -287,7 +267,7 @@ fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
     );
 
     let bytes = canonical_png();
-    let hash = RadrootsBlossomSha256::digest(&bytes);
+    let hash = Sha256::digest(&bytes);
     let prefix = format!("https://cdn.example/{hash}.");
     let exact_extension =
         "p".repeat(RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES - prefix.len());
@@ -295,7 +275,7 @@ fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
         &bytes,
         "image/png",
         &exact_extension,
-        RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        AuthoredRasterDimensions::Unspecified,
     )
     .unwrap();
     assert_eq!(
@@ -309,7 +289,7 @@ fn publication_readiness_enforces_nonempty_bytes_and_bounded_urls() {
             &bytes,
             "image/png",
             &over_extension,
-            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            AuthoredRasterDimensions::Unspecified,
         )
         .unwrap_err()
         .code(),
@@ -337,7 +317,7 @@ fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters
                 &truncated,
                 "image/jpeg",
                 "jpg",
-                RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+                AuthoredRasterDimensions::Unspecified,
             )
             .unwrap_err()
             .code(),
@@ -356,7 +336,7 @@ fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters
             &malformed_dqt,
             "image/jpeg",
             "jpg",
-            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            AuthoredRasterDimensions::Unspecified,
         )
         .unwrap_err()
         .code(),
@@ -370,7 +350,7 @@ fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters
             &progressive,
             "image/jpeg",
             "jpg",
-            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            AuthoredRasterDimensions::Unspecified,
         )
         .unwrap_err()
         .code(),
@@ -382,7 +362,7 @@ fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters
             &encoded_animated_png(),
             "image/png",
             "png",
-            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            AuthoredRasterDimensions::Unspecified,
         )
         .unwrap_err()
         .code(),
@@ -394,7 +374,7 @@ fn publication_readiness_rejects_forbidden_and_corrupt_jpeg_and_animated_rasters
             &encoded_animated_webp(),
             "image/webp",
             "webp",
-            RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+            AuthoredRasterDimensions::Unspecified,
         )
         .unwrap_err()
         .code(),
@@ -483,13 +463,13 @@ fn verify_public_raster(
     bytes: &[u8],
     media_type: &str,
     extension: &str,
-    authored_dimensions: RadrootsBlossomAuthoredRasterDimensions,
-) -> Result<radroots_blossom::RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomError> {
-    let hash = RadrootsBlossomSha256::digest(bytes);
+    authored_dimensions: AuthoredRasterDimensions,
+) -> Result<radroots_blossom::PublicationReadinessEvidence, Error> {
+    let hash = Sha256::digest(bytes);
     let url = format!("https://cdn.example/{hash}.{extension}");
-    let media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
-    let authored_descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&url).unwrap(),
+    let media_type = MediaType::parse(media_type).unwrap();
+    let authored_descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&url).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),
@@ -500,10 +480,10 @@ fn verify_public_raster(
     .unwrap()
     .verify_bytes(bytes, &media_type)
     .unwrap();
-    let upload = RadrootsBlossomBud02UploadObservation::new(
+    let upload = Bud02UploadObservation::new(
         201,
-        RadrootsBlossomBlobDescriptor::new(
-            RadrootsBlossomBlobUrl::parse(&url).unwrap(),
+        BlobDescriptor::new(
+            BlobUrl::parse(&url).unwrap(),
             hash,
             bytes.len() as u64,
             media_type.clone(),
@@ -512,24 +492,11 @@ fn verify_public_raster(
         .unwrap(),
     )
     .unwrap();
-    let approved_url = RadrootsBlossomBlobUrl::parse(&url)
-        .unwrap()
-        .approve()
+    let approved_url = BlobUrl::parse(&url).unwrap().approve().unwrap();
+    let head = Bud01HeadObservation::new(200, approved_url.clone(), bytes.len() as u64, media_type)
         .unwrap();
-    let head = RadrootsBlossomBud01HeadObservation::new(
-        200,
-        approved_url.clone(),
-        bytes.len() as u64,
-        media_type,
-    )
-    .unwrap();
-    let get = RadrootsBlossomBud01GetObservation::from_complete_body(
-        200,
-        approved_url,
-        bytes.len() as u64,
-        bytes,
-    )
-    .unwrap();
+    let get = Bud01GetObservation::from_complete_body(200, approved_url, bytes.len() as u64, bytes)
+        .unwrap();
     verify_publication_readiness(
         &authored_descriptor,
         bytes,
@@ -627,7 +594,7 @@ fn execute_invalid(vector: &Vector) {
 fn run_mutation(
     vector: &Vector,
     mutation: &str,
-) -> Result<radroots_blossom::RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomError> {
+) -> Result<radroots_blossom::PublicationReadinessEvidence, Error> {
     let canonical = hex::decode(input_str(vector, "bytes_hex")).unwrap();
     let mut sealed_bytes = canonical.clone();
     let mut exact_authored_bytes = canonical.clone();
@@ -824,7 +791,7 @@ fn run_mutation(
 
     if mutation == "get_size_over_max" {
         let url = approved_url(get_origin, &sealed_bytes);
-        return RadrootsBlossomBud01GetObservation::from_complete_body(
+        return Bud01GetObservation::from_complete_body(
             get_status,
             url,
             adjusted_size(sealed_bytes.len(), get_declared_size_delta),
@@ -833,7 +800,7 @@ fn run_mutation(
         .and_then(|_| unreachable_result());
     }
 
-    let expected_media_type = RadrootsBlossomMediaType::parse(media_type).unwrap();
+    let expected_media_type = MediaType::parse(media_type).unwrap();
     let authored_descriptor = descriptor(
         "https://cdn.example",
         &sealed_bytes,
@@ -843,7 +810,7 @@ fn run_mutation(
     .approve_reference()?
     .verify_bytes(&sealed_bytes, &expected_media_type)?;
 
-    let upload = RadrootsBlossomBud02UploadObservation::new(
+    let upload = Bud02UploadObservation::new(
         upload_status,
         descriptor(
             upload_origin,
@@ -852,23 +819,23 @@ fn run_mutation(
             upload_media_type,
         ),
     )?;
-    let head = RadrootsBlossomBud01HeadObservation::new(
+    let head = Bud01HeadObservation::new(
         head_status,
         approved_url(head_origin, &sealed_bytes),
         adjusted_size(sealed_bytes.len(), head_size_delta),
-        RadrootsBlossomMediaType::parse(head_media_type).unwrap(),
+        MediaType::parse(head_media_type).unwrap(),
     )?;
-    let get = RadrootsBlossomBud01GetObservation::from_complete_body(
+    let get = Bud01GetObservation::from_complete_body(
         get_status,
         approved_url(get_origin, &sealed_bytes),
         adjusted_size(sealed_bytes.len(), get_declared_size_delta),
         &retrieved_bytes,
     )?;
     let authored_dimensions = match authored_dimensions {
-        Some((width, height)) => RadrootsBlossomAuthoredRasterDimensions::Exact(
-            RadrootsBlossomRasterDimensions::new(width, height)?,
-        ),
-        None => RadrootsBlossomAuthoredRasterDimensions::Unspecified,
+        Some((width, height)) => {
+            AuthoredRasterDimensions::Exact(RasterDimensions::new(width, height)?)
+        }
+        None => AuthoredRasterDimensions::Unspecified,
     };
     verify_publication_readiness(
         &authored_descriptor,
@@ -893,31 +860,25 @@ fn replace_raster_bytes(
     upload_hash_bytes.clone_from(sealed_bytes);
 }
 
-fn unreachable_result()
--> Result<radroots_blossom::RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomError> {
+fn unreachable_result() -> Result<radroots_blossom::PublicationReadinessEvidence, Error> {
     unreachable!("oversized GET construction must fail")
 }
 
-fn descriptor(
-    origin: &str,
-    hash_bytes: &[u8],
-    size: u64,
-    media_type: &str,
-) -> RadrootsBlossomBlobDescriptor {
-    let hash = RadrootsBlossomSha256::digest(hash_bytes);
-    RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("{origin}/{hash}.png")).unwrap(),
+fn descriptor(origin: &str, hash_bytes: &[u8], size: u64, media_type: &str) -> BlobDescriptor {
+    let hash = Sha256::digest(hash_bytes);
+    BlobDescriptor::new(
+        BlobUrl::parse(&format!("{origin}/{hash}.png")).unwrap(),
         hash,
         size,
-        RadrootsBlossomMediaType::parse(media_type).unwrap(),
+        MediaType::parse(media_type).unwrap(),
         1_800_000_000,
     )
     .unwrap()
 }
 
-fn approved_url(origin: &str, hash_bytes: &[u8]) -> RadrootsBlossomApprovedBlobUrl {
-    let hash = RadrootsBlossomSha256::digest(hash_bytes);
-    RadrootsBlossomBlobUrl::parse(&format!("{origin}/{hash}.png"))
+fn approved_url(origin: &str, hash_bytes: &[u8]) -> ApprovedBlobUrl {
+    let hash = Sha256::digest(hash_bytes);
+    BlobUrl::parse(&format!("{origin}/{hash}.png"))
         .unwrap()
         .approve()
         .unwrap()

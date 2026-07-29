@@ -48,9 +48,9 @@
   "source_files": [
     {
       "file": {
-        "byte_length": 1856,
+        "byte_length": 1948,
         "path": "crates/outbox/Cargo.toml",
-        "sha256": "f643aa30ee5d9ada9ef43bfeae7517ccacb234f237953a35175fc6b8a4b5bbaa"
+        "sha256": "b41ec65ece0ca32031906f10e25973714a8eb910f82ea59d0d54f3bbea70a866"
       },
       "role": "outbox_package_manifest"
     },
@@ -64,9 +64,9 @@
     },
     {
       "file": {
-        "byte_length": 133831,
+        "byte_length": 133966,
         "path": "crates/outbox/src/phase1_publication.rs",
-        "sha256": "45eaf58cad4fcbba707ff91d12cb8f9c6c5ea4d0dfad85e6e3a00a403efe25d5"
+        "sha256": "025b9051785b1c293a604c2dea8a3cb6123f71750f4a25d337d828a0e97abab0"
       },
       "role": "phase1_publication_runtime"
     },
@@ -112,25 +112,25 @@
     },
     {
       "file": {
-        "byte_length": 510144,
+        "byte_length": 536956,
         "path": "tools/xtask/src/contract.rs",
-        "sha256": "c08947646a9769e4278d8a044b3474026fd71b3a2315babccae992b2ae55c368"
+        "sha256": "226461c98773687d9e39c502785655ae8b9f831b79fbd8d824f709c13715690c"
       },
       "role": "contract_dispatch"
     },
     {
       "file": {
-        "byte_length": 24835,
+        "byte_length": 27184,
         "path": "tools/xtask/src/main.rs",
-        "sha256": "0c75609e8a3612ff17ce8b99d6fafba84994865e1863535ac818d9a54678bf90"
+        "sha256": "83a8ac80c188802474e147444e7af890a188dd2103822ffbda607cd0b4b26044"
       },
       "role": "xtask_dispatch"
     },
     {
       "file": {
-        "byte_length": 27103,
+        "byte_length": 27107,
         "path": "contracts/releases/1.0.0-alpha.1.toml",
-        "sha256": "f12cc739f3253b6847556e5659c4cba061bf18265435b2af39f6961ba6bb86e5"
+        "sha256": "8168ed38dfce1c8e1b3a8262da0eb8088d50287fcae93f05cd1103fb02b446bf"
       },
       "role": "release_record"
     },

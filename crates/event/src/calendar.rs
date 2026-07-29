@@ -8,15 +8,15 @@ use alloc::{
 use core::{fmt, ops::RangeInclusive, str::FromStr};
 
 use crate::ids::{
-    RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsDTag,
-    RadrootsEventId, RadrootsPublicKey, RadrootsRelayUrl,
+    PublicKey, RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsDTag,
+    RadrootsEventId, RadrootsRelayUrl, parse_public_key,
 };
 use crate::media::RadrootsAuthoredImage;
 use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_MAX_BYTES,
 };
-use radroots_blossom::url::RadrootsBlossomBlobUrl;
+use radroots_blossom::BlobUrl;
 use url_nostd::Url;
 
 pub const RADROOTS_CALENDAR_SECONDS_PER_DAY: u64 = 86_400;
@@ -281,7 +281,7 @@ impl serde::Serialize for RadrootsCalendarUid {
 pub struct RadrootsCalendarEventReference {
     coordinate: RadrootsAddressableCoordinate,
     kind: u32,
-    author: RadrootsPublicKey,
+    author: PublicKey,
     d_tag: RadrootsDTag,
     relay: Option<String>,
 }
@@ -322,7 +322,7 @@ impl RadrootsCalendarEventReference {
         self.kind
     }
 
-    pub fn author(&self) -> &RadrootsPublicKey {
+    pub fn author(&self) -> &PublicKey {
         &self.author
     }
 
@@ -400,7 +400,7 @@ impl RadrootsCalendarEventRevisionReference {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsCalendarEventAuthorReference {
     raw_pubkey: String,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     relay: Option<String>,
 }
 
@@ -410,7 +410,7 @@ impl RadrootsCalendarEventAuthorReference {
         relay: Option<&str>,
     ) -> Result<Self, RadrootsCalendarEventError> {
         let raw_pubkey = pubkey.as_ref();
-        let pubkey = RadrootsPublicKey::parse(raw_pubkey)
+        let pubkey = parse_public_key(raw_pubkey)
             .map_err(|_| RadrootsCalendarEventError::InvalidAuthorReference)?;
         let relay = parse_calendar_reference_relay(
             relay,
@@ -427,7 +427,7 @@ impl RadrootsCalendarEventAuthorReference {
         &self.raw_pubkey
     }
 
-    pub fn pubkey(&self) -> &RadrootsPublicKey {
+    pub fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -437,7 +437,7 @@ impl RadrootsCalendarEventAuthorReference {
 
     pub fn is_canonical(&self) -> bool {
         // Relay hints use strict Radroots syntax; their raw URL spelling is not normalized.
-        self.raw_pubkey == self.pubkey.as_str()
+        self.raw_pubkey == self.pubkey.to_hex()
             && self
                 .relay()
                 .is_none_or(|relay| RadrootsRelayUrl::parse(relay).is_ok())
@@ -743,7 +743,7 @@ impl RadrootsParsedNip52Calendar {
 pub struct RadrootsAdmittedCalendar {
     parsed: RadrootsParsedNip52Calendar,
     uid: RadrootsCalendarUid,
-    blossom_image: Option<RadrootsBlossomBlobUrl>,
+    blossom_image: Option<BlobUrl>,
 }
 
 impl RadrootsAdmittedCalendar {
@@ -778,7 +778,7 @@ impl RadrootsAdmittedCalendar {
         let blossom_image = parsed
             .image()
             .map(|image| {
-                RadrootsBlossomBlobUrl::parse(image.as_str())
+                BlobUrl::parse(image.as_str())
                     .map_err(|_| RadrootsCalendarAdmissionError::NonBlossomImage)
             })
             .transpose()?;
@@ -813,7 +813,7 @@ impl RadrootsAdmittedCalendar {
         self.parsed.list_description()
     }
 
-    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+    pub fn blossom_image(&self) -> Option<&BlobUrl> {
         self.blossom_image.as_ref()
     }
 }
@@ -1744,7 +1744,7 @@ impl std::error::Error for RadrootsCalendarAdmissionError {}
 pub struct RadrootsAdmittedCalendarDateEvent {
     parsed: RadrootsParsedNip52CalendarDateEvent,
     d_tag: RadrootsDTag,
-    blossom_image: Option<RadrootsBlossomBlobUrl>,
+    blossom_image: Option<BlobUrl>,
 }
 
 impl RadrootsAdmittedCalendarDateEvent {
@@ -1772,7 +1772,7 @@ impl RadrootsAdmittedCalendarDateEvent {
         &self.d_tag
     }
 
-    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+    pub fn blossom_image(&self) -> Option<&BlobUrl> {
         self.blossom_image.as_ref()
     }
 }
@@ -1782,7 +1782,7 @@ pub struct RadrootsAdmittedCalendarTimeEvent {
     parsed: RadrootsParsedNip52CalendarTimeEvent,
     d_tag: RadrootsDTag,
     covered_utc_days: Vec<u64>,
-    blossom_image: Option<RadrootsBlossomBlobUrl>,
+    blossom_image: Option<BlobUrl>,
 }
 
 impl RadrootsAdmittedCalendarTimeEvent {
@@ -1839,7 +1839,7 @@ impl RadrootsAdmittedCalendarTimeEvent {
         &self.covered_utc_days
     }
 
-    pub fn blossom_image(&self) -> Option<&RadrootsBlossomBlobUrl> {
+    pub fn blossom_image(&self) -> Option<&BlobUrl> {
         self.blossom_image.as_ref()
     }
 }
@@ -2065,7 +2065,7 @@ fn validate_inbound_calendar_participants(
     participants: &[RadrootsCalendarParticipant],
 ) -> Result<(), RadrootsCalendarEventError> {
     for (index, participant) in participants.iter().enumerate() {
-        if RadrootsPublicKey::parse(&participant.pubkey).is_err()
+        if parse_public_key(&participant.pubkey).is_err()
             || participant
                 .relay
                 .as_deref()
@@ -2092,9 +2092,9 @@ fn validate_authored_calendar_participants(
     }
     validate_inbound_calendar_participants(participants)?;
     for (index, participant) in participants.iter().enumerate() {
-        let pubkey = RadrootsPublicKey::parse(&participant.pubkey)
+        let pubkey = parse_public_key(&participant.pubkey)
             .map_err(|_| RadrootsCalendarEventError::InvalidParticipant { index })?;
-        if pubkey.as_str() != participant.pubkey
+        if pubkey.to_hex() != participant.pubkey
             || participant
                 .relay
                 .as_deref()
@@ -2159,12 +2159,12 @@ fn validate_admitted_calendar_common(
 
 fn admitted_blossom_image(
     common: &RadrootsParsedNip52CalendarCommon,
-) -> Result<Option<RadrootsBlossomBlobUrl>, RadrootsCalendarAdmissionError> {
+) -> Result<Option<BlobUrl>, RadrootsCalendarAdmissionError> {
     common
         .image
         .as_ref()
         .map(|image| {
-            RadrootsBlossomBlobUrl::parse(image.as_str())
+            BlobUrl::parse(image.as_str())
                 .map_err(|_| RadrootsCalendarAdmissionError::NonBlossomImage)
         })
         .transpose()
@@ -2973,7 +2973,7 @@ mod tests {
             event.coordinate().as_str(),
             format!("031923:{uppercase_author}:wash-pack")
         );
-        assert_eq!(event.author().as_str(), "a".repeat(64));
+        assert_eq!(event.author().to_hex(), "a".repeat(64));
         assert_eq!(event.relay(), Some("WSS://Relay.Example/events"));
         assert!(!event.is_canonical());
 
@@ -2992,7 +2992,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(author.raw_pubkey(), uppercase_author);
-        assert_eq!(author.pubkey().as_str(), "a".repeat(64));
+        assert_eq!(author.pubkey().to_hex(), "a".repeat(64));
         assert!(!author.is_canonical());
 
         assert_eq!(
@@ -3211,7 +3211,9 @@ mod tests {
     fn rsvp_author_hint_must_match_event_coordinate_in_strict_layers() {
         let uid = RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAQ").unwrap();
         let event = canonical_event_reference("wash-pack");
-        let mismatched = RadrootsCalendarEventAuthorReference::parse("b".repeat(64), None).unwrap();
+        let mismatched =
+            RadrootsCalendarEventAuthorReference::parse(crate::test_valid_hex_64('b'), None)
+                .unwrap();
         assert_eq!(
             RadrootsAuthoredCalendarEventRsvp::new(
                 uid.clone(),

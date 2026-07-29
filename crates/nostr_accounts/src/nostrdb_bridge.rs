@@ -9,10 +9,10 @@ pub fn radroots_nostr_accounts_register_default_secret_with_nostrdb(
     let Some(signer) = manager.default_signer_capability()? else {
         return Ok(false);
     };
-    let Some(identity) = manager.resolve_signing_identity_for_signer(&signer)? else {
+    let Some(keys) = manager.resolve_signing_keys_for_signer(&signer)? else {
         return Ok(false);
     };
-    Ok(nostrdb.add_giftwrap_secret_key(identity.secret_key_bytes()))
+    Ok(nostrdb.add_giftwrap_secret_key(keys.secret_key().to_secret_bytes()))
 }
 
 #[cfg(test)]
@@ -20,6 +20,8 @@ mod tests {
     use super::*;
     use crate::store::RadrootsNostrFileAccountStore;
     use crate::vault::RadrootsNostrSecretVaultMemory;
+    use nostr::Keys;
+    use radroots_identity::{PublicIdentity, PublicKey};
     use radroots_nostrdb::prelude::RadrootsNostrdbConfig;
     use std::sync::Arc;
 
@@ -32,7 +34,7 @@ mod tests {
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
         let manager = RadrootsNostrAccountsManager::new(store, vault).expect("manager");
         manager
-            .generate_identity(Some("primary".into()), true)
+            .generate_keys(Some("primary".into()), true)
             .expect("generate");
 
         let nostrdb =
@@ -52,12 +54,12 @@ mod tests {
         ));
         let vault = Arc::new(RadrootsNostrSecretVaultMemory::new());
         let manager = RadrootsNostrAccountsManager::new(store, vault).expect("manager");
+        let keys = Keys::generate();
+        let public_identity = PublicIdentity::new(
+            PublicKey::from_hex(&keys.public_key().to_hex()).expect("public identity"),
+        );
         manager
-            .upsert_public_identity(
-                radroots_identity::RadrootsIdentity::generate().to_public(),
-                Some("watch".into()),
-                true,
-            )
+            .upsert_public_identity(public_identity, Some("watch".into()), true)
             .expect("watch");
 
         let nostrdb =

@@ -33,11 +33,10 @@ use alloc::{
 use core::{cmp::Ordering, fmt};
 
 use radroots_blossom::{
+    ApprovedBlobUrl, ByteVerifiedDescriptor, MediaType,
     RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES,
-    RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES, RadrootsBlossomApprovedBlobUrl,
-    RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomMediaType,
-    RadrootsBlossomRasterDimensions, RadrootsBlossomRasterFormat, RadrootsBlossomSha256,
-    url::RadrootsBlossomBlobUrl,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES, RasterDimensions, RasterFormat, Sha256,
+    url::BlobUrl,
 };
 use radroots_event::{
     RadrootsEventTags,
@@ -47,7 +46,7 @@ use radroots_event::{
         RadrootsParsedNip52CalendarCommon,
     },
     food_availability::{RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID, RadrootsFoodAvailabilityDetails},
-    ids::{RadrootsEventId, RadrootsPublicKey},
+    ids::RadrootsEventId,
     kinds::{
         KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_POST,
         KIND_PROFILE,
@@ -62,8 +61,9 @@ use radroots_event::{
         compute_canonical_nip01_event_id,
     },
 };
+use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize, ser::SerializeSeq};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256 as Sha2_256};
 
 use crate::{
     calendar::{decode, encode},
@@ -237,18 +237,18 @@ impl RadrootsPhase1PublicationDraft {
 /// prove that the URL was uploaded or remains retrievable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsPhase1PublicationMediaReference {
-    url: RadrootsBlossomApprovedBlobUrl,
-    sha256: RadrootsBlossomSha256,
+    url: ApprovedBlobUrl,
+    sha256: Sha256,
     size: u64,
-    media_type: RadrootsBlossomMediaType,
+    media_type: MediaType,
 }
 
 impl RadrootsPhase1PublicationMediaReference {
-    pub fn url(&self) -> &RadrootsBlossomApprovedBlobUrl {
+    pub fn url(&self) -> &ApprovedBlobUrl {
         &self.url
     }
 
-    pub const fn sha256(&self) -> RadrootsBlossomSha256 {
+    pub const fn sha256(&self) -> Sha256 {
         self.sha256
     }
 
@@ -256,14 +256,11 @@ impl RadrootsPhase1PublicationMediaReference {
         self.size
     }
 
-    pub fn media_type(&self) -> &RadrootsBlossomMediaType {
+    pub fn media_type(&self) -> &MediaType {
         &self.media_type
     }
 
-    fn from_verified(
-        descriptor: &RadrootsBlossomByteVerifiedDescriptor,
-        url: RadrootsBlossomApprovedBlobUrl,
-    ) -> Self {
+    fn from_verified(descriptor: &ByteVerifiedDescriptor, url: ApprovedBlobUrl) -> Self {
         Self {
             url,
             sha256: descriptor.sha256(),
@@ -275,18 +272,18 @@ impl RadrootsPhase1PublicationMediaReference {
     fn from_wire(
         wire: &MediaReferenceWire,
     ) -> Result<Self, RadrootsPhase1PublicationArtifactError> {
-        let parsed_url = RadrootsBlossomBlobUrl::parse(&wire.url)
-            .and_then(RadrootsBlossomBlobUrl::approve)
+        let parsed_url = BlobUrl::parse(&wire.url)
+            .and_then(BlobUrl::approve)
             .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidMediaReference)?;
         if parsed_url.as_str() != wire.url {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
         }
-        let sha256 = RadrootsBlossomSha256::from_hex(&wire.sha256)
+        let sha256 = Sha256::from_hex(&wire.sha256)
             .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidMediaReference)?;
         if parsed_url.as_blob_url().hash_path().hash() != sha256 {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
         }
-        let media_type = RadrootsBlossomMediaType::parse(&wire.media_type)
+        let media_type = MediaType::parse(&wire.media_type)
             .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidMediaReference)?;
         if media_type.as_str() != wire.media_type || !wire.media_type.starts_with("image/") {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
@@ -347,7 +344,7 @@ impl fmt::Display for RadrootsPhase1PublicationArtifactDigest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsPhase1PublicationArtifact {
     semantic_variant: RadrootsPhase1PublicationSemanticVariant,
-    expected_author: RadrootsPublicKey,
+    expected_author: PublicKey,
     draft: RadrootsPhase1PublicationDraft,
     expected_event_id: RadrootsEventId,
     media_references: Vec<RadrootsPhase1PublicationMediaReference>,
@@ -501,7 +498,7 @@ impl RadrootsPhase1PublicationArtifact {
         self.semantic_variant.event_contract_id()
     }
 
-    pub fn expected_author(&self) -> &RadrootsPublicKey {
+    pub fn expected_author(&self) -> &PublicKey {
         &self.expected_author
     }
 
@@ -634,7 +631,7 @@ impl RadrootsPhase1PublicationArtifact {
         }
         canonicalize_media_references(&mut media_references)?;
         let expected_event_id = compute_canonical_nip01_event_id(
-            expected_author.as_str(),
+            &expected_author.to_hex(),
             created_at,
             parts.kind,
             &parts.tags,
@@ -818,12 +815,10 @@ fn encoding_error(code: &'static str) -> RadrootsPhase1PublicationArtifactError 
     RadrootsPhase1PublicationArtifactError::AuthoredEncoding { code }
 }
 
-fn parse_expected_author(
-    value: &str,
-) -> Result<RadrootsPublicKey, RadrootsPhase1PublicationArtifactError> {
-    let author = RadrootsPublicKey::parse(value)
+fn parse_expected_author(value: &str) -> Result<PublicKey, RadrootsPhase1PublicationArtifactError> {
+    let author = PublicKey::from_hex(value)
         .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidExpectedAuthor)?;
-    if author.as_str() != value {
+    if author.to_hex() != value {
         return Err(RadrootsPhase1PublicationArtifactError::InvalidExpectedAuthor);
     }
     Ok(author)
@@ -841,12 +836,12 @@ fn parse_expected_event_id(
 }
 
 fn validate_draft_identifier(
-    author: &RadrootsPublicKey,
+    author: &PublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
 ) -> Result<(), RadrootsPhase1PublicationArtifactError> {
     let computed = compute_canonical_nip01_event_id(
-        author.as_str(),
+        &author.to_hex(),
         draft.created_at,
         draft.kind,
         &draft.tags,
@@ -862,7 +857,7 @@ fn validate_draft_identifier(
 #[derive(Serialize)]
 struct SignedEventSizeWire<'a> {
     id: &'a str,
-    pubkey: &'a str,
+    pubkey: String,
     created_at: u64,
     kind: u32,
     tags: &'a [Vec<String>],
@@ -871,7 +866,7 @@ struct SignedEventSizeWire<'a> {
 }
 
 fn validate_signed_event_wire_size(
-    author: &RadrootsPublicKey,
+    author: &PublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
 ) -> Result<(), RadrootsPhase1PublicationArtifactError> {
@@ -886,7 +881,7 @@ fn validate_signed_event_wire_size(
 }
 
 fn signed_event_wire_size(
-    author: &RadrootsPublicKey,
+    author: &PublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
 ) -> Result<usize, RadrootsPhase1PublicationArtifactError> {
@@ -896,7 +891,7 @@ fn signed_event_wire_size(
     );
     Ok(serde_json::to_vec(&SignedEventSizeWire {
         id: expected_event_id.as_str(),
-        pubkey: author.as_str(),
+        pubkey: author.to_hex(),
         created_at: draft.created_at,
         kind: draft.kind,
         tags: &draft.tags,
@@ -1140,7 +1135,7 @@ fn validate_post(
         ) else {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidPostProfile);
         };
-        RadrootsBlossomRasterDimensions::new(dimensions.width(), dimensions.height())
+        RasterDimensions::new(dimensions.width(), dimensions.height())
             .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidPostProfile)?;
         let mut tag = vec![
             "imeta".to_string(),
@@ -1361,7 +1356,7 @@ fn validate_food_availability(
         let (Some(url), Some(dimensions)) = (image.url(), image.dimensions()) else {
             return Err(RadrootsPhase1PublicationArtifactError::InvalidFoodAvailabilityProfile);
         };
-        RadrootsBlossomRasterDimensions::new(dimensions.width(), dimensions.height())
+        RasterDimensions::new(dimensions.width(), dimensions.height())
             .map_err(|_| RadrootsPhase1PublicationArtifactError::InvalidFoodAvailabilityProfile)?;
         canonical.push(vec![
             "image".to_string(),
@@ -1428,7 +1423,7 @@ fn validate_media_reference_envelope(
     if reference.url.as_str().len() > RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES
         || reference.size == 0
         || reference.size > RADROOTS_BLOSSOM_PUBLICATION_RASTER_MAX_BYTES
-        || RadrootsBlossomRasterFormat::from_media_type(&reference.media_type).is_err()
+        || RasterFormat::from_media_type(&reference.media_type).is_err()
     {
         return Err(RadrootsPhase1PublicationArtifactError::InvalidMediaReference);
     }
@@ -1499,7 +1494,7 @@ struct ArtifactPayloadWire<'a> {
     semantic_variant: &'a str,
     authored_operation_id: &'a str,
     event_contract_id: &'a str,
-    expected_author: &'a str,
+    expected_author: String,
     draft: DraftPayloadWire<'a>,
     expected_event_id: &'a str,
     media_references: MediaReferencesPayloadWire<'a>,
@@ -1508,7 +1503,7 @@ struct ArtifactPayloadWire<'a> {
 #[derive(Serialize)]
 struct MediaReferencePayloadWire<'a> {
     url: &'a str,
-    sha256: RadrootsBlossomSha256,
+    sha256: Sha256,
     size: u64,
     media_type: &'a str,
 }
@@ -1535,7 +1530,7 @@ impl Serialize for MediaReferencesPayloadWire<'_> {
 
 fn artifact_payload_wire<'a>(
     variant: RadrootsPhase1PublicationSemanticVariant,
-    author: &'a RadrootsPublicKey,
+    author: &'a PublicKey,
     draft: &'a RadrootsPhase1PublicationDraft,
     expected_event_id: &'a RadrootsEventId,
     media: &'a [RadrootsPhase1PublicationMediaReference],
@@ -1545,7 +1540,7 @@ fn artifact_payload_wire<'a>(
         semantic_variant: variant.as_str(),
         authored_operation_id: variant.authored_operation_id(),
         event_contract_id: variant.event_contract_id(),
-        expected_author: author.as_str(),
+        expected_author: author.to_hex(),
         draft: DraftPayloadWire {
             created_at: draft.created_at,
             kind: draft.kind,
@@ -1560,7 +1555,7 @@ fn artifact_payload_wire<'a>(
 #[cfg(test)]
 fn compute_artifact_digest(
     variant: RadrootsPhase1PublicationSemanticVariant,
-    author: &RadrootsPublicKey,
+    author: &PublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
@@ -1571,7 +1566,7 @@ fn compute_artifact_digest(
 
 fn serialize_artifact_payload(
     variant: RadrootsPhase1PublicationSemanticVariant,
-    author: &RadrootsPublicKey,
+    author: &PublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
@@ -1587,7 +1582,7 @@ fn serialize_artifact_payload(
 }
 
 fn digest_artifact_payload(payload: &[u8]) -> RadrootsPhase1PublicationArtifactDigest {
-    let mut hasher = Sha256::new();
+    let mut hasher = Sha2_256::new();
     hasher.update(ARTIFACT_DIGEST_DOMAIN);
     hasher.update(ARTIFACT_DIGEST_DOMAIN_TERMINATOR);
     hasher.update(payload);
@@ -1596,7 +1591,7 @@ fn digest_artifact_payload(payload: &[u8]) -> RadrootsPhase1PublicationArtifactD
 
 fn build_canonical_artifact(
     variant: RadrootsPhase1PublicationSemanticVariant,
-    author: &RadrootsPublicKey,
+    author: &PublicKey,
     draft: &RadrootsPhase1PublicationDraft,
     expected_event_id: &RadrootsEventId,
     media: &[RadrootsPhase1PublicationMediaReference],
@@ -1627,7 +1622,7 @@ mod tests {
 
     #[test]
     fn signed_event_wire_size_accepts_exact_limit_and_rejects_one_over() {
-        let author = RadrootsPublicKey::parse(AUTHOR).unwrap();
+        let author = PublicKey::from_hex(AUTHOR).unwrap();
         let mut draft = RadrootsPhase1PublicationDraft {
             created_at: 1_784_347_200,
             kind: KIND_POST,
@@ -1660,7 +1655,7 @@ mod tests {
 
     #[test]
     fn publication_artifact_digest_has_exactly_one_nul_domain_terminator() {
-        let author = RadrootsPublicKey::parse(AUTHOR).unwrap();
+        let author = PublicKey::from_hex(AUTHOR).unwrap();
         let draft = RadrootsPhase1PublicationDraft {
             created_at: 1_784_347_200,
             kind: KIND_POST,
@@ -1685,7 +1680,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut exact = Sha256::new();
+        let mut exact = Sha2_256::new();
         exact.update(b"radroots.phase1.publication-artifact.v1");
         exact.update([0]);
         exact.update(&payload);
@@ -1696,7 +1691,7 @@ mod tests {
             b"radroots.phase1.publication-artifact.v1".as_slice(),
             b"radroots.phase1.publication-artifact.v1\0\0".as_slice(),
         ] {
-            let mut alternate = Sha256::new();
+            let mut alternate = Sha2_256::new();
             alternate.update(prefix);
             alternate.update(&payload);
             let alternate: [u8; 32] = alternate.finalize().into();
@@ -1733,12 +1728,9 @@ mod tests {
         );
     }
 
-    fn event_id(
-        author: &RadrootsPublicKey,
-        draft: &RadrootsPhase1PublicationDraft,
-    ) -> RadrootsEventId {
+    fn event_id(author: &PublicKey, draft: &RadrootsPhase1PublicationDraft) -> RadrootsEventId {
         compute_canonical_nip01_event_id(
-            author.as_str(),
+            &author.to_hex(),
             draft.created_at,
             draft.kind,
             &draft.tags,

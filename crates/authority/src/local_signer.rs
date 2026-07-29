@@ -5,8 +5,9 @@ use crate::{
     RadrootsSignerError,
 };
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::{RadrootsEventId, RadrootsPublicKey};
+use radroots_event::ids::RadrootsEventId;
 use radroots_event_codec::wire::publication::RadrootsPhase1PublicationDraft;
+use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, radroots_nostr_sign_frozen_draft,
     radroots_nostr_sign_phase1_publication_draft,
@@ -14,19 +15,19 @@ use radroots_nostr::prelude::{
 
 pub struct RadrootsLocalEventSigner {
     keys: RadrootsNostrKeys,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
 }
 
 impl RadrootsLocalEventSigner {
     pub fn new(keys: RadrootsNostrKeys) -> Result<Self, RadrootsAuthorityError> {
-        let pubkey = RadrootsPublicKey::parse(keys.public_key().to_hex())
+        let pubkey = PublicKey::from_hex(&keys.public_key().to_hex())
             .map_err(|_| RadrootsAuthorityError::InvalidSignerPubkey)?;
         Ok(Self { keys, pubkey })
     }
 }
 
 impl RadrootsEventSigner for RadrootsLocalEventSigner {
-    fn pubkey(&self) -> &RadrootsPublicKey {
+    fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -46,7 +47,7 @@ impl RadrootsPhase1PublicationSigner for RadrootsLocalEventSigner {
     fn sign_phase1_publication_draft(
         &self,
         draft: &RadrootsPhase1PublicationDraft,
-        expected_pubkey: &RadrootsPublicKey,
+        expected_pubkey: &PublicKey,
         expected_event_id: &RadrootsEventId,
     ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_phase1_publication_draft(
@@ -101,7 +102,7 @@ mod tests {
     fn local_signer_reports_public_key() {
         let signer = RadrootsLocalEventSigner::new(fixture_keys()).expect("signer");
 
-        assert_eq!(signer.pubkey().as_str(), FIXTURE_ALICE_PUBLIC_KEY_HEX);
+        assert_eq!(signer.pubkey().to_hex(), FIXTURE_ALICE_PUBLIC_KEY_HEX);
     }
 
     #[test]
@@ -112,7 +113,7 @@ mod tests {
         let signed = signer.sign_frozen_draft(&draft).expect("signed");
 
         assert_eq!(signed.id_str(), draft.expected_event_id_str());
-        assert_eq!(signed.pubkey_str(), draft.expected_pubkey_str());
+        assert_eq!(signed.pubkey().to_hex(), draft.expected_pubkey().to_hex());
         assert_eq!(
             radroots_nostr_verify_event(&verification_event(&signed)),
             RadrootsNostrEventVerification::Verified

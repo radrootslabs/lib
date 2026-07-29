@@ -1,3 +1,11 @@
 # radroots_transport_publish_protocol
 
+## Quarantine status
+
+This package is a retired, `publish = false` compatibility shim. New code must
+use `radroots_protocol::radrootsd::transport_publish::v5`. It remains only for
+the CLI and radrootsd consumers discovered during release-v1 migration. Step
+286 removes the final radrootsd dependency and this package; it must not become
+a registry identity or receive new behavior before then.
+
 Shared Radrootsd transport publish JSON-RPC wire contracts.

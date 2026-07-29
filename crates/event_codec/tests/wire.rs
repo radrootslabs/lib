@@ -58,7 +58,7 @@ fn draft_validation_accepts_wire_parts_without_signed_envelope() {
 
     assert_eq!(draft.kind_u32(), KIND_GEOCHAT);
     assert_eq!(draft.created_at_u64(), 99);
-    assert_eq!(draft.expected_pubkey_str(), "a".repeat(64));
+    assert_eq!(draft.expected_pubkey().to_hex(), "a".repeat(64));
     assert_eq!(draft.content(), "hello");
     assert_eq!(draft.tags().len(), 1);
     assert_eq!(draft.expected_event_id_str().len(), 64);

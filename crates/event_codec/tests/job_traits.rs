@@ -14,7 +14,7 @@ use radroots_event_codec::job::traits::{BorrowedEventAdapter, JobEventLike};
 use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -67,7 +67,7 @@ fn borrowed_event_adapter_builds_request_metadata() {
     let metadata = adapter.to_job_request_metadata().unwrap();
 
     assert_eq!(metadata.id, event.id_str());
-    assert_eq!(metadata.author, event.author_str());
+    assert_eq!(metadata.author, event.author().to_hex());
     assert_eq!(metadata.published_at, event.created_at_u64());
     assert_eq!(metadata.kind, event.kind_u32());
     assert_eq!(metadata.data, req);
@@ -134,7 +134,7 @@ fn borrowed_event_adapter_builds_request_metadata_and_index() {
 
     let index = adapter.to_job_request_event_index().unwrap();
     assert_eq!(index.event.id_str(), event.id_str());
-    assert_eq!(index.event.author_str(), event.author_str());
+    assert_eq!(index.event.author().to_hex(), event.author().to_hex());
     assert_eq!(index.event.created_at_u64(), event.created_at_u64());
     assert_eq!(index.event.kind_u32(), event.kind_u32());
     assert_eq!(index.event.content(), event.content());
@@ -151,7 +151,7 @@ fn borrowed_event_adapter_builds_result_metadata_and_index() {
     let adapter = BorrowedEventAdapter::new(&event, event.created_at_u64(), &tags, event.sig_str());
     let metadata = adapter.to_job_result_metadata().unwrap();
     assert_eq!(metadata.id, event.id_str());
-    assert_eq!(metadata.author, event.author_str());
+    assert_eq!(metadata.author, event.author().to_hex());
     assert_eq!(metadata.published_at, event.created_at_u64());
     assert_eq!(metadata.kind, event.kind_u32());
     assert_eq!(metadata.data.kind, result.kind);
@@ -160,7 +160,7 @@ fn borrowed_event_adapter_builds_result_metadata_and_index() {
 
     let index = adapter.to_job_result_event_index().unwrap();
     assert_eq!(index.event.id_str(), event.id_str());
-    assert_eq!(index.event.author_str(), event.author_str());
+    assert_eq!(index.event.author().to_hex(), event.author().to_hex());
     assert_eq!(index.event.created_at_u64(), event.created_at_u64());
     assert_eq!(index.event.kind_u32(), event.kind_u32());
     assert_eq!(index.event.content(), event.content());
@@ -177,7 +177,7 @@ fn borrowed_event_adapter_builds_feedback_metadata_and_index() {
     let adapter = BorrowedEventAdapter::new(&event, event.created_at_u64(), &tags, event.sig_str());
     let metadata = adapter.to_job_feedback_metadata().unwrap();
     assert_eq!(metadata.id, event.id_str());
-    assert_eq!(metadata.author, event.author_str());
+    assert_eq!(metadata.author, event.author().to_hex());
     assert_eq!(metadata.published_at, event.created_at_u64());
     assert_eq!(metadata.kind, event.kind_u32());
     assert_eq!(metadata.data.kind, feedback.kind);
@@ -186,7 +186,7 @@ fn borrowed_event_adapter_builds_feedback_metadata_and_index() {
 
     let index = adapter.to_job_feedback_event_index().unwrap();
     assert_eq!(index.event.id_str(), event.id_str());
-    assert_eq!(index.event.author_str(), event.author_str());
+    assert_eq!(index.event.author().to_hex(), event.author().to_hex());
     assert_eq!(index.event.created_at_u64(), event.created_at_u64());
     assert_eq!(index.event.kind_u32(), event.kind_u32());
     assert_eq!(index.event.content(), event.content());

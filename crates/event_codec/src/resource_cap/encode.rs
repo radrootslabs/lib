@@ -106,7 +106,7 @@ pub fn to_wire_parts_with_kind(
 mod tests {
     use super::*;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
-    use radroots_core::{RadrootsCoreDecimal, RadrootsCoreQuantity, RadrootsCoreUnit};
+    use radroots_core::{Decimal, Quantity, Unit};
     use radroots_event::resource_area::RadrootsResourceAreaRef;
     use radroots_event::resource_cap::RadrootsResourceHarvestProduct;
 
@@ -123,10 +123,7 @@ mod tests {
             },
             start: 1,
             end: 2,
-            cap_quantity: RadrootsCoreQuantity::new(
-                RadrootsCoreDecimal::from(1000u32),
-                RadrootsCoreUnit::MassG,
-            ),
+            cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
             display_amount: None,
             display_unit: None,
             display_label: None,

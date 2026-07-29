@@ -1,10 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-    RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     RadrootsAuthoredImage,
     post::{
@@ -66,10 +63,10 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
 
 fn authored_image() -> RadrootsAuthoredPostImage {
     let bytes = b"strawberries";
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse("image/webp").unwrap();
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://media.example/{hash}.webp")).unwrap(),
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse("image/webp").unwrap();
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://media.example/{hash}.webp")).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),

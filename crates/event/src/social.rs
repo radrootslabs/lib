@@ -149,7 +149,7 @@ mod tests {
     fn supports_nip22_target_shapes() {
         let event = RadrootsSocialTarget::Event {
             id: "a".repeat(64),
-            author: Some("b".repeat(64)),
+            author: Some(crate::test_valid_hex_64('b')),
             event_kind: Some(30023),
             relays: Some(vec!["wss://relay.example".to_string()]),
         };

@@ -1,0 +1,102 @@
+{
+  "suite": "core_value_serialization",
+  "contract_version": "1.0.0",
+  "vectors": [
+    {
+      "id": "core_decimal_normalizes_scale_001",
+      "kind": "core.decimal.serde",
+      "input": "1.2300",
+      "expected": "1.23"
+    },
+    {
+      "id": "core_decimal_normalizes_signed_zero_002",
+      "kind": "core.decimal.serde",
+      "input": "-0.000",
+      "expected": "0"
+    },
+    {
+      "id": "core_currency_normalizes_case_003",
+      "kind": "core.currency.serde",
+      "input": "usd",
+      "expected": "USD"
+    },
+    {
+      "id": "core_money_normalizes_values_004",
+      "kind": "core.money.serde",
+      "input": {
+        "amount": "2.500",
+        "currency": "usd"
+      },
+      "expected": {
+        "amount": "2.5",
+        "currency": "USD"
+      }
+    },
+    {
+      "id": "core_percent_normalizes_value_005",
+      "kind": "core.percent.serde",
+      "input": {
+        "value": "12.500"
+      },
+      "expected": {
+        "value": "12.5"
+      }
+    },
+    {
+      "id": "core_quantity_normalizes_unit_006",
+      "kind": "core.quantity.serde",
+      "input": {
+        "amount": "1.2500",
+        "unit": "kilograms",
+        "label": "crate"
+      },
+      "expected": {
+        "amount": "1.25",
+        "unit": "kg",
+        "label": "crate"
+      }
+    },
+    {
+      "id": "core_quantity_omits_absent_label_007",
+      "kind": "core.quantity.serde",
+      "input": {
+        "amount": "3.000",
+        "unit": "each"
+      },
+      "expected": {
+        "amount": "3",
+        "unit": "each"
+      }
+    },
+    {
+      "id": "core_unit_normalizes_synonym_008",
+      "kind": "core.unit.serde",
+      "input": "pounds",
+      "expected": "lb"
+    },
+    {
+      "id": "core_quantity_price_normalizes_nested_values_009",
+      "kind": "core.quantity_price.serde",
+      "input": {
+        "amount": {
+          "amount": "5.000",
+          "currency": "eur"
+        },
+        "quantity": {
+          "amount": "2.000",
+          "unit": "kilograms"
+        }
+      },
+      "expected": {
+        "amount": {
+          "amount": "5",
+          "currency": "EUR"
+        },
+        "quantity": {
+          "amount": "2",
+          "unit": "kg"
+        }
+      }
+    }
+  ]
+}

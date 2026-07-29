@@ -1,11 +1,8 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountScope,
-    RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
-    RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::pricing::{Discount, DiscountScope, DiscountThreshold, DiscountValue};
+use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::RadrootsEventPtr;
 use radroots_event::app_data::RadrootsAppData;
 use radroots_event::coop::RadrootsCoop;
@@ -112,12 +109,12 @@ fn sample_gcs() -> RadrootsGcsLocation {
 }
 
 fn sample_listing() -> RadrootsOperationalListing {
-    let quantity =
-        RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
-    let price = RadrootsCoreQuantityPrice::new(
-        RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
+    let quantity = Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap();
+    let price = QuantityPrice::try_new(
+        Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
         quantity.clone(),
-    );
+    )
+    .unwrap();
 
     RadrootsOperationalListing {
         d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
@@ -272,10 +269,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         },
         start: 1,
         end: 2,
-        cap_quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from(1000u32),
-            RadrootsCoreUnit::MassG,
-        ),
+        cap_quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
         display_amount: None,
         display_unit: None,
         display_label: None,
@@ -455,7 +449,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
     assert!(!operational_listing_build_tags(&listing).unwrap().is_empty());
 
     let mut listing_with_trade = listing.clone();
-    listing_with_trade.inventory_available = Some(RadrootsCoreDecimal::from(12u32));
+    listing_with_trade.inventory_available = Some(Decimal::from(12u32));
     let with_trade_fields: fn() -> OperationalListingTagOptions =
         OperationalListingTagOptions::with_trade_fields;
     let trade_options = with_trade_fields();
@@ -571,17 +565,17 @@ fn listing_and_message_builders_cover_optional_shapes() {
     ));
 
     let mut listing_with_discount_payload = listing_with_trade.clone();
-    listing_with_discount_payload.discounts = Some(vec![RadrootsCoreDiscount {
-        scope: RadrootsCoreDiscountScope::Bin,
-        threshold: RadrootsCoreDiscountThreshold::BinCount {
-            bin_id: "bin-1".to_string(),
-            min: 2,
-        },
-        value: RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::new(
-            RadrootsCoreDecimal::from(1u32),
-            RadrootsCoreCurrency::USD,
-        )),
-    }]);
+    listing_with_discount_payload.discounts = Some(vec![
+        Discount::try_new(
+            DiscountScope::Bin,
+            DiscountThreshold::BinCount {
+                bin_id: "bin-1".to_string(),
+                min: 2,
+            },
+            DiscountValue::MoneyPerBin(Money::try_new(Decimal::from(1u32), Currency::USD).unwrap()),
+        )
+        .unwrap(),
+    ]);
     #[cfg(feature = "serde_json")]
     {
         let tags =

@@ -1,194 +1,216 @@
-use crate::{RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity, RadrootsCoreUnit};
+use core::fmt;
 
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+use crate::{Decimal, Money, Quantity, Unit};
+
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsCoreQuantityPrice {
-    pub amount: RadrootsCoreMoney,
-    pub quantity: RadrootsCoreQuantity,
+pub struct QuantityPrice {
+    amount: Money,
+    quantity: Quantity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCoreQuantityPriceError {
+pub enum Error {
     PerQuantityZero,
-    UnitMismatch {
-        have: RadrootsCoreUnit,
-        want: RadrootsCoreUnit,
-    },
-    NonConvertibleUnits {
-        from: RadrootsCoreUnit,
-        to: RadrootsCoreUnit,
-    },
+    PerQuantityNegative,
+    NegativePrice,
+    NegativeRequestedQuantity,
+    UnitMismatch { have: Unit, want: Unit },
+    NonConvertibleUnits { from: Unit, to: Unit },
+    ArithmeticOverflow,
 }
 
-pub trait RadrootsCoreQuantityPriceOps {
-    #[must_use]
-    fn cost_for(&self, qty: &RadrootsCoreQuantity) -> RadrootsCoreMoney;
-
-    #[must_use]
-    fn cost_for_rounded(&self, qty: &RadrootsCoreQuantity) -> RadrootsCoreMoney;
-
-    #[must_use]
-    fn cost_for_with_quantized_price(&self, qty: &RadrootsCoreQuantity) -> RadrootsCoreMoney;
-
-    fn try_cost_for(
-        &self,
-        qty: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError>;
-
-    fn try_cost_for_rounded(
-        &self,
-        qty: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError>;
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PerQuantityZero => f.write_str("price quantity must be greater than zero"),
+            Self::PerQuantityNegative => f.write_str("price quantity must not be negative"),
+            Self::NegativePrice => f.write_str("price amount must not be negative"),
+            Self::NegativeRequestedQuantity => {
+                f.write_str("requested quantity must not be negative")
+            }
+            Self::UnitMismatch { have, want } => {
+                write!(f, "price quantity unit mismatch: have {have}, want {want}")
+            }
+            Self::NonConvertibleUnits { from, to } => {
+                write!(f, "price units are not convertible: {from} -> {to}")
+            }
+            Self::ArithmeticOverflow => f.write_str("price arithmetic overflow"),
+        }
+    }
 }
 
-impl RadrootsCoreQuantityPrice {
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+
+fn map_conversion_error(error: crate::unit::ConvertError, from: Unit, to: Unit) -> Error {
+    match error {
+        crate::unit::ConvertError::ArithmeticOverflow { .. } => Error::ArithmeticOverflow,
+        _ => Error::NonConvertibleUnits { from, to },
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+
+    impl Sealed for super::QuantityPrice {}
+}
+
+/// Sealed pricing operations implemented by [`QuantityPrice`].
+///
+/// Downstream crates may call this trait but cannot implement it:
+///
+/// ```compile_fail
+/// use radroots_core::{Money, Quantity};
+/// use radroots_core::pricing::{Error, QuantityPriceOps};
+///
+/// struct ForeignPrice;
+///
+/// impl QuantityPriceOps for ForeignPrice {
+///     fn try_cost_for(&self, _: &Quantity) -> Result<Money, Error> { panic!() }
+///     fn try_cost_for_rounded(&self, _: &Quantity) -> Result<Money, Error> { panic!() }
+/// }
+/// ```
+pub trait QuantityPriceOps: sealed::Sealed {
+    /// Calculates the requested cost without silently converting invalid
+    /// quantities, unit mismatches, or arithmetic failures into zero.
+    fn try_cost_for(&self, qty: &Quantity) -> Result<Money, Error>;
+
+    /// Calculates first, then rounds the final result to the currency exponent
+    /// with deterministic midpoint-away-from-zero rounding.
+    fn try_cost_for_rounded(&self, qty: &Quantity) -> Result<Money, Error>;
+}
+
+impl QuantityPrice {
     #[inline]
-    pub fn new(amount: RadrootsCoreMoney, quantity: RadrootsCoreQuantity) -> Self {
-        Self { amount, quantity }
+    pub fn try_new(amount: Money, quantity: Quantity) -> Result<Self, Error> {
+        amount
+            .ensure_non_negative()
+            .map_err(|_| Error::NegativePrice)?;
+        if quantity.amount().is_sign_negative() {
+            return Err(Error::PerQuantityNegative);
+        }
+        if quantity.amount().is_zero() {
+            return Err(Error::PerQuantityZero);
+        }
+        Ok(Self { amount, quantity })
     }
 
     #[inline]
-    pub fn try_cost_for_amount_in(
-        &self,
-        amount: RadrootsCoreDecimal,
-        unit: RadrootsCoreUnit,
-    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError> {
+    pub fn amount(&self) -> &Money {
+        &self.amount
+    }
+
+    #[inline]
+    pub fn quantity(&self) -> &Quantity {
+        &self.quantity
+    }
+
+    #[inline]
+    pub fn validate(&self) -> Result<(), Error> {
+        Self::try_new(self.amount.clone(), self.quantity.clone()).map(|_| ())
+    }
+
+    #[inline]
+    pub fn try_cost_for_amount_in(&self, amount: Decimal, unit: Unit) -> Result<Money, Error> {
         use crate::unit::convert_unit_decimal;
 
-        let target = self.quantity.unit;
+        let target = self.quantity.unit();
 
         let normalized = if unit == target {
             amount
         } else {
-            convert_unit_decimal(amount, unit, target).map_err(|_| {
-                RadrootsCoreQuantityPriceError::NonConvertibleUnits {
-                    from: unit,
-                    to: target,
-                }
-            })?
+            convert_unit_decimal(amount, unit, target)
+                .map_err(|error| map_conversion_error(error, unit, target))?
         };
 
-        let qty = RadrootsCoreQuantity::new(normalized, target);
+        let qty =
+            Quantity::try_new(normalized, target).map_err(|_| Error::NegativeRequestedQuantity)?;
         self.try_cost_for_rounded(&qty)
     }
 
     #[inline]
-    pub fn try_cost_for_quantity_in(
-        &self,
-        qty: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError> {
-        self.try_cost_for_amount_in(qty.amount, qty.unit)
+    pub fn try_cost_for_quantity_in(&self, qty: &Quantity) -> Result<Money, Error> {
+        self.try_cost_for_amount_in(qty.amount(), qty.unit())
     }
 
     #[inline]
     pub fn is_price_per_canonical_unit(&self) -> bool {
-        self.quantity.unit == self.quantity.unit.canonical_unit()
-            && self.quantity.amount == RadrootsCoreDecimal::ONE
+        self.quantity.unit() == self.quantity.unit().canonical_unit()
+            && self.quantity.amount() == Decimal::ONE
     }
 
     #[inline]
-    pub fn try_to_unit_price(
-        &self,
-        unit: RadrootsCoreUnit,
-    ) -> Result<RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError> {
+    pub fn try_to_unit_price(&self, unit: Unit) -> Result<QuantityPrice, Error> {
         use crate::unit::convert_unit_decimal;
 
-        if self.quantity.amount.is_zero() {
-            return Err(RadrootsCoreQuantityPriceError::PerQuantityZero);
-        }
+        self.validate()?;
 
-        let normalized = if self.quantity.unit == unit {
-            self.quantity.amount
+        let normalized = if self.quantity.unit() == unit {
+            self.quantity.amount()
         } else {
-            convert_unit_decimal(self.quantity.amount, self.quantity.unit, unit).map_err(|_| {
-                RadrootsCoreQuantityPriceError::NonConvertibleUnits {
-                    from: self.quantity.unit,
-                    to: unit,
-                }
-            })?
+            convert_unit_decimal(self.quantity.amount(), self.quantity.unit(), unit)
+                .map_err(|error| map_conversion_error(error, self.quantity.unit(), unit))?
         };
 
         if normalized.is_zero() {
-            return Err(RadrootsCoreQuantityPriceError::PerQuantityZero);
+            return Err(Error::PerQuantityZero);
         }
 
-        let amount = self.amount.div_decimal(normalized);
-        Ok(RadrootsCoreQuantityPrice {
-            amount,
-            quantity: RadrootsCoreQuantity::new(RadrootsCoreDecimal::ONE, unit),
-        })
+        let amount = self
+            .amount
+            .checked_div_decimal(normalized)
+            .map_err(|_| Error::ArithmeticOverflow)?;
+        let quantity =
+            Quantity::try_new(Decimal::ONE, unit).map_err(|_| Error::ArithmeticOverflow)?;
+        Self::try_new(amount, quantity)
     }
 
     #[inline]
-    pub fn try_to_canonical_unit_price(
-        &self,
-    ) -> Result<RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError> {
-        self.try_to_unit_price(self.quantity.unit.canonical_unit())
+    pub fn try_to_canonical_unit_price(&self) -> Result<QuantityPrice, Error> {
+        self.try_to_unit_price(self.quantity.unit().canonical_unit())
     }
 }
 
-impl RadrootsCoreQuantityPriceOps for RadrootsCoreQuantityPrice {
-    #[inline]
-    fn cost_for(&self, qty: &RadrootsCoreQuantity) -> RadrootsCoreMoney {
-        if qty.amount.is_zero() {
-            return RadrootsCoreMoney::zero(self.amount.currency);
-        }
-        if self.quantity.amount.is_zero() {
-            return RadrootsCoreMoney::zero(self.amount.currency);
-        }
-        if qty.unit != self.quantity.unit {
-            return RadrootsCoreMoney::zero(self.amount.currency);
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for QuantityPrice {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            amount: Money,
+            quantity: Quantity,
         }
 
-        let ratio = qty.amount / self.quantity.amount;
-        self.amount.mul_decimal(ratio)
+        let wire = Wire::deserialize(deserializer)?;
+        Self::try_new(wire.amount, wire.quantity).map_err(serde::de::Error::custom)
     }
+}
 
+impl QuantityPriceOps for QuantityPrice {
     #[inline]
-    fn cost_for_rounded(&self, qty: &RadrootsCoreQuantity) -> RadrootsCoreMoney {
-        self.cost_for(qty).quantize_to_currency()
-    }
-
-    #[inline]
-    fn cost_for_with_quantized_price(&self, qty: &RadrootsCoreQuantity) -> RadrootsCoreMoney {
-        if qty.amount.is_zero() {
-            return RadrootsCoreMoney::zero(self.amount.currency);
-        }
-        if self.quantity.amount.is_zero() {
-            return RadrootsCoreMoney::zero(self.amount.currency);
-        }
-        if qty.unit != self.quantity.unit {
-            return RadrootsCoreMoney::zero(self.amount.currency);
-        }
-        let unit_price_q = self.amount.clone().quantize_to_currency();
-        unit_price_q.mul_decimal(qty.amount / self.quantity.amount)
-    }
-
-    #[inline]
-    fn try_cost_for(
-        &self,
-        qty: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError> {
-        if self.quantity.amount.is_zero() {
-            return Err(RadrootsCoreQuantityPriceError::PerQuantityZero);
-        }
-        if qty.unit != self.quantity.unit {
-            return Err(RadrootsCoreQuantityPriceError::UnitMismatch {
-                have: qty.unit,
-                want: self.quantity.unit,
+    fn try_cost_for(&self, qty: &Quantity) -> Result<Money, Error> {
+        self.validate()?;
+        qty.ensure_non_negative()
+            .map_err(|_| Error::NegativeRequestedQuantity)?;
+        if qty.unit() != self.quantity.unit() {
+            return Err(Error::UnitMismatch {
+                have: qty.unit(),
+                want: self.quantity.unit(),
             });
         }
-        let ratio = qty.amount / self.quantity.amount;
-        Ok(self.amount.mul_decimal(ratio))
+        let ratio = qty
+            .amount()
+            .checked_div(self.quantity.amount())
+            .map_err(|_| Error::ArithmeticOverflow)?;
+        self.amount
+            .checked_mul_decimal(ratio)
+            .map_err(|_| Error::ArithmeticOverflow)
     }
 
     #[inline]
-    fn try_cost_for_rounded(
-        &self,
-        qty: &RadrootsCoreQuantity,
-    ) -> Result<RadrootsCoreMoney, RadrootsCoreQuantityPriceError> {
+    fn try_cost_for_rounded(&self, qty: &Quantity) -> Result<Money, Error> {
         Ok(self.try_cost_for(qty)?.quantize_to_currency())
     }
 }

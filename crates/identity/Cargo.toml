@@ -1,48 +1,32 @@
 [package]
 name = "radroots_identity"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
-authors = ["Tyson Lupul <tyson@radroots.org>"]
+authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Identity model for Radroots"
+description = "Public identity and account value types for Radroots"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots_identity"
-readme = "README"
+readme = "README.md"
+
+[lib]
+name = "radroots_identity"
 
 [features]
-default = ["std", "json-file", "nip49"]
-std = [
-  "dep:radroots_protected_store",
-  "dep:radroots_runtime_paths",
-  "dep:radroots_secret_vault",
-]
-json-file = ["std", "dep:radroots_runtime"]
-nip49 = ["std", "nostr/nip49"]
-secrecy = ["dep:secrecy"]
-zeroize = ["dep:zeroize"]
+default = ["std", "serde"]
+std = ["thiserror/std"]
+serde = ["dep:serde"]
 
 [dependencies]
-radroots_runtime = { workspace = true, optional = true }
-radroots_protected_store = { workspace = true, optional = true, features = [
-  "std",
-] }
-radroots_runtime_paths = { workspace = true, optional = true }
-radroots_secret_vault = { workspace = true, optional = true, features = [
-  "std",
-] }
-nostr = { workspace = true }
-secrecy = { workspace = true, optional = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-zeroize = { workspace = true, optional = true }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+serde = { workspace = true, optional = true }
+thiserror = { version = "2", default-features = false }
 
 [dev-dependencies]
-tempfile = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+[lints]
+workspace = true

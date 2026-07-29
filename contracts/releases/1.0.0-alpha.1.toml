@@ -87,10 +87,10 @@ semver_impacts = [
 summary = "Decouple replica backup compatibility from package SemVer and retain restore support for schema-compatible 0.1.0-alpha.2 backups."
 
 [[changes]]
-id = "rust-crate-version-authority"
+id = "library-crate-version-authority"
 classification = "fix"
 semver_impacts = ["fix_packaging_metadata"]
-summary = "Pin every Rust workspace crate and internal requirement to the authoritative 0.1.0-alpha package cohort independently of protocol contract versions."
+summary = "Pin every library workspace crate and internal requirement to the authoritative 0.1.0-alpha Cargo cohort independently of protocol contract versions."
 
 [[changes]]
 id = "general-verified-event-boundary"

@@ -1,0 +1,157 @@
+schema_version = 1
+architecture_id = "radroots.crates.release.v1"
+
+[[deviation]]
+id = "RCRV1-DEV-001"
+date = "2026-07-27"
+status = "active"
+approval = "Explicit user correction dated 2026-07-27."
+affected_steps = [
+  "015",
+  "016",
+  "017",
+  "018",
+  "019",
+  "020",
+  "021",
+  "022",
+  "023",
+  "026",
+]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#repository-ownership",
+  "docs/specs/radroots_crates_release_v1.toml#repository_policy",
+]
+source_evidence = [
+  "The final v1 specification allocates 17 public packages to radrootslabs/lib and 2 to radrootslabs/sdk.",
+  "Both existing repositories have independent histories, workspaces, lockfiles, remotes, and standalone release boundaries.",
+]
+replacement_action = "Retain the two existing standalone repositories; replace import and monorepo-unification work with independent workspace, lockfile, metadata, dependency, and release qualification."
+verification = [
+  "Both repository-local architecture validators resolve every spec anchor.",
+  "The synchronized architecture catalog enforces the exact 17/2 ownership partition.",
+  "Each standalone repository owns a required architecture CI adapter over its repository-local command surface.",
+]
+unresolved_risk = "Parent gitlinks cannot advance until the new standalone commits are public-remote reachable under separate authorization."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-005"
+date = "2026-07-28"
+status = "active"
+approval = "Explicit user Rust version-policy update dated 2026-07-28 17:47 UTC."
+affected_steps = [
+  "013",
+  "019",
+  "020",
+  "021",
+  "022",
+  "023",
+  "024",
+  "025",
+  "026",
+  "305",
+]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#221-initial-versions",
+  "docs/specs/radroots_crates_release_v1.toml#repositories.lib",
+]
+source_evidence = [
+  "The prior 1.0.0 and mixed 0.1.0 prerelease crate cohorts were explicitly declared incorrect.",
+  "The user requires every Rust crate in radrootslabs/lib to remain exactly 0.1.0-alpha until further explicit notice.",
+]
+replacement_action = "Pin every workspace package, lockfile entry, and internal Radroots dependency requirement in radrootslabs/lib to 0.1.0-alpha; preserve independent protocol and sibling-repository versions; reject library cohort drift until new explicit authority is recorded."
+verification = [
+  "Repository architecture validation rejects any workspace package version other than 0.1.0-alpha.",
+  "Internal Radroots dependency requirements resolve exactly to =0.1.0-alpha.",
+  "Synchronized release specifications record the library cohort independently from the SDK repository version.",
+]
+unresolved_risk = "The prerelease cohort intentionally prevents independent library package version advancement until a future explicit policy change."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-006"
+date = "2026-07-28"
+status = "active"
+approval = "Concurrent Phase 1 foundational-events pfc-all authority and explicit instruction to preserve the radroots.crates.release.v1 refactor dated 2026-07-28."
+affected_steps = ["046", "047", "048", "050", "051", "052", "053"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#radroots_blossom",
+  "docs/specs/radroots_crates_release_v1.toml#package.radroots_blossom",
+]
+source_evidence = [
+  "The independently governed Phase 1 operation blossom.verify_publication_readiness requires publication-readiness evidence and complete static JPEG, PNG, and WebP validation in radroots_blossom.",
+  "The final crate-surface specification retains radroots_blossom as a protocol-only crate with only std and serde, while the Phase 1 candidate predates that final boundary and is already consumed by event, outbox, and transport conformance.",
+]
+replacement_action = "Retain publication_readiness and the non-default raster-decode feature as an exact temporary Phase 1 extension; permit only in-memory decoding and keep external I/O, clients, scheduling, caches, filesystem access, and application media policy forbidden. Resolve the ownership mismatch in a later governed RCLD before publication."
+verification = [
+  "The Blossom package-boundary suite locks the exact temporary feature, dependency, module, root-export, and forbidden-external-I/O surface.",
+  "The no-default protocol lane remains portable and independent of raster decoder dependencies.",
+  "The decoder security, deterministic fuzz smoke, resource-matrix, iOS compile-link, contract, and release-preflight lanes remain mandatory while the extension exists.",
+]
+unresolved_risk = "The Phase 1 readiness extension does not match the final radroots_blossom publication surface and therefore must remain non-publishable until a later RCLD relocates it or explicit authority amends the synchronized release specification."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-002"
+date = "2026-07-27"
+status = "active"
+approval = "Explicit user correction dated 2026-07-27."
+affected_steps = ["249"]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#radroots",
+  "docs/specs/radroots_crates_release_v1.toml#repositories.sdk",
+]
+source_evidence = [
+  "The final v1 specification assigns the radroots facade to the existing sdk repository.",
+  "The approved sequence requires radroots to be the first crate-surface mutation after architecture controls are green.",
+]
+replacement_action = "Scaffold radroots in the sdk repository immediately after Step 014, then execute Steps 250-260 in their original order without repeating the scaffold portion of Step 249."
+verification = [
+  "The sdk release policy reserves radroots as an approved local package while publication remains frozen.",
+  "The facade scaffold checkpoint must add radroots only to the sdk workspace and architecture policy.",
+]
+unresolved_risk = "The facade remains non-publishable until the package-realistic Step 305 enablement gate."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
+id = "RCRV1-DEV-004"
+date = "2026-07-28"
+status = "active"
+approval = "Explicit user coverage-policy update dated 2026-07-28 17:15 UTC."
+affected_steps = [
+  "098",
+  "155",
+  "225",
+  "260",
+  "268",
+  "294",
+  "298",
+  "299",
+  "301",
+  "302",
+  "303",
+  "304",
+  "314",
+]
+spec_anchors = [
+  "docs/specs/radroots_crates_release_v1.md#245-coverage-policy",
+  "docs/specs/radroots_crates_release_v1.toml#quality_policy.coverage",
+]
+source_evidence = [
+  "The oss/lib codebase is under heavy development during the multi-RCLD refactor.",
+  "The user explicitly replaced the active 100% coverage requirement with a uniform 90% module requirement.",
+]
+replacement_action = "Enforce 90% executable-line, function, region, and branch coverage for every required oss/lib crate; retain only no-branch-record exceptions; defer restoration of 100% until an explicit future contract update after refactor stabilization."
+verification = [
+  "Contract validation rejects any base coverage dimension other than 90% or disabled required branches.",
+  "Coverage policy-gate tests prove values below 90% fail and values at or above 90% pass.",
+  "The required-crate inventory remains complete and crate-specific numeric thresholds below 90% remain forbidden.",
+]
+unresolved_risk = "A 90% development gate admits untested paths that a later 100% gate would reject; the final restoration remains intentionally unscheduled pending explicit authority."
+normative_architecture_change = false
+adr_required = false

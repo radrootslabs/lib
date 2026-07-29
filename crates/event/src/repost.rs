@@ -40,13 +40,13 @@ mod tests {
     fn repost_models_represent_note_and_generic_targets() {
         let note_target = RadrootsSocialTarget::Event {
             id: "a".repeat(64),
-            author: Some("b".repeat(64)),
+            author: Some(crate::test_valid_hex_64('b')),
             event_kind: Some(1),
             relays: None,
         };
         let article_target = RadrootsSocialTarget::Address {
             address: "30023:pubkey:article".to_string(),
-            author: Some("b".repeat(64)),
+            author: Some(crate::test_valid_hex_64('b')),
             event_kind: Some(30023),
             relays: Some(vec!["wss://relay.example".to_string()]),
         };

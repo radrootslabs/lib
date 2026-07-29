@@ -31,8 +31,8 @@ pub enum RadrootsNostrAccountsError {
 }
 
 #[cfg(feature = "std")]
-impl From<radroots_identity::IdentityError> for RadrootsNostrAccountsError {
-    fn from(value: radroots_identity::IdentityError) -> Self {
+impl From<radroots_identity::Error> for RadrootsNostrAccountsError {
+    fn from(value: radroots_identity::Error) -> Self {
         Self::Identity(value.to_string())
     }
 }
@@ -54,14 +54,14 @@ impl From<radroots_secret_vault::RadrootsSecretVaultAccessError> for RadrootsNos
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_identity::IdentityError;
+    use radroots_identity::Error as IdentityValueError;
     use radroots_runtime::RuntimeJsonError;
     use radroots_secret_vault::RadrootsSecretVaultAccessError;
     use std::path::PathBuf;
 
     #[test]
     fn converts_identity_error() {
-        let source = IdentityError::PublicKeyMismatch;
+        let source = IdentityValueError::IdentityIdMismatch;
         let converted: RadrootsNostrAccountsError = source.into();
         assert!(converted.to_string().starts_with("identity error:"));
     }

@@ -1,0 +1,18 @@
+[package]
+name = "radroots_sync"
+description = "Synchronization orchestration for Radroots"
+version = "0.1.0-alpha"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+name = "radroots_sync"
+
+[lints]
+workspace = true

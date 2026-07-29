@@ -400,8 +400,7 @@ pub mod evaluator {
         } else {
             return None;
         };
-        RadrootsNip01Coordinate::parse(format!("{kind}:{}:{identifier}", event.author().as_str()))
-            .ok()
+        RadrootsNip01Coordinate::parse(format!("{kind}:{}:{identifier}", event.author())).ok()
     }
 
     const fn decision(

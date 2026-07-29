@@ -20,10 +20,8 @@ use std::{
 };
 
 use radroots_blossom::{
-    RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
-    RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION,
-    RadrootsBlossomPublicationReadinessEvidence, RadrootsBlossomRasterDimensions,
-    RadrootsBlossomRasterFormat,
+    PublicationReadinessEvidence, RADROOTS_BLOSSOM_PUBLICATION_READINESS_EVIDENCE_MAX_BYTES,
+    RADROOTS_BLOSSOM_PUBLICATION_READINESS_POLICY_VERSION, RasterDimensions, RasterFormat,
 };
 use serde::{
     Deserialize, Deserializer, Serialize,
@@ -116,7 +114,7 @@ impl fmt::Display for RadrootsPhase1PublicationMediaReadinessBindingDigest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsPhase1MediaReadyPublicationArtifact {
     allowlisted_artifact: RadrootsPhase1AllowlistedPublicationArtifact,
-    evidence: Vec<RadrootsBlossomPublicationReadinessEvidence>,
+    evidence: Vec<PublicationReadinessEvidence>,
     binding_digest: RadrootsPhase1PublicationMediaReadinessBindingDigest,
     canonical_json: Vec<u8>,
 }
@@ -130,7 +128,7 @@ impl RadrootsPhase1MediaReadyPublicationArtifact {
         self.allowlisted_artifact.artifact()
     }
 
-    pub fn evidence(&self) -> &[RadrootsBlossomPublicationReadinessEvidence] {
+    pub fn evidence(&self) -> &[PublicationReadinessEvidence] {
         &self.evidence
     }
 
@@ -194,10 +192,8 @@ impl RadrootsPhase1MediaReadyPublicationArtifact {
             .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::AllocationFailed)?;
         for raw in wire.evidence {
             evidence.push(
-                RadrootsBlossomPublicationReadinessEvidence::from_canonical_json(
-                    raw.get().as_bytes(),
-                )
-                .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::EvidenceInvalid)?,
+                PublicationReadinessEvidence::from_canonical_json(raw.get().as_bytes())
+                    .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::EvidenceInvalid)?,
             );
         }
         let ready = build_media_readiness_binding(allowlisted_artifact, evidence)?;
@@ -217,7 +213,7 @@ pub fn bind_phase1_publication_media_readiness<I>(
     evidence: I,
 ) -> Result<RadrootsPhase1MediaReadyPublicationArtifact, RadrootsPhase1PublicationMediaReadinessError>
 where
-    I: IntoIterator<Item = RadrootsBlossomPublicationReadinessEvidence>,
+    I: IntoIterator<Item = PublicationReadinessEvidence>,
 {
     let mut bounded = Vec::new();
     let mut evidence = evidence.into_iter();
@@ -256,7 +252,7 @@ pub fn validate_phase1_publication_media_readiness(
 
 fn build_media_readiness_binding(
     allowlisted_artifact: RadrootsPhase1AllowlistedPublicationArtifact,
-    evidence: Vec<RadrootsBlossomPublicationReadinessEvidence>,
+    evidence: Vec<PublicationReadinessEvidence>,
 ) -> Result<RadrootsPhase1MediaReadyPublicationArtifact, RadrootsPhase1PublicationMediaReadinessError>
 {
     validate_evidence_parity(allowlisted_artifact.artifact(), &evidence)?;
@@ -281,7 +277,7 @@ fn build_media_readiness_binding(
 
 fn validate_evidence_parity(
     artifact: &RadrootsPhase1PublicationArtifact,
-    evidence: &[RadrootsBlossomPublicationReadinessEvidence],
+    evidence: &[PublicationReadinessEvidence],
 ) -> Result<(), RadrootsPhase1PublicationMediaReadinessError> {
     let media = artifact.media_references();
     if evidence.len() != media.len() {
@@ -301,10 +297,10 @@ fn validate_evidence_parity(
                 RadrootsPhase1PublicationMediaReadinessError::EvidenceOrderMismatch { index },
             );
         }
-        let expected_format = RadrootsBlossomRasterFormat::from_media_type(reference.media_type())
-            .map_err(
-                |_| RadrootsPhase1PublicationMediaReadinessError::EvidenceFactMismatch { index },
-            )?;
+        let expected_format =
+            RasterFormat::from_media_type(reference.media_type()).map_err(|_| {
+                RadrootsPhase1PublicationMediaReadinessError::EvidenceFactMismatch { index }
+            })?;
         if observation.sha256() != reference.sha256()
             || observation.size() != reference.size()
             || observation.media_type() != reference.media_type()
@@ -325,10 +321,7 @@ fn validate_evidence_parity(
 
 fn expected_dimensions(
     artifact: &RadrootsPhase1PublicationArtifact,
-) -> Result<
-    Vec<Option<RadrootsBlossomRasterDimensions>>,
-    RadrootsPhase1PublicationMediaReadinessError,
-> {
+) -> Result<Vec<Option<RasterDimensions>>, RadrootsPhase1PublicationMediaReadinessError> {
     match artifact.semantic_variant() {
         RadrootsPhase1PublicationSemanticVariant::PhotoUpdate
         | RadrootsPhase1PublicationSemanticVariant::Ask => post_dimensions(artifact),
@@ -343,10 +336,7 @@ fn expected_dimensions(
 
 fn post_dimensions(
     artifact: &RadrootsPhase1PublicationArtifact,
-) -> Result<
-    Vec<Option<RadrootsBlossomRasterDimensions>>,
-    RadrootsPhase1PublicationMediaReadinessError,
-> {
+) -> Result<Vec<Option<RasterDimensions>>, RadrootsPhase1PublicationMediaReadinessError> {
     let draft = artifact.draft();
     let projection = project_inbound_post_parts(draft.kind(), draft.tags(), draft.content())
         .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid)?;
@@ -361,10 +351,8 @@ fn post_dimensions(
         let dimensions = imeta
             .dimensions()
             .ok_or(RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid)?;
-        let dimensions =
-            RadrootsBlossomRasterDimensions::new(dimensions.width(), dimensions.height()).map_err(
-                |_| RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid,
-            )?;
+        let dimensions = RasterDimensions::new(dimensions.width(), dimensions.height())
+            .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid)?;
         entries.push((url.to_string(), dimensions));
         entries.extend(
             imeta
@@ -379,10 +367,7 @@ fn post_dimensions(
 
 fn food_dimensions(
     artifact: &RadrootsPhase1PublicationArtifact,
-) -> Result<
-    Vec<Option<RadrootsBlossomRasterDimensions>>,
-    RadrootsPhase1PublicationMediaReadinessError,
-> {
+) -> Result<Vec<Option<RasterDimensions>>, RadrootsPhase1PublicationMediaReadinessError> {
     let draft = artifact.draft();
     let tags = radroots_event::RadrootsEventTags::new(draft.tags().to_vec())
         .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid)?;
@@ -407,10 +392,8 @@ fn food_dimensions(
         let dimensions = image
             .dimensions()
             .ok_or(RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid)?;
-        let dimensions =
-            RadrootsBlossomRasterDimensions::new(dimensions.width(), dimensions.height()).map_err(
-                |_| RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid,
-            )?;
+        let dimensions = RasterDimensions::new(dimensions.width(), dimensions.height())
+            .map_err(|_| RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid)?;
         entries.push((url.to_string(), dimensions));
     }
     align_dimensions(artifact.media_references(), entries)
@@ -418,11 +401,8 @@ fn food_dimensions(
 
 fn align_dimensions(
     media: &[RadrootsPhase1PublicationMediaReference],
-    mut entries: Vec<(String, RadrootsBlossomRasterDimensions)>,
-) -> Result<
-    Vec<Option<RadrootsBlossomRasterDimensions>>,
-    RadrootsPhase1PublicationMediaReadinessError,
-> {
+    mut entries: Vec<(String, RasterDimensions)>,
+) -> Result<Vec<Option<RasterDimensions>>, RadrootsPhase1PublicationMediaReadinessError> {
     entries.sort_by(|left, right| left.0.cmp(&right.0));
     if entries.windows(2).any(|pair| pair[0].0 == pair[1].0) {
         return Err(RadrootsPhase1PublicationMediaReadinessError::ArtifactProfileInvalid);
@@ -444,7 +424,7 @@ fn align_dimensions(
 
 fn compute_binding_digest(
     artifact: &RadrootsPhase1PublicationArtifact,
-    evidence: &[RadrootsBlossomPublicationReadinessEvidence],
+    evidence: &[PublicationReadinessEvidence],
 ) -> RadrootsPhase1PublicationMediaReadinessBindingDigest {
     let mut hasher = Sha256::new();
     hasher.update(BINDING_DIGEST_DOMAIN);
@@ -463,7 +443,7 @@ fn compute_binding_digest(
 
 fn serialize_binding(
     artifact: &RadrootsPhase1PublicationArtifact,
-    evidence: &[RadrootsBlossomPublicationReadinessEvidence],
+    evidence: &[PublicationReadinessEvidence],
     binding_digest: RadrootsPhase1PublicationMediaReadinessBindingDigest,
 ) -> Result<Vec<u8>, RadrootsPhase1PublicationMediaReadinessError> {
     let mut raw_evidence = Vec::new();

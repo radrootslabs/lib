@@ -250,12 +250,12 @@ impl<'a> OracleRequestIndexV1<'a> {
         let mut address_targets =
             BTreeMap::<(u32, String, String), OracleAddressRequestEvidenceV1>::new();
         for (index, request) in requests.iter().enumerate() {
-            let request_author = request.event().author_str();
+            let request_author = request.event().author().to_hex();
             for target in request.projection().event_targets() {
                 event_targets
                     .entry(target.event_id().as_str().to_owned())
                     .or_default()
-                    .entry(request_author.to_owned())
+                    .entry(request_author.clone())
                     .and_modify(|current| {
                         if request.event().id() < requests[*current].event().id() {
                             *current = index;
@@ -266,7 +266,7 @@ impl<'a> OracleRequestIndexV1<'a> {
             for target in request.projection().address_targets() {
                 let coordinate = (
                     target.coordinate().kind(),
-                    target.coordinate().pubkey().as_str().to_owned(),
+                    target.coordinate().pubkey().to_hex(),
                     target.coordinate().identifier().to_owned(),
                 );
                 let evidence = address_targets.entry(coordinate.clone()).or_default();
@@ -307,7 +307,7 @@ impl<'a> OracleRequestIndexV1<'a> {
             .event_targets
             .get(event.id_str())
             .map_or((None, false), |by_author| {
-                let authorized = by_author.get(event.author_str()).copied();
+                let authorized = by_author.get(&event.author().to_hex()).copied();
                 (
                     authorized,
                     by_author.len() > usize::from(authorized.is_some()),
@@ -383,11 +383,11 @@ fn oracle_nip01_coordinate_key(event: &RadrootsEventEnvelope) -> Option<(u32, St
         _ => return None,
     };
     let coordinate =
-        RadrootsNip01Coordinate::parse(format!("{kind}:{}:{identifier}", event.author_str()))
+        RadrootsNip01Coordinate::parse(format!("{kind}:{}:{identifier}", event.author().to_hex()))
             .ok()?;
     Some((
         coordinate.kind(),
-        coordinate.pubkey().as_str().to_owned(),
+        coordinate.pubkey().to_hex(),
         coordinate.identifier().to_owned(),
     ))
 }
@@ -574,7 +574,7 @@ mod tests {
         );
         let coordinate = format!(
             "30402:{}:unrepresentable-cutoff",
-            target.event().author_str()
+            target.event().author().to_hex()
         );
         let created_at = u64::try_from(i64::MAX).expect("i64 maximum fits u64") + 1;
         let keys =
@@ -648,7 +648,7 @@ mod tests {
             "{}",
             vec![vec!["d".to_owned(), "high-fan-in".to_owned()]],
         );
-        let coordinate = format!("30402:{}:high-fan-in", target.event().author_str());
+        let coordinate = format!("30402:{}:high-fan-in", target.event().author().to_hex());
         let mut requests = (0..REQUEST_COUNT)
             .map(|index| {
                 let ingest = signed_ingest_with_tags(
@@ -699,7 +699,10 @@ mod tests {
             );
             request_tags.push(vec![
                 "a".to_owned(),
-                format!("30402:{}:{identifier}", address_target.event().author_str()),
+                format!(
+                    "30402:{}:{identifier}",
+                    address_target.event().author().to_hex()
+                ),
             ]);
             targets.push(address_target);
         }
@@ -782,7 +785,7 @@ mod tests {
                 "stale address",
                 vec![vec![
                     "a".to_owned(),
-                    format!("30402:{}:stale", stale.event().author_str()),
+                    format!("30402:{}:stale", stale.event().author().to_hex()),
                 ]],
             )),
             admitted_request(signed_ingest_with_tags_and_key(
@@ -818,7 +821,7 @@ mod tests {
                 "stale address",
                 vec![vec![
                     "a".to_owned(),
-                    format!("30402:{}:exact", exact.event().author_str()),
+                    format!("30402:{}:exact", exact.event().author().to_hex()),
                 ]],
             )),
             admitted_request(signed_ingest_with_tags(
@@ -853,7 +856,7 @@ mod tests {
             "address reference",
             vec![vec![
                 "a".to_owned(),
-                format!("30402:{}:address", address.event().author_str()),
+                format!("30402:{}:address", address.event().author().to_hex()),
             ]],
         ))];
         let address_index = OracleRequestIndexV1::new(&address_requests);
@@ -881,7 +884,7 @@ mod tests {
                 vec!["e".to_owned(), both.event().id_str().to_owned()],
                 vec![
                     "a".to_owned(),
-                    format!("30402:{}:both", both.event().author_str()),
+                    format!("30402:{}:both", both.event().author().to_hex()),
                 ],
             ],
         ))];
@@ -907,7 +910,7 @@ mod tests {
             "{}",
             vec![vec!["d".to_owned(), "invariant".to_owned()]],
         );
-        let coordinate = format!("30402:{}:invariant", target.event().author_str());
+        let coordinate = format!("30402:{}:invariant", target.event().author().to_hex());
         let first = admitted_request(signed_ingest_with_tags(
             5,
             1_700_200_010,

@@ -228,7 +228,7 @@ async fn seed_v1_raw_event(
         "INSERT INTO event_envelopes(event_id, pubkey, created_at, kind, tags_json, content, sig, raw_json, verification_status, contract_status, contract_id, event_class, projection_eligible, inserted_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?, ?, ?, ?, ?, ?)",
     )
     .bind(event.id_str())
-    .bind(event.author_str())
+    .bind(event.author().to_hex())
     .bind(
         i64::try_from(event.created_at_u64())
             .unwrap_or_else(|_| panic!("{case_id}: created_at exceeds SQLite range")),

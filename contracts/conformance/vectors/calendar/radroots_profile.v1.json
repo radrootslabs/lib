@@ -49,12 +49,12 @@
           }
         },
         "participants": [
-          {"pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "relay": "wss://relay.example.test", "role": "host"}
+          {"pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df", "relay": "wss://relay.example.test", "role": "host"}
         ],
         "categories": ["csa", "vegetables"],
         "references": ["https://example.test/pickup-details"],
         "calendar_requests": [
-          {"calendar": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar", "relay": "wss://relay.example.test"}
+          {"calendar": "31924:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:farm-calendar", "relay": "wss://relay.example.test"}
         ]
       },
       "expected": {
@@ -71,11 +71,11 @@
             ["g", "c23nb62w20st"],
             ["summary", "Weekly pickup"],
             ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"],
-            ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://relay.example.test", "host"],
+            ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df", "wss://relay.example.test", "host"],
             ["t", "csa"],
             ["t", "vegetables"],
             ["r", "https://example.test/pickup-details"],
-            ["a", "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:farm-calendar", "wss://relay.example.test"]
+            ["a", "31924:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:farm-calendar", "wss://relay.example.test"]
           ]
         },
         "media_verification": "byte_verified",
@@ -188,7 +188,7 @@
       "input": {
         "kind": 31922,
         "content": "",
-        "tags": [["d", "farm-tour"], ["title", "Urban farm tour"], ["start", "2026-07-18"], ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "WSS://relay.example.test"]]
+        "tags": [["d", "farm-tour"], ["title", "Urban farm tour"], ["start", "2026-07-18"], ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df", "WSS://relay.example.test"]]
       },
       "expected": {"error": "non_canonical_field"}
     },
@@ -278,11 +278,11 @@
         "list_description": "NIP-51 set description for compatible clients.",
         "event_references": [
           {
-            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": "wss://date-relay.example.test/events"
           },
           {
-            "coordinate": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg",
+            "coordinate": "31923:e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af:CCCCCCCCCCCCCCCCCCCCCg",
             "relay": "wss://time-relay.example.test/events"
           }
         ]
@@ -294,8 +294,8 @@
           "tags": [
             ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
             ["title", "South Island farm schedule"],
-            ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://date-relay.example.test/events"],
-            ["a", "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg", "wss://time-relay.example.test/events"],
+            ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "wss://date-relay.example.test/events"],
+            ["a", "31923:e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af:CCCCCCCCCCCCCCCCCCCCCg", "wss://time-relay.example.test/events"],
             ["description", "NIP-51 set description for compatible clients."]
           ]
         }
@@ -320,7 +320,7 @@
         },
         "event_references": [
           {
-            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": null
           }
         ]
@@ -332,7 +332,7 @@
           "tags": [
             ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
             ["title", "Victoria farm calendar"],
-            ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+            ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
             ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"]
           ]
         },
@@ -360,11 +360,11 @@
         "title": "Duplicate event calendar",
         "event_references": [
           {
-            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": "wss://one.example.test"
           },
           {
-            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": "wss://two.example.test"
           }
         ]
@@ -379,7 +379,7 @@
         "title": "Uppercase relay",
         "event_references": [
           {
-            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": "WSS://Relay.Example.Test/events"
           }
         ]
@@ -394,7 +394,7 @@
         "title": "Wrong coordinate kind",
         "event_references": [
           {
-            "coordinate": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31924:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": null
           }
         ]
@@ -410,8 +410,8 @@
         "image": {
           "bytes_utf8": "victoria-calendar",
           "descriptor": {
-            "url": "https://media.example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.webp",
-            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "url": "https://media.example/585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df.webp",
+            "sha256": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
             "size": 17,
             "type": "image/webp",
             "uploaded": 1784347200
@@ -444,8 +444,8 @@
         "tags": [
           ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
           ["title", "South Island farm schedule"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://date-relay.example.test/events"],
-          ["a", "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg", "wss://time-relay.example.test/events"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "wss://date-relay.example.test/events"],
+          ["a", "31923:e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af:CCCCCCCCCCCCCCCCCCCCCg", "wss://time-relay.example.test/events"],
           ["description", "NIP-51 set description for compatible clients."],
           ["image", "https://media.example/aba72b48bb536e341ab81c5f86053981c443029766a4374ee86a4f56577ebc84.webp"]
         ]
@@ -456,11 +456,11 @@
         "list_description": "NIP-51 set description for compatible clients.",
         "event_references": [
           {
-            "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+            "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
             "relay": "wss://date-relay.example.test/events"
           },
           {
-            "coordinate": "31923:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc:CCCCCCCCCCCCCCCCCCCCCg",
+            "coordinate": "31923:e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af:CCCCCCCCCCCCCCCCCCCCCg",
             "relay": "wss://time-relay.example.test/events"
           }
         ],
@@ -477,7 +477,7 @@
         "tags": [
           ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
           ["title", "Uppercase reference"],
-          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Relay.Example.Test/events"]
+          ["a", "31922:585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Relay.Example.Test/events"]
         ]
       },
       "expected": {"error": "non_canonical_field", "field": "event_reference"}
@@ -491,8 +491,8 @@
         "tags": [
           ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
           ["title", "Duplicate reference"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://one.example.test"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://two.example.test"]
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "wss://one.example.test"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "wss://two.example.test"]
         ]
       },
       "expected": {"error": "duplicate_event_reference"}
@@ -527,7 +527,7 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": null
         },
         "status": "accepted"
@@ -538,7 +538,7 @@
           "content": "",
           "tags": [
             ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-            ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+            ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
             ["status", "accepted"]
           ]
         }
@@ -550,17 +550,17 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31923:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": "wss://coordinate-relay.example.test/events"
         },
         "revision_reference": {
-          "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "id": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
           "relay": "wss://event-relay.example.test/events"
         },
         "status": "tentative",
         "free_busy": "busy",
         "author_hint": {
-          "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
           "relay": "wss://author-relay.example.test/events"
         },
         "note": "I can help with the wash-pack shift."
@@ -571,11 +571,11 @@
           "content": "I can help with the wash-pack shift.",
           "tags": [
             ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-            ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://coordinate-relay.example.test/events"],
+            ["a", "31923:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "wss://coordinate-relay.example.test/events"],
             ["status", "tentative"],
-            ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://event-relay.example.test/events"],
+            ["e", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af", "wss://event-relay.example.test/events"],
             ["fb", "busy"],
-            ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://author-relay.example.test/events"]
+            ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df", "wss://author-relay.example.test/events"]
           ]
         },
         "observed_free_busy": "busy",
@@ -588,7 +588,7 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": null
         },
         "status": "declined",
@@ -602,7 +602,7 @@
       "input": {
         "d": "farm-tour-rsvp",
         "event_reference": {
-          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": null
         },
         "status": "accepted"
@@ -615,11 +615,11 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": null
         },
         "revision_reference": {
-          "id": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+          "id": "E0266E3CFB0D2886F91C73F5F868F3B98273713E5FCD97C081663F5518A4B3AF",
           "relay": null
         },
         "status": "accepted"
@@ -632,12 +632,12 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": null
         },
         "status": "accepted",
         "author_hint": {
-          "pubkey": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "pubkey": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
           "relay": null
         }
       },
@@ -649,7 +649,7 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": "WSS://Relay.Example.Test/events"
         },
         "status": "accepted"
@@ -662,7 +662,7 @@
       "input": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31924:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31924:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": null
         },
         "status": "accepted"
@@ -677,7 +677,7 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "accepted"]
         ]
       },
@@ -696,25 +696,25 @@
         "content": "I can help with the wash-pack shift.",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "wss://coordinate-relay.example.test/events"],
-          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "wss://event-relay.example.test/events"],
+          ["a", "31923:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "wss://coordinate-relay.example.test/events"],
+          ["e", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af", "wss://event-relay.example.test/events"],
           ["status", "tentative"],
           ["fb", "busy"],
-          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "wss://author-relay.example.test/events"]
+          ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df", "wss://author-relay.example.test/events"]
         ]
       },
       "expected": {
         "d": "DDDDDDDDDDDDDDDDDDDDDw",
         "event_reference": {
-          "coordinate": "31923:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ",
+          "coordinate": "31923:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ",
           "relay": "wss://coordinate-relay.example.test/events"
         },
         "revision_reference": {
-          "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "id": "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af",
           "relay": "wss://event-relay.example.test/events"
         },
         "author_hint": {
-          "pubkey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pubkey": "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",
           "relay": "wss://author-relay.example.test/events"
         },
         "status": "tentative",
@@ -730,7 +730,7 @@
         "content": "Unable to attend.",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "declined"],
           ["fb", "busy"]
         ]
@@ -750,10 +750,10 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Coordinate-Relay.Example.Test/events"],
-          ["e", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", "WSS://Event-Relay.Example.Test/events"],
+          ["a", "31922:585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Coordinate-Relay.Example.Test/events"],
+          ["e", "E0266E3CFB0D2886F91C73F5F868F3B98273713E5FCD97C081663F5518A4B3AF", "WSS://Event-Relay.Example.Test/events"],
           ["status", "accepted"],
-          ["p", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "WSS://Author-Relay.Example.Test/events"]
+          ["p", "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF", "WSS://Author-Relay.Example.Test/events"]
         ]
       },
       "expected": {"error": "non_canonical_field"}
@@ -766,9 +766,9 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "accepted"],
-          ["p", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]
+          ["p", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af"]
         ]
       },
       "expected": {"error": "author_hint_mismatch"}
@@ -781,7 +781,7 @@
         "content": "",
         "tags": [
           ["d", "farm-tour-rsvp"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "accepted"]
         ]
       },
@@ -796,7 +796,7 @@
         "tags": [
           ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
           ["title", "Uppercase coordinate"],
-          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ"]
+          ["a", "31922:585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF:BBBBBBBBBBBBBBBBBBBBBQ"]
         ]
       },
       "expected": {"error": "non_canonical_field", "field": "event_reference"}
@@ -810,7 +810,7 @@
         "tags": [
           ["d", "AAAAAAAAAAAAAAAAAAAAAA"],
           ["title", "Uppercase relay"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Relay.Example.Test/events"]
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Relay.Example.Test/events"]
         ]
       },
       "expected": {"error": "non_canonical_field", "field": "event_reference"}
@@ -823,7 +823,7 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "accepted"]
         ]
       },
@@ -837,8 +837,8 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
-          ["e", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["e", "E0266E3CFB0D2886F91C73F5F868F3B98273713E5FCD97C081663F5518A4B3AF"],
           ["status", "accepted"]
         ]
       },
@@ -852,9 +852,9 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "accepted"],
-          ["p", "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"]
+          ["p", "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF"]
         ]
       },
       "expected": {"error": "non_canonical_field", "field": "author_hint"}
@@ -867,7 +867,7 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Coordinate-Relay.Example.Test/events"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ", "WSS://Coordinate-Relay.Example.Test/events"],
           ["status", "accepted"]
         ]
       },
@@ -881,8 +881,8 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
-          ["e", "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "WSS://Event-Relay.Example.Test/events"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["e", "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af", "WSS://Event-Relay.Example.Test/events"],
           ["status", "accepted"]
         ]
       },
@@ -896,9 +896,9 @@
         "content": "",
         "tags": [
           ["d", "DDDDDDDDDDDDDDDDDDDDDw"],
-          ["a", "31922:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:BBBBBBBBBBBBBBBBBBBBBQ"],
+          ["a", "31922:585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df:BBBBBBBBBBBBBBBBBBBBBQ"],
           ["status", "accepted"],
-          ["p", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "WSS://Author-Relay.Example.Test/events"]
+          ["p", "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df", "WSS://Author-Relay.Example.Test/events"]
         ]
       },
       "expected": {"error": "non_canonical_field", "field": "author_hint"}

@@ -1034,11 +1034,11 @@ fn transport_failure_target_receipts(
         .iter()
         .cloned()
         .map(|target| {
-            RadrootsTransportTargetReceipt::skipped(
+            Ok(RadrootsTransportTargetReceipt::attempted(
                 target,
                 RadrootsTransportOutcome::new(RadrootsTransportOutcomeKind::ConnectionFailed)
                     .try_with_message(message.to_owned())?,
-            )
+            ))
         })
         .collect()
 }
@@ -1415,7 +1415,7 @@ fn ensure_raw_event_matches_signed_event(
         (
             "pubkey",
             event.pubkey.to_hex(),
-            signed_event.pubkey_str().to_owned(),
+            signed_event.pubkey().to_hex().to_owned(),
         ),
         (
             "created_at",

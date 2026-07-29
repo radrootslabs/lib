@@ -1,3 +1,5 @@
+//! Canonical three-letter currency codes and currency-specific minor units.
+
 use core::fmt;
 use core::str::FromStr;
 
@@ -10,21 +12,22 @@ use std::string::String;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as DeError};
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsCoreCurrency([u8; 3]);
+pub struct Currency([u8; 3]);
 
-impl RadrootsCoreCurrency {
+impl Currency {
+    /// Builds a currency from its canonical three-byte ASCII code.
     #[inline]
-    pub const fn from_const(bytes: [u8; 3]) -> Result<Self, RadrootsCoreCurrencyParseError> {
+    pub const fn from_const(bytes: [u8; 3]) -> Result<Self, ParseError> {
         if Self::is_ascii_upper(bytes[0])
             && Self::is_ascii_upper(bytes[1])
             && Self::is_ascii_upper(bytes[2])
         {
             Ok(Self(bytes))
         } else {
-            Err(RadrootsCoreCurrencyParseError::InvalidFormat)
+            Err(ParseError::InvalidFormat)
         }
     }
 
@@ -33,10 +36,10 @@ impl RadrootsCoreCurrency {
     }
 
     #[inline]
-    pub fn from_str_upper(s: &str) -> Result<Self, RadrootsCoreCurrencyParseError> {
+    pub fn from_str_upper(s: &str) -> Result<Self, ParseError> {
         let b = s.as_bytes();
         if b.len() != 3 || b.iter().any(|c| !c.is_ascii_uppercase()) {
-            return Err(RadrootsCoreCurrencyParseError::InvalidFormat);
+            return Err(ParseError::InvalidFormat);
         }
         Ok(Self([b[0], b[1], b[2]]))
     }
@@ -46,12 +49,17 @@ impl RadrootsCoreCurrency {
         core::str::from_utf8(&self.0).unwrap_or("???")
     }
 
-    pub const USD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"USD");
-    pub const EUR: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"EUR");
-    pub const GBP: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"GBP");
-    pub const JPY: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"JPY");
-    pub const CAD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"CAD");
-    pub const AUD: RadrootsCoreCurrency = RadrootsCoreCurrency(*b"AUD");
+    #[inline]
+    pub const fn as_bytes(&self) -> &[u8; 3] {
+        &self.0
+    }
+
+    pub const USD: Currency = Currency(*b"USD");
+    pub const EUR: Currency = Currency(*b"EUR");
+    pub const GBP: Currency = Currency(*b"GBP");
+    pub const JPY: Currency = Currency(*b"JPY");
+    pub const CAD: Currency = Currency(*b"CAD");
+    pub const AUD: Currency = Currency(*b"AUD");
 
     #[inline]
     pub const fn minor_unit_exponent(&self) -> u32 {
@@ -69,34 +77,34 @@ impl RadrootsCoreCurrency {
     }
 }
 
-impl fmt::Debug for RadrootsCoreCurrency {
+impl fmt::Debug for Currency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("RadrootsCoreCurrency")
-            .field(&self.as_str())
-            .finish()
+        f.debug_tuple("Currency").field(&self.as_str()).finish()
     }
 }
 
-impl fmt::Display for RadrootsCoreCurrency {
+impl fmt::Display for Currency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl TryFrom<&str> for RadrootsCoreCurrency {
-    type Error = RadrootsCoreCurrencyParseError;
+impl TryFrom<&str> for Currency {
+    type Error = ParseError;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()
     }
 }
 
-impl FromStr for RadrootsCoreCurrency {
-    type Err = RadrootsCoreCurrencyParseError;
+impl FromStr for Currency {
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Currency input is canonicalized to uppercase ASCII. Serialization
+        // and Display always emit that canonical representation.
         let s = s.trim();
         if s.len() != 3 || !s.chars().all(|c| c.is_ascii_alphabetic()) {
-            return Err(RadrootsCoreCurrencyParseError::InvalidFormat);
+            return Err(ParseError::InvalidFormat);
         }
         let upper = s.to_ascii_uppercase();
         Self::from_str_upper(&upper)
@@ -105,14 +113,14 @@ impl FromStr for RadrootsCoreCurrency {
 
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RadrootsCoreCurrencyParseError {
+pub enum ParseError {
     InvalidFormat,
 }
 
-impl fmt::Display for RadrootsCoreCurrencyParseError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RadrootsCoreCurrencyParseError::InvalidFormat => {
+            ParseError::InvalidFormat => {
                 write!(f, "currency must be a 3-letter code")
             }
         }
@@ -120,17 +128,17 @@ impl fmt::Display for RadrootsCoreCurrencyParseError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCoreCurrencyParseError {}
+impl std::error::Error for ParseError {}
 
 #[cfg(feature = "serde")]
-impl Serialize for RadrootsCoreCurrency {
+impl Serialize for Currency {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_str(self.as_str())
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for RadrootsCoreCurrency {
+impl<'de> Deserialize<'de> for Currency {
     fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
         let s = String::deserialize(de)?;
         s.parse().map_err(D::Error::custom)

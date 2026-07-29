@@ -116,7 +116,7 @@ pub trait JobEventLike {
 
 pub trait JobEventBorrow<'a> {
     fn raw_id(&'a self) -> &'a str;
-    fn raw_author(&'a self) -> &'a str;
+    fn raw_author(&'a self) -> String;
     fn raw_content(&'a self) -> &'a str;
     fn raw_kind(&'a self) -> u32;
 }
@@ -147,7 +147,7 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
     }
     #[inline]
     fn raw_author(&self) -> String {
-        self.inner.raw_author().to_owned()
+        self.inner.raw_author()
     }
     #[inline]
     fn raw_published_at(&self) -> u64 {
@@ -177,8 +177,8 @@ impl<'a> JobEventBorrow<'a> for radroots_event::RadrootsEventEnvelope {
         self.id_str()
     }
     #[inline]
-    fn raw_author(&'a self) -> &'a str {
-        self.author_str()
+    fn raw_author(&'a self) -> String {
+        self.author().to_hex()
     }
     #[inline]
     fn raw_content(&'a self) -> &'a str {

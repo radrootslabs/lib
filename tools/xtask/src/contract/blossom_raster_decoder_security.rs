@@ -1,9 +1,10 @@
 use super::{
     artifact_bundle::{GeneratedArtifact, read_regular_file, with_artifact_bundle_transaction},
     phase1_publication_media_readiness::{
-        BLOSSOM_PREDECESSOR_ARTIFACTS, FileDescriptor, PredecessorDescriptor, ProtocolSourcePin,
-        descriptor_for_bytes, descriptor_for_file, predecessor_descriptor,
-        validate_immutable_predecessor, validate_source_supersessions,
+        BLOSSOM_PREDECESSOR_ARTIFACTS, BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS, FileDescriptor,
+        PredecessorDescriptor, ProtocolSourcePin, descriptor_for_bytes, descriptor_for_file,
+        predecessor_descriptor, validate_immutable_predecessor_with_superseded_artifacts,
+        validate_source_supersessions,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,7 @@ const SCHEMA_VERSION: u32 = 1;
 const CONTRACT_ID: &str = "radroots_blossom.raster_decoder_security_v1";
 const AUTHORITY_ID: &str = "blossom_raster_decoder_security_v1";
 const HASH_ALGORITHM: &str = "sha256_bytes_v1";
+const LIB_CRATE_VERSION: &str = "0.1.0-alpha";
 const WRITE_COMMAND: &str = "cargo xtask contract blossom-raster-decoder-security-manifest --write";
 
 const MANIFEST_RELATIVE: &str = "crates/blossom/contracts/raster_decoder_security_v1.manifest.json";
@@ -471,22 +473,22 @@ const RELEASE_SEMVER_IMPACTS: &[&str] = &[
     "change_exported_constant_value",
 ];
 const OPERATION_INPUTS: &[&str] = &[
-    "RadrootsBlossomByteVerifiedDescriptor",
+    "ByteVerifiedDescriptor",
     "Bytes",
-    "RadrootsBlossomAuthoredRasterDimensions",
-    "RadrootsBlossomBud02UploadObservation",
-    "RadrootsBlossomBud01HeadObservation",
-    "RadrootsBlossomBud01GetObservation",
+    "AuthoredRasterDimensions",
+    "Bud02UploadObservation",
+    "Bud01HeadObservation",
+    "Bud01GetObservation",
 ];
-const OPERATION_OUTPUTS: &[&str] = &["RadrootsBlossomPublicationReadinessEvidence"];
+const OPERATION_OUTPUTS: &[&str] = &["PublicationReadinessEvidence"];
 const OPERATION_MODULES: &[&str] = &[READINESS_SOURCE_RELATIVE];
 const OPERATION_RUST_TYPES: &[&str] = &[
-    "radroots_blossom::RadrootsBlossomAuthoredRasterDimensions",
-    "radroots_blossom::RadrootsBlossomBud01GetCollector",
-    "radroots_blossom::RadrootsBlossomBud01GetObservation",
-    "radroots_blossom::RadrootsBlossomBud01HeadObservation",
-    "radroots_blossom::RadrootsBlossomBud02UploadObservation",
-    "radroots_blossom::RadrootsBlossomPublicationReadinessEvidence",
+    "radroots_blossom::AuthoredRasterDimensions",
+    "radroots_blossom::Bud01GetCollector",
+    "radroots_blossom::Bud01GetObservation",
+    "radroots_blossom::Bud01HeadObservation",
+    "radroots_blossom::Bud02UploadObservation",
+    "radroots_blossom::PublicationReadinessEvidence",
 ];
 const SOURCE_SUPERSESSIONS: &[&str] = &[
     "CHANGELOG.md",
@@ -495,6 +497,8 @@ const SOURCE_SUPERSESSIONS: &[&str] = &[
     "crates/blossom/src/error.rs",
     "crates/blossom/src/publication_readiness.rs",
     "crates/blossom/src/publication_readiness/sequential_jpeg.rs",
+    "crates/blossom/tests/publication_readiness.rs",
+    "crates/blossom/tests/publication_readiness_persistence.rs",
     "tools/xtask/src/contract.rs",
     "tools/xtask/src/main.rs",
 ];
@@ -699,10 +703,11 @@ pub(crate) fn validate_blossom_raster_decoder_security_manifest(
 
 fn validate_predecessors(workspace_root: &Path) -> Result<(), String> {
     validate_source_supersessions(workspace_root, SOURCE_SUPERSESSIONS)?;
-    validate_immutable_predecessor(
+    validate_immutable_predecessor_with_superseded_artifacts(
         workspace_root,
         "Blossom publication readiness",
         BLOSSOM_PREDECESSOR_ARTIFACTS,
+        BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS,
     )
 }
 
@@ -797,10 +802,12 @@ fn describe_manifest(
         authority_id: AUTHORITY_ID.to_owned(),
         manifest_schema: descriptor_for_bytes(MANIFEST_SCHEMA_RELATIVE, manifest_schema_bytes),
         predecessors: vec![predecessor_descriptor(
+            workspace_root,
             "radroots_blossom.publication_readiness_v1",
             BLOSSOM_PREDECESSOR_ARTIFACTS,
+            BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS,
             SOURCE_SUPERSESSIONS,
-        )],
+        )?],
         protocol_sources: vec![
             ProtocolSourcePin {
                 id: "nostr_nips".to_owned(),
@@ -1430,7 +1437,7 @@ fn validate_error_authority(workspace_root: &Path) -> Result<(), String> {
     let mut variants = BTreeSet::new();
     for item in &file.items {
         if let Item::Enum(item) = item
-            && item.ident == "RadrootsBlossomError"
+            && item.ident == "Error"
             && is_public(&item.vis)
         {
             for variant in &item.variants {
@@ -1684,6 +1691,15 @@ fn insert_fuzz_bin_name(bin_names: &mut BTreeSet<String>, name: &str) -> Result<
     Ok(())
 }
 
+fn validate_fuzz_crate_version(label: &str, package: &toml::Table) -> Result<(), String> {
+    if package.get("version").and_then(toml::Value::as_str) != Some(LIB_CRATE_VERSION) {
+        return Err(format!(
+            "{label} version must remain exactly {LIB_CRATE_VERSION}"
+        ));
+    }
+    Ok(())
+}
+
 fn validate_fuzz_authority(workspace_root: &Path, validate_corpus: bool) -> Result<(), String> {
     let workspace = parse_toml(workspace_root, WORKSPACE_MANIFEST_RELATIVE)?;
     let excludes = toml_string_array(
@@ -1706,6 +1722,7 @@ fn validate_fuzz_authority(workspace_root: &Path, validate_corpus: bool) -> Resu
         .get("package")
         .and_then(toml::Value::as_table)
         .ok_or_else(|| "fuzz package table is missing".to_owned())?;
+    validate_fuzz_crate_version("fuzz package", package)?;
     if package.get("name").and_then(toml::Value::as_str) != Some("radroots-fuzz")
         || package.get("publish").and_then(toml::Value::as_bool) != Some(false)
         || package
@@ -1816,7 +1833,10 @@ fn validate_fuzz_authority(workspace_root: &Path, validate_corpus: bool) -> Resu
     let fuzz_lock_package = packages
         .iter()
         .find(|package| package.get("name").and_then(toml::Value::as_str) == Some("radroots-fuzz"))
-        .ok_or_else(|| "fuzz lockfile is missing package radroots-fuzz".to_owned())?;
+        .ok_or_else(|| "fuzz lockfile is missing package radroots-fuzz".to_owned())?
+        .as_table()
+        .ok_or_else(|| "fuzz lockfile radroots-fuzz package must be a table".to_owned())?;
+    validate_fuzz_crate_version("fuzz lockfile radroots-fuzz package", fuzz_lock_package)?;
     let fuzz_lock_dependencies = toml_string_array(
         "fuzz lockfile radroots-fuzz dependencies",
         fuzz_lock_package.get("dependencies"),
@@ -2146,10 +2166,15 @@ fn manifest_schema() -> Value {
             "predecessor": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["contract_id", "immutable_artifacts", "source_supersessions"],
+                "required": ["contract_id", "immutable_artifacts", "artifact_supersessions", "source_supersessions"],
                 "properties": {
                     "contract_id": {"const": "radroots_blossom.publication_readiness_v1"},
                     "immutable_artifacts": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"$ref": "#/$defs/file"}
+                    },
+                    "artifact_supersessions": {
                         "type": "array",
                         "minItems": 1,
                         "items": {"$ref": "#/$defs/file"}
@@ -2578,6 +2603,26 @@ mod tests {
         validate_vector(&workspace_root).expect("exact 30-case vector authority");
         validate_fuzz_authority(&workspace_root, true)
             .expect("raw seed inventory and structural fuzz authority");
+    }
+
+    #[test]
+    fn fuzz_crate_version_authority_rejects_drift() {
+        let root = workspace_root();
+        let manifest = parse_toml(&root, FUZZ_MANIFEST_RELATIVE).expect("fuzz manifest");
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .expect("fuzz package table");
+        validate_fuzz_crate_version("fuzz package", package).expect("frozen fuzz version");
+
+        let mut drifted = package.clone();
+        drifted.insert(
+            "version".to_owned(),
+            toml::Value::String("0.0.0".to_owned()),
+        );
+        let error = validate_fuzz_crate_version("fuzz package", &drifted)
+            .expect_err("fuzz version drift must fail closed");
+        assert!(error.contains(LIB_CRATE_VERSION), "{error}");
     }
 
     #[test]

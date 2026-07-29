@@ -1,6 +1,6 @@
 [package]
 name = "radroots_protocol_contract_v1"
-publish = ["crates-io"]
+publish = false
 version = "0.1.0-alpha"
 edition.workspace = true
 authors = ["Tyson Lupul <tyson@radroots.org>"]
@@ -14,13 +14,18 @@ readme = "README"
 
 [features]
 default = ["std", "serde"]
-dto-bindgen = ["std", "serde", "dep:dto_bindgen"]
 serde = ["dep:serde"]
 std = []
 
 [dependencies]
-dto_bindgen = { workspace = true, optional = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ], optional = true }
+
+[dev-dependencies]
+radroots_protocol = { workspace = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
+serde_json = { workspace = true, features = ["std"] }

@@ -374,7 +374,7 @@ fn validate_vector(
                 ));
             }
             let expected = exact_object(
-                &vector.expected,
+                vector.expected_value()?,
                 &["contract_id", "event_id", "variant"],
                 &format!("{}.expected", vector.id),
             )?;
@@ -393,7 +393,7 @@ fn validate_vector(
                 ));
             }
             let expected = exact_object(
-                &vector.expected,
+                vector.expected_value()?,
                 &["error_code", "error_variant", "event_id"],
                 &format!("{}.expected", vector.id),
             )?;

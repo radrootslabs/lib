@@ -36,11 +36,11 @@ all-server-match rule remain outside this public crate.
 
 ## Actions And Endpoint Targets
 
-`RadrootsBlossomAuthorizationAction` has exactly the five lowercase BUD-11 wire values `get`,
+`AuthorizationAction` has exactly the five lowercase BUD-11 wire values `get`,
 `upload`, `list`, `delete`, and `media`. Case variants, whitespace, unknown verbs, and the empty
 string are invalid.
 
-Endpoint validation uses an explicit `RadrootsBlossomAuthorizationTarget`:
+Endpoint validation uses an explicit `AuthorizationTarget`:
 
 | Endpoint | Target | Required action | Implied hash | `x` policy |
 | --- | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ does not authorize arbitrary endpoints and does not perform HTTP parsing.
 
 ## Human-Readable Content
 
-`RadrootsBlossomAuthorizationContent` is from 1 through 4,096 UTF-8 bytes and is already equal to
+`AuthorizationContent` is from 1 through 4,096 UTF-8 bytes and is already equal to
 its Unicode-whitespace-trimmed form. It rejects empty and whitespace-only input, leading or
 trailing whitespace, NUL, and non-whitespace controls. Horizontal tab, newline, and carriage return
 are allowed only inside otherwise human-readable content. Interior ordinary whitespace and
@@ -69,7 +69,7 @@ as `Upload farm photo`.
 
 ## Server Domains
 
-A `RadrootsBlossomServerDomain` is an ASCII lowercase domain name of at most 253 bytes without
+A `ServerDomain` is an ASCII lowercase domain name of at most 253 bytes without
 scheme, user information, port, path, query, fragment, IP-literal brackets, or trailing dot. Every
 dot-separated label is from 1 through 63 bytes, begins and ends with an ASCII lowercase letter or
 digit, and otherwise contains only ASCII lowercase letters, digits, or `-`. `localhost` is valid.
@@ -88,7 +88,7 @@ reduces replay scope without changing tolerant inbound BUD-11 semantics.
 
 ## Blob Hash Scope
 
-Every known `x` tag value is a `RadrootsBlossomSha256`: exactly 64 lowercase hexadecimal
+Every known `x` tag value is a `Sha256`: exactly 64 lowercase hexadecimal
 characters. Multiple valid `x` tags are allowed.
 
 For targets requiring a hash scope, at least one `x` tag must equal the target's implied hash. Other
@@ -100,7 +100,7 @@ Strict authored upload claims contain exactly one `x` tag equal to the upload ha
 
 ## Claim Tag Parsing
 
-`RadrootsBlossomParsedAuthorizationClaim::parse` consumes signed content, the event `created_at`
+`AuthorizationClaim::parse` consumes signed content, the event `created_at`
 timestamp, and raw Nostr tag arrays. Structural parsing occurs before endpoint policy validation.
 
 Known tags use exact lowercase names and require at least a key and value:
@@ -126,7 +126,7 @@ or target scope. Those checks belong to the appropriate outward adapter or valid
 ## Time Validation
 
 Endpoint validation receives an explicit `now` so it is deterministic and does not read a wall
-clock. `RadrootsBlossomAuthorizationValidation::bud11` applies only the pinned BUD time and optional
+clock. `AuthorizationValidation::bud11` applies only the pinned BUD time and optional
 server semantics. The existing bounded constructor applies the Radroots replay profile with
 `RADROOTS_BLOSSOM_AUTH_MAX_CREATED_AGE_SECONDS = 300` and
 `RADROOTS_BLOSSOM_AUTH_MAX_HORIZON_SECONDS = 300`.
@@ -148,7 +148,7 @@ seconds inclusive, and `created_at + lifetime` must not overflow `u64`.
 
 ## Strict Authored Upload Claims
 
-`RadrootsBlossomAuthoredUploadClaim::new` requires typed human-readable content, one typed server
+`AuthoredUploadClaim::new` requires typed human-readable content, one typed server
 domain, one exact typed SHA-256, `created_at`, and a valid authored lifetime. It produces canonical
 wire parts in this exact order:
 
@@ -254,7 +254,7 @@ The outward Nostr adapter additionally exposes these stable boundary identifiers
 - `invalid_event_signature`
 - `event_signing`
 
-An authenticated pure-claim failure retains its `RadrootsBlossomError::code()` identifier rather
+An authenticated pure-claim failure retains its `Error::code()` identifier rather
 than being collapsed into a generic adapter error.
 
 Direct typed action, server-domain, and hash parsing uses `invalid_authorization_action`,

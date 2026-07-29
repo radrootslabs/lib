@@ -57,7 +57,7 @@ const READINESS_POLICY_VERSION: u16 = 1;
 const EVIDENCE_MAX_BYTES: usize = 8 * 1024;
 const URL_MAX_BYTES: usize = 4 * 1024;
 const RASTER_MAX_BYTES: u64 = 10_485_760;
-const RASTER_MAX_DECODED_BYTES: u64 = 160_000_000;
+const RASTER_MAX_DECODED_BYTES: u64 = 80_000_000;
 const RASTER_MAX_DIMENSION: u32 = 16_384;
 const RASTER_MAX_PIXELS: u64 = 20_000_000;
 
@@ -72,58 +72,58 @@ const PUBLIC_CONSTANTS: &[&str] = &[
     "RADROOTS_BLOSSOM_PUBLICATION_READINESS_URL_MAX_BYTES",
 ];
 const PUBLIC_TYPES: &[&str] = &[
-    "RadrootsBlossomAuthoredRasterDimensions",
-    "RadrootsBlossomBud01GetCollector",
-    "RadrootsBlossomBud01GetObservation",
-    "RadrootsBlossomBud01HeadObservation",
-    "RadrootsBlossomBud02UploadObservation",
-    "RadrootsBlossomBud02UploadStatus",
-    "RadrootsBlossomPublicationReadinessEvidence",
-    "RadrootsBlossomPublicationReadinessEvidenceDigest",
-    "RadrootsBlossomRasterDimensions",
-    "RadrootsBlossomRasterFormat",
+    "AuthoredRasterDimensions",
+    "Bud01GetCollector",
+    "Bud01GetObservation",
+    "Bud01HeadObservation",
+    "Bud02UploadObservation",
+    "Bud02UploadStatus",
+    "PublicationReadinessEvidence",
+    "PublicationReadinessEvidenceDigest",
+    "RasterDimensions",
+    "RasterFormat",
 ];
 const PUBLIC_FUNCTIONS: &[&str] = &["verify_publication_readiness"];
 const PUBLIC_METHODS: &[&str] = &[
-    "RadrootsBlossomBud01GetCollector::finish",
-    "RadrootsBlossomBud01GetCollector::new",
-    "RadrootsBlossomBud01GetCollector::push_chunk",
-    "RadrootsBlossomBud01GetObservation::bytes",
-    "RadrootsBlossomBud01GetObservation::declared_size",
-    "RadrootsBlossomBud01GetObservation::from_complete_body",
-    "RadrootsBlossomBud01GetObservation::url",
-    "RadrootsBlossomBud01HeadObservation::content_length",
-    "RadrootsBlossomBud01HeadObservation::media_type",
-    "RadrootsBlossomBud01HeadObservation::new",
-    "RadrootsBlossomBud01HeadObservation::url",
-    "RadrootsBlossomBud02UploadObservation::descriptor",
-    "RadrootsBlossomBud02UploadObservation::new",
-    "RadrootsBlossomBud02UploadObservation::status",
-    "RadrootsBlossomBud02UploadStatus::as_u16",
-    "RadrootsBlossomPublicationReadinessEvidence::bud02_status",
-    "RadrootsBlossomPublicationReadinessEvidence::dimensions",
-    "RadrootsBlossomPublicationReadinessEvidence::evidence_digest",
-    "RadrootsBlossomPublicationReadinessEvidence::from_canonical_json",
-    "RadrootsBlossomPublicationReadinessEvidence::media_type",
-    "RadrootsBlossomPublicationReadinessEvidence::policy_version",
-    "RadrootsBlossomPublicationReadinessEvidence::raster_format",
-    "RadrootsBlossomPublicationReadinessEvidence::schema_version",
-    "RadrootsBlossomPublicationReadinessEvidence::sha256",
-    "RadrootsBlossomPublicationReadinessEvidence::size",
-    "RadrootsBlossomPublicationReadinessEvidence::to_canonical_json",
-    "RadrootsBlossomPublicationReadinessEvidence::uploaded",
-    "RadrootsBlossomPublicationReadinessEvidence::url",
-    "RadrootsBlossomPublicationReadinessEvidenceDigest::as_sha256",
-    "RadrootsBlossomRasterDimensions::height",
-    "RadrootsBlossomRasterDimensions::new",
-    "RadrootsBlossomRasterDimensions::pixels",
-    "RadrootsBlossomRasterDimensions::width",
-    "RadrootsBlossomRasterFormat::as_str",
-    "RadrootsBlossomRasterFormat::from_media_type",
+    "Bud01GetCollector::finish",
+    "Bud01GetCollector::new",
+    "Bud01GetCollector::push_chunk",
+    "Bud01GetObservation::bytes",
+    "Bud01GetObservation::declared_size",
+    "Bud01GetObservation::from_complete_body",
+    "Bud01GetObservation::url",
+    "Bud01HeadObservation::content_length",
+    "Bud01HeadObservation::media_type",
+    "Bud01HeadObservation::new",
+    "Bud01HeadObservation::url",
+    "Bud02UploadObservation::descriptor",
+    "Bud02UploadObservation::new",
+    "Bud02UploadObservation::status",
+    "Bud02UploadStatus::as_u16",
+    "PublicationReadinessEvidence::bud02_status",
+    "PublicationReadinessEvidence::dimensions",
+    "PublicationReadinessEvidence::evidence_digest",
+    "PublicationReadinessEvidence::from_canonical_json",
+    "PublicationReadinessEvidence::media_type",
+    "PublicationReadinessEvidence::policy_version",
+    "PublicationReadinessEvidence::raster_format",
+    "PublicationReadinessEvidence::schema_version",
+    "PublicationReadinessEvidence::sha256",
+    "PublicationReadinessEvidence::size",
+    "PublicationReadinessEvidence::to_canonical_json",
+    "PublicationReadinessEvidence::uploaded",
+    "PublicationReadinessEvidence::url",
+    "PublicationReadinessEvidenceDigest::as_sha256",
+    "RasterDimensions::height",
+    "RasterDimensions::new",
+    "RasterDimensions::pixels",
+    "RasterDimensions::width",
+    "RasterFormat::as_str",
+    "RasterFormat::from_media_type",
 ];
 const SEALED_TYPES: &[&str] = &[
-    "RadrootsBlossomPublicationReadinessEvidence",
-    "RadrootsBlossomPublicationReadinessEvidenceDigest",
+    "PublicationReadinessEvidence",
+    "PublicationReadinessEvidenceDigest",
 ];
 const PRIVATE_WIRE_TYPES: &[&str] = &[
     "PublicationReadinessDimensionsWire",
@@ -627,14 +627,14 @@ fn describe_manifest(
         readiness: ReadinessDescriptor {
             verify_operation_id: VERIFY_OPERATION_ID.to_owned(),
             input_types: owned(&[
-                "RadrootsBlossomByteVerifiedDescriptor",
+                "ByteVerifiedDescriptor",
                 "Bytes",
-                "RadrootsBlossomAuthoredRasterDimensions",
-                "RadrootsBlossomBud02UploadObservation",
-                "RadrootsBlossomBud01HeadObservation",
-                "RadrootsBlossomBud01GetObservation",
+                "AuthoredRasterDimensions",
+                "Bud02UploadObservation",
+                "Bud01HeadObservation",
+                "Bud01GetObservation",
             ]),
-            output_type: "RadrootsBlossomPublicationReadinessEvidence".to_owned(),
+            output_type: "PublicationReadinessEvidence".to_owned(),
             evidence: EvidenceDescriptor {
                 schema_version: EVIDENCE_SCHEMA_VERSION,
                 policy_version: READINESS_POLICY_VERSION,
@@ -1120,14 +1120,14 @@ fn validate_manifest_shape(manifest: &PublicationReadinessManifest) -> Result<()
         || manifest.readiness.verify_operation_id != VERIFY_OPERATION_ID
         || manifest.readiness.input_types
             != owned(&[
-                "RadrootsBlossomByteVerifiedDescriptor",
+                "ByteVerifiedDescriptor",
                 "Bytes",
-                "RadrootsBlossomAuthoredRasterDimensions",
-                "RadrootsBlossomBud02UploadObservation",
-                "RadrootsBlossomBud01HeadObservation",
-                "RadrootsBlossomBud01GetObservation",
+                "AuthoredRasterDimensions",
+                "Bud02UploadObservation",
+                "Bud01HeadObservation",
+                "Bud01GetObservation",
             ])
-        || manifest.readiness.output_type != "RadrootsBlossomPublicationReadinessEvidence"
+        || manifest.readiness.output_type != "PublicationReadinessEvidence"
         || manifest.readiness.evidence.schema_version != EVIDENCE_SCHEMA_VERSION
         || manifest.readiness.evidence.policy_version != READINESS_POLICY_VERSION
         || manifest.readiness.evidence.max_canonical_json_bytes != EVIDENCE_MAX_BYTES as u64
@@ -1256,7 +1256,7 @@ fn manifest_schema() -> Value {
                 "properties": {
                     "verify_operation_id": {"const": VERIFY_OPERATION_ID},
                     "input_types": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "string", "minLength": 1}},
-                    "output_type": {"const": "RadrootsBlossomPublicationReadinessEvidence"},
+                    "output_type": {"const": "PublicationReadinessEvidence"},
                     "evidence": {"$ref": "#/$defs/evidence"},
                     "behavior_vector": {"$ref": "#/$defs/vector"},
                     "persistence_vector": {"$ref": "#/$defs/vector"}
@@ -1462,8 +1462,8 @@ mod tests {
         validate_public_api_source(&format!("// unrelated comment\n{source}")).unwrap();
 
         let exposed = source.replacen(
-            "    url: RadrootsBlossomApprovedBlobUrl,",
-            "    pub url: RadrootsBlossomApprovedBlobUrl,",
+            "    url: ApprovedBlobUrl,",
+            "    pub url: ApprovedBlobUrl,",
             1,
         );
         assert!(
@@ -1473,8 +1473,8 @@ mod tests {
         );
 
         let deserializable = source.replacen(
-            "#[derive(Clone, Debug, PartialEq, Eq)]\npub struct RadrootsBlossomPublicationReadinessEvidence",
-            "#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]\npub struct RadrootsBlossomPublicationReadinessEvidence",
+            "#[derive(Clone, Debug, PartialEq, Eq)]\npub struct PublicationReadinessEvidence",
+            "#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]\npub struct PublicationReadinessEvidence",
             1,
         );
         assert!(

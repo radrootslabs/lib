@@ -1,35 +1,31 @@
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+#[cfg(all(test, not(feature = "std")))]
+extern crate std;
 
 pub mod currency;
 pub mod decimal;
-pub mod discount;
-#[cfg(feature = "dto-bindgen")]
-pub mod dto;
+mod discount;
+#[cfg(all(test, feature = "std"))]
+mod dto;
+mod error;
 pub mod money;
 pub mod percent;
+pub mod pricing;
 pub mod quantity;
-pub mod quantity_price;
+mod quantity_price;
 #[cfg(feature = "serde")]
-pub mod serde_ext;
+mod serde_ext;
 pub mod unit;
 
-pub use currency::{RadrootsCoreCurrency, RadrootsCoreCurrencyParseError};
-pub use decimal::RadrootsCoreDecimal;
-pub use discount::{
-    RadrootsCoreDiscount, RadrootsCoreDiscountScope, RadrootsCoreDiscountThreshold,
-    RadrootsCoreDiscountValue,
-};
-pub use money::{RadrootsCoreMoney, RadrootsCoreMoneyInvariantError};
-pub use percent::{RadrootsCorePercent, RadrootsCorePercentParseError};
-pub use quantity::{RadrootsCoreQuantity, RadrootsCoreQuantityInvariantError};
-pub use quantity_price::{
-    RadrootsCoreQuantityPrice, RadrootsCoreQuantityPriceError, RadrootsCoreQuantityPriceOps,
-};
-pub use unit::{
-    RadrootsCoreUnit, RadrootsCoreUnitConvertError, RadrootsCoreUnitDimension,
-    RadrootsCoreUnitParseError, convert_mass_decimal, convert_unit_decimal, convert_volume_decimal,
-    parse_mass_unit, parse_volume_unit,
-};
+pub use currency::Currency;
+pub use decimal::Decimal;
+pub use error::Error;
+pub use money::Money;
+pub use percent::Percent;
+pub use pricing::QuantityPrice;
+pub use quantity::Quantity;
+pub use unit::Unit;

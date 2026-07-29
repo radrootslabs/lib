@@ -167,6 +167,8 @@ const PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_ARTIFACTS: &[ImmutableArtifact
         "7a31169eac4217a38cb3ef25eb9213f2f89e11fb17e76ceaf7449b34225e98af",
     ),
 ];
+const PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_SUPERSEDED_ARTIFACTS: &[&str] =
+    &["crates/event_codec/tests/publication_artifact.rs"];
 
 const ALLOWLIST_PREDECESSOR_ARTIFACTS: &[ImmutableArtifactSpec] = &[
     ImmutableArtifactSpec::new(
@@ -268,6 +270,7 @@ const ALLOWLIST_PREDECESSOR_SOURCE_SUPERSESSIONS: &[&str] = &[
     "contracts/releases/1.0.0-alpha.1.toml",
     "crates/event_codec/Cargo.toml",
     "crates/event_codec/src/wire/publication.rs",
+    "crates/event_codec/tests/publication_artifact.rs",
     "tools/xtask/src/contract.rs",
     "tools/xtask/src/contract/nip09_reconciliation.rs",
     "tools/xtask/src/contract/phase1_publication_artifact.rs",
@@ -278,11 +281,17 @@ const BLOSSOM_PREDECESSOR_SOURCE_SUPERSESSIONS: &[&str] = &[
     "CHANGELOG.md",
     "contracts/operations.toml",
     "contracts/releases/1.0.0-alpha.1.toml",
+    "crates/blossom/tests/publication_readiness.rs",
+    "crates/blossom/tests/publication_readiness_persistence.rs",
     "tools/xtask/src/contract.rs",
     "tools/xtask/src/contract/nip09_reconciliation.rs",
     "tools/xtask/src/contract/phase1_publication_artifact.rs",
     "tools/xtask/src/contract/raw_source_rebuild.rs",
     "tools/xtask/src/main.rs",
+];
+pub(super) const BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS: &[&str] = &[
+    "crates/blossom/tests/publication_readiness.rs",
+    "crates/blossom/tests/publication_readiness_persistence.rs",
 ];
 
 #[derive(Clone, Copy)]
@@ -316,6 +325,7 @@ pub(super) struct FileDescriptor {
 pub(super) struct PredecessorDescriptor {
     contract_id: String,
     immutable_artifacts: Vec<FileDescriptor>,
+    artifact_supersessions: Vec<FileDescriptor>,
     source_supersessions: Vec<String>,
 }
 
@@ -469,10 +479,11 @@ pub(crate) fn validate_immutable_phase1_publication_artifact_predecessor(
     workspace_root: &Path,
 ) -> Result<(), String> {
     with_artifact_bundle_transaction(workspace_root, |_| {
-        validate_immutable_predecessor(
+        validate_immutable_predecessor_with_superseded_artifacts(
             workspace_root,
             "Phase 1 publication artifact",
             PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_ARTIFACTS,
+            PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_SUPERSEDED_ARTIFACTS,
         )
     })
 }
@@ -481,10 +492,11 @@ pub(crate) fn validate_immutable_blossom_publication_readiness_predecessor(
     workspace_root: &Path,
 ) -> Result<(), String> {
     with_artifact_bundle_transaction(workspace_root, |_| {
-        validate_immutable_predecessor(
+        validate_immutable_predecessor_with_superseded_artifacts(
             workspace_root,
             "Blossom publication readiness",
             BLOSSOM_PREDECESSOR_ARTIFACTS,
+            BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS,
         )
     })
 }
@@ -492,20 +504,22 @@ pub(crate) fn validate_immutable_blossom_publication_readiness_predecessor(
 fn validate_predecessors(workspace_root: &Path) -> Result<(), String> {
     validate_source_supersessions(workspace_root, ALLOWLIST_PREDECESSOR_SOURCE_SUPERSESSIONS)?;
     validate_source_supersessions(workspace_root, BLOSSOM_PREDECESSOR_SOURCE_SUPERSESSIONS)?;
-    validate_immutable_predecessor(
+    validate_immutable_predecessor_with_superseded_artifacts(
         workspace_root,
         "Phase 1 publication artifact",
         PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_ARTIFACTS,
+        PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_SUPERSEDED_ARTIFACTS,
     )?;
     validate_immutable_predecessor(
         workspace_root,
         "Phase 1 publication allowlist",
         ALLOWLIST_PREDECESSOR_ARTIFACTS,
     )?;
-    validate_immutable_predecessor(
+    validate_immutable_predecessor_with_superseded_artifacts(
         workspace_root,
         "Blossom publication readiness",
         BLOSSOM_PREDECESSOR_ARTIFACTS,
+        BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS,
     )
 }
 
@@ -531,8 +545,37 @@ pub(super) fn validate_immutable_predecessor(
     label: &str,
     artifacts: &[ImmutableArtifactSpec],
 ) -> Result<(), String> {
+    validate_immutable_predecessor_with_superseded_artifacts(workspace_root, label, artifacts, &[])
+}
+
+pub(super) fn validate_immutable_predecessor_with_superseded_artifacts(
+    workspace_root: &Path,
+    label: &str,
+    artifacts: &[ImmutableArtifactSpec],
+    superseded_artifact_paths: &[&str],
+) -> Result<(), String> {
+    let superseded_artifacts = superseded_artifact_paths
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if superseded_artifacts.len() != superseded_artifact_paths.len() {
+        return Err(format!(
+            "{label} predecessor artifact supersession paths must be unique"
+        ));
+    }
+    if let Some(path) = superseded_artifacts
+        .iter()
+        .find(|path| !artifacts.iter().any(|artifact| artifact.relative == **path))
+    {
+        return Err(format!(
+            "{label} predecessor artifact supersession path `{path}` is not an immutable predecessor artifact"
+        ));
+    }
     for artifact in artifacts {
         let bytes = read_regular_file(workspace_root, artifact.relative)?;
+        if superseded_artifacts.contains(artifact.relative) {
+            continue;
+        }
         if bytes.len() != artifact.byte_length || sha256_hex(&bytes) != artifact.sha256 {
             return Err(format!(
                 "immutable {label} predecessor artifact {} drifted",
@@ -648,15 +691,19 @@ fn describe_manifest(
         manifest_schema: descriptor_for_bytes(MANIFEST_SCHEMA_RELATIVE, manifest_schema_bytes),
         predecessors: vec![
             predecessor_descriptor(
+                workspace_root,
                 "radroots_event_codec.phase1_publication_allowlist_v1",
                 ALLOWLIST_PREDECESSOR_ARTIFACTS,
+                PUBLICATION_ARTIFACT_TRANSITIVE_PREDECESSOR_SUPERSEDED_ARTIFACTS,
                 ALLOWLIST_PREDECESSOR_SOURCE_SUPERSESSIONS,
-            ),
+            )?,
             predecessor_descriptor(
+                workspace_root,
                 "radroots_blossom.publication_readiness_v1",
                 BLOSSOM_PREDECESSOR_ARTIFACTS,
+                BLOSSOM_PREDECESSOR_SUPERSEDED_ARTIFACTS,
                 BLOSSOM_PREDECESSOR_SOURCE_SUPERSESSIONS,
-            ),
+            )?,
         ],
         protocol_sources: vec![
             ProtocolSourcePin {
@@ -720,11 +767,13 @@ fn describe_manifest(
 }
 
 pub(super) fn predecessor_descriptor(
+    workspace_root: &Path,
     contract_id: &str,
     artifacts: &[ImmutableArtifactSpec],
+    artifact_supersessions: &[&str],
     source_supersessions: &[&str],
-) -> PredecessorDescriptor {
-    PredecessorDescriptor {
+) -> Result<PredecessorDescriptor, String> {
+    Ok(PredecessorDescriptor {
         contract_id: contract_id.to_owned(),
         immutable_artifacts: artifacts
             .iter()
@@ -735,8 +784,12 @@ pub(super) fn predecessor_descriptor(
                 hash_algorithm: HASH_ALGORITHM.to_owned(),
             })
             .collect(),
+        artifact_supersessions: artifact_supersessions
+            .iter()
+            .map(|path| descriptor_for_file(workspace_root, path))
+            .collect::<Result<Vec<_>, _>>()?,
         source_supersessions: owned(source_supersessions),
-    }
+    })
 }
 
 fn validate_source_contract(workspace_root: &Path) -> Result<(), String> {
@@ -1114,7 +1167,7 @@ fn validate_operations_authority(workspace_root: &Path) -> Result<(), String> {
             BIND_OPERATION_ID,
             &[
                 "RadrootsPhase1AllowlistedPublicationArtifact",
-                "RadrootsBlossomPublicationReadinessEvidence",
+                "PublicationReadinessEvidence",
             ],
             &["RadrootsPhase1MediaReadyPublicationArtifact"],
             "validation_error",
@@ -1401,10 +1454,11 @@ fn manifest_schema() -> Value {
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["contract_id", "immutable_artifacts", "source_supersessions"],
+                    "required": ["contract_id", "immutable_artifacts", "artifact_supersessions", "source_supersessions"],
                     "properties": {
                         "contract_id": {"type": "string", "minLength": 1},
                         "immutable_artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/file"}},
+                        "artifact_supersessions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/file"}},
                         "source_supersessions": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "uniqueItems": true}
                     }
                 }

@@ -30,7 +30,7 @@ BUD-11 is added as a separate foundation slice.
 
 ## SHA-256
 
-A `RadrootsBlossomSha256` is exactly 32 bytes. Its wire and display form is exactly 64 lowercase
+A `Sha256` is exactly 32 bytes. Its wire and display form is exactly 64 lowercase
 ASCII hexadecimal characters.
 
 - Parsing rejects uppercase hexadecimal, prefixes, separators, whitespace, non-hexadecimal bytes,
@@ -41,7 +41,7 @@ ASCII hexadecimal characters.
 
 ## Root Hash Paths
 
-A `RadrootsBlossomHashPath` represents one BUD-01 root path:
+A `HashPath` represents one BUD-01 root path:
 
 ```text
 /<64-lowercase-hex-sha256>[.<extension>]
@@ -61,7 +61,7 @@ include one. The extension is not used to infer or validate the descriptor MIME 
 
 ## Structural Blob URLs
 
-A `RadrootsBlossomBlobUrl` is an absolute structural BUD-01 URL with these invariants:
+A `BlobUrl` is an absolute structural BUD-01 URL with these invariants:
 
 - the scheme is `http` or `https`, compared case-insensitively and exposed canonically in lowercase
 - the authority contains one nonempty DNS hostname, canonical dotted-decimal IPv4 address, or
@@ -72,7 +72,7 @@ A `RadrootsBlossomBlobUrl` is an absolute structural BUD-01 URL with these invar
 - user information is forbidden
 - the path is exactly one root hash path
 - query and fragment components are forbidden
-- the path digest is exposed as a typed `RadrootsBlossomSha256`
+- the path digest is exposed as a typed `Sha256`
 - an optional safe extension is parsed independently from the digest
 
 Scheme and DNS host case are canonicalized to lowercase by the URL parser. Extension case is
@@ -111,7 +111,7 @@ responsible for their own destination, redirect, DNS-rebinding, response-size, a
 
 ## Media Types
 
-A `RadrootsBlossomMediaType` is a syntactically valid MIME media type parsed by the repository's
+A `MediaType` is a syntactically valid MIME media type parsed by the repository's
 `mediatype` dependency. MIME parameters are supported. The canonical representation lowercases the
 type, subtype, suffix, and parameter names, sorts parameters by name, and preserves parameter
 values. Duplicate parameter names are rejected. Semantic equality is case-insensitive for those
@@ -129,14 +129,14 @@ does not sniff or infer content type from file bytes or the URL extension.
 
 ## BUD-02 Descriptors
 
-A structural `RadrootsBlossomBlobDescriptor` contains the five required BUD-02 fields:
+A structural `BlobDescriptor` contains the five required BUD-02 fields:
 
 | Field | Contract |
 | --- | --- |
 | `url` | structurally valid absolute root blob URL with an extension |
 | `sha256` | typed lowercase SHA-256 equal to the digest in `url` |
 | `size` | unsigned 64-bit byte count |
-| `type` | parsed `RadrootsBlossomMediaType` |
+| `type` | parsed `MediaType` |
 | `uploaded` | unsigned 64-bit Unix timestamp |
 
 Unknown descriptor fields are tolerated on input for forward compatibility. They need not be
@@ -153,12 +153,12 @@ clock or treat it as server attestation.
 
 ## Byte Commitments And Byte-Verified Descriptors
 
-A structural descriptor advances to `RadrootsBlossomApprovedDescriptor` only after its URL passes
-the explicit HTTPS-or-loopback reference policy. `RadrootsBlossomByteCommitment::from_bytes`
+A structural descriptor advances to `ApprovedDescriptor` only after its URL passes
+the explicit HTTPS-or-loopback reference policy. `ByteCommitment::from_bytes`
 computes the SHA-256 and exact `u64` size of a final byte slice and binds them to a caller-approved
-`RadrootsBlossomMediaType`.
+`MediaType`.
 
-An approved descriptor advances to `RadrootsBlossomByteVerifiedDescriptor` only through
+An approved descriptor advances to `ByteVerifiedDescriptor` only through
 `verify_commitment`, or through the `verify_bytes` convenience path that constructs the same byte
 commitment. Verification succeeds only when all three values match:
 
@@ -196,7 +196,7 @@ this contract. Integration tests dispatch its vectors by `kind`:
 
 `bytes_hex` values are exact bytes encoded as lowercase hexadecimal. A `null` extension or port
 means absence. Invalid typed-operation vectors use the exact stable identifier returned by
-`RadrootsBlossomError::code()`.
+`Error::code()`.
 
 ## Stable Error Identifiers
 
@@ -251,7 +251,7 @@ The public typed API exposes these stable semantic identifiers:
 - `publication_raster_container_dimension_mismatch`
 - `publication_authored_raster_dimension_mismatch`
 
-Malformed descriptor JSON can fail in serde before a `RadrootsBlossomError` exists. The executable
+Malformed descriptor JSON can fail in serde before a `Error` exists. The executable
 descriptor harness uses three additional wire-shape classifications for those cases:
 
 - `missing_descriptor_field`, with the missing field named separately
@@ -259,7 +259,7 @@ descriptor harness uses three additional wire-shape classifications for those ca
 - `invalid_descriptor_uploaded`
 
 Nested descriptor values that reach a Radroots parser, including invalid SHA-256, URL, MIME, URL
-extension, and URL/hash combinations, retain the applicable `RadrootsBlossomError::code()` value.
+extension, and URL/hash combinations, retain the applicable `Error::code()` value.
 
 The canonical vector file is mirrored under `crates/blossom/tests/fixtures/` so the published crate
 can execute the same conformance suite. Source-workspace tests require the canonical file and assert

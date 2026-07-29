@@ -1,7 +1,4 @@
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomBlobUrl, RadrootsBlossomMediaType,
-    RadrootsBlossomSha256,
-};
+use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     RadrootsAuthoredImage, RadrootsEventTags,
     calendar::{
@@ -44,8 +41,8 @@ use radroots_event_codec::{
 const DATE_D_TAG: &str = "fernwood-csa-pickup";
 const TIME_D_TAG: &str = "wash-pack-shift";
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const EVENT_AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-const SECOND_AUTHOR: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const EVENT_AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+const SECOND_AUTHOR: &str = "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 const EVENT_SIG: &str = concat!(
     "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -57,10 +54,10 @@ fn date(value: &str) -> RadrootsCalendarDate {
 
 fn authored_image() -> RadrootsAuthoredImage {
     let bytes = b"canonical-calendar-image";
-    let hash = RadrootsBlossomSha256::digest(bytes);
-    let media_type = RadrootsBlossomMediaType::parse("image/webp").unwrap();
-    let descriptor = RadrootsBlossomBlobDescriptor::new(
-        RadrootsBlossomBlobUrl::parse(&format!("https://media.example.test/{hash}.webp")).unwrap(),
+    let hash = Sha256::digest(bytes);
+    let media_type = MediaType::parse("image/webp").unwrap();
+    let descriptor = BlobDescriptor::new(
+        BlobUrl::parse(&format!("https://media.example.test/{hash}.webp")).unwrap(),
         hash,
         bytes.len() as u64,
         media_type.clone(),

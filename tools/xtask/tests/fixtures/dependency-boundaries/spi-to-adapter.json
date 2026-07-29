@@ -1,0 +1,46 @@
+{
+  "packages": [
+    {
+      "id": "fixture#radroots_transport@0.1.0",
+      "name": "radroots_transport",
+      "dependencies": [
+        {
+          "name": "radroots_nostr",
+          "rename": "protocol_adapter",
+          "kind": "build",
+          "features": ["events"],
+          "target": "cfg(target_arch = \"wasm32\")",
+          "uses_default_features": false
+        }
+      ]
+    },
+    {
+      "id": "fixture#radroots_nostr@0.1.0",
+      "name": "radroots_nostr",
+      "dependencies": []
+    }
+  ],
+  "resolve": {
+    "nodes": [
+      {
+        "id": "fixture#radroots_transport@0.1.0",
+        "deps": [
+          {
+            "name": "protocol_adapter",
+            "pkg": "fixture#radroots_nostr@0.1.0",
+            "dep_kinds": [
+              {
+                "kind": "build",
+                "target": "cfg(target_arch = \"wasm32\")"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "fixture#radroots_nostr@0.1.0",
+        "deps": []
+      }
+    ]
+  }
+}

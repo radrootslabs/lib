@@ -1,8 +1,6 @@
 use std::{borrow::Cow, fs, path::Path};
 
-use radroots_blossom::{
-    RadrootsBlossomBlobDescriptor, RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomError,
-};
+use radroots_blossom::{BlobDescriptor, ByteVerifiedDescriptor, Error};
 use radroots_event::{
     RadrootsAuthoredImage,
     calendar::{
@@ -596,7 +594,7 @@ fn assert_author_reference(
     let relay = expected.get("relay").and_then(Value::as_str);
     assert_eq!(actual.raw_pubkey(), pubkey, "{}", vector_id(vector));
     assert_eq!(
-        actual.pubkey().as_str(),
+        actual.pubkey().to_hex(),
         pubkey.to_ascii_lowercase(),
         "{} normalized author key",
         vector_id(vector)
@@ -606,7 +604,7 @@ fn assert_author_reference(
         relay.is_none_or(|relay| radroots_event::ids::RadrootsRelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
-        pubkey == actual.pubkey().as_str() && canonical_relay,
+        pubkey == actual.pubkey().to_hex() && canonical_relay,
         "{} author canonicality",
         vector_id(vector)
     );
@@ -1414,15 +1412,13 @@ fn authored_image(input: &Value, vector_id: &str) -> RadrootsAuthoredImage {
         .unwrap_or_else(|error| panic!("{vector_id} image failed: {error}"))
 }
 
-fn verified_descriptor(input: &Value, vector_id: &str) -> RadrootsBlossomByteVerifiedDescriptor {
+fn verified_descriptor(input: &Value, vector_id: &str) -> ByteVerifiedDescriptor {
     verified_descriptor_result(input)
         .unwrap_or_else(|error| panic!("{vector_id} byte verification failed: {error}"))
 }
 
-fn verified_descriptor_result(
-    input: &Value,
-) -> Result<RadrootsBlossomByteVerifiedDescriptor, RadrootsBlossomError> {
-    let descriptor: RadrootsBlossomBlobDescriptor =
+fn verified_descriptor_result(input: &Value) -> Result<ByteVerifiedDescriptor, Error> {
+    let descriptor: BlobDescriptor =
         serde_json::from_value(input["descriptor"].clone()).expect("image descriptor must parse");
     let media_type = descriptor.media_type().clone();
     descriptor.approve_reference()?.verify_bytes(

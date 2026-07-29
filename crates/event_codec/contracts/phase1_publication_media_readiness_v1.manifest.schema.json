@@ -51,6 +51,13 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "artifact_supersessions": {
+            "items": {
+              "$ref": "#/$defs/file"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
           "contract_id": {
             "minLength": 1,
             "type": "string"
@@ -75,6 +82,7 @@
         "required": [
           "contract_id",
           "immutable_artifacts",
+          "artifact_supersessions",
           "source_supersessions"
         ],
         "type": "object"

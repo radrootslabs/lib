@@ -7,6 +7,7 @@ use alloc::{format, string::String, string::ToString, vec::Vec};
 use std::{string::String, vec::Vec};
 
 use core::{borrow::Borrow, fmt, ops::Deref, str::FromStr};
+pub(crate) use radroots_identity::PublicKey;
 use url_nostd::Url;
 
 use crate::kinds::KIND_CLASSIFIED_LISTING;
@@ -17,6 +18,7 @@ pub enum RadrootsIdParseError {
     InvalidFormat,
     InvalidLength { expected: usize, actual: usize },
     InvalidCharacter,
+    InvalidPublicKey,
     UnexpectedKind { expected: u32, actual: u32 },
     TooLong { max: usize, actual: usize },
 }
@@ -33,6 +35,9 @@ impl fmt::Display for RadrootsIdParseError {
                 )
             }
             Self::InvalidCharacter => write!(f, "identifier contains an invalid character"),
+            Self::InvalidPublicKey => {
+                write!(f, "identifier is not a valid secp256k1 x-only public key")
+            }
             Self::UnexpectedKind { expected, actual } => {
                 write!(
                     f,
@@ -183,7 +188,6 @@ macro_rules! validated_string_id {
     };
 }
 
-validated_string_id!(RadrootsPublicKey, validate_hex_64);
 validated_string_id!(RadrootsEventId, validate_hex_64);
 validated_string_id!(RadrootsEventSignature, validate_hex_128);
 validated_string_id!(RadrootsTradeId, validate_hex_32);
@@ -204,6 +208,19 @@ validated_string_id!(RadrootsInventoryBinId, validate_commercial_id);
 validated_string_id!(RadrootsEconomicsDigest, validate_economics_digest);
 validated_string_id!(RadrootsEventPointer, validate_hex_64);
 validated_string_id!(RadrootsRelayUrl, validate_relay_url);
+
+pub(crate) fn parse_public_key(value: impl AsRef<str>) -> Result<PublicKey, RadrootsIdParseError> {
+    PublicKey::from_hex(value.as_ref()).map_err(|error| match error {
+        radroots_identity::Error::InvalidHexLength { expected, actual }
+        | radroots_identity::Error::InvalidByteLength { expected, actual } => {
+            RadrootsIdParseError::InvalidLength { expected, actual }
+        }
+        radroots_identity::Error::InvalidHexCharacter { .. } => {
+            RadrootsIdParseError::InvalidCharacter
+        }
+        _ => RadrootsIdParseError::InvalidPublicKey,
+    })
+}
 
 /// Radroots tag-element policy for a NIP-01 coordinate.
 ///
@@ -259,7 +276,7 @@ impl std::error::Error for RadrootsNip01CoordinateParseError {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsNip01CoordinateParts {
     pub kind: u32,
-    pub pubkey: RadrootsPublicKey,
+    pub pubkey: PublicKey,
     pub identifier: String,
 }
 
@@ -277,7 +294,7 @@ impl RadrootsNip01CoordinateParts {
 pub struct RadrootsNip01Coordinate {
     canonical: String,
     kind: u32,
-    pubkey: RadrootsPublicKey,
+    pubkey: PublicKey,
     identifier: String,
 }
 
@@ -311,8 +328,7 @@ impl RadrootsNip01Coordinate {
             return Err(RadrootsNip01CoordinateParseError::IdentifierMustBeEmpty { kind });
         }
 
-        let pubkey =
-            RadrootsPublicKey::parse(pubkey).map_err(RadrootsNip01CoordinateParseError::Pubkey)?;
+        let pubkey = parse_public_key(pubkey).map_err(RadrootsNip01CoordinateParseError::Pubkey)?;
         let identifier = identifier.to_string();
         let canonical = format!("{kind}:{pubkey}:{identifier}");
         Ok(Self {
@@ -334,7 +350,7 @@ impl RadrootsNip01Coordinate {
     }
 
     #[inline]
-    pub const fn pubkey(&self) -> &RadrootsPublicKey {
+    pub const fn pubkey(&self) -> &PublicKey {
         &self.pubkey
     }
 
@@ -347,7 +363,7 @@ impl RadrootsNip01Coordinate {
     pub fn parts(&self) -> RadrootsNip01CoordinateParts {
         RadrootsNip01CoordinateParts {
             kind: self.kind,
-            pubkey: self.pubkey.clone(),
+            pubkey: self.pubkey,
             identifier: self.identifier.clone(),
         }
     }
@@ -451,7 +467,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsNip01Coordinate {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsAddressableCoordinateParts {
     pub kind: u32,
-    pub pubkey: RadrootsPublicKey,
+    pub pubkey: PublicKey,
     pub d_tag: RadrootsDTag,
 }
 
@@ -565,7 +581,7 @@ fn parse_addressable_coordinate_parts(
     let kind = kind
         .parse::<u32>()
         .map_err(|_| RadrootsIdParseError::InvalidFormat)?;
-    let pubkey = RadrootsPublicKey::parse(pubkey)?;
+    let pubkey = parse_public_key(pubkey)?;
     let d_tag = RadrootsDTag::parse(d_tag)?;
     Ok(RadrootsAddressableCoordinateParts {
         kind,
@@ -683,7 +699,7 @@ mod tests {
     }
 
     fn hex_64(character: char) -> String {
-        core::iter::repeat_n(character, 64).collect()
+        crate::test_valid_hex_64(character)
     }
 
     fn hex_32(character: char) -> String {
@@ -696,9 +712,12 @@ mod tests {
 
     #[test]
     fn public_keys_and_event_ids_require_64_hex_chars() {
-        let upper = "A".repeat(64);
-        let public_key = RadrootsPublicKey::parse(&upper).expect("public key");
-        assert_eq!(public_key.as_str(), "a".repeat(64));
+        let upper = "585591529DA0BAB31B3B1B1F986611CF5F435DCA84F978C89EE8A40CCA7103DF";
+        let public_key = parse_public_key(upper).expect("public key");
+        assert_eq!(
+            public_key.to_hex(),
+            "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"
+        );
 
         let event_id = RadrootsEventId::parse(hex_64('f')).expect("event id");
         assert_eq!(event_id.as_str(), hex_64('f'));
@@ -725,6 +744,7 @@ mod tests {
                 actual: 7,
             },
             RadrootsIdParseError::InvalidCharacter,
+            RadrootsIdParseError::InvalidPublicKey,
             RadrootsIdParseError::UnexpectedKind {
                 expected: KIND_CLASSIFIED_LISTING,
                 actual: 30023,
@@ -856,7 +876,7 @@ mod tests {
         let addr = format!("30402:{}:farm:farm-1:members", hex_64('A'));
         let parts = RadrootsAddressableCoordinateParts::parse(&addr).expect("coordinate parts");
         assert_eq!(parts.kind, 30402);
-        assert_eq!(parts.pubkey.as_str(), hex_64('a'));
+        assert_eq!(parts.pubkey.to_hex(), hex_64('a'));
         assert_eq!(parts.d_tag.as_str(), "farm:farm-1:members");
     }
 
@@ -866,7 +886,7 @@ mod tests {
             let coordinate = RadrootsNip01Coordinate::parse(format!("+0{kind}:{}:", hex_64('A')))
                 .expect("replaceable coordinate");
             assert_eq!(coordinate.kind(), kind);
-            assert_eq!(coordinate.pubkey().as_str(), hex_64('a'));
+            assert_eq!(coordinate.pubkey().to_hex(), hex_64('a'));
             assert_eq!(coordinate.identifier(), "");
             assert_eq!(coordinate.as_str(), format!("{kind}:{}:", hex_64('a')));
         }
@@ -887,7 +907,7 @@ mod tests {
                 .expect("opaque addressable coordinate");
 
         assert_eq!(coordinate.kind(), 30_402);
-        assert_eq!(coordinate.pubkey().as_str(), hex_64('a'));
+        assert_eq!(coordinate.pubkey().to_hex(), hex_64('a'));
         assert_eq!(coordinate.identifier().as_bytes(), identifier.as_bytes());
         assert_eq!(
             coordinate.as_str().as_bytes(),
@@ -895,7 +915,7 @@ mod tests {
         );
         let parts = coordinate.parts();
         assert_eq!(parts.kind, 30_402);
-        assert_eq!(parts.pubkey.as_str(), hex_64('a'));
+        assert_eq!(parts.pubkey.to_hex(), hex_64('a'));
         assert_eq!(parts.identifier.as_bytes(), identifier.as_bytes());
         assert_eq!(
             RadrootsNip01CoordinateParts::parse(coordinate.as_str()).expect("parts"),
@@ -1085,7 +1105,6 @@ mod tests {
     fn validated_identifier_wrappers_expose_consistent_traits() {
         let addressable = format!("30402:{}:listing-1", hex_64('0'));
 
-        assert_identifier_impls!(RadrootsPublicKey, hex_64('a').as_str());
         assert_identifier_impls!(RadrootsEventId, hex_64('b').as_str());
         assert_identifier_impls!(RadrootsEventSignature, hex_128('c').as_str());
         assert_identifier_impls!(RadrootsDTag, "listing-1");
@@ -1239,7 +1258,7 @@ mod tests {
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
         struct MissingPublicKey {
-            value: RadrootsPublicKey,
+            value: PublicKey,
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]

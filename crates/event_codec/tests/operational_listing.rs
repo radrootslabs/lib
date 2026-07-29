@@ -1,10 +1,7 @@
 #![cfg(feature = "serde_json")]
 
-use radroots_core::{
-    RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreDiscount, RadrootsCoreDiscountScope,
-    RadrootsCoreDiscountThreshold, RadrootsCoreDiscountValue, RadrootsCoreMoney,
-    RadrootsCoreQuantity, RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-};
+use radroots_core::pricing::{Discount, DiscountScope, DiscountThreshold, DiscountValue};
+use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
     farm::RadrootsFarmRef,
@@ -40,7 +37,7 @@ use std::{borrow::Cow, collections::BTreeSet, fs, path::Path, str::FromStr};
 use serde_json::Value;
 
 const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const AUTHOR: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -57,6 +54,18 @@ fn listing_d_tag(raw: &str) -> RadrootsDTag {
 
 fn bin_id(raw: &str) -> RadrootsInventoryBinId {
     raw.parse().unwrap()
+}
+
+fn money(amount: Decimal, currency: Currency) -> Money {
+    Money::try_new(amount, currency).unwrap()
+}
+
+fn quantity(amount: Decimal, unit: Unit) -> Quantity {
+    Quantity::try_new(amount, unit).unwrap()
+}
+
+fn quantity_price(amount: Money, quantity: Quantity) -> QuantityPrice {
+    QuantityPrice::try_new(amount, quantity).unwrap()
 }
 
 fn sample_operational_listing_tags() -> Vec<Vec<String>> {
@@ -103,12 +112,8 @@ fn assert_invalid_tag(tags: Vec<Vec<String>>, expected: &'static str) {
 }
 
 fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
-    let quantity =
-        RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::Each);
-    let price = RadrootsCoreQuantityPrice::new(
-        RadrootsCoreMoney::new(RadrootsCoreDecimal::from(10u32), RadrootsCoreCurrency::USD),
-        quantity.clone(),
-    );
+    let quantity = quantity(Decimal::from(1u32), Unit::Each);
+    let price = quantity_price(money(Decimal::from(10u32), Currency::USD), quantity.clone());
 
     RadrootsOperationalListing {
         d_tag: listing_d_tag(d_tag),
@@ -222,8 +227,8 @@ fn operational_listing_from_event_parts_does_not_allow_json_content_to_override_
     let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
     listing.product.title = "Content override".to_string();
     listing.product.category = "Content category".to_string();
-    listing.inventory_available = Some(RadrootsCoreDecimal::from(99u32));
-    listing.bins[0].quantity.amount = RadrootsCoreDecimal::from(42u32);
+    listing.inventory_available = Some(Decimal::from(99u32));
+    listing.bins[0].quantity = quantity(Decimal::from(42u32), Unit::Each);
 
     let decoded =
         operational_listing_from_event_parts(&tags, &serde_json::to_string(&listing).unwrap())
@@ -232,10 +237,7 @@ fn operational_listing_from_event_parts_does_not_allow_json_content_to_override_
     assert_eq!(decoded.product.title, "Widget");
     assert_eq!(decoded.product.category, "Tools");
     assert_eq!(decoded.inventory_available, None);
-    assert_eq!(
-        decoded.bins[0].quantity.amount,
-        RadrootsCoreDecimal::from(1u32)
-    );
+    assert_eq!(decoded.bins[0].quantity.amount(), Decimal::from(1u32));
 }
 
 #[test]
@@ -306,22 +308,30 @@ fn execute_listing_parse_vector(vector: &Value, id: &str) {
                 .find(|bin| bin.bin_id == listing.primary_bin_id)
                 .expect("primary listing bin");
             assert_eq!(
-                primary.quantity.amount.to_string(),
+                primary.quantity.amount().to_string(),
                 expected["quantity_amount"],
                 "{id}"
             );
             assert_eq!(
-                primary.quantity.unit.code(),
+                primary.quantity.unit().code(),
                 expected["quantity_unit"],
                 "{id}"
             );
             assert_eq!(
-                primary.price_per_canonical_unit.amount.amount.to_string(),
+                primary
+                    .price_per_canonical_unit
+                    .amount()
+                    .amount()
+                    .to_string(),
                 expected["price_amount"],
                 "{id}"
             );
             assert_eq!(
-                primary.price_per_canonical_unit.amount.currency.as_str(),
+                primary
+                    .price_per_canonical_unit
+                    .amount()
+                    .currency()
+                    .as_str(),
                 expected["price_currency"],
                 "{id}"
             );
@@ -351,10 +361,10 @@ fn execute_listing_parse_vector(vector: &Value, id: &str) {
 }
 
 fn sample_listing_full(d_tag: &str) -> RadrootsOperationalListing {
-    let qty_amount = RadrootsCoreDecimal::from_str("1000").unwrap();
-    let price_amount = RadrootsCoreDecimal::from_str("0.01").unwrap();
-    let display_qty = RadrootsCoreDecimal::from_str("1").unwrap();
-    let display_price = RadrootsCoreDecimal::from_str("10").unwrap();
+    let qty_amount = Decimal::from_str("1000").unwrap();
+    let price_amount = Decimal::from_str("0.01").unwrap();
+    let display_qty = Decimal::from_str("1").unwrap();
+    let display_price = Decimal::from_str("10").unwrap();
 
     RadrootsOperationalListing {
         d_tag: listing_d_tag(d_tag),
@@ -377,33 +387,30 @@ fn sample_listing_full(d_tag: &str) -> RadrootsOperationalListing {
         primary_bin_id: bin_id("bin-1"),
         bins: vec![RadrootsOperationalListingBin {
             bin_id: bin_id("bin-1"),
-            quantity: RadrootsCoreQuantity::new(qty_amount, RadrootsCoreUnit::MassG),
-            price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
-                RadrootsCoreMoney::new(price_amount, RadrootsCoreCurrency::USD),
-                RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::MassG),
+            quantity: quantity(qty_amount, Unit::MassG),
+            price_per_canonical_unit: quantity_price(
+                money(price_amount, Currency::USD),
+                quantity(Decimal::from(1u32), Unit::MassG),
             ),
             display_amount: Some(display_qty),
-            display_unit: Some(RadrootsCoreUnit::MassKg),
+            display_unit: Some(Unit::MassKg),
             display_label: Some("bag".to_string()),
-            display_price: Some(RadrootsCoreMoney::new(
-                display_price,
-                RadrootsCoreCurrency::USD,
-            )),
-            display_price_unit: Some(RadrootsCoreUnit::MassKg),
+            display_price: Some(money(display_price, Currency::USD)),
+            display_price_unit: Some(Unit::MassKg),
         }],
         resource_area: None,
         plot: None,
-        discounts: Some(vec![RadrootsCoreDiscount {
-            scope: RadrootsCoreDiscountScope::Bin,
-            threshold: RadrootsCoreDiscountThreshold::BinCount {
-                bin_id: "bin-1".to_string(),
-                min: 5,
-            },
-            value: RadrootsCoreDiscountValue::MoneyPerBin(RadrootsCoreMoney::new(
-                RadrootsCoreDecimal::from_str("2").unwrap(),
-                RadrootsCoreCurrency::USD,
-            )),
-        }]),
+        discounts: Some(vec![
+            Discount::try_new(
+                DiscountScope::Bin,
+                DiscountThreshold::BinCount {
+                    bin_id: "bin-1".to_string(),
+                    min: 5,
+                },
+                DiscountValue::MoneyPerBin(money(Decimal::from_str("2").unwrap(), Currency::USD)),
+            )
+            .unwrap(),
+        ]),
         inventory_available: None,
         availability: None,
         delivery_method: None,
@@ -735,11 +742,8 @@ fn operational_listing_from_event_covers_bin_and_price_error_paths() {
     );
     let decoded =
         operational_listing_from_event(KIND_CLASSIFIED_LISTING, &tags, "# Widget").unwrap();
-    assert_eq!(
-        decoded.bins[0].display_amount,
-        Some(RadrootsCoreDecimal::from(1u32))
-    );
-    assert_eq!(decoded.bins[0].display_unit, Some(RadrootsCoreUnit::Each));
+    assert_eq!(decoded.bins[0].display_amount, Some(Decimal::from(1u32)));
+    assert_eq!(decoded.bins[0].display_unit, Some(Unit::Each));
     assert_eq!(decoded.bins[0].display_label, None);
 
     let mut tags = sample_operational_listing_tags();
@@ -1144,7 +1148,7 @@ fn listing_parsed_wrappers_preserve_event_metadata() {
     )
     .unwrap();
     assert_eq!(parsed.event.id_str(), EVENT_ID);
-    assert_eq!(parsed.event.author_str(), AUTHOR);
+    assert_eq!(parsed.event.author().to_hex(), AUTHOR);
     assert_eq!(parsed.event.created_at_u64(), 7);
     assert_eq!(parsed.event.sig_str(), EVENT_SIG);
     assert_eq!(parsed.data.data.d_tag, listing.d_tag);
@@ -1325,25 +1329,16 @@ fn operational_listing_tags_full_uses_single_generic_price_for_primary_bin() {
     let mut listing = sample_listing_full("AAAAAAAAAAAAAAAAAAAAAw");
     listing.bins.push(RadrootsOperationalListingBin {
         bin_id: bin_id("bin-2"),
-        quantity: RadrootsCoreQuantity::new(
-            RadrootsCoreDecimal::from_str("500").unwrap(),
-            RadrootsCoreUnit::MassG,
+        quantity: quantity(Decimal::from_str("500").unwrap(), Unit::MassG),
+        price_per_canonical_unit: quantity_price(
+            money(Decimal::from_str("0.02").unwrap(), Currency::USD),
+            quantity(Decimal::from(1u32), Unit::MassG),
         ),
-        price_per_canonical_unit: RadrootsCoreQuantityPrice::new(
-            RadrootsCoreMoney::new(
-                RadrootsCoreDecimal::from_str("0.02").unwrap(),
-                RadrootsCoreCurrency::USD,
-            ),
-            RadrootsCoreQuantity::new(RadrootsCoreDecimal::from(1u32), RadrootsCoreUnit::MassG),
-        ),
-        display_amount: Some(RadrootsCoreDecimal::from(500u32)),
-        display_unit: Some(RadrootsCoreUnit::MassG),
+        display_amount: Some(Decimal::from(500u32)),
+        display_unit: Some(Unit::MassG),
         display_label: Some("sample".to_string()),
-        display_price: Some(RadrootsCoreMoney::new(
-            RadrootsCoreDecimal::from_str("10").unwrap(),
-            RadrootsCoreCurrency::USD,
-        )),
-        display_price_unit: Some(RadrootsCoreUnit::MassG),
+        display_price: Some(money(Decimal::from_str("10").unwrap(), Currency::USD)),
+        display_price_unit: Some(Unit::MassG),
     });
 
     let tags = operational_listing_tags_full(&listing).unwrap();
@@ -1365,7 +1360,7 @@ fn operational_listing_tags_full_uses_single_generic_price_for_primary_bin() {
 #[test]
 fn operational_listing_tags_full_includes_trade_fields() {
     let mut listing = sample_listing("AAAAAAAAAAAAAAAAAAAAAg");
-    let inventory = RadrootsCoreDecimal::from_str("12.5").unwrap();
+    let inventory = Decimal::from_str("12.5").unwrap();
     let inventory_value = inventory.to_string();
     listing.inventory_available = Some(inventory);
     listing.availability = Some(RadrootsOperationalListingAvailability::Window {

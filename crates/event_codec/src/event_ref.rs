@@ -7,8 +7,9 @@ use alloc::{
 
 use radroots_event::{
     RadrootsEventRef,
-    ids::{RadrootsDTag, RadrootsEventId, RadrootsPublicKey, RadrootsRelayUrl},
+    ids::{RadrootsDTag, RadrootsEventId, RadrootsRelayUrl},
 };
+use radroots_identity::PublicKey;
 
 use crate::error::EventParseError;
 
@@ -39,7 +40,7 @@ pub fn parse_event_ref_tag(
     let id = &tag[1];
     RadrootsEventId::parse(id).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let author = &tag[2];
-    RadrootsPublicKey::parse(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+    PublicKey::from_hex(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let kind_s = &tag[3];
     let kind: u32 = kind_s
         .parse()

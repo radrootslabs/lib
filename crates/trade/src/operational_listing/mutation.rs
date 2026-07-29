@@ -162,24 +162,18 @@ pub fn build_operational_listing_mutation_draft(
         created_at,
         parts.tags,
         parts.content,
-        draft.seller_pubkey().as_str(),
+        draft.seller_pubkey().to_hex(),
     )
     .map_err(RadrootsOperationalListingMutationError::FrozenDraft)
 }
 
 #[cfg(test)]
 mod tests {
-    use radroots_core::{
-        RadrootsCoreCurrency, RadrootsCoreDecimal, RadrootsCoreMoney, RadrootsCoreQuantity,
-        RadrootsCoreQuantityPrice, RadrootsCoreUnit,
-    };
+    use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::validate_event_contract_shape,
         farm::RadrootsFarmRef,
-        ids::{
-            RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId,
-            RadrootsPublicKey,
-        },
+        ids::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
         kinds::KIND_CLASSIFIED_LISTING,
         operational_listing::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
@@ -190,6 +184,7 @@ mod tests {
         resource_area::RadrootsResourceAreaRef,
     };
     use radroots_event_codec::verification::verify_nip01_event;
+    use radroots_identity::PublicKey;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };
@@ -236,20 +231,12 @@ mod tests {
             primary_bin_id: bin_id("bin-1"),
             bins: vec![RadrootsOperationalListingBin {
                 bin_id: bin_id("bin-1"),
-                quantity: RadrootsCoreQuantity::new(
-                    RadrootsCoreDecimal::from(1000u32),
-                    RadrootsCoreUnit::MassG,
-                ),
-                price_per_canonical_unit: RadrootsCoreQuantityPrice {
-                    amount: RadrootsCoreMoney::new(
-                        RadrootsCoreDecimal::from(20u32),
-                        RadrootsCoreCurrency::USD,
-                    ),
-                    quantity: RadrootsCoreQuantity::new(
-                        RadrootsCoreDecimal::from(1u32),
-                        RadrootsCoreUnit::MassG,
-                    ),
-                },
+                quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
+                price_per_canonical_unit: QuantityPrice::try_new(
+                    Money::try_new(Decimal::from(20u32), Currency::USD).unwrap(),
+                    Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
+                )
+                .unwrap(),
                 display_amount: None,
                 display_unit: None,
                 display_label: None,
@@ -259,7 +246,7 @@ mod tests {
             resource_area: None,
             plot: None,
             discounts: None,
-            inventory_available: Some(RadrootsCoreDecimal::from(5u32)),
+            inventory_available: Some(Decimal::from(5u32)),
             availability: Some(RadrootsOperationalListingAvailability::Status {
                 status: RadrootsOperationalListingStatus::Active,
             }),
@@ -278,7 +265,7 @@ mod tests {
     fn canonical_draft() -> RadrootsOperationalListingCanonicalEdit {
         RadrootsOperationalListingCanonicalEdit::new(
             listing(),
-            RadrootsPublicKey::parse(SELLER).expect("seller"),
+            PublicKey::from_hex(SELLER).expect("seller"),
         )
         .expect("canonical listing edit")
     }
@@ -316,7 +303,7 @@ mod tests {
                 .canonical_draft()
                 .expect("draft")
                 .seller_pubkey()
-                .as_str(),
+                .to_hex(),
             SELLER
         );
         assert_eq!(
@@ -324,7 +311,7 @@ mod tests {
                 .canonical_draft()
                 .expect("draft")
                 .seller_pubkey()
-                .as_str(),
+                .to_hex(),
             SELLER
         );
         assert_eq!(
@@ -332,7 +319,7 @@ mod tests {
                 .canonical_draft()
                 .expect("draft")
                 .seller_pubkey()
-                .as_str(),
+                .to_hex(),
             SELLER
         );
         assert_eq!(
@@ -404,7 +391,7 @@ mod tests {
             publish_draft.contract_id(),
             OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID
         );
-        assert_eq!(publish_draft.expected_pubkey_str(), SELLER);
+        assert_eq!(publish_draft.expected_pubkey().to_hex(), SELLER);
         assert_eq!(publish_draft.created_at_u64(), 1_700_000_000);
         assert_eq!(publish_draft.content(), "# Coffee\n\nSingle origin coffee");
         assert_eq!(update_draft.kind_u32(), KIND_CLASSIFIED_LISTING);
@@ -412,7 +399,7 @@ mod tests {
             update_draft.contract_id(),
             OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID
         );
-        assert_eq!(update_draft.expected_pubkey_str(), SELLER);
+        assert_eq!(update_draft.expected_pubkey().to_hex(), SELLER);
     }
 
     #[test]
@@ -449,7 +436,7 @@ mod tests {
         });
         let draft = RadrootsOperationalListingCanonicalEdit::new(
             listing,
-            RadrootsPublicKey::parse(SELLER).expect("seller"),
+            PublicKey::from_hex(SELLER).expect("seller"),
         )
         .expect("canonical listing edit");
         let publish = RadrootsOperationalListingMutation::publish(draft);

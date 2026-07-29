@@ -7,8 +7,8 @@ use core::fmt;
 
 use crate::{
     ids::{
-        RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
-        RadrootsIdParseError, RadrootsPublicKey,
+        PublicKey, RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts,
+        RadrootsEventId, RadrootsIdParseError, parse_public_key,
     },
     kinds::{
         KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
@@ -225,7 +225,7 @@ impl TryFrom<u32> for RadrootsNip22CommentRootKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNip22EventRootReference {
     event_id: RadrootsEventId,
-    author: RadrootsPublicKey,
+    author: PublicKey,
     kind: RadrootsNip22CommentRootKind,
     relay: Option<RadrootsNostrRelayHint>,
 }
@@ -233,7 +233,7 @@ pub struct RadrootsNip22EventRootReference {
 impl RadrootsNip22EventRootReference {
     pub fn new(
         event_id: RadrootsEventId,
-        author: RadrootsPublicKey,
+        author: PublicKey,
         kind: RadrootsNip22CommentRootKind,
         relay: Option<RadrootsNostrRelayHint>,
     ) -> Result<Self, RadrootsNip22CommentError> {
@@ -255,8 +255,7 @@ impl RadrootsNip22EventRootReference {
         Self::new(
             RadrootsEventId::parse(event_id)
                 .map_err(RadrootsNip22CommentError::RootEventIdInvalid)?,
-            RadrootsPublicKey::parse(author)
-                .map_err(RadrootsNip22CommentError::RootAuthorInvalid)?,
+            parse_public_key(author).map_err(RadrootsNip22CommentError::RootAuthorInvalid)?,
             RadrootsNip22CommentRootKind::parse(kind)?,
             parse_optional_relay(relay)?,
         )
@@ -266,7 +265,7 @@ impl RadrootsNip22EventRootReference {
         &self.event_id
     }
 
-    pub const fn author(&self) -> &RadrootsPublicKey {
+    pub const fn author(&self) -> &PublicKey {
         &self.author
     }
 
@@ -291,7 +290,7 @@ impl RadrootsNip22EventRootReference {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNip22AddressRootReference {
     coordinate: RadrootsAddressableCoordinate,
-    author: RadrootsPublicKey,
+    author: PublicKey,
     kind: RadrootsNip22CommentRootKind,
     relay: Option<RadrootsNostrRelayHint>,
 }
@@ -336,7 +335,7 @@ impl RadrootsNip22AddressRootReference {
         &self.coordinate
     }
 
-    pub const fn author(&self) -> &RadrootsPublicKey {
+    pub const fn author(&self) -> &PublicKey {
         &self.author
     }
 
@@ -361,14 +360,14 @@ impl RadrootsNip22AddressRootReference {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsNip22CommentParentReference {
     event_id: RadrootsEventId,
-    author: RadrootsPublicKey,
+    author: PublicKey,
     relay: Option<RadrootsNostrRelayHint>,
 }
 
 impl RadrootsNip22CommentParentReference {
     pub fn new(
         event_id: RadrootsEventId,
-        author: RadrootsPublicKey,
+        author: PublicKey,
         relay: Option<RadrootsNostrRelayHint>,
     ) -> Result<Self, RadrootsNip22CommentError> {
         validate_optional_relay(&relay)?;
@@ -387,8 +386,7 @@ impl RadrootsNip22CommentParentReference {
         Self::new(
             RadrootsEventId::parse(event_id)
                 .map_err(RadrootsNip22CommentError::ParentEventIdInvalid)?,
-            RadrootsPublicKey::parse(author)
-                .map_err(RadrootsNip22CommentError::ParentAuthorInvalid)?,
+            parse_public_key(author).map_err(RadrootsNip22CommentError::ParentAuthorInvalid)?,
             parse_optional_relay(relay)?,
         )
     }
@@ -397,7 +395,7 @@ impl RadrootsNip22CommentParentReference {
         &self.event_id
     }
 
-    pub const fn author(&self) -> &RadrootsPublicKey {
+    pub const fn author(&self) -> &PublicKey {
         &self.author
     }
 
@@ -424,7 +422,7 @@ impl RadrootsNip22CommentRoot {
         }
     }
 
-    pub const fn author(&self) -> &RadrootsPublicKey {
+    pub const fn author(&self) -> &PublicKey {
         match self {
             Self::Event(reference) => reference.author(),
             Self::Address(reference) => reference.author(),
@@ -631,7 +629,7 @@ fn validate_authored_comment_wire_size(
                     "E",
                     reference.event_id().as_str(),
                     reference.relay_or_empty(),
-                    reference.author().as_str(),
+                    reference.author().to_hex().as_str(),
                 ],
             );
             8usize + usize::from(reference.relay().is_some())
@@ -659,7 +657,7 @@ fn validate_authored_comment_wire_size(
         &mut tags_json_bytes,
         &mut tag_count,
         "P",
-        root.author().as_str(),
+        root.author().to_hex().as_str(),
         root.relay(),
     );
 
@@ -676,7 +674,7 @@ fn validate_authored_comment_wire_size(
                     "e",
                     reference.event_id().as_str(),
                     reference.relay_or_empty(),
-                    reference.author().as_str(),
+                    reference.author().to_hex().as_str(),
                 ],
             );
             add_tag(
@@ -690,7 +688,7 @@ fn validate_authored_comment_wire_size(
                 &mut tags_json_bytes,
                 &mut tag_count,
                 "p",
-                reference.author().as_str(),
+                reference.author().to_hex().as_str(),
                 reference.relay(),
             );
             8usize + usize::from(reference.relay().is_some())
@@ -726,7 +724,7 @@ fn validate_authored_comment_wire_size(
                 &mut tags_json_bytes,
                 &mut tag_count,
                 "p",
-                reference.author().as_str(),
+                reference.author().to_hex().as_str(),
                 reference.relay(),
             );
             8usize + 3 * usize::from(reference.relay().is_some())
@@ -740,7 +738,7 @@ fn validate_authored_comment_wire_size(
                     "e",
                     parent.event_id().as_str(),
                     parent.relay_or_empty(),
-                    parent.author().as_str(),
+                    parent.author().to_hex().as_str(),
                 ],
             );
             add_tag(
@@ -754,7 +752,7 @@ fn validate_authored_comment_wire_size(
                 &mut tags_json_bytes,
                 &mut tag_count,
                 "p",
-                parent.author().as_str(),
+                parent.author().to_hex().as_str(),
                 parent.relay(),
             );
             8usize + usize::from(parent.relay().is_some())
@@ -851,7 +849,7 @@ mod tests {
     fn event_root(kind: u32) -> RadrootsNip22EventRootReference {
         RadrootsNip22EventRootReference::parse(
             "a".repeat(64),
-            "b".repeat(64),
+            crate::test_valid_hex_64('b'),
             kind,
             Some("wss://relay.example"),
         )
@@ -860,7 +858,7 @@ mod tests {
 
     fn address_root(kind: u32) -> RadrootsNip22AddressRootReference {
         RadrootsNip22AddressRootReference::parse(
-            format!("{kind}:{}:victoria-market", "b".repeat(64)),
+            format!("{kind}:{}:victoria-market", crate::test_valid_hex_64('b')),
             Some("wss://relay.example"),
         )
         .expect("address root")
@@ -903,7 +901,7 @@ mod tests {
             assert!(matches!(
                 RadrootsNip22EventRootReference::parse(
                     "a".repeat(64),
-                    "b".repeat(64),
+                    crate::test_valid_hex_64('b'),
                     kind,
                     None
                 ),
@@ -927,15 +925,18 @@ mod tests {
     #[test]
     fn canonicalizes_address_author_and_requires_current_revision() {
         let root = RadrootsNip22AddressRootReference::parse(
-            format!("30402:{}:listing", "B".repeat(64)),
+            format!("30402:{}:listing", crate::test_valid_hex_64('B')),
             None,
         )
         .expect("address root");
         assert_eq!(
             root.coordinate().as_str(),
-            format!("30402:{}:listing", "b".repeat(64))
+            format!("30402:{}:listing", crate::test_valid_hex_64('b'))
         );
-        assert_eq!(root.author().as_str(), "b".repeat(64));
+        assert_eq!(
+            root.author().to_hex().as_str(),
+            crate::test_valid_hex_64('b')
+        );
 
         let comment =
             RadrootsAuthoredNip22Comment::parse_top_level_address("Comment", root, "E".repeat(64))
@@ -951,13 +952,17 @@ mod tests {
     fn address_root_rechecks_the_canonical_coordinate_tag_element() {
         let maximum_d_tag = "x".repeat(512);
         let root = RadrootsNip22AddressRootReference::parse(
-            format!("30402:{}:{maximum_d_tag}", "b".repeat(64)),
+            format!("30402:{}:{maximum_d_tag}", crate::test_valid_hex_64('b')),
             None,
         )
         .expect("maximum public d tag fits the tag-element budget");
         assert!(root.coordinate().as_str().len() <= RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES);
 
-        let oversized = format!("30402:{}:{}", "b".repeat(64), "x".repeat(513));
+        let oversized = format!(
+            "30402:{}:{}",
+            crate::test_valid_hex_64('b'),
+            "x".repeat(513)
+        );
         assert!(matches!(
             RadrootsNip22AddressRootReference::parse(oversized, None),
             Err(RadrootsNip22CommentError::RootCoordinateInvalid(
@@ -975,7 +980,7 @@ mod tests {
         assert!(matches!(
             RadrootsNip22EventRootReference::parse(
                 "a".repeat(64),
-                "b".repeat(64),
+                crate::test_valid_hex_64('b'),
                 KIND_CLASSIFIED_LISTING,
                 Some(&oversized_noncanonical_relay),
             ),
@@ -1010,7 +1015,7 @@ mod tests {
         );
         RadrootsNip22EventRootReference::parse(
             "a".repeat(64),
-            "b".repeat(64),
+            crate::test_valid_hex_64('b'),
             KIND_CLASSIFIED_LISTING,
             Some(&exact_relay),
         )
@@ -1019,7 +1024,7 @@ mod tests {
         assert!(matches!(
             RadrootsNip22EventRootReference::parse(
                 "a".repeat(64),
-                "b".repeat(64),
+                crate::test_valid_hex_64('b'),
                 KIND_CLASSIFIED_LISTING,
                 Some(&overflow)
             ),
