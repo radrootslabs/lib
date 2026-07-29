@@ -7,6 +7,7 @@ use std::process::{Command, Output};
 
 const POLICY_RELATIVE: &str = "contracts/releases/publish_policy.toml";
 const PROFILES_RELATIVE: &str = "contracts/coverage-profiles.toml";
+const ARCHITECTURE_RELATIVE: &str = "docs/specs/radroots_crates_release_v1.toml";
 const POLICY_SCHEMA_VERSION: u32 = 1;
 const CLOSURE_DIRECTORY: &str = "release-package-closure";
 
@@ -15,7 +16,8 @@ const CLOSURE_DIRECTORY: &str = "release-package-closure";
 struct ReleasePolicy {
     schema: PolicySchema,
     release: ReleaseVersion,
-    classification: ReleaseClassification,
+    publication: PublicationControl,
+    workspace_classification: WorkspaceReleaseClassification,
     publish_order: PublishOrder,
 }
 
@@ -33,12 +35,24 @@ struct ReleaseVersion {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ReleaseClassification {
-    public: Vec<String>,
-    internal: Vec<String>,
-    deferred: Vec<String>,
+struct PublicationControl {
+    frozen: bool,
+    registry: String,
+    final_enablement_step: u16,
+    spec_id: String,
+    approved_packages: Vec<String>,
+    local_packages: Vec<String>,
+    external_packages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceReleaseClassification {
+    private: Vec<String>,
+    build_codegen: Vec<String>,
+    test_support: Vec<String>,
+    preview: Vec<String>,
     retired: Vec<String>,
-    yank_only: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,21 +93,52 @@ struct CargoMetadata {
 struct CargoMetadataPackage {
     id: String,
     name: String,
+    version: String,
     manifest_path: PathBuf,
 }
 
 struct PackageWorkspaceEntry {
     name: String,
+    version: String,
     source_directory: PathBuf,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseArchitecture {
+    repositories: CratesReleaseRepositories,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseRepositories {
+    lib: CratesReleaseRepository,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseRepository {
+    version: String,
+}
+
+#[derive(Debug)]
+struct ValidatedReleasePolicy {
+    package_order: Vec<String>,
+    local_packages: BTreeSet<String>,
+    workspace_packages: BTreeSet<String>,
+    frozen: bool,
 }
 
 pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), String> {
     ensure_clean_git_worktree(workspace_root)?;
     let policy = load_toml::<ReleasePolicy>(&workspace_root.join(POLICY_RELATIVE))?;
-    let public = validate_policy(&policy)?;
+    let validated = validate_policy(&policy)?;
+    let package_version = load_package_version(workspace_root)?;
     let profiles = load_toml::<FeatureProfilesFile>(&workspace_root.join(PROFILES_RELATIVE))?;
-    let selected_profiles = select_profiles(&policy, &profiles.profiles)?;
+    let selected_profiles = select_profiles(&validated, &profiles.profiles)?;
     let workspace_packages = load_workspace_packages(workspace_root)?;
+    validate_local_package_versions(
+        &workspace_packages,
+        &validated.local_packages,
+        &package_version,
+    )?;
 
     let cargo_target_root = cargo_target_root(workspace_root)?;
     let closure_root = cargo_target_root.join(CLOSURE_DIRECTORY);
@@ -108,7 +153,7 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
     }
     let source_patch_config = write_source_patch_config(&closure_root, &workspace_packages)?;
 
-    for package in &policy.publish_order.crates {
+    for package in &validated.package_order {
         let package_list = cargo_package_list(workspace_root, package)?;
         fs::write(
             list_root.join(format!("{package}.txt")),
@@ -125,7 +170,7 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
             &["package", "--locked", "--no-verify", "-p", package],
             &format!("package {package}"),
         )?;
-        let filename = format!("{package}-{}.crate", policy.release.version);
+        let filename = format!("{package}-{package_version}.crate");
         let cargo_archive = cargo_target_root.join("package").join(&filename);
         require_regular_file(&cargo_archive, &format!("Cargo archive for {package}"))?;
         let governed_archive = archive_root.join(&filename);
@@ -142,14 +187,15 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
             &governed_archive,
             &package_extract_root,
             package,
-            &policy.release.version,
+            &package_version,
             &package_list,
         )?;
         validate_normalized_manifest(
             &package_extract_root.join("Cargo.toml"),
             package,
-            &policy.release.version,
-            &public,
+            &package_version,
+            &validated.local_packages,
+            validated.frozen,
         )?;
     }
 
@@ -157,7 +203,7 @@ pub(crate) fn validate_release_packages(workspace_root: &Path) -> Result<(), Str
         &check_root,
         &extracted_root,
         &selected_profiles,
-        &policy.release.version,
+        &package_version,
     )?;
     run_cargo(
         &check_root,
@@ -192,7 +238,40 @@ fn load_toml<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
     toml::from_str(&raw).map_err(|error| format!("parse {}: {error}", path.display()))
 }
 
-fn validate_policy(policy: &ReleasePolicy) -> Result<BTreeSet<String>, String> {
+fn load_package_version(workspace_root: &Path) -> Result<String, String> {
+    let architecture =
+        load_toml::<CratesReleaseArchitecture>(&workspace_root.join(ARCHITECTURE_RELATIVE))?;
+    if architecture.repositories.lib.version.trim().is_empty() {
+        return Err(
+            "crates release architecture repositories.lib.version must not be empty".to_owned(),
+        );
+    }
+    Ok(architecture.repositories.lib.version)
+}
+
+fn validate_local_package_versions(
+    workspace_packages: &[PackageWorkspaceEntry],
+    local_packages: &BTreeSet<String>,
+    package_version: &str,
+) -> Result<(), String> {
+    let workspace_versions = workspace_packages
+        .iter()
+        .map(|package| (package.name.as_str(), package.version.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    for package in local_packages {
+        let actual = workspace_versions
+            .get(package.as_str())
+            .ok_or_else(|| format!("approved local package {package} is not a workspace member"))?;
+        if *actual != package_version {
+            return Err(format!(
+                "approved local package {package} version {actual} must match crates release architecture version {package_version}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_policy(policy: &ReleasePolicy) -> Result<ValidatedReleasePolicy, String> {
     if policy.schema.version != POLICY_SCHEMA_VERSION {
         return Err(format!(
             "release package policy schema.version must be {POLICY_SCHEMA_VERSION}"
@@ -201,33 +280,97 @@ fn validate_policy(policy: &ReleasePolicy) -> Result<BTreeSet<String>, String> {
     if policy.release.version.trim().is_empty() {
         return Err("release package policy version must not be empty".to_owned());
     }
+    if policy.publication.registry != "crates-io" {
+        return Err("publication.registry must be crates-io".to_owned());
+    }
+    if policy.publication.final_enablement_step != 305 {
+        return Err("publication.final_enablement_step must be 305".to_owned());
+    }
+    if policy.publication.spec_id != "radroots.crates.release.v1" {
+        return Err("publication.spec_id must be radroots.crates.release.v1".to_owned());
+    }
+    let approved = unique_nonempty(
+        &policy.publication.approved_packages,
+        "publication.approved_packages",
+    )?;
+    let local = unique_nonempty(
+        &policy.publication.local_packages,
+        "publication.local_packages",
+    )?;
+    let external = unique_nonempty(
+        &policy.publication.external_packages,
+        "publication.external_packages",
+    )?;
+    if local.is_empty() {
+        return Err("publication.local_packages must not be empty".to_owned());
+    }
+    if !local.is_disjoint(&external) {
+        return Err("publication local and external package ownership must not overlap".to_owned());
+    }
+    let owned = local.union(&external).cloned().collect::<BTreeSet<_>>();
+    if owned != approved {
+        return Err(
+            "publication local and external package ownership must partition approved_packages"
+                .to_owned(),
+        );
+    }
+
     let classes = [
-        ("classification.public", &policy.classification.public),
-        ("classification.internal", &policy.classification.internal),
-        ("classification.deferred", &policy.classification.deferred),
-        ("classification.retired", &policy.classification.retired),
-        ("classification.yank_only", &policy.classification.yank_only),
+        (
+            "workspace_classification.private",
+            &policy.workspace_classification.private,
+        ),
+        (
+            "workspace_classification.build_codegen",
+            &policy.workspace_classification.build_codegen,
+        ),
+        (
+            "workspace_classification.test_support",
+            &policy.workspace_classification.test_support,
+        ),
+        (
+            "workspace_classification.preview",
+            &policy.workspace_classification.preview,
+        ),
+        (
+            "workspace_classification.retired",
+            &policy.workspace_classification.retired,
+        ),
     ];
-    let mut classified = BTreeSet::new();
+    let mut workspace_packages = local.clone();
     for (label, values) in classes {
         let unique = unique_nonempty(values, label)?;
         for value in unique {
-            if !classified.insert(value.clone()) {
+            if approved.contains(&value) || !workspace_packages.insert(value.clone()) {
                 return Err(format!(
                     "release package policy classifies {value} more than once"
                 ));
             }
         }
     }
-    let public = unique_nonempty(&policy.classification.public, "classification.public")?;
     let ordered = unique_nonempty(&policy.publish_order.crates, "publish_order.crates")?;
-    if ordered != public {
-        return Err(
-            "release package publish order must contain every public package exactly once"
-                .to_owned(),
-        );
-    }
-    Ok(public)
+    let package_order = if policy.publication.frozen {
+        if !ordered.is_empty() {
+            return Err(
+                "publish_order.crates must remain empty while publication is frozen".to_owned(),
+            );
+        }
+        policy.publication.local_packages.clone()
+    } else {
+        if ordered != local {
+            return Err(
+                "publish_order.crates must contain every approved local package exactly once when publication is enabled"
+                    .to_owned(),
+            );
+        }
+        policy.publish_order.crates.clone()
+    };
+    Ok(ValidatedReleasePolicy {
+        package_order,
+        local_packages: local,
+        workspace_packages,
+        frozen: policy.publication.frozen,
+    })
 }
 
 fn unique_nonempty(values: &[String], label: &str) -> Result<BTreeSet<String>, String> {
@@ -244,22 +387,12 @@ fn unique_nonempty(values: &[String], label: &str) -> Result<BTreeSet<String>, S
 }
 
 fn select_profiles(
-    policy: &ReleasePolicy,
+    policy: &ValidatedReleasePolicy,
     profiles: &FeatureProfiles,
 ) -> Result<Vec<(String, FeatureProfile)>, String> {
     validate_profile("profiles.default", &profiles.default)?;
-    let classified = policy
-        .classification
-        .public
-        .iter()
-        .chain(&policy.classification.internal)
-        .chain(&policy.classification.deferred)
-        .chain(&policy.classification.retired)
-        .chain(&policy.classification.yank_only)
-        .cloned()
-        .collect::<BTreeSet<_>>();
     for (package, profile) in &profiles.crates {
-        if !classified.contains(package) {
+        if !policy.workspace_packages.contains(package) {
             return Err(format!(
                 "release feature profile references unknown package {package}"
             ));
@@ -267,8 +400,7 @@ fn select_profiles(
         validate_profile(&format!("profiles.crates.{package}"), profile)?;
     }
     Ok(policy
-        .publish_order
-        .crates
+        .package_order
         .iter()
         .map(|package| {
             (
@@ -667,6 +799,7 @@ fn validate_normalized_manifest(
     expected_package: &str,
     release_version: &str,
     public: &BTreeSet<String>,
+    publication_frozen: bool,
 ) -> Result<(), String> {
     let raw = fs::read_to_string(manifest_path)
         .map_err(|error| format!("read {}: {error}", manifest_path.display()))?;
@@ -687,9 +820,14 @@ fn validate_normalized_manifest(
         .get("publish")
         .and_then(toml::Value::as_array)
         .ok_or_else(|| format!("normalized manifest for {expected_package} has no publish list"))?;
-    if publish.as_slice() != [toml::Value::String("crates-io".to_owned())] {
+    let expected_publish = if publication_frozen {
+        Vec::new()
+    } else {
+        vec![toml::Value::String("crates-io".to_owned())]
+    };
+    if publish != &expected_publish {
         return Err(format!(
-            "normalized manifest for {expected_package} is not crates.io-only"
+            "normalized manifest for {expected_package} has publish authority inconsistent with the publication freeze"
         ));
     }
 
@@ -826,6 +964,7 @@ fn load_workspace_packages(workspace_root: &Path) -> Result<Vec<PackageWorkspace
             .to_path_buf();
         packages.push(PackageWorkspaceEntry {
             name: package.name,
+            version: package.version,
             source_directory,
         });
     }
@@ -971,18 +1110,110 @@ version = "=1.0.0-alpha.1"
             "radroots_dependency".to_owned(),
             "radroots_public".to_owned(),
         ]);
-        validate_normalized_manifest(&manifest, "radroots_public", "1.0.0-alpha.1", &public)
-            .expect("valid normalized manifest");
+        validate_normalized_manifest(
+            &manifest,
+            "radroots_public",
+            "1.0.0-alpha.1",
+            &public,
+            false,
+        )
+        .expect("valid normalized manifest");
 
         let invalid = fs::read_to_string(&manifest)
             .expect("read manifest")
             .replace("radroots_dependency", "radroots_internal");
         fs::write(&manifest, invalid).expect("write invalid manifest");
         assert!(
-            validate_normalized_manifest(&manifest, "radroots_public", "1.0.0-alpha.1", &public,)
-                .expect_err("internal production dependency must fail")
-                .contains("non-public package radroots_internal")
+            validate_normalized_manifest(
+                &manifest,
+                "radroots_public",
+                "1.0.0-alpha.1",
+                &public,
+                false,
+            )
+            .expect_err("internal production dependency must fail")
+            .contains("non-public package radroots_internal")
         );
+    }
+
+    fn frozen_policy() -> ReleasePolicy {
+        ReleasePolicy {
+            schema: PolicySchema {
+                version: POLICY_SCHEMA_VERSION,
+            },
+            release: ReleaseVersion {
+                version: "1.0.0-alpha.1".to_owned(),
+            },
+            publication: PublicationControl {
+                frozen: true,
+                registry: "crates-io".to_owned(),
+                final_enablement_step: 305,
+                spec_id: "radroots.crates.release.v1".to_owned(),
+                approved_packages: vec![
+                    "radroots_public".to_owned(),
+                    "radroots_external".to_owned(),
+                ],
+                local_packages: vec!["radroots_public".to_owned()],
+                external_packages: vec!["radroots_external".to_owned()],
+            },
+            workspace_classification: WorkspaceReleaseClassification {
+                private: vec!["radroots_internal".to_owned()],
+                build_codegen: vec!["xtask".to_owned()],
+                test_support: Vec::new(),
+                preview: Vec::new(),
+                retired: Vec::new(),
+            },
+            publish_order: PublishOrder { crates: Vec::new() },
+        }
+    }
+
+    #[test]
+    fn frozen_policy_packages_local_approved_crates_without_enabling_publication() {
+        let validated = validate_policy(&frozen_policy()).expect("valid frozen policy");
+        assert_eq!(validated.package_order, ["radroots_public"]);
+        assert!(validated.frozen);
+
+        let mut invalid = frozen_policy();
+        invalid
+            .publish_order
+            .crates
+            .push("radroots_public".to_owned());
+        assert!(
+            validate_policy(&invalid)
+                .unwrap_err()
+                .contains("must remain empty while publication is frozen")
+        );
+    }
+
+    #[test]
+    fn approved_local_packages_use_the_crate_architecture_version() {
+        let packages = [PackageWorkspaceEntry {
+            name: "radroots_public".to_owned(),
+            version: "0.1.0-alpha".to_owned(),
+            source_directory: PathBuf::from("crates/public"),
+        }];
+        let local = BTreeSet::from(["radroots_public".to_owned()]);
+        validate_local_package_versions(&packages, &local, "0.1.0-alpha")
+            .expect("matching architecture version");
+        assert!(
+            validate_local_package_versions(&packages, &local, "1.0.0-alpha.1")
+                .unwrap_err()
+                .contains("must match crates release architecture version")
+        );
+    }
+
+    #[test]
+    fn frozen_normalized_manifest_requires_an_empty_publish_list() {
+        let root = tempfile::tempdir().expect("temporary manifest root");
+        let manifest = root.path().join("Cargo.toml");
+        fs::write(
+            &manifest,
+            "[package]\nname = 'radroots_public'\nversion = '0.1.0-alpha'\npublish = []\n",
+        )
+        .expect("write frozen manifest");
+        let public = BTreeSet::from(["radroots_public".to_owned()]);
+        validate_normalized_manifest(&manifest, "radroots_public", "0.1.0-alpha", &public, true)
+            .expect("frozen package manifest");
     }
 
     #[test]
@@ -1035,6 +1266,7 @@ version = "=1.0.0-alpha.1"
         let root = tempfile::tempdir().expect("temporary closure root");
         let packages = [PackageWorkspaceEntry {
             name: "radroots_fixture".to_owned(),
+            version: "0.1.0-alpha".to_owned(),
             source_directory: root.path().join("source"),
         }];
         let config_path =

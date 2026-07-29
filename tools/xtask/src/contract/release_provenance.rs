@@ -23,6 +23,7 @@ const TOOLCHAIN_RELATIVE: &str = "rust-toolchain.toml";
 const LOCKFILE_RELATIVE: &str = "Cargo.lock";
 const FEATURE_PROFILES_RELATIVE: &str = "contracts/coverage-profiles.toml";
 const PUBLISH_POLICY_RELATIVE: &str = "contracts/releases/publish_policy.toml";
+const ARCHITECTURE_RELATIVE: &str = "docs/specs/radroots_crates_release_v1.toml";
 const WRITE_SCHEMA_COMMAND: &str = "cargo xtask contract release-provenance-schema --write";
 const METADATA_COMMAND: &str = "cargo metadata --locked --format-version 1";
 
@@ -176,7 +177,8 @@ struct TestProfiles {
 struct PublishPolicy {
     schema: PublishPolicySchema,
     release: ReleaseVersion,
-    classification: ReleaseClassification,
+    publication: PublicationControl,
+    workspace_classification: WorkspaceReleaseClassification,
     publish_order: PublishOrder,
 }
 
@@ -194,18 +196,51 @@ struct ReleaseVersion {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ReleaseClassification {
-    public: Vec<String>,
-    internal: Vec<String>,
-    deferred: Vec<String>,
+struct PublicationControl {
+    frozen: bool,
+    registry: String,
+    final_enablement_step: u16,
+    spec_id: String,
+    approved_packages: Vec<String>,
+    local_packages: Vec<String>,
+    external_packages: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceReleaseClassification {
+    private: Vec<String>,
+    build_codegen: Vec<String>,
+    test_support: Vec<String>,
+    preview: Vec<String>,
     retired: Vec<String>,
-    yank_only: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PublishOrder {
     crates: Vec<String>,
+}
+
+#[derive(Debug)]
+struct ValidatedPublishPolicy {
+    package_order: Vec<String>,
+    workspace_packages: BTreeSet<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseArchitecture {
+    repositories: CratesReleaseRepositories,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseRepositories {
+    lib: CratesReleaseRepository,
+}
+
+#[derive(Debug, Deserialize)]
+struct CratesReleaseRepository {
+    version: String,
 }
 
 pub(crate) fn write_release_provenance_schema(workspace_root: &Path) -> Result<(), String> {
@@ -268,10 +303,11 @@ fn describe_release_provenance(
     let lockfile = descriptor_for_file(workspace_root, LOCKFILE_RELATIVE)?;
     let toolchain = load_toolchain(workspace_root)?;
     let policy = load_toml::<PublishPolicy>(workspace_root, PUBLISH_POLICY_RELATIVE)?;
-    validate_publish_policy(&policy)?;
+    let policy = validate_publish_policy(&policy)?;
+    let package_version = load_package_version(workspace_root)?;
     let feature_profiles = selected_feature_profiles(workspace_root, &policy)?;
     let dependency_graph = dependency_graph_evidence(workspace_root)?;
-    let packages = package_evidence(workspace_root, package_directory, &policy)?;
+    let packages = package_evidence(workspace_root, package_directory, &policy, &package_version)?;
 
     Ok(ReleaseProvenanceManifest {
         schema_version: SCHEMA_VERSION,
@@ -366,7 +402,7 @@ fn load_toolchain(workspace_root: &Path) -> Result<ToolchainEvidence, String> {
 
 fn selected_feature_profiles(
     workspace_root: &Path,
-    policy: &PublishPolicy,
+    policy: &ValidatedPublishPolicy,
 ) -> Result<FeatureProfileEvidence, String> {
     let profiles =
         load_toml::<TestProfilesFile>(workspace_root, FEATURE_PROFILES_RELATIVE)?.profiles;
@@ -374,17 +410,10 @@ fn selected_feature_profiles(
     for (package, profile) in &profiles.crates {
         validate_test_profile(&format!("profiles.crates.{package}"), profile)?;
     }
-    let classified = all_classified_packages(policy);
-    let public = policy
-        .classification
-        .public
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
     let unknown_overrides = profiles
         .crates
         .keys()
-        .filter(|package| !classified.contains(*package))
+        .filter(|package| !policy.workspace_packages.contains(*package))
         .cloned()
         .collect::<Vec<_>>();
     if !unknown_overrides.is_empty() {
@@ -394,10 +423,8 @@ fn selected_feature_profiles(
         ));
     }
     let selected = policy
-        .publish_order
-        .crates
+        .package_order
         .iter()
-        .filter(|package| public.contains(*package))
         .map(|package| {
             let profile = profiles.crates.get(package).unwrap_or(&profiles.default);
             FeatureProfile {
@@ -421,7 +448,7 @@ fn validate_test_profile(label: &str, profile: &TestProfile) -> Result<(), Strin
     require_unique_nonempty(&profile.features, &format!("{label}.features"))
 }
 
-fn validate_publish_policy(policy: &PublishPolicy) -> Result<(), String> {
+fn validate_publish_policy(policy: &PublishPolicy) -> Result<ValidatedPublishPolicy, String> {
     if policy.schema.version != PUBLISH_POLICY_SCHEMA_VERSION {
         return Err(format!(
             "release publish policy schema version must be {PUBLISH_POLICY_SCHEMA_VERSION}"
@@ -430,66 +457,118 @@ fn validate_publish_policy(policy: &PublishPolicy) -> Result<(), String> {
     if policy.release.version.trim().is_empty() {
         return Err("release.version must not be empty".to_owned());
     }
-    for (label, packages) in [
-        ("classification.public", &policy.classification.public),
-        ("classification.internal", &policy.classification.internal),
-        ("classification.deferred", &policy.classification.deferred),
-        ("classification.retired", &policy.classification.retired),
-        ("classification.yank_only", &policy.classification.yank_only),
-    ] {
-        require_unique_nonempty(packages, label)?;
+    if policy.publication.registry != "crates-io" {
+        return Err("publication.registry must be crates-io".to_owned());
     }
-    let all = all_classified_packages(policy);
-    let classified_count = policy.classification.public.len()
-        + policy.classification.internal.len()
-        + policy.classification.deferred.len()
-        + policy.classification.retired.len()
-        + policy.classification.yank_only.len();
-    if all.len() != classified_count {
-        return Err("release package classifications must be pairwise unique".to_owned());
+    if policy.publication.final_enablement_step != 305 {
+        return Err("publication.final_enablement_step must be 305".to_owned());
     }
-    require_unique_nonempty(&policy.publish_order.crates, "publish_order.crates")?;
-    let public = policy
-        .classification
-        .public
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let ordered = policy
-        .publish_order
-        .crates
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    if ordered != public {
+    if policy.publication.spec_id != "radroots.crates.release.v1" {
+        return Err("publication.spec_id must be radroots.crates.release.v1".to_owned());
+    }
+    let approved = require_unique_nonempty_set(
+        &policy.publication.approved_packages,
+        "publication.approved_packages",
+    )?;
+    let local = require_unique_nonempty_set(
+        &policy.publication.local_packages,
+        "publication.local_packages",
+    )?;
+    let external = require_unique_nonempty_set(
+        &policy.publication.external_packages,
+        "publication.external_packages",
+    )?;
+    if local.is_empty() {
+        return Err("publication.local_packages must not be empty".to_owned());
+    }
+    if !local.is_disjoint(&external) {
+        return Err("publication local and external package ownership must not overlap".to_owned());
+    }
+    if local.union(&external).cloned().collect::<BTreeSet<_>>() != approved {
         return Err(
-            "publish_order.crates must contain every public package exactly once".to_owned(),
+            "publication local and external package ownership must partition approved_packages"
+                .to_owned(),
         );
     }
-    Ok(())
+
+    let classes = [
+        (
+            "workspace_classification.private",
+            &policy.workspace_classification.private,
+        ),
+        (
+            "workspace_classification.build_codegen",
+            &policy.workspace_classification.build_codegen,
+        ),
+        (
+            "workspace_classification.test_support",
+            &policy.workspace_classification.test_support,
+        ),
+        (
+            "workspace_classification.preview",
+            &policy.workspace_classification.preview,
+        ),
+        (
+            "workspace_classification.retired",
+            &policy.workspace_classification.retired,
+        ),
+    ];
+    let mut workspace_packages = local.clone();
+    for (label, packages) in classes {
+        let unique = require_unique_nonempty_set(packages, label)?;
+        for package in unique {
+            if approved.contains(&package) || !workspace_packages.insert(package.clone()) {
+                return Err(format!(
+                    "release package policy classifies {package} more than once"
+                ));
+            }
+        }
+    }
+
+    let ordered =
+        require_unique_nonempty_set(&policy.publish_order.crates, "publish_order.crates")?;
+    let package_order = if policy.publication.frozen {
+        if !ordered.is_empty() {
+            return Err(
+                "publish_order.crates must remain empty while publication is frozen".to_owned(),
+            );
+        }
+        policy.publication.local_packages.clone()
+    } else {
+        if ordered != local {
+            return Err(
+                "publish_order.crates must contain every approved local package exactly once when publication is enabled"
+                    .to_owned(),
+            );
+        }
+        policy.publish_order.crates.clone()
+    };
+    Ok(ValidatedPublishPolicy {
+        package_order,
+        workspace_packages,
+    })
 }
 
-fn all_classified_packages(policy: &PublishPolicy) -> BTreeSet<String> {
-    policy
-        .classification
-        .public
-        .iter()
-        .chain(&policy.classification.internal)
-        .chain(&policy.classification.deferred)
-        .chain(&policy.classification.retired)
-        .chain(&policy.classification.yank_only)
-        .cloned()
-        .collect()
+fn load_package_version(workspace_root: &Path) -> Result<String, String> {
+    let architecture =
+        load_toml::<CratesReleaseArchitecture>(workspace_root, ARCHITECTURE_RELATIVE)?;
+    if architecture.repositories.lib.version.trim().is_empty() {
+        return Err(
+            "crates release architecture repositories.lib.version must not be empty".to_owned(),
+        );
+    }
+    Ok(architecture.repositories.lib.version)
 }
 
 fn package_evidence(
     workspace_root: &Path,
     package_directory: &Path,
-    policy: &PublishPolicy,
+    policy: &ValidatedPublishPolicy,
+    package_version: &str,
 ) -> Result<PackageEvidence, String> {
-    let archives = describe_package_archives(package_directory, policy)?;
+    let archives = describe_package_archives(package_directory, policy, package_version)?;
     Ok(PackageEvidence {
-        release_version: policy.release.version.clone(),
+        release_version: package_version.to_owned(),
         publish_policy: descriptor_for_file(workspace_root, PUBLISH_POLICY_RELATIVE)?,
         archives,
     })
@@ -497,18 +576,13 @@ fn package_evidence(
 
 fn describe_package_archives(
     package_directory: &Path,
-    policy: &PublishPolicy,
+    policy: &ValidatedPublishPolicy,
+    package_version: &str,
 ) -> Result<Vec<PackageArchive>, String> {
     let expected = policy
-        .publish_order
-        .crates
+        .package_order
         .iter()
-        .map(|package| {
-            (
-                format!("{package}-{}.crate", policy.release.version),
-                package,
-            )
-        })
+        .map(|package| (format!("{package}-{package_version}.crate"), package))
         .collect::<BTreeMap<_, _>>();
     let mut found = BTreeMap::new();
     let entries = fs::read_dir(package_directory).map_err(|error| {
@@ -550,7 +624,7 @@ fn describe_package_archives(
                 (*package).clone(),
                 PackageArchive {
                     package: (*package).clone(),
-                    version: policy.release.version.clone(),
+                    version: package_version.to_owned(),
                     filename: name,
                     byte_length: bytes.len() as u64,
                     sha256: sha256_hex(&bytes),
@@ -563,8 +637,7 @@ fn describe_package_archives(
         }
     }
     let missing = policy
-        .publish_order
-        .crates
+        .package_order
         .iter()
         .filter(|package| !found.contains_key(*package))
         .cloned()
@@ -573,8 +646,7 @@ fn describe_package_archives(
         return Err(format!("missing package archives: {}", missing.join(", ")));
     }
     policy
-        .publish_order
-        .crates
+        .package_order
         .iter()
         .map(|package| {
             found
@@ -1076,6 +1148,11 @@ fn require_unique_nonempty(values: &[String], label: &str) -> Result<(), String>
     Ok(())
 }
 
+fn require_unique_nonempty_set(values: &[String], label: &str) -> Result<BTreeSet<String>, String> {
+    require_unique_nonempty(values, label)?;
+    Ok(values.iter().cloned().collect())
+}
+
 fn canonical_json_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let mut bytes =
         serde_json::to_vec_pretty(value).map_err(|error| format!("serialize JSON: {error}"))?;
@@ -1307,16 +1384,27 @@ mod tests {
             release: ReleaseVersion {
                 version: "1.2.3".to_owned(),
             },
-            classification: ReleaseClassification {
-                public: vec!["alpha".to_owned(), "beta".to_owned()],
-                internal: vec!["internal".to_owned()],
-                deferred: Vec::new(),
+            publication: PublicationControl {
+                frozen: true,
+                registry: "crates-io".to_owned(),
+                final_enablement_step: 305,
+                spec_id: "radroots.crates.release.v1".to_owned(),
+                approved_packages: vec![
+                    "alpha".to_owned(),
+                    "beta".to_owned(),
+                    "external".to_owned(),
+                ],
+                local_packages: vec!["alpha".to_owned(), "beta".to_owned()],
+                external_packages: vec!["external".to_owned()],
+            },
+            workspace_classification: WorkspaceReleaseClassification {
+                private: vec!["internal".to_owned()],
+                build_codegen: Vec::new(),
+                test_support: Vec::new(),
+                preview: Vec::new(),
                 retired: Vec::new(),
-                yank_only: Vec::new(),
             },
-            publish_order: PublishOrder {
-                crates: vec!["alpha".to_owned(), "beta".to_owned()],
-            },
+            publish_order: PublishOrder { crates: Vec::new() },
         }
     }
 
@@ -1378,18 +1466,33 @@ mod tests {
     #[test]
     fn release_provenance_requires_complete_exact_package_archives() {
         let temp = tempfile::TempDir::new().unwrap();
+        let policy = validate_publish_policy(&test_policy()).unwrap();
         fs::write(temp.path().join("alpha-1.2.3.crate"), b"alpha").unwrap();
-        let missing = describe_package_archives(temp.path(), &test_policy()).unwrap_err();
+        let missing = describe_package_archives(temp.path(), &policy, "1.2.3").unwrap_err();
         assert!(missing.contains("missing package archives: beta"));
 
         fs::write(temp.path().join("beta-1.2.3.crate"), b"beta").unwrap();
-        let archives = describe_package_archives(temp.path(), &test_policy()).unwrap();
+        let archives = describe_package_archives(temp.path(), &policy, "1.2.3").unwrap();
         assert_eq!(archives.len(), 2);
         assert_eq!(archives[0].package, "alpha");
 
         fs::write(temp.path().join("unknown-1.2.3.crate"), b"unknown").unwrap();
-        let extra = describe_package_archives(temp.path(), &test_policy()).unwrap_err();
+        let extra = describe_package_archives(temp.path(), &policy, "1.2.3").unwrap_err();
         assert!(extra.contains("unexpected package archive"));
+    }
+
+    #[test]
+    fn release_provenance_uses_local_packages_while_publication_is_frozen() {
+        let policy = validate_publish_policy(&test_policy()).unwrap();
+        assert_eq!(policy.package_order, ["alpha", "beta"]);
+
+        let mut invalid = test_policy();
+        invalid.publish_order.crates.push("alpha".to_owned());
+        assert!(
+            validate_publish_policy(&invalid)
+                .unwrap_err()
+                .contains("must remain empty while publication is frozen")
+        );
     }
 
     #[test]
