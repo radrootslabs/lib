@@ -4,9 +4,7 @@ use alloc::{format, string::String, vec::Vec};
 #[cfg(feature = "serde_json")]
 use radroots_event::farm::crdt::KIND_FARM_CRDT_CHANGE;
 use radroots_event::{
-    farm::crdt::{
-        RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange,
-    },
+    farm::crdt::{FarmCrdtChange, RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG},
     farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
@@ -17,16 +15,16 @@ use crate::field_helpers::{
     push_optional_tag, push_tag, validate_non_empty_base64url, validate_non_empty_field,
 };
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 pub fn farm_crdt_change_build_tags(
-    change: &RadrootsFarmCrdtChange,
+    change: &FarmCrdtChange,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     farm_crdt_change_build_tags_with_author(change, None)
 }
 
 pub fn farm_crdt_change_build_tags_with_author(
-    change: &RadrootsFarmCrdtChange,
+    change: &FarmCrdtChange,
     author_pubkey: Option<&str>,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_change(change)?;
@@ -47,47 +45,45 @@ pub fn farm_crdt_change_build_tags_with_author(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(
-    change: &RadrootsFarmCrdtChange,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(change: &FarmCrdtChange) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(change, KIND_FARM_CRDT_CHANGE)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_author(
-    change: &RadrootsFarmCrdtChange,
+    change: &FarmCrdtChange,
     author_pubkey: &str,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind_and_author(change, KIND_FARM_CRDT_CHANGE, Some(author_pubkey))
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    change: &RadrootsFarmCrdtChange,
+    change: &FarmCrdtChange,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind_and_author(change, kind, None)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind_and_author(
-    change: &RadrootsFarmCrdtChange,
+    change: &FarmCrdtChange,
     kind: u32,
     author_pubkey: Option<&str>,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM_CRDT_CHANGE {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_crdt_change_build_tags_with_author(change, author_pubkey)?;
     let content = serde_json::to_string(change).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,
     })
 }
 
-pub(crate) fn validate_change(change: &RadrootsFarmCrdtChange) -> Result<(), EventEncodeError> {
+pub(crate) fn validate_change(change: &FarmCrdtChange) -> Result<(), EventEncodeError> {
     if change.schema != RADROOTS_FARM_CRDT_CHANGE_SCHEMA {
         return Err(EventEncodeError::InvalidField("schema"));
     }

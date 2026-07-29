@@ -6,15 +6,13 @@ use alloc::{
 
 use radroots_event::{
     social::group::{
-        KIND_GROUP_ADMINS, KIND_GROUP_CREATE_GROUP, KIND_GROUP_CREATE_INVITE,
+        GroupAdmins, GroupCreateGroup, GroupCreateInvite, GroupDeleteEvent, GroupDeleteGroup,
+        GroupEditMetadata, GroupEditableMetadata, GroupJoinRequest, GroupLeaveRequest,
+        GroupMembers, GroupMetadata, GroupPutUser, GroupRemoveUser, GroupRole, GroupRoles,
+        GroupUserRef, KIND_GROUP_ADMINS, KIND_GROUP_CREATE_GROUP, KIND_GROUP_CREATE_INVITE,
         KIND_GROUP_DELETE_EVENT, KIND_GROUP_DELETE_GROUP, KIND_GROUP_EDIT_METADATA,
         KIND_GROUP_JOIN_REQUEST, KIND_GROUP_LEAVE_REQUEST, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
-        KIND_GROUP_PUT_USER, KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES, RadrootsGroupAdmins,
-        RadrootsGroupCreateGroup, RadrootsGroupCreateInvite, RadrootsGroupDeleteEvent,
-        RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata, RadrootsGroupEditableMetadata,
-        RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest, RadrootsGroupMembers,
-        RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser, RadrootsGroupRole,
-        RadrootsGroupRoles, RadrootsGroupUserRef,
+        KIND_GROUP_PUT_USER, KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES,
     },
     tag::name::{TAG_D, TAG_E, TAG_H, TAG_P},
 };
@@ -39,10 +37,10 @@ pub fn group_put_user_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupPutUser, EventParseError> {
+) -> Result<GroupPutUser, EventParseError> {
     require_kind(kind, KIND_GROUP_PUT_USER, "9000")?;
     let (pubkey, roles) = required_user_tag(tags)?;
-    Ok(RadrootsGroupPutUser {
+    Ok(GroupPutUser {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         pubkey,
@@ -54,10 +52,10 @@ pub fn group_remove_user_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupRemoveUser, EventParseError> {
+) -> Result<GroupRemoveUser, EventParseError> {
     require_kind(kind, KIND_GROUP_REMOVE_USER, "9001")?;
     let (pubkey, _) = required_user_tag(tags)?;
-    Ok(RadrootsGroupRemoveUser {
+    Ok(GroupRemoveUser {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         pubkey,
@@ -68,9 +66,9 @@ pub fn group_create_group_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupCreateGroup, EventParseError> {
+) -> Result<GroupCreateGroup, EventParseError> {
     require_kind(kind, KIND_GROUP_CREATE_GROUP, "9007")?;
-    Ok(RadrootsGroupCreateGroup {
+    Ok(GroupCreateGroup {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         metadata: metadata_from_tags(tags)?,
@@ -81,9 +79,9 @@ pub fn group_edit_metadata_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupEditMetadata, EventParseError> {
+) -> Result<GroupEditMetadata, EventParseError> {
     require_kind(kind, KIND_GROUP_EDIT_METADATA, "9002")?;
-    Ok(RadrootsGroupEditMetadata {
+    Ok(GroupEditMetadata {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         metadata: metadata_from_tags(tags)?,
@@ -94,9 +92,9 @@ pub fn group_delete_group_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupDeleteGroup, EventParseError> {
+) -> Result<GroupDeleteGroup, EventParseError> {
     require_kind(kind, KIND_GROUP_DELETE_GROUP, "9008")?;
-    Ok(RadrootsGroupDeleteGroup {
+    Ok(GroupDeleteGroup {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
     })
@@ -106,9 +104,9 @@ pub fn group_delete_event_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupDeleteEvent, EventParseError> {
+) -> Result<GroupDeleteEvent, EventParseError> {
     require_kind(kind, KIND_GROUP_DELETE_EVENT, "9005")?;
-    Ok(RadrootsGroupDeleteEvent {
+    Ok(GroupDeleteEvent {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         event_id: required_tag_value(tags, TAG_E)?,
@@ -119,9 +117,9 @@ pub fn group_create_invite_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupCreateInvite, EventParseError> {
+) -> Result<GroupCreateInvite, EventParseError> {
     require_kind(kind, KIND_GROUP_CREATE_INVITE, "9009")?;
-    Ok(RadrootsGroupCreateInvite {
+    Ok(GroupCreateInvite {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         code: required_tag_value(tags, TAG_CODE)?,
@@ -132,9 +130,9 @@ pub fn group_join_request_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupJoinRequest, EventParseError> {
+) -> Result<GroupJoinRequest, EventParseError> {
     require_kind(kind, KIND_GROUP_JOIN_REQUEST, "9021")?;
-    Ok(RadrootsGroupJoinRequest {
+    Ok(GroupJoinRequest {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
         code: optional_tag_value(tags, TAG_CODE)?,
@@ -145,9 +143,9 @@ pub fn group_leave_request_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupLeaveRequest, EventParseError> {
+) -> Result<GroupLeaveRequest, EventParseError> {
     require_kind(kind, KIND_GROUP_LEAVE_REQUEST, "9022")?;
-    Ok(RadrootsGroupLeaveRequest {
+    Ok(GroupLeaveRequest {
         group_id: required_tag_value(tags, TAG_H)?,
         message: optional_content(content),
     })
@@ -157,10 +155,10 @@ pub fn group_metadata_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupMetadata, EventParseError> {
+) -> Result<GroupMetadata, EventParseError> {
     require_kind(kind, KIND_GROUP_METADATA, "39000")?;
     require_empty_content(content, "content")?;
-    Ok(RadrootsGroupMetadata {
+    Ok(GroupMetadata {
         d_tag: required_tag_value(tags, TAG_D)?,
         metadata: metadata_from_tags(tags)?,
     })
@@ -170,9 +168,9 @@ pub fn group_admins_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupAdmins, EventParseError> {
+) -> Result<GroupAdmins, EventParseError> {
     require_kind(kind, KIND_GROUP_ADMINS, "39001")?;
-    Ok(RadrootsGroupAdmins {
+    Ok(GroupAdmins {
         d_tag: required_tag_value(tags, TAG_D)?,
         description: optional_content(content),
         admins: user_refs_from_tags(tags)?,
@@ -183,9 +181,9 @@ pub fn group_members_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupMembers, EventParseError> {
+) -> Result<GroupMembers, EventParseError> {
     require_kind(kind, KIND_GROUP_MEMBERS, "39002")?;
-    Ok(RadrootsGroupMembers {
+    Ok(GroupMembers {
         d_tag: required_tag_value(tags, TAG_D)?,
         description: optional_content(content),
         members: user_refs_from_tags(tags)?,
@@ -196,9 +194,9 @@ pub fn group_roles_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGroupRoles, EventParseError> {
+) -> Result<GroupRoles, EventParseError> {
     require_kind(kind, KIND_GROUP_ROLES, "39003")?;
-    Ok(RadrootsGroupRoles {
+    Ok(GroupRoles {
         d_tag: required_tag_value(tags, TAG_D)?,
         description: optional_content(content),
         roles: roles_from_tags(tags)?,
@@ -220,10 +218,8 @@ fn require_kind(
     }
 }
 
-fn metadata_from_tags(
-    tags: &[Vec<String>],
-) -> Result<RadrootsGroupEditableMetadata, EventParseError> {
-    Ok(RadrootsGroupEditableMetadata {
+fn metadata_from_tags(tags: &[Vec<String>]) -> Result<GroupEditableMetadata, EventParseError> {
+    Ok(GroupEditableMetadata {
         name: optional_tag_value(tags, TAG_NAME)?,
         about: optional_tag_value(tags, TAG_ABOUT)?,
         picture: optional_tag_value(tags, TAG_PICTURE)?,
@@ -279,12 +275,12 @@ fn required_user_tag(tags: &[Vec<String>]) -> Result<(String, Vec<String>), Even
     user_from_tag(tag)
 }
 
-fn user_refs_from_tags(tags: &[Vec<String>]) -> Result<Vec<RadrootsGroupUserRef>, EventParseError> {
+fn user_refs_from_tags(tags: &[Vec<String>]) -> Result<Vec<GroupUserRef>, EventParseError> {
     tags.iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_P))
         .map(|tag| {
             let (pubkey, roles) = user_from_tag(tag)?;
-            Ok(RadrootsGroupUserRef { pubkey, roles })
+            Ok(GroupUserRef { pubkey, roles })
         })
         .collect()
 }
@@ -303,7 +299,7 @@ fn user_from_tag(tag: &[String]) -> Result<(String, Vec<String>), EventParseErro
     Ok((pubkey, roles))
 }
 
-fn roles_from_tags(tags: &[Vec<String>]) -> Result<Vec<RadrootsGroupRole>, EventParseError> {
+fn roles_from_tags(tags: &[Vec<String>]) -> Result<Vec<GroupRole>, EventParseError> {
     tags.iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_ROLE))
         .map(|tag| {
@@ -321,7 +317,7 @@ fn roles_from_tags(tags: &[Vec<String>]) -> Result<Vec<RadrootsGroupRole>, Event
                 validate_non_empty_tag_value(permission, TAG_ROLE)?;
                 permissions.push(permission.clone());
             }
-            Ok(RadrootsGroupRole {
+            Ok(GroupRole {
                 name,
                 description,
                 permissions,

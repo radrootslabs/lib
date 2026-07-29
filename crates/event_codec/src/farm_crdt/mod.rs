@@ -8,11 +8,10 @@ mod tests {
     use radroots_event::{
         envelope::kind::KIND_POST,
         farm::crdt::{
+            CrdtBackend, FarmCrdtChange, FarmCrdtDocumentKind, FarmSemanticKind,
             KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG,
-            RadrootsCrdtBackend, RadrootsFarmCrdtChange, RadrootsFarmCrdtDocumentKind,
-            RadrootsFarmSemanticKind,
         },
-        farm::workspace::{KIND_FARM_WORKSPACE_MANIFEST, RadrootsFarmWorkspaceRef},
+        farm::workspace::{FarmWorkspaceRef, KIND_FARM_WORKSPACE_MANIFEST},
     };
 
     use crate::error::{EventEncodeError, EventParseError};
@@ -68,68 +67,68 @@ mod tests {
     fn farm_crdt_change_roundtrips_representative_mvp_semantics() {
         let cases = vec![
             (
-                RadrootsFarmCrdtDocumentKind::FarmTask,
-                RadrootsFarmSemanticKind::FarmTaskCreate,
+                FarmCrdtDocumentKind::FarmTask,
+                FarmSemanticKind::FarmTaskCreate,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmTask,
-                RadrootsFarmSemanticKind::FarmTaskStatusSet,
+                FarmCrdtDocumentKind::FarmTask,
+                FarmSemanticKind::FarmTaskStatusSet,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                RadrootsFarmSemanticKind::FarmWorkSessionStart,
+                FarmCrdtDocumentKind::FarmWorkSession,
+                FarmSemanticKind::FarmWorkSessionStart,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                RadrootsFarmSemanticKind::FarmWorkSessionStop,
+                FarmCrdtDocumentKind::FarmWorkSession,
+                FarmSemanticKind::FarmWorkSessionStop,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                RadrootsFarmSemanticKind::FarmWorkSessionSubmit,
+                FarmCrdtDocumentKind::FarmWorkSession,
+                FarmSemanticKind::FarmWorkSessionSubmit,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                RadrootsFarmSemanticKind::FarmWorkSessionApprove,
+                FarmCrdtDocumentKind::FarmWorkSession,
+                FarmSemanticKind::FarmWorkSessionApprove,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                RadrootsFarmSemanticKind::FarmWorkSessionReject,
+                FarmCrdtDocumentKind::FarmWorkSession,
+                FarmSemanticKind::FarmWorkSessionReject,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                RadrootsFarmSemanticKind::FarmWorkSessionCorrect,
+                FarmCrdtDocumentKind::FarmWorkSession,
+                FarmSemanticKind::FarmWorkSessionCorrect,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
-                RadrootsFarmSemanticKind::FarmHarvestLineAdd,
+                FarmCrdtDocumentKind::FarmHarvestRecord,
+                FarmSemanticKind::FarmHarvestLineAdd,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
-                RadrootsFarmSemanticKind::FarmHarvestLineCorrect,
+                FarmCrdtDocumentKind::FarmHarvestRecord,
+                FarmSemanticKind::FarmHarvestLineCorrect,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
-                RadrootsFarmSemanticKind::FarmHarvestLineVoid,
+                FarmCrdtDocumentKind::FarmHarvestRecord,
+                FarmSemanticKind::FarmHarvestLineVoid,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmMembership,
-                RadrootsFarmSemanticKind::FarmMemberInviteCreate,
+                FarmCrdtDocumentKind::FarmMembership,
+                FarmSemanticKind::FarmMemberInviteCreate,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmMembership,
-                RadrootsFarmSemanticKind::FarmMemberApprove,
+                FarmCrdtDocumentKind::FarmMembership,
+                FarmSemanticKind::FarmMemberApprove,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmMembership,
-                RadrootsFarmSemanticKind::FarmMemberRoleSet,
+                FarmCrdtDocumentKind::FarmMembership,
+                FarmSemanticKind::FarmMemberRoleSet,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmPayPeriod,
-                RadrootsFarmSemanticKind::FarmPayPeriodClose,
+                FarmCrdtDocumentKind::FarmPayPeriod,
+                FarmSemanticKind::FarmPayPeriodClose,
             ),
             (
-                RadrootsFarmCrdtDocumentKind::FarmPayPeriod,
-                RadrootsFarmSemanticKind::FarmReportExportMark,
+                FarmCrdtDocumentKind::FarmPayPeriod,
+                FarmSemanticKind::FarmReportExportMark,
             ),
         ];
 
@@ -547,29 +546,29 @@ mod tests {
         assert_same_encode_error(wrong_kind, EventEncodeError::InvalidKind(KIND_POST));
     }
 
-    fn sample_change() -> RadrootsFarmCrdtChange {
+    fn sample_change() -> FarmCrdtChange {
         sample_change_with(
             DOCUMENT_ID,
-            RadrootsFarmCrdtDocumentKind::FarmTask,
-            RadrootsFarmSemanticKind::FarmTaskCreate,
+            FarmCrdtDocumentKind::FarmTask,
+            FarmSemanticKind::FarmTaskCreate,
         )
     }
 
     fn sample_change_with(
         document_id: &str,
-        document_kind: RadrootsFarmCrdtDocumentKind,
-        semantic_kind: RadrootsFarmSemanticKind,
-    ) -> RadrootsFarmCrdtChange {
-        RadrootsFarmCrdtChange {
+        document_kind: FarmCrdtDocumentKind,
+        semantic_kind: FarmSemanticKind,
+    ) -> FarmCrdtChange {
+        FarmCrdtChange {
             schema: RADROOTS_FARM_CRDT_CHANGE_SCHEMA.to_string(),
-            workspace: RadrootsFarmWorkspaceRef {
+            workspace: FarmWorkspaceRef {
                 pubkey: "workspace_pubkey".to_string(),
                 d_tag: WORKSPACE_D_TAG.to_string(),
             },
             farm_group_id: GROUP_ID.to_string(),
             document_id: document_id.to_string(),
             document_kind,
-            crdt_backend: RadrootsCrdtBackend::Automerge,
+            crdt_backend: CrdtBackend::Automerge,
             crdt_backend_version: Some("0.x".to_string()),
             actor_id: "actor_abc".to_string(),
             change_hash: "crdt_hash_abc".to_string(),

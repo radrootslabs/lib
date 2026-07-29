@@ -5,7 +5,7 @@ use crate::{RadrootsRelayOutcome, RadrootsRelayTargetSet, RadrootsRelayTransport
 #[cfg(feature = "client")]
 use core::time::Duration;
 use futures::future::BoxFuture;
-use radroots_event::{draft::RadrootsSignedEvent, wire::RadrootsNip01EventWire};
+use radroots_event::{draft::SignedEvent, wire::Nip01EventWire};
 use radroots_transport::{
     RadrootsTransport, RadrootsTransportCapabilities, RadrootsTransportDeliveryReceipt,
     RadrootsTransportDeliveryRequest, RadrootsTransportError, RadrootsTransportFetchReceipt,
@@ -30,7 +30,7 @@ pub const RADROOTS_RELAY_PUBLISH_IDEMPOTENCY_KEY_MAX_BYTES: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayPublishRequest {
-    signed_event: RadrootsSignedEvent,
+    signed_event: SignedEvent,
     targets: RadrootsRelayTargetSet,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
     idempotency_key: Option<String>,
@@ -39,7 +39,7 @@ pub struct RadrootsRelayPublishRequest {
 
 impl RadrootsRelayPublishRequest {
     pub fn new(
-        signed_event: RadrootsSignedEvent,
+        signed_event: SignedEvent,
         targets: RadrootsRelayTargetSet,
         now_ms: i64,
     ) -> Result<Self, RadrootsRelayTransportError> {
@@ -71,7 +71,7 @@ impl RadrootsRelayPublishRequest {
         Ok(self)
     }
 
-    pub fn signed_event(&self) -> &RadrootsSignedEvent {
+    pub fn signed_event(&self) -> &SignedEvent {
         &self.signed_event
     }
 
@@ -188,7 +188,7 @@ pub trait RadrootsRelayPublishAdapter: Send + Sync {
 }
 
 pub fn verified_signed_event_payload(
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &SignedEvent,
 ) -> Result<RadrootsTransportPayload, RadrootsTransportError> {
     RadrootsTransportPayload::unchecked_signed_event_json(
         signed_event.id_str(),
@@ -565,19 +565,19 @@ mod contract_tests {
 
 fn signed_event_from_transport_payload(
     payload: &RadrootsTransportPayload,
-) -> Result<RadrootsSignedEvent, RadrootsTransportError> {
+) -> Result<SignedEvent, RadrootsTransportError> {
     let RadrootsTransportPayload::SignedEventJson {
         event_id, raw_json, ..
     } = payload
     else {
         return Err(RadrootsTransportError::InvalidPayloadBytes);
     };
-    let wire = RadrootsNip01EventWire::parse_json(raw_json)
+    let wire = Nip01EventWire::parse_json(raw_json)
         .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)?;
     if wire.id != *event_id {
         return Err(RadrootsTransportError::InvalidPayloadId);
     }
-    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json.clone())
+    SignedEvent::from_wire_verified_id(wire, raw_json.clone())
         .map_err(|_| RadrootsTransportError::InvalidPayloadBytes)
 }
 
@@ -594,7 +594,7 @@ fn relay_targets_from_transport_targets(
         } else {
             crate::RadrootsRelayUrlPolicy::Public
         };
-        let relay = crate::RadrootsRelayUrl::parse(target.uri().as_str(), policy)
+        let relay = crate::RelayUrl::parse(target.uri().as_str(), policy)
             .map_err(nostr_error_to_transport_error)?;
         if !relays.contains(&relay) {
             relays.push(relay);
@@ -1002,7 +1002,7 @@ impl RadrootsRelayPublishAdapter for RadrootsNostrClientPublishAdapter {
 #[cfg(feature = "client")]
 fn ensure_raw_event_matches_signed_event(
     event: &RadrootsNostrEvent,
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &SignedEvent,
 ) -> Result<(), RadrootsRelayTransportError> {
     let mismatches = [
         ("id", event.id.to_hex(), signed_event.id_str().to_owned()),
@@ -1056,9 +1056,9 @@ fn ensure_raw_event_matches_signed_event(
 mod tests {
     use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
     use nostr::JsonUtil;
-    use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+    use radroots_event::draft::{EventDraft, SignedEvent};
     use radroots_event::envelope::kind::KIND_GEOCHAT;
-    use radroots_event::wire::RadrootsNip01EventWire;
+    use radroots_event::wire::Nip01EventWire;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
     };
@@ -1068,11 +1068,11 @@ mod tests {
     const FIXTURE_ALICE_PUBLIC_KEY_HEX: &str =
         "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
-    fn signed_post(content: &str) -> (RadrootsNostrEvent, RadrootsSignedEvent) {
+    fn signed_post(content: &str) -> (RadrootsNostrEvent, SignedEvent) {
         let secret_key =
             RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX).expect("secret key");
         let keys = RadrootsNostrKeys::new(secret_key);
-        let draft = RadrootsEventDraft::new(
+        let draft = EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1_700_000_000,
@@ -1086,11 +1086,11 @@ mod tests {
         (raw_event, signed_event)
     }
 
-    fn assert_mismatch(raw_event: RadrootsNostrEvent, signed_event: &RadrootsSignedEvent) {
+    fn assert_mismatch(raw_event: RadrootsNostrEvent, signed_event: &SignedEvent) {
         assert!(ensure_raw_event_matches_signed_event(&raw_event, signed_event).is_err());
     }
 
-    fn raw_event_from_wire(wire: RadrootsNip01EventWire) -> RadrootsNostrEvent {
+    fn raw_event_from_wire(wire: Nip01EventWire) -> RadrootsNostrEvent {
         RadrootsNostrEvent::from_json(serde_json::to_string(&wire).expect("raw event json"))
             .expect("raw event")
     }

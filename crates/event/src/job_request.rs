@@ -10,7 +10,7 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsJobInput {
+pub struct JobInput {
     pub data: String,
     pub input_type: JobInputType,
     pub relay: Option<String>,
@@ -24,7 +24,7 @@ pub struct RadrootsJobInput {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsJobParam {
+pub struct JobParam {
     pub key: String,
     pub value: String,
 }
@@ -36,11 +36,11 @@ pub struct RadrootsJobParam {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsJobRequest {
+pub struct JobRequest {
     pub kind: u16,
-    pub inputs: Vec<RadrootsJobInput>,
+    pub inputs: Vec<JobInput>,
     pub output: Option<String>,
-    pub params: Vec<RadrootsJobParam>,
+    pub params: Vec<JobParam>,
     pub bid_sat: Option<u32>,
     pub relays: Vec<String>,
     pub providers: Vec<String>,

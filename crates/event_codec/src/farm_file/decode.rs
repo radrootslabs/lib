@@ -5,11 +5,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    farm::crdt::RadrootsFarmCrdtDocumentKind,
-    farm::file::{
-        KIND_FARM_FILE_METADATA, RadrootsFarmFileDimensions, RadrootsFarmFileMetadata,
-        RadrootsFarmFileSource,
-    },
+    farm::crdt::FarmCrdtDocumentKind,
+    farm::file::{FarmFileDimensions, FarmFileMetadata, FarmFileSource, KIND_FARM_FILE_METADATA},
     farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tag::name::{TAG_A, TAG_D, TAG_H, TAG_MIME, TAG_ORIGINAL_SHA256, TAG_SHA256, TAG_URL},
 };
@@ -37,7 +34,7 @@ pub fn farm_file_metadata_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsFarmFileMetadata, EventParseError> {
+) -> Result<FarmFileMetadata, EventParseError> {
     if kind != KIND_FARM_FILE_METADATA {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -69,9 +66,9 @@ pub fn farm_file_metadata_from_event(
         Some(content.to_string())
     };
 
-    let metadata = RadrootsFarmFileMetadata {
+    let metadata = FarmFileMetadata {
         d_tag,
-        workspace: radroots_event::farm::workspace::RadrootsFarmWorkspaceRef {
+        workspace: radroots_event::farm::workspace::FarmWorkspaceRef {
             pubkey: workspace.pubkey,
             d_tag: workspace.d_tag,
         },
@@ -102,7 +99,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsFarmFileMetadata>, EventParseError> {
+) -> Result<RadrootsParsedData<FarmFileMetadata>, EventParseError> {
     let metadata = farm_file_metadata_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -121,7 +118,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsFarmFileMetadata>, EventParseError> {
+) -> Result<RadrootsParsedEvent<FarmFileMetadata>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -160,7 +157,7 @@ fn optional_hash_tag(
 
 fn parse_owner_document(
     tags: &[Vec<String>],
-) -> Result<(String, RadrootsFarmCrdtDocumentKind), EventParseError> {
+) -> Result<(String, FarmCrdtDocumentKind), EventParseError> {
     let tag = tags
         .iter()
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_OWNER_DOCUMENT))
@@ -174,11 +171,11 @@ fn parse_owner_document(
     Ok((document_id, kind))
 }
 
-fn parse_document_kind_tag(value: &str) -> Result<RadrootsFarmCrdtDocumentKind, EventParseError> {
+fn parse_document_kind_tag(value: &str) -> Result<FarmCrdtDocumentKind, EventParseError> {
     if value.trim().is_empty() {
         Err(EventParseError::InvalidTag(TAG_OWNER_DOCUMENT))
     } else {
-        Ok(RadrootsFarmCrdtDocumentKind::from(value.to_string()))
+        Ok(FarmCrdtDocumentKind::from(value.to_string()))
     }
 }
 
@@ -194,17 +191,14 @@ fn parse_size(tags: &[Vec<String>]) -> Result<Option<u64>, EventParseError> {
 
 fn parse_dimensions_tag(
     tags: &[Vec<String>],
-) -> Result<Option<RadrootsFarmFileDimensions>, EventParseError> {
+) -> Result<Option<FarmFileDimensions>, EventParseError> {
     let Some(value) = optional_tag_value(tags, TAG_DIMENSIONS)? else {
         return Ok(None);
     };
     Ok(Some(parse_dimensions(&value, TAG_DIMENSIONS)?))
 }
 
-fn parse_dimensions(
-    value: &str,
-    tag: &'static str,
-) -> Result<RadrootsFarmFileDimensions, EventParseError> {
+fn parse_dimensions(value: &str, tag: &'static str) -> Result<FarmFileDimensions, EventParseError> {
     let (w, h) = value
         .split_once('x')
         .ok_or(EventParseError::InvalidTag(tag))?;
@@ -217,13 +211,13 @@ fn parse_dimensions(
     if w == 0 || h == 0 {
         return Err(EventParseError::InvalidTag(tag));
     }
-    Ok(RadrootsFarmFileDimensions { w, h })
+    Ok(FarmFileDimensions { w, h })
 }
 
 fn parse_source_tag(
     tags: &[Vec<String>],
     key: &'static str,
-) -> Result<Option<RadrootsFarmFileSource>, EventParseError> {
+) -> Result<Option<FarmFileSource>, EventParseError> {
     let Some(tag) = tags
         .iter()
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(key))
@@ -249,7 +243,7 @@ fn parse_source_tag(
         validate_non_empty_tag_value(value, key)?;
         dimensions = Some(parse_dimensions(value, key)?);
     }
-    Ok(Some(RadrootsFarmFileSource {
+    Ok(Some(FarmFileSource {
         url,
         mime_type,
         dimensions,

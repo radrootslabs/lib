@@ -3,8 +3,8 @@ mod test_fixtures;
 
 use radroots_event::{
     envelope::kind::{KIND_MESSAGE, KIND_POST},
-    social::message::{RadrootsMessage, RadrootsMessageRecipient},
-    tag::RadrootsEventPtr,
+    social::message::{Message, MessageRecipient},
+    tag::EventPtr,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message::decode::{
@@ -15,7 +15,7 @@ use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]
 fn message_build_tags_requires_recipients() {
-    let message = RadrootsMessage {
+    let message = Message {
         recipients: Vec::new(),
         content: "hello".to_string(),
         reply_to: None,
@@ -31,8 +31,8 @@ fn message_build_tags_requires_recipients() {
 
 #[test]
 fn message_build_tags_requires_recipient_pubkey() {
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "  ".to_string(),
             relay_url: None,
         }],
@@ -50,8 +50,8 @@ fn message_build_tags_requires_recipient_pubkey() {
 
 #[test]
 fn message_to_wire_parts_requires_content() {
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub".to_string(),
             relay_url: None,
         }],
@@ -66,8 +66,8 @@ fn message_to_wire_parts_requires_content() {
         EventEncodeError::EmptyRequiredField("content")
     ));
 
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: " ".to_string(),
             relay_url: None,
         }],
@@ -84,19 +84,19 @@ fn message_to_wire_parts_requires_content() {
 
 #[test]
 fn message_to_wire_parts_sets_tags() {
-    let message = RadrootsMessage {
+    let message = Message {
         recipients: vec![
-            RadrootsMessageRecipient {
+            MessageRecipient {
                 public_key: "pub1".to_string(),
                 relay_url: None,
             },
-            RadrootsMessageRecipient {
+            MessageRecipient {
                 public_key: "pub2".to_string(),
                 relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             },
         ],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_SECONDARY_WSS.to_string()),
         }),
@@ -127,8 +127,8 @@ fn message_to_wire_parts_sets_tags() {
 
 #[test]
 fn message_to_wire_parts_handles_absent_optional_fields() {
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub1".to_string(),
             relay_url: None,
         }],
@@ -143,13 +143,13 @@ fn message_to_wire_parts_handles_absent_optional_fields() {
 
 #[test]
 fn message_to_wire_parts_supports_reply_without_relay() {
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub1".to_string(),
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: "reply".to_string(),
             relays: None,
         }),
@@ -319,8 +319,8 @@ fn message_index_from_event_propagates_parse_errors() {
 
 #[test]
 fn message_build_tags_rejects_invalid_optional_fields() {
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub".to_string(),
             relay_url: Some(" ".to_string()),
         }],
@@ -334,13 +334,13 @@ fn message_build_tags_rejects_invalid_optional_fields() {
         EventEncodeError::EmptyRequiredField("recipients.relay_url")
     ));
 
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub".to_string(),
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: " ".to_string(),
             relays: None,
         }),
@@ -352,13 +352,13 @@ fn message_build_tags_rejects_invalid_optional_fields() {
         EventEncodeError::EmptyRequiredField("reply_to.id")
     ));
 
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub".to_string(),
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: "reply".to_string(),
             relays: Some(" ".to_string()),
         }),
@@ -370,8 +370,8 @@ fn message_build_tags_rejects_invalid_optional_fields() {
         EventEncodeError::EmptyRequiredField("reply_to.relays")
     ));
 
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: "pub".to_string(),
             relay_url: None,
         }],

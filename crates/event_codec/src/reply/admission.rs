@@ -1,6 +1,6 @@
 use core::fmt;
 
-use radroots_event::{contract::RadrootsEventContract, envelope::RadrootsEventEnvelope};
+use radroots_event::{contract::EventContract, envelope::EventEnvelope};
 
 use crate::{
     post::admission::RadrootsThreadExcludedPostCandidate,
@@ -25,7 +25,7 @@ impl RadrootsAdmittedNip10ReplyEvent {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -33,7 +33,7 @@ impl RadrootsAdmittedNip10ReplyEvent {
         &self.projection
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         radroots_event::contract::event_contract(self.projection.contract_id())
             .expect("NIP-10 Reply contract is registry-owned")
     }
@@ -114,7 +114,7 @@ pub fn admit_thread_excluded_post_candidate(
 }
 
 pub fn verify_and_admit_nip10_reply_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsAdmittedNip10ReplyEvent, RadrootsNip10ReplyAdmissionError> {
     admit_verified_nip10_reply_event(verify_nip01_event(event)?)
 }

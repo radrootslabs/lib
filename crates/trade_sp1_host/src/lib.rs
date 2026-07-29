@@ -1773,7 +1773,7 @@ mod tests {
     };
     use base64::Engine;
     use radroots_event::{
-        envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
+        envelope::EventEnvelope, envelope::EventEnvelopeParts,
         envelope::kind::KIND_TRADE_VALIDATION_RECEIPT,
     };
     use radroots_trade::validation_receipt::{
@@ -2534,7 +2534,7 @@ mod tests {
         );
 
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let event = EventEnvelope::new(EventEnvelopeParts {
             id: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
             author: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                 .to_string(),

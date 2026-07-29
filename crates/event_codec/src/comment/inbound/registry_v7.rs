@@ -6,17 +6,14 @@ use core::fmt;
 
 use radroots_event::{
     envelope::kind::KIND_COMMENT,
-    id::{
-        RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
-        RadrootsIdParseError,
-    },
+    id::{AddressableCoordinate, AddressableCoordinateParts, EventId, ParseError},
     post::comment::{
-        RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES, RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
-        RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT,
-        RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT,
-        RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES, RadrootsNip22CommentRootKind,
+        Nip22CommentRootKind, RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES,
+        RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES, RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES,
+        RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT, RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT,
+        RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES,
     },
-    tag::relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::NostrRelayHint,
 };
 use radroots_identity::PublicKey;
 
@@ -129,7 +126,7 @@ impl RadrootsNip22CommentDiagnostic {
 pub struct RadrootsInboundNip22Participant {
     tag_index: usize,
     pubkey: PublicKey,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
     raw_tag: Vec<String>,
 }
 
@@ -142,7 +139,7 @@ impl RadrootsInboundNip22Participant {
         &self.pubkey
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -154,11 +151,11 @@ impl RadrootsInboundNip22Participant {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22EventRoot {
     tag_index: usize,
-    event_id: RadrootsEventId,
+    event_id: EventId,
     kind_tag_index: usize,
     kind_raw_tag: Vec<String>,
-    kind: RadrootsNip22CommentRootKind,
-    relay: Option<RadrootsNostrRelayHint>,
+    kind: Nip22CommentRootKind,
+    relay: Option<NostrRelayHint>,
     author_hint: Option<PublicKey>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
@@ -169,7 +166,7 @@ impl RadrootsInboundNip22EventRoot {
         self.tag_index
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -181,11 +178,11 @@ impl RadrootsInboundNip22EventRoot {
         &self.kind_raw_tag
     }
 
-    pub const fn kind(&self) -> RadrootsNip22CommentRootKind {
+    pub const fn kind(&self) -> Nip22CommentRootKind {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -205,11 +202,11 @@ impl RadrootsInboundNip22EventRoot {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22AddressRoot {
     tag_index: usize,
-    coordinate: RadrootsAddressableCoordinate,
+    coordinate: AddressableCoordinate,
     kind_tag_index: usize,
     kind_raw_tag: Vec<String>,
-    kind: RadrootsNip22CommentRootKind,
-    relay: Option<RadrootsNostrRelayHint>,
+    kind: Nip22CommentRootKind,
+    relay: Option<NostrRelayHint>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
 }
@@ -219,7 +216,7 @@ impl RadrootsInboundNip22AddressRoot {
         self.tag_index
     }
 
-    pub const fn coordinate(&self) -> &RadrootsAddressableCoordinate {
+    pub const fn coordinate(&self) -> &AddressableCoordinate {
         &self.coordinate
     }
 
@@ -231,11 +228,11 @@ impl RadrootsInboundNip22AddressRoot {
         &self.kind_raw_tag
     }
 
-    pub const fn kind(&self) -> RadrootsNip22CommentRootKind {
+    pub const fn kind(&self) -> Nip22CommentRootKind {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -262,7 +259,7 @@ impl RadrootsInboundNip22CommentRoot {
         }
     }
 
-    pub const fn kind(&self) -> RadrootsNip22CommentRootKind {
+    pub const fn kind(&self) -> Nip22CommentRootKind {
         match self {
             Self::Event(root) => root.kind(),
             Self::Address(root) => root.kind(),
@@ -273,11 +270,11 @@ impl RadrootsInboundNip22CommentRoot {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22CommentParent {
     tag_index: usize,
-    event_id: RadrootsEventId,
+    event_id: EventId,
     kind_tag_index: usize,
     kind_raw_tag: Vec<String>,
     kind: u32,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
     author_hint: Option<PublicKey>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
@@ -288,7 +285,7 @@ impl RadrootsInboundNip22CommentParent {
         self.tag_index
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -304,7 +301,7 @@ impl RadrootsInboundNip22CommentParent {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -324,8 +321,8 @@ impl RadrootsInboundNip22CommentParent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22CurrentRevision {
     tag_index: usize,
-    event_id: RadrootsEventId,
-    relay: Option<RadrootsNostrRelayHint>,
+    event_id: EventId,
+    relay: Option<NostrRelayHint>,
     raw_tag: Vec<String>,
 }
 
@@ -334,11 +331,11 @@ impl RadrootsInboundNip22CurrentRevision {
         self.tag_index
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -350,11 +347,11 @@ impl RadrootsInboundNip22CurrentRevision {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22TopLevelEventReference {
     tag_index: usize,
-    event_id: RadrootsEventId,
+    event_id: EventId,
     kind_tag_index: usize,
     kind_raw_tag: Vec<String>,
     kind: u32,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
     author_hint: Option<PublicKey>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
@@ -363,11 +360,11 @@ pub struct RadrootsInboundNip22TopLevelEventReference {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundNip22TopLevelAddressReference {
     tag_index: usize,
-    coordinate: RadrootsAddressableCoordinate,
+    coordinate: AddressableCoordinate,
     kind_tag_index: usize,
     kind_raw_tag: Vec<String>,
     kind: u32,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
     author: RadrootsInboundNip22Participant,
     raw_tag: Vec<String>,
 }
@@ -377,7 +374,7 @@ impl RadrootsInboundNip22TopLevelAddressReference {
         self.tag_index
     }
 
-    pub const fn coordinate(&self) -> &RadrootsAddressableCoordinate {
+    pub const fn coordinate(&self) -> &AddressableCoordinate {
         &self.coordinate
     }
 
@@ -393,7 +390,7 @@ impl RadrootsInboundNip22TopLevelAddressReference {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -411,7 +408,7 @@ impl RadrootsInboundNip22TopLevelEventReference {
         self.tag_index
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -427,7 +424,7 @@ impl RadrootsInboundNip22TopLevelEventReference {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -543,7 +540,7 @@ pub enum RadrootsNip22CommentProjectionError {
     },
     RootEventIdInvalid {
         tag_index: usize,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     RootCoordinateInvalid {
         tag_index: usize,
@@ -566,7 +563,7 @@ pub enum RadrootsNip22CommentProjectionError {
     },
     ParentEventIdInvalid {
         tag_index: usize,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     ParentCoordinateInvalid {
         tag_index: usize,
@@ -582,7 +579,7 @@ pub enum RadrootsNip22CommentProjectionError {
     },
     RevisionEventIdInvalid {
         tag_index: usize,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     ParentAuthorMissing,
     ParentAuthorAmbiguous,
@@ -1091,16 +1088,16 @@ fn project_nip22_comment_parts(
 type IndexedTag<'a> = (usize, &'a Vec<String>);
 
 struct ParsedEventReference {
-    event_id: RadrootsEventId,
-    relay: Option<RadrootsNostrRelayHint>,
+    event_id: EventId,
+    relay: Option<NostrRelayHint>,
     author_hint: Option<PublicKey>,
 }
 
 struct ParsedAddressReference {
-    coordinate: RadrootsAddressableCoordinate,
+    coordinate: AddressableCoordinate,
     author: PublicKey,
-    kind: RadrootsNip22CommentRootKind,
-    relay: Option<RadrootsNostrRelayHint>,
+    kind: Nip22CommentRootKind,
+    relay: Option<NostrRelayHint>,
 }
 
 #[derive(Clone, Copy)]
@@ -1142,7 +1139,7 @@ impl ReferenceRole {
     const fn event_id_error(
         self,
         tag_index: usize,
-        error: RadrootsIdParseError,
+        error: ParseError,
     ) -> RadrootsNip22CommentProjectionError {
         match self {
             Self::Root => {
@@ -1214,13 +1211,13 @@ fn exactly_one_authority_tag<'a>(
 
 fn parse_root_kind(
     (tag_index, tag): IndexedTag<'_>,
-) -> Result<RadrootsNip22CommentRootKind, RadrootsNip22CommentProjectionError> {
+) -> Result<Nip22CommentRootKind, RadrootsNip22CommentProjectionError> {
     let kind = tag
         .get(1)
         .filter(|_| tag.len() == 2)
         .and_then(|value| parse_canonical_kind_token(value))
         .ok_or(RadrootsNip22CommentProjectionError::RootKindUnsupported { tag_index })?;
-    RadrootsNip22CommentRootKind::parse(kind)
+    Nip22CommentRootKind::parse(kind)
         .map_err(|_| RadrootsNip22CommentProjectionError::RootKindUnsupported { tag_index })
 }
 
@@ -1232,7 +1229,7 @@ fn parse_parent_kind(
         .filter(|_| tag.len() == 2)
         .and_then(|value| parse_canonical_kind_token(value))
         .ok_or(RadrootsNip22CommentProjectionError::ParentKindInvalid { tag_index })?;
-    if kind == KIND_COMMENT || RadrootsNip22CommentRootKind::parse(kind).is_ok() {
+    if kind == KIND_COMMENT || Nip22CommentRootKind::parse(kind).is_ok() {
         Ok(kind)
     } else {
         Err(RadrootsNip22CommentProjectionError::ParentKindInvalid { tag_index })
@@ -1319,7 +1316,7 @@ fn parse_event_reference(
         return Err(role.reference_shape_error(tag_index));
     }
     let event_id =
-        RadrootsEventId::parse(&tag[1]).map_err(|error| role.event_id_error(tag_index, error))?;
+        EventId::parse(&tag[1]).map_err(|error| role.event_id_error(tag_index, error))?;
     let relay = project_relay(tag_index, tag, 2, role.relay_role(), diagnostics);
     let author_hint = tag
         .get(3)
@@ -1349,14 +1346,14 @@ fn parse_address_reference(
         .split_once(':')
         .and_then(|(kind, _)| parse_canonical_kind_token(kind))
         .ok_or_else(|| role.coordinate_error(tag_index))?;
-    let parts = RadrootsAddressableCoordinateParts::parse(&tag[1])
-        .map_err(|_| role.coordinate_error(tag_index))?;
+    let parts =
+        AddressableCoordinateParts::parse(&tag[1]).map_err(|_| role.coordinate_error(tag_index))?;
     if parts.kind != canonical_kind {
         return Err(role.coordinate_error(tag_index));
     }
-    let kind = RadrootsNip22CommentRootKind::parse(parts.kind)
-        .map_err(|_| role.coordinate_error(tag_index))?;
-    let coordinate = RadrootsAddressableCoordinate::parse(format_coordinate(&parts))
+    let kind =
+        Nip22CommentRootKind::parse(parts.kind).map_err(|_| role.coordinate_error(tag_index))?;
+    let coordinate = AddressableCoordinate::parse(format_coordinate(&parts))
         .map_err(|_| role.coordinate_error(tag_index))?;
     let relay = project_relay(tag_index, tag, 2, role.relay_role(), diagnostics);
     Ok(ParsedAddressReference {
@@ -1367,7 +1364,7 @@ fn parse_address_reference(
     })
 }
 
-fn format_coordinate(parts: &RadrootsAddressableCoordinateParts) -> String {
+fn format_coordinate(parts: &AddressableCoordinateParts) -> String {
     format!("{}:{}:{}", parts.kind, parts.pubkey, parts.d_tag)
 }
 
@@ -1378,7 +1375,7 @@ fn parse_current_revision(
     if !matches!(tag.len(), 2 | 3) {
         return Err(RadrootsNip22CommentProjectionError::RevisionShape { tag_index });
     }
-    let event_id = RadrootsEventId::parse(&tag[1]).map_err(|error| {
+    let event_id = EventId::parse(&tag[1]).map_err(|error| {
         RadrootsNip22CommentProjectionError::RevisionEventIdInvalid { tag_index, error }
     })?;
     let relay = project_relay(tag_index, tag, 2, RelayRole::Revision, diagnostics);
@@ -1467,12 +1464,12 @@ fn project_relay(
     element_index: usize,
     role: RelayRole,
     diagnostics: &mut Vec<RadrootsNip22CommentDiagnostic>,
-) -> Option<RadrootsNostrRelayHint> {
+) -> Option<NostrRelayHint> {
     let value = tag.get(element_index)?;
     if value.is_empty() {
         return None;
     }
-    match RadrootsNostrRelayHint::parse(value) {
+    match NostrRelayHint::parse(value) {
         Ok(relay) => Some(relay),
         Err(_) => {
             diagnostics.push(role.diagnostic(tag_index, tag.to_vec()));

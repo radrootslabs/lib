@@ -1,7 +1,7 @@
 use radroots_event::{
     contract::registry_v7::{
-        RadrootsContractMatchError, RadrootsContractValidationError, RadrootsEventContract,
-        event_contract_registry_v7, validate_event_contract_registry_v7,
+        ContractMatchError, ContractValidationError, EventContract, event_contract_registry_v7,
+        validate_event_contract_registry_v7,
     },
     envelope::kind::{
         KIND_CLASSIFIED_LISTING, KIND_COMMENT, KIND_DELETION_REQUEST, KIND_POST, KIND_PROFILE,
@@ -31,18 +31,10 @@ const INTERNAL_CONTRACT_MISSING: &str = "registry_v7_contract_missing";
 /// Later registries may grow those APIs without changing persisted v7 facts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsRegistryV7AdmissionDecision {
-    Admitted {
-        contract: &'static RadrootsEventContract,
-    },
-    Unsupported {
-        code: &'static str,
-    },
-    Invalid {
-        code: &'static str,
-    },
-    Defect {
-        code: &'static str,
-    },
+    Admitted { contract: &'static EventContract },
+    Unsupported { code: &'static str },
+    Invalid { code: &'static str },
+    Defect { code: &'static str },
 }
 
 /// Admits through the immutable event-contract registry-v7 behavior graph.
@@ -95,14 +87,14 @@ fn admit_registry_contract_v7(
 ) -> RadrootsRegistryV7AdmissionDecision {
     match validate_event_contract_registry_v7(event.event()) {
         Ok(contract) => RadrootsRegistryV7AdmissionDecision::Admitted { contract },
-        Err(RadrootsContractValidationError::ContractMatch {
-            error: RadrootsContractMatchError::UnsupportedKind(_),
+        Err(ContractValidationError::ContractMatch {
+            error: ContractMatchError::UnsupportedKind(_),
         }) => unsupported("unsupported_kind"),
-        Err(RadrootsContractValidationError::ContractMatch {
-            error: RadrootsContractMatchError::UnsupportedShape(_),
+        Err(ContractValidationError::ContractMatch {
+            error: ContractMatchError::UnsupportedShape(_),
         }) => unsupported("unsupported_shape"),
-        Err(RadrootsContractValidationError::ContractMatch {
-            error: RadrootsContractMatchError::AmbiguousShape(_),
+        Err(ContractValidationError::ContractMatch {
+            error: ContractMatchError::AmbiguousShape(_),
         }) => invalid("ambiguous_shape"),
         Err(error) => invalid(error.code()),
     }

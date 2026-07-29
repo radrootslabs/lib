@@ -1,6 +1,6 @@
 use radroots_event::{
     envelope::kind::is_request_kind,
-    social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
+    social::job_request::{JobInput, JobParam, JobRequest},
 };
 
 #[cfg(not(feature = "std"))]
@@ -12,19 +12,16 @@ use crate::job::{
 };
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
-pub fn job_request_from_tags(
-    kind: u32,
-    tags: &[Vec<String>],
-) -> Result<RadrootsJobRequest, JobParseError> {
+pub fn job_request_from_tags(kind: u32, tags: &[Vec<String>]) -> Result<JobRequest, JobParseError> {
     let kind = u16::try_from(kind).map_err(|_| JobParseError::KindOutOfRange(kind))?;
-    let inputs: Vec<RadrootsJobInput> = parse_i_tags(tags);
+    let inputs: Vec<JobInput> = parse_i_tags(tags);
 
     let output = tags
         .iter()
         .find(|t| t.first().map(|s| s.as_str()) == Some("output"))
         .and_then(|t| t.get(1).cloned());
 
-    let params: Vec<RadrootsJobParam> = parse_params(tags);
+    let params: Vec<JobParam> = parse_params(tags);
 
     let bid_sat = parse_bid_tag_sat(tags)?;
 
@@ -52,7 +49,7 @@ pub fn job_request_from_tags(
         return Err(JobParseError::MissingTag("p"));
     }
 
-    Ok(RadrootsJobRequest {
+    Ok(JobRequest {
         kind,
         inputs,
         output,
@@ -71,7 +68,7 @@ pub fn data_from_event(
     published_at: u64,
     kind: u32,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsJobRequest>, JobParseError> {
+) -> Result<RadrootsParsedData<JobRequest>, JobParseError> {
     if !is_request_kind(kind) {
         return Err(JobParseError::InvalidTag("kind (expected 5000-5999)"));
     }
@@ -93,7 +90,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsJobRequest>, JobParseError> {
+) -> Result<RadrootsParsedEvent<JobRequest>, JobParseError> {
     let data = data_from_event(id.clone(), author.clone(), published_at, kind, tags.clone())?;
     RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
         .map_err(|_| JobParseError::InvalidTag("event_envelope"))

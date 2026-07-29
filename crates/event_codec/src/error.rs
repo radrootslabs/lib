@@ -51,8 +51,8 @@ impl std::error::Error for EventParseError {
     }
 }
 
-impl From<radroots_event::envelope::RadrootsEventEnvelopeError> for EventParseError {
-    fn from(_: radroots_event::envelope::RadrootsEventEnvelopeError) -> Self {
+impl From<radroots_event::envelope::EventEnvelopeError> for EventParseError {
+    fn from(_: radroots_event::envelope::EventEnvelopeError) -> Self {
         Self::InvalidEnvelope
     }
 }
@@ -97,12 +97,12 @@ impl std::error::Error for EventEncodeError {}
 #[cfg(test)]
 mod tests {
     use super::EventParseError;
-    use radroots_event::envelope::RadrootsEventEnvelopeError;
+    use radroots_event::envelope::EventEnvelopeError;
 
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn invalid_envelope_conversion_preserves_public_error_contract() {
-        let error = EventParseError::from(RadrootsEventEnvelopeError::NonCanonicalId);
+        let error = EventParseError::from(EventEnvelopeError::NonCanonicalId);
 
         assert_eq!(error.code(), "invalid_envelope");
         assert_eq!(error.to_string(), "invalid event envelope");

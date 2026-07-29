@@ -1,4 +1,4 @@
-use radroots_event::post::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
+use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 use radroots_event_codec::{
     post::admission::{RadrootsPostAdmissionOutcome, verify_and_admit_post_event},
     reply::{
@@ -33,8 +33,8 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
         Some(RELAY_PRIMARY_WSS),
     );
 
-    let direct = RadrootsAuthoredNip10Reply::direct("Direct reply", root.clone())
-        .expect("authored direct reply");
+    let direct =
+        AuthoredNip10Reply::direct("Direct reply", root.clone()).expect("authored direct reply");
     let direct_event = radroots_nostr_build_nip10_reply_event(&direct)
         .expect("typed direct Reply builder")
         .custom_created_at(created_at)
@@ -57,8 +57,8 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
         FIXTURE_CAROL_PUBLIC_KEY_HEX,
         Some(RELAY_SECONDARY_WSS),
     );
-    let nested = RadrootsAuthoredNip10Reply::nested("Nested reply", root, parent)
-        .expect("authored nested reply");
+    let nested =
+        AuthoredNip10Reply::nested("Nested reply", root, parent).expect("authored nested reply");
     let nested_event = radroots_nostr_build_nip10_reply_event(&nested)
         .expect("typed nested Reply builder")
         .custom_created_at(created_at)
@@ -93,7 +93,7 @@ fn typed_nip10_reply_builders_sign_exact_marked_direct_and_nested_profiles() {
 
 #[test]
 fn signed_nip10_reply_is_thread_excluded_before_semantic_reply_admission() {
-    let reply = RadrootsAuthoredNip10Reply::direct(
+    let reply = AuthoredNip10Reply::direct(
         "Thread reply",
         reference(
             ROOT_EVENT_ID,
@@ -182,7 +182,7 @@ fn generic_kind_one_builder_cannot_bypass_typed_nip10_reply_authoring() {
 #[tokio::test]
 async fn typed_nip10_reply_builder_reaches_client_publication() {
     let client = RadrootsNostrClient::new(fixture_keys());
-    let reply = RadrootsAuthoredNip10Reply::direct(
+    let reply = AuthoredNip10Reply::direct(
         "Publish Reply",
         reference(
             ROOT_EVENT_ID,
@@ -208,8 +208,8 @@ fn fixture_keys() -> RadrootsNostrKeys {
     )
 }
 
-fn reference(event_id: &str, author: &str, relay: Option<&str>) -> RadrootsNip10ReplyReference {
-    RadrootsNip10ReplyReference::parse(event_id, author, relay).expect("valid Reply reference")
+fn reference(event_id: &str, author: &str, relay: Option<&str>) -> Nip10ReplyReference {
+    Nip10ReplyReference::parse(event_id, author, relay).expect("valid Reply reference")
 }
 
 fn event_tags(event: &nostr::Event) -> Vec<Vec<String>> {

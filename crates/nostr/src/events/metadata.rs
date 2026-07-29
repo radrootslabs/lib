@@ -11,7 +11,7 @@ use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrPublicKe
 #[cfg(feature = "client")]
 use core::time::Duration;
 #[cfg(feature = "events")]
-use radroots_event::profile::RadrootsAuthoredProfile;
+use radroots_event::profile::AuthoredProfile;
 #[cfg(feature = "events")]
 use radroots_event_codec::profile::authored::authored_profile_to_wire_parts;
 
@@ -51,7 +51,7 @@ impl RadrootsNostrProfileEventBuilder {
 /// Builds a sealed kind-0 event from the strict authored Profile contract.
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_profile_event(
-    profile: &RadrootsAuthoredProfile,
+    profile: &AuthoredProfile,
 ) -> Result<RadrootsNostrProfileEventBuilder, RadrootsNostrError> {
     let parts = authored_profile_to_wire_parts(profile)?;
     let inner =

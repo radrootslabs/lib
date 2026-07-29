@@ -2,8 +2,8 @@
 use alloc::{string::ToString, vec, vec::Vec};
 
 use radroots_event::{
-    envelope::kind::KIND_DELETION_REQUEST, post::deletion::RadrootsAuthoredNip09DeletionRequest,
-    wire::RadrootsNip01EventWireParts,
+    envelope::kind::KIND_DELETION_REQUEST, post::deletion::AuthoredNip09DeletionRequest,
+    wire::Nip01EventWireParts,
 };
 
 /// Builds deterministic unsigned kind-5 wire parts for a strict NIP-09
@@ -13,8 +13,8 @@ use radroots_event::{
 /// canonical address targets, followed by the complete unique ascending set of
 /// target-kind advisories.
 pub fn authored_nip09_deletion_request_to_wire_parts(
-    request: &RadrootsAuthoredNip09DeletionRequest,
-) -> RadrootsNip01EventWireParts {
+    request: &AuthoredNip09DeletionRequest,
+) -> Nip01EventWireParts {
     let mut tags = Vec::with_capacity(
         request
             .target_count()
@@ -39,7 +39,7 @@ pub fn authored_nip09_deletion_request_to_wire_parts(
             .map(|kind| vec!["k".to_string(), kind.to_string()]),
     );
 
-    RadrootsNip01EventWireParts {
+    Nip01EventWireParts {
         kind: KIND_DELETION_REQUEST,
         content: request.content().to_string(),
         tags,
@@ -50,8 +50,8 @@ pub fn authored_nip09_deletion_request_to_wire_parts(
 mod tests {
     use super::*;
     use radroots_event::post::deletion::{
-        RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES, RadrootsNip09DeletionAddressTarget,
-        RadrootsNip09DeletionEventTarget,
+        Nip09DeletionAddressTarget, Nip09DeletionEventTarget,
+        RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
     };
 
     fn h(character: char) -> String {
@@ -60,16 +60,16 @@ mod tests {
 
     #[test]
     fn emits_exact_canonical_two_element_target_and_kind_tags() {
-        let request = RadrootsAuthoredNip09DeletionRequest::new(
+        let request = AuthoredNip09DeletionRequest::new(
             "superseded",
             vec![
-                RadrootsNip09DeletionEventTarget::parse(h('f'), 30_402).expect("event target"),
-                RadrootsNip09DeletionEventTarget::parse(h('a'), 1).expect("event target"),
+                Nip09DeletionEventTarget::parse(h('f'), 30_402).expect("event target"),
+                Nip09DeletionEventTarget::parse(h('a'), 1).expect("event target"),
             ],
             vec![
-                RadrootsNip09DeletionAddressTarget::parse(format!("31923:{}:market", h('e')))
+                Nip09DeletionAddressTarget::parse(format!("31923:{}:market", h('e')))
                     .expect("address target"),
-                RadrootsNip09DeletionAddressTarget::parse(format!("30402:{}:produce", h('b')))
+                Nip09DeletionAddressTarget::parse(format!("30402:{}:produce", h('b')))
                     .expect("address target"),
             ],
         )
@@ -95,12 +95,12 @@ mod tests {
 
     #[test]
     fn core_wire_estimator_matches_emitted_json_at_the_strict_boundary() {
-        let target = RadrootsNip09DeletionEventTarget::parse(h('a'), 1).expect("event target");
+        let target = Nip09DeletionEventTarget::parse(h('a'), 1).expect("event target");
         let mut lower = 0usize;
         let mut upper = radroots_event::post::deletion::RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES;
         while lower < upper {
             let candidate = lower + (upper - lower).div_ceil(2);
-            if RadrootsAuthoredNip09DeletionRequest::new(
+            if AuthoredNip09DeletionRequest::new(
                 "\u{0001}".repeat(candidate),
                 vec![target.clone()],
                 Vec::new(),
@@ -113,12 +113,9 @@ mod tests {
             }
         }
 
-        let request = RadrootsAuthoredNip09DeletionRequest::new(
-            "\u{0001}".repeat(lower),
-            vec![target],
-            Vec::new(),
-        )
-        .expect("largest content fitting strict signed wire");
+        let request =
+            AuthoredNip09DeletionRequest::new("\u{0001}".repeat(lower), vec![target], Vec::new())
+                .expect("largest content fitting strict signed wire");
         let parts = authored_nip09_deletion_request_to_wire_parts(&request);
         let json = serde_json::json!({
             "id": "0".repeat(64),
@@ -136,11 +133,11 @@ mod tests {
 
     #[test]
     fn strict_wire_size_equals_independent_max_u64_serialization_with_escaping() {
-        let request = RadrootsAuthoredNip09DeletionRequest::new(
+        let request = AuthoredNip09DeletionRequest::new(
             "reason \"quoted\" \\\n\u{0001} 🌱",
-            vec![RadrootsNip09DeletionEventTarget::parse(h('A'), 5).expect("event target")],
+            vec![Nip09DeletionEventTarget::parse(h('A'), 5).expect("event target")],
             vec![
-                RadrootsNip09DeletionAddressTarget::parse(format!(
+                Nip09DeletionAddressTarget::parse(format!(
                     "30000:{}:victoria:\"crop\\row:\u{0002}:雪",
                     h('B')
                 ))

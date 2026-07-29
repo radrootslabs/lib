@@ -3,8 +3,8 @@ use crate::model::reconciliation_v1::{
     RadrootsEventAdmissionStatus, RadrootsStoredRawEvent, RadrootsStoredRawEventHead,
     StoredEventClass,
 };
-use radroots_event::envelope::RadrootsEventKind;
-use radroots_event::envelope::event_head::v1::RadrootsEventHeadCoordinate;
+use radroots_event::envelope::EventKind;
+use radroots_event::envelope::event_head::v1::EventHeadCoordinate;
 use radroots_identity::PublicKey;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, Transaction};
@@ -57,8 +57,7 @@ pub(super) fn stored_raw_event_from_row(
     if kind > u32::from(u16::MAX) {
         return Err(RadrootsEventStoreError::StoredRawEventClassificationInconsistent { event_id });
     }
-    let expected_class =
-        StoredEventClass::from_event_kind_class(RadrootsEventKind::new(kind).class());
+    let expected_class = StoredEventClass::from_event_kind_class(EventKind::new(kind).class());
     if expected_class == StoredEventClass::Ephemeral {
         return Err(RadrootsEventStoreError::StoredRawEventClassificationInconsistent { event_id });
     }
@@ -93,10 +92,10 @@ pub(super) fn stored_raw_event_from_row(
 
 pub(super) async fn raw_head_snapshot_in_transaction(
     tx: &mut Transaction<'_, Sqlite>,
-    coordinate: &RadrootsEventHeadCoordinate,
+    coordinate: &EventHeadCoordinate,
 ) -> Result<Option<RawHeadSnapshot>, RadrootsEventStoreError> {
     let row = match coordinate {
-        RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
+        EventHeadCoordinate::Replaceable { kind, pubkey } => {
             sqlx::query(
                 "SELECT event.seq, event.event_id, event.pubkey, event.created_at, event.kind, event.tags_json, event.content, event.sig, event.raw_json, event.verification_status, event.contract_status, event.contract_id, event.event_class, event.projection_eligible, event.inserted_at_ms, event.updated_at_ms, head.coordinate_type AS raw_head_coordinate_type, head.kind AS raw_head_kind, head.pubkey AS raw_head_pubkey, head.d_tag AS raw_head_d_tag, head.event_id AS raw_head_event_id, head.created_at AS raw_head_created_at, head.updated_at_ms AS raw_head_updated_at_ms FROM event_envelope_head AS head LEFT JOIN event_envelopes AS event ON event.event_id = head.event_id WHERE head.coordinate_type = 'replaceable' AND head.kind = ? AND head.pubkey = ? AND head.d_tag IS NULL",
             )
@@ -105,7 +104,7 @@ pub(super) async fn raw_head_snapshot_in_transaction(
             .fetch_optional(&mut **tx)
             .await?
         }
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind,
             pubkey,
             d_tag,
@@ -136,13 +135,13 @@ pub(super) async fn raw_head_snapshot_in_transaction(
 
 pub(super) fn raw_head_coordinate_for_stored_event(
     event: &RadrootsStoredRawEvent,
-) -> Result<RadrootsEventHeadCoordinate, RadrootsEventStoreError> {
+) -> Result<EventHeadCoordinate, RadrootsEventStoreError> {
     let inconsistent = || RadrootsEventStoreError::StoredHeadInconsistent {
         event_id: event.event_id.clone(),
     };
     let pubkey = PublicKey::from_hex(&event.pubkey).map_err(|_| inconsistent())?;
     match event.event_class {
-        StoredEventClass::Replaceable => Ok(RadrootsEventHeadCoordinate::Replaceable {
+        StoredEventClass::Replaceable => Ok(EventHeadCoordinate::Replaceable {
             kind: event.kind,
             pubkey,
         }),
@@ -155,7 +154,7 @@ pub(super) fn raw_head_coordinate_for_stored_event(
                 .and_then(|tag| tag.get(1))
                 .cloned()
                 .unwrap_or_default();
-            Ok(RadrootsEventHeadCoordinate::Addressable {
+            Ok(EventHeadCoordinate::Addressable {
                 kind: event.kind,
                 pubkey,
                 d_tag,
@@ -183,14 +182,14 @@ fn stored_raw_head_from_joined_row(
 }
 
 fn validate_raw_head_snapshot(
-    requested_coordinate: &RadrootsEventHeadCoordinate,
+    requested_coordinate: &EventHeadCoordinate,
     raw_head: &RadrootsStoredRawEventHead,
     raw_event: &RadrootsStoredRawEvent,
 ) -> Result<(), RadrootsEventStoreError> {
     let expected_coordinate = raw_head_coordinate_for_stored_event(raw_event)?;
     let stored_coordinate = match raw_head.coordinate_type {
         StoredEventClass::Replaceable if raw_head.d_tag.is_none() => {
-            RadrootsEventHeadCoordinate::Replaceable {
+            EventHeadCoordinate::Replaceable {
                 kind: raw_head.kind,
                 pubkey: PublicKey::from_hex(&raw_head.pubkey).map_err(|_| {
                     RadrootsEventStoreError::StoredHeadInconsistent {
@@ -199,7 +198,7 @@ fn validate_raw_head_snapshot(
                 })?,
             }
         }
-        StoredEventClass::Addressable => RadrootsEventHeadCoordinate::Addressable {
+        StoredEventClass::Addressable => EventHeadCoordinate::Addressable {
             kind: raw_head.kind,
             pubkey: PublicKey::from_hex(&raw_head.pubkey).map_err(|_| {
                 RadrootsEventStoreError::StoredHeadInconsistent {

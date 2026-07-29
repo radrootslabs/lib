@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fs, path::Path};
 
-use radroots_event::{envelope::RadrootsEventEnvelope, wire::RadrootsNip01EventWire};
+use radroots_event::{envelope::EventEnvelope, wire::Nip01EventWire};
 use radroots_event_codec::{
     admission::{RadrootsAdmittedEvent, RadrootsEventAdmissionError, admit_verified_event},
     verification::verify_nip01_event,
@@ -150,9 +150,9 @@ fn admission_error_variant(error: &RadrootsEventAdmissionError) -> &'static str 
     }
 }
 
-fn event_envelope(value: &Value) -> RadrootsEventEnvelope {
+fn event_envelope(value: &Value) -> EventEnvelope {
     let raw_json = serde_json::to_string(value).expect("serialize fixed event");
-    RadrootsNip01EventWire::parse_json(&raw_json)
+    Nip01EventWire::parse_json(&raw_json)
         .expect("fixed signed event wire")
         .into_envelope()
         .expect("fixed signed event envelope")

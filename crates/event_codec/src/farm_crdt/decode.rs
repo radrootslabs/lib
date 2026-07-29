@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    farm::crdt::{KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
+    farm::crdt::{FarmCrdtChange, KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG},
     farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
@@ -22,7 +22,7 @@ pub fn farm_crdt_change_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsFarmCrdtChange, EventParseError> {
+) -> Result<FarmCrdtChange, EventParseError> {
     farm_crdt_change_from_event_inner(kind, tags, content, None)
 }
 
@@ -31,7 +31,7 @@ pub fn farm_crdt_change_from_event_with_author(
     tags: &[Vec<String>],
     content: &str,
     author_pubkey: &str,
-) -> Result<RadrootsFarmCrdtChange, EventParseError> {
+) -> Result<FarmCrdtChange, EventParseError> {
     validate_non_empty_tag_value(author_pubkey, TAG_P)?;
     farm_crdt_change_from_event_inner(kind, tags, content, Some(author_pubkey))
 }
@@ -43,7 +43,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsFarmCrdtChange>, EventParseError> {
+) -> Result<RadrootsParsedData<FarmCrdtChange>, EventParseError> {
     let change = farm_crdt_change_from_event_with_author(kind, &tags, &content, &author)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -62,7 +62,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsFarmCrdtChange>, EventParseError> {
+) -> Result<RadrootsParsedEvent<FarmCrdtChange>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -79,7 +79,7 @@ fn farm_crdt_change_from_event_inner(
     tags: &[Vec<String>],
     content: &str,
     author_pubkey: Option<&str>,
-) -> Result<RadrootsFarmCrdtChange, EventParseError> {
+) -> Result<FarmCrdtChange, EventParseError> {
     if kind != KIND_FARM_CRDT_CHANGE {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -110,7 +110,7 @@ fn farm_crdt_change_from_event_inner(
         return Err(EventParseError::InvalidTag(TAG_P));
     }
 
-    let change: RadrootsFarmCrdtChange =
+    let change: FarmCrdtChange =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
     validate_change(&change).map_err(encode_error_to_parse_error)?;
     if change.farm_group_id != farm_group_id {

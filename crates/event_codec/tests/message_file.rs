@@ -4,9 +4,9 @@ mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_MESSAGE_FILE};
-use radroots_event::social::message::RadrootsMessageRecipient;
-use radroots_event::social::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
-use radroots_event::tag::RadrootsEventPtr;
+use radroots_event::social::message::MessageRecipient;
+use radroots_event::social::message_file::{MessageFile, MessageFileDimensions};
+use radroots_event::tag::EventPtr;
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message_file::decode::{
@@ -21,20 +21,20 @@ fn file_url(path: &str) -> String {
     format!("{CDN_PRIMARY_HTTPS}/{path}")
 }
 
-fn sample_message_file() -> RadrootsMessageFile {
-    RadrootsMessageFile {
+fn sample_message_file() -> MessageFile {
+    MessageFile {
         recipients: vec![
-            RadrootsMessageRecipient {
+            MessageRecipient {
                 public_key: "pub1".to_string(),
                 relay_url: None,
             },
-            RadrootsMessageRecipient {
+            MessageRecipient {
                 public_key: "pub2".to_string(),
                 relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
             },
         ],
         file_url: file_url("encrypted.bin"),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_SECONDARY_WSS.to_string()),
         }),
@@ -46,7 +46,7 @@ fn sample_message_file() -> RadrootsMessageFile {
         encrypted_hash: "hash".to_string(),
         original_hash: Some("orig-hash".to_string()),
         size: Some(1200),
-        dimensions: Some(RadrootsMessageFileDimensions { w: 1200, h: 800 }),
+        dimensions: Some(MessageFileDimensions { w: 1200, h: 800 }),
         blurhash: Some("blurhash".to_string()),
         thumb: Some(file_url("thumb.bin")),
         fallbacks: vec![file_url("fallback-1.bin"), file_url("fallback-2.bin")],
@@ -149,7 +149,7 @@ fn message_file_build_tags_requires_crypto_fields() {
 #[test]
 fn message_file_build_tags_rejects_invalid_reply_subject_and_fallbacks() {
     let mut message = sample_message_file();
-    message.reply_to = Some(RadrootsEventPtr {
+    message.reply_to = Some(EventPtr {
         id: " ".to_string(),
         relays: None,
     });

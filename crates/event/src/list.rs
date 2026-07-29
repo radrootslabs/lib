@@ -8,9 +8,9 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsList {
+pub struct List {
     pub content: String,
-    pub entries: Vec<RadrootsListEntry>,
+    pub entries: Vec<ListEntry>,
 }
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
@@ -20,7 +20,7 @@ pub struct RadrootsList {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsListEntry {
+pub struct ListEntry {
     pub tag: String,
     pub values: Vec<String>,
 }
@@ -32,14 +32,14 @@ mod tests {
 
     #[test]
     fn generic_list_model_covers_nip65_relay_entries() {
-        let list = RadrootsList {
+        let list = List {
             content: String::new(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "r".to_string(),
                     values: vec!["wss://read.example".to_string(), "read".to_string()],
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "r".to_string(),
                     values: vec!["wss://write.example".to_string(), "write".to_string()],
                 },

@@ -7,7 +7,7 @@ use crate::model::{
     RadrootsNip09SuppressionReason, StoredEventClass,
 };
 use crate::nip09::reconciliation_v1::generation_from_blob;
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use sqlx::{Row, Sqlite, Transaction};
 
 impl RadrootsEventStore {
@@ -54,7 +54,7 @@ pub(super) async fn current_visibility_in_transaction(
     .map_err(|error| visibility_authority_error("raw-head marker", error))?;
     let raw_head_event_id = row
         .try_get::<Option<String>, _>("raw_head_event_id")?
-        .map(RadrootsEventId::parse)
+        .map(EventId::parse)
         .transpose()
         .map_err(|error| visibility_authority_error("raw-head event id", error))?;
     let decision = RadrootsCurrentVisibilityDecisionV1::parse(
@@ -85,12 +85,12 @@ pub(super) fn suppression_evidence_from_row(
     let reason: Option<String> = row.try_get("suppression_reason")?;
     let event_reference_request_id = row
         .try_get::<Option<String>, _>("event_reference_request_id")?
-        .map(RadrootsEventId::parse)
+        .map(EventId::parse)
         .transpose()
         .map_err(|error| visibility_authority_error("event deletion request id", error))?;
     let address_reference_request_id = row
         .try_get::<Option<String>, _>("address_reference_request_id")?
-        .map(RadrootsEventId::parse)
+        .map(EventId::parse)
         .transpose()
         .map_err(|error| visibility_authority_error("address deletion request id", error))?;
     let address_reference_cutoff = row
@@ -310,11 +310,11 @@ async fn validate_addressable_head_projection(
         || row.try_get::<Option<String>, _>("event_reference_request_id")?
             != evidence
                 .and_then(|value| value.event_reference_request_id.as_ref())
-                .map(RadrootsEventId::to_hex)
+                .map(EventId::to_hex)
         || row.try_get::<Option<String>, _>("address_reference_request_id")?
             != evidence
                 .and_then(|value| value.address_reference_request_id.as_ref())
-                .map(RadrootsEventId::to_hex)
+                .map(EventId::to_hex)
         || stored_cutoff != evidence.and_then(|value| value.address_reference_cutoff)
     {
         return current_visibility_drift(format!(

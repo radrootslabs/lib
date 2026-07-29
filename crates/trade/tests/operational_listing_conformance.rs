@@ -2,7 +2,7 @@
 
 use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
-use radroots_event::{id::RadrootsIdParseError, wire::RadrootsNip01EventWire};
+use radroots_event::{id::ParseError, wire::Nip01EventWire};
 use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_nostr::prelude::radroots_event_from_nostr;
 use radroots_trade::operational_listing::{
@@ -180,23 +180,23 @@ fn address_invalid(vector: &Vector) {
     assert_eq!(actual, vector.expected, "{}", vector.id);
 }
 
-fn address_error_value(error: &RadrootsIdParseError) -> Value {
+fn address_error_value(error: &ParseError) -> Value {
     match error {
-        RadrootsIdParseError::Empty => json!({ "kind": "empty" }),
-        RadrootsIdParseError::InvalidFormat => json!({ "kind": "invalid_format" }),
-        RadrootsIdParseError::InvalidLength { expected, actual } => json!({
+        ParseError::Empty => json!({ "kind": "empty" }),
+        ParseError::InvalidFormat => json!({ "kind": "invalid_format" }),
+        ParseError::InvalidLength { expected, actual } => json!({
             "kind": "invalid_length",
             "expected": expected,
             "actual": actual,
         }),
-        RadrootsIdParseError::InvalidCharacter => json!({ "kind": "invalid_character" }),
-        RadrootsIdParseError::InvalidPublicKey => json!({ "kind": "invalid_public_key" }),
-        RadrootsIdParseError::UnexpectedKind { expected, actual } => json!({
+        ParseError::InvalidCharacter => json!({ "kind": "invalid_character" }),
+        ParseError::InvalidPublicKey => json!({ "kind": "invalid_public_key" }),
+        ParseError::UnexpectedKind { expected, actual } => json!({
             "kind": "unexpected_kind",
             "expected": expected,
             "actual": actual,
         }),
-        RadrootsIdParseError::TooLong { max, actual } => json!({
+        ParseError::TooLong { max, actual } => json!({
             "kind": "too_long",
             "max": max,
             "actual": actual,
@@ -250,7 +250,7 @@ fn verified_event(vector: &Vector, keys: &Keys) -> RadrootsSignatureVerifiedEven
         .verify()
         .unwrap_or_else(|error| panic!("{} failed NIP-01 verification: {error}", vector.id));
 
-    let wire = RadrootsNip01EventWire::parse_json(&raw)
+    let wire = Nip01EventWire::parse_json(&raw)
         .unwrap_or_else(|error| panic!("{} failed Radroots wire parsing: {error}", vector.id));
     assert!(
         wire.extra.is_empty(),

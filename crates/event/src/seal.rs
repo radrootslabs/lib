@@ -10,6 +10,6 @@ use alloc::string::String;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsSeal {
+pub struct Seal {
     pub content: String,
 }

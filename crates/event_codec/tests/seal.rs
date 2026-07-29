@@ -1,5 +1,5 @@
 use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_SEAL};
-use radroots_event::social::seal::RadrootsSeal;
+use radroots_event::social::seal::Seal;
 
 mod common;
 
@@ -10,7 +10,7 @@ use radroots_event_codec::seal::encode::{seal_build_tags, to_wire_parts, to_wire
 
 #[test]
 fn seal_to_wire_parts_requires_content() {
-    let seal = RadrootsSeal {
+    let seal = Seal {
         content: "  ".to_string(),
     };
 
@@ -23,7 +23,7 @@ fn seal_to_wire_parts_requires_content() {
 
 #[test]
 fn seal_to_wire_parts_sets_kind_and_content() {
-    let seal = RadrootsSeal {
+    let seal = Seal {
         content: "payload".to_string(),
     };
 
@@ -117,7 +117,7 @@ fn seal_index_from_event_propagates_parse_errors() {
 
 #[test]
 fn seal_build_tags_and_kind_validation_cover_paths() {
-    let seal = RadrootsSeal {
+    let seal = Seal {
         content: "payload".to_string(),
     };
     assert!(seal_build_tags(&seal).unwrap().is_empty());

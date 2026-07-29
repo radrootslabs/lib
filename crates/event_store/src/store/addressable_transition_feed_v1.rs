@@ -20,7 +20,7 @@ use crate::model::{
 use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use radroots_identity::PublicKey;
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 
@@ -843,15 +843,12 @@ fn optional_reference(
 fn optional_event_id(
     field: &'static str,
     value: Option<String>,
-) -> Result<Option<RadrootsEventId>, RadrootsEventStoreError> {
+) -> Result<Option<EventId>, RadrootsEventStoreError> {
     value.map(|value| parse_event_id(field, value)).transpose()
 }
 
-fn parse_event_id(
-    field: &'static str,
-    value: String,
-) -> Result<RadrootsEventId, RadrootsEventStoreError> {
-    RadrootsEventId::parse(value.as_str())
+fn parse_event_id(field: &'static str, value: String) -> Result<EventId, RadrootsEventStoreError> {
+    EventId::parse(value.as_str())
         .map_err(|error| corruption(format!("{field} event id is invalid: {error}")))
 }
 

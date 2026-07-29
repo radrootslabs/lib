@@ -7,9 +7,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{
-    envelope::kind::KIND_DOCUMENT, post::document::RadrootsDocument, tag::name::TAG_D,
-};
+use radroots_event::{envelope::kind::KIND_DOCUMENT, post::document::Document, tag::name::TAG_D};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
@@ -69,7 +67,7 @@ pub fn document_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsDocument, EventParseError> {
+) -> Result<Document, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "30361",
@@ -82,7 +80,7 @@ pub fn document_from_event(
     let d_tag = parse_d_tag(tags)?;
     let subject_pubkey = parse_subject_pubkey(tags)?;
     let subject_address = parse_subject_address(tags)?;
-    let mut document: RadrootsDocument =
+    let mut document: Document =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
     if document.d_tag.trim().is_empty() {
@@ -128,7 +126,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsDocument>, EventParseError> {
+) -> Result<RadrootsParsedData<Document>, EventParseError> {
     let document = document_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -147,7 +145,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsDocument>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Document>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -162,11 +160,11 @@ pub fn parsed_from_event(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
+    use radroots_event::post::document::{Document, DocumentSubject};
 
     #[test]
     fn document_decode_accepts_subject_without_address() {
-        let document = RadrootsDocument {
+        let document = Document {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             doc_type: "policy".to_string(),
             title: "Farm policy".to_string(),
@@ -174,7 +172,7 @@ mod tests {
             summary: None,
             effective_at: None,
             body_markdown: None,
-            subject: RadrootsDocumentSubject {
+            subject: DocumentSubject {
                 pubkey: "subject-pubkey".to_string(),
                 address: None,
             },

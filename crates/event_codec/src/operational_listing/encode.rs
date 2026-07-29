@@ -7,42 +7,42 @@ use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_event::envelope::kind::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
-use radroots_event::listing::operational::RadrootsOperationalListing;
+use radroots_event::listing::operational::OperationalListing;
 
 use crate::error::EventEncodeError;
 use crate::operational_listing::tags::operational_listing_tags;
 #[cfg(feature = "serde_json")]
 use crate::operational_listing::tags::operational_listing_tags_full;
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 #[cfg(feature = "serde_json")]
 const DEFAULT_KIND: u32 = KIND_CLASSIFIED_LISTING;
 
 pub fn operational_listing_build_tags(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     operational_listing_tags(listing)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts(
-    listing: &RadrootsOperationalListing,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    listing: &OperationalListing,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(listing, DEFAULT_KIND)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if !is_classified_listing_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = operational_listing_tags_full(listing)?;
     let content = operational_listing_markdown_content(listing);
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,
@@ -50,7 +50,7 @@ pub fn to_wire_parts_with_kind(
 }
 
 #[cfg(feature = "serde_json")]
-fn operational_listing_markdown_content(listing: &RadrootsOperationalListing) -> String {
+fn operational_listing_markdown_content(listing: &OperationalListing) -> String {
     let title = listing.product.title.trim();
     let summary = listing
         .product
@@ -73,24 +73,24 @@ mod tests {
     use core::str::FromStr;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
-        farm::RadrootsFarmRef,
-        id::{RadrootsDTag, RadrootsInventoryBinId},
-        listing::operational::{RadrootsOperationalListingBin, RadrootsOperationalListingProduct},
+        farm::FarmRef,
+        id::{DTag, InventoryBinId},
+        listing::operational::{OperationalListingBin, OperationalListingProduct},
     };
 
     fn decimal(value: &str) -> Decimal {
         Decimal::from_str(value).expect("decimal")
     }
 
-    fn listing_with(title: &str, summary: Option<&str>) -> RadrootsOperationalListing {
-        RadrootsOperationalListing {
-            d_tag: RadrootsDTag::parse("AAAAAAAAAAAAAAAAAAAAAA").expect("d tag"),
+    fn listing_with(title: &str, summary: Option<&str>) -> OperationalListing {
+        OperationalListing {
+            d_tag: DTag::parse("AAAAAAAAAAAAAAAAAAAAAA").expect("d tag"),
             published_at: None,
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "a".repeat(64),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             },
-            product: RadrootsOperationalListingProduct {
+            product: OperationalListingProduct {
                 key: "coffee".to_string(),
                 title: title.to_string(),
                 category: "produce".to_string(),
@@ -101,9 +101,9 @@ mod tests {
                 profile: None,
                 year: None,
             },
-            primary_bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
-            bins: vec![RadrootsOperationalListingBin {
-                bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+            primary_bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
+            bins: vec![OperationalListingBin {
+                bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
                 quantity: Quantity::try_new(decimal("1"), Unit::MassG).unwrap(),
                 price_per_canonical_unit: QuantityPrice::try_new(
                     Money::try_new(decimal("1"), Currency::USD).unwrap(),

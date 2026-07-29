@@ -2,8 +2,8 @@
 
 use radroots_event::{
     envelope::kind::{KIND_ARTICLE, KIND_GENERIC_REPOST, KIND_POST, KIND_REACTION, KIND_REPOST},
-    post::repost::{RadrootsGenericRepost, RadrootsRepost},
-    social::RadrootsSocialTarget,
+    post::repost::{GenericRepost, Repost},
+    social::SocialTarget,
     tag::name::{TAG_A, TAG_E, TAG_K, TAG_P},
 };
 use radroots_event_codec::{
@@ -30,9 +30,9 @@ const EVENT_SIG: &str = concat!(
 );
 const ARTICLE_D_TAG: &str = "DDDDDDDDDDDDDDDDDDDDDA";
 
-fn note_repost() -> RadrootsRepost {
-    RadrootsRepost {
-        target: RadrootsSocialTarget::Event {
+fn note_repost() -> Repost {
+    Repost {
+        target: SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: Some(AUTHOR.to_string()),
             event_kind: Some(KIND_POST),
@@ -42,9 +42,9 @@ fn note_repost() -> RadrootsRepost {
     }
 }
 
-fn generic_article_repost() -> RadrootsGenericRepost {
-    RadrootsGenericRepost {
-        target: RadrootsSocialTarget::Address {
+fn generic_article_repost() -> GenericRepost {
+    GenericRepost {
+        target: SocialTarget::Address {
             address: format!("{KIND_ARTICLE}:{AUTHOR}:{ARTICLE_D_TAG}"),
             author: Some(AUTHOR.to_string()),
             event_kind: Some(KIND_ARTICLE),
@@ -83,7 +83,7 @@ fn repost_to_wire_parts_roundtrips_kind_one_target() {
     let decoded = repost_from_event(parts.kind, &parts.tags, &parts.content).unwrap();
     assert!(matches!(
         decoded.target,
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             event_kind: Some(KIND_POST),
             ..
         }
@@ -113,7 +113,7 @@ fn generic_repost_to_wire_parts_roundtrips_address_target() {
     assert_eq!(decoded.target_kind, KIND_ARTICLE);
     assert!(matches!(
         decoded.target,
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             event_kind: Some(KIND_ARTICLE),
             ..
         }
@@ -133,7 +133,7 @@ fn repost_codecs_reject_wrong_kind_and_wrong_target_kind() {
     ));
 
     let mut repost = note_repost();
-    if let RadrootsSocialTarget::Event { event_kind, .. } = &mut repost.target {
+    if let SocialTarget::Event { event_kind, .. } = &mut repost.target {
         *event_kind = Some(KIND_ARTICLE);
     }
     assert!(matches!(
@@ -165,7 +165,7 @@ fn repost_codecs_reject_wrong_kind_and_wrong_target_kind() {
 fn repost_event_target_codecs_cover_optional_and_error_edges() {
     let mut no_relay = note_repost();
     no_relay.content = Some("fresh note".to_string());
-    if let RadrootsSocialTarget::Event { author, relays, .. } = &mut no_relay.target {
+    if let SocialTarget::Event { author, relays, .. } = &mut no_relay.target {
         *author = None;
         *relays = None;
     }
@@ -182,11 +182,11 @@ fn repost_event_target_codecs_cover_optional_and_error_edges() {
     assert_eq!(decoded.content.as_deref(), Some("fresh note"));
     assert!(matches!(
         decoded.target,
-        RadrootsSocialTarget::Event { relays: None, .. }
+        SocialTarget::Event { relays: None, .. }
     ));
 
     let mut invalid_target = note_repost();
-    invalid_target.target = RadrootsSocialTarget::Address {
+    invalid_target.target = SocialTarget::Address {
         address: format!("{KIND_ARTICLE}:{AUTHOR}:{ARTICLE_D_TAG}"),
         author: Some(AUTHOR.to_string()),
         event_kind: Some(KIND_ARTICLE),
@@ -198,7 +198,7 @@ fn repost_event_target_codecs_cover_optional_and_error_edges() {
     ));
 
     let mut invalid_id = note_repost();
-    if let RadrootsSocialTarget::Event { id, .. } = &mut invalid_id.target {
+    if let SocialTarget::Event { id, .. } = &mut invalid_id.target {
         *id = "not-a-lowercase-hex-id".to_string();
     }
     assert!(matches!(
@@ -207,7 +207,7 @@ fn repost_event_target_codecs_cover_optional_and_error_edges() {
     ));
 
     let mut invalid_author = note_repost();
-    if let RadrootsSocialTarget::Event { author, .. } = &mut invalid_author.target {
+    if let SocialTarget::Event { author, .. } = &mut invalid_author.target {
         *author = Some(" ".to_string());
     }
     assert!(matches!(
@@ -236,8 +236,8 @@ fn repost_event_target_codecs_cover_optional_and_error_edges() {
 
 #[test]
 fn generic_repost_codecs_cover_event_targets_and_error_edges() {
-    let generic = RadrootsGenericRepost {
-        target: RadrootsSocialTarget::Event {
+    let generic = GenericRepost {
+        target: SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: Some(AUTHOR.to_string()),
             event_kind: Some(KIND_REACTION),
@@ -260,14 +260,14 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
     assert!(decoded.content.is_none());
     assert!(matches!(
         decoded.target,
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             event_kind: Some(KIND_REACTION),
             ..
         }
     ));
 
-    let no_author_event = RadrootsGenericRepost {
-        target: RadrootsSocialTarget::Event {
+    let no_author_event = GenericRepost {
+        target: SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: None,
             event_kind: Some(KIND_REACTION),
@@ -284,7 +284,7 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
     }));
 
     let mut generic = generic_article_repost();
-    if let RadrootsSocialTarget::Address { author, relays, .. } = &mut generic.target {
+    if let SocialTarget::Address { author, relays, .. } = &mut generic.target {
         *author = None;
         *relays = None;
     }
@@ -362,7 +362,7 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
     ));
 
     let mut generic = generic_article_repost();
-    if let RadrootsSocialTarget::Address { author, relays, .. } = &mut generic.target {
+    if let SocialTarget::Address { author, relays, .. } = &mut generic.target {
         *author = Some(" ".to_string());
         *relays = None;
     }
@@ -372,7 +372,7 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
     ));
 
     let mut generic = generic_article_repost();
-    generic.target = RadrootsSocialTarget::External {
+    generic.target = SocialTarget::External {
         id: "https://example.test/repost-target".to_string(),
         external_kind: "web".to_string(),
         hint: None,
@@ -382,8 +382,8 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
         Err(EventEncodeError::InvalidField("target"))
     ));
 
-    let mut generic = RadrootsGenericRepost {
-        target: RadrootsSocialTarget::Event {
+    let mut generic = GenericRepost {
+        target: SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: None,
             event_kind: None,
@@ -397,7 +397,7 @@ fn generic_repost_codecs_cover_event_targets_and_error_edges() {
         Err(EventEncodeError::InvalidField("target_kind"))
     ));
 
-    if let RadrootsSocialTarget::Event { event_kind, .. } = &mut generic.target {
+    if let SocialTarget::Event { event_kind, .. } = &mut generic.target {
         *event_kind = Some(KIND_REACTION);
     }
     generic.target_kind = KIND_POST;

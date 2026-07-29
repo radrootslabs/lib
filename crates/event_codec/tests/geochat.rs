@@ -3,7 +3,7 @@ mod common;
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_GEOCHAT, KIND_POST},
-    social::geochat::RadrootsGeoChat,
+    social::geochat::GeoChat,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::geochat::decode::{
@@ -13,7 +13,7 @@ use radroots_event_codec::geochat::encode::{geochat_build_tags, to_wire_parts};
 
 #[test]
 fn geochat_build_tags_requires_geohash() {
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: "  ".to_string(),
         content: "hello".to_string(),
         nickname: None,
@@ -29,7 +29,7 @@ fn geochat_build_tags_requires_geohash() {
 
 #[test]
 fn geochat_build_tags_requires_nickname_if_present() {
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: "dr5rsj7".to_string(),
         content: "hello".to_string(),
         nickname: Some(" ".to_string()),
@@ -45,7 +45,7 @@ fn geochat_build_tags_requires_nickname_if_present() {
 
 #[test]
 fn geochat_build_tags_omits_optional_nickname_and_teleport_when_disabled() {
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: "dr5rsj7".to_string(),
         content: "hello".to_string(),
         nickname: None,
@@ -58,7 +58,7 @@ fn geochat_build_tags_omits_optional_nickname_and_teleport_when_disabled() {
 
 #[test]
 fn geochat_to_wire_parts_requires_content() {
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: "dr5rsj7".to_string(),
         content: "  ".to_string(),
         nickname: None,
@@ -71,7 +71,7 @@ fn geochat_to_wire_parts_requires_content() {
         EventEncodeError::EmptyRequiredField("content")
     ));
 
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: " ".to_string(),
         content: "hello".to_string(),
         nickname: None,
@@ -86,7 +86,7 @@ fn geochat_to_wire_parts_requires_content() {
 
 #[test]
 fn geochat_to_wire_parts_sets_tags() {
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: "dr5rsj7".to_string(),
         content: "hello".to_string(),
         nickname: Some("alex".to_string()),

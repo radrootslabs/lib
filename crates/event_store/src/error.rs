@@ -1,6 +1,6 @@
-use radroots_event::draft::RadrootsSignedEventError;
-use radroots_event::id::RadrootsIdParseError;
-use radroots_event::wire::RadrootsEventWireError;
+use radroots_event::draft::SignedEventError;
+use radroots_event::id::ParseError;
+use radroots_event::wire::EventWireError;
 use radroots_event_codec::verification::RadrootsNip01VerificationError;
 use radroots_transport::RadrootsTransportError;
 
@@ -54,13 +54,13 @@ pub enum RadrootsEventStoreError {
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
     #[error("identifier parse error: {0}")]
-    IdParse(#[from] RadrootsIdParseError),
+    IdParse(#[from] ParseError),
     #[error("identity value parse error: {0}")]
     Identity(#[from] radroots_identity::Error),
     #[error("event wire error: {0}")]
-    EventWire(#[from] RadrootsEventWireError),
+    EventWire(#[from] EventWireError),
     #[error("signed event error: {0}")]
-    SignedEvent(#[from] RadrootsSignedEventError),
+    SignedEvent(#[from] SignedEventError),
     #[error("NIP-01 verification error: {0}")]
     Nip01Verification(#[from] RadrootsNip01VerificationError),
     #[error("transport contract error: {0}")]

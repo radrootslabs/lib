@@ -1,9 +1,6 @@
 use crate::error::{NetError, Result};
-use radroots_event::{
-    post::reply::RadrootsAuthoredNip10Reply,
-    post::{RadrootsAuthoredUpdate, RadrootsPost},
-};
-use radroots_event_codec::parsed::RadrootsParsedData;
+use radroots_event::{post::AuthoredUpdate, post::reply::AuthoredNip10Reply};
+use radroots_event_codec::{parsed::RadrootsParsedData, post::decode::LegacyPost};
 use radroots_nostr::prelude::{
     radroots_nostr_build_nip10_reply_event, radroots_nostr_build_update_event,
     radroots_nostr_fetch_post_events, radroots_nostr_send_nip10_reply_event,
@@ -13,7 +10,7 @@ use radroots_nostr::prelude::{
 use crate::nostr_client::manager::NostrClientManager;
 
 impl NostrClientManager {
-    pub async fn publish_update_event(&self, update: &RadrootsAuthoredUpdate) -> Result<String> {
+    pub async fn publish_update_event(&self, update: &AuthoredUpdate) -> Result<String> {
         let builder =
             radroots_nostr_build_update_event(update).map_err(|e| NetError::Msg(e.to_string()))?;
         let out = radroots_nostr_send_post_event(&self.inner.client, builder)
@@ -22,16 +19,13 @@ impl NostrClientManager {
         Ok(out.val.to_string())
     }
 
-    pub fn publish_update_event_blocking(&self, update: RadrootsAuthoredUpdate) -> Result<String> {
+    pub fn publish_update_event_blocking(&self, update: AuthoredUpdate) -> Result<String> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move { this.publish_update_event(&update).await })
     }
 
-    pub async fn publish_nip10_reply_event(
-        &self,
-        reply: &RadrootsAuthoredNip10Reply,
-    ) -> Result<String> {
+    pub async fn publish_nip10_reply_event(&self, reply: &AuthoredNip10Reply) -> Result<String> {
         let builder = radroots_nostr_build_nip10_reply_event(reply)
             .map_err(|e| NetError::Msg(e.to_string()))?;
         let out = radroots_nostr_send_nip10_reply_event(&self.inner.client, builder)
@@ -41,10 +35,7 @@ impl NostrClientManager {
         Ok(out.val.to_string())
     }
 
-    pub fn publish_nip10_reply_event_blocking(
-        &self,
-        reply: RadrootsAuthoredNip10Reply,
-    ) -> Result<String> {
+    pub fn publish_nip10_reply_event_blocking(&self, reply: AuthoredNip10Reply) -> Result<String> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move { this.publish_nip10_reply_event(&reply).await })
@@ -56,7 +47,7 @@ impl NostrClientManager {
         &self,
         limit: u16,
         since_unix: Option<u64>,
-    ) -> Result<Vec<RadrootsParsedData<RadrootsPost>>> {
+    ) -> Result<Vec<RadrootsParsedData<LegacyPost>>> {
         let items = radroots_nostr_fetch_post_events(&self.inner.client, limit, since_unix)
             .await
             .map_err(|e| NetError::Msg(e.to_string()))?;
@@ -67,7 +58,7 @@ impl NostrClientManager {
         &self,
         limit: u16,
         since_unix: Option<u64>,
-    ) -> Result<Vec<RadrootsParsedData<RadrootsPost>>> {
+    ) -> Result<Vec<RadrootsParsedData<LegacyPost>>> {
         let rt = self.inner.rt.clone();
         let this = self.clone();
         rt.block_on(async move { this.fetch_post_events(limit, since_unix).await })

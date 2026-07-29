@@ -3,12 +3,12 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_event::farm::change_set::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
+use radroots_event::farm::change_set::{GeoJsonPoint, GeoJsonPolygon};
 
 const EARTH_RADIUS_M: f64 = 6_378_137.0;
 
-pub fn geojson_point_from_lat_lng(lat: f64, lng: f64) -> RadrootsGeoJsonPoint {
-    RadrootsGeoJsonPoint {
+pub fn geojson_point_from_lat_lng(lat: f64, lng: f64) -> GeoJsonPoint {
+    GeoJsonPoint {
         r#type: String::from("Point"),
         coordinates: [lng, lat],
     }
@@ -19,7 +19,7 @@ pub fn geojson_polygon_circle_wgs84(
     lng: f64,
     radius_m: f64,
     steps: usize,
-) -> RadrootsGeoJsonPolygon {
+) -> GeoJsonPolygon {
     let steps = if steps < 3 { 3 } else { steps };
     let lat1 = lat.to_radians();
     let lng1 = lng.to_radians();
@@ -46,7 +46,7 @@ pub fn geojson_polygon_circle_wgs84(
         ring.push([lng_deg, lat_deg]);
     }
 
-    RadrootsGeoJsonPolygon {
+    GeoJsonPolygon {
         r#type: String::from("Polygon"),
         coordinates: vec![ring],
     }

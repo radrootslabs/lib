@@ -8,12 +8,12 @@ use std::{
 };
 
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
-    envelope::RadrootsEventEnvelopeLimits,
-    envelope::RadrootsEventEnvelopeParts,
+    envelope::EventEnvelope,
+    envelope::EventEnvelopeLimits,
+    envelope::EventEnvelopeParts,
     post::comment::{
-        RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
-        RadrootsNip22CommentParentReference, RadrootsNip22EventRootReference,
+        AuthoredNip22Comment, Nip22AddressRootReference, Nip22CommentError,
+        Nip22CommentParentReference, Nip22EventRootReference,
     },
 };
 use radroots_event_codec::{
@@ -314,9 +314,7 @@ fn execute(vector: &Vector) {
     }
 }
 
-fn authored_comment(
-    vector: &Vector,
-) -> Result<RadrootsAuthoredNip22Comment, RadrootsNip22CommentError> {
+fn authored_comment(vector: &Vector) -> Result<AuthoredNip22Comment, Nip22CommentError> {
     let content = input_str(vector, "content");
     let root = input_object(vector, "root");
     let position = input_object(vector, "position");
@@ -324,17 +322,15 @@ fn authored_comment(
 
     match object_str(root, "type", &vector.id) {
         "event" => {
-            let root_reference = RadrootsNip22EventRootReference::parse(
+            let root_reference = Nip22EventRootReference::parse(
                 object_str(root, "event_id", &vector.id),
                 object_str(root, "author", &vector.id),
                 object_u32(root, "kind", &vector.id),
                 object_optional_str(root, "relay", &vector.id),
             )?;
             match position_type {
-                "top_event" => {
-                    RadrootsAuthoredNip22Comment::top_level_event(content, root_reference)
-                }
-                "nested" => RadrootsAuthoredNip22Comment::nested(
+                "top_event" => AuthoredNip22Comment::top_level_event(content, root_reference),
+                "nested" => AuthoredNip22Comment::nested(
                     content,
                     root_reference,
                     nested_parent(position, &vector.id)?,
@@ -343,7 +339,7 @@ fn authored_comment(
             }
         }
         "address" => {
-            let root_reference = RadrootsNip22AddressRootReference::parse(
+            let root_reference = Nip22AddressRootReference::parse(
                 object_str(root, "coordinate", &vector.id),
                 object_optional_str(root, "relay", &vector.id),
             )?;
@@ -360,12 +356,12 @@ fn authored_comment(
                 vector.id
             );
             match position_type {
-                "top_address" => RadrootsAuthoredNip22Comment::parse_top_level_address(
+                "top_address" => AuthoredNip22Comment::parse_top_level_address(
                     content,
                     root_reference,
                     object_str(position, "current_revision", &vector.id),
                 ),
-                "nested" => RadrootsAuthoredNip22Comment::nested(
+                "nested" => AuthoredNip22Comment::nested(
                     content,
                     root_reference,
                     nested_parent(position, &vector.id)?,
@@ -383,18 +379,18 @@ fn authored_comment(
 fn nested_parent(
     position: &serde_json::Map<String, Value>,
     vector_id: &str,
-) -> Result<RadrootsNip22CommentParentReference, RadrootsNip22CommentError> {
+) -> Result<Nip22CommentParentReference, Nip22CommentError> {
     let parent = position["parent"]
         .as_object()
         .unwrap_or_else(|| panic!("{vector_id} position.parent must be an object"));
-    RadrootsNip22CommentParentReference::parse(
+    Nip22CommentParentReference::parse(
         object_str(parent, "event_id", vector_id),
         object_str(parent, "author", vector_id),
         object_optional_str(parent, "relay", vector_id),
     )
 }
 
-fn fixture_envelope(vector: &Vector) -> RadrootsEventEnvelope {
+fn fixture_envelope(vector: &Vector) -> EventEnvelope {
     let event_json = input_str(vector, "event_json");
     let raw: RawEvent = serde_json::from_str(event_json)
         .unwrap_or_else(|error| panic!("{} event_json failed to parse: {error}", vector.id));
@@ -405,7 +401,7 @@ fn fixture_envelope(vector: &Vector) -> RadrootsEventEnvelope {
         vector.id
     );
 
-    let mut limits = RadrootsEventEnvelopeLimits::default();
+    let mut limits = EventEnvelopeLimits::default();
     limits.max_content_bytes = limits.max_content_bytes.max(raw.content.len());
     limits.max_tag_count = limits.max_tag_count.max(raw.tags.len());
     limits.max_total_tag_elements = limits
@@ -426,8 +422,8 @@ fn fixture_envelope(vector: &Vector) -> RadrootsEventEnvelope {
             .map(String::len)
             .sum(),
     );
-    RadrootsEventEnvelope::new_with_limits(
-        RadrootsEventEnvelopeParts {
+    EventEnvelope::new_with_limits(
+        EventEnvelopeParts {
             id: raw.id,
             author: raw.pubkey,
             created_at: raw.created_at,

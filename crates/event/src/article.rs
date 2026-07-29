@@ -1,14 +1,14 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use crate::social::{RadrootsSocialFarmAnchor, RadrootsSocialLocation};
+use crate::social::{SocialFarmAnchor, SocialLocation};
 
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsArticle {
+pub struct Article {
     pub d_tag: String,
     pub title: String,
     pub content: String,
@@ -31,12 +31,12 @@ pub struct RadrootsArticle {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub farm: Option<RadrootsSocialFarmAnchor>,
+    pub farm: Option<SocialFarmAnchor>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub location: Option<RadrootsSocialLocation>,
+    pub location: Option<SocialLocation>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn article_represents_required_nip23_fields() {
-        let article = RadrootsArticle {
+        let article = Article {
             d_tag: "soil-notes".to_string(),
             title: "soil notes".to_string(),
             content: "# soil notes".to_string(),
@@ -58,7 +58,7 @@ mod tests {
             image: None,
             published_at: Some(1_700_000_000),
             farm: None,
-            location: Some(RadrootsSocialLocation {
+            location: Some(SocialLocation {
                 name: Some("field edge".to_string()),
                 geohash: Some("c23nb62w20st".to_string()),
             }),

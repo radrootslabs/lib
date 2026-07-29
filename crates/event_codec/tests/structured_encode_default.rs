@@ -7,24 +7,18 @@ use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::envelope::kind::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
 };
-use radroots_event::farm::change_set::{
-    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-};
-use radroots_event::farm::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
-use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
-use radroots_event::farm::resource_area::{
-    RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
-};
-use radroots_event::farm::resource_cap::{
-    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
-};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+use radroots_event::farm::coop::{Coop, CoopLocation, CoopRef};
+use radroots_event::farm::plot::{Plot, PlotLocation, PlotRef};
+use radroots_event::farm::resource_area::{ResourceArea, ResourceAreaLocation, ResourceAreaRef};
+use radroots_event::farm::resource_cap::{ResourceHarvestCap, ResourceHarvestProduct};
+use radroots_event::farm::{Farm, FarmPublicLocation, FarmRef};
+use radroots_event::id::{DTag, InventoryBinId};
 use radroots_event::listing::operational::{
-    RadrootsOperationalListing, RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
+    OperationalListing, OperationalListingBin, OperationalListingProduct,
 };
-use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::post::document::{Document, DocumentSubject};
+use radroots_event::social::list_set::ListSet;
 use radroots_event_codec::coop::encode::{
     coop_build_tags, coop_ref_tags, to_wire_parts as coop_to_wire_parts,
     to_wire_parts_with_kind as coop_to_wire_parts_with_kind,
@@ -67,24 +61,24 @@ use test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
 const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
-fn listing_d_tag(raw: &str) -> RadrootsDTag {
+fn listing_d_tag(raw: &str) -> DTag {
     raw.parse().unwrap()
 }
 
-fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+fn bin_id(raw: &str) -> InventoryBinId {
     raw.parse().unwrap()
 }
 
-fn sample_gcs() -> RadrootsGcsLocation {
-    RadrootsGcsLocation {
+fn sample_gcs() -> GcsLocation {
+    GcsLocation {
         lat: 37.0,
         lng: -122.0,
         geohash: "9q8yy".to_string(),
-        point: RadrootsGeoJsonPoint {
+        point: GeoJsonPoint {
             r#type: "Point".to_string(),
             coordinates: [-122.0, 37.0],
         },
-        polygon: RadrootsGeoJsonPolygon {
+        polygon: GeoJsonPolygon {
             r#type: "Polygon".to_string(),
             coordinates: vec![vec![
                 [-122.0, 37.0],
@@ -110,21 +104,21 @@ fn sample_gcs() -> RadrootsGcsLocation {
     }
 }
 
-fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
+fn sample_listing(d_tag: &str) -> OperationalListing {
     let quantity = Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap();
     let price = QuantityPrice::try_new(
         Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
         quantity.clone(),
     )
     .unwrap();
-    RadrootsOperationalListing {
+    OperationalListing {
         d_tag: listing_d_tag(d_tag),
         published_at: None,
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
-        product: RadrootsOperationalListingProduct {
+        product: OperationalListingProduct {
             key: "sku".to_string(),
             title: "Widget".to_string(),
             category: "Tools".to_string(),
@@ -136,7 +130,7 @@ fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
             year: None,
         },
         primary_bin_id: bin_id("bin-1"),
-        bins: vec![RadrootsOperationalListingBin {
+        bins: vec![OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit: price,
@@ -157,15 +151,15 @@ fn sample_listing(d_tag: &str) -> RadrootsOperationalListing {
     }
 }
 
-fn sample_farm() -> RadrootsFarm {
-    RadrootsFarm {
+fn sample_farm() -> Farm {
+    Farm {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         name: "Farm".to_string(),
         about: None,
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsFarmPublicLocation {
+        location: Some(FarmPublicLocation {
             primary: "farm".to_string(),
             city: Some("Town".to_string()),
             region: Some("Region".to_string()),
@@ -176,15 +170,15 @@ fn sample_farm() -> RadrootsFarm {
     }
 }
 
-fn sample_coop() -> RadrootsCoop {
-    RadrootsCoop {
+fn sample_coop() -> Coop {
+    Coop {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         name: "Coop".to_string(),
         about: None,
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsCoopLocation {
+        location: Some(CoopLocation {
             primary: Some("coop".to_string()),
             city: None,
             region: None,
@@ -195,8 +189,8 @@ fn sample_coop() -> RadrootsCoop {
     }
 }
 
-fn sample_document() -> RadrootsDocument {
-    RadrootsDocument {
+fn sample_document() -> Document {
+    Document {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
         doc_type: "charter".to_string(),
         title: "Charter".to_string(),
@@ -204,7 +198,7 @@ fn sample_document() -> RadrootsDocument {
         summary: None,
         effective_at: None,
         body_markdown: None,
-        subject: RadrootsDocumentSubject {
+        subject: DocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
@@ -212,16 +206,16 @@ fn sample_document() -> RadrootsDocument {
     }
 }
 
-fn sample_plot() -> RadrootsPlot {
-    RadrootsPlot {
+fn sample_plot() -> Plot {
+    Plot {
         d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
         name: "Plot".to_string(),
         about: None,
-        location: Some(RadrootsPlotLocation {
+        location: Some(PlotLocation {
             primary: Some("plot".to_string()),
             city: None,
             region: None,
@@ -232,12 +226,12 @@ fn sample_plot() -> RadrootsPlot {
     }
 }
 
-fn sample_resource_area() -> RadrootsResourceArea {
-    RadrootsResourceArea {
+fn sample_resource_area() -> ResourceArea {
+    ResourceArea {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         name: "Area".to_string(),
         about: None,
-        location: RadrootsResourceAreaLocation {
+        location: ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
@@ -248,14 +242,14 @@ fn sample_resource_area() -> RadrootsResourceArea {
     }
 }
 
-fn sample_resource_cap() -> RadrootsResourceHarvestCap {
-    RadrootsResourceHarvestCap {
+fn sample_resource_cap() -> ResourceHarvestCap {
+    ResourceHarvestCap {
         d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
-        resource_area: RadrootsResourceAreaRef {
+        resource_area: ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
-        product: RadrootsResourceHarvestProduct {
+        product: ResourceHarvestProduct {
             key: "nutmeg".to_string(),
             category: Some("spice".to_string()),
         },
@@ -370,14 +364,14 @@ fn structured_wire_parts_cover_default_kind_and_error_paths() {
 
 #[test]
 fn structured_build_tags_cover_optional_and_error_paths() {
-    let farm = RadrootsFarm {
+    let farm = Farm {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         name: "Farm".to_string(),
         about: None,
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsFarmPublicLocation {
+        location: Some(FarmPublicLocation {
             primary: "farm".to_string(),
             city: Some("Town".to_string()),
             region: Some("Region".to_string()),
@@ -412,21 +406,21 @@ fn structured_build_tags_cover_optional_and_error_paths() {
             .any(|tag| tag.first().map(|v| v.as_str()) == Some("g"))
     );
 
-    let farm_ref_tags = farm_ref_tags(&RadrootsFarmRef {
+    let farm_ref_tags = farm_ref_tags(&FarmRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
     })
     .unwrap();
     assert_eq!(farm_ref_tags.len(), 2);
 
-    let coop = RadrootsCoop {
+    let coop = Coop {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         name: "Coop".to_string(),
         about: None,
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsCoopLocation {
+        location: Some(CoopLocation {
             primary: Some("coop".to_string()),
             city: None,
             region: None,
@@ -442,14 +436,14 @@ fn structured_build_tags_cover_optional_and_error_paths() {
             .iter()
             .any(|tag| tag[0] == "t" && tag[1] == "co-op")
     );
-    let coop_ref_tags = coop_ref_tags(&RadrootsCoopRef {
+    let coop_ref_tags = coop_ref_tags(&CoopRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
     })
     .unwrap();
     assert_eq!(coop_ref_tags.len(), 2);
 
-    let document = RadrootsDocument {
+    let document = Document {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
         doc_type: "charter".to_string(),
         title: "Charter".to_string(),
@@ -457,7 +451,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         summary: None,
         effective_at: None,
         body_markdown: None,
-        subject: RadrootsDocumentSubject {
+        subject: DocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
@@ -480,15 +474,15 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         EventEncodeError::EmptyRequiredField("subject.address")
     ));
 
-    let plot = RadrootsPlot {
+    let plot = Plot {
         d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
         name: "Plot".to_string(),
         about: None,
-        location: Some(RadrootsPlotLocation {
+        location: Some(PlotLocation {
             primary: Some("plot".to_string()),
             city: None,
             region: None,
@@ -521,11 +515,11 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         EventEncodeError::EmptyRequiredField("plot.author_pubkey")
     ));
 
-    let area = RadrootsResourceArea {
+    let area = ResourceArea {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         name: "Area".to_string(),
         about: None,
-        location: RadrootsResourceAreaLocation {
+        location: ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
@@ -542,7 +536,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
             .iter()
             .any(|tag| tag[0] == "t" && tag[1] == "orchard")
     );
-    let area_ref_tags = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let area_ref_tags = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
     })
@@ -557,13 +551,13 @@ fn structured_build_tags_cover_optional_and_error_paths() {
         EventEncodeError::EmptyRequiredField("location.gcs.geohash")
     ));
 
-    let cap = RadrootsResourceHarvestCap {
+    let cap = ResourceHarvestCap {
         d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
-        resource_area: RadrootsResourceAreaRef {
+        resource_area: ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
-        product: RadrootsResourceHarvestProduct {
+        product: ResourceHarvestProduct {
             key: "nutmeg".to_string(),
             category: Some("spice".to_string()),
         },
@@ -598,7 +592,7 @@ fn structured_build_tags_cover_optional_and_error_paths() {
 
 #[test]
 fn structured_build_tags_cover_required_field_errors() {
-    let document = RadrootsDocument {
+    let document = Document {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
         doc_type: "charter".to_string(),
         title: "Charter".to_string(),
@@ -606,7 +600,7 @@ fn structured_build_tags_cover_required_field_errors() {
         summary: None,
         effective_at: None,
         body_markdown: None,
-        subject: RadrootsDocumentSubject {
+        subject: DocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
@@ -645,7 +639,7 @@ fn structured_build_tags_cover_required_field_errors() {
         EventEncodeError::EmptyRequiredField("subject.pubkey")
     ));
 
-    let farm = RadrootsFarm {
+    let farm = Farm {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         name: "Farm".to_string(),
         about: None,
@@ -663,7 +657,7 @@ fn structured_build_tags_cover_required_field_errors() {
     invalid_farm.name = " ".to_string();
     let err = farm_build_tags(&invalid_farm).unwrap_err();
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
-    let err = farm_ref_tags(&RadrootsFarmRef {
+    let err = farm_ref_tags(&FarmRef {
         pubkey: " ".to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
     })
@@ -672,7 +666,7 @@ fn structured_build_tags_cover_required_field_errors() {
         err,
         EventEncodeError::EmptyRequiredField("farm.pubkey")
     ));
-    let err = farm_ref_tags(&RadrootsFarmRef {
+    let err = farm_ref_tags(&FarmRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: " ".to_string(),
     })
@@ -682,7 +676,7 @@ fn structured_build_tags_cover_required_field_errors() {
         EventEncodeError::EmptyRequiredField("farm.d_tag")
     ));
 
-    let coop = RadrootsCoop {
+    let coop = Coop {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         name: "Coop".to_string(),
         about: None,
@@ -701,12 +695,12 @@ fn structured_build_tags_cover_required_field_errors() {
     let err = coop_build_tags(&invalid_coop).unwrap_err();
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
     invalid_coop = coop.clone();
-    invalid_coop.location = Some(RadrootsCoopLocation {
+    invalid_coop.location = Some(CoopLocation {
         primary: None,
         city: None,
         region: None,
         country: None,
-        gcs: RadrootsGcsLocation {
+        gcs: GcsLocation {
             geohash: " ".to_string(),
             ..sample_gcs()
         },
@@ -716,7 +710,7 @@ fn structured_build_tags_cover_required_field_errors() {
         err,
         EventEncodeError::EmptyRequiredField("location.gcs.geohash")
     ));
-    let err = coop_ref_tags(&RadrootsCoopRef {
+    let err = coop_ref_tags(&CoopRef {
         pubkey: " ".to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
     })
@@ -725,7 +719,7 @@ fn structured_build_tags_cover_required_field_errors() {
         err,
         EventEncodeError::EmptyRequiredField("coop.pubkey")
     ));
-    let err = coop_ref_tags(&RadrootsCoopRef {
+    let err = coop_ref_tags(&CoopRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: " ".to_string(),
     })
@@ -735,9 +729,9 @@ fn structured_build_tags_cover_required_field_errors() {
         EventEncodeError::EmptyRequiredField("coop.d_tag")
     ));
 
-    let plot = RadrootsPlot {
+    let plot = Plot {
         d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
@@ -774,11 +768,11 @@ fn structured_build_tags_cover_required_field_errors() {
         EventEncodeError::EmptyRequiredField("plot.d_tag")
     ));
 
-    let area = RadrootsResourceArea {
+    let area = ResourceArea {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         name: "Area".to_string(),
         about: None,
-        location: RadrootsResourceAreaLocation {
+        location: ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
@@ -795,7 +789,7 @@ fn structured_build_tags_cover_required_field_errors() {
     invalid_area.name = " ".to_string();
     let err = resource_area_build_tags(&invalid_area).unwrap_err();
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("name")));
-    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let err = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: " ".to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
     })
@@ -804,7 +798,7 @@ fn structured_build_tags_cover_required_field_errors() {
         err,
         EventEncodeError::EmptyRequiredField("resource_area.pubkey")
     ));
-    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let err = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: " ".to_string(),
     })
@@ -814,13 +808,13 @@ fn structured_build_tags_cover_required_field_errors() {
         EventEncodeError::EmptyRequiredField("resource_area.d_tag")
     ));
 
-    let cap = RadrootsResourceHarvestCap {
+    let cap = ResourceHarvestCap {
         d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
-        resource_area: RadrootsResourceAreaRef {
+        resource_area: ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
-        product: RadrootsResourceHarvestProduct {
+        product: ResourceHarvestProduct {
             key: "nutmeg".to_string(),
             category: Some("spice".to_string()),
         },
@@ -887,9 +881,9 @@ fn structured_list_sets_cover_success_and_error_paths() {
     let plots_from = farm_plots_list_set_from_plots(
         farm_id,
         TEST_PUBKEY_HEX,
-        [RadrootsPlot {
+        [Plot {
             d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
@@ -936,7 +930,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
 
     let coop_farms = coop_members_farms_list_set(
         coop_id,
-        [RadrootsFarmRef {
+        [FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }],
@@ -956,7 +950,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
     ));
     let err = coop_members_farms_list_set(
         coop_id,
-        [RadrootsFarmRef {
+        [FarmRef {
             pubkey: "".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }],
@@ -968,7 +962,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
     ));
     let err = coop_members_farms_list_set(
         "invalid",
-        [RadrootsFarmRef {
+        [FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }],
@@ -979,7 +973,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
     let area_id = "AAAAAAAAAAAAAAAAAAAAAw";
     let resource_farms = resource_area_members_farms_list_set(
         area_id,
-        [RadrootsFarmRef {
+        [FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }],
@@ -989,7 +983,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
 
     let resource_plots = resource_area_members_plots_list_set(
         area_id,
-        [RadrootsPlotRef {
+        [PlotRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
         }],
@@ -1012,7 +1006,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
     ));
     let err = resource_area_members_plots_list_set(
         area_id,
-        [RadrootsPlotRef {
+        [PlotRef {
             pubkey: "".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
         }],
@@ -1026,7 +1020,7 @@ fn structured_list_sets_cover_success_and_error_paths() {
 
 #[test]
 fn structured_list_set_outputs_remain_deterministic() {
-    let list_set: RadrootsListSet =
+    let list_set: ListSet =
         farm_members_list_set("AAAAAAAAAAAAAAAAAAAAAA", [TEST_PUBKEY_HEX, TEST_PUBKEY_HEX])
             .unwrap();
     assert_eq!(list_set.entries.len(), 2);

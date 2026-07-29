@@ -3,7 +3,7 @@ pub mod encode;
 
 #[cfg(test)]
 mod tests {
-    use radroots_event::{envelope::kind::KIND_POST, social::http_auth::RadrootsHttpAuth};
+    use radroots_event::{envelope::kind::KIND_POST, social::http_auth::HttpAuth};
 
     use crate::error::{EventEncodeError, EventParseError};
     use crate::http_auth::decode::{data_from_event, http_auth_from_event, parsed_from_event};
@@ -19,7 +19,7 @@ mod tests {
 
     #[test]
     fn http_auth_encodes_and_decodes_get_without_payload() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/download".to_string(),
             method: "GET".to_string(),
             payload_sha256: None,
@@ -38,7 +38,7 @@ mod tests {
 
     #[test]
     fn http_auth_encodes_and_decodes_post_with_payload() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(PAYLOAD.to_string()),
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn http_auth_rejects_missing_url_missing_method_bad_payload_and_content() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(PAYLOAD.to_string()),
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn http_auth_rejects_wrong_kind() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(PAYLOAD.to_string()),
@@ -151,7 +151,7 @@ mod tests {
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn http_auth_rejects_duplicate_security_tags() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(PAYLOAD.to_string()),
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn http_auth_wrappers_preserve_event_metadata() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(PAYLOAD.to_string()),

@@ -8,20 +8,18 @@ mod tests {
     use crate::error::EventEncodeError;
     use crate::resource_cap::encode::resource_harvest_cap_build_tags;
     use radroots_core::{Decimal, Quantity, Unit};
-    use radroots_event::farm::resource_area::RadrootsResourceAreaRef;
-    use radroots_event::farm::resource_cap::{
-        RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
-    };
+    use radroots_event::farm::resource_area::ResourceAreaRef;
+    use radroots_event::farm::resource_cap::{ResourceHarvestCap, ResourceHarvestProduct};
 
     #[test]
     fn resource_harvest_cap_tags_include_required_fields() {
-        let cap = RadrootsResourceHarvestCap {
+        let cap = ResourceHarvestCap {
             d_tag: "DAAAAAAAAAAAAAAAAAAAAA".to_string(),
-            resource_area: RadrootsResourceAreaRef {
+            resource_area: ResourceAreaRef {
                 pubkey: "area_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             },
-            product: RadrootsResourceHarvestProduct {
+            product: ResourceHarvestProduct {
                 key: "nutmeg".to_string(),
                 category: Some("spice".to_string()),
             },
@@ -59,13 +57,13 @@ mod tests {
 
     #[test]
     fn resource_harvest_cap_build_tags_rejects_invalid_d_tags() {
-        let mut cap = RadrootsResourceHarvestCap {
+        let mut cap = ResourceHarvestCap {
             d_tag: "DAAAAAAAAAAAAAAAAAAAAA".to_string(),
-            resource_area: RadrootsResourceAreaRef {
+            resource_area: ResourceAreaRef {
                 pubkey: "area_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             },
-            product: RadrootsResourceHarvestProduct {
+            product: ResourceHarvestProduct {
                 key: "nutmeg".to_string(),
                 category: Some("spice".to_string()),
             },

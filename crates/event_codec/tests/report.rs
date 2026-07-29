@@ -5,8 +5,8 @@ mod common;
 use common::{AUTHOR as ENVELOPE_AUTHOR, EVENT_ID as ENVELOPE_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_ARTICLE, KIND_POST, KIND_REPORT},
-    post::report::RadrootsReport,
-    social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
+    post::report::Report,
+    social::{ReportFileTarget, ReportType, SocialTarget},
     tag::name::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
 };
 use radroots_event_codec::{
@@ -22,21 +22,21 @@ const REPORTED: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40c
 const FILE_HASH: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 const ARTICLE_D_TAG: &str = "DDDDDDDDDDDDDDDDDDDDDA";
 
-fn profile_report() -> RadrootsReport {
-    RadrootsReport {
+fn profile_report() -> Report {
+    Report {
         reported_pubkey: REPORTED.to_string(),
-        report_type: RadrootsReportType::Spam,
+        report_type: ReportType::Spam,
         event: None,
         file: None,
         content: None,
     }
 }
 
-fn event_report() -> RadrootsReport {
-    RadrootsReport {
+fn event_report() -> Report {
+    Report {
         reported_pubkey: REPORTED.to_string(),
-        report_type: RadrootsReportType::Illegal,
-        event: Some(RadrootsSocialTarget::Event {
+        report_type: ReportType::Illegal,
+        event: Some(SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: Some(REPORTED.to_string()),
             event_kind: Some(KIND_POST),
@@ -47,12 +47,12 @@ fn event_report() -> RadrootsReport {
     }
 }
 
-fn file_report() -> RadrootsReport {
-    RadrootsReport {
+fn file_report() -> Report {
+    Report {
         reported_pubkey: REPORTED.to_string(),
-        report_type: RadrootsReportType::Malware,
+        report_type: ReportType::Malware,
         event: None,
-        file: Some(RadrootsReportFileTarget {
+        file: Some(ReportFileTarget {
             sha256: Some(FILE_HASH.to_string()),
             url: Some("https://media.example.test/blob".to_string()),
             magnet: Some("magnet:?xt=urn:btih:example".to_string()),
@@ -61,11 +61,11 @@ fn file_report() -> RadrootsReport {
     }
 }
 
-fn address_report() -> RadrootsReport {
-    RadrootsReport {
+fn address_report() -> Report {
+    Report {
         reported_pubkey: REPORTED.to_string(),
-        report_type: RadrootsReportType::Nudity,
-        event: Some(RadrootsSocialTarget::Address {
+        report_type: ReportType::Nudity,
+        event: Some(SocialTarget::Address {
             address: format!("{KIND_ARTICLE}:{REPORTED}:{ARTICLE_D_TAG}"),
             author: Some(REPORTED.to_string()),
             event_kind: Some(KIND_ARTICLE),
@@ -103,17 +103,14 @@ fn report_to_wire_parts_roundtrips_pubkey_event_and_file_reports() {
     );
     let decoded = report_from_event(profile.kind, &profile.tags, &profile.content).unwrap();
     assert_eq!(decoded.reported_pubkey, REPORTED);
-    assert_eq!(decoded.report_type, RadrootsReportType::Spam);
+    assert_eq!(decoded.report_type, ReportType::Spam);
 
     let event = to_wire_parts(&event_report()).unwrap();
     assert_eq!(event.content, "Contains prohibited listing text");
     assert!(has_tag(&event.tags, TAG_E, EVENT_ID));
     let decoded = report_from_event(event.kind, &event.tags, &event.content).unwrap();
-    assert!(matches!(
-        decoded.event,
-        Some(RadrootsSocialTarget::Event { .. })
-    ));
-    assert_eq!(decoded.report_type, RadrootsReportType::Illegal);
+    assert!(matches!(decoded.event, Some(SocialTarget::Event { .. })));
+    assert_eq!(decoded.report_type, ReportType::Illegal);
 
     let file = to_wire_parts(&file_report()).unwrap();
     assert!(has_tag(&file.tags, TAG_SHA256, FILE_HASH));
@@ -140,10 +137,10 @@ fn report_to_wire_parts_roundtrips_pubkey_event_and_file_reports() {
         format!("{KIND_ARTICLE}:{REPORTED}:{ARTICLE_D_TAG}").as_str()
     ));
     let decoded = report_from_event(address.kind, &address.tags, &address.content).unwrap();
-    assert_eq!(decoded.report_type, RadrootsReportType::Nudity);
+    assert_eq!(decoded.report_type, ReportType::Nudity);
     assert!(matches!(
         decoded.event,
-        Some(RadrootsSocialTarget::Address { relays: None, .. })
+        Some(SocialTarget::Address { relays: None, .. })
     ));
 }
 
@@ -176,7 +173,7 @@ fn report_codec_rejects_missing_pubkey_unknown_type_bad_hash_and_wrong_kind() {
     ));
 
     let mut report = file_report();
-    report.file = Some(RadrootsReportFileTarget {
+    report.file = Some(ReportFileTarget {
         sha256: None,
         url: None,
         magnet: None,
@@ -247,7 +244,7 @@ fn report_codec_rejects_missing_pubkey_unknown_type_bad_hash_and_wrong_kind() {
 #[test]
 fn report_codec_rejects_bad_event_targets_and_report_type_mismatches() {
     let mut report = event_report();
-    report.event = Some(RadrootsSocialTarget::External {
+    report.event = Some(SocialTarget::External {
         id: "https://example.test/report".to_string(),
         external_kind: "web".to_string(),
         hint: None,
@@ -258,7 +255,7 @@ fn report_codec_rejects_bad_event_targets_and_report_type_mismatches() {
     ));
 
     let mut report = event_report();
-    if let Some(RadrootsSocialTarget::Event { id, .. }) = &mut report.event {
+    if let Some(SocialTarget::Event { id, .. }) = &mut report.event {
         *id = "not-a-lowercase-hex-id".to_string();
     }
     assert!(matches!(
@@ -267,7 +264,7 @@ fn report_codec_rejects_bad_event_targets_and_report_type_mismatches() {
     ));
 
     let mut report = address_report();
-    if let Some(RadrootsSocialTarget::Address {
+    if let Some(SocialTarget::Address {
         address, relays, ..
     }) = &mut report.event
     {
@@ -329,18 +326,15 @@ fn report_codec_rejects_bad_event_targets_and_report_type_mismatches() {
         .expect("address tag");
     address.truncate(2);
     let decoded = report_from_event(KIND_REPORT, &tags, "").expect("address report");
-    assert!(matches!(
-        decoded.event,
-        Some(RadrootsSocialTarget::Address { .. })
-    ));
+    assert!(matches!(decoded.event, Some(SocialTarget::Address { .. })));
 }
 
 #[test]
 fn report_codec_covers_report_type_and_file_variants() {
     for (report_type, expected) in [
-        (RadrootsReportType::Profanity, "profanity"),
-        (RadrootsReportType::Impersonation, "impersonation"),
-        (RadrootsReportType::Other, "other"),
+        (ReportType::Profanity, "profanity"),
+        (ReportType::Impersonation, "impersonation"),
+        (ReportType::Other, "other"),
     ] {
         let mut report = profile_report();
         report.report_type = report_type;
@@ -351,7 +345,7 @@ fn report_codec_covers_report_type_and_file_variants() {
     }
 
     let mut report = file_report();
-    report.file = Some(RadrootsReportFileTarget {
+    report.file = Some(ReportFileTarget {
         sha256: None,
         url: Some("https://media.example.test/blob".to_string()),
         magnet: None,
@@ -364,7 +358,7 @@ fn report_codec_covers_report_type_and_file_variants() {
     );
 
     let mut report = file_report();
-    report.file = Some(RadrootsReportFileTarget {
+    report.file = Some(ReportFileTarget {
         sha256: None,
         url: None,
         magnet: Some("magnet:?xt=urn:btih:example".to_string()),
@@ -377,7 +371,7 @@ fn report_codec_covers_report_type_and_file_variants() {
     );
 
     let mut report = event_report();
-    if let Some(RadrootsSocialTarget::Event { relays, .. }) = &mut report.event {
+    if let Some(SocialTarget::Event { relays, .. }) = &mut report.event {
         *relays = None;
     }
     let parts = to_wire_parts(&report).unwrap();
@@ -389,7 +383,7 @@ fn report_codec_covers_report_type_and_file_variants() {
     assert_eq!(event.len(), 3);
 
     let mut report = address_report();
-    if let Some(RadrootsSocialTarget::Address { relays, .. }) = &mut report.event {
+    if let Some(SocialTarget::Address { relays, .. }) = &mut report.event {
         *relays = Some(vec![
             " ".to_string(),
             "wss://relay.example.test".to_string(),
@@ -439,7 +433,7 @@ fn report_wrappers_preserve_event_metadata() {
     )
     .unwrap();
     assert_eq!(data.kind, KIND_REPORT);
-    assert_eq!(data.data.report_type, RadrootsReportType::Illegal);
+    assert_eq!(data.data.report_type, ReportType::Illegal);
 
     let parsed = parsed_from_event(
         ENVELOPE_ID.to_string(),

@@ -3,7 +3,7 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
     envelope::kind::KIND_LIST_READ_WRITE_RELAYS,
-    social::list::{RadrootsList, RadrootsListEntry},
+    social::list::{List, ListEntry},
     tag::name::TAG_R,
 };
 
@@ -11,7 +11,7 @@ use super::is_generic_list_codec_kind;
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
-fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> {
+fn entry_from_tag(tag: &[String]) -> Result<ListEntry, EventParseError> {
     let name = &tag[0];
     if name.trim().is_empty() {
         return Err(EventParseError::InvalidTag("tag"));
@@ -20,15 +20,13 @@ fn entry_from_tag(tag: &[String]) -> Result<RadrootsListEntry, EventParseError> 
     if value.trim().is_empty() {
         return Err(EventParseError::InvalidTag("tag"));
     }
-    Ok(RadrootsListEntry {
+    Ok(ListEntry {
         tag: name.clone(),
         values: tag[1..].to_vec(),
     })
 }
 
-pub fn list_entries_from_tags(
-    tags: &[Vec<String>],
-) -> Result<Vec<RadrootsListEntry>, EventParseError> {
+pub fn list_entries_from_tags(tags: &[Vec<String>]) -> Result<Vec<ListEntry>, EventParseError> {
     let mut entries = Vec::with_capacity(tags.len());
     for tag in tags.iter().filter(|t| t.len() >= 2) {
         entries.push(entry_from_tag(tag)?);
@@ -40,7 +38,7 @@ pub fn list_from_tags(
     kind: u32,
     content: String,
     tags: &[Vec<String>],
-) -> Result<RadrootsList, EventParseError> {
+) -> Result<List, EventParseError> {
     if !is_generic_list_codec_kind(kind) {
         return Err(EventParseError::InvalidKind {
             expected: "generic nip51 standard or non-calendar list-set kind",
@@ -51,7 +49,7 @@ pub fn list_from_tags(
         validate_relay_tags(tags)?;
     }
     let entries = list_entries_from_tags(tags)?;
-    Ok(RadrootsList { content, entries })
+    Ok(List { content, entries })
 }
 
 fn validate_relay_tags(tags: &[Vec<String>]) -> Result<(), EventParseError> {
@@ -93,7 +91,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsList>, EventParseError> {
+) -> Result<RadrootsParsedData<List>, EventParseError> {
     let list = list_from_tags(kind, content, &tags)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -112,7 +110,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsList>, EventParseError> {
+) -> Result<RadrootsParsedEvent<List>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -125,9 +123,7 @@ pub fn parsed_from_event(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn list_private_entries_from_json(
-    content: &str,
-) -> Result<Vec<RadrootsListEntry>, EventParseError> {
+pub fn list_private_entries_from_json(content: &str) -> Result<Vec<ListEntry>, EventParseError> {
     let tags: Vec<Vec<String>> =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
     list_entries_from_tags(&tags)

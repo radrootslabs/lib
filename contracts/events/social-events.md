@@ -37,8 +37,8 @@ The repository implements strict authored and verified-projected kind `1` root-p
 separate strict-authored and tolerant-inbound kind `1` NIP-10 Reply profile, a strict-authored and
 tolerant verified-inbound kind `1111` NIP-22 Comment profile, a strict-authored and tolerant
 verified-inbound kind `5` NIP-09 deletion-request profile with pure deterministic suppression
-evaluation, kind `7` `RadrootsReaction`, generic `RadrootsList` entries, operational listing
-records through `RadrootsOperationalListing`, the raw kind-`30402` profile partition and validated
+evaluation, kind `7` `Reaction`, generic `List` entries, operational listing
+records through `OperationalListing`, the raw kind-`30402` profile partition and validated
 FoodAvailability authored, verified-admission, and revision contract, articles, generic public
 file metadata, calendar date events, calendar time events, reposts, generic reposts, calendar
 collections, RSVP events, and reports.
@@ -49,68 +49,68 @@ The closeout contract requires:
 - kind and tag constants for the approved NIP surface
 - ordinary kind-1 compatibility reads plus strict Update, PhotoUpdate, and Ask authoring
 - strict marked direct and nested NIP-10 Reply authoring plus tolerant positional inbound admission
-- strict NIP-22 `RadrootsAuthoredNip22Comment`,
+- strict NIP-22 `AuthoredNip22Comment`,
   `RadrootsInboundNip22CommentProjection`, and
   `RadrootsAdmittedNip22CommentEvent` behavior without legacy `e_root` or
   `e_prev` authority
-- strict NIP-09 `RadrootsAuthoredNip09DeletionRequest`,
+- strict NIP-09 `AuthoredNip09DeletionRequest`,
   `RadrootsInboundNip09DeletionProjection`, and
   `RadrootsAdmittedNip09DeletionRequestEvent` request behavior plus a separate
   pure `RadrootsNip09SuppressionDecision` evaluator without storage authority
-- strict NIP-25 `RadrootsReaction` behavior where empty content is a valid like
+- strict NIP-25 `Reaction` behavior where empty content is a valid like
 - explicit optional `published_at` support for NIP-99 classified-listing parity
-- NIP-65 relay-list validation evidence through `RadrootsList`
+- NIP-65 relay-list validation evidence through `List`
 - conformance vectors and canonical-event witnesses for every new or upgraded social event family
 
 ## Approved Event Families
 
 The MVP public social substrate includes:
 
-- strict `RadrootsAuthoredUpdate`, `RadrootsAuthoredPhotoUpdate`, and
-  `RadrootsAuthoredAsk` publication types plus verified tolerant projection for
+- strict `AuthoredUpdate`, `AuthoredPhotoUpdate`, and
+  `AuthoredAsk` publication types plus verified tolerant projection for
   ordinary NIP-01 kind `1` events
-- strict `RadrootsAuthoredNip10Reply` direct and nested publication plus
+- strict `AuthoredNip10Reply` direct and nested publication plus
   `RadrootsInboundNip10ReplyProjection` for marked and deprecated positional
   inbound NIP-10 replies
-- strict `RadrootsAuthoredNip22Comment` publication plus
+- strict `AuthoredNip22Comment` publication plus
   `RadrootsInboundNip22CommentProjection` and
   `RadrootsAdmittedNip22CommentEvent` for kind-`1111` NIP-22 Comments rooted
   only in kind `30402`, `31922`, or `31923`
-- strict `RadrootsAuthoredNip09DeletionRequest` publication plus
+- strict `AuthoredNip09DeletionRequest` publication plus
   `RadrootsInboundNip09DeletionProjection` and
   `RadrootsAdmittedNip09DeletionRequestEvent` for effect-free kind-`5` NIP-09
   event and address deletion requests, followed by pure deterministic
   suppression evaluation over verified targets and admitted requests
-- `RadrootsArticle` for NIP-23 kind `30023` long-form content
-- generic public `RadrootsFileMetadata` for NIP-94 kind `1063`
-- strict authored `RadrootsAuthoredCalendarDateEvent`, tolerant
-  `RadrootsParsedNip52CalendarDateEvent`, and strict admitted
-  `RadrootsAdmittedCalendarDateEvent` models for NIP-52 kind `31922`
-- strict authored `RadrootsAuthoredCalendarTimeEvent`, tolerant
-  `RadrootsParsedNip52CalendarTimeEvent`, and strict admitted
-  `RadrootsAdmittedCalendarTimeEvent` models for NIP-52 kind `31923`
+- `Article` for NIP-23 kind `30023` long-form content
+- generic public `FileMetadata` for NIP-94 kind `1063`
+- strict authored `AuthoredCalendarDateEvent`, tolerant
+  `ParsedNip52CalendarDateEvent`, and strict admitted
+  `AdmittedCalendarDateEvent` models for NIP-52 kind `31922`
+- strict authored `AuthoredCalendarTimeEvent`, tolerant
+  `ParsedNip52CalendarTimeEvent`, and strict admitted
+  `AdmittedCalendarTimeEvent` models for NIP-52 kind `31923`
 
 The production-v1 public social substrate includes:
 
-- `RadrootsRepost` for NIP-18 kind `6`
-- `RadrootsGenericRepost` for NIP-18 kind `16`
-- strict authored `RadrootsAuthoredCalendar`, tolerant
-  `RadrootsParsedNip52Calendar`, and strict admitted `RadrootsAdmittedCalendar`
+- `Repost` for NIP-18 kind `6`
+- `GenericRepost` for NIP-18 kind `16`
+- strict authored `AuthoredCalendar`, tolerant
+  `ParsedNip52Calendar`, and strict admitted `AdmittedCalendar`
   models for NIP-52 kind `31924`
-- strict authored `RadrootsAuthoredCalendarEventRsvp`, tolerant
-  `RadrootsParsedNip52CalendarEventRsvp`, and strict admitted
-  `RadrootsAdmittedCalendarEventRsvp` models for NIP-52 kind `31925`
-- `RadrootsReport` for NIP-56 kind `1984`
-- operational-listing profile validation through `RadrootsOperationalListing` at NIP-99
+- strict authored `AuthoredCalendarEventRsvp`, tolerant
+  `ParsedNip52CalendarEventRsvp`, and strict admitted
+  `AdmittedCalendarEventRsvp` models for NIP-52 kind `31925`
+- `Report` for NIP-56 kind `1984`
+- operational-listing profile validation through `OperationalListing` at NIP-99
   classified-listing kind `30402`
 - strict FoodAvailability details, deterministic unsigned authoring, verified tolerant projection,
   NIP-01 admission, and strict revision validation for focused kind-`30402` inputs, with explicit
   exclusion of Operational Listing and marker-free generic NIP-99 candidates
-- relay-list kind `10002` validation through `RadrootsList`
+- relay-list kind `10002` validation through `List`
 
 ## Contract Decisions
 
-`RadrootsPost` remains a compatibility read projection for ordinary kind `1`
+`Post` remains a compatibility read projection for ordinary kind `1`
 text notes and older optional social metadata. It is not an authored boundary.
 The public raw `imeta` encoder and its generic tag-builder implementation are
 removed so callers cannot turn mutable strings into purported strict media.
@@ -135,7 +135,7 @@ event limit after exact JSON escaping, tag-array punctuation, and a worst-case
 20-digit NIP-01 timestamp are counted; decoded content and tag limits do not
 operate as independent escape hatches around that wire budget.
 
-Every authored primary image is a `RadrootsAuthoredImage` backed by an approved,
+Every authored primary image is a `AuthoredImage` backed by an approved,
 byte-verified Blossom descriptor. Every authored fallback is an approved
 Blossom hash-path URL with the same digest. This typestate proves local
 descriptor-to-byte agreement only. Successful BUD-02 upload completion remains
@@ -174,7 +174,7 @@ contract. Strict Profile, Update, PhotoUpdate, Ask, NIP-10 Reply, NIP-22
 Comment, and NIP-09 Deletion Request contracts are `TypedOnly`;
 `radroots.social.post.v1` is `ReadOnly`; ordinary generic-draft contracts
 remain `GenericDraft`.
-`RadrootsEventDraft::new` therefore rejects the strict Profile contract and
+`EventDraft::new` therefore rejects the strict Profile contract and
 every governed kind-1, kind-5, or kind-1111 contract with
 `contract_not_draft_authorable`. Serialized drafts record registry version `7`
 and are accepted only after deserialization revalidates the registry version,
@@ -190,11 +190,11 @@ a signer is consulted.
 
 ### NIP-10 Reply Trust Layers
 
-`RadrootsAuthoredNip10Reply` is an opaque, bounded authoring state. Direct
+`AuthoredNip10Reply` is an opaque, bounded authoring state. Direct
 Replies contain one root reference; nested Replies contain one root and one
 distinct parent reference. Each reference carries a validated 64-character
 lowercase event id, a referenced-author pubkey, and an optional
-`RadrootsNostrRelayHint`. The relay hint profile accepts only byte-stable ASCII
+`NostrRelayHint`. The relay hint profile accepts only byte-stable ASCII
 WebSocket URLs: an exact lowercase `ws://` or `wss://` scheme; a canonical
 lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6 authority;
 an optional canonical decimal port from `1` through `65535`; and an RFC 3986
@@ -235,7 +235,7 @@ participant propagation, relay hints, and referenced-author hints advisory,
 blank content or absent `p` tags do not erase an otherwise unambiguous inbound
 Reply. Malformed optional relay, author-hint, citation, and participant metadata is
 retained in the verified envelope and exposed as ordered typed diagnostics;
-valid relay hints are projected through the same `RadrootsNostrRelayHint`
+valid relay hints are projected through the same `NostrRelayHint`
 profile used for authoring, and rejected hints remain verbatim in the ordered
 diagnostic's raw tag. This tolerant read-side behavior never weakens strict
 authored output.
@@ -279,7 +279,7 @@ kind `1` is deliberately excluded because text-note threads use the separate
 NIP-10 Reply boundary. Legacy `e_root` and `e_prev` tags have no authority in
 this contract.
 
-`RadrootsAuthoredNip22Comment` is an opaque, non-Serde authoring state. Canonical
+`AuthoredNip22Comment` is an opaque, non-Serde authoring state. Canonical
 tag order is `E,K,P,e,k,p` for a top-level event root,
 `A,K,P,a,e,k,p` for a top-level address root, and
 `E,K,P,e,k,p` or `A,K,P,e,k,p` for a nested event or address root,
@@ -311,7 +311,7 @@ revision, or parent or prove that the referenced event exists, carries the
 asserted kind, was signed by the asserted author, or is available at a relay.
 
 NIP-10 Reply and NIP-22 Comment references share
-`RadrootsNostrRelayHint`. Relay syntax is independent of the Comment resource
+`NostrRelayHint`. Relay syntax is independent of the Comment resource
 profile: content is limited to 131072 UTF-8 bytes, a Comment to 1024 tags, all
 tags to 4096 elements including tag names, each element to 4096 UTF-8 bytes,
 aggregate tag-element bytes to 131072, and the compact signed event to 262144
@@ -336,7 +336,7 @@ diagnostics, resource boundaries, error precedence, and NIP-01 admission.
 
 The strict Radroots
 [NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md)
-profile is kind `5`. `RadrootsAuthoredNip09DeletionRequest` is an opaque,
+profile is kind `5`. `AuthoredNip09DeletionRequest` is an opaque,
 non-Serde authoring state that requires at least one valid `e` event-id target
 or `a` NIP-01 replaceable/addressable coordinate. Each event target has a
 caller-asserted kind advisory in `0..=65535`. Replaceable coordinates of kind
@@ -606,13 +606,13 @@ a trusted escape hatch outside the supported mutation guarantees. A caller that 
 authority for any resulting state; only a governed migration, rebuild, or conformance path that
 invokes the exhaustive validator can re-establish integrity evidence for that state.
 
-`RadrootsReaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
+`Reaction` uses strict NIP-25 semantics. Empty content, `+`, `-`, emoji, and custom reaction
 content are valid when the target tags are valid. Missing targets remain invalid.
 
-`RadrootsReport` intentionally tightens NIP-56 for the Radroots type: a reported pubkey `p` tag is
+`Report` intentionally tightens NIP-56 for the Radroots type: a reported pubkey `p` tag is
 required for a valid report, including event and file or blob reports.
 
-Generic public `RadrootsFileMetadata` remains separate from private `RadrootsFarmFileMetadata` even
+Generic public `FileMetadata` remains separate from private `FarmFileMetadata` even
 though both use kind `1063`. The public generic model must cover the current simple NIP-94 tags,
 including URL, MIME type, SHA-256 hash, original hash, size, dimensions, blurhash, thumbnail, image,
 summary, alt text, fallback, `magnet`, `i`, and `service`.
@@ -624,12 +624,12 @@ exactly `radroots:price_unit` and `radroots:quantity`; the Operational Listing m
 `radroots:primary_bin`, `radroots:bin`, and `radroots:price`. Focused-only, operational-only,
 marker-free generic NIP-99, and mixed-marker inputs are distinct partition results. This happens
 before profile tag-shape validation, so a malformed one-element marker still counts. Matching is
-exact and case-sensitive. `RadrootsClassifiedListingPartition` names those results
+exact and case-sensitive. `ClassifiedListingPartition` names those results
 `FocusedFoodAvailability`, `OperationalListing`, `GenericNip99`, and `Ambiguous`. The partition is
 allocation-free, does not inspect the event kind, marker values, or tag arity, and does not establish
 that either profile is valid.
 
-`RadrootsFoodAvailabilityDetails` and its focused domain values are checked before construction.
+`FoodAvailabilityDetails` and its focused domain values are checked before construction.
 The identifier is 1 through 512 UTF-8 bytes, contains no whitespace, and contains no Unicode
 control or format character. Content must contain at least one scalar outside Unicode whitespace
 and the information-separator range U+001C through U+001F, and is bounded to
@@ -646,7 +646,7 @@ Status is exactly `active` or `sold`.
 
 Image dimensions are two nonzero canonical `u32` decimal components in `WIDTHxHEIGHT` form.
 Validated details accept no more than 64 images, reject duplicate URLs or Blossom digests, and
-accept only `RadrootsAuthoredImage` values backed by an approved, byte-verified image descriptor.
+accept only `AuthoredImage` values backed by an approved, byte-verified image descriptor.
 That proof establishes local descriptor-to-byte agreement only. It does not establish BUD-02 upload
 completion, decoded raster dimensions, content safety, retrieval, reachability, or network
 availability.
@@ -736,9 +736,9 @@ performs cryptographic verification. An admitted model is therefore valid only w
 bound to the already id- and signature-verified envelope from which it was parsed.
 
 Strict authoring is the outbound counterpart, not a fourth inbound verification state.
-`RadrootsAuthoredCalendarDateEvent`, `RadrootsAuthoredCalendarTimeEvent`,
-`RadrootsAuthoredCalendar`, and `RadrootsAuthoredCalendarEventRsvp` have private checked fields and
-encode deterministic `RadrootsNip01EventWireParts`. Wire parts contain only `kind`, `content`, and
+`AuthoredCalendarDateEvent`, `AuthoredCalendarTimeEvent`,
+`AuthoredCalendar`, and `AuthoredCalendarEventRsvp` have private checked fields and
+encode deterministic `Nip01EventWireParts`. Wire parts contain only `kind`, `content`, and
 `tags`; the owning runtime still supplies `created_at` and author identity, computes the event id,
 signs the event, and publishes it.
 
@@ -837,7 +837,7 @@ event, or that the RSVP author is authorized to answer for another party.
 Calendar images have an explicit progression of trust. Tolerant inbound parsing accepts any
 absolute image URI. Strict inbound admission requires a structural Blossom hash-path URL, but does
 not prove approved-reference policy, byte agreement, upload completion, reachability, or image
-safety. Strict authored models accept only `RadrootsAuthoredImage`, which wraps an approved,
+safety. Strict authored models accept only `AuthoredImage`, which wraps an approved,
 byte-verified Blossom descriptor declared as `image/*`. That typestate proves local
 descriptor-to-byte agreement only.
 
@@ -857,8 +857,8 @@ farm-ops candidate sets. Private farm operations candidates include the farm wor
 farm CRDT change envelope, farm file metadata, and the supported NIP-29 group event subset.
 
 `RadrootsRelayList` is not a separate model type in the target contract. Operational listing records
-are represented through `RadrootsOperationalListing`, and NIP-51 standard and list-set entries,
-including NIP-65 relay metadata kind `10002`, are represented through `RadrootsList`. NIP-51
+are represented through `OperationalListing`, and NIP-51 standard and list-set entries,
+including NIP-65 relay metadata kind `10002`, are represented through `List`. NIP-51
 taxonomy may classify kind `31924` as a calendar list, but generic list and list-set decoding or
 authoring must reject that kind; only the calendar-specific model and codec may parse or publish it.
 

@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use crate::error::EventParseError;
-use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
+use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,13 +30,13 @@ impl<T> RadrootsParsedData<T> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsParsedEvent<T> {
-    pub event: RadrootsEventEnvelope,
+    pub event: EventEnvelope,
     pub data: RadrootsParsedData<T>,
 }
 
 impl<T> RadrootsParsedEvent<T> {
     #[inline]
-    pub fn new(event: RadrootsEventEnvelope, data: RadrootsParsedData<T>) -> Self {
+    pub fn new(event: EventEnvelope, data: RadrootsParsedData<T>) -> Self {
         Self { event, data }
     }
 
@@ -76,7 +76,7 @@ impl<T> RadrootsParsedEvent<T> {
         sig: String,
         data: RadrootsParsedData<T>,
     ) -> Result<Self, EventParseError> {
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let event = EventEnvelope::new(EventEnvelopeParts {
             id,
             author,
             created_at: published_at,
@@ -92,7 +92,7 @@ impl<T> RadrootsParsedEvent<T> {
 #[cfg(test)]
 mod tests {
     use super::{RadrootsParsedData, RadrootsParsedEvent};
-    use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
+    use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn parsed_event_constructor_maps_event_and_data() {
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let event = EventEnvelope::new(EventEnvelopeParts {
             id: EVENT_ID.to_string(),
             author: AUTHOR.to_string(),
             created_at: 22,

@@ -4,14 +4,14 @@ use radroots_event::envelope::kind::{
     KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
 };
 use radroots_event::social::job::{JobFeedbackStatus, JobPaymentRequest};
-use radroots_event::social::job_feedback::RadrootsJobFeedback;
+use radroots_event::social::job_feedback::JobFeedback;
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::job::error::JobParseError;
 use radroots_event_codec::job::feedback::decode::{job_feedback_from_tags, parsed_from_event};
 use radroots_event_codec::job::feedback::encode::to_wire_parts;
 
-fn sample_feedback() -> RadrootsJobFeedback {
-    RadrootsJobFeedback {
+fn sample_feedback() -> JobFeedback {
+    JobFeedback {
         kind: u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01"),
         status: JobFeedbackStatus::Processing,
         extra_info: Some("queued".to_string()),

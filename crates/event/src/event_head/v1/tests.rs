@@ -1,6 +1,6 @@
 use super::*;
-use crate::contract::RadrootsContractMatchError;
-use crate::envelope::RadrootsEventEnvelopeParts;
+use crate::contract::ContractMatchError;
+use crate::envelope::EventEnvelopeParts;
 use crate::envelope::kind::{
     KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_POST, KIND_PROFILE, KIND_TRADE_PROPOSAL,
 };
@@ -20,8 +20,8 @@ fn event(
     author: &str,
     created_at: u64,
     tags: Vec<Vec<String>>,
-) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: id.to_string(),
         author: author.to_string(),
         created_at,
@@ -40,8 +40,8 @@ fn event_with_content(
     created_at: u64,
     tags: Vec<Vec<String>>,
     content: &str,
-) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: id.to_string(),
         author: author.to_string(),
         created_at,
@@ -53,16 +53,16 @@ fn event_with_content(
     .expect("event envelope")
 }
 
-fn candidate(id: char, created_at: u64) -> RadrootsEventHeadCandidate {
+fn candidate(id: char, created_at: u64) -> EventHeadCandidate {
     expect_candidate(event_head_candidate_for_class(
         &event(10002, &hex_64(id), &hex_64('a'), created_at, Vec::new()),
-        RadrootsEventClass::Replaceable,
+        EventClass::Replaceable,
     ))
 }
 
-fn expect_candidate(result: RadrootsEventHeadCandidateResult) -> RadrootsEventHeadCandidate {
+fn expect_candidate(result: EventHeadCandidateResult) -> EventHeadCandidate {
     match result {
-        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
+        EventHeadCandidateResult::Candidate(candidate) => candidate,
         other => panic!("expected candidate: {other:?}"),
     }
 }
@@ -71,12 +71,12 @@ fn expect_candidate(result: RadrootsEventHeadCandidateResult) -> RadrootsEventHe
 fn regular_and_ephemeral_events_do_not_create_heads() {
     let event = event(1, &hex_64('1'), &hex_64('a'), 1, Vec::new());
     assert_eq!(
-        event_head_candidate_for_class(&event, RadrootsEventClass::Regular),
-        RadrootsEventHeadCandidateResult::NotHeadSelected
+        event_head_candidate_for_class(&event, EventClass::Regular),
+        EventHeadCandidateResult::NotHeadSelected
     );
     assert_eq!(
-        event_head_candidate_for_class(&event, RadrootsEventClass::Ephemeral),
-        RadrootsEventHeadCandidateResult::NotPersisted
+        event_head_candidate_for_class(&event, EventClass::Ephemeral),
+        EventHeadCandidateResult::NotPersisted
     );
 }
 
@@ -85,11 +85,11 @@ fn replaceable_events_use_kind_and_pubkey_coordinates() {
     let event = event(10002, &hex_64('1'), &hex_64('a'), 5, Vec::new());
     let candidate = expect_candidate(event_head_candidate_for_class(
         &event,
-        RadrootsEventClass::Replaceable,
+        EventClass::Replaceable,
     ));
     assert_eq!(
         candidate.coordinate,
-        RadrootsEventHeadCoordinate::Replaceable {
+        EventHeadCoordinate::Replaceable {
             kind: 10002,
             pubkey: parse_public_key(hex_64('a')).unwrap()
         }
@@ -108,11 +108,11 @@ fn addressable_events_use_kind_pubkey_and_d_tag_coordinates() {
     );
     let candidate = expect_candidate(event_head_candidate_for_class(
         &event,
-        RadrootsEventClass::Addressable,
+        EventClass::Addressable,
     ));
     assert_eq!(
         candidate.coordinate,
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind: 30023,
             pubkey: parse_public_key(hex_64('b')).unwrap(),
             d_tag: "article-1".to_owned()
@@ -124,8 +124,8 @@ fn addressable_events_use_kind_pubkey_and_d_tag_coordinates() {
 fn addressable_events_require_valid_d_tags() {
     let missing = event(30023, &hex_64('2'), &hex_64('b'), 7, Vec::new());
     assert_eq!(
-        event_head_candidate_for_class(&missing, RadrootsEventClass::Addressable),
-        RadrootsEventHeadCandidateResult::Malformed(RadrootsEventHeadMalformed::MissingDTag)
+        event_head_candidate_for_class(&missing, EventClass::Addressable),
+        EventHeadCandidateResult::Malformed(EventHeadMalformed::MissingDTag)
     );
 
     let invalid = event(
@@ -136,44 +136,44 @@ fn addressable_events_require_valid_d_tags() {
         vec![vec![TAG_D.to_string(), "bad d".to_string()]],
     );
     assert!(matches!(
-        event_head_candidate_for_class(&invalid, RadrootsEventClass::Addressable),
-        RadrootsEventHeadCandidateResult::Malformed(RadrootsEventHeadMalformed::InvalidDTag(_))
+        event_head_candidate_for_class(&invalid, EventClass::Addressable),
+        EventHeadCandidateResult::Malformed(EventHeadMalformed::InvalidDTag(_))
     ));
 }
 
 #[test]
 fn event_head_selection_uses_nip01_time_and_lowest_id_rules() {
-    let current: RadrootsCurrentEventHead = candidate('3', 10).into();
+    let current: CurrentEventHead = candidate('3', 10).into();
 
     assert!(matches!(
         select_event_head(candidate('1', 1), None),
-        RadrootsEventHeadDecision::Applied(_)
+        EventHeadDecision::Applied(_)
     ));
     assert!(matches!(
         select_event_head(candidate('4', 11), Some(&current)),
-        RadrootsEventHeadDecision::Applied(_)
+        EventHeadDecision::Applied(_)
     ));
     assert_eq!(
         select_event_head(candidate('2', 9), Some(&current)),
-        RadrootsEventHeadDecision::SkippedOlder
+        EventHeadDecision::SkippedOlder
     );
     assert_eq!(
         select_event_head(candidate('3', 10), Some(&current)),
-        RadrootsEventHeadDecision::SkippedDuplicate
+        EventHeadDecision::SkippedDuplicate
     );
     assert!(matches!(
         select_event_head(candidate('2', 10), Some(&current)),
-        RadrootsEventHeadDecision::Applied(_)
+        EventHeadDecision::Applied(_)
     ));
     assert_eq!(
         select_event_head(candidate('4', 10), Some(&current)),
-        RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId
+        EventHeadDecision::SkippedSameTimestampHigherEventId
     );
 }
 
 #[test]
 fn event_head_selection_rejects_coordinate_mismatch() {
-    let current: RadrootsCurrentEventHead = candidate('3', 10).into();
+    let current: CurrentEventHead = candidate('3', 10).into();
     let other = event_head_candidate_for_class(
         &event(
             30023,
@@ -182,12 +182,12 @@ fn event_head_selection_rejects_coordinate_mismatch() {
             11,
             vec![vec![TAG_D.to_string(), "article".to_string()]],
         ),
-        RadrootsEventClass::Addressable,
+        EventClass::Addressable,
     );
     let other = expect_candidate(other);
     assert_eq!(
         select_event_head(other, Some(&current)),
-        RadrootsEventHeadDecision::CoordinateMismatch
+        EventHeadDecision::CoordinateMismatch
     );
 }
 
@@ -197,7 +197,7 @@ fn contract_bridge_uses_replaceable_event_classes() {
     let candidate = expect_candidate(event_head_candidate_for_event(&event).expect("contract"));
     assert_eq!(
         candidate.coordinate,
-        RadrootsEventHeadCoordinate::Replaceable {
+        EventHeadCoordinate::Replaceable {
             kind: KIND_FOLLOW,
             pubkey: parse_public_key(hex_64('a')).unwrap()
         }
@@ -210,7 +210,7 @@ fn raw_nip01_bridge_uses_numeric_kind_classes_without_contract_identification() 
     let replaceable = expect_candidate(event_head_candidate_for_nip01_event(&replaceable));
     assert_eq!(
         replaceable.coordinate,
-        RadrootsEventHeadCoordinate::Replaceable {
+        EventHeadCoordinate::Replaceable {
             kind: 19_999,
             pubkey: parse_public_key(hex_64('a')).unwrap(),
         }
@@ -226,7 +226,7 @@ fn raw_nip01_bridge_uses_numeric_kind_classes_without_contract_identification() 
     let addressable = expect_candidate(event_head_candidate_for_nip01_event(&addressable));
     assert_eq!(
         addressable.coordinate,
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind: 39_999,
             pubkey: parse_public_key(hex_64('b')).unwrap(),
             d_tag: "unsupported".to_owned(),
@@ -236,7 +236,7 @@ fn raw_nip01_bridge_uses_numeric_kind_classes_without_contract_identification() 
     let regular = event(40_000, &hex_64('3'), &hex_64('c'), 3, Vec::new());
     assert_eq!(
         event_head_candidate_for_nip01_event(&regular),
-        RadrootsEventHeadCandidateResult::NotHeadSelected
+        EventHeadCandidateResult::NotHeadSelected
     );
 }
 
@@ -272,7 +272,7 @@ fn raw_nip01_addressable_coordinates_treat_d_as_opaque_protocol_data() {
         let candidate = expect_candidate(event_head_candidate_for_nip01_event(&event));
         assert_eq!(
             candidate.coordinate,
-            RadrootsEventHeadCoordinate::Addressable {
+            EventHeadCoordinate::Addressable {
                 kind: 39_999,
                 pubkey: parse_public_key(hex_64('b')).unwrap(),
                 d_tag: expected.to_owned(),
@@ -290,8 +290,8 @@ fn product_addressable_coordinates_retain_strict_d_validation() {
     ] {
         let event = event(30_023, &hex_64('2'), &hex_64('b'), 2, tags);
         assert!(matches!(
-            event_head_candidate_for_class(&event, RadrootsEventClass::Addressable),
-            RadrootsEventHeadCandidateResult::Malformed(_)
+            event_head_candidate_for_class(&event, EventClass::Addressable),
+            EventHeadCandidateResult::Malformed(_)
         ));
     }
 }
@@ -308,7 +308,7 @@ fn contract_bridge_uses_addressable_event_classes() {
     let candidate = expect_candidate(event_head_candidate_for_event(&event).expect("contract"));
     assert_eq!(
         candidate.coordinate,
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind: KIND_LIST_SET_GENERIC,
             pubkey: parse_public_key(hex_64('b')).unwrap(),
             d_tag: "member_of.farms".to_owned()
@@ -330,7 +330,7 @@ fn contract_bridge_uses_profile_replaceable_heads() {
         expect_candidate(event_head_candidate_for_event(&profile).expect("profile contract"));
     assert_eq!(
         candidate.coordinate,
-        RadrootsEventHeadCoordinate::Replaceable {
+        EventHeadCoordinate::Replaceable {
             kind: KIND_PROFILE,
             pubkey: parse_public_key(hex_64('c')).unwrap()
         }
@@ -359,7 +359,7 @@ fn contract_bridge_keeps_trade_mutations_out_of_head_selection() {
     );
     assert_eq!(
         event_head_candidate_for_event(&trade).expect("trade contract"),
-        RadrootsEventHeadCandidateResult::NotHeadSelected
+        EventHeadCandidateResult::NotHeadSelected
     );
 }
 
@@ -368,7 +368,7 @@ fn contract_bridge_reports_unsupported_and_malformed_shapes() {
     let unsupported = event(999_999, &hex_64('5'), &hex_64('a'), 1, Vec::new());
     assert_eq!(
         event_head_candidate_for_event(&unsupported),
-        Err(RadrootsContractMatchError::UnsupportedKind(999_999))
+        Err(ContractMatchError::UnsupportedKind(999_999))
     );
 
     let malformed_addressable = event(
@@ -380,9 +380,7 @@ fn contract_bridge_reports_unsupported_and_malformed_shapes() {
     );
     assert_eq!(
         event_head_candidate_for_event(&malformed_addressable),
-        Err(RadrootsContractMatchError::UnsupportedShape(
-            KIND_LIST_SET_GENERIC
-        ))
+        Err(ContractMatchError::UnsupportedShape(KIND_LIST_SET_GENERIC))
     );
 
     let regular_with_d_tag = event(
@@ -394,14 +392,14 @@ fn contract_bridge_reports_unsupported_and_malformed_shapes() {
     );
     assert_eq!(
         event_head_candidate_for_event(&regular_with_d_tag).expect("post contract"),
-        RadrootsEventHeadCandidateResult::NotHeadSelected
+        EventHeadCandidateResult::NotHeadSelected
     );
 }
 
 #[test]
 fn expect_candidate_reports_non_candidate_inputs() {
     let result = std::panic::catch_unwind(|| {
-        expect_candidate(RadrootsEventHeadCandidateResult::NotHeadSelected);
+        expect_candidate(EventHeadCandidateResult::NotHeadSelected);
     });
 
     assert!(result.is_err());

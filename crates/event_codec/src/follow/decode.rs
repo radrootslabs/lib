@@ -3,7 +3,7 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
     envelope::kind::KIND_FOLLOW,
-    social::follow::{RadrootsFollow, RadrootsFollowProfile},
+    social::follow::{Follow, FollowProfile},
 };
 
 use crate::error::EventParseError;
@@ -15,10 +15,7 @@ fn looks_like_ws_relay(s: &str) -> bool {
     s.starts_with("ws://") || s.starts_with("wss://")
 }
 
-fn parse_follow_tag(
-    tag: &[String],
-    published_at: u64,
-) -> Result<RadrootsFollowProfile, EventParseError> {
+fn parse_follow_tag(tag: &[String], published_at: u64) -> Result<FollowProfile, EventParseError> {
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
     let (relay_url, contact_name) = match tag.get(2).filter(|s| !s.is_empty()) {
         Some(value) if looks_like_ws_relay(value) => (
@@ -36,7 +33,7 @@ fn parse_follow_tag(
         None => published_at,
     };
 
-    Ok(RadrootsFollowProfile {
+    Ok(FollowProfile {
         published_at,
         public_key: public_key.clone(),
         relay_url,
@@ -48,7 +45,7 @@ pub fn follow_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     published_at: u64,
-) -> Result<RadrootsFollow, EventParseError> {
+) -> Result<Follow, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "3",
@@ -62,7 +59,7 @@ pub fn follow_from_tags(
     {
         list.push(parse_follow_tag(tag, published_at)?);
     }
-    Ok(RadrootsFollow { list })
+    Ok(Follow { list })
 }
 
 pub fn data_from_event(
@@ -72,7 +69,7 @@ pub fn data_from_event(
     kind: u32,
     _content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsFollow>, EventParseError> {
+) -> Result<RadrootsParsedData<Follow>, EventParseError> {
     let follow = follow_from_tags(kind, &tags, published_at)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -91,7 +88,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsFollow>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Follow>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

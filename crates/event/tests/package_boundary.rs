@@ -22,6 +22,10 @@ const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
 const ADMISSION: &str = include_str!("../src/admission.rs");
 const VERIFICATION: &str = include_str!("../src/verification.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event.txt");
+const CODEC_MANIFEST: &str = include_str!("../../event_codec/Cargo.toml");
+const CODEC_POST_DECODE: &str = include_str!("../../event_codec/src/post/decode.rs");
+const CODEC_PROFILE: &str = include_str!("../../event_codec/src/profile/mod.rs");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -167,6 +171,51 @@ fn crate_root_exposes_the_curated_native_event_vocabulary() {
 }
 
 #[test]
+fn public_native_items_do_not_retain_the_legacy_radroots_prefix() {
+    let prefixed_items = PUBLIC_API
+        .lines()
+        .filter(|line| {
+            line.split("::").any(|segment| {
+                segment
+                    .strip_prefix("Radroots")
+                    .and_then(|suffix| suffix.chars().next())
+                    .is_some_and(|character| character.is_ascii_uppercase())
+            })
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        prefixed_items.is_empty(),
+        "legacy-prefixed native items remain public: {prefixed_items:#?}"
+    );
+    for retired in [
+        "radroots_event::post::Post",
+        "radroots_event::profile::Profile",
+    ] {
+        let declaration = format!("pub struct {retired}");
+        let member_prefix = format!("pub {retired}::");
+        assert!(
+            !PUBLIC_API
+                .lines()
+                .any(|line| line == declaration || line.starts_with(&member_prefix)),
+            "retired compatibility type remains public: {retired}"
+        );
+    }
+}
+
+#[test]
+fn lossy_legacy_projections_are_quarantined_until_codec_retirement() {
+    assert!(CODEC_MANIFEST.contains("publish = false"));
+    for (source, compatibility_type) in [
+        (CODEC_POST_DECODE, "pub struct LegacyPost"),
+        (CODEC_PROFILE, "pub struct LegacyProfile"),
+    ] {
+        assert!(source.contains(compatibility_type));
+        assert!(source.contains("superseded codec APIs in Step 087"));
+    }
+}
+
+#[test]
 fn verification_typestates_are_native_private_and_policy_gated() {
     let admission = include_str!("../src/admission.rs");
     let verification = include_str!("../src/verification.rs");
@@ -186,8 +235,8 @@ fn verification_typestates_are_native_private_and_policy_gated() {
     }
     assert!(ROOT.contains("mod verification;"));
     assert!(!ROOT.contains("pub mod verification;"));
-    assert!(verification.contains("pub struct IdVerifiedEvent(RadrootsEventEnvelope);"));
-    assert!(verification.contains("pub struct SignatureVerifiedEvent(RadrootsEventEnvelope);"));
+    assert!(verification.contains("pub struct IdVerifiedEvent(EventEnvelope);"));
+    assert!(verification.contains("pub struct SignatureVerifiedEvent(EventEnvelope);"));
     assert!(admission.contains("policy.admit(&self)?;"));
     assert!(admission.contains("policy.make_visible(&self)?;"));
     assert!(verification.contains("pub trait SignatureVerifier: Send + Sync"));
@@ -243,7 +292,7 @@ fn event_references_use_the_identity_owned_public_key() {
     let author =
         PublicKey::from_hex("585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df")
             .expect("valid public key");
-    let reference = radroots_event::tag::RadrootsEventRef {
+    let reference = radroots_event::tag::EventRef {
         id: "a".repeat(64),
         author,
         kind: 1,
@@ -272,12 +321,12 @@ fn trade_protocol_identifiers_have_one_definition_and_deliberate_facades() {
     assert_eq!(core::mem::size_of::<CandidateId>(), 32);
     assert_eq!(core::mem::size_of::<MutationId>(), 32);
     assert!(TradeId::parse("order-1").is_err());
-    assert!(radroots_event::id::RadrootsOrderId::parse("order-1").is_ok());
+    assert!(radroots_event::id::OrderId::parse("order-1").is_ok());
 
     for definition in [
-        "validated_hex_id!(RadrootsTradeId, 16);",
-        "validated_hex_id!(RadrootsTradeCandidateId, 32);",
-        "validated_hex_id!(RadrootsTradeMutationId, 32);",
+        "validated_hex_id!(TradeId, 16);",
+        "validated_hex_id!(CandidateId, 32);",
+        "validated_hex_id!(MutationId, 32);",
     ] {
         assert_eq!(IDENTIFIERS.matches(definition).count(), 1, "{definition}");
     }
@@ -285,9 +334,6 @@ fn trade_protocol_identifiers_have_one_definition_and_deliberate_facades() {
         "pub struct TradeId",
         "pub struct CandidateId",
         "pub struct MutationId",
-        "pub struct RadrootsTradeId",
-        "pub struct RadrootsTradeCandidateId",
-        "pub struct RadrootsTradeMutationId",
     ] {
         assert!(
             !TRADE.contains(duplicate),

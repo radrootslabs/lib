@@ -9,30 +9,30 @@ use core::fmt;
 
 use crate::{
     contract::registry_v7::{
-        RadrootsContractValidationError, RadrootsEventContract, validate_event_contract_registry_v7,
+        ContractValidationError, EventContract, validate_event_contract_registry_v7,
     },
-    envelope::RadrootsEventEnvelope,
-    id::RadrootsEventId,
+    envelope::EventEnvelope,
+    id::EventId,
     wire::compute_canonical_nip01_event_id,
 };
 
 /// A structurally valid event whose canonical identifier is not yet trusted.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RawEvent(RadrootsEventEnvelope);
+pub struct RawEvent(EventEnvelope);
 
 impl RawEvent {
     #[must_use]
-    pub const fn new(event: RadrootsEventEnvelope) -> Self {
+    pub const fn new(event: EventEnvelope) -> Self {
         Self(event)
     }
 
     #[must_use]
-    pub const fn event(&self) -> &RadrootsEventEnvelope {
+    pub const fn event(&self) -> &EventEnvelope {
         &self.0
     }
 
     #[must_use]
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.0
     }
 
@@ -66,16 +66,16 @@ impl RawEvent {
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IdVerifiedEvent(RadrootsEventEnvelope);
+pub struct IdVerifiedEvent(EventEnvelope);
 
 impl IdVerifiedEvent {
     #[must_use]
-    pub const fn event(&self) -> &RadrootsEventEnvelope {
+    pub const fn event(&self) -> &EventEnvelope {
         &self.0
     }
 
     #[must_use]
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.0
     }
 
@@ -102,7 +102,7 @@ impl IdVerifiedEvent {
 pub trait SignatureVerifier: Send + Sync {
     /// Returns success only when the envelope's signature is valid for its
     /// already verified canonical event identifier.
-    fn verify_signature(&self, event: &RadrootsEventEnvelope) -> Result<(), Error>;
+    fn verify_signature(&self, event: &EventEnvelope) -> Result<(), Error>;
 }
 
 /// An event whose canonical identifier and BIP-340 signature are verified.
@@ -115,16 +115,16 @@ pub trait SignatureVerifier: Send + Sync {
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignatureVerifiedEvent(RadrootsEventEnvelope);
+pub struct SignatureVerifiedEvent(EventEnvelope);
 
 impl SignatureVerifiedEvent {
     #[must_use]
-    pub const fn event(&self) -> &RadrootsEventEnvelope {
+    pub const fn event(&self) -> &EventEnvelope {
         &self.0
     }
 
     #[must_use]
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.0
     }
 
@@ -151,7 +151,7 @@ impl SignatureVerifiedEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContractValidatedEvent {
     event: SignatureVerifiedEvent,
-    contract: &'static RadrootsEventContract,
+    contract: &'static EventContract,
 }
 
 impl ContractValidatedEvent {
@@ -161,12 +161,12 @@ impl ContractValidatedEvent {
     }
 
     #[must_use]
-    pub const fn event(&self) -> &RadrootsEventEnvelope {
+    pub const fn event(&self) -> &EventEnvelope {
         self.event.event()
     }
 
     #[must_use]
-    pub const fn contract(&self) -> &'static RadrootsEventContract {
+    pub const fn contract(&self) -> &'static EventContract {
         self.contract
     }
 
@@ -181,7 +181,7 @@ impl ContractValidatedEvent {
     }
 
     #[must_use]
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.event.into_event()
     }
 }
@@ -191,12 +191,9 @@ impl ContractValidatedEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     MalformedEnvelope,
-    IdMismatch {
-        expected: RadrootsEventId,
-        actual: RadrootsEventId,
-    },
+    IdMismatch { expected: EventId, actual: EventId },
     SignatureInvalid,
-    ContractValidation(RadrootsContractValidationError),
+    ContractValidation(ContractValidationError),
 }
 
 impl Error {
@@ -239,12 +236,12 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::envelope::RadrootsEventEnvelopeParts;
+    use crate::envelope::EventEnvelopeParts;
 
     struct Accept;
 
     impl SignatureVerifier for Accept {
-        fn verify_signature(&self, _event: &RadrootsEventEnvelope) -> Result<(), Error> {
+        fn verify_signature(&self, _event: &EventEnvelope) -> Result<(), Error> {
             Ok(())
         }
     }
@@ -252,13 +249,13 @@ mod tests {
     struct Reject;
 
     impl SignatureVerifier for Reject {
-        fn verify_signature(&self, _event: &RadrootsEventEnvelope) -> Result<(), Error> {
+        fn verify_signature(&self, _event: &EventEnvelope) -> Result<(), Error> {
             Err(Error::SignatureInvalid)
         }
     }
 
-    fn valid_profile_event() -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    fn valid_profile_event() -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: "762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0"
                 .to_owned(),
             author: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"

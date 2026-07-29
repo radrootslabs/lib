@@ -32,23 +32,24 @@ Cryptographic verification implementations belong to `radroots_event_codec`
 or signing crates and enter this crate only through the explicit
 `admission::SignatureVerifier` host SPI.
 
-The Profile module exposes the exclusive strict authored model. It requires a
+The Profile module exposes only the strict authored and native profile values. It requires a
 non-whitespace, control-free name; its media fields accept only image-typed,
 byte-verified Blossom descriptors; and its NIP-05 identifier type validates
-syntax without making a network identity claim. The legacy read projection is
-not serializable or exported as a DTO. Tolerant reads use
-`RadrootsInboundProfileMetadata` from `radroots_event_codec`.
+syntax without making a network identity claim. Tolerant reads use
+`RadrootsInboundProfileMetadata` from `radroots_event_codec`; the lossy legacy
+projection is quarantined there as `LegacyProfile` until its mandatory removal
+in Step 087 and is not part of this crate's public surface.
 
-The post module keeps the legacy mutable `RadrootsPost` model as a compatibility
-read projection only. New root kind-1 publication uses private-field
-`RadrootsAuthoredUpdate`, `RadrootsAuthoredPhotoUpdate`, and
-`RadrootsAuthoredAsk` types. Photo and optional Ask media require nonzero
+The post module exposes only native authored values. New root kind-1 publication uses private-field
+`AuthoredUpdate`, `AuthoredPhotoUpdate`, and
+`AuthoredAsk` types. Photo and optional Ask media require nonzero
 dimensions, bounded alt text, approved same-digest fallbacks, and an
 image-typed byte-verified Blossom descriptor. That descriptor state is not an
 upload receipt; BUD-02 completion remains a runtime prerequisite before
-signing.
+signing. The mutable legacy read projection is quarantined in
+`radroots_event_codec` as `LegacyPost` until its mandatory removal in Step 087.
 
-The shared `tag::relay_hint` module exposes `RadrootsNostrRelayHint` for NIP-10 Reply
+The shared `tag::relay_hint` module exposes `NostrRelayHint` for NIP-10 Reply
 and NIP-22 Comment references. It is a byte-stable subset of WebSocket URLs:
 exact lowercase `ws://` or `wss://`, visible ASCII, canonical lowercase DNS or
 four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, canonical optional port
@@ -56,8 +57,8 @@ four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, canonical optional port
 escapes. It rejects IDNA and percent-encoded hosts, legacy IPv4, userinfo,
 fragments, controls, backslashes, and normalization-dependent spellings.
 
-The `post::reply` module exposes opaque `RadrootsNip10ReplyReference` and
-`RadrootsAuthoredNip10Reply` types for strict direct and nested kind-1
+The `post::reply` module exposes opaque `Nip10ReplyReference` and
+`AuthoredNip10Reply` types for strict direct and nested kind-1
 authoring. References carry a validated event id, referenced author, and
 optional shared relay hint; construction emits either one marked root or
 distinct marked root and parent references. Relay-hint syntax is not a
@@ -67,7 +68,7 @@ existence, target kind, signature, author, or relay availability.
 
 The `post::comment` module implements the strict Radroots
 [NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
-kind-`1111` profile. `RadrootsAuthoredNip22Comment` and its opaque event-root,
+kind-`1111` profile. `AuthoredNip22Comment` and its opaque event-root,
 address-root, parent, position, and root-kind values admit only kind-`30402`,
 kind-`31922`, or kind-`31923` event or address roots. External `I`/`i`
 references and kind-`1` roots are unsupported. The authored model has no Serde
@@ -98,7 +99,7 @@ admission. The three governed Comment operations are
 
 The `post::deletion` module implements the effect-free request layer of
 [NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md).
-`RadrootsAuthoredNip09DeletionRequest` requires at least one validated event-id
+`AuthoredNip09DeletionRequest` requires at least one validated event-id
 or replaceable/addressable coordinate target. Event targets carry a
 caller-asserted kind advisory in `0..=65535`; this is metadata rather than
 proof of the target event. Address coordinates accept NIP-01 replaceable kinds
@@ -126,13 +127,13 @@ the focused FoodAvailability marker family; presence of
 `radroots:primary_bin`, `radroots:bin`, or `radroots:price` selects the richer
 Operational Listing marker family. Focused-only, operational-only, marker-free
 generic NIP-99, and mixed-marker events produce
-`RadrootsClassifiedListingPartition::{FocusedFoodAvailability,
+`ClassifiedListingPartition::{FocusedFoodAvailability,
 OperationalListing, GenericNip99, Ambiguous}` respectively. A malformed
 one-element tag still contributes its raw first name, and marker matching is
 case-sensitive. `classify_classified_listing_tags` and the borrowed-slice
 variant inspect neither kind, tag values, nor tag arity.
 
-The `food::availability` module provides `RadrootsFoodAvailabilityDetails` and
+The `food::availability` module provides `FoodAvailabilityDetails` and
 checked identifier, text, publication timestamp, price, currency, unit,
 quantity, status, image-dimension, and image values. Content contains at least
 one scalar outside Unicode whitespace and U+001C through U+001F, and is bounded
@@ -143,7 +144,7 @@ control-free text bounded to 4096 UTF-8 bytes. Food units are closed to `g`,
 Price permits zero; quantity is strictly positive and uses the price unit.
 Image dimensions use two nonzero canonical `u32` decimal values in
 `WIDTHxHEIGHT` form. Details accept at most 64 images, require unique image URLs
-and Blossom digests, and accept only `RadrootsAuthoredImage` values that already
+and Blossom digests, and accept only `AuthoredImage` values that already
 prove local descriptor-to-byte agreement. Details retain nonzero `published_at`
 and can validate that it is not later than a supplied `created_at`.
 
@@ -163,10 +164,10 @@ module nor the registry signs, publishes, replicates, or retrieves an event.
 The calendar module keeps three different states explicit for NIP-52 kinds
 `31922`, `31923`, `31924`, and `31925`: the complete structural event envelope,
 a tolerant baseline NIP-52 projection, and a strict Radroots-admitted
-projection. The authored types are `RadrootsAuthoredCalendarDateEvent`,
-`RadrootsAuthoredCalendarTimeEvent`, `RadrootsAuthoredCalendar`, and
-`RadrootsAuthoredCalendarEventRsvp`; their inbound counterparts use matching
-`RadrootsParsedNip52*` and `RadrootsAdmitted*` types. Envelope construction
+projection. The authored types are `AuthoredCalendarDateEvent`,
+`AuthoredCalendarTimeEvent`, `AuthoredCalendar`, and
+`AuthoredCalendarEventRsvp`; their inbound counterparts use matching
+`ParsedNip52*` and `Admitted*` types. Envelope construction
 validates structure, not a matching event id or Schnorr signature. Callers must
 perform those cryptographic checks independently and keep any parsed or
 admitted value bound to the verified envelope and expected kind.
@@ -241,7 +242,7 @@ state are not part of this crate's current group event subset.
 
 Task records, work sessions, harvest records, approvals, and similar Field
 business objects are CRDT document semantics carried by
-`RadrootsFarmCrdtChange`. They are not separate `rr-rs` event families and this
+`FarmCrdtChange`. They are not separate `rr-rs` event families and this
 crate does not enforce private Field workflow authorization.
 
 ## Copyright

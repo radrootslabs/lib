@@ -7,11 +7,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    farm::crdt::RadrootsFarmCrdtDocumentKind,
-    farm::file::{
-        KIND_FARM_FILE_METADATA, RadrootsFarmFileDimensions, RadrootsFarmFileMetadata,
-        RadrootsFarmFileSource,
-    },
+    farm::crdt::FarmCrdtDocumentKind,
+    farm::file::{FarmFileDimensions, FarmFileMetadata, FarmFileSource, KIND_FARM_FILE_METADATA},
     farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
     tag::name::{TAG_A, TAG_D, TAG_H, TAG_MIME, TAG_ORIGINAL_SHA256, TAG_SHA256, TAG_URL},
 };
@@ -22,7 +19,7 @@ use crate::field_helpers::{
     push_optional_tag, push_tag, push_tag_values, validate_lowercase_hex_64,
     validate_non_empty_field,
 };
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_ALT: &str = "alt";
 const TAG_BLURHASH: &str = "blurhash";
@@ -34,7 +31,7 @@ const TAG_SIZE: &str = "size";
 const TAG_THUMB: &str = "thumb";
 
 pub fn farm_file_metadata_build_tags(
-    metadata: &RadrootsFarmFileMetadata,
+    metadata: &FarmFileMetadata,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_metadata(metadata)?;
     let workspace = format!(
@@ -78,30 +75,26 @@ pub fn farm_file_metadata_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    metadata: &RadrootsFarmFileMetadata,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(metadata: &FarmFileMetadata) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(metadata, KIND_FARM_FILE_METADATA)
 }
 
 pub fn to_wire_parts_with_kind(
-    metadata: &RadrootsFarmFileMetadata,
+    metadata: &FarmFileMetadata,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM_FILE_METADATA {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_file_metadata_build_tags(metadata)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: metadata.caption.clone().unwrap_or_default(),
         tags,
     })
 }
 
-pub(crate) fn validate_metadata(
-    metadata: &RadrootsFarmFileMetadata,
-) -> Result<(), EventEncodeError> {
+pub(crate) fn validate_metadata(metadata: &FarmFileMetadata) -> Result<(), EventEncodeError> {
     validate_d_tag(&metadata.d_tag, "d_tag")?;
     validate_non_empty_field(&metadata.farm_group_id, "farm_group_id")?;
     validate_non_empty_field(&metadata.workspace.pubkey, "workspace.pubkey")?;
@@ -133,12 +126,12 @@ pub(crate) fn validate_metadata(
     Ok(())
 }
 
-pub(crate) fn document_kind_tag(kind: &RadrootsFarmCrdtDocumentKind) -> String {
+pub(crate) fn document_kind_tag(kind: &FarmCrdtDocumentKind) -> String {
     kind.as_str().to_string()
 }
 
 fn validate_dimensions(
-    dimensions: RadrootsFarmFileDimensions,
+    dimensions: FarmFileDimensions,
     field: &'static str,
 ) -> Result<(), EventEncodeError> {
     if dimensions.w == 0 || dimensions.h == 0 {
@@ -149,7 +142,7 @@ fn validate_dimensions(
 }
 
 fn validate_source(
-    source: Option<&RadrootsFarmFileSource>,
+    source: Option<&FarmFileSource>,
     field: &'static str,
 ) -> Result<(), EventEncodeError> {
     let Some(source) = source else {
@@ -168,7 +161,7 @@ fn validate_source(
 fn push_source_tag(
     tags: &mut Vec<Vec<String>>,
     key: &'static str,
-    source: Option<&RadrootsFarmFileSource>,
+    source: Option<&FarmFileSource>,
 ) -> Result<(), EventEncodeError> {
     let Some(source) = source else {
         return Ok(());
@@ -185,6 +178,6 @@ fn push_source_tag(
     Ok(())
 }
 
-fn dimensions_tag(dimensions: RadrootsFarmFileDimensions) -> String {
+fn dimensions_tag(dimensions: FarmFileDimensions) -> String {
     format!("{}x{}", dimensions.w, dimensions.h)
 }

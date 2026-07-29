@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{envelope::kind::KIND_SEAL, social::seal::RadrootsSeal};
+use radroots_event::{envelope::kind::KIND_SEAL, social::seal::Seal};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -15,7 +15,7 @@ pub fn seal_from_parts(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsSeal, EventParseError> {
+) -> Result<Seal, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "13",
@@ -28,7 +28,7 @@ pub fn seal_from_parts(
     if content.trim().is_empty() {
         return Err(EventParseError::InvalidTag("content"));
     }
-    Ok(RadrootsSeal {
+    Ok(Seal {
         content: content.to_string(),
     })
 }
@@ -40,7 +40,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsSeal>, EventParseError> {
+) -> Result<RadrootsParsedData<Seal>, EventParseError> {
     let seal = seal_from_parts(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -59,7 +59,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsSeal>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Seal>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

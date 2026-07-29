@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::tag::RadrootsEventPtr;
+use crate::tag::EventPtr;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -12,10 +12,10 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsMessage {
-    pub recipients: Vec<RadrootsMessageRecipient>,
+pub struct Message {
+    pub recipients: Vec<MessageRecipient>,
     pub content: String,
-    pub reply_to: Option<RadrootsEventPtr>,
+    pub reply_to: Option<EventPtr>,
     pub subject: Option<String>,
 }
 
@@ -26,7 +26,7 @@ pub struct RadrootsMessage {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsMessageRecipient {
+pub struct MessageRecipient {
     pub public_key: String,
     pub relay_url: Option<String>,
 }

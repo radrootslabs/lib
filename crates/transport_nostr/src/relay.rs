@@ -26,9 +26,9 @@ impl RadrootsRelayUrlPolicy {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsRelayUrl(String);
+pub struct RelayUrl(String);
 
-impl RadrootsRelayUrl {
+impl RelayUrl {
     pub fn parse(
         value: impl AsRef<str>,
         policy: RadrootsRelayUrlPolicy,
@@ -243,7 +243,7 @@ fn is_supported_global_ipv6_unicast(segments: [u16; 8]) -> bool {
     (segments[0] & 0xe000) == 0x2000
 }
 
-impl fmt::Display for RadrootsRelayUrl {
+impl fmt::Display for RelayUrl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.0.as_str())
     }
@@ -251,7 +251,7 @@ impl fmt::Display for RadrootsRelayUrl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRelayTargetSet {
-    relays: Vec<RadrootsRelayUrl>,
+    relays: Vec<RelayUrl>,
 }
 
 impl RadrootsRelayTargetSet {
@@ -265,7 +265,7 @@ impl RadrootsRelayTargetSet {
     {
         let mut ordered_relays = Vec::new();
         for relay in relays {
-            let relay = RadrootsRelayUrl::parse(relay, policy)?;
+            let relay = RelayUrl::parse(relay, policy)?;
             if ordered_relays.iter().any(|existing| existing == &relay) {
                 return Err(RadrootsRelayTransportError::DuplicateRelayUrl {
                     url: relay.into_string(),
@@ -280,7 +280,7 @@ impl RadrootsRelayTargetSet {
         Ok(Self { relays })
     }
 
-    pub fn from_urls(relays: Vec<RadrootsRelayUrl>) -> Result<Self, RadrootsRelayTransportError> {
+    pub fn from_urls(relays: Vec<RelayUrl>) -> Result<Self, RadrootsRelayTransportError> {
         let mut ordered_relays = Vec::new();
         for relay in relays {
             if ordered_relays.iter().any(|existing| existing == &relay) {
@@ -297,7 +297,7 @@ impl RadrootsRelayTargetSet {
         Ok(Self { relays })
     }
 
-    pub fn relays(&self) -> &[RadrootsRelayUrl] {
+    pub fn relays(&self) -> &[RelayUrl] {
         &self.relays
     }
 

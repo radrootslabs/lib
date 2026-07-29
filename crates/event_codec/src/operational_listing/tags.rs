@@ -12,15 +12,14 @@ use radroots_core::Money;
 #[cfg(any(feature = "serde_json", test))]
 use radroots_core::pricing::Discount;
 use radroots_event::envelope::kind::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
-use radroots_event::farm::RadrootsFarmRef;
+use radroots_event::farm::FarmRef;
 use radroots_event::farm::location::{has_textual_locality, is_public_geohash5};
-use radroots_event::farm::plot::RadrootsPlotRef;
-use radroots_event::farm::resource_area::RadrootsResourceAreaRef;
+use radroots_event::farm::plot::PlotRef;
+use radroots_event::farm::resource_area::ResourceAreaRef;
 use radroots_event::listing::operational::{
-    RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-    RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-    RadrootsOperationalListingImage, RadrootsOperationalListingPublicLocation,
-    RadrootsOperationalListingStatus,
+    OperationalListing, OperationalListingAvailability, OperationalListingBin,
+    OperationalListingDeliveryMethod, OperationalListingImage, OperationalListingPublicLocation,
+    OperationalListingStatus,
 };
 use radroots_event::tag::name::{TAG_D, TAG_PUBLISHED_AT};
 
@@ -77,13 +76,13 @@ impl OperationalListingTagOptions {
 }
 
 pub fn operational_listing_tags(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     operational_listing_tags_with_options(listing, OperationalListingTagOptions::default())
 }
 
 pub fn operational_listing_tags_full(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     operational_listing_tags_with_options(
         listing,
@@ -92,7 +91,7 @@ pub fn operational_listing_tags_full(
 }
 
 pub fn operational_listing_tags_with_options(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
     options: OperationalListingTagOptions,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let d_tag = listing.d_tag.as_str();
@@ -142,7 +141,7 @@ pub fn operational_listing_tags_with_options(
         listing.primary_bin_id.to_string(),
     ]);
 
-    let mut bins: Vec<&RadrootsOperationalListingBin> = listing.bins.iter().collect();
+    let mut bins: Vec<&OperationalListingBin> = listing.bins.iter().collect();
     if let Some(pos) = bins
         .iter()
         .position(|bin| bin.bin_id == listing.primary_bin_id)
@@ -184,13 +183,13 @@ pub fn operational_listing_tags_with_options(
         && let Some(availability) = &listing.availability
     {
         match availability {
-            RadrootsOperationalListingAvailability::Status { status } => {
+            OperationalListingAvailability::Status { status } => {
                 tags.push(vec![
                     TAG_STATUS.to_string(),
                     status_as_str(status).to_string(),
                 ]);
             }
-            RadrootsOperationalListingAvailability::Window { start, end } => {
+            OperationalListingAvailability::Window { start, end } => {
                 if let Some(start) = start {
                     tags.push(vec![
                         TAG_RADROOTS_AVAILABILITY_START.to_string(),
@@ -210,12 +209,10 @@ pub fn operational_listing_tags_with_options(
         let mut tag = Vec::with_capacity(3);
         tag.push(TAG_DELIVERY.to_string());
         match method {
-            RadrootsOperationalListingDeliveryMethod::Pickup => tag.push("pickup".into()),
-            RadrootsOperationalListingDeliveryMethod::LocalDelivery => {
-                tag.push("local_delivery".into())
-            }
-            RadrootsOperationalListingDeliveryMethod::Shipping => tag.push("shipping".into()),
-            RadrootsOperationalListingDeliveryMethod::Other { method } => {
+            OperationalListingDeliveryMethod::Pickup => tag.push("pickup".into()),
+            OperationalListingDeliveryMethod::LocalDelivery => tag.push("local_delivery".into()),
+            OperationalListingDeliveryMethod::Shipping => tag.push("shipping".into()),
+            OperationalListingDeliveryMethod::Other { method } => {
                 tag.push("other".into());
                 tag.push(method.clone());
             }
@@ -263,10 +260,7 @@ pub fn operational_listing_tags_with_options(
     Ok(tags)
 }
 
-fn push_farm_tags(
-    tags: &mut Vec<Vec<String>>,
-    farm: &RadrootsFarmRef,
-) -> Result<(), EventEncodeError> {
+fn push_farm_tags(tags: &mut Vec<Vec<String>>, farm: &FarmRef) -> Result<(), EventEncodeError> {
     if farm.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.pubkey"));
     }
@@ -285,9 +279,7 @@ fn push_farm_tags(
     Ok(())
 }
 
-fn tag_listing_resource_area(
-    area: &RadrootsResourceAreaRef,
-) -> Result<Vec<String>, EventEncodeError> {
+fn tag_listing_resource_area(area: &ResourceAreaRef) -> Result<Vec<String>, EventEncodeError> {
     if area.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("resource_area.pubkey"));
     }
@@ -304,7 +296,7 @@ fn tag_listing_resource_area(
     Ok(vec![TAG_RADROOTS_RESOURCE_AREA.to_string(), address])
 }
 
-fn tag_listing_plot(plot: &RadrootsPlotRef) -> Result<Vec<String>, EventEncodeError> {
+fn tag_listing_plot(plot: &PlotRef) -> Result<Vec<String>, EventEncodeError> {
     if plot.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("plot.pubkey"));
     }
@@ -321,7 +313,7 @@ fn tag_listing_plot(plot: &RadrootsPlotRef) -> Result<Vec<String>, EventEncodeEr
     Ok(vec![TAG_RADROOTS_PLOT.to_string(), address])
 }
 
-fn tag_listing_bin(bin: &RadrootsOperationalListingBin) -> Result<Vec<String>, EventEncodeError> {
+fn tag_listing_bin(bin: &OperationalListingBin) -> Result<Vec<String>, EventEncodeError> {
     let unit = bin.quantity.unit();
     if unit != unit.canonical_unit() {
         return Err(EventEncodeError::EmptyRequiredField("bin.quantity"));
@@ -351,7 +343,7 @@ fn tag_listing_bin(bin: &RadrootsOperationalListingBin) -> Result<Vec<String>, E
     Ok(tag)
 }
 
-fn tag_listing_price(bin: &RadrootsOperationalListingBin) -> Result<Vec<String>, EventEncodeError> {
+fn tag_listing_price(bin: &OperationalListingBin) -> Result<Vec<String>, EventEncodeError> {
     let price = &bin.price_per_canonical_unit;
     if !price.is_price_per_canonical_unit() {
         return Err(EventEncodeError::EmptyRequiredField(
@@ -384,7 +376,7 @@ fn tag_listing_price(bin: &RadrootsOperationalListingBin) -> Result<Vec<String>,
     Ok(tag)
 }
 
-fn bin_total_price(bin: &RadrootsOperationalListingBin) -> Result<Money, EventEncodeError> {
+fn bin_total_price(bin: &OperationalListingBin) -> Result<Money, EventEncodeError> {
     bin.price_per_canonical_unit
         .try_cost_for_quantity_in(&bin.quantity)
         .map_err(|_| EventEncodeError::EmptyRequiredField("bin.price_per_canonical_unit"))
@@ -398,7 +390,7 @@ fn tag_listing_price_generic(price: &Money) -> Vec<String> {
     tag
 }
 
-fn tag_listing_image(image: &RadrootsOperationalListingImage) -> Option<Vec<String>> {
+fn tag_listing_image(image: &OperationalListingImage) -> Option<Vec<String>> {
     let url = clean_value(&image.url)?;
     let mut tag = Vec::with_capacity(3);
     tag.push(TAG_IMAGE.to_string());
@@ -411,7 +403,7 @@ fn tag_listing_image(image: &RadrootsOperationalListingImage) -> Option<Vec<Stri
 
 fn push_location_geotag(
     tags: &mut Vec<Vec<String>>,
-    location: &RadrootsOperationalListingPublicLocation,
+    location: &OperationalListingPublicLocation,
 ) -> Result<(), EventEncodeError> {
     let geohash = clean_value(&location.geohash)
         .ok_or(EventEncodeError::EmptyRequiredField("location.geohash"))?;
@@ -444,11 +436,11 @@ fn discount_tag_payload(discount: &Discount) -> Result<String, EventEncodeError>
     }
 }
 
-fn status_as_str(status: &RadrootsOperationalListingStatus) -> &str {
+fn status_as_str(status: &OperationalListingStatus) -> &str {
     match status {
-        RadrootsOperationalListingStatus::Active => "active",
-        RadrootsOperationalListingStatus::Sold => "sold",
-        RadrootsOperationalListingStatus::Other { value } => value.as_str(),
+        OperationalListingStatus::Active => "active",
+        OperationalListingStatus::Sold => "sold",
+        OperationalListingStatus::Other { value } => value.as_str(),
     }
 }
 
@@ -462,10 +454,9 @@ mod tests {
     };
     use radroots_core::pricing::{DiscountScope, DiscountThreshold, DiscountValue};
     use radroots_core::{Currency, Decimal, Quantity, QuantityPrice, Unit};
-    use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+    use radroots_event::id::{DTag, InventoryBinId};
     use radroots_event::listing::operational::{
-        RadrootsOperationalListingImageSize, RadrootsOperationalListingProduct,
-        RadrootsOperationalListingStatus,
+        OperationalListingImageSize, OperationalListingProduct, OperationalListingStatus,
     };
 
     const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
@@ -493,16 +484,16 @@ mod tests {
         QuantityPrice::try_new(amount, quantity).unwrap()
     }
 
-    fn d_tag(raw: &str) -> RadrootsDTag {
+    fn d_tag(raw: &str) -> DTag {
         raw.parse().unwrap()
     }
 
-    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    fn bin_id(raw: &str) -> InventoryBinId {
         raw.parse().unwrap()
     }
 
-    fn base_product() -> RadrootsOperationalListingProduct {
-        RadrootsOperationalListingProduct {
+    fn base_product() -> OperationalListingProduct {
+        OperationalListingProduct {
             key: "coffee".to_string(),
             title: "Coffee".to_string(),
             category: "agri".to_string(),
@@ -515,8 +506,8 @@ mod tests {
         }
     }
 
-    fn base_bin() -> RadrootsOperationalListingBin {
-        RadrootsOperationalListingBin {
+    fn base_bin() -> OperationalListingBin {
+        OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: quantity(decimal("1000"), Unit::MassG).with_label("bag"),
             price_per_canonical_unit: price(
@@ -531,33 +522,33 @@ mod tests {
         }
     }
 
-    fn base_listing() -> RadrootsOperationalListing {
-        RadrootsOperationalListing {
+    fn base_listing() -> OperationalListing {
+        OperationalListing {
             d_tag: d_tag(TEST_D_TAG),
             published_at: None,
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
             product: base_product(),
             primary_bin_id: bin_id("bin-1"),
             bins: vec![base_bin()],
-            resource_area: Some(RadrootsResourceAreaRef {
+            resource_area: Some(ResourceAreaRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             }),
-            plot: Some(RadrootsPlotRef {
+            plot: Some(PlotRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             }),
             discounts: None,
             inventory_available: Some(decimal("2")),
-            availability: Some(RadrootsOperationalListingAvailability::Window {
+            availability: Some(OperationalListingAvailability::Window {
                 start: Some(10),
                 end: Some(20),
             }),
-            delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
-            location: Some(RadrootsOperationalListingPublicLocation {
+            delivery_method: Some(OperationalListingDeliveryMethod::Pickup),
+            location: Some(OperationalListingPublicLocation {
                 primary: "Moyobamba".to_string(),
                 city: Some("Moyobamba".to_string()),
                 region: Some("San Martin".to_string()),
@@ -565,11 +556,11 @@ mod tests {
                 geohash: "9q8yy".to_string(),
             }),
             images: Some(vec![
-                RadrootsOperationalListingImage {
+                OperationalListingImage {
                     url: cdn_url("a.jpg"),
-                    size: Some(RadrootsOperationalListingImageSize { w: 1200, h: 800 }),
+                    size: Some(OperationalListingImageSize { w: 1200, h: 800 }),
                 },
-                RadrootsOperationalListingImage {
+                OperationalListingImage {
                     url: "  ".to_string(),
                     size: None,
                 },
@@ -614,7 +605,7 @@ mod tests {
     #[test]
     fn location_geotag_accepts_public_geohash5() {
         let mut tags = Vec::new();
-        let location = RadrootsOperationalListingPublicLocation {
+        let location = OperationalListingPublicLocation {
             primary: "Test".to_string(),
             city: Some("Town".to_string()),
             region: None,
@@ -631,7 +622,7 @@ mod tests {
     #[test]
     fn location_geotag_rejects_blank_geohash() {
         let mut tags = Vec::new();
-        let location = RadrootsOperationalListingPublicLocation {
+        let location = OperationalListingPublicLocation {
             primary: "Test".to_string(),
             city: Some("Town".to_string()),
             region: None,
@@ -649,7 +640,7 @@ mod tests {
     #[test]
     fn location_geotag_rejects_non_public_geohash() {
         let mut tags = Vec::new();
-        let location = RadrootsOperationalListingPublicLocation {
+        let location = OperationalListingPublicLocation {
             primary: "Test".to_string(),
             city: Some("Town".to_string()),
             region: None,
@@ -666,15 +657,15 @@ mod tests {
 
     #[test]
     fn image_and_status_helpers_cover_variants() {
-        let with_size = tag_listing_image(&RadrootsOperationalListingImage {
+        let with_size = tag_listing_image(&OperationalListingImage {
             url: format!(" {CDN_PRIMARY_HTTPS}/a.jpg "),
-            size: Some(RadrootsOperationalListingImageSize { w: 10, h: 20 }),
+            size: Some(OperationalListingImageSize { w: 10, h: 20 }),
         })
         .expect("image tag");
         assert_eq!(with_size[0], "image");
         assert_eq!(with_size[2], "10x20");
 
-        let without_size = tag_listing_image(&RadrootsOperationalListingImage {
+        let without_size = tag_listing_image(&OperationalListingImage {
             url: cdn_url("b.jpg"),
             size: None,
         })
@@ -682,23 +673,17 @@ mod tests {
         assert_eq!(without_size.len(), 2);
 
         assert!(
-            tag_listing_image(&RadrootsOperationalListingImage {
+            tag_listing_image(&OperationalListingImage {
                 url: "null".to_string(),
                 size: None,
             })
             .is_none()
         );
 
+        assert_eq!(status_as_str(&OperationalListingStatus::Active), "active");
+        assert_eq!(status_as_str(&OperationalListingStatus::Sold), "sold");
         assert_eq!(
-            status_as_str(&RadrootsOperationalListingStatus::Active),
-            "active"
-        );
-        assert_eq!(
-            status_as_str(&RadrootsOperationalListingStatus::Sold),
-            "sold"
-        );
-        assert_eq!(
-            status_as_str(&RadrootsOperationalListingStatus::Other {
+            status_as_str(&OperationalListingStatus::Other {
                 value: "paused".to_string()
             }),
             "paused"
@@ -732,7 +717,7 @@ mod tests {
         let mut tags = Vec::new();
         push_farm_tags(
             &mut tags,
-            &RadrootsFarmRef {
+            &FarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
@@ -743,7 +728,7 @@ mod tests {
 
         let err = push_farm_tags(
             &mut Vec::new(),
-            &RadrootsFarmRef {
+            &FarmRef {
                 pubkey: "".to_string(),
                 d_tag: TEST_FARM_D_TAG.to_string(),
             },
@@ -756,7 +741,7 @@ mod tests {
 
         let err = push_farm_tags(
             &mut Vec::new(),
-            &RadrootsFarmRef {
+            &FarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "".to_string(),
             },
@@ -769,7 +754,7 @@ mod tests {
 
         let err = push_farm_tags(
             &mut Vec::new(),
-            &RadrootsFarmRef {
+            &FarmRef {
                 pubkey: TEST_PUBKEY_HEX.to_string(),
                 d_tag: "farm:invalid".to_string(),
             },
@@ -777,14 +762,14 @@ mod tests {
         .expect_err("invalid farm d_tag");
         assert!(matches!(err, EventEncodeError::InvalidField("farm.d_tag")));
 
-        let area = tag_listing_resource_area(&RadrootsResourceAreaRef {
+        let area = tag_listing_resource_area(&ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         })
         .expect("resource area");
         assert_eq!(area[0], "radroots:resource_area");
 
-        let plot = tag_listing_plot(&RadrootsPlotRef {
+        let plot = tag_listing_plot(&PlotRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         })
@@ -943,7 +928,7 @@ mod tests {
 
         let mut listing = base_listing();
         listing.discounts = None;
-        listing.resource_area = Some(RadrootsResourceAreaRef {
+        listing.resource_area = Some(ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "invalid".to_string(),
         });
@@ -1013,8 +998,8 @@ mod tests {
 
         let mut status_listing = base_listing();
         status_listing.discounts = None;
-        status_listing.availability = Some(RadrootsOperationalListingAvailability::Status {
-            status: RadrootsOperationalListingStatus::Other {
+        status_listing.availability = Some(OperationalListingAvailability::Status {
+            status: OperationalListingStatus::Other {
                 value: "paused".to_string(),
             },
         });
@@ -1025,10 +1010,10 @@ mod tests {
         }));
 
         for method in [
-            RadrootsOperationalListingDeliveryMethod::Pickup,
-            RadrootsOperationalListingDeliveryMethod::LocalDelivery,
-            RadrootsOperationalListingDeliveryMethod::Shipping,
-            RadrootsOperationalListingDeliveryMethod::Other {
+            OperationalListingDeliveryMethod::Pickup,
+            OperationalListingDeliveryMethod::LocalDelivery,
+            OperationalListingDeliveryMethod::Shipping,
+            OperationalListingDeliveryMethod::Other {
                 method: "scheduled".to_string(),
             },
         ] {
@@ -1057,11 +1042,10 @@ mod tests {
 
         let mut empty_window_availability = base_listing();
         empty_window_availability.discounts = None;
-        empty_window_availability.availability =
-            Some(RadrootsOperationalListingAvailability::Window {
-                start: None,
-                end: None,
-            });
+        empty_window_availability.availability = Some(OperationalListingAvailability::Window {
+            start: None,
+            end: None,
+        });
         let empty_window_tags = operational_listing_tags_with_options(
             &empty_window_availability,
             OperationalListingTagOptions {
@@ -1147,7 +1131,7 @@ mod tests {
         ));
 
         listing = base_listing();
-        listing.resource_area = Some(RadrootsResourceAreaRef {
+        listing.resource_area = Some(ResourceAreaRef {
             pubkey: "".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         });
@@ -1158,7 +1142,7 @@ mod tests {
         ));
 
         listing = base_listing();
-        listing.resource_area = Some(RadrootsResourceAreaRef {
+        listing.resource_area = Some(ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "".to_string(),
         });
@@ -1169,7 +1153,7 @@ mod tests {
         ));
 
         listing = base_listing();
-        listing.plot = Some(RadrootsPlotRef {
+        listing.plot = Some(PlotRef {
             pubkey: "".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         });
@@ -1180,7 +1164,7 @@ mod tests {
         ));
 
         listing = base_listing();
-        listing.plot = Some(RadrootsPlotRef {
+        listing.plot = Some(PlotRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "".to_string(),
         });
@@ -1191,7 +1175,7 @@ mod tests {
         ));
 
         listing = base_listing();
-        listing.plot = Some(RadrootsPlotRef {
+        listing.plot = Some(PlotRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "plot:invalid".to_string(),
         });
@@ -1237,7 +1221,7 @@ mod tests {
         listing.product.location = Some(" null ".to_string());
         listing.product.profile = Some(" ".to_string());
         listing.location = None;
-        listing.images = Some(vec![RadrootsOperationalListingImage {
+        listing.images = Some(vec![OperationalListingImage {
             url: "null".to_string(),
             size: None,
         }]);
@@ -1252,7 +1236,7 @@ mod tests {
         let mut listing = base_listing();
         listing.discounts = None;
         listing.images = None;
-        listing.location = Some(RadrootsOperationalListingPublicLocation {
+        listing.location = Some(OperationalListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some("Moyobamba".to_string()),
             region: Some("San Martin".to_string()),
@@ -1315,7 +1299,7 @@ mod tests {
     fn operational_listing_tags_location_handles_partial_optional_components() {
         let mut listing = base_listing();
         listing.discounts = None;
-        listing.location = Some(RadrootsOperationalListingPublicLocation {
+        listing.location = Some(OperationalListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some(" ".to_string()),
             region: Some("San Martin".to_string()),
@@ -1330,7 +1314,7 @@ mod tests {
         assert_eq!(location.get(2).map(|v| v.as_str()), Some("San Martin"));
         assert_eq!(location.len(), 3);
 
-        listing.location = Some(RadrootsOperationalListingPublicLocation {
+        listing.location = Some(OperationalListingPublicLocation {
             primary: "Moyobamba".to_string(),
             city: Some("Moyobamba".to_string()),
             region: Some(" ".to_string()),

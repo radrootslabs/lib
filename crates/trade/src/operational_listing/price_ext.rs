@@ -3,7 +3,7 @@ use crate::operational_listing::model::{
 };
 use radroots_core::pricing::{Error as PricingError, QuantityPriceOps};
 use radroots_core::{Decimal, Quantity};
-use radroots_event::listing::operational::RadrootsOperationalListingBin;
+use radroots_event::listing::operational::OperationalListingBin;
 
 pub trait BinPricingTryExt {
     fn try_subtotal_for_count(
@@ -18,7 +18,7 @@ pub trait BinPricingTryExt {
 
 #[inline]
 fn effective_quantity(
-    bin: &RadrootsOperationalListingBin,
+    bin: &OperationalListingBin,
     bin_count: u32,
 ) -> Result<Quantity, PricingError> {
     let amount = bin
@@ -29,7 +29,7 @@ fn effective_quantity(
     Quantity::try_new(amount, bin.quantity.unit()).map_err(|_| PricingError::ArithmeticOverflow)
 }
 
-impl BinPricingTryExt for RadrootsOperationalListingBin {
+impl BinPricingTryExt for OperationalListingBin {
     fn try_subtotal_for_count(
         &self,
         bin_count: u32,
@@ -67,15 +67,15 @@ mod tests {
     use super::BinPricingTryExt;
     use radroots_core::pricing::Error as PricingError;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-    use radroots_event::id::RadrootsInventoryBinId;
-    use radroots_event::listing::operational::RadrootsOperationalListingBin;
+    use radroots_event::id::InventoryBinId;
+    use radroots_event::listing::operational::OperationalListingBin;
 
-    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
-        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    fn bin_id(raw: &str) -> InventoryBinId {
+        InventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn valid_bin() -> RadrootsOperationalListingBin {
-        RadrootsOperationalListingBin {
+    fn valid_bin() -> OperationalListingBin {
+        OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: Quantity::try_new(Decimal::from(2u32), Unit::MassG).unwrap(),
             price_per_canonical_unit: QuantityPrice::try_new(
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn try_subtotal_for_rejects_unit_mismatch() {
-        let bin = RadrootsOperationalListingBin {
+        let bin = OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
             price_per_canonical_unit: QuantityPrice::try_new(
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn try_total_for_count_propagates_subtotal_errors() {
-        let bin = RadrootsOperationalListingBin {
+        let bin = OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity: Quantity::try_new(Decimal::from(1u32), Unit::MassG).unwrap(),
             price_per_canonical_unit: QuantityPrice::try_new(

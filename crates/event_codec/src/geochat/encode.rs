@@ -7,10 +7,10 @@ use alloc::{
 };
 
 use radroots_event::envelope::kind::KIND_GEOCHAT;
-use radroots_event::social::geochat::RadrootsGeoChat;
+use radroots_event::social::geochat::GeoChat;
 
 use crate::error::EventEncodeError;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_GEOCHAT;
 const TAG_G: &str = "g";
@@ -22,7 +22,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-pub fn geochat_build_tags(geochat: &RadrootsGeoChat) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn geochat_build_tags(geochat: &GeoChat) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let geohash = geochat.geohash.trim();
     if geohash.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("geohash"));
@@ -48,14 +48,12 @@ pub fn geochat_build_tags(geochat: &RadrootsGeoChat) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    geochat: &RadrootsGeoChat,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(geochat: &GeoChat) -> Result<Nip01EventWireParts, EventEncodeError> {
     if geochat.content.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("content"));
     }
     let tags = geochat_build_tags(geochat)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind: DEFAULT_KIND,
         content: geochat.content.clone(),
         tags,

@@ -4,15 +4,15 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::social::follow::{RadrootsFollow, RadrootsFollowProfile};
+use radroots_event::social::follow::{Follow, FollowProfile};
 
 use crate::error::EventEncodeError;
 use radroots_event::envelope::kind::KIND_FOLLOW;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_FOLLOW;
 
-fn follow_tag(profile: &RadrootsFollowProfile) -> Result<Vec<String>, EventEncodeError> {
+fn follow_tag(profile: &FollowProfile) -> Result<Vec<String>, EventEncodeError> {
     if profile.public_key.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("follow.public_key"));
     }
@@ -31,7 +31,7 @@ fn follow_tag(profile: &RadrootsFollowProfile) -> Result<Vec<String>, EventEncod
     Ok(tag)
 }
 
-pub fn follow_build_tags(follow: &RadrootsFollow) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn follow_build_tags(follow: &Follow) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::with_capacity(follow.list.len());
     for profile in &follow.list {
         tags.push(follow_tag(profile)?);
@@ -58,28 +58,23 @@ pub enum FollowMutation {
     },
 }
 
-pub fn to_wire_parts(
-    follow: &RadrootsFollow,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(follow: &Follow) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(follow, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
-    follow: &RadrootsFollow,
+    follow: &Follow,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     let tags = follow_build_tags(follow)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: String::new(),
         tags,
     })
 }
 
-pub fn follow_apply(
-    follow: &RadrootsFollow,
-    mutation: FollowMutation,
-) -> Result<RadrootsFollow, EventEncodeError> {
+pub fn follow_apply(follow: &Follow, mutation: FollowMutation) -> Result<Follow, EventEncodeError> {
     let mut list = normalize_list(&follow.list)?;
 
     match mutation {
@@ -108,7 +103,7 @@ pub fn follow_apply(
             } else {
                 let relay_url = normalize_optional(relay_url);
                 let contact_name = normalize_optional(contact_name);
-                list.push(RadrootsFollowProfile {
+                list.push(FollowProfile {
                     published_at: 0,
                     public_key,
                     relay_url,
@@ -118,13 +113,13 @@ pub fn follow_apply(
         }
     }
 
-    Ok(RadrootsFollow { list })
+    Ok(Follow { list })
 }
 
 pub fn follow_to_wire_parts_after(
-    follow: &RadrootsFollow,
+    follow: &Follow,
     mutation: FollowMutation,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     let updated = follow_apply(follow, mutation)?;
     to_wire_parts(&updated)
 }
@@ -148,15 +143,13 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
     })
 }
 
-fn normalize_list(
-    list: &[RadrootsFollowProfile],
-) -> Result<Vec<RadrootsFollowProfile>, EventEncodeError> {
+fn normalize_list(list: &[FollowProfile]) -> Result<Vec<FollowProfile>, EventEncodeError> {
     let mut out = Vec::with_capacity(list.len());
     for entry in list {
         let public_key = normalize_public_key(&entry.public_key)?;
         if out
             .iter()
-            .any(|item: &RadrootsFollowProfile| item.public_key == public_key)
+            .any(|item: &FollowProfile| item.public_key == public_key)
         {
             continue;
         }
@@ -170,7 +163,7 @@ fn normalize_list(
 }
 
 fn apply_follow(
-    list: &mut Vec<RadrootsFollowProfile>,
+    list: &mut Vec<FollowProfile>,
     public_key: String,
     relay_url: Option<String>,
     contact_name: Option<String>,
@@ -185,7 +178,7 @@ fn apply_follow(
         }
         list[pos] = entry;
     } else {
-        list.push(RadrootsFollowProfile {
+        list.push(FollowProfile {
             published_at: 0,
             public_key,
             relay_url,

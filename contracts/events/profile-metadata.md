@@ -34,7 +34,7 @@ key; a canonical-length hex value that is not a curve point returns
 decoding are a later optional stage and cannot be substituted for general event
 verification.
 
-The direct legacy `RadrootsProfile` codec, Profile-specific Nostr/network
+The direct legacy `Profile` codec, Profile-specific Nostr/network
 publish helpers, and replica Profile draft emission were removed in the
 `1.0.0-alpha.1` breaking contract. A replica Profile row is a lossy inbound
 projection and cannot prove author intent for a complete kind-`0` replacement.
@@ -59,12 +59,12 @@ establish verified event admission, and must not be used as its substitute.
 
 ## Strict authored boundary
 
-`RadrootsAuthoredProfile` has private fields and requires a non-whitespace,
+`AuthoredProfile` has private fields and requires a non-whitespace,
 control-free `name`, consistent with the NIP-24 recommendation that `name`
 remain present when `display_name` is used. The scoped optional fields are
 `display_name`, `about`, `nip05`, `bot`, `picture`, and `banner`; `bot` is a
-Boolean. NIP-05 values enter only through `RadrootsNip05Identifier`. Picture and
-banner values enter through the shared `RadrootsAuthoredImage`, which can wrap
+Boolean. NIP-05 values enter only through `Nip05Identifier`. Picture and
+banner values enter through the shared `AuthoredImage`, which can wrap
 only an `image/*` `ByteVerifiedDescriptor`. There is no raw-string
 media setter or unchecked deserialization path. Generic `website`, `lud06`, and
 `lud16` strings remain outside this strict authored operation.
@@ -126,7 +126,7 @@ through the raw content view.
 
 ## NIP-05 boundary
 
-`RadrootsNip05Identifier` requires exactly one `@`, a non-empty local part using
+`Nip05Identifier` requires exactly one `@`, a non-empty local part using
 only lowercase `a-z`, digits, `-`, `_`, or `.`, and an ASCII DNS domain.
 Domain matching is case-insensitive, so accepted domains are canonicalized to
 lowercase. Parsing is syntax-only. It performs no HTTPS lookup and never

@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use crate::RadrootsOutboxError;
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::id::{RadrootsTradeId, RadrootsTradeMutationId};
+use radroots_event::draft::{EventDraft, SignedEvent};
+use radroots_event::id::{MutationId, TradeId};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
     RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,
@@ -277,7 +277,7 @@ impl RadrootsOutboxDeliveryPlanInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxOperationInput {
     pub operation_kind: String,
-    pub draft: RadrootsEventDraft,
+    pub draft: EventDraft,
     pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
     pub created_at_ms: i64,
@@ -286,7 +286,7 @@ pub struct RadrootsOutboxOperationInput {
 impl RadrootsOutboxOperationInput {
     pub fn new(
         operation_kind: impl Into<String>,
-        draft: RadrootsEventDraft,
+        draft: EventDraft,
         delivery_plan: RadrootsOutboxDeliveryPlanInput,
         created_at_ms: i64,
     ) -> Self {
@@ -308,8 +308,8 @@ impl RadrootsOutboxOperationInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxSignedOperationInput {
     pub operation_kind: String,
-    pub draft: RadrootsEventDraft,
-    pub signed_event: RadrootsSignedEvent,
+    pub draft: EventDraft,
+    pub signed_event: SignedEvent,
     pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
     pub event_store_inserted: bool,
@@ -320,8 +320,8 @@ pub struct RadrootsOutboxSignedOperationInput {
 impl RadrootsOutboxSignedOperationInput {
     pub fn new(
         operation_kind: impl Into<String>,
-        draft: RadrootsEventDraft,
-        signed_event: RadrootsSignedEvent,
+        draft: EventDraft,
+        signed_event: SignedEvent,
         delivery_plan: RadrootsOutboxDeliveryPlanInput,
         event_store_inserted: bool,
         event_store_ingested_at_ms: i64,
@@ -348,10 +348,10 @@ impl RadrootsOutboxSignedOperationInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxTradeMutationInput {
     pub operation_kind: String,
-    pub trade_id: RadrootsTradeId,
-    pub mutation_id: RadrootsTradeMutationId,
+    pub trade_id: TradeId,
+    pub mutation_id: MutationId,
     pub canonical_payload_sha256: String,
-    pub draft: RadrootsEventDraft,
+    pub draft: EventDraft,
     pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
     pub created_at_ms: i64,
@@ -360,10 +360,10 @@ pub struct RadrootsOutboxTradeMutationInput {
 impl RadrootsOutboxTradeMutationInput {
     pub fn new(
         operation_kind: impl Into<String>,
-        trade_id: RadrootsTradeId,
-        mutation_id: RadrootsTradeMutationId,
+        trade_id: TradeId,
+        mutation_id: MutationId,
         canonical_payload_sha256: impl Into<String>,
-        draft: RadrootsEventDraft,
+        draft: EventDraft,
         delivery_plan: RadrootsOutboxDeliveryPlanInput,
         created_at_ms: i64,
     ) -> Self {
@@ -388,11 +388,11 @@ impl RadrootsOutboxTradeMutationInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOutboxSignedTradeMutationInput {
     pub operation_kind: String,
-    pub trade_id: RadrootsTradeId,
-    pub mutation_id: RadrootsTradeMutationId,
+    pub trade_id: TradeId,
+    pub mutation_id: MutationId,
     pub canonical_payload_sha256: String,
-    pub draft: RadrootsEventDraft,
-    pub signed_event: RadrootsSignedEvent,
+    pub draft: EventDraft,
+    pub signed_event: SignedEvent,
     pub delivery_plan: RadrootsOutboxDeliveryPlanInput,
     pub idempotency_key: Option<String>,
     pub event_store_inserted: bool,
@@ -404,11 +404,11 @@ impl RadrootsOutboxSignedTradeMutationInput {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         operation_kind: impl Into<String>,
-        trade_id: RadrootsTradeId,
-        mutation_id: RadrootsTradeMutationId,
+        trade_id: TradeId,
+        mutation_id: MutationId,
         canonical_payload_sha256: impl Into<String>,
-        draft: RadrootsEventDraft,
-        signed_event: RadrootsSignedEvent,
+        draft: EventDraft,
+        signed_event: SignedEvent,
         delivery_plan: RadrootsOutboxDeliveryPlanInput,
         event_store_inserted: bool,
         event_store_ingested_at_ms: i64,
@@ -464,8 +464,8 @@ pub struct RadrootsOutboxOperationRecord {
     pub operation_kind: String,
     pub expected_pubkey: String,
     pub semantic_scope: String,
-    pub trade_id: Option<RadrootsTradeId>,
-    pub mutation_id: Option<RadrootsTradeMutationId>,
+    pub trade_id: Option<TradeId>,
+    pub mutation_id: Option<MutationId>,
     pub canonical_payload_sha256: Option<String>,
     pub idempotency_key: Option<String>,
     pub operation_idempotency_digest: String,
@@ -480,8 +480,8 @@ pub struct RadrootsOutboxEventRecord {
     pub operation_id: i64,
     pub event_id: String,
     pub expected_pubkey: String,
-    pub draft: RadrootsEventDraft,
-    pub signed_event: Option<RadrootsSignedEvent>,
+    pub draft: EventDraft,
+    pub signed_event: Option<SignedEvent>,
     pub raw_event_json: Option<String>,
     pub state: RadrootsOutboxEventState,
     pub attempt_count: i64,
@@ -557,8 +557,8 @@ pub struct RadrootsOutboxClaimedEvent {
     pub state: RadrootsOutboxEventState,
     pub claim_token: String,
     pub active_delivery_plan_id: Option<i64>,
-    pub draft: RadrootsEventDraft,
-    pub signed_event: Option<RadrootsSignedEvent>,
+    pub draft: EventDraft,
+    pub signed_event: Option<SignedEvent>,
     pub delivery_targets: Vec<RadrootsOutboxDeliveryTargetRecord>,
 }
 

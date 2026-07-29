@@ -8,11 +8,11 @@ use radroots_blossom::ByteVerifiedDescriptor;
 /// Errors raised while constructing strict authored image media.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsAuthoredImageError {
+pub enum AuthoredImageError {
     MediaTypeNotImage,
 }
 
-impl RadrootsAuthoredImageError {
+impl AuthoredImageError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::MediaTypeNotImage => "media_type_not_image",
@@ -20,7 +20,7 @@ impl RadrootsAuthoredImageError {
     }
 }
 
-impl fmt::Display for RadrootsAuthoredImageError {
+impl fmt::Display for AuthoredImageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MediaTypeNotImage => {
@@ -31,7 +31,7 @@ impl fmt::Display for RadrootsAuthoredImageError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsAuthoredImageError {}
+impl std::error::Error for AuthoredImageError {}
 
 /// A byte-verified Blossom descriptor whose declared media type is `image/*`.
 ///
@@ -39,14 +39,14 @@ impl std::error::Error for RadrootsAuthoredImageError {}
 /// This typestate does not prove upload completion, network availability, or
 /// image format safety. Owning runtimes remain responsible for those policies.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredImage(ByteVerifiedDescriptor);
+pub struct AuthoredImage(ByteVerifiedDescriptor);
 
-impl RadrootsAuthoredImage {
+impl AuthoredImage {
     pub fn try_from_verified_descriptor(
         descriptor: ByteVerifiedDescriptor,
-    ) -> Result<Self, RadrootsAuthoredImageError> {
+    ) -> Result<Self, AuthoredImageError> {
         if !descriptor.media_type().as_str().starts_with("image/") {
-            return Err(RadrootsAuthoredImageError::MediaTypeNotImage);
+            return Err(AuthoredImageError::MediaTypeNotImage);
         }
         Ok(Self(descriptor))
     }
@@ -56,8 +56,8 @@ impl RadrootsAuthoredImage {
     }
 }
 
-impl TryFrom<ByteVerifiedDescriptor> for RadrootsAuthoredImage {
-    type Error = RadrootsAuthoredImageError;
+impl TryFrom<ByteVerifiedDescriptor> for AuthoredImage {
+    type Error = AuthoredImageError;
 
     fn try_from(value: ByteVerifiedDescriptor) -> Result<Self, Self::Error> {
         Self::try_from_verified_descriptor(value)
@@ -73,20 +73,18 @@ mod tests {
     fn authored_image_requires_a_byte_verified_image_descriptor() {
         let descriptor = verified_descriptor("image/webp", "webp");
         let expected_url = descriptor.url().as_str().to_owned();
-        let image = RadrootsAuthoredImage::try_from(descriptor).unwrap();
+        let image = AuthoredImage::try_from(descriptor).unwrap();
 
         assert_eq!(image.descriptor().url().as_str(), expected_url);
     }
 
     #[test]
     fn authored_image_rejects_non_image_media_types_with_a_stable_error() {
-        let error = RadrootsAuthoredImage::try_from_verified_descriptor(verified_descriptor(
-            "text/plain",
-            "txt",
-        ))
-        .unwrap_err();
+        let error =
+            AuthoredImage::try_from_verified_descriptor(verified_descriptor("text/plain", "txt"))
+                .unwrap_err();
 
-        assert_eq!(error, RadrootsAuthoredImageError::MediaTypeNotImage);
+        assert_eq!(error, AuthoredImageError::MediaTypeNotImage);
         assert_eq!(error.code(), "media_type_not_image");
         assert_eq!(
             error.to_string(),

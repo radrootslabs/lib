@@ -7,15 +7,13 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_POST,
-    post::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference},
-    wire::RadrootsNip01EventWireParts,
+    post::reply::{AuthoredNip10Reply, Nip10ReplyReference},
+    wire::Nip01EventWireParts,
 };
 
 /// Builds deterministic unsigned kind-1 wire parts for a strict marked NIP-10
 /// reply.
-pub fn authored_nip10_reply_to_wire_parts(
-    reply: &RadrootsAuthoredNip10Reply,
-) -> RadrootsNip01EventWireParts {
+pub fn authored_nip10_reply_to_wire_parts(reply: &AuthoredNip10Reply) -> Nip01EventWireParts {
     let mut tags = Vec::with_capacity(if reply.parent().is_some() { 4 } else { 2 });
     tags.push(event_tag(reply.root(), "root"));
     if let Some(parent) = reply.parent() {
@@ -28,14 +26,14 @@ pub fn authored_nip10_reply_to_wire_parts(
     {
         tags.push(public_key_tag(parent));
     }
-    RadrootsNip01EventWireParts {
+    Nip01EventWireParts {
         kind: KIND_POST,
         content: reply.content().to_string(),
         tags,
     }
 }
 
-fn event_tag(reference: &RadrootsNip10ReplyReference, marker: &str) -> Vec<String> {
+fn event_tag(reference: &Nip10ReplyReference, marker: &str) -> Vec<String> {
     vec![
         "e".to_string(),
         reference.event_id().to_hex(),
@@ -44,7 +42,7 @@ fn event_tag(reference: &RadrootsNip10ReplyReference, marker: &str) -> Vec<Strin
     ]
 }
 
-fn public_key_tag(reference: &RadrootsNip10ReplyReference) -> Vec<String> {
+fn public_key_tag(reference: &Nip10ReplyReference) -> Vec<String> {
     vec!["p".to_string(), reference.author().to_hex()]
 }
 
@@ -59,12 +57,9 @@ mod tests {
     #[test]
     fn nested_reply_deduplicates_equal_reference_authors() {
         let author = h('b');
-        let root =
-            RadrootsNip10ReplyReference::parse(h('a'), &author, None).expect("root reference");
-        let parent =
-            RadrootsNip10ReplyReference::parse(h('c'), &author, None).expect("parent reference");
-        let reply =
-            RadrootsAuthoredNip10Reply::nested("Reply", root, parent).expect("nested reply");
+        let root = Nip10ReplyReference::parse(h('a'), &author, None).expect("root reference");
+        let parent = Nip10ReplyReference::parse(h('c'), &author, None).expect("parent reference");
+        let reply = AuthoredNip10Reply::nested("Reply", root, parent).expect("nested reply");
 
         assert_eq!(
             authored_nip10_reply_to_wire_parts(&reply).tags,

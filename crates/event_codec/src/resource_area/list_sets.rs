@@ -9,10 +9,10 @@ use alloc::{
 };
 
 use radroots_event::envelope::kind::{KIND_FARM, KIND_PLOT};
-use radroots_event::farm::RadrootsFarmRef;
-use radroots_event::farm::plot::RadrootsPlotRef;
-use radroots_event::social::list::RadrootsListEntry;
-use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::farm::FarmRef;
+use radroots_event::farm::plot::PlotRef;
+use radroots_event::social::list::ListEntry;
+use radroots_event::social::list_set::ListSet;
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -26,7 +26,7 @@ fn resource_list_set_id(area_id: &str, suffix: &str) -> Result<String, EventEnco
     Ok(format!("resource:{area_id}:{suffix}"))
 }
 
-fn list_entries<I, S>(tag: &str, values: I) -> Result<Vec<RadrootsListEntry>, EventEncodeError>
+fn list_entries<I, S>(tag: &str, values: I) -> Result<Vec<ListEntry>, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -37,7 +37,7 @@ where
         if value.is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("entry.values"));
         }
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: tag.to_string(),
             values: vec![value.to_string()],
         });
@@ -45,7 +45,7 @@ where
     Ok(entries)
 }
 
-fn farm_address(farm: &RadrootsFarmRef) -> Result<String, EventEncodeError> {
+fn farm_address(farm: &FarmRef) -> Result<String, EventEncodeError> {
     if farm.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.pubkey"));
     }
@@ -62,7 +62,7 @@ fn farm_address(farm: &RadrootsFarmRef) -> Result<String, EventEncodeError> {
     Ok(addr)
 }
 
-fn plot_address(plot: &RadrootsPlotRef) -> Result<String, EventEncodeError> {
+fn plot_address(plot: &PlotRef) -> Result<String, EventEncodeError> {
     if plot.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("plot.pubkey"));
     }
@@ -82,23 +82,23 @@ fn plot_address(plot: &RadrootsPlotRef) -> Result<String, EventEncodeError> {
 pub fn resource_area_members_farms_list_set<I>(
     area_id: &str,
     farms: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
-    I: IntoIterator<Item = RadrootsFarmRef>,
+    I: IntoIterator<Item = FarmRef>,
 {
     let mut entries = Vec::new();
     for farm in farms {
         let address = farm_address(&farm)?;
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "a".to_string(),
             values: vec![address],
         });
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "p".to_string(),
             values: vec![farm.pubkey],
         });
     }
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: resource_list_set_id(area_id, "members.farms")?,
         content: String::new(),
         entries,
@@ -111,23 +111,23 @@ where
 pub fn resource_area_members_plots_list_set<I>(
     area_id: &str,
     plots: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
-    I: IntoIterator<Item = RadrootsPlotRef>,
+    I: IntoIterator<Item = PlotRef>,
 {
     let mut entries = Vec::new();
     for plot in plots {
         let address = plot_address(&plot)?;
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "a".to_string(),
             values: vec![address],
         });
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "p".to_string(),
             values: vec![plot.pubkey],
         });
     }
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: resource_list_set_id(area_id, "members.plots")?,
         content: String::new(),
         entries,
@@ -140,12 +140,12 @@ where
 pub fn resource_area_stewards_list_set<I, S>(
     area_id: &str,
     stewards: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: resource_list_set_id(area_id, "members.stewards")?,
         content: String::new(),
         entries: list_entries("p", stewards)?,
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn farm_and_plot_address_helpers_reject_empty_d_tags() {
-        let err = farm_address(&RadrootsFarmRef {
+        let err = farm_address(&FarmRef {
             pubkey: " ".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         })
@@ -211,7 +211,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("farm.pubkey")
         ));
 
-        let err = farm_address(&RadrootsFarmRef {
+        let err = farm_address(&FarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: " ".to_string(),
         })
@@ -221,7 +221,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("farm.d_tag")
         ));
 
-        let err = plot_address(&RadrootsPlotRef {
+        let err = plot_address(&PlotRef {
             pubkey: " ".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         })
@@ -231,7 +231,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("plot.pubkey")
         ));
 
-        let err = plot_address(&RadrootsPlotRef {
+        let err = plot_address(&PlotRef {
             pubkey: "plot_pubkey".to_string(),
             d_tag: " ".to_string(),
         })
@@ -250,7 +250,7 @@ mod tests {
 
         let err = resource_area_members_farms_list_set(
             "invalid",
-            vec![RadrootsFarmRef {
+            vec![FarmRef {
                 pubkey: farm_pubkey.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
@@ -260,7 +260,7 @@ mod tests {
 
         let farms = resource_area_members_farms_list_set(
             area_id,
-            vec![RadrootsFarmRef {
+            vec![FarmRef {
                 pubkey: farm_pubkey.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
@@ -273,7 +273,7 @@ mod tests {
 
         let err = resource_area_members_farms_list_set(
             area_id,
-            vec![RadrootsFarmRef {
+            vec![FarmRef {
                 pubkey: farm_pubkey.to_string(),
                 d_tag: "invalid".to_string(),
             }],
@@ -283,7 +283,7 @@ mod tests {
 
         let plots = resource_area_members_plots_list_set(
             area_id,
-            vec![RadrootsPlotRef {
+            vec![PlotRef {
                 pubkey: plot_pubkey.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
@@ -296,7 +296,7 @@ mod tests {
 
         let err = resource_area_members_plots_list_set(
             "invalid",
-            vec![RadrootsPlotRef {
+            vec![PlotRef {
                 pubkey: plot_pubkey.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
@@ -306,7 +306,7 @@ mod tests {
 
         let err = resource_area_members_plots_list_set(
             area_id,
-            vec![RadrootsPlotRef {
+            vec![PlotRef {
                 pubkey: plot_pubkey.to_string(),
                 d_tag: "invalid".to_string(),
             }],

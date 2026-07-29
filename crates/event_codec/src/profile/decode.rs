@@ -4,13 +4,10 @@ use alloc::{
     vec::Vec,
 };
 
-use super::RadrootsProfileData;
+use super::{LegacyProfile, RadrootsProfileData};
 use radroots_event::{
     envelope::kind::KIND_PROFILE,
-    profile::{
-        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, RadrootsProfileType,
-        radroots_profile_type_from_tag_value,
-    },
+    profile::{ProfileType, RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_from_tag_value},
 };
 
 use crate::error::EventParseError;
@@ -34,7 +31,7 @@ fn parse_bot(value: &Value) -> Option<String> {
     }
 }
 
-fn profile_type_from_tags(tags: &[Vec<String>]) -> Option<RadrootsProfileType> {
+fn profile_type_from_tags(tags: &[Vec<String>]) -> Option<ProfileType> {
     tags.iter()
         .filter(|tag| tag.first().map(|v| v.as_str()) == Some(RADROOTS_PROFILE_TYPE_TAG_KEY))
         .filter_map(|tag| tag.get(1))
@@ -46,7 +43,7 @@ fn profile_type_from_tags(tags: &[Vec<String>]) -> Option<RadrootsProfileType> {
 /// This API requires `name`, coerces Boolean `bot` to a string, and discards
 /// unprojected fields. Use `profile.parse_inbound_metadata` for the tolerant
 /// inbound metadata contract.
-pub fn profile_from_content(content: &str) -> Result<RadrootsProfile, EventParseError> {
+pub fn profile_from_content(content: &str) -> Result<LegacyProfile, EventParseError> {
     let value: Value =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
     let obj = value
@@ -57,7 +54,7 @@ pub fn profile_from_content(content: &str) -> Result<RadrootsProfile, EventParse
         .and_then(|v| v.as_str())
         .ok_or(EventParseError::InvalidJson("name"))?;
 
-    Ok(RadrootsProfile {
+    Ok(LegacyProfile {
         name: name.to_string(),
         display_name: parse_optional_string(&value, "display_name"),
         nip05: parse_optional_string(&value, "nip05"),

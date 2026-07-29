@@ -6,42 +6,35 @@ use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::envelope::kind::{
     KIND_ARTICLE, KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
 };
-use radroots_event::farm::change_set::{
-    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-};
-use radroots_event::farm::coop::RadrootsCoop;
-use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotRef};
-use radroots_event::farm::resource_area::{
-    RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
-};
-use radroots_event::farm::resource_cap::{
-    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
-};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
-use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+use radroots_event::farm::coop::Coop;
+use radroots_event::farm::plot::{Plot, PlotRef};
+use radroots_event::farm::resource_area::{ResourceArea, ResourceAreaLocation, ResourceAreaRef};
+use radroots_event::farm::resource_cap::{ResourceHarvestCap, ResourceHarvestProduct};
+use radroots_event::farm::{Farm, FarmRef};
+use radroots_event::id::{DTag, InventoryBinId};
 use radroots_event::listing::operational::{
-    RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-    RadrootsOperationalListingBin, RadrootsOperationalListingImage,
-    RadrootsOperationalListingImageSize, RadrootsOperationalListingProduct,
-    RadrootsOperationalListingPublicLocation, RadrootsOperationalListingStatus,
+    OperationalListing, OperationalListingAvailability, OperationalListingBin,
+    OperationalListingImage, OperationalListingImageSize, OperationalListingProduct,
+    OperationalListingPublicLocation, OperationalListingStatus,
 };
-use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_event::post::reaction::RadrootsReaction;
-use radroots_event::social::RadrootsSocialTarget;
-use radroots_event::social::app_data::RadrootsAppData;
-use radroots_event::social::follow::{RadrootsFollow, RadrootsFollowProfile};
-use radroots_event::social::geochat::RadrootsGeoChat;
-use radroots_event::social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
+use radroots_event::post::document::{Document, DocumentSubject};
+use radroots_event::post::reaction::Reaction;
+use radroots_event::social::SocialTarget;
+use radroots_event::social::app_data::AppData;
+use radroots_event::social::follow::{Follow, FollowProfile};
+use radroots_event::social::geochat::GeoChat;
+use radroots_event::social::gift_wrap::{GiftWrap, GiftWrapRecipient};
 use radroots_event::social::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
-use radroots_event::social::job_feedback::RadrootsJobFeedback;
-use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
-use radroots_event::social::job_result::RadrootsJobResult;
-use radroots_event::social::list::{RadrootsList, RadrootsListEntry};
-use radroots_event::social::list_set::RadrootsListSet;
-use radroots_event::social::message::{RadrootsMessage, RadrootsMessageRecipient};
-use radroots_event::social::message_file::RadrootsMessageFile;
-use radroots_event::social::seal::RadrootsSeal;
-use radroots_event::tag::RadrootsEventPtr;
+use radroots_event::social::job_feedback::JobFeedback;
+use radroots_event::social::job_request::{JobInput, JobParam, JobRequest};
+use radroots_event::social::job_result::JobResult;
+use radroots_event::social::list::{List, ListEntry};
+use radroots_event::social::list_set::ListSet;
+use radroots_event::social::message::{Message, MessageRecipient};
+use radroots_event::social::message_file::MessageFile;
+use radroots_event::social::seal::Seal;
+use radroots_event::tag::EventPtr;
 use radroots_event_codec::error::EventEncodeError;
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::operational_listing::encode::operational_listing_build_tags;
@@ -60,16 +53,16 @@ fn cdn_url(path: &str) -> String {
     format!("{CDN_PRIMARY_HTTPS}/{path}")
 }
 
-fn d_tag(raw: &str) -> RadrootsDTag {
+fn d_tag(raw: &str) -> DTag {
     raw.parse().unwrap()
 }
 
-fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+fn bin_id(raw: &str) -> InventoryBinId {
     raw.parse().unwrap()
 }
 
-fn sample_social_target(id: &str) -> RadrootsSocialTarget {
-    RadrootsSocialTarget::Event {
+fn sample_social_target(id: &str) -> SocialTarget {
+    SocialTarget::Event {
         id: id.to_string(),
         author: Some(TEST_PUBKEY_HEX.to_string()),
         event_kind: Some(KIND_ARTICLE),
@@ -77,16 +70,16 @@ fn sample_social_target(id: &str) -> RadrootsSocialTarget {
     }
 }
 
-fn sample_gcs() -> RadrootsGcsLocation {
-    RadrootsGcsLocation {
+fn sample_gcs() -> GcsLocation {
+    GcsLocation {
         lat: 37.0,
         lng: -122.0,
         geohash: "9q8yy".to_string(),
-        point: RadrootsGeoJsonPoint {
+        point: GeoJsonPoint {
             r#type: "Point".to_string(),
             coordinates: [-122.0, 37.0],
         },
-        polygon: RadrootsGeoJsonPolygon {
+        polygon: GeoJsonPolygon {
             r#type: "Polygon".to_string(),
             coordinates: vec![vec![
                 [-122.0, 37.0],
@@ -112,7 +105,7 @@ fn sample_gcs() -> RadrootsGcsLocation {
     }
 }
 
-fn sample_listing() -> RadrootsOperationalListing {
+fn sample_listing() -> OperationalListing {
     let quantity = Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap();
     let price = QuantityPrice::try_new(
         Money::try_new(Decimal::from(10u32), Currency::USD).unwrap(),
@@ -120,14 +113,14 @@ fn sample_listing() -> RadrootsOperationalListing {
     )
     .unwrap();
 
-    RadrootsOperationalListing {
+    OperationalListing {
         d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
         published_at: None,
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: TEST_NPUB.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
-        product: RadrootsOperationalListingProduct {
+        product: OperationalListingProduct {
             key: "sku".to_string(),
             title: "Widget".to_string(),
             category: "Tools".to_string(),
@@ -139,7 +132,7 @@ fn sample_listing() -> RadrootsOperationalListing {
             year: None,
         },
         primary_bin_id: bin_id("bin-1"),
-        bins: vec![RadrootsOperationalListingBin {
+        bins: vec![OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit: price,
@@ -166,13 +159,13 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     assert!(!listing.build_tags().unwrap().is_empty());
     assert!(!operational_listing_build_tags(&listing).unwrap().is_empty());
 
-    let app_data = RadrootsAppData {
+    let app_data = AppData {
         d_tag: "radroots.app".to_string(),
         content: "payload".to_string(),
     };
     assert!(!app_data.build_tags().unwrap().is_empty());
 
-    let reaction = RadrootsReaction {
+    let reaction = Reaction {
         target: sample_social_target(
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         ),
@@ -180,13 +173,13 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!reaction.build_tags().unwrap().is_empty());
 
-    let message = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message = Message {
+        recipients: vec![MessageRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         }),
@@ -194,8 +187,8 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!message.build_tags().unwrap().is_empty());
 
-    let message_file = RadrootsMessageFile {
-        recipients: vec![RadrootsMessageRecipient {
+    let message_file = MessageFile {
+        recipients: vec![MessageRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: None,
         }],
@@ -216,7 +209,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!message_file.build_tags().unwrap().is_empty());
 
-    let geochat = RadrootsGeoChat {
+    let geochat = GeoChat {
         geohash: "dr5rsj7".to_string(),
         content: "hello".to_string(),
         nickname: Some("alex".to_string()),
@@ -224,8 +217,8 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!geochat.build_tags().unwrap().is_empty());
 
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
@@ -234,7 +227,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!follow.build_tags().unwrap().is_empty());
 
-    let farm = RadrootsFarm {
+    let farm = Farm {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         name: "Farm".to_string(),
         about: None,
@@ -246,11 +239,11 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!farm.build_tags().unwrap().is_empty());
 
-    let resource_area = RadrootsResourceArea {
+    let resource_area = ResourceArea {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         name: "Area".to_string(),
         about: None,
-        location: RadrootsResourceAreaLocation {
+        location: ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
@@ -261,13 +254,13 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!resource_area.build_tags().unwrap().is_empty());
 
-    let resource_cap = RadrootsResourceHarvestCap {
+    let resource_cap = ResourceHarvestCap {
         d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
-        resource_area: RadrootsResourceAreaRef {
+        resource_area: ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
-        product: RadrootsResourceHarvestProduct {
+        product: ResourceHarvestProduct {
             key: "nutmeg".to_string(),
             category: Some("spice".to_string()),
         },
@@ -281,7 +274,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!resource_cap.build_tags().unwrap().is_empty());
 
-    let coop = RadrootsCoop {
+    let coop = Coop {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
         name: "Coop".to_string(),
         about: None,
@@ -293,7 +286,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!coop.build_tags().unwrap().is_empty());
 
-    let document = RadrootsDocument {
+    let document = Document {
         d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
         doc_type: "charter".to_string(),
         title: "Charter".to_string(),
@@ -301,7 +294,7 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
         summary: None,
         effective_at: None,
         body_markdown: None,
-        subject: RadrootsDocumentSubject {
+        subject: DocumentSubject {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             address: Some(format!("30340:{TEST_PUBKEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")),
         },
@@ -309,19 +302,19 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!document.build_tags().unwrap().is_empty());
 
-    let list = RadrootsList {
+    let list = List {
         content: "private".to_string(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![TEST_PUBKEY_HEX.to_string()],
         }],
     };
     assert!(!list.build_tags().unwrap().is_empty());
 
-    let list_set = RadrootsListSet {
+    let list_set = ListSet {
         d_tag: "members.owners".to_string(),
         content: "private".to_string(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![TEST_PUBKEY_HEX.to_string()],
         }],
@@ -331,9 +324,9 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!list_set.build_tags().unwrap().is_empty());
 
-    let plot = RadrootsPlot {
+    let plot = Plot {
         d_tag: "AAAAAAAAAAAAAAAAAAAABQ".to_string(),
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
@@ -344,16 +337,16 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!plot.build_tags().unwrap().is_empty());
 
-    let job_request = RadrootsJobRequest {
+    let job_request = JobRequest {
         kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
             relay: None,
             marker: None,
         }],
         output: None,
-        params: vec![RadrootsJobParam {
+        params: vec![JobParam {
             key: "foo".to_string(),
             value: "bar".to_string(),
         }],
@@ -365,14 +358,14 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!job_request.build_tags().unwrap().is_empty());
 
-    let job_result = RadrootsJobResult {
+    let job_result = JobResult {
         kind: u16::try_from(KIND_JOB_RESULT_MIN + 1).expect("result kind must fit NIP-01"),
-        request_event: RadrootsEventPtr {
+        request_event: EventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         request_json: None,
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
             relay: None,
@@ -388,11 +381,11 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!job_result.build_tags().unwrap().is_empty());
 
-    let job_feedback = RadrootsJobFeedback {
+    let job_feedback = JobFeedback {
         kind: u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01"),
         status: JobFeedbackStatus::Processing,
         extra_info: Some("queued".to_string()),
-        request_event: RadrootsEventPtr {
+        request_event: EventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -406,13 +399,13 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
     };
     assert!(!job_feedback.build_tags().unwrap().is_empty());
 
-    let seal = RadrootsSeal {
+    let seal = Seal {
         content: "sealed".to_string(),
     };
     assert!(seal.build_tags().unwrap().is_empty());
 
-    let gift_wrap = RadrootsGiftWrap {
-        recipient: RadrootsGiftWrapRecipient {
+    let gift_wrap = GiftWrap {
+        recipient: GiftWrapRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -425,11 +418,11 @@ fn event_tag_builder_impls_build_tags_for_all_supported_types() {
 #[test]
 fn listing_and_message_builders_cover_optional_shapes() {
     let mut listing = sample_listing();
-    listing.resource_area = Some(RadrootsResourceAreaRef {
+    listing.resource_area = Some(ResourceAreaRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
     });
-    listing.plot = Some(RadrootsPlotRef {
+    listing.plot = Some(PlotRef {
         pubkey: TEST_PUBKEY_HEX.to_string(),
         d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
     });
@@ -439,16 +432,16 @@ fn listing_and_message_builders_cover_optional_shapes() {
     listing.product.location = Some("Moyobamba".to_string());
     listing.product.profile = Some("fruity".to_string());
     listing.product.year = Some("2024".to_string());
-    listing.location = Some(RadrootsOperationalListingPublicLocation {
+    listing.location = Some(OperationalListingPublicLocation {
         primary: "Moyobamba".to_string(),
         city: Some("Moyobamba".to_string()),
         region: Some("San Martin".to_string()),
         country: Some("PE".to_string()),
         geohash: "9q8yy".to_string(),
     });
-    listing.images = Some(vec![RadrootsOperationalListingImage {
+    listing.images = Some(vec![OperationalListingImage {
         url: cdn_url("a.jpg"),
-        size: Some(RadrootsOperationalListingImageSize { w: 1200, h: 800 }),
+        size: Some(OperationalListingImageSize { w: 1200, h: 800 }),
     }]);
     assert!(!operational_listing_build_tags(&listing).unwrap().is_empty());
 
@@ -457,11 +450,11 @@ fn listing_and_message_builders_cover_optional_shapes() {
     let with_trade_fields: fn() -> OperationalListingTagOptions =
         OperationalListingTagOptions::with_trade_fields;
     let trade_options = with_trade_fields();
-    listing_with_trade.availability = Some(RadrootsOperationalListingAvailability::Status {
-        status: RadrootsOperationalListingStatus::Active,
+    listing_with_trade.availability = Some(OperationalListingAvailability::Status {
+        status: OperationalListingStatus::Active,
     });
     let operational_listing_tags_full_fn: fn(
-        &RadrootsOperationalListing,
+        &OperationalListing,
     ) -> Result<Vec<Vec<String>>, EventEncodeError> =
         radroots_event_codec::operational_listing::tags::operational_listing_tags_full;
     let full_tags = operational_listing_tags_full_fn(&listing_with_trade).unwrap();
@@ -482,8 +475,8 @@ fn listing_and_message_builders_cover_optional_shapes() {
     }));
 
     let mut listing_status_sold = listing_with_trade.clone();
-    listing_status_sold.availability = Some(RadrootsOperationalListingAvailability::Status {
-        status: RadrootsOperationalListingStatus::Sold,
+    listing_status_sold.availability = Some(OperationalListingAvailability::Status {
+        status: OperationalListingStatus::Sold,
     });
     let sold_tags =
         operational_listing_tags_with_options(&listing_status_sold, trade_options).unwrap();
@@ -493,8 +486,8 @@ fn listing_and_message_builders_cover_optional_shapes() {
     }));
 
     let mut listing_status_other = listing_with_trade.clone();
-    listing_status_other.availability = Some(RadrootsOperationalListingAvailability::Status {
-        status: RadrootsOperationalListingStatus::Other {
+    listing_status_other.availability = Some(OperationalListingAvailability::Status {
+        status: OperationalListingStatus::Other {
             value: "paused".to_string(),
         },
     });
@@ -506,7 +499,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
     }));
 
     let mut listing_geohash_only = listing_with_trade.clone();
-    listing_geohash_only.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_geohash_only.location = Some(OperationalListingPublicLocation {
         primary: "Moyobamba".to_string(),
         city: Some("Moyobamba".to_string()),
         region: None,
@@ -524,7 +517,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
     }));
 
     let mut listing_no_coordinates = listing_with_trade.clone();
-    listing_no_coordinates.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_no_coordinates.location = Some(OperationalListingPublicLocation {
         primary: "Moyobamba".to_string(),
         city: Some("Moyobamba".to_string()),
         region: None,
@@ -556,7 +549,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
     );
 
     let mut listing_with_empty_primary_location = listing_with_trade.clone();
-    listing_with_empty_primary_location.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_with_empty_primary_location.location = Some(OperationalListingPublicLocation {
         primary: " null ".to_string(),
         city: Some("Moyobamba".to_string()),
         region: None,
@@ -598,13 +591,13 @@ fn listing_and_message_builders_cover_optional_shapes() {
         assert!(matches!(err, EventEncodeError::Json));
     }
 
-    let message_without_relays = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message_without_relays = Message {
+        recipients: vec![MessageRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: "reply".to_string(),
             relays: None,
         }),
@@ -612,13 +605,13 @@ fn listing_and_message_builders_cover_optional_shapes() {
     };
     assert!(!message_without_relays.build_tags().unwrap().is_empty());
 
-    let message_invalid_reply = RadrootsMessage {
-        recipients: vec![RadrootsMessageRecipient {
+    let message_invalid_reply = Message {
+        recipients: vec![MessageRecipient {
             public_key: TEST_PUBKEY_HEX.to_string(),
             relay_url: None,
         }],
         content: "hello".to_string(),
-        reply_to: Some(RadrootsEventPtr {
+        reply_to: Some(EventPtr {
             id: " ".to_string(),
             relays: None,
         }),
@@ -664,9 +657,9 @@ fn listing_builder_rejects_required_field_errors() {
 
 #[test]
 fn job_request_tag_builder_rejects_encrypted_without_provider() {
-    let request = RadrootsJobRequest {
+    let request = JobRequest {
         kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
             relay: None,
@@ -686,9 +679,9 @@ fn job_request_tag_builder_rejects_encrypted_without_provider() {
 
 #[test]
 fn job_request_tag_builder_accepts_encrypted_with_provider() {
-    let request = RadrootsJobRequest {
+    let request = JobRequest {
         kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
             relay: None,

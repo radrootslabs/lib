@@ -1,9 +1,9 @@
 use super::RadrootsTransportObservation;
 use crate::RadrootsEventStoreError;
-use radroots_event::contract::registry_v7::{RadrootsTagSemantic, RadrootsTagValueType};
-use radroots_event::draft::RadrootsSignedEvent;
-use radroots_event::envelope::event_head::v1::RadrootsEventHeadDecision;
-use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
+use radroots_event::contract::registry_v7::{TagSemantic, TagValueType};
+use radroots_event::draft::SignedEvent;
+use radroots_event::envelope::event_head::v1::EventHeadDecision;
+use radroots_event::envelope::{EventEnvelope, EventKindClass};
 use radroots_event_codec::verification::v1::RadrootsSignatureVerifiedEvent;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,12 +53,12 @@ impl StoredEventClass {
         }
     }
 
-    pub fn from_event_kind_class(value: RadrootsEventKindClass) -> Self {
+    pub fn from_event_kind_class(value: EventKindClass) -> Self {
         match value {
-            RadrootsEventKindClass::Regular => Self::Regular,
-            RadrootsEventKindClass::Replaceable => Self::Replaceable,
-            RadrootsEventKindClass::Ephemeral => Self::Ephemeral,
-            RadrootsEventKindClass::Addressable => Self::Addressable,
+            EventKindClass::Regular => Self::Regular,
+            EventKindClass::Replaceable => Self::Replaceable,
+            EventKindClass::Ephemeral => Self::Ephemeral,
+            EventKindClass::Addressable => Self::Addressable,
         }
     }
 
@@ -151,13 +151,13 @@ pub struct RadrootsEventIngest {
 
 impl RadrootsEventIngest {
     #[cfg(test)]
-    pub(crate) fn new(signed_event: RadrootsSignedEvent, observed_at_ms: i64) -> Self {
+    pub(crate) fn new(signed_event: SignedEvent, observed_at_ms: i64) -> Self {
         Self::from_signed_event(signed_event, observed_at_ms)
             .expect("test event must have a valid NIP-01 signature")
     }
 
     pub fn from_signed_event(
-        signed_event: RadrootsSignedEvent,
+        signed_event: SignedEvent,
         observed_at_ms: i64,
     ) -> Result<Self, RadrootsEventStoreError> {
         Self::from_signed_event_reconciliation_v1(signed_event, observed_at_ms)
@@ -175,7 +175,7 @@ impl RadrootsEventIngest {
         self
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -208,15 +208,15 @@ pub enum RadrootsRawHeadDecision {
 }
 
 impl RadrootsRawHeadDecision {
-    pub fn from_protocol(value: &RadrootsEventHeadDecision) -> Self {
+    pub fn from_protocol(value: &EventHeadDecision) -> Self {
         match value {
-            RadrootsEventHeadDecision::Applied(_) => Self::Applied,
-            RadrootsEventHeadDecision::SkippedDuplicate => Self::SkippedDuplicate,
-            RadrootsEventHeadDecision::SkippedOlder => Self::SkippedOlder,
-            RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId => {
+            EventHeadDecision::Applied(_) => Self::Applied,
+            EventHeadDecision::SkippedDuplicate => Self::SkippedDuplicate,
+            EventHeadDecision::SkippedOlder => Self::SkippedOlder,
+            EventHeadDecision::SkippedSameTimestampHigherEventId => {
                 Self::SkippedSameTimestampHigherEventId
             }
-            RadrootsEventHeadDecision::CoordinateMismatch => Self::MalformedCoordinate,
+            EventHeadDecision::CoordinateMismatch => Self::MalformedCoordinate,
         }
     }
 }
@@ -234,77 +234,77 @@ impl RadrootsEventStoreSourceGeneration {
     }
 }
 
-pub fn tag_semantic_name(value: RadrootsTagSemantic) -> &'static str {
+pub fn tag_semantic_name(value: TagSemantic) -> &'static str {
     match value {
-        RadrootsTagSemantic::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagSemantic::CalendarEventAuthor => "calendar_event_author",
-        RadrootsTagSemantic::CalendarEventReference => "calendar_event_reference",
-        RadrootsTagSemantic::CalendarEventRevision => "calendar_event_revision",
-        RadrootsTagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
-        RadrootsTagSemantic::CalendarEnd => "calendar_end",
-        RadrootsTagSemantic::CalendarStart => "calendar_start",
-        RadrootsTagSemantic::Category => "category",
-        RadrootsTagSemantic::Citation => "citation",
-        RadrootsTagSemantic::Contract => "contract",
-        RadrootsTagSemantic::Counterparty => "counterparty",
-        RadrootsTagSemantic::Evidence => "evidence",
-        RadrootsTagSemantic::EventPointer => "event_pointer",
-        RadrootsTagSemantic::FreeBusy => "free_busy",
-        RadrootsTagSemantic::Geohash => "geohash",
-        RadrootsTagSemantic::GroupId => "group_id",
-        RadrootsTagSemantic::Identifier => "identifier",
-        RadrootsTagSemantic::Image => "image",
-        RadrootsTagSemantic::Kind => "kind",
-        RadrootsTagSemantic::ClassifiedListingAddress => "listing_address",
-        RadrootsTagSemantic::OperationalListingSnapshot => "listing_snapshot",
-        RadrootsTagSemantic::ListDescription => "list_description",
-        RadrootsTagSemantic::Location => "location",
-        RadrootsTagSemantic::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagSemantic::Participant => "participant",
-        RadrootsTagSemantic::PreviousEvent => "previous_event",
-        RadrootsTagSemantic::Price => "price",
-        RadrootsTagSemantic::PublishedAt => "published_at",
-        RadrootsTagSemantic::Relay => "relay",
-        RadrootsTagSemantic::Reference => "reference",
-        RadrootsTagSemantic::ReviewTarget => "review_target",
-        RadrootsTagSemantic::RootEvent => "root_event",
-        RadrootsTagSemantic::ServiceInput => "service_input",
-        RadrootsTagSemantic::ServiceOutput => "service_output",
-        RadrootsTagSemantic::Source => "source",
-        RadrootsTagSemantic::Status => "status",
-        RadrootsTagSemantic::Summary => "summary",
-        RadrootsTagSemantic::Title => "title",
-        RadrootsTagSemantic::Topic => "topic",
-        RadrootsTagSemantic::TimeZone => "time_zone",
-        RadrootsTagSemantic::Url => "url",
-        RadrootsTagSemantic::UtcDayCoverage => "utc_day_coverage",
+        TagSemantic::AddressableCoordinate => "addressable_coordinate",
+        TagSemantic::CalendarEventAuthor => "calendar_event_author",
+        TagSemantic::CalendarEventReference => "calendar_event_reference",
+        TagSemantic::CalendarEventRevision => "calendar_event_revision",
+        TagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
+        TagSemantic::CalendarEnd => "calendar_end",
+        TagSemantic::CalendarStart => "calendar_start",
+        TagSemantic::Category => "category",
+        TagSemantic::Citation => "citation",
+        TagSemantic::Contract => "contract",
+        TagSemantic::Counterparty => "counterparty",
+        TagSemantic::Evidence => "evidence",
+        TagSemantic::EventPointer => "event_pointer",
+        TagSemantic::FreeBusy => "free_busy",
+        TagSemantic::Geohash => "geohash",
+        TagSemantic::GroupId => "group_id",
+        TagSemantic::Identifier => "identifier",
+        TagSemantic::Image => "image",
+        TagSemantic::Kind => "kind",
+        TagSemantic::ClassifiedListingAddress => "listing_address",
+        TagSemantic::OperationalListingSnapshot => "listing_snapshot",
+        TagSemantic::ListDescription => "list_description",
+        TagSemantic::Location => "location",
+        TagSemantic::Nip01Coordinate => "nip01_coordinate",
+        TagSemantic::Participant => "participant",
+        TagSemantic::PreviousEvent => "previous_event",
+        TagSemantic::Price => "price",
+        TagSemantic::PublishedAt => "published_at",
+        TagSemantic::Relay => "relay",
+        TagSemantic::Reference => "reference",
+        TagSemantic::ReviewTarget => "review_target",
+        TagSemantic::RootEvent => "root_event",
+        TagSemantic::ServiceInput => "service_input",
+        TagSemantic::ServiceOutput => "service_output",
+        TagSemantic::Source => "source",
+        TagSemantic::Status => "status",
+        TagSemantic::Summary => "summary",
+        TagSemantic::Title => "title",
+        TagSemantic::Topic => "topic",
+        TagSemantic::TimeZone => "time_zone",
+        TagSemantic::Url => "url",
+        TagSemantic::UtcDayCoverage => "utc_day_coverage",
     }
 }
 
-pub fn tag_value_type_name(value: RadrootsTagValueType) -> &'static str {
+pub fn tag_value_type_name(value: TagValueType) -> &'static str {
     match value {
-        RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagValueType::CalendarDate => "calendar_date",
-        RadrootsTagValueType::CalendarEventCoordinate => "calendar_event_coordinate",
-        RadrootsTagValueType::CalendarFreeBusy => "calendar_free_busy",
-        RadrootsTagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
-        RadrootsTagValueType::CalendarUid => "calendar_uid",
-        RadrootsTagValueType::ContractId => "contract_id",
-        RadrootsTagValueType::DTag => "d_tag",
-        RadrootsTagValueType::EventId => "event_id",
-        RadrootsTagValueType::EventPointer => "event_pointer",
-        RadrootsTagValueType::Geohash => "geohash",
-        RadrootsTagValueType::IanaTimeZoneId => "iana_time_zone_id",
-        RadrootsTagValueType::Kind => "kind",
-        RadrootsTagValueType::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagValueType::PublicKey => "public_key",
-        RadrootsTagValueType::RelayUrl => "relay_url",
-        RadrootsTagValueType::Sha256 => "sha256",
-        RadrootsTagValueType::Text => "text",
-        RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
-        RadrootsTagValueType::Uri => "uri",
-        RadrootsTagValueType::Url => "url",
-        RadrootsTagValueType::UtcDayIndex => "utc_day_index",
-        RadrootsTagValueType::Uuid => "uuid",
+        TagValueType::AddressableCoordinate => "addressable_coordinate",
+        TagValueType::CalendarDate => "calendar_date",
+        TagValueType::CalendarEventCoordinate => "calendar_event_coordinate",
+        TagValueType::CalendarFreeBusy => "calendar_free_busy",
+        TagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
+        TagValueType::CalendarUid => "calendar_uid",
+        TagValueType::ContractId => "contract_id",
+        TagValueType::DTag => "d_tag",
+        TagValueType::EventId => "event_id",
+        TagValueType::EventPointer => "event_pointer",
+        TagValueType::Geohash => "geohash",
+        TagValueType::IanaTimeZoneId => "iana_time_zone_id",
+        TagValueType::Kind => "kind",
+        TagValueType::Nip01Coordinate => "nip01_coordinate",
+        TagValueType::PublicKey => "public_key",
+        TagValueType::RelayUrl => "relay_url",
+        TagValueType::Sha256 => "sha256",
+        TagValueType::Text => "text",
+        TagValueType::UnixTimestamp => "unix_timestamp",
+        TagValueType::Uri => "uri",
+        TagValueType::Url => "url",
+        TagValueType::UtcDayIndex => "utc_day_index",
+        TagValueType::Uuid => "uuid",
     }
 }

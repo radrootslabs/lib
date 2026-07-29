@@ -8,7 +8,7 @@ use alloc::{
 use radroots_event::{
     envelope::kind::KIND_FARM,
     farm::location::{has_textual_locality, is_public_geohash5},
-    farm::{RadrootsFarm, RadrootsFarmRef},
+    farm::{Farm, FarmRef},
     tag::name::TAG_D,
 };
 
@@ -16,7 +16,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_G: &str = "g";
@@ -25,7 +25,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-pub fn farm_build_tags(farm: &RadrootsFarm) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn farm_build_tags(farm: &Farm) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if farm.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -61,7 +61,7 @@ pub fn farm_build_tags(farm: &RadrootsFarm) -> Result<Vec<Vec<String>>, EventEnc
     Ok(tags)
 }
 
-pub fn farm_ref_tags(farm: &RadrootsFarmRef) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn farm_ref_tags(farm: &FarmRef) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if farm.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.pubkey"));
     }
@@ -82,21 +82,21 @@ pub fn farm_ref_tags(farm: &RadrootsFarmRef) -> Result<Vec<Vec<String>>, EventEn
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(farm: &RadrootsFarm) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(farm: &Farm) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(farm, KIND_FARM)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    farm: &RadrootsFarm,
+    farm: &Farm,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_build_tags(farm)?;
     let content = serde_json::to_string(farm).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,

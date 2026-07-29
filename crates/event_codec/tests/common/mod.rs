@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
 use radroots_event::{
-    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts, tag::RadrootsEventPtr,
-    tag::RadrootsEventRef,
+    envelope::EventEnvelope, envelope::EventEnvelopeParts, tag::EventPtr, tag::EventRef,
 };
 use radroots_identity::PublicKey;
 
@@ -13,8 +12,8 @@ pub const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 );
 
-pub fn event_ref(id: &str, author: &str, kind: u32) -> RadrootsEventRef {
-    RadrootsEventRef {
+pub fn event_ref(id: &str, author: &str, kind: u32) -> EventRef {
+    EventRef {
         id: id.to_string(),
         author: PublicKey::from_hex(author).expect("valid fixture public key"),
         kind,
@@ -29,8 +28,8 @@ pub fn event_ref_with_d(
     kind: u32,
     d_tag: &str,
     relays: Option<Vec<String>>,
-) -> RadrootsEventRef {
-    RadrootsEventRef {
+) -> EventRef {
+    EventRef {
         id: id.to_string(),
         author: PublicKey::from_hex(author).expect("valid fixture public key"),
         kind,
@@ -39,15 +38,15 @@ pub fn event_ref_with_d(
     }
 }
 
-pub fn event_ptr(id: &str, relays: Option<&str>) -> RadrootsEventPtr {
-    RadrootsEventPtr {
+pub fn event_ptr(id: &str, relays: Option<&str>) -> EventPtr {
+    EventPtr {
         id: id.to_string(),
         relays: relays.map(|s| s.to_string()),
     }
 }
 
-pub fn nostr_event(kind: u32, content: &str, tags: Vec<Vec<String>>) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+pub fn nostr_event(kind: u32, content: &str, tags: Vec<Vec<String>>) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: EVENT_ID.to_string(),
         author: AUTHOR.to_string(),
         created_at: 123,

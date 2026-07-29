@@ -16,8 +16,8 @@ use crate::model::{
 use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
-use radroots_event::food::availability::RadrootsFoodIdentifier;
-use radroots_event::id::RadrootsEventId;
+use radroots_event::food::availability::FoodIdentifier;
+use radroots_event::id::EventId;
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsFoodAvailabilityProjectionOutcome,
     project_verified_food_availability_event_registry_v7,
@@ -52,7 +52,7 @@ impl RadrootsEventStore {
     pub async fn food_availability_v1(
         &self,
         pubkey: &PublicKey,
-        identifier: &RadrootsFoodIdentifier,
+        identifier: &FoodIdentifier,
     ) -> Result<Option<RadrootsStoredFoodAvailabilityV1>, RadrootsEventStoreError> {
         let mut tx = self.pool.begin().await?;
         validate_food_availability_projection_hook_state_fast_v1(&mut tx).await?;
@@ -705,7 +705,7 @@ fn load_and_validate_projection_row(
     )?;
     let pubkey = PublicKey::from_hex(row.try_get::<String, _>("pubkey")?.as_str())
         .map_err(|error| projection_drift(format!("stored pubkey is invalid: {error}")))?;
-    let event_id = RadrootsEventId::parse(row.try_get::<String, _>("event_id")?.as_str())
+    let event_id = EventId::parse(row.try_get::<String, _>("event_id")?.as_str())
         .map_err(|error| projection_drift(format!("stored event id is invalid: {error}")))?;
     let event_seq: i64 = row.try_get("event_seq")?;
     let created_at = u64_from_i64("food.created_at", row.try_get("created_at")?)

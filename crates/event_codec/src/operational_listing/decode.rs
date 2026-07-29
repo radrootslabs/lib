@@ -7,20 +7,18 @@ use alloc::{
 use radroots_core::pricing::Discount;
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
+    envelope::EventEnvelope,
     envelope::kind::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, is_classified_listing_kind},
-    farm::RadrootsFarmRef,
+    farm::FarmRef,
     farm::location::is_public_geohash5,
-    farm::plot::RadrootsPlotRef,
-    farm::resource_area::RadrootsResourceAreaRef,
-    id::{RadrootsDTag, RadrootsInventoryBinId},
-    listing::operational::RadrootsOperationalListingParseError,
+    farm::plot::PlotRef,
+    farm::resource_area::ResourceAreaRef,
+    id::{DTag, InventoryBinId},
+    listing::operational::OperationalListingParseError,
     listing::operational::{
-        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-        RadrootsOperationalListingImage, RadrootsOperationalListingImageSize,
-        RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
-        RadrootsOperationalListingStatus,
+        OperationalListing, OperationalListingAvailability, OperationalListingBin,
+        OperationalListingDeliveryMethod, OperationalListingImage, OperationalListingImageSize,
+        OperationalListingProduct, OperationalListingPublicLocation, OperationalListingStatus,
     },
     tag::name::{TAG_D, TAG_PUBLISHED_AT},
 };
@@ -66,25 +64,21 @@ enum OperationalListingDecodeError {
 }
 
 impl OperationalListingDecodeError {
-    fn into_listing_parse_error(self) -> RadrootsOperationalListingParseError {
+    fn into_listing_parse_error(self) -> OperationalListingParseError {
         match self {
-            Self::MissingTag(field) => {
-                RadrootsOperationalListingParseError::MissingTag(field.to_string())
-            }
-            Self::InvalidTag(field) => {
-                RadrootsOperationalListingParseError::InvalidTag(field.to_string())
-            }
+            Self::MissingTag(field) => OperationalListingParseError::MissingTag(field.to_string()),
+            Self::InvalidTag(field) => OperationalListingParseError::InvalidTag(field.to_string()),
             Self::InvalidNumber(field) => {
-                RadrootsOperationalListingParseError::InvalidNumber(field.to_string())
+                OperationalListingParseError::InvalidNumber(field.to_string())
             }
-            Self::InvalidUnit(_) => RadrootsOperationalListingParseError::InvalidUnit,
-            Self::InvalidCurrency(_) => RadrootsOperationalListingParseError::InvalidCurrency,
+            Self::InvalidUnit(_) => OperationalListingParseError::InvalidUnit,
+            Self::InvalidCurrency(_) => OperationalListingParseError::InvalidCurrency,
             Self::InvalidJson(field) => {
-                RadrootsOperationalListingParseError::InvalidJson(field.to_string())
+                OperationalListingParseError::InvalidJson(field.to_string())
             }
             #[cfg(feature = "serde_json")]
             Self::InvalidDiscount(field) => {
-                RadrootsOperationalListingParseError::InvalidDiscount(field.to_string())
+                OperationalListingParseError::InvalidDiscount(field.to_string())
             }
         }
     }
@@ -197,7 +191,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, OperationalListingDecodeE
     Ok(value)
 }
 
-fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, OperationalListingDecodeError> {
+fn parse_farm_ref(tags: &[Vec<String>]) -> Result<FarmRef, OperationalListingDecodeError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_A))
@@ -227,7 +221,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, OperationalLi
         }
         validate_d_tag_tag(&d_tag, TAG_A)
             .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_A))?;
-        return Ok(RadrootsFarmRef { pubkey, d_tag });
+        return Ok(FarmRef { pubkey, d_tag });
     }
     Err(OperationalListingDecodeError::MissingTag(TAG_A))
 }
@@ -249,7 +243,7 @@ fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, OperationalListingD
 
 fn parse_resource_area(
     tags: &[Vec<String>],
-) -> Result<Option<RadrootsResourceAreaRef>, OperationalListingDecodeError> {
+) -> Result<Option<ResourceAreaRef>, OperationalListingDecodeError> {
     let tag = tags
         .iter()
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_RADROOTS_RESOURCE_AREA));
@@ -287,12 +281,10 @@ fn parse_resource_area(
     }
     validate_d_tag_tag(&d_tag, TAG_RADROOTS_RESOURCE_AREA)
         .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_RESOURCE_AREA))?;
-    Ok(Some(RadrootsResourceAreaRef { pubkey, d_tag }))
+    Ok(Some(ResourceAreaRef { pubkey, d_tag }))
 }
 
-fn parse_plot_ref(
-    tags: &[Vec<String>],
-) -> Result<Option<RadrootsPlotRef>, OperationalListingDecodeError> {
+fn parse_plot_ref(tags: &[Vec<String>]) -> Result<Option<PlotRef>, OperationalListingDecodeError> {
     let tag = tags
         .iter()
         .find(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_RADROOTS_PLOT));
@@ -324,14 +316,14 @@ fn parse_plot_ref(
     }
     validate_d_tag_tag(&d_tag, TAG_RADROOTS_PLOT)
         .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_PLOT))?;
-    Ok(Some(RadrootsPlotRef { pubkey, d_tag }))
+    Ok(Some(PlotRef { pubkey, d_tag }))
 }
 
 pub fn operational_listing_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsOperationalListing, EventParseError> {
+) -> Result<OperationalListing, EventParseError> {
     if !is_classified_listing_kind(kind) {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_CLASSIFIED_LISTING_KINDS,
@@ -345,18 +337,16 @@ pub fn operational_listing_from_event(
 pub fn operational_listing_from_event_parts(
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsOperationalListing, RadrootsOperationalListingParseError> {
+) -> Result<OperationalListing, OperationalListingParseError> {
     decode_operational_listing_from_event_parts(tags, content)
         .map_err(OperationalListingDecodeError::into_listing_parse_error)
 }
 
 pub fn operational_listing_from_nostr_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsOperationalListing, RadrootsOperationalListingParseError> {
+    event: &EventEnvelope,
+) -> Result<OperationalListing, OperationalListingParseError> {
     if !is_classified_listing_kind(event.kind_u32()) {
-        return Err(RadrootsOperationalListingParseError::InvalidKind(
-            event.kind_u32(),
-        ));
+        return Err(OperationalListingParseError::InvalidKind(event.kind_u32()));
     }
     operational_listing_from_event_parts(&event.tags_as_vec(), event.content())
 }
@@ -364,7 +354,7 @@ pub fn operational_listing_from_nostr_event(
 fn decode_operational_listing_from_event_parts(
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsOperationalListing, OperationalListingDecodeError> {
+) -> Result<OperationalListing, OperationalListingDecodeError> {
     reject_private_listing_location_content(content)?;
     let d_tag = parse_d_tag(tags)?;
     let farm_ref = parse_farm_ref(tags)?;
@@ -372,7 +362,7 @@ fn decode_operational_listing_from_event_parts(
     let resource_area = parse_resource_area(tags)?;
     let plot = parse_plot_ref(tags)?;
 
-    let mut product = RadrootsOperationalListingProduct {
+    let mut product = OperationalListingProduct {
         key: String::new(),
         title: String::new(),
         category: String::new(),
@@ -389,11 +379,11 @@ fn decode_operational_listing_from_event_parts(
     let mut discounts: Vec<Discount> = Vec::new();
     let mut location: Option<OperationalListingLocationDraft> = None;
     let mut inventory_available: Option<Decimal> = None;
-    let mut availability_status: Option<RadrootsOperationalListingStatus> = None;
+    let mut availability_status: Option<OperationalListingStatus> = None;
     let mut availability_start: Option<u64> = None;
     let mut availability_end: Option<u64> = None;
-    let mut delivery_method: Option<RadrootsOperationalListingDeliveryMethod> = None;
-    let mut images: Vec<RadrootsOperationalListingImage> = Vec::new();
+    let mut delivery_method: Option<OperationalListingDeliveryMethod> = None;
+    let mut images: Vec<OperationalListingImage> = Vec::new();
     let mut geohash: Option<String> = None;
     let mut published_at: Option<u64> = None;
 
@@ -597,16 +587,16 @@ fn decode_operational_listing_from_event_parts(
                     .and_then(|value| clean_value(value))
                     .unwrap_or_default();
                 delivery_method = Some(match method.as_str() {
-                    "pickup" => RadrootsOperationalListingDeliveryMethod::Pickup,
-                    "local_delivery" => RadrootsOperationalListingDeliveryMethod::LocalDelivery,
-                    "shipping" => RadrootsOperationalListingDeliveryMethod::Shipping,
-                    "other" => RadrootsOperationalListingDeliveryMethod::Other {
+                    "pickup" => OperationalListingDeliveryMethod::Pickup,
+                    "local_delivery" => OperationalListingDeliveryMethod::LocalDelivery,
+                    "shipping" => OperationalListingDeliveryMethod::Shipping,
+                    "other" => OperationalListingDeliveryMethod::Other {
                         method: tag
                             .get(2)
                             .and_then(|value| clean_value(value))
                             .unwrap_or_default(),
                     },
-                    other => RadrootsOperationalListingDeliveryMethod::Other {
+                    other => OperationalListingDeliveryMethod::Other {
                         method: other.to_string(),
                     },
                 });
@@ -618,7 +608,7 @@ fn decode_operational_listing_from_event_parts(
                 if url.trim().is_empty() {
                     continue;
                 }
-                images.push(RadrootsOperationalListingImage {
+                images.push(OperationalListingImage {
                     url: url.to_string(),
                     size: tag.get(2).and_then(|value| parse_image_size(value)),
                 });
@@ -628,18 +618,18 @@ fn decode_operational_listing_from_event_parts(
     }
 
     let availability = match availability_status {
-        Some(status) => Some(RadrootsOperationalListingAvailability::Status { status }),
+        Some(status) => Some(OperationalListingAvailability::Status { status }),
         None => match (availability_start, availability_end) {
             (None, None) => None,
-            (start, end) => Some(RadrootsOperationalListingAvailability::Window { start, end }),
+            (start, end) => Some(OperationalListingAvailability::Window { start, end }),
         },
     };
 
     let location = location
         .map(|location| {
             let geohash = geohash.ok_or(OperationalListingDecodeError::InvalidTag(TAG_GEOHASH))?;
-            Ok::<RadrootsOperationalListingPublicLocation, OperationalListingDecodeError>(
-                RadrootsOperationalListingPublicLocation {
+            Ok::<OperationalListingPublicLocation, OperationalListingDecodeError>(
+                OperationalListingPublicLocation {
                     primary: location.primary,
                     city: location.city,
                     region: location.region,
@@ -664,12 +654,12 @@ fn decode_operational_listing_from_event_parts(
         ));
     }
 
-    let d_tag = RadrootsDTag::parse(&d_tag)
-        .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_D))?;
-    let primary_bin_id = RadrootsInventoryBinId::parse(&primary_bin_id)
+    let d_tag =
+        DTag::parse(&d_tag).map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_D))?;
+    let primary_bin_id = InventoryBinId::parse(&primary_bin_id)
         .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_PRIMARY_BIN))?;
 
-    Ok(RadrootsOperationalListing {
+    Ok(OperationalListing {
         d_tag,
         published_at,
         farm: farm_ref,
@@ -702,7 +692,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsOperationalListing>, EventParseError> {
+) -> Result<RadrootsParsedData<OperationalListing>, EventParseError> {
     let listing = operational_listing_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -721,7 +711,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsOperationalListing>, EventParseError> {
+) -> Result<RadrootsParsedEvent<OperationalListing>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -743,8 +733,8 @@ pub fn parsed_from_event(
 }
 
 pub fn data_from_nostr_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsParsedData<RadrootsOperationalListing>, EventParseError> {
+    event: &EventEnvelope,
+) -> Result<RadrootsParsedData<OperationalListing>, EventParseError> {
     data_from_event(
         event.id_hex(),
         event.author().to_hex().to_string(),
@@ -756,8 +746,8 @@ pub fn data_from_nostr_event(
 }
 
 pub fn parsed_from_nostr_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsOperationalListing>, EventParseError> {
+    event: &EventEnvelope,
+) -> Result<RadrootsParsedEvent<OperationalListing>, EventParseError> {
     parsed_from_event(
         event.id_hex(),
         event.author().to_hex().to_string(),
@@ -794,21 +784,21 @@ fn set_optional(target: &mut Option<String>, value: Option<&String>) {
     }
 }
 
-fn parse_status(value: &str) -> RadrootsOperationalListingStatus {
+fn parse_status(value: &str) -> OperationalListingStatus {
     match value.trim().to_ascii_lowercase().as_str() {
-        "active" => RadrootsOperationalListingStatus::Active,
-        "sold" => RadrootsOperationalListingStatus::Sold,
-        other => RadrootsOperationalListingStatus::Other {
+        "active" => OperationalListingStatus::Active,
+        "sold" => OperationalListingStatus::Sold,
+        other => OperationalListingStatus::Other {
             value: other.to_string(),
         },
     }
 }
 
-fn parse_image_size(value: &str) -> Option<RadrootsOperationalListingImageSize> {
+fn parse_image_size(value: &str) -> Option<OperationalListingImageSize> {
     let (w_raw, h_raw) = value.split_once('x')?;
     let w = w_raw.parse::<u32>().ok()?;
     let h = h_raw.parse::<u32>().ok()?;
-    Some(RadrootsOperationalListingImageSize { w, h })
+    Some(OperationalListingImageSize { w, h })
 }
 
 fn parse_discount(payload: &str) -> Result<Discount, OperationalListingDecodeError> {
@@ -863,7 +853,7 @@ fn upsert_bin<'a>(
 
 fn build_bins(
     mut drafts: Vec<BinDraft>,
-) -> Result<Vec<RadrootsOperationalListingBin>, OperationalListingDecodeError> {
+) -> Result<Vec<OperationalListingBin>, OperationalListingDecodeError> {
     drafts.sort_by_key(|draft| draft.order_index);
     let mut bins = Vec::with_capacity(drafts.len());
     for draft in drafts {
@@ -881,8 +871,8 @@ fn build_bins(
                 TAG_RADROOTS_PRICE,
             ));
         }
-        bins.push(RadrootsOperationalListingBin {
-            bin_id: RadrootsInventoryBinId::parse(&draft.bin_id)
+        bins.push(OperationalListingBin {
+            bin_id: InventoryBinId::parse(&draft.bin_id)
                 .map_err(|_| OperationalListingDecodeError::InvalidTag(TAG_RADROOTS_BIN))?,
             quantity,
             price_per_canonical_unit: price,

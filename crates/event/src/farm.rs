@@ -10,14 +10,14 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsFarm {
+pub struct Farm {
     pub d_tag: String,
     pub name: String,
     pub about: Option<String>,
     pub website: Option<String>,
     pub picture: Option<String>,
     pub banner: Option<String>,
-    pub location: Option<RadrootsFarmPublicLocation>,
+    pub location: Option<FarmPublicLocation>,
     pub tags: Option<Vec<String>>,
 }
 
@@ -28,7 +28,7 @@ pub struct RadrootsFarm {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, Default)]
-pub struct RadrootsFarmRef {
+pub struct FarmRef {
     pub pubkey: String,
     pub d_tag: String,
 }
@@ -40,7 +40,7 @@ pub struct RadrootsFarmRef {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsFarmPublicLocation {
+pub struct FarmPublicLocation {
     pub primary: String,
     pub city: Option<String>,
     pub region: Option<String>,

@@ -39,14 +39,14 @@ Strict
 [NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
 Comment publication is separately exposed through
 `RadrootsNostrNip22CommentEventBuilder`. Its only input is a checked
-`RadrootsAuthoredNip22Comment`; callers may choose the timestamp and sign or
+`AuthoredNip22Comment`; callers may choose the timestamp and sign or
 publish, but cannot mutate the kind, content, or canonical
 root, parent, kind, and participant tags. The profile admits event or address
 roots only for kinds `30402`, `31922`, and `31923`; it has no external
 `I`/`i` or kind-`1` root surface.
 
 Reply and Comment authoring and verified projection share the portable
-`RadrootsNostrRelayHint` profile rather than the generic relay URL type. It
+`NostrRelayHint` profile rather than the generic relay URL type. It
 accepts only exact lowercase `ws://` or `wss://` visible-ASCII URLs with a
 canonical lowercase DNS, four-octet IPv4, or bracketed pure-hex RFC 5952 IPv6
 authority, an optional canonical port `1..65535`, and RFC 3986
@@ -69,7 +69,7 @@ Strict
 [NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md)
 deletion-request publication is exposed through the sealed
 `RadrootsNostrNip09DeletionRequestEventBuilder`. Its only input is a checked
-`RadrootsAuthoredNip09DeletionRequest`; callers may choose the timestamp and
+`AuthoredNip09DeletionRequest`; callers may choose the timestamp and
 sign or publish, but cannot mutate the kind, content, or canonical `e`, `a`,
 and derived `k` tags. Generic kind-5 builders are rejected before signer
 access. Admission proves only the signed deletion-request event and its typed
@@ -120,7 +120,7 @@ unsigned-event conversion, or unchecked deserialization path.
 
 Strict kind-0 Profile publication uses
 `RadrootsNostrProfileEventBuilder`, constructed only from
-`RadrootsAuthoredProfile`. The sealed wrapper permits timestamp selection and
+`AuthoredProfile`. The sealed wrapper permits timestamp selection and
 local signing or client publication, but no raw kind, content, or tag
 mutation. A media-bearing Profile still requires runtime-owned proof of
 successful BUD-02 upload before it reaches this authoring boundary.

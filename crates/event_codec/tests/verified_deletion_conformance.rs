@@ -8,16 +8,16 @@ use std::{
 };
 
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
-    envelope::RadrootsEventEnvelopeLimits,
-    envelope::RadrootsEventEnvelopeParts,
+    envelope::EventEnvelope,
+    envelope::EventEnvelopeLimits,
+    envelope::EventEnvelopeParts,
     post::deletion::{
-        RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES, RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
+        AuthoredNip09DeletionRequest, Nip09DeletionAddressTarget, Nip09DeletionError,
+        Nip09DeletionEventTarget, RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
+        RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
         RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         RADROOTS_NIP09_DELETION_TAG_TOTAL_ELEMENT_MAX_COUNT,
-        RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES, RadrootsAuthoredNip09DeletionRequest,
-        RadrootsNip09DeletionAddressTarget, RadrootsNip09DeletionError,
-        RadrootsNip09DeletionEventTarget,
+        RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES,
     },
 };
 use radroots_event_codec::{
@@ -678,16 +678,14 @@ fn execute(vector: &Vector) {
     }
 }
 
-fn authored_request(
-    vector: &Vector,
-) -> Result<RadrootsAuthoredNip09DeletionRequest, RadrootsNip09DeletionError> {
+fn authored_request(vector: &Vector) -> Result<AuthoredNip09DeletionRequest, Nip09DeletionError> {
     let event_targets = input_array(vector, "event_targets")
         .iter()
         .map(|target| {
             let target = target
                 .as_object()
                 .unwrap_or_else(|| panic!("{} event target must be an object", vector.id));
-            RadrootsNip09DeletionEventTarget::parse(
+            Nip09DeletionEventTarget::parse(
                 object_str(target, "event_id", &vector.id),
                 object_u32(target, "kind", &vector.id),
             )
@@ -696,18 +694,14 @@ fn authored_request(
     let address_targets = input_array(vector, "address_targets")
         .iter()
         .map(|target| {
-            RadrootsNip09DeletionAddressTarget::parse(
+            Nip09DeletionAddressTarget::parse(
                 target
                     .as_str()
                     .unwrap_or_else(|| panic!("{} address target must be a string", vector.id)),
             )
         })
         .collect::<Result<Vec<_>, _>>()?;
-    RadrootsAuthoredNip09DeletionRequest::new(
-        input_str(vector, "content"),
-        event_targets,
-        address_targets,
-    )
+    AuthoredNip09DeletionRequest::new(input_str(vector, "content"), event_targets, address_targets)
 }
 
 fn fixture_raw_event(vector: &Vector) -> RawEvent {
@@ -723,9 +717,9 @@ fn fixture_raw_event(vector: &Vector) -> RawEvent {
     raw
 }
 
-fn fixture_envelope(vector: &Vector) -> RadrootsEventEnvelope {
+fn fixture_envelope(vector: &Vector) -> EventEnvelope {
     let raw = fixture_raw_event(vector);
-    let mut limits = RadrootsEventEnvelopeLimits::default();
+    let mut limits = EventEnvelopeLimits::default();
     limits.max_content_bytes = limits.max_content_bytes.max(raw.content.len());
     limits.max_tag_count = limits.max_tag_count.max(raw.tags.len());
     limits.max_total_tag_elements = limits
@@ -740,8 +734,8 @@ fn fixture_envelope(vector: &Vector) -> RadrootsEventEnvelope {
             .unwrap_or_default(),
     );
     limits.max_total_tag_bytes = limits.max_total_tag_bytes.max(tag_bytes(&raw.tags));
-    RadrootsEventEnvelope::new_with_limits(
-        RadrootsEventEnvelopeParts {
+    EventEnvelope::new_with_limits(
+        EventEnvelopeParts {
             id: raw.id,
             author: raw.pubkey,
             created_at: raw.created_at,

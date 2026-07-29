@@ -1,7 +1,7 @@
-use radroots_event::contract::RadrootsContractValidationError;
-use radroots_event::draft::{RadrootsDraftError, RadrootsEventDraft};
+use radroots_event::contract::ContractValidationError;
+use radroots_event::draft::{DraftError, EventDraft};
 use radroots_event::envelope::kind::{KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE};
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 use radroots_event_codec::wire::{canonicalize_tags, empty_content};
 
 #[test]
@@ -27,26 +27,26 @@ fn wire_canonicalize_tags_trims_sorts_and_dedups() {
 
 #[test]
 fn wire_parts_are_canonical_event_owned_payload_parts() {
-    let parts = RadrootsNip01EventWireParts {
+    let parts = Nip01EventWireParts {
         kind: KIND_GEOCHAT,
         content: "hello".to_string(),
         tags: vec![vec!["t".to_string(), "a".to_string()]],
     };
     let json = serde_json::to_string(&parts).expect("json");
-    let decoded: RadrootsNip01EventWireParts = serde_json::from_str(&json).expect("decoded");
+    let decoded: Nip01EventWireParts = serde_json::from_str(&json).expect("decoded");
 
     assert_eq!(decoded, parts);
 }
 
 #[test]
 fn draft_validation_accepts_wire_parts_without_signed_envelope() {
-    let parts = RadrootsNip01EventWireParts {
+    let parts = Nip01EventWireParts {
         kind: KIND_GEOCHAT,
         content: "hello".to_string(),
         tags: vec![vec!["t".to_string(), "a".to_string()]],
     };
 
-    let draft = RadrootsEventDraft::new(
+    let draft = EventDraft::new(
         "radroots.social.geochat.v1",
         parts.kind,
         99,
@@ -66,12 +66,12 @@ fn draft_validation_accepts_wire_parts_without_signed_envelope() {
 
 #[test]
 fn draft_validation_rejects_contract_shape_errors() {
-    let missing_contract_tag = RadrootsNip01EventWireParts {
+    let missing_contract_tag = Nip01EventWireParts {
         kind: KIND_KNOWLEDGE_CLAIM,
         content: r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#.to_string(),
         tags: Vec::new(),
     };
-    let error = RadrootsEventDraft::new(
+    let error = EventDraft::new(
         "radroots.knowledge.claim.v1",
         missing_contract_tag.kind,
         99,
@@ -82,8 +82,8 @@ fn draft_validation_rejects_contract_shape_errors() {
     .expect_err("missing contract tag");
     assert!(matches!(
         error,
-        RadrootsDraftError::ContractShape {
-            error: RadrootsContractValidationError::MissingTag {
+        DraftError::ContractShape {
+            error: ContractValidationError::MissingTag {
                 name: "contract",
                 ..
             },
@@ -91,7 +91,7 @@ fn draft_validation_rejects_contract_shape_errors() {
         }
     ));
 
-    let invalid_relay = RadrootsNip01EventWireParts {
+    let invalid_relay = Nip01EventWireParts {
         kind: KIND_KNOWLEDGE_CLAIM,
         content: r#"{"schema":"radroots.knowledge.claim.v1","schema_version":1}"#.to_string(),
         tags: vec![
@@ -109,7 +109,7 @@ fn draft_validation_rejects_contract_shape_errors() {
             ],
         ],
     };
-    let error = RadrootsEventDraft::new(
+    let error = EventDraft::new(
         "radroots.knowledge.claim.v1",
         invalid_relay.kind,
         99,
@@ -120,8 +120,8 @@ fn draft_validation_rejects_contract_shape_errors() {
     .expect_err("invalid relay");
     assert!(matches!(
         error,
-        RadrootsDraftError::ContractShape {
-            error: RadrootsContractValidationError::TagValueMismatch { name: "source", .. },
+        DraftError::ContractShape {
+            error: ContractValidationError::TagValueMismatch { name: "source", .. },
             ..
         }
     ));

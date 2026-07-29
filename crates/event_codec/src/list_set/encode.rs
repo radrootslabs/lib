@@ -5,12 +5,12 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::social::list_set::ListSet;
 
 use crate::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
 use crate::list::encode::list_entries_to_tags;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_D: &str = "d";
 const TAG_TITLE: &str = "title";
@@ -21,7 +21,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-pub fn list_set_build_tags(list: &RadrootsListSet) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn list_set_build_tags(list: &ListSet) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if list.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -59,14 +59,14 @@ pub fn list_set_build_tags(list: &RadrootsListSet) -> Result<Vec<Vec<String>>, E
 }
 
 pub fn to_wire_parts_with_kind(
-    list: &RadrootsListSet,
+    list: &ListSet,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if !super::is_generic_list_set_codec_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = list_set_build_tags(list)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: list.content.clone(),
         tags,
@@ -75,7 +75,7 @@ pub fn to_wire_parts_with_kind(
 
 #[cfg(feature = "serde_json")]
 pub fn list_set_private_entries_json(
-    entries: &[radroots_event::social::list::RadrootsListEntry],
+    entries: &[radroots_event::social::list::ListEntry],
 ) -> Result<String, EventEncodeError> {
     let tags = list_entries_to_tags(entries)?;
     serde_json::to_string(&tags).map_err(|_| EventEncodeError::Json)

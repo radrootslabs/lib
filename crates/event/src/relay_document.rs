@@ -8,7 +8,7 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsRelayDocument {
+pub struct RelayDocument {
     #[cfg_attr(
         any(feature = "serde", test),
         serde(skip_serializing_if = "Option::is_none")

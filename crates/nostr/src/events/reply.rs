@@ -5,7 +5,7 @@ use crate::{
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{post::reply::RadrootsAuthoredNip10Reply, wire::RadrootsNip01EventWireParts};
+use radroots_event::{post::reply::AuthoredNip10Reply, wire::Nip01EventWireParts};
 use radroots_event_codec::reply::authored::authored_nip10_reply_to_wire_parts;
 
 /// A sealed builder for a validated strict marked NIP-10 Reply.
@@ -44,14 +44,14 @@ impl RadrootsNostrNip10ReplyEventBuilder {
 }
 
 pub fn radroots_nostr_build_nip10_reply_event(
-    reply: &RadrootsAuthoredNip10Reply,
+    reply: &AuthoredNip10Reply,
 ) -> Result<RadrootsNostrNip10ReplyEventBuilder, RadrootsNostrError> {
     let parts = authored_nip10_reply_to_wire_parts(reply);
     builder_from_wire_parts(parts)
 }
 
 fn builder_from_wire_parts(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
 ) -> Result<RadrootsNostrNip10ReplyEventBuilder, RadrootsNostrError> {
     let inner =
         crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;

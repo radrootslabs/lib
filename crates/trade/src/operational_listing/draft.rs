@@ -14,9 +14,9 @@ use radroots_authority::RadrootsActorContext;
 use radroots_event::{
     contract::AuthorRole,
     envelope::kind::KIND_CLASSIFIED_LISTING,
-    id::{RadrootsClassifiedListingAddress, RadrootsIdParseError, RadrootsInventoryBinId},
-    listing::operational::RadrootsOperationalListing,
-    trade::validation::RadrootsOperationalListingValidationError,
+    id::{ClassifiedListingAddress, InventoryBinId, ParseError},
+    listing::operational::OperationalListing,
+    trade::validation::OperationalListingValidationError,
 };
 use radroots_identity::{Error as PublicKeyError, PublicKey};
 
@@ -25,11 +25,11 @@ use super::validation::validate_operational_listing_model;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingEditDocumentV1 {
-    pub listing: RadrootsOperationalListing,
+    pub listing: OperationalListing,
 }
 
 impl RadrootsOperationalListingEditDocumentV1 {
-    pub fn new(listing: RadrootsOperationalListing) -> Self {
+    pub fn new(listing: OperationalListing) -> Self {
         Self { listing }
     }
 }
@@ -37,14 +37,14 @@ impl RadrootsOperationalListingEditDocumentV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingCanonicalEdit {
-    listing: RadrootsOperationalListing,
+    listing: OperationalListing,
     seller_pubkey: PublicKey,
-    public_listing_addr: RadrootsClassifiedListingAddress,
+    public_listing_addr: ClassifiedListingAddress,
 }
 
 impl RadrootsOperationalListingCanonicalEdit {
     pub fn new(
-        mut listing: RadrootsOperationalListing,
+        mut listing: OperationalListing,
         seller_pubkey: PublicKey,
     ) -> Result<Self, RadrootsOperationalListingEditError> {
         let farm_pubkey = PublicKey::from_hex(listing.farm.pubkey.as_str())
@@ -74,7 +74,7 @@ impl RadrootsOperationalListingCanonicalEdit {
         })
     }
 
-    pub fn listing(&self) -> &RadrootsOperationalListing {
+    pub fn listing(&self) -> &OperationalListing {
         &self.listing
     }
 
@@ -82,7 +82,7 @@ impl RadrootsOperationalListingCanonicalEdit {
         &self.seller_pubkey
     }
 
-    pub fn public_listing_addr(&self) -> &RadrootsClassifiedListingAddress {
+    pub fn public_listing_addr(&self) -> &ClassifiedListingAddress {
         &self.public_listing_addr
     }
 }
@@ -90,8 +90,8 @@ impl RadrootsOperationalListingCanonicalEdit {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOperationalListingEditError {
     InvalidFarmPubkey(PublicKeyError),
-    InvalidClassifiedListingAddress(RadrootsIdParseError),
-    InvalidModel(RadrootsOperationalListingValidationError),
+    InvalidClassifiedListingAddress(ParseError),
+    InvalidModel(OperationalListingValidationError),
     ActorRoleUnsatisfied {
         required_role: AuthorRole,
     },
@@ -100,10 +100,10 @@ pub enum RadrootsOperationalListingEditError {
         actual_pubkey: PublicKey,
     },
     MissingPrimaryBin {
-        primary_bin_id: RadrootsInventoryBinId,
+        primary_bin_id: InventoryBinId,
     },
     DuplicateBinId {
-        bin_id: RadrootsInventoryBinId,
+        bin_id: InventoryBinId,
     },
 }
 
@@ -135,7 +135,7 @@ impl fmt::Display for RadrootsOperationalListingEditError {
 impl core::error::Error for RadrootsOperationalListingEditError {}
 
 fn validate_listing_bins(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
 ) -> Result<(), RadrootsOperationalListingEditError> {
     let primary_bin_id = listing.primary_bin_id.clone();
     let mut seen_bin_ids = Vec::new();
@@ -161,12 +161,8 @@ fn validate_listing_bins(
     Ok(())
 }
 
-fn listing_addr(
-    kind: u32,
-    seller_pubkey: &PublicKey,
-    d_tag: &str,
-) -> RadrootsClassifiedListingAddress {
-    RadrootsClassifiedListingAddress::parse(format!("{kind}:{seller_pubkey}:{d_tag}"))
+fn listing_addr(kind: u32, seller_pubkey: &PublicKey, d_tag: &str) -> ClassifiedListingAddress {
+    ClassifiedListingAddress::parse(format!("{kind}:{seller_pubkey}:{d_tag}"))
         .expect("typed listing identity must form a listing address")
 }
 
@@ -196,15 +192,14 @@ mod tests {
     use radroots_event::{
         contract::AuthorRole,
         envelope::kind::KIND_CLASSIFIED_LISTING,
-        farm::RadrootsFarmRef,
-        id::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
+        farm::FarmRef,
+        id::{ClassifiedListingAddress, DTag, InventoryBinId},
         listing::operational::{
-            RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-            RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-            RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
-            RadrootsOperationalListingStatus,
+            OperationalListing, OperationalListingAvailability, OperationalListingBin,
+            OperationalListingDeliveryMethod, OperationalListingProduct,
+            OperationalListingPublicLocation, OperationalListingStatus,
         },
-        trade::validation::RadrootsOperationalListingValidationError,
+        trade::validation::OperationalListingValidationError,
     };
     use radroots_identity::PublicKey;
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
@@ -217,23 +212,23 @@ mod tests {
     const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
     const OTHER: &str = FIXTURE_BOB_PUBLIC_KEY_HEX;
 
-    fn d_tag(raw: &str) -> RadrootsDTag {
-        RadrootsDTag::parse(raw).expect("d tag")
+    fn d_tag(raw: &str) -> DTag {
+        DTag::parse(raw).expect("d tag")
     }
 
-    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
-        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    fn bin_id(raw: &str) -> InventoryBinId {
+        InventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn listing() -> RadrootsOperationalListing {
-        RadrootsOperationalListing {
+    fn listing() -> OperationalListing {
+        OperationalListing {
             d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: SELLER.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsOperationalListingProduct {
+            product: OperationalListingProduct {
                 key: "coffee".to_string(),
                 title: "Coffee".to_string(),
                 category: "coffee".to_string(),
@@ -245,7 +240,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: bin_id("bin-1"),
-            bins: vec![RadrootsOperationalListingBin {
+            bins: vec![OperationalListingBin {
                 bin_id: bin_id("bin-1"),
                 quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
                 price_per_canonical_unit: QuantityPrice::try_new(
@@ -263,11 +258,11 @@ mod tests {
             plot: None,
             discounts: None,
             inventory_available: Some(Decimal::from(5u32)),
-            availability: Some(RadrootsOperationalListingAvailability::Status {
-                status: RadrootsOperationalListingStatus::Active,
+            availability: Some(OperationalListingAvailability::Status {
+                status: OperationalListingStatus::Active,
             }),
-            delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
-            location: Some(RadrootsOperationalListingPublicLocation {
+            delivery_method: Some(OperationalListingDeliveryMethod::Pickup),
+            location: Some(OperationalListingPublicLocation {
                 primary: "Victoria".to_string(),
                 city: Some("Victoria".to_string()),
                 region: Some("British Columbia".to_string()),
@@ -335,7 +330,7 @@ mod tests {
         ));
         assert!(matches!(
             RadrootsOperationalListingEditError::InvalidClassifiedListingAddress(
-                RadrootsClassifiedListingAddress::parse("bad").unwrap_err()
+                ClassifiedListingAddress::parse("bad").unwrap_err()
             ),
             RadrootsOperationalListingEditError::InvalidClassifiedListingAddress(_)
         ));
@@ -516,7 +511,7 @@ mod tests {
         assert_eq!(
             error,
             RadrootsOperationalListingEditError::InvalidModel(
-                RadrootsOperationalListingValidationError::MissingInventory
+                OperationalListingValidationError::MissingInventory
             )
         );
     }
@@ -538,7 +533,7 @@ mod tests {
         assert_eq!(
             error,
             RadrootsOperationalListingEditError::InvalidModel(
-                RadrootsOperationalListingValidationError::InvalidBin
+                OperationalListingValidationError::InvalidBin
             )
         );
 
@@ -561,7 +556,7 @@ mod tests {
         assert_eq!(
             error,
             RadrootsOperationalListingEditError::InvalidModel(
-                RadrootsOperationalListingValidationError::InvalidPrice
+                OperationalListingValidationError::InvalidPrice
             )
         );
     }

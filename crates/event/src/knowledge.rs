@@ -6,11 +6,8 @@ use alloc::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::envelope::kind::KIND_WIKI_ARTICLE;
-use crate::id::{
-    RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsRelayUrl,
-    parse_public_key,
-};
-use crate::tag::RadrootsEventRef;
+use crate::id::{AddressableCoordinate, DTag, EventId, RelayUrl, parse_public_key};
+use crate::tag::EventRef;
 
 pub const RADROOTS_KNOWLEDGE_SCHEMA_VERSION: u16 = 1;
 pub const RADROOTS_WIKI_D_TAG_MAX_LEN: usize = 512;
@@ -25,13 +22,13 @@ pub const RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA: &str =
     "radroots.knowledge.contribution_attestation.v1";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsWikiDTagError {
+pub enum WikiDTagError {
     Empty,
     TooLong { max: usize, actual: usize },
     NotNormalized { normalized: String },
 }
 
-impl RadrootsWikiDTagError {
+impl WikiDTagError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::Empty => "empty",
@@ -41,7 +38,7 @@ impl RadrootsWikiDTagError {
     }
 }
 
-impl fmt::Display for RadrootsWikiDTagError {
+impl fmt::Display for WikiDTagError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => formatter.write_str("wiki d tag must not be empty"),
@@ -62,7 +59,7 @@ impl fmt::Display for RadrootsWikiDTagError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsWikiDTagError {}
+impl std::error::Error for WikiDTagError {}
 
 pub fn normalize_wiki_d_tag(input: &str) -> String {
     let mut normalized = String::new();
@@ -85,14 +82,14 @@ pub fn normalize_wiki_d_tag(input: &str) -> String {
     normalized
 }
 
-pub fn validate_wiki_d_tag(value: &str) -> Result<(), RadrootsWikiDTagError> {
+pub fn validate_wiki_d_tag(value: &str) -> Result<(), WikiDTagError> {
     if value.is_empty() {
-        return Err(RadrootsWikiDTagError::Empty);
+        return Err(WikiDTagError::Empty);
     }
 
     let actual = value.chars().count();
     if actual > RADROOTS_WIKI_D_TAG_MAX_LEN {
-        return Err(RadrootsWikiDTagError::TooLong {
+        return Err(WikiDTagError::TooLong {
             max: RADROOTS_WIKI_D_TAG_MAX_LEN,
             actual,
         });
@@ -100,19 +97,19 @@ pub fn validate_wiki_d_tag(value: &str) -> Result<(), RadrootsWikiDTagError> {
 
     let normalized = normalize_wiki_d_tag(value);
     if normalized != value {
-        return Err(RadrootsWikiDTagError::NotNormalized { normalized });
+        return Err(WikiDTagError::NotNormalized { normalized });
     }
 
     Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsKnowledgeValidationError {
+pub enum KnowledgeValidationError {
     EmptyField(&'static str),
     InvalidField(&'static str),
 }
 
-impl RadrootsKnowledgeValidationError {
+impl KnowledgeValidationError {
     pub const fn code(self) -> &'static str {
         match self {
             Self::EmptyField(_) => "empty_field",
@@ -127,7 +124,7 @@ impl RadrootsKnowledgeValidationError {
     }
 }
 
-impl fmt::Display for RadrootsKnowledgeValidationError {
+impl fmt::Display for KnowledgeValidationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::EmptyField(field) => write!(formatter, "empty knowledge field: {field}"),
@@ -137,14 +134,11 @@ impl fmt::Display for RadrootsKnowledgeValidationError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsKnowledgeValidationError {}
+impl std::error::Error for KnowledgeValidationError {}
 
-fn require_non_empty(
-    value: &str,
-    field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+fn require_non_empty(value: &str, field: &'static str) -> Result<(), KnowledgeValidationError> {
     if value.trim().is_empty() {
-        Err(RadrootsKnowledgeValidationError::EmptyField(field))
+        Err(KnowledgeValidationError::EmptyField(field))
     } else {
         Ok(())
     }
@@ -154,63 +148,52 @@ fn require_schema(
     schema: &str,
     schema_version: u16,
     expected_schema: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     if schema != expected_schema {
-        return Err(RadrootsKnowledgeValidationError::InvalidField("schema"));
+        return Err(KnowledgeValidationError::InvalidField("schema"));
     }
     if schema_version != RADROOTS_KNOWLEDGE_SCHEMA_VERSION {
-        return Err(RadrootsKnowledgeValidationError::InvalidField(
-            "schema_version",
-        ));
+        return Err(KnowledgeValidationError::InvalidField("schema_version"));
     }
     Ok(())
 }
 
-fn validate_event_id(
-    value: &str,
-    field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+fn validate_event_id(value: &str, field: &'static str) -> Result<(), KnowledgeValidationError> {
     if value.trim().is_empty() {
-        return Err(RadrootsKnowledgeValidationError::EmptyField(field));
+        return Err(KnowledgeValidationError::EmptyField(field));
     }
-    RadrootsEventId::parse(value)
+    EventId::parse(value)
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))
+        .map_err(|_| KnowledgeValidationError::InvalidField(field))
 }
 
-fn validate_pubkey(
-    value: &str,
-    field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+fn validate_pubkey(value: &str, field: &'static str) -> Result<(), KnowledgeValidationError> {
     if value.trim().is_empty() {
-        return Err(RadrootsKnowledgeValidationError::EmptyField(field));
+        return Err(KnowledgeValidationError::EmptyField(field));
     }
     parse_public_key(value)
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))
+        .map_err(|_| KnowledgeValidationError::InvalidField(field))
 }
 
-fn validate_relays(
-    relays: &[String],
-    field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+fn validate_relays(relays: &[String], field: &'static str) -> Result<(), KnowledgeValidationError> {
     for relay in relays {
-        RadrootsRelayUrl::parse(relay)
+        RelayUrl::parse(relay)
             .map(|_| ())
-            .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))?;
+            .map_err(|_| KnowledgeValidationError::InvalidField(field))?;
     }
     Ok(())
 }
 
 fn validate_event_ref(
-    event_ref: &RadrootsEventRef,
+    event_ref: &EventRef,
     field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     validate_event_id(&event_ref.id, field)?;
     if let Some(d_tag) = event_ref.d_tag.as_deref() {
-        RadrootsDTag::parse(d_tag)
+        DTag::parse(d_tag)
             .map(|_| ())
-            .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))?;
+            .map_err(|_| KnowledgeValidationError::InvalidField(field))?;
     }
     if let Some(relays) = event_ref.relays.as_deref() {
         validate_relays(relays, field)?;
@@ -219,9 +202,9 @@ fn validate_event_ref(
 }
 
 fn validate_event_refs(
-    refs: &[RadrootsEventRef],
+    refs: &[EventRef],
     field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     for event_ref in refs {
         validate_event_ref(event_ref, field)?;
     }
@@ -229,45 +212,45 @@ fn validate_event_refs(
 }
 
 fn validate_address_ref(
-    address: &RadrootsAddressableRef,
+    address: &AddressableRef,
     field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     if address.kind == 0 {
-        return Err(RadrootsKnowledgeValidationError::InvalidField(field));
+        return Err(KnowledgeValidationError::InvalidField(field));
     }
     validate_pubkey(&address.pubkey, field)?;
-    RadrootsDTag::parse(address.d_tag.as_str())
+    DTag::parse(address.d_tag.as_str())
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))?;
+        .map_err(|_| KnowledgeValidationError::InvalidField(field))?;
     validate_relays(&address.relays, field)
 }
 
 fn validate_wiki_article_address_ref(
-    address: &RadrootsAddressableRef,
+    address: &AddressableRef,
     field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     if address.kind != KIND_WIKI_ARTICLE {
-        return Err(RadrootsKnowledgeValidationError::InvalidField(field));
+        return Err(KnowledgeValidationError::InvalidField(field));
     }
     validate_pubkey(&address.pubkey, field)?;
     validate_wiki_d_tag(address.d_tag.as_str())
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField(field))?;
+        .map_err(|_| KnowledgeValidationError::InvalidField(field))?;
     validate_relays(&address.relays, field)
 }
 
 fn validate_wiki_article_version_ref(
-    version_ref: &RadrootsWikiArticleVersionRef,
+    version_ref: &WikiArticleVersionRef,
     field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     validate_event_id(&version_ref.event_id, field)?;
     validate_wiki_article_address_ref(&version_ref.address_ref, field)
 }
 
 fn validate_node_ref(
-    node_ref: &RadrootsKnowledgeNodeRef,
+    node_ref: &KnowledgeNodeRef,
     field: &'static str,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+) -> Result<(), KnowledgeValidationError> {
     let mut populated = 0u8;
     if let Some(event_ref) = &node_ref.event_ref {
         populated += 1;
@@ -284,16 +267,14 @@ fn validate_node_ref(
     if populated == 1 {
         Ok(())
     } else {
-        Err(RadrootsKnowledgeValidationError::InvalidField(field))
+        Err(KnowledgeValidationError::InvalidField(field))
     }
 }
 
-pub fn validate_wiki_article(
-    article: &RadrootsWikiArticle,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+pub fn validate_wiki_article(article: &WikiArticle) -> Result<(), KnowledgeValidationError> {
     validate_wiki_d_tag(article.d_tag.as_str())
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField("d_tag"))?;
+        .map_err(|_| KnowledgeValidationError::InvalidField("d_tag"))?;
     if let Some(title) = article.title.as_deref() {
         require_non_empty(title, "title")?;
     }
@@ -308,18 +289,16 @@ pub fn validate_wiki_article(
     Ok(())
 }
 
-pub fn validate_wiki_redirect(
-    redirect: &RadrootsWikiRedirect,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+pub fn validate_wiki_redirect(redirect: &WikiRedirect) -> Result<(), KnowledgeValidationError> {
     validate_wiki_d_tag(redirect.d_tag.as_str())
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField("d_tag"))?;
+        .map_err(|_| KnowledgeValidationError::InvalidField("d_tag"))?;
     validate_wiki_article_address_ref(&redirect.target, "wiki_redirect.target")
 }
 
 pub fn validate_wiki_merge_request(
-    request: &RadrootsWikiMergeRequest,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+    request: &WikiMergeRequest,
+) -> Result<(), KnowledgeValidationError> {
     validate_wiki_article_address_ref(&request.target_article, "target_article")?;
     validate_pubkey(&request.destination_pubkey, "destination_pubkey")?;
     if let Some(base) = request.base_version_event_id.as_deref() {
@@ -331,9 +310,7 @@ pub fn validate_wiki_merge_request(
     )
 }
 
-pub fn validate_knowledge_source(
-    source: &RadrootsKnowledgeSource,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+pub fn validate_knowledge_source(source: &KnowledgeSource) -> Result<(), KnowledgeValidationError> {
     require_schema(
         source.schema.as_str(),
         source.schema_version,
@@ -341,7 +318,7 @@ pub fn validate_knowledge_source(
     )?;
     validate_wiki_d_tag(source.d_tag.as_str())
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField("d_tag"))?;
+        .map_err(|_| KnowledgeValidationError::InvalidField("d_tag"))?;
     require_non_empty(source.title.as_str(), "title")?;
     require_non_empty(source.source_type.as_str(), "source_type")?;
     for author in &source.authors {
@@ -354,9 +331,7 @@ pub fn is_uncited_knowledge_claim_type(claim_type: &str) -> bool {
     matches!(claim_type, "hypothesis" | "observation" | "question")
 }
 
-pub fn validate_knowledge_claim(
-    claim: &RadrootsKnowledgeClaim,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+pub fn validate_knowledge_claim(claim: &KnowledgeClaim) -> Result<(), KnowledgeValidationError> {
     require_schema(
         claim.schema.as_str(),
         claim.schema_version,
@@ -367,15 +342,11 @@ pub fn validate_knowledge_claim(
     if claim.citation_spans.is_empty()
         && !is_uncited_knowledge_claim_type(claim.claim_type.as_str())
     {
-        return Err(RadrootsKnowledgeValidationError::EmptyField(
-            "citation_spans",
-        ));
+        return Err(KnowledgeValidationError::EmptyField("citation_spans"));
     }
     for citation in &claim.citation_spans {
         if citation.source_ref.kind != crate::envelope::kind::KIND_KNOWLEDGE_SOURCE {
-            return Err(RadrootsKnowledgeValidationError::InvalidField(
-                "citation_spans",
-            ));
+            return Err(KnowledgeValidationError::InvalidField("citation_spans"));
         }
         validate_event_ref(&citation.source_ref, "citation_spans")?;
         if let Some(artifact_ref) = &citation.artifact_ref {
@@ -389,8 +360,8 @@ pub fn validate_knowledge_claim(
 }
 
 pub fn validate_knowledge_relation(
-    relation: &RadrootsKnowledgeRelation,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+    relation: &KnowledgeRelation,
+) -> Result<(), KnowledgeValidationError> {
     require_schema(
         relation.schema.as_str(),
         relation.schema_version,
@@ -403,9 +374,7 @@ pub fn validate_knowledge_relation(
     validate_event_refs(&relation.supersedes, "supersedes")
 }
 
-pub fn validate_knowledge_review(
-    review: &RadrootsKnowledgeReview,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+pub fn validate_knowledge_review(review: &KnowledgeReview) -> Result<(), KnowledgeValidationError> {
     require_schema(
         review.schema.as_str(),
         review.schema_version,
@@ -414,14 +383,12 @@ pub fn validate_knowledge_review(
     validate_event_id(review.target.event_id.as_str(), "review_target")?;
     validate_pubkey(review.target.author_pubkey.as_str(), "review_target")?;
     if review.target.kind == 0 {
-        return Err(RadrootsKnowledgeValidationError::InvalidField(
-            "review_target",
-        ));
+        return Err(KnowledgeValidationError::InvalidField("review_target"));
     }
     if let Some(address) = review.target.address.as_deref() {
-        RadrootsAddressableCoordinate::parse(address)
+        AddressableCoordinate::parse(address)
             .map(|_| ())
-            .map_err(|_| RadrootsKnowledgeValidationError::InvalidField("review_target"))?;
+            .map_err(|_| KnowledgeValidationError::InvalidField("review_target"))?;
     }
     validate_relays(&review.target.relays, "review_target")?;
     require_non_empty(review.reviewer_role.as_str(), "reviewer_role")?;
@@ -434,8 +401,8 @@ pub fn validate_knowledge_review(
 }
 
 pub fn validate_knowledge_field_report(
-    report: &RadrootsKnowledgeFieldReport,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+    report: &KnowledgeFieldReport,
+) -> Result<(), KnowledgeValidationError> {
     require_schema(
         report.schema.as_str(),
         report.schema_version,
@@ -443,19 +410,16 @@ pub fn validate_knowledge_field_report(
     )?;
     require_non_empty(report.report_type.as_str(), "report_type")?;
     require_non_empty(report.title.as_str(), "title")?;
-    if report.context.location_precision
-        == RadrootsKnowledgeLocationPrecision::ExactPrivateReference
+    if report.context.location_precision == KnowledgeLocationPrecision::ExactPrivateReference
         && report.context.private_location_ref.is_none()
     {
-        return Err(RadrootsKnowledgeValidationError::EmptyField(
-            "private_location_ref",
-        ));
+        return Err(KnowledgeValidationError::EmptyField("private_location_ref"));
     }
     if let Some(private_location_ref) = &report.context.private_location_ref {
         validate_event_ref(private_location_ref, "private_location_ref")?;
     }
     if report.observations.is_empty() {
-        return Err(RadrootsKnowledgeValidationError::EmptyField("observations"));
+        return Err(KnowledgeValidationError::EmptyField("observations"));
     }
     for observation in &report.observations {
         require_non_empty(observation.observation_type.as_str(), "observations")?;
@@ -469,9 +433,7 @@ pub fn validate_knowledge_field_report(
     validate_event_refs(&report.related_refs, "related_refs")
 }
 
-pub fn validate_evidence_bounty(
-    bounty: &RadrootsEvidenceBounty,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+pub fn validate_evidence_bounty(bounty: &EvidenceBounty) -> Result<(), KnowledgeValidationError> {
     require_schema(
         bounty.schema.as_str(),
         bounty.schema_version,
@@ -479,17 +441,17 @@ pub fn validate_evidence_bounty(
     )?;
     validate_wiki_d_tag(bounty.d_tag.as_str())
         .map(|_| ())
-        .map_err(|_| RadrootsKnowledgeValidationError::InvalidField("d_tag"))?;
+        .map_err(|_| KnowledgeValidationError::InvalidField("d_tag"))?;
     require_non_empty(bounty.title.as_str(), "title")?;
     if bounty.target_refs.is_empty() {
-        return Err(RadrootsKnowledgeValidationError::EmptyField("target_refs"));
+        return Err(KnowledgeValidationError::EmptyField("target_refs"));
     }
     validate_event_refs(&bounty.target_refs, "target_refs")
 }
 
 pub fn validate_knowledge_change_proposal(
-    proposal: &RadrootsKnowledgeChangeProposal,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+    proposal: &KnowledgeChangeProposal,
+) -> Result<(), KnowledgeValidationError> {
     require_schema(
         proposal.schema.as_str(),
         proposal.schema_version,
@@ -503,8 +465,8 @@ pub fn validate_knowledge_change_proposal(
 }
 
 pub fn validate_contribution_attestation(
-    attestation: &RadrootsContributionAttestation,
-) -> Result<(), RadrootsKnowledgeValidationError> {
+    attestation: &ContributionAttestation,
+) -> Result<(), KnowledgeValidationError> {
     require_schema(
         attestation.schema.as_str(),
         attestation.schema_version,
@@ -517,7 +479,7 @@ pub fn validate_contribution_attestation(
     require_non_empty(attestation.contribution_type.as_str(), "contribution_type")?;
     require_non_empty(attestation.summary.as_str(), "summary")?;
     if attestation.subject_refs.is_empty() {
-        return Err(RadrootsKnowledgeValidationError::EmptyField("subject_refs"));
+        return Err(KnowledgeValidationError::EmptyField("subject_refs"));
     }
     validate_event_refs(&attestation.subject_refs, "subject_refs")?;
     validate_event_refs(&attestation.evidence_refs, "evidence_refs")
@@ -530,7 +492,7 @@ pub fn validate_contribution_attestation(
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAddressableRef {
+pub struct AddressableRef {
     pub kind: u32,
     pub pubkey: String,
     pub d_tag: String,
@@ -544,7 +506,7 @@ pub struct RadrootsAddressableRef {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsRightsAssertion {
+pub struct RightsAssertion {
     pub assertion: String,
     pub holder: Option<String>,
     pub license: Option<String>,
@@ -558,15 +520,15 @@ pub struct RadrootsRightsAssertion {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsWikiArticle {
+pub struct WikiArticle {
     pub d_tag: String,
     pub title: Option<String>,
     pub content_djot: String,
     pub summary: Option<String>,
     pub topics: Vec<String>,
-    pub references: Vec<RadrootsEventRef>,
-    pub forked_from: Vec<RadrootsWikiArticleVersionRef>,
-    pub deferred_to: Option<RadrootsWikiArticleVersionRef>,
+    pub references: Vec<EventRef>,
+    pub forked_from: Vec<WikiArticleVersionRef>,
+    pub deferred_to: Option<WikiArticleVersionRef>,
 }
 
 #[cfg_attr(
@@ -576,9 +538,9 @@ pub struct RadrootsWikiArticle {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsWikiArticleVersionRef {
+pub struct WikiArticleVersionRef {
     pub event_id: String,
-    pub address_ref: RadrootsAddressableRef,
+    pub address_ref: AddressableRef,
 }
 
 #[cfg_attr(
@@ -588,9 +550,9 @@ pub struct RadrootsWikiArticleVersionRef {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsWikiRedirect {
+pub struct WikiRedirect {
     pub d_tag: String,
-    pub target: RadrootsAddressableRef,
+    pub target: AddressableRef,
 }
 
 #[cfg_attr(
@@ -600,8 +562,8 @@ pub struct RadrootsWikiRedirect {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsWikiMergeRequest {
-    pub target_article: RadrootsAddressableRef,
+pub struct WikiMergeRequest {
+    pub target_article: AddressableRef,
     pub destination_pubkey: String,
     pub base_version_event_id: Option<String>,
     pub source_version_event_id: String,
@@ -615,7 +577,7 @@ pub struct RadrootsWikiMergeRequest {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeSource {
+pub struct KnowledgeSource {
     pub schema: String,
     pub schema_version: u16,
     pub d_tag: String,
@@ -626,8 +588,8 @@ pub struct RadrootsKnowledgeSource {
     pub publication_year: Option<u16>,
     pub edition: Option<String>,
     pub canonical_url: Option<String>,
-    pub artifact_refs: Vec<RadrootsEventRef>,
-    pub author_asserted_rights: Option<RadrootsRightsAssertion>,
+    pub artifact_refs: Vec<EventRef>,
+    pub author_asserted_rights: Option<RightsAssertion>,
     pub topics: Vec<String>,
     pub summary: Option<String>,
 }
@@ -639,16 +601,16 @@ pub struct RadrootsKnowledgeSource {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeClaim {
+pub struct KnowledgeClaim {
     pub schema: String,
     pub schema_version: u16,
     pub claim_type: String,
     pub text: String,
-    pub citation_spans: Vec<RadrootsKnowledgeCitationSpan>,
+    pub citation_spans: Vec<KnowledgeCitationSpan>,
     pub topics: Vec<String>,
     pub applies_to: Vec<String>,
     pub author_asserted_confidence: Option<String>,
-    pub supersedes: Vec<RadrootsEventRef>,
+    pub supersedes: Vec<EventRef>,
 }
 
 #[cfg_attr(
@@ -658,9 +620,9 @@ pub struct RadrootsKnowledgeClaim {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeCitationSpan {
-    pub source_ref: RadrootsEventRef,
-    pub artifact_ref: Option<RadrootsEventRef>,
+pub struct KnowledgeCitationSpan {
+    pub source_ref: EventRef,
+    pub artifact_ref: Option<EventRef>,
     pub page_start: Option<u32>,
     pub page_end: Option<u32>,
     pub section_path: Vec<String>,
@@ -675,10 +637,10 @@ pub struct RadrootsKnowledgeCitationSpan {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeNodeRef {
+pub struct KnowledgeNodeRef {
     pub node_type: String,
-    pub event_ref: Option<RadrootsEventRef>,
-    pub address_ref: Option<RadrootsAddressableRef>,
+    pub event_ref: Option<EventRef>,
+    pub address_ref: Option<AddressableRef>,
     pub external_id: Option<String>,
     pub label: Option<String>,
 }
@@ -690,15 +652,15 @@ pub struct RadrootsKnowledgeNodeRef {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeRelation {
+pub struct KnowledgeRelation {
     pub schema: String,
     pub schema_version: u16,
-    pub subject: RadrootsKnowledgeNodeRef,
+    pub subject: KnowledgeNodeRef,
     pub predicate: String,
-    pub object: RadrootsKnowledgeNodeRef,
-    pub support_refs: Vec<RadrootsEventRef>,
+    pub object: KnowledgeNodeRef,
+    pub support_refs: Vec<EventRef>,
     pub author_asserted_confidence: Option<String>,
-    pub supersedes: Vec<RadrootsEventRef>,
+    pub supersedes: Vec<EventRef>,
 }
 
 #[cfg_attr(
@@ -708,15 +670,15 @@ pub struct RadrootsKnowledgeRelation {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeReview {
+pub struct KnowledgeReview {
     pub schema: String,
     pub schema_version: u16,
-    pub target: RadrootsKnowledgeReviewTarget,
+    pub target: KnowledgeReviewTarget,
     pub reviewer_role: String,
     pub verdict: String,
-    pub scores: Vec<RadrootsKnowledgeReviewScore>,
+    pub scores: Vec<KnowledgeReviewScore>,
     pub notes: Option<String>,
-    pub evidence_refs: Vec<RadrootsEventRef>,
+    pub evidence_refs: Vec<EventRef>,
 }
 
 #[cfg_attr(
@@ -726,13 +688,13 @@ pub struct RadrootsKnowledgeReview {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeReviewTarget {
+pub struct KnowledgeReviewTarget {
     pub event_id: String,
     pub author_pubkey: String,
     pub kind: u32,
     pub address: Option<String>,
     pub relays: Vec<String>,
-    pub review_scope: RadrootsKnowledgeReviewScope,
+    pub review_scope: KnowledgeReviewScope,
 }
 
 #[cfg_attr(
@@ -743,7 +705,7 @@ pub struct RadrootsKnowledgeReviewTarget {
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsKnowledgeReviewScope {
+pub enum KnowledgeReviewScope {
     SpecificVersion,
     AddressableCoordinateAtPublishedAt,
     PolicyLatest,
@@ -756,7 +718,7 @@ pub enum RadrootsKnowledgeReviewScope {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeReviewScore {
+pub struct KnowledgeReviewScore {
     pub dimension: String,
     pub value: String,
     pub note: Option<String>,
@@ -769,16 +731,16 @@ pub struct RadrootsKnowledgeReviewScore {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeFieldReport {
+pub struct KnowledgeFieldReport {
     pub schema: String,
     pub schema_version: u16,
     pub report_type: String,
     pub title: String,
     pub summary: Option<String>,
-    pub context: RadrootsKnowledgeFieldContext,
-    pub observations: Vec<RadrootsKnowledgeObservation>,
-    pub artifact_refs: Vec<RadrootsEventRef>,
-    pub related_refs: Vec<RadrootsEventRef>,
+    pub context: KnowledgeFieldContext,
+    pub observations: Vec<KnowledgeObservation>,
+    pub artifact_refs: Vec<EventRef>,
+    pub related_refs: Vec<EventRef>,
     pub limitations: Vec<String>,
 }
 
@@ -789,10 +751,10 @@ pub struct RadrootsKnowledgeFieldReport {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeFieldContext {
-    pub location_precision: RadrootsKnowledgeLocationPrecision,
-    pub public_location: Option<RadrootsKnowledgeLocation>,
-    pub private_location_ref: Option<RadrootsEventRef>,
+pub struct KnowledgeFieldContext {
+    pub location_precision: KnowledgeLocationPrecision,
+    pub public_location: Option<KnowledgeLocation>,
+    pub private_location_ref: Option<EventRef>,
     pub topics: Vec<String>,
     pub context_tags: Vec<String>,
 }
@@ -805,7 +767,7 @@ pub struct RadrootsKnowledgeFieldContext {
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsKnowledgeLocationPrecision {
+pub enum KnowledgeLocationPrecision {
     None,
     Region,
     Locality,
@@ -821,7 +783,7 @@ pub enum RadrootsKnowledgeLocationPrecision {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeLocation {
+pub struct KnowledgeLocation {
     pub label: Option<String>,
     pub region: Option<String>,
     pub locality: Option<String>,
@@ -835,11 +797,11 @@ pub struct RadrootsKnowledgeLocation {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeObservation {
+pub struct KnowledgeObservation {
     pub observation_type: String,
     pub text: String,
     pub observed_at: Option<String>,
-    pub values: Vec<RadrootsKnowledgeObservationValue>,
+    pub values: Vec<KnowledgeObservationValue>,
 }
 
 #[cfg_attr(
@@ -849,7 +811,7 @@ pub struct RadrootsKnowledgeObservation {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeObservationValue {
+pub struct KnowledgeObservationValue {
     pub key: String,
     pub value: String,
     pub unit: Option<String>,
@@ -862,14 +824,14 @@ pub struct RadrootsKnowledgeObservationValue {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEvidenceBounty {
+pub struct EvidenceBounty {
     pub schema: String,
     pub schema_version: u16,
     pub d_tag: String,
     pub title: String,
     pub summary: Option<String>,
     pub topics: Vec<String>,
-    pub target_refs: Vec<RadrootsEventRef>,
+    pub target_refs: Vec<EventRef>,
     pub reward_note: Option<String>,
     pub closes_at: Option<String>,
 }
@@ -881,15 +843,15 @@ pub struct RadrootsEvidenceBounty {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsKnowledgeChangeProposal {
+pub struct KnowledgeChangeProposal {
     pub schema: String,
     pub schema_version: u16,
-    pub target: RadrootsEventRef,
+    pub target: EventRef,
     pub proposal_type: String,
     pub summary: String,
     pub rationale: Option<String>,
-    pub evidence_refs: Vec<RadrootsEventRef>,
-    pub supersedes: Vec<RadrootsEventRef>,
+    pub evidence_refs: Vec<EventRef>,
+    pub supersedes: Vec<EventRef>,
 }
 
 #[cfg_attr(
@@ -899,14 +861,14 @@ pub struct RadrootsKnowledgeChangeProposal {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsContributionAttestation {
+pub struct ContributionAttestation {
     pub schema: String,
     pub schema_version: u16,
     pub contributor_pubkey: String,
     pub contribution_type: String,
-    pub subject_refs: Vec<RadrootsEventRef>,
+    pub subject_refs: Vec<EventRef>,
     pub summary: String,
-    pub evidence_refs: Vec<RadrootsEventRef>,
+    pub evidence_refs: Vec<EventRef>,
 }
 
 #[cfg(test)]
@@ -917,12 +879,12 @@ mod tests {
         crate::test_valid_hex_64(character)
     }
 
-    fn event_ref() -> RadrootsEventRef {
+    fn event_ref() -> EventRef {
         event_ref_with_kind(1)
     }
 
-    fn event_ref_with_kind(kind: u32) -> RadrootsEventRef {
-        RadrootsEventRef {
+    fn event_ref_with_kind(kind: u32) -> EventRef {
+        EventRef {
             id: "0".repeat(64),
             author: radroots_identity::PublicKey::from_hex(&crate::test_valid_hex_64('1'))
                 .expect("fixture public key"),
@@ -932,8 +894,8 @@ mod tests {
         }
     }
 
-    fn article_address_ref() -> RadrootsAddressableRef {
-        RadrootsAddressableRef {
+    fn article_address_ref() -> AddressableRef {
+        AddressableRef {
             kind: KIND_WIKI_ARTICLE,
             pubkey: hex_64('a'),
             d_tag: "soil-health".to_string(),
@@ -941,15 +903,15 @@ mod tests {
         }
     }
 
-    fn article_version_ref() -> RadrootsWikiArticleVersionRef {
-        RadrootsWikiArticleVersionRef {
+    fn article_version_ref() -> WikiArticleVersionRef {
+        WikiArticleVersionRef {
             event_id: hex_64('b'),
             address_ref: article_address_ref(),
         }
     }
 
-    fn wiki_article() -> RadrootsWikiArticle {
-        RadrootsWikiArticle {
+    fn wiki_article() -> WikiArticle {
+        WikiArticle {
             d_tag: "soil-health".to_string(),
             title: Some("Soil health".to_string()),
             content_djot: "# Soil health".to_string(),
@@ -965,8 +927,8 @@ mod tests {
         "http://relay.radroots.example".to_string()
     }
 
-    fn knowledge_source() -> RadrootsKnowledgeSource {
-        RadrootsKnowledgeSource {
+    fn knowledge_source() -> KnowledgeSource {
+        KnowledgeSource {
             schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             d_tag: "soil-source".to_string(),
@@ -984,8 +946,8 @@ mod tests {
         }
     }
 
-    fn citation_span() -> RadrootsKnowledgeCitationSpan {
-        RadrootsKnowledgeCitationSpan {
+    fn citation_span() -> KnowledgeCitationSpan {
+        KnowledgeCitationSpan {
             source_ref: event_ref_with_kind(crate::envelope::kind::KIND_KNOWLEDGE_SOURCE),
             artifact_ref: Some(event_ref()),
             page_start: None,
@@ -996,8 +958,8 @@ mod tests {
         }
     }
 
-    fn knowledge_claim() -> RadrootsKnowledgeClaim {
-        RadrootsKnowledgeClaim {
+    fn knowledge_claim() -> KnowledgeClaim {
+        KnowledgeClaim {
             schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             claim_type: "practice_effect".to_string(),
@@ -1010,8 +972,8 @@ mod tests {
         }
     }
 
-    fn node_ref() -> RadrootsKnowledgeNodeRef {
-        RadrootsKnowledgeNodeRef {
+    fn node_ref() -> KnowledgeNodeRef {
+        KnowledgeNodeRef {
             node_type: "event".to_string(),
             event_ref: Some(event_ref()),
             address_ref: None,
@@ -1020,8 +982,8 @@ mod tests {
         }
     }
 
-    fn knowledge_relation() -> RadrootsKnowledgeRelation {
-        RadrootsKnowledgeRelation {
+    fn knowledge_relation() -> KnowledgeRelation {
+        KnowledgeRelation {
             schema: RADROOTS_KNOWLEDGE_RELATION_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             subject: node_ref(),
@@ -1033,21 +995,21 @@ mod tests {
         }
     }
 
-    fn knowledge_review() -> RadrootsKnowledgeReview {
-        RadrootsKnowledgeReview {
+    fn knowledge_review() -> KnowledgeReview {
+        KnowledgeReview {
             schema: RADROOTS_KNOWLEDGE_REVIEW_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-            target: RadrootsKnowledgeReviewTarget {
+            target: KnowledgeReviewTarget {
                 event_id: hex_64('d'),
                 author_pubkey: hex_64('a'),
                 kind: crate::envelope::kind::KIND_KNOWLEDGE_CLAIM,
                 address: None,
                 relays: Vec::new(),
-                review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+                review_scope: KnowledgeReviewScope::SpecificVersion,
             },
             reviewer_role: "peer".to_string(),
             verdict: "needs_more_evidence".to_string(),
-            scores: vec![RadrootsKnowledgeReviewScore {
+            scores: vec![KnowledgeReviewScore {
                 dimension: "evidence".to_string(),
                 value: "partial".to_string(),
                 note: None,
@@ -1057,25 +1019,25 @@ mod tests {
         }
     }
 
-    fn field_report() -> RadrootsKnowledgeFieldReport {
-        RadrootsKnowledgeFieldReport {
+    fn field_report() -> KnowledgeFieldReport {
+        KnowledgeFieldReport {
             schema: RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             report_type: "observation".to_string(),
             title: "Field observation".to_string(),
             summary: None,
-            context: RadrootsKnowledgeFieldContext {
-                location_precision: RadrootsKnowledgeLocationPrecision::CoarseGeohash,
+            context: KnowledgeFieldContext {
+                location_precision: KnowledgeLocationPrecision::CoarseGeohash,
                 public_location: None,
                 private_location_ref: None,
                 topics: Vec::new(),
                 context_tags: Vec::new(),
             },
-            observations: vec![RadrootsKnowledgeObservation {
+            observations: vec![KnowledgeObservation {
                 observation_type: "residue".to_string(),
                 text: "Residue was visible.".to_string(),
                 observed_at: None,
-                values: vec![RadrootsKnowledgeObservationValue {
+                values: vec![KnowledgeObservationValue {
                     key: "coverage".to_string(),
                     value: "medium".to_string(),
                     unit: None,
@@ -1087,8 +1049,8 @@ mod tests {
         }
     }
 
-    fn evidence_bounty() -> RadrootsEvidenceBounty {
-        RadrootsEvidenceBounty {
+    fn evidence_bounty() -> EvidenceBounty {
+        EvidenceBounty {
             schema: RADROOTS_EVIDENCE_BOUNTY_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             d_tag: "soil-bounty".to_string(),
@@ -1101,8 +1063,8 @@ mod tests {
         }
     }
 
-    fn knowledge_change_proposal() -> RadrootsKnowledgeChangeProposal {
-        RadrootsKnowledgeChangeProposal {
+    fn knowledge_change_proposal() -> KnowledgeChangeProposal {
+        KnowledgeChangeProposal {
             schema: RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             target: event_ref(),
@@ -1114,8 +1076,8 @@ mod tests {
         }
     }
 
-    fn contribution_attestation() -> RadrootsContributionAttestation {
-        RadrootsContributionAttestation {
+    fn contribution_attestation() -> ContributionAttestation {
+        ContributionAttestation {
             schema: RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             contributor_pubkey: hex_64('a'),
@@ -1127,8 +1089,8 @@ mod tests {
     }
 
     fn assert_validation_error(
-        result: Result<(), RadrootsKnowledgeValidationError>,
-        expected: RadrootsKnowledgeValidationError,
+        result: Result<(), KnowledgeValidationError>,
+        expected: KnowledgeValidationError,
     ) {
         assert_eq!(result, Err(expected));
     }
@@ -1166,10 +1128,10 @@ mod tests {
     #[test]
     fn validates_normalized_wiki_d_tags() {
         assert_eq!(validate_wiki_d_tag("soil-health-basics"), Ok(()));
-        assert_eq!(validate_wiki_d_tag(""), Err(RadrootsWikiDTagError::Empty));
+        assert_eq!(validate_wiki_d_tag(""), Err(WikiDTagError::Empty));
         assert_eq!(
             validate_wiki_d_tag("Soil Health"),
-            Err(RadrootsWikiDTagError::NotNormalized {
+            Err(WikiDTagError::NotNormalized {
                 normalized: "soil-health".to_string()
             })
         );
@@ -1181,7 +1143,7 @@ mod tests {
 
         assert_eq!(
             validate_wiki_d_tag(&value),
-            Err(RadrootsWikiDTagError::TooLong {
+            Err(WikiDTagError::TooLong {
                 max: RADROOTS_WIKI_D_TAG_MAX_LEN,
                 actual: RADROOTS_WIKI_D_TAG_MAX_LEN + 1,
             })
@@ -1227,7 +1189,7 @@ mod tests {
 
     #[test]
     fn models_wiki_article_as_djot_payload() {
-        let article = RadrootsWikiArticle {
+        let article = WikiArticle {
             d_tag: "soil-health".to_string(),
             title: Some("Soil health".to_string()),
             content_djot: "# Soil health".to_string(),
@@ -1245,7 +1207,7 @@ mod tests {
 
     #[test]
     fn models_author_asserted_rights_without_trusted_status() {
-        let source = RadrootsKnowledgeSource {
+        let source = KnowledgeSource {
             schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
             schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
             d_tag: "soil-source".to_string(),
@@ -1257,7 +1219,7 @@ mod tests {
             edition: None,
             canonical_url: None,
             artifact_refs: Vec::new(),
-            author_asserted_rights: Some(RadrootsRightsAssertion {
+            author_asserted_rights: Some(RightsAssertion {
                 assertion: "author_asserted_public_domain".to_string(),
                 holder: None,
                 license: None,
@@ -1280,9 +1242,9 @@ mod tests {
 
     #[test]
     fn models_field_context_without_exact_private_coordinates() {
-        let context = RadrootsKnowledgeFieldContext {
-            location_precision: RadrootsKnowledgeLocationPrecision::ExactPrivateReference,
-            public_location: Some(RadrootsKnowledgeLocation {
+        let context = KnowledgeFieldContext {
+            location_precision: KnowledgeLocationPrecision::ExactPrivateReference,
+            public_location: Some(KnowledgeLocation {
                 label: Some("watershed edge".to_string()),
                 region: Some("sample-region".to_string()),
                 locality: None,
@@ -1295,7 +1257,7 @@ mod tests {
 
         assert_eq!(
             context.location_precision,
-            RadrootsKnowledgeLocationPrecision::ExactPrivateReference
+            KnowledgeLocationPrecision::ExactPrivateReference
         );
         assert!(context.private_location_ref.is_some());
         assert_eq!(
@@ -1308,14 +1270,14 @@ mod tests {
     fn knowledge_validators_accept_valid_models() {
         assert_eq!(validate_wiki_article(&wiki_article()), Ok(()));
         assert_eq!(
-            validate_wiki_redirect(&RadrootsWikiRedirect {
+            validate_wiki_redirect(&WikiRedirect {
                 d_tag: "soil".to_string(),
                 target: article_address_ref(),
             }),
             Ok(())
         );
         assert_eq!(
-            validate_wiki_merge_request(&RadrootsWikiMergeRequest {
+            validate_wiki_merge_request(&WikiMergeRequest {
                 target_article: article_address_ref(),
                 destination_pubkey: hex_64('a'),
                 base_version_event_id: Some(hex_64('e')),
@@ -1346,14 +1308,14 @@ mod tests {
         article.references[0].relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_wiki_article(&article),
-            RadrootsKnowledgeValidationError::InvalidField("references"),
+            KnowledgeValidationError::InvalidField("references"),
         );
 
         let mut article = wiki_article();
         article.forked_from[0].address_ref.relays = vec![invalid_relay()];
         assert_validation_error(
             validate_wiki_article(&article),
-            RadrootsKnowledgeValidationError::InvalidField("forked_from"),
+            KnowledgeValidationError::InvalidField("forked_from"),
         );
 
         let mut article = wiki_article();
@@ -1365,20 +1327,20 @@ mod tests {
             .relays = vec![invalid_relay()];
         assert_validation_error(
             validate_wiki_article(&article),
-            RadrootsKnowledgeValidationError::InvalidField("deferred_to"),
+            KnowledgeValidationError::InvalidField("deferred_to"),
         );
 
-        let mut redirect = RadrootsWikiRedirect {
+        let mut redirect = WikiRedirect {
             d_tag: "soil".to_string(),
             target: article_address_ref(),
         };
         redirect.target.relays = vec![invalid_relay()];
         assert_validation_error(
             validate_wiki_redirect(&redirect),
-            RadrootsKnowledgeValidationError::InvalidField("wiki_redirect.target"),
+            KnowledgeValidationError::InvalidField("wiki_redirect.target"),
         );
 
-        let mut merge = RadrootsWikiMergeRequest {
+        let mut merge = WikiMergeRequest {
             target_article: article_address_ref(),
             destination_pubkey: hex_64('a'),
             base_version_event_id: Some(hex_64('e')),
@@ -1388,73 +1350,72 @@ mod tests {
         merge.target_article.relays = vec![invalid_relay()];
         assert_validation_error(
             validate_wiki_merge_request(&merge),
-            RadrootsKnowledgeValidationError::InvalidField("target_article"),
+            KnowledgeValidationError::InvalidField("target_article"),
         );
 
         let mut source = knowledge_source();
         source.artifact_refs[0].relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_knowledge_source(&source),
-            RadrootsKnowledgeValidationError::InvalidField("artifact_refs"),
+            KnowledgeValidationError::InvalidField("artifact_refs"),
         );
 
         let mut claim = knowledge_claim();
         claim.citation_spans[0].source_ref.relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_knowledge_claim(&claim),
-            RadrootsKnowledgeValidationError::InvalidField("citation_spans"),
+            KnowledgeValidationError::InvalidField("citation_spans"),
         );
 
         let mut relation = knowledge_relation();
         relation.support_refs[0].relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_knowledge_relation(&relation),
-            RadrootsKnowledgeValidationError::InvalidField("support_refs"),
+            KnowledgeValidationError::InvalidField("support_refs"),
         );
 
         let mut review = knowledge_review();
         review.target.relays = vec![invalid_relay()];
         assert_validation_error(
             validate_knowledge_review(&review),
-            RadrootsKnowledgeValidationError::InvalidField("review_target"),
+            KnowledgeValidationError::InvalidField("review_target"),
         );
 
         let mut report = field_report();
-        report.context.location_precision =
-            RadrootsKnowledgeLocationPrecision::ExactPrivateReference;
+        report.context.location_precision = KnowledgeLocationPrecision::ExactPrivateReference;
         let mut private_location_ref = event_ref();
         private_location_ref.relays = Some(vec![invalid_relay()]);
         report.context.private_location_ref = Some(private_location_ref);
         assert_validation_error(
             validate_knowledge_field_report(&report),
-            RadrootsKnowledgeValidationError::InvalidField("private_location_ref"),
+            KnowledgeValidationError::InvalidField("private_location_ref"),
         );
 
         let mut bounty = evidence_bounty();
         bounty.target_refs[0].relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_evidence_bounty(&bounty),
-            RadrootsKnowledgeValidationError::InvalidField("target_refs"),
+            KnowledgeValidationError::InvalidField("target_refs"),
         );
 
         let mut proposal = knowledge_change_proposal();
         proposal.target.relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_knowledge_change_proposal(&proposal),
-            RadrootsKnowledgeValidationError::InvalidField("target"),
+            KnowledgeValidationError::InvalidField("target"),
         );
 
         let mut attestation = contribution_attestation();
         attestation.subject_refs[0].relays = Some(vec![invalid_relay()]);
         assert_validation_error(
             validate_contribution_attestation(&attestation),
-            RadrootsKnowledgeValidationError::InvalidField("subject_refs"),
+            KnowledgeValidationError::InvalidField("subject_refs"),
         );
     }
 
     #[test]
     fn wiki_article_title_is_optional_but_not_blank() {
-        let mut article = RadrootsWikiArticle {
+        let mut article = WikiArticle {
             d_tag: "soil-health".to_string(),
             title: None,
             content_djot: "# Soil health".to_string(),
@@ -1469,7 +1430,7 @@ mod tests {
         article.title = Some(" ".to_string());
         assert_validation_error(
             validate_wiki_article(&article),
-            RadrootsKnowledgeValidationError::EmptyField("title"),
+            KnowledgeValidationError::EmptyField("title"),
         );
     }
 
@@ -1479,7 +1440,7 @@ mod tests {
         claim.citation_spans.clear();
         assert_validation_error(
             validate_knowledge_claim(&claim),
-            RadrootsKnowledgeValidationError::EmptyField("citation_spans"),
+            KnowledgeValidationError::EmptyField("citation_spans"),
         );
 
         claim.citation_spans.push(citation_span());
@@ -1498,14 +1459,14 @@ mod tests {
         capitalized.citation_spans.clear();
         assert_validation_error(
             validate_knowledge_claim(&capitalized),
-            RadrootsKnowledgeValidationError::EmptyField("citation_spans"),
+            KnowledgeValidationError::EmptyField("citation_spans"),
         );
         assert!(!is_uncited_knowledge_claim_type("Hypothesis"));
     }
 
     #[test]
     fn knowledge_validators_reject_representative_invalid_models() {
-        let mut article = RadrootsWikiArticle {
+        let mut article = WikiArticle {
             d_tag: "soil-health".to_string(),
             title: Some("Soil health".to_string()),
             content_djot: " ".to_string(),
@@ -1517,29 +1478,29 @@ mod tests {
         };
         assert_validation_error(
             validate_wiki_article(&article),
-            RadrootsKnowledgeValidationError::EmptyField("content_djot"),
+            KnowledgeValidationError::EmptyField("content_djot"),
         );
         article.content_djot = "# Soil health".to_string();
-        article.forked_from.push(RadrootsWikiArticleVersionRef {
+        article.forked_from.push(WikiArticleVersionRef {
             event_id: "bad".to_string(),
             address_ref: article_address_ref(),
         });
         assert_validation_error(
             validate_wiki_article(&article),
-            RadrootsKnowledgeValidationError::InvalidField("forked_from"),
+            KnowledgeValidationError::InvalidField("forked_from"),
         );
 
-        let mut redirect = RadrootsWikiRedirect {
+        let mut redirect = WikiRedirect {
             d_tag: "soil".to_string(),
             target: article_address_ref(),
         };
         redirect.target.kind = 30023;
         assert_validation_error(
             validate_wiki_redirect(&redirect),
-            RadrootsKnowledgeValidationError::InvalidField("wiki_redirect.target"),
+            KnowledgeValidationError::InvalidField("wiki_redirect.target"),
         );
 
-        let mut merge = RadrootsWikiMergeRequest {
+        let mut merge = WikiMergeRequest {
             target_article: article_address_ref(),
             destination_pubkey: "bad".to_string(),
             base_version_event_id: None,
@@ -1548,76 +1509,75 @@ mod tests {
         };
         assert_validation_error(
             validate_wiki_merge_request(&merge),
-            RadrootsKnowledgeValidationError::InvalidField("destination_pubkey"),
+            KnowledgeValidationError::InvalidField("destination_pubkey"),
         );
         merge.destination_pubkey = hex_64('a');
         merge.source_version_event_id = String::new();
         assert_validation_error(
             validate_wiki_merge_request(&merge),
-            RadrootsKnowledgeValidationError::EmptyField("source_version_event_id"),
+            KnowledgeValidationError::EmptyField("source_version_event_id"),
         );
 
         let mut source = knowledge_source();
         source.authors.push(" ".to_string());
         assert_validation_error(
             validate_knowledge_source(&source),
-            RadrootsKnowledgeValidationError::EmptyField("authors"),
+            KnowledgeValidationError::EmptyField("authors"),
         );
 
         let mut claim = knowledge_claim();
         claim.citation_spans[0].quote_hash = Some("bad".to_string());
         assert_validation_error(
             validate_knowledge_claim(&claim),
-            RadrootsKnowledgeValidationError::InvalidField("citation_spans"),
+            KnowledgeValidationError::InvalidField("citation_spans"),
         );
 
         let mut relation = knowledge_relation();
         relation.subject.external_id = Some("external".to_string());
         assert_validation_error(
             validate_knowledge_relation(&relation),
-            RadrootsKnowledgeValidationError::InvalidField("subject"),
+            KnowledgeValidationError::InvalidField("subject"),
         );
 
         let mut review = knowledge_review();
         review.target.kind = 0;
         assert_validation_error(
             validate_knowledge_review(&review),
-            RadrootsKnowledgeValidationError::InvalidField("review_target"),
+            KnowledgeValidationError::InvalidField("review_target"),
         );
 
         let mut report = field_report();
-        report.context.location_precision =
-            RadrootsKnowledgeLocationPrecision::ExactPrivateReference;
+        report.context.location_precision = KnowledgeLocationPrecision::ExactPrivateReference;
         assert_validation_error(
             validate_knowledge_field_report(&report),
-            RadrootsKnowledgeValidationError::EmptyField("private_location_ref"),
+            KnowledgeValidationError::EmptyField("private_location_ref"),
         );
-        report.context.location_precision = RadrootsKnowledgeLocationPrecision::CoarseGeohash;
+        report.context.location_precision = KnowledgeLocationPrecision::CoarseGeohash;
         report.observations[0].values[0].value = String::new();
         assert_validation_error(
             validate_knowledge_field_report(&report),
-            RadrootsKnowledgeValidationError::EmptyField("observation_values"),
+            KnowledgeValidationError::EmptyField("observation_values"),
         );
 
         let mut bounty = evidence_bounty();
         bounty.target_refs.clear();
         assert_validation_error(
             validate_evidence_bounty(&bounty),
-            RadrootsKnowledgeValidationError::EmptyField("target_refs"),
+            KnowledgeValidationError::EmptyField("target_refs"),
         );
 
         let mut proposal = knowledge_change_proposal();
         proposal.summary = " ".to_string();
         assert_validation_error(
             validate_knowledge_change_proposal(&proposal),
-            RadrootsKnowledgeValidationError::EmptyField("summary"),
+            KnowledgeValidationError::EmptyField("summary"),
         );
 
         let mut attestation = contribution_attestation();
         attestation.contributor_pubkey = "bad".to_string();
         assert_validation_error(
             validate_contribution_attestation(&attestation),
-            RadrootsKnowledgeValidationError::InvalidField("contributor_pubkey"),
+            KnowledgeValidationError::InvalidField("contributor_pubkey"),
         );
     }
 }

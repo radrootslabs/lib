@@ -5,7 +5,7 @@ pub use crate::verification::{
     SignatureVerifier,
 };
 
-use crate::envelope::RadrootsEventEnvelope;
+use crate::envelope::EventEnvelope;
 
 /// **Host SPI:** authorizes a contract-validated event for admission.
 ///
@@ -79,7 +79,7 @@ impl AdmittedEvent {
     }
 
     #[must_use]
-    pub const fn event(&self) -> &RadrootsEventEnvelope {
+    pub const fn event(&self) -> &EventEnvelope {
         self.event.event()
     }
 
@@ -128,7 +128,7 @@ impl VisibleEvent {
     }
 
     #[must_use]
-    pub const fn event(&self) -> &RadrootsEventEnvelope {
+    pub const fn event(&self) -> &EventEnvelope {
         self.event.event()
     }
 
@@ -146,12 +146,12 @@ impl VisibleEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::envelope::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+    use crate::envelope::{EventEnvelope, EventEnvelopeParts};
 
     struct Allow;
 
     impl SignatureVerifier for Allow {
-        fn verify_signature(&self, _event: &RadrootsEventEnvelope) -> Result<(), Error> {
+        fn verify_signature(&self, _event: &EventEnvelope) -> Result<(), Error> {
             Ok(())
         }
     }
@@ -184,7 +184,7 @@ mod tests {
     fn positive_vector_traverses_the_complete_transition_graph() {
         let admission_policy: &dyn AdmissionPolicy<Error = core::convert::Infallible> = &Allow;
         let visibility_policy: &dyn VisibilityPolicy<Error = core::convert::Infallible> = &Allow;
-        let envelope = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let envelope = EventEnvelope::new(EventEnvelopeParts {
             id: "762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0"
                 .to_owned(),
             author: "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df"

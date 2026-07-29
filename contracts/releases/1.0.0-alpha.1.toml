@@ -252,7 +252,7 @@ semver_impacts = [
   "change_exported_function_signature",
   "change_exported_algorithm_behavior",
 ]
-summary = "Replace the Reply-owned RadrootsNip10RelayHint with the shared RadrootsNostrRelayHint protocol primitive and migrate NIP-10 Reply and NIP-22 Comment references to that canonical byte-stable profile."
+summary = "Replace the Reply-owned RadrootsNip10RelayHint with the shared NostrRelayHint protocol primitive and migrate NIP-10 Reply and NIP-22 Comment references to that canonical byte-stable profile."
 
 [[changes]]
 id = "strict-nip09-deletion-request-contract"

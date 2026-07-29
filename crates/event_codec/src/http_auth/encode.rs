@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    social::http_auth::{KIND_HTTP_AUTH, RadrootsHttpAuth},
+    social::http_auth::{HttpAuth, KIND_HTTP_AUTH},
     tag::name::{TAG_METHOD, TAG_PAYLOAD, TAG_URL_AUTH},
 };
 
@@ -10,9 +10,9 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     push_optional_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
-pub fn http_auth_build_tags(auth: &RadrootsHttpAuth) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn http_auth_build_tags(auth: &HttpAuth) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_non_empty_field(&auth.url, "url")?;
     validate_non_empty_field(&auth.method, "method")?;
     if let Some(payload) = auth.payload_sha256.as_deref() {
@@ -25,21 +25,19 @@ pub fn http_auth_build_tags(auth: &RadrootsHttpAuth) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    auth: &RadrootsHttpAuth,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(auth: &HttpAuth) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(auth, KIND_HTTP_AUTH)
 }
 
 pub fn to_wire_parts_with_kind(
-    auth: &RadrootsHttpAuth,
+    auth: &HttpAuth,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_HTTP_AUTH {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = http_auth_build_tags(auth)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: String::new(),
         tags,

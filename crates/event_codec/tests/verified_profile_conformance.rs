@@ -3,14 +3,11 @@
 use std::{borrow::Cow, fs, path::Path};
 
 use radroots_event::envelope::event_head::{
-    RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
-    RadrootsEventHeadDecision, event_head_candidate_for_event, select_event_head,
+    CurrentEventHead, EventHeadCandidate, EventHeadCandidateResult, EventHeadDecision,
+    event_head_candidate_for_event, select_event_head,
 };
-use radroots_event::{
-    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
-    wire::RadrootsNip01EventWire,
-};
-use radroots_event::{id::RadrootsIdParseError, wire::RadrootsEventWireError};
+use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts, wire::Nip01EventWire};
+use radroots_event::{id::ParseError, wire::EventWireError};
 use radroots_event_codec::profile::admission::{
     RadrootsAdmittedProfileEvent, RadrootsProfileAdmissionError, verify_and_admit_profile_event,
 };
@@ -138,14 +135,14 @@ fn verify_invalid_signature(vector: &Vector) {
 }
 
 fn reject_invalid_wire_public_key(vector: &Vector) {
-    let error = RadrootsNip01EventWire::parse_json(input_str(vector, "event_json"))
+    let error = Nip01EventWire::parse_json(input_str(vector, "event_json"))
         .expect_err("invalid secp256k1 public key must fail wire parsing");
     assert_eq!(expected_str(vector, "error"), "invalid_public_key");
     assert_eq!(
         error,
-        RadrootsEventWireError::InvalidIdentifier {
+        EventWireError::InvalidIdentifier {
             field: "pubkey",
-            error: RadrootsIdParseError::InvalidPublicKey,
+            error: ParseError::InvalidPublicKey,
         }
     );
 }
@@ -230,23 +227,21 @@ fn selected_event_id(
     current: &RadrootsAdmittedProfileEvent,
     candidate: &RadrootsAdmittedProfileEvent,
 ) -> String {
-    let current: RadrootsCurrentEventHead = head_candidate(current).into();
+    let current: CurrentEventHead = head_candidate(current).into();
     match select_event_head(head_candidate(candidate), Some(&current)) {
-        RadrootsEventHeadDecision::Applied(head) => head.event_id.into_string(),
-        RadrootsEventHeadDecision::SkippedDuplicate
-        | RadrootsEventHeadDecision::SkippedOlder
-        | RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId => {
-            current.event_id.into_string()
-        }
-        RadrootsEventHeadDecision::CoordinateMismatch => {
+        EventHeadDecision::Applied(head) => head.event_id.into_string(),
+        EventHeadDecision::SkippedDuplicate
+        | EventHeadDecision::SkippedOlder
+        | EventHeadDecision::SkippedSameTimestampHigherEventId => current.event_id.into_string(),
+        EventHeadDecision::CoordinateMismatch => {
             panic!("admitted Profile events from one author must share a coordinate")
         }
     }
 }
 
-fn head_candidate(admitted: &RadrootsAdmittedProfileEvent) -> RadrootsEventHeadCandidate {
+fn head_candidate(admitted: &RadrootsAdmittedProfileEvent) -> EventHeadCandidate {
     match event_head_candidate_for_event(admitted.event()).expect("Profile contract") {
-        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
+        EventHeadCandidateResult::Candidate(candidate) => candidate,
         other => panic!("admitted Profile must be a replaceable head candidate: {other:?}"),
     }
 }
@@ -256,16 +251,16 @@ fn admitted_event(raw_json: &str, vector_id: &str) -> RadrootsAdmittedProfileEve
         .unwrap_or_else(|error| panic!("{vector_id} failed: {error}"))
 }
 
-fn canonical_envelope(raw_json: &str) -> RadrootsEventEnvelope {
-    RadrootsNip01EventWire::parse_json(raw_json)
+fn canonical_envelope(raw_json: &str) -> EventEnvelope {
+    Nip01EventWire::parse_json(raw_json)
         .expect("canonical raw event")
         .into_envelope()
         .expect("event envelope")
 }
 
-fn unchecked_id_envelope(raw_json: &str) -> RadrootsEventEnvelope {
+fn unchecked_id_envelope(raw_json: &str) -> EventEnvelope {
     let raw: RawEvent = serde_json::from_str(raw_json).expect("raw event");
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: raw.id,
         author: raw.pubkey,
         created_at: raw.created_at,

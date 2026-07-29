@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-use crate::listing::operational::RadrootsOperationalListingParseError;
+use crate::listing::operational::OperationalListingParseError;
 
 #[cfg_attr(
     any(feature = "serde", test),
@@ -16,21 +16,13 @@ use crate::listing::operational::RadrootsOperationalListingParseError;
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsOperationalListingValidationError {
-    InvalidKind {
-        kind: u32,
-    },
+pub enum OperationalListingValidationError {
+    InvalidKind { kind: u32 },
     InvalidProfile,
     MissingListingId,
-    ListingEventNotFound {
-        listing_addr: String,
-    },
-    ListingEventFetchFailed {
-        listing_addr: String,
-    },
-    ParseError {
-        error: RadrootsOperationalListingParseError,
-    },
+    ListingEventNotFound { listing_addr: String },
+    ListingEventFetchFailed { listing_addr: String },
+    ParseError { error: OperationalListingParseError },
     InvalidSeller,
     MissingFarmProfile,
     MissingFarmRecord,
@@ -52,7 +44,7 @@ pub enum RadrootsOperationalListingValidationError {
     MissingDeliveryMethod,
 }
 
-impl core::fmt::Display for RadrootsOperationalListingValidationError {
+impl core::fmt::Display for OperationalListingValidationError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidKind { kind } => write!(f, "invalid listing kind: {kind}"),
@@ -94,7 +86,7 @@ impl core::fmt::Display for RadrootsOperationalListingValidationError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsOperationalListingValidationError {}
+impl std::error::Error for OperationalListingValidationError {}
 
 #[cfg(test)]
 mod tests {
@@ -103,23 +95,23 @@ mod tests {
     #[test]
     fn listing_validation_error_display_covers_location_variants() {
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidProfile.to_string(),
+            OperationalListingValidationError::InvalidProfile.to_string(),
             "classified listing is not an Operational Listing profile"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingLocation.to_string(),
+            OperationalListingValidationError::MissingLocation.to_string(),
             "missing listing location"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingLocationLocality.to_string(),
+            OperationalListingValidationError::MissingLocationLocality.to_string(),
             "missing listing location locality"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingLocationGeohash.to_string(),
+            OperationalListingValidationError::MissingLocationGeohash.to_string(),
             "missing listing location geohash"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidLocationGeohash.to_string(),
+            OperationalListingValidationError::InvalidLocationGeohash.to_string(),
             "invalid listing location geohash"
         );
     }

@@ -7,9 +7,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::{KIND_FARM, KIND_POST},
-    farm::RadrootsFarmRef,
-    post::RadrootsPost,
-    social::{RadrootsSocialFarmAnchor, RadrootsSocialMediaMetadata, RadrootsSocialTarget},
+    farm::FarmRef,
+    social::{SocialFarmAnchor, SocialLocation, SocialMediaMetadata, SocialTarget},
     tag::name::{TAG_A, TAG_IMETA, TAG_Q, TAG_T},
 };
 
@@ -20,7 +19,47 @@ use crate::social_helpers::{location_from_tags, parse_dimensions_tag};
 
 const DEFAULT_KIND: u32 = KIND_POST;
 
-pub fn post_from_content(kind: u32, content: &str) -> Result<RadrootsPost, EventParseError> {
+/// Temporary compatibility projection for pre-v1 post consumers.
+///
+/// This type is quarantined in the non-publishable intermediate codec surface
+/// and must be removed with the superseded codec APIs in Step 087.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Debug)]
+pub struct LegacyPost {
+    pub content: String,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub farm: Option<SocialFarmAnchor>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub address_refs: Option<Vec<SocialTarget>>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub location: Option<SocialLocation>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub topics: Option<Vec<String>>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub quote_refs: Option<Vec<SocialTarget>>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub media: Option<Vec<SocialMediaMetadata>>,
+}
+
+pub fn post_from_content(kind: u32, content: &str) -> Result<LegacyPost, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "1",
@@ -30,7 +69,7 @@ pub fn post_from_content(kind: u32, content: &str) -> Result<RadrootsPost, Event
     if content.trim().is_empty() {
         return Err(EventParseError::InvalidTag("content"));
     }
-    Ok(RadrootsPost {
+    Ok(LegacyPost {
         content: content.to_string(),
         farm: None,
         address_refs: None,
@@ -45,7 +84,7 @@ pub fn post_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsPost, EventParseError> {
+) -> Result<LegacyPost, EventParseError> {
     let mut post = post_from_content(kind, content)?;
     post.farm = farm_anchor_from_tags(tags)?;
     post.address_refs = address_refs_from_tags(tags)?;
@@ -63,7 +102,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsPost>, EventParseError> {
+) -> Result<RadrootsParsedData<LegacyPost>, EventParseError> {
     let post = post_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -82,7 +121,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsPost>, EventParseError> {
+) -> Result<RadrootsParsedEvent<LegacyPost>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -96,7 +135,7 @@ pub fn parsed_from_event(
 
 fn farm_anchor_from_tags(
     tags: &[Vec<String>],
-) -> Result<Option<RadrootsSocialFarmAnchor>, EventParseError> {
+) -> Result<Option<SocialFarmAnchor>, EventParseError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_A))
@@ -109,8 +148,8 @@ fn farm_anchor_from_tags(
             } else {
                 None
             };
-            return Ok(Some(RadrootsSocialFarmAnchor {
-                farm: RadrootsFarmRef {
+            return Ok(Some(SocialFarmAnchor {
+                farm: FarmRef {
                     pubkey: address.pubkey,
                     d_tag: address.d_tag,
                 },
@@ -123,7 +162,7 @@ fn farm_anchor_from_tags(
 
 fn address_refs_from_tags(
     tags: &[Vec<String>],
-) -> Result<Option<Vec<RadrootsSocialTarget>>, EventParseError> {
+) -> Result<Option<Vec<SocialTarget>>, EventParseError> {
     let mut refs = Vec::new();
     for tag in tags
         .iter()
@@ -139,7 +178,7 @@ fn address_refs_from_tags(
         } else {
             None
         };
-        refs.push(RadrootsSocialTarget::Address {
+        refs.push(SocialTarget::Address {
             address: value.clone(),
             author: Some(address.pubkey),
             event_kind: Some(address.kind),
@@ -151,7 +190,7 @@ fn address_refs_from_tags(
 
 fn quote_refs_from_tags(
     tags: &[Vec<String>],
-) -> Result<Option<Vec<RadrootsSocialTarget>>, EventParseError> {
+) -> Result<Option<Vec<SocialTarget>>, EventParseError> {
     let mut refs = Vec::new();
     for tag in tags
         .iter()
@@ -164,7 +203,7 @@ fn quote_refs_from_tags(
             None
         };
         match parse_address_tag(value, TAG_Q) {
-            Ok(address) => refs.push(RadrootsSocialTarget::Address {
+            Ok(address) => refs.push(SocialTarget::Address {
                 address: value.clone(),
                 author: Some(address.pubkey),
                 event_kind: Some(address.kind),
@@ -172,7 +211,7 @@ fn quote_refs_from_tags(
             }),
             Err(_) => {
                 validate_lowercase_hex_64_tag(value, TAG_Q)?;
-                refs.push(RadrootsSocialTarget::Event {
+                refs.push(SocialTarget::Event {
                     id: value.clone(),
                     author: None,
                     event_kind: None,
@@ -186,7 +225,7 @@ fn quote_refs_from_tags(
 
 fn media_from_tags(
     tags: &[Vec<String>],
-) -> Result<Option<Vec<RadrootsSocialMediaMetadata>>, EventParseError> {
+) -> Result<Option<Vec<SocialMediaMetadata>>, EventParseError> {
     let mut media = Vec::new();
     for tag in tags
         .iter()
@@ -199,9 +238,9 @@ fn media_from_tags(
         if raw.iter().any(|value| value.trim().is_empty()) {
             return Err(EventParseError::InvalidTag(TAG_IMETA));
         }
-        let mut item = RadrootsSocialMediaMetadata {
+        let mut item = SocialMediaMetadata {
             imeta: Some(vec![raw.clone()]),
-            ..RadrootsSocialMediaMetadata::default()
+            ..SocialMediaMetadata::default()
         };
         for entry in raw {
             parse_imeta_entry(&mut item, &entry)?;
@@ -211,10 +250,7 @@ fn media_from_tags(
     Ok(non_empty_vec(media))
 }
 
-fn parse_imeta_entry(
-    item: &mut RadrootsSocialMediaMetadata,
-    entry: &str,
-) -> Result<(), EventParseError> {
+fn parse_imeta_entry(item: &mut SocialMediaMetadata, entry: &str) -> Result<(), EventParseError> {
     let Some((key, value)) = entry.split_once(' ') else {
         return Err(EventParseError::InvalidTag(TAG_IMETA));
     };
@@ -264,6 +300,25 @@ fn non_empty_vec<T>(values: Vec<T>) -> Option<Vec<T>> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "serde")]
+    #[test]
+    fn content_only_legacy_post_round_trips_without_null_metadata() {
+        let post: LegacyPost =
+            serde_json::from_str(r#"{"content":"farm update"}"#).expect("legacy post");
+
+        assert_eq!(post.content, "farm update");
+        assert!(post.farm.is_none());
+        assert!(post.address_refs.is_none());
+        assert!(post.location.is_none());
+        assert!(post.topics.is_none());
+        assert!(post.quote_refs.is_none());
+        assert!(post.media.is_none());
+        assert_eq!(
+            serde_json::to_string(&post).expect("legacy post JSON"),
+            r#"{"content":"farm update"}"#
+        );
+    }
+
     #[test]
     fn post_decode_accepts_address_ref_without_relays_and_unknown_imeta_keys() {
         let author = "a".repeat(64);
@@ -287,7 +342,7 @@ mod tests {
         let refs = post.address_refs.expect("address refs");
         assert!(matches!(
             &refs[0],
-            RadrootsSocialTarget::Address { relays: None, .. }
+            SocialTarget::Address { relays: None, .. }
         ));
         let media = post.media.expect("media");
         assert_eq!(

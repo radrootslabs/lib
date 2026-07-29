@@ -4,9 +4,9 @@ use alloc::boxed::Box;
 use core::fmt;
 
 use radroots_event::{
-    contract::RadrootsEventContract, envelope::RadrootsEventEnvelope,
+    contract::EventContract, envelope::EventEnvelope,
     food::availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
-    listing::classified::RadrootsClassifiedListingPartition,
+    listing::classified::ClassifiedListingPartition,
 };
 
 use crate::{
@@ -31,7 +31,7 @@ impl RadrootsAdmittedFoodAvailabilityEvent {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -39,7 +39,7 @@ impl RadrootsAdmittedFoodAvailabilityEvent {
         &self.projection
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         radroots_event::contract::event_contract(RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID)
             .expect("FoodAvailability contract ID is registry-owned")
     }
@@ -58,7 +58,7 @@ impl RadrootsAdmittedFoodAvailabilityEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsExcludedClassifiedListingCandidate {
     verified_event: RadrootsSignatureVerifiedEvent,
-    partition: RadrootsClassifiedListingPartition,
+    partition: ClassifiedListingPartition,
 }
 
 impl RadrootsExcludedClassifiedListingCandidate {
@@ -66,20 +66,15 @@ impl RadrootsExcludedClassifiedListingCandidate {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
-    pub const fn partition(&self) -> RadrootsClassifiedListingPartition {
+    pub const fn partition(&self) -> ClassifiedListingPartition {
         self.partition
     }
 
-    pub fn into_parts(
-        self,
-    ) -> (
-        RadrootsSignatureVerifiedEvent,
-        RadrootsClassifiedListingPartition,
-    ) {
+    pub fn into_parts(self) -> (RadrootsSignatureVerifiedEvent, ClassifiedListingPartition) {
         (self.verified_event, self.partition)
     }
 }
@@ -154,8 +149,8 @@ pub fn admit_verified_food_availability_event(
         RadrootsFoodAvailabilityProjectionOutcome::Excluded(partition) => {
             debug_assert!(matches!(
                 partition,
-                RadrootsClassifiedListingPartition::OperationalListing
-                    | RadrootsClassifiedListingPartition::GenericNip99
+                ClassifiedListingPartition::OperationalListing
+                    | ClassifiedListingPartition::GenericNip99
             ));
             Ok(RadrootsFoodAvailabilityAdmissionOutcome::Excluded(
                 RadrootsExcludedClassifiedListingCandidate {
@@ -169,7 +164,7 @@ pub fn admit_verified_food_availability_event(
 
 /// Verifies NIP-01 id and signature before focused Food admission.
 pub fn verify_and_admit_food_availability_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsFoodAvailabilityAdmissionOutcome, RadrootsFoodAvailabilityAdmissionError> {
     admit_verified_food_availability_event(verify_nip01_event(event)?)
 }

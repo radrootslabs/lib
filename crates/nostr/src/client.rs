@@ -574,8 +574,8 @@ mod tests {
             RadrootsNostrSecretKey::from_slice(&[4_u8; 32]).expect("test secret key"),
         );
         let client = RadrootsNostrClient::new(keys);
-        let update = radroots_event::post::RadrootsAuthoredUpdate::new("Farm update")
-            .expect("authored update");
+        let update =
+            radroots_event::post::AuthoredUpdate::new("Farm update").expect("authored update");
         let builder = crate::events::post::radroots_nostr_build_update_event(&update)
             .expect("sealed post builder");
 
@@ -594,15 +594,14 @@ mod tests {
             RadrootsNostrSecretKey::from_slice(&[5_u8; 32]).expect("test secret key"),
         );
         let client = RadrootsNostrClient::new(keys);
-        let reference = radroots_event::post::reply::RadrootsNip10ReplyReference::parse(
+        let reference = radroots_event::post::reply::Nip10ReplyReference::parse(
             "a".repeat(64),
             FIXTURE_BOB_PUBLIC_KEY_HEX,
             None,
         )
         .expect("reference");
-        let reply =
-            radroots_event::post::reply::RadrootsAuthoredNip10Reply::direct("Reply", reference)
-                .expect("reply");
+        let reply = radroots_event::post::reply::AuthoredNip10Reply::direct("Reply", reference)
+            .expect("reply");
         let builder =
             crate::events::reply::radroots_nostr_build_nip10_reply_event(&reply).expect("builder");
 

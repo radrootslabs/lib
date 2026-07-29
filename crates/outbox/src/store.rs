@@ -14,14 +14,12 @@ use crate::model::{
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
 };
-use radroots_event::draft::{
-    RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
-};
-use radroots_event::envelope::RadrootsEventKindClass;
+use radroots_event::draft::{EventDraft, SignedEvent, validate_signed_nostr_event_matches_draft};
+use radroots_event::envelope::EventKindClass;
 use radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS;
-use radroots_event::id::{RadrootsTradeId, RadrootsTradeMutationId};
+use radroots_event::id::{MutationId, TradeId};
 use radroots_event::trade::trade_mutation_from_canonical_content;
-use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event::wire::Nip01EventWire;
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
@@ -1117,9 +1115,9 @@ impl RadrootsOutbox {
         &self,
         outbox_event_id: i64,
         claim_token: &str,
-        signed_event: RadrootsSignedEvent,
+        signed_event: SignedEvent,
         now_ms: i64,
-    ) -> Result<RadrootsSignedEvent, RadrootsOutboxError> {
+    ) -> Result<SignedEvent, RadrootsOutboxError> {
         let mut tx = self.pool.begin().await?;
         let record = event_by_id_tx(&mut tx, outbox_event_id).await?;
         let stored = record.claim_token.as_deref();
@@ -2295,7 +2293,7 @@ async fn signed_event_lifecycle_for_plans(
 async fn ensure_event_signed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     outbox_event_id: i64,
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &SignedEvent,
     event_store_inserted: bool,
     event_store_ingested_at_ms: i64,
 ) -> Result<(), RadrootsOutboxError> {
@@ -2728,8 +2726,7 @@ fn event_from_row(
 ) -> Result<RadrootsOutboxEventRecord, RadrootsOutboxError> {
     let outbox_event_id = row.try_get("outbox_event_id")?;
     let event_id = row.try_get::<String, _>("event_id")?;
-    let draft: RadrootsEventDraft =
-        serde_json::from_str(row.try_get::<String, _>("draft_json")?.as_str())?;
+    let draft: EventDraft = serde_json::from_str(row.try_get::<String, _>("draft_json")?.as_str())?;
     let signed_event = signed_event_from_storage(
         outbox_event_id,
         row.try_get("signed_event_json")?,
@@ -2788,7 +2785,7 @@ fn signed_event_from_storage(
     outbox_event_id: i64,
     signed_event_json: Option<String>,
     raw_event_json: Option<String>,
-) -> Result<Option<RadrootsSignedEvent>, RadrootsOutboxError> {
+) -> Result<Option<SignedEvent>, RadrootsOutboxError> {
     match (signed_event_json, raw_event_json) {
         (None, None) => Ok(None),
         (Some(_), None) => Err(RadrootsOutboxError::StoredSignedEventMissingRawJson(
@@ -2798,17 +2795,15 @@ fn signed_event_from_storage(
             outbox_event_id,
         )),
         (Some(signed_json), Some(raw_json)) => {
-            let wire = RadrootsNip01EventWire::parse_json(signed_json.as_str())?;
-            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
+            let wire = Nip01EventWire::parse_json(signed_json.as_str())?;
+            SignedEvent::from_wire_verified_id(wire, raw_json)
                 .map(Some)
                 .map_err(Into::into)
         }
     }
 }
 
-fn signed_event_wire_json(
-    signed_event: &RadrootsSignedEvent,
-) -> Result<String, RadrootsOutboxError> {
+fn signed_event_wire_json(signed_event: &SignedEvent) -> Result<String, RadrootsOutboxError> {
     serde_json::to_string(signed_event.wire()).map_err(Into::into)
 }
 
@@ -3036,7 +3031,7 @@ fn parse_transport_outcome_kind(
 struct OperationDigestInput<'a> {
     operation_kind: &'a str,
     expected_pubkey: &'a str,
-    draft: &'a RadrootsEventDraft,
+    draft: &'a EventDraft,
 }
 
 struct TradeMutationSemantic {
@@ -3057,7 +3052,7 @@ struct TradeMutationOperationDigestInput<'a> {
 fn operation_idempotency_digest(
     operation_kind: &str,
     expected_pubkey: &str,
-    draft: &RadrootsEventDraft,
+    draft: &EventDraft,
 ) -> String {
     let input = OperationDigestInput {
         operation_kind,
@@ -3158,7 +3153,7 @@ fn validate_trade_mutation_input(
     trade_id: &str,
     mutation_id: &str,
     canonical_payload_sha256: &str,
-    draft: &RadrootsEventDraft,
+    draft: &EventDraft,
 ) -> Result<TradeMutationSemantic, RadrootsOutboxError> {
     if !TRADE_MUTATION_EVENT_KINDS.contains(&draft.kind_u32()) {
         return Err(RadrootsOutboxError::TradeMutationMetadataMismatch { field: "kind" });
@@ -3209,13 +3204,11 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-fn ensure_generic_outbox_draft_allowed(
-    draft: &RadrootsEventDraft,
-) -> Result<(), RadrootsOutboxError> {
+fn ensure_generic_outbox_draft_allowed(draft: &EventDraft) -> Result<(), RadrootsOutboxError> {
     if TRADE_MUTATION_EVENT_KINDS.contains(&draft.kind_u32()) {
         return Err(RadrootsOutboxError::TradeMutationRequiresSemanticOutbox);
     }
-    if draft.kind().class() == RadrootsEventKindClass::Ephemeral {
+    if draft.kind().class() == EventKindClass::Ephemeral {
         return Err(RadrootsOutboxError::EphemeralEventNotQueueable {
             kind: draft.kind_u32(),
         });
@@ -3226,10 +3219,10 @@ fn ensure_generic_outbox_draft_allowed(
 fn parse_optional_stored_trade_id(
     field: &'static str,
     value: Option<String>,
-) -> Result<Option<RadrootsTradeId>, RadrootsOutboxError> {
+) -> Result<Option<TradeId>, RadrootsOutboxError> {
     value
         .map(|value| {
-            RadrootsTradeId::parse(value.as_str())
+            TradeId::parse(value.as_str())
                 .map_err(|_| RadrootsOutboxError::InvalidStoredIdentifier { field, value })
         })
         .transpose()
@@ -3238,10 +3231,10 @@ fn parse_optional_stored_trade_id(
 fn parse_optional_stored_mutation_id(
     field: &'static str,
     value: Option<String>,
-) -> Result<Option<RadrootsTradeMutationId>, RadrootsOutboxError> {
+) -> Result<Option<MutationId>, RadrootsOutboxError> {
     value
         .map(|value| {
-            RadrootsTradeMutationId::parse(value.as_str())
+            MutationId::parse(value.as_str())
                 .map_err(|_| RadrootsOutboxError::InvalidStoredIdentifier { field, value })
         })
         .transpose()
@@ -3397,17 +3390,13 @@ mod tests {
     use radroots_event::envelope::kind::{
         KIND_CLASSIFIED_LISTING, KIND_FOLLOW, KIND_GEOCHAT, KIND_HTTP_AUTH, KIND_RELAY_AUTH,
     };
-    use radroots_event::id::{
-        RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
-        RadrootsTradeId,
-    };
+    use radroots_event::id::{ClassifiedListingAddress, DTag, EventId, InventoryBinId, TradeId};
     use radroots_event::trade::{
-        RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
-        RadrootsFulfillmentProfileV1, RadrootsTradeCancellationProfileV1,
-        RadrootsTradeCandidateLineV1, RadrootsTradeCandidateTermsV1,
-        RadrootsTradeCanonicalMutationV1, RadrootsTradeEconomicAdjustmentV1,
-        RadrootsTradeEconomicsProfileV1, RadrootsTradeMutationBodyV1,
-        RadrootsTradeMutationEnvelopeV1, canonical_jcs_value, canonical_trade_mutation_content,
+        FulfillmentProfileV1, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
+        TradeCancellationProfileV1, TradeCandidateLineV1, TradeCandidateTermsV1,
+        TradeCanonicalMutationV1, TradeEconomicAdjustmentV1, TradeEconomicsProfileV1,
+        TradeMutationBodyV1, TradeMutationEnvelopeV1, canonical_jcs_value,
+        canonical_trade_mutation_content,
     };
     use radroots_identity::PublicKey;
     use radroots_nostr::prelude::{
@@ -3440,8 +3429,8 @@ mod tests {
         PublicKey::from_hex(public_key_hex).expect("fixture pubkey")
     }
 
-    fn generic_draft(expected_pubkey: &str, content: &str) -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn generic_draft(expected_pubkey: &str, content: &str) -> EventDraft {
+        EventDraft::new(
             "radroots.social.follow_list.v1",
             KIND_FOLLOW,
             1_700_000_000,
@@ -3452,8 +3441,8 @@ mod tests {
         .expect("generic draft")
     }
 
-    fn durable_draft(expected_pubkey: &str, label: &str) -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn durable_draft(expected_pubkey: &str, label: &str) -> EventDraft {
+        EventDraft::new(
             "radroots.social.follow_list.v1",
             KIND_FOLLOW,
             1_700_000_000,
@@ -3464,27 +3453,27 @@ mod tests {
         .expect("durable draft")
     }
 
-    fn candidate_terms() -> RadrootsTradeCandidateTermsV1 {
-        RadrootsTradeCandidateTermsV1 {
+    fn candidate_terms() -> TradeCandidateTermsV1 {
+        TradeCandidateTermsV1 {
             candidate_id: None,
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
             base_candidate_id: None,
             supersession_intent: None,
             buyer_pubkey: public_key('a'),
             seller_pubkey: public_key('a'),
-            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
-            lines: vec![RadrootsTradeCandidateLineV1 {
-                line_id: RadrootsDTag::parse("line-1").expect("line id"),
-                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+            farm_id: DTag::parse("farm-1").expect("farm id"),
+            lines: vec![TradeCandidateLineV1 {
+                line_id: DTag::parse("line-1").expect("line id"),
+                listing_addr: ClassifiedListingAddress::parse(format!(
                     "{KIND_CLASSIFIED_LISTING}:{}:listing-1",
                     FIXTURE_ALICE_PUBLIC_KEY_HEX
                 ))
                 .expect("listing address"),
-                listing_event_id: RadrootsEventId::parse(hex_64('c')).expect("listing event id"),
+                listing_event_id: EventId::parse(hex_64('c')).expect("listing event id"),
                 listing_snapshot_sha256: hex_64('d'),
                 product_id: "carrots".to_owned(),
                 option_id: None,
-                bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+                bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
                 quantity_mantissa: "2".to_owned(),
                 quantity_scale: 0,
                 unit_code: "count".to_owned(),
@@ -3495,7 +3484,7 @@ mod tests {
                 replaces_line_id: None,
             }],
             line_tombstones: Vec::new(),
-            economics: RadrootsTradeEconomicsProfileV1 {
+            economics: TradeEconomicsProfileV1 {
                 profile_id: "mvp-no-payment".to_owned(),
                 currency_code: "USD".to_owned(),
                 currency_exponent: 2,
@@ -3504,9 +3493,9 @@ mod tests {
                 discount_total_mantissa: "0".to_owned(),
                 adjustment_total_mantissa: "0".to_owned(),
                 total_mantissa: "600".to_owned(),
-                adjustments: Vec::<RadrootsTradeEconomicAdjustmentV1>::new(),
+                adjustments: Vec::<TradeEconomicAdjustmentV1>::new(),
             },
-            fulfillment: RadrootsFulfillmentProfileV1 {
+            fulfillment: FulfillmentProfileV1 {
                 profile_id: "market-pickup".to_owned(),
                 method: "pickup".to_owned(),
                 starts_at_unix_s: 1_800_000_000,
@@ -3517,7 +3506,7 @@ mod tests {
                 location_class: "private_after_agreement".to_owned(),
                 requires_private_terms: false,
             },
-            cancellation: RadrootsTradeCancellationProfileV1 {
+            cancellation: TradeCancellationProfileV1 {
                 profile_id: "mvp".to_owned(),
                 buyer_pre_agreement: true,
                 post_agreement_cutoff_unix_s: Some(1_799_999_000),
@@ -3527,31 +3516,31 @@ mod tests {
         }
     }
 
-    fn proposal_envelope() -> RadrootsTradeMutationEnvelopeV1 {
-        RadrootsTradeMutationEnvelopeV1 {
+    fn proposal_envelope() -> TradeMutationEnvelopeV1 {
+        TradeMutationEnvelopeV1 {
             mutation_id: None,
             contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_owned(),
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
-            trade_id: RadrootsTradeId::parse(hex_32('1')).expect("trade id"),
+            trade_id: TradeId::parse(hex_32('1')).expect("trade id"),
             root_mutation_id: None,
             buyer_pubkey: public_key('a'),
             seller_pubkey: public_key('a'),
-            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+            farm_id: DTag::parse("farm-1").expect("farm id"),
             parent_mutation_ids: Vec::new(),
             author_pubkey: public_key('a'),
             counterparty_pubkey: public_key('a'),
             authored_at_unix_s: 1_799_000_000,
-            body: RadrootsTradeMutationBodyV1::Proposal {
+            body: TradeMutationBodyV1::Proposal {
                 candidate: candidate_terms(),
             },
         }
     }
 
-    fn canonical_trade_proposal() -> RadrootsTradeCanonicalMutationV1 {
+    fn canonical_trade_proposal() -> TradeCanonicalMutationV1 {
         canonical_trade_mutation_content(proposal_envelope()).expect("canonical trade proposal")
     }
 
-    fn trade_mutation_draft(canonical: &RadrootsTradeCanonicalMutationV1) -> RadrootsEventDraft {
+    fn trade_mutation_draft(canonical: &TradeCanonicalMutationV1) -> EventDraft {
         let mut tags = vec![
             vec![
                 "contract".to_owned(),
@@ -3566,7 +3555,7 @@ mod tests {
         for parent in &canonical.envelope.parent_mutation_ids {
             tags.push(vec!["e".to_owned(), parent.to_string()]);
         }
-        RadrootsEventDraft::new(
+        EventDraft::new(
             canonical.envelope.contract_id.clone(),
             canonical.envelope.mutation_kind().nostr_kind(),
             canonical.envelope.authored_at_unix_s,
@@ -3580,9 +3569,9 @@ mod tests {
     fn proposal_draft_with_content(
         content: impl Into<String>,
         expected_pubkey: &str,
-    ) -> RadrootsEventDraft {
+    ) -> EventDraft {
         let valid = trade_mutation_draft(&canonical_trade_proposal());
-        RadrootsEventDraft::new(
+        EventDraft::new(
             valid.contract_id(),
             valid.kind_u32(),
             valid.created_at_u64(),
@@ -3593,9 +3582,7 @@ mod tests {
         .expect("proposal draft with custom content")
     }
 
-    fn signed_trade_mutation(
-        canonical: &RadrootsTradeCanonicalMutationV1,
-    ) -> (RadrootsEventDraft, RadrootsSignedEvent) {
+    fn signed_trade_mutation(canonical: &TradeCanonicalMutationV1) -> (EventDraft, SignedEvent) {
         let draft = trade_mutation_draft(canonical);
         let signed_event =
             radroots_nostr_sign_frozen_draft(&fixture_keys(), &draft).expect("signed trade event");
@@ -4004,10 +3991,7 @@ mod tests {
         )
     }
 
-    fn operation_input(
-        draft: RadrootsEventDraft,
-        created_at_ms: i64,
-    ) -> RadrootsOutboxOperationInput {
+    fn operation_input(draft: EventDraft, created_at_ms: i64) -> RadrootsOutboxOperationInput {
         RadrootsOutboxOperationInput::new(
             "publish_post",
             draft,
@@ -4020,8 +4004,8 @@ mod tests {
     }
 
     fn signed_operation_input(
-        draft: RadrootsEventDraft,
-        signed_event: RadrootsSignedEvent,
+        draft: EventDraft,
+        signed_event: SignedEvent,
         created_at_ms: i64,
     ) -> RadrootsOutboxSignedOperationInput {
         RadrootsOutboxSignedOperationInput::new(
@@ -4039,9 +4023,9 @@ mod tests {
     }
 
     fn signed_trade_mutation_input(
-        canonical: &RadrootsTradeCanonicalMutationV1,
-        draft: RadrootsEventDraft,
-        signed_event: RadrootsSignedEvent,
+        canonical: &TradeCanonicalMutationV1,
+        draft: EventDraft,
+        signed_event: SignedEvent,
         targets: Vec<RadrootsTransportTarget>,
         created_at_ms: i64,
     ) -> RadrootsOutboxSignedTradeMutationInput {
@@ -4060,8 +4044,8 @@ mod tests {
     }
 
     fn trade_mutation_input(
-        canonical: &RadrootsTradeCanonicalMutationV1,
-        draft: RadrootsEventDraft,
+        canonical: &TradeCanonicalMutationV1,
+        draft: EventDraft,
         targets: Vec<RadrootsTransportTarget>,
         created_at_ms: i64,
     ) -> RadrootsOutboxTradeMutationInput {
@@ -5526,7 +5510,7 @@ mod tests {
             ("radroots.relay.auth.v1", KIND_RELAY_AUTH, "{}"),
             ("radroots.http.auth.v1", KIND_HTTP_AUTH, "{}"),
         ] {
-            let draft = RadrootsEventDraft::new(
+            let draft = EventDraft::new(
                 contract_id,
                 kind,
                 1_700_000_000,
@@ -8220,7 +8204,7 @@ mod tests {
         let mut wire = signed.wire().clone();
         wire.sig = "0".repeat(128);
         let raw_json = serde_json::to_string(&wire).expect("invalid-signature wire JSON");
-        let invalid_signed = RadrootsSignedEvent::from_wire_verified_id(wire, raw_json)
+        let invalid_signed = SignedEvent::from_wire_verified_id(wire, raw_json)
             .expect("event id remains valid when only the signature changes");
         outbox
             .complete_signing(

@@ -3,16 +3,16 @@ use alloc::{string::String, string::ToString, vec, vec::Vec};
 
 use core::fmt;
 use radroots_event::{
-    envelope::RadrootsEventEnvelopeError,
-    envelope::RadrootsEventTags,
+    envelope::EventEnvelopeError,
+    envelope::EventTags,
     envelope::kind::KIND_CLASSIFIED_LISTING,
-    food::availability::{RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityError},
+    food::availability::{FoodAvailabilityDetails, FoodAvailabilityError},
     listing::classified::{TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY},
     tag::name::{
         TAG_D, TAG_IMAGE, TAG_LOCATION, TAG_PRICE, TAG_PUBLISHED_AT, TAG_STATUS, TAG_SUMMARY,
         TAG_TITLE,
     },
-    wire::{DEFAULT_RAW_JSON_MAX_BYTES, RadrootsNip01EventWireParts},
+    wire::{DEFAULT_RAW_JSON_MAX_BYTES, Nip01EventWireParts},
 };
 
 const FOOD_SIGNED_EVENT_FIXED_BYTES: usize = "{\"id\":\"".len()
@@ -29,8 +29,8 @@ const FOOD_SIGNED_EVENT_FIXED_BYTES: usize = "{\"id\":\"".len()
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsFoodAvailabilityEncodeError {
-    Domain(RadrootsFoodAvailabilityError),
-    Wire(RadrootsEventEnvelopeError),
+    Domain(FoodAvailabilityError),
+    Wire(EventEnvelopeError),
     EventWireTooLarge { max: usize, actual: usize },
 }
 
@@ -38,12 +38,10 @@ impl RadrootsFoodAvailabilityEncodeError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::Domain(error) => error.code(),
-            Self::Wire(RadrootsEventEnvelopeError::TagElementTooLarge { .. }) => {
+            Self::Wire(EventEnvelopeError::TagElementTooLarge { .. }) => {
                 "food_tag_element_too_large"
             }
-            Self::Wire(RadrootsEventEnvelopeError::TagsTooLarge { .. }) => {
-                "food_tag_bytes_exceeded"
-            }
+            Self::Wire(EventEnvelopeError::TagsTooLarge { .. }) => "food_tag_bytes_exceeded",
             Self::Wire(_) => "food_wire_invalid",
             Self::EventWireTooLarge { .. } => "food_event_wire_too_large",
         }
@@ -74,21 +72,21 @@ impl std::error::Error for RadrootsFoodAvailabilityEncodeError {
     }
 }
 
-impl From<RadrootsFoodAvailabilityError> for RadrootsFoodAvailabilityEncodeError {
-    fn from(value: RadrootsFoodAvailabilityError) -> Self {
+impl From<FoodAvailabilityError> for RadrootsFoodAvailabilityEncodeError {
+    fn from(value: FoodAvailabilityError) -> Self {
         Self::Domain(value)
     }
 }
 
-impl From<RadrootsEventEnvelopeError> for RadrootsFoodAvailabilityEncodeError {
-    fn from(value: RadrootsEventEnvelopeError) -> Self {
+impl From<EventEnvelopeError> for RadrootsFoodAvailabilityEncodeError {
+    fn from(value: EventEnvelopeError) -> Self {
         Self::Wire(value)
     }
 }
 
 /// Builds exact canonical NIP-99 tags for strict FoodAvailability details.
 pub fn authored_food_availability_build_tags(
-    details: &RadrootsFoodAvailabilityDetails,
+    details: &FoodAvailabilityDetails,
     created_at: u64,
 ) -> Result<Vec<Vec<String>>, RadrootsFoodAvailabilityEncodeError> {
     details.validate_created_at(created_at)?;
@@ -130,7 +128,7 @@ pub fn authored_food_availability_build_tags(
         ]
     }));
 
-    RadrootsEventTags::new(tags.clone())?;
+    EventTags::new(tags.clone())?;
     Ok(tags)
 }
 
@@ -139,12 +137,12 @@ pub fn authored_food_availability_build_tags(
 /// Every image is already byte-verified by the input typestate. A publication
 /// runtime must still prove BUD-02 upload completion before signing.
 pub fn authored_food_availability_to_wire_parts(
-    details: &RadrootsFoodAvailabilityDetails,
+    details: &FoodAvailabilityDetails,
     created_at: u64,
-) -> Result<RadrootsNip01EventWireParts, RadrootsFoodAvailabilityEncodeError> {
+) -> Result<Nip01EventWireParts, RadrootsFoodAvailabilityEncodeError> {
     let tags = authored_food_availability_build_tags(details, created_at)?;
     validate_compact_signed_wire_size(&tags, details.content().as_str(), created_at)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind: KIND_CLASSIFIED_LISTING,
         content: details.content().as_str().into(),
         tags,
@@ -213,9 +211,8 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 mod tests {
     use super::*;
     use radroots_event::food::availability::{
-        RadrootsFoodAvailabilityDetailsParts, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
-        RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodPrice, RadrootsFoodPublishedAt,
-        RadrootsFoodQuantity, RadrootsFoodText, RadrootsFoodUnit,
+        FoodAvailabilityDetailsParts, FoodAvailabilityStatus, FoodContent, FoodCurrency,
+        FoodIdentifier, FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
     };
 
     #[test]
@@ -260,22 +257,18 @@ mod tests {
         );
     }
 
-    fn details(content: &str) -> RadrootsFoodAvailabilityDetails {
-        RadrootsFoodAvailabilityDetails::new(RadrootsFoodAvailabilityDetailsParts {
-            content: RadrootsFoodContent::new(content).unwrap(),
-            identifier: RadrootsFoodIdentifier::parse("nantes-carrots").unwrap(),
-            title: RadrootsFoodText::new("Nantes Carrots").unwrap(),
-            summary: RadrootsFoodText::new("Fresh bunches").unwrap(),
-            published_at: RadrootsFoodPublishedAt::new(100).unwrap(),
-            location: RadrootsFoodText::new("Central Saanich, BC").unwrap(),
-            price: RadrootsFoodPrice::new(
-                "3",
-                RadrootsFoodCurrency::parse("CAD").unwrap(),
-                RadrootsFoodUnit::Pound,
-            )
-            .unwrap(),
-            quantity: Some(RadrootsFoodQuantity::new("24", RadrootsFoodUnit::Pound).unwrap()),
-            status: RadrootsFoodAvailabilityStatus::Active,
+    fn details(content: &str) -> FoodAvailabilityDetails {
+        FoodAvailabilityDetails::new(FoodAvailabilityDetailsParts {
+            content: FoodContent::new(content).unwrap(),
+            identifier: FoodIdentifier::parse("nantes-carrots").unwrap(),
+            title: FoodText::new("Nantes Carrots").unwrap(),
+            summary: FoodText::new("Fresh bunches").unwrap(),
+            published_at: FoodPublishedAt::new(100).unwrap(),
+            location: FoodText::new("Central Saanich, BC").unwrap(),
+            price: FoodPrice::new("3", FoodCurrency::parse("CAD").unwrap(), FoodUnit::Pound)
+                .unwrap(),
+            quantity: Some(FoodQuantity::new("24", FoodUnit::Pound).unwrap()),
+            status: FoodAvailabilityStatus::Active,
             images: Vec::new(),
         })
         .unwrap()

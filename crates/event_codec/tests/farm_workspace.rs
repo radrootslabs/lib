@@ -2,13 +2,12 @@
 
 use radroots_event::{
     envelope::kind::{KIND_FARM, KIND_FARM_FILE_METADATA},
-    farm::RadrootsFarmRef,
+    farm::FarmRef,
     farm::crdt::KIND_FARM_CRDT_CHANGE,
     farm::workspace::{
-        KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION,
-        RADROOTS_FARM_WORKSPACE_SCHEMA, RadrootsFarmWorkspaceManifest,
-        RadrootsFarmWorkspaceMediaServer, RadrootsFarmWorkspaceRelay,
-        RadrootsFarmWorkspaceRelayMode,
+        FarmWorkspaceManifest, FarmWorkspaceMediaServer, FarmWorkspaceRelay,
+        FarmWorkspaceRelayMode, KIND_FARM_WORKSPACE_MANIFEST,
+        RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION, RADROOTS_FARM_WORKSPACE_SCHEMA,
     },
     tag::name::{TAG_A, TAG_H, TAG_P},
 };
@@ -114,22 +113,22 @@ fn farm_workspace_encode_rejects_schema_and_supported_kind_edges() {
     }
 }
 
-fn sample_manifest() -> RadrootsFarmWorkspaceManifest {
-    RadrootsFarmWorkspaceManifest {
+fn sample_manifest() -> FarmWorkspaceManifest {
+    FarmWorkspaceManifest {
         d_tag: D_TAG.to_string(),
         schema: RADROOTS_FARM_WORKSPACE_SCHEMA.to_string(),
         farm_group_id: GROUP_ID.to_string(),
         name: "Small Regen Farm".to_string(),
         owner_pubkey: "workspace_owner_pubkey".to_string(),
-        farm: Some(RadrootsFarmRef {
+        farm: Some(FarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: FARM_D_TAG.to_string(),
         }),
-        relays: vec![RadrootsFarmWorkspaceRelay {
+        relays: vec![FarmWorkspaceRelay {
             url: "wss://relay.example.invalid/farm/field-group".to_string(),
-            mode: RadrootsFarmWorkspaceRelayMode::ReadWrite,
+            mode: FarmWorkspaceRelayMode::ReadWrite,
         }],
-        media_servers: vec![RadrootsFarmWorkspaceMediaServer {
+        media_servers: vec![FarmWorkspaceMediaServer {
             url: "https://media.example.invalid/farm/field-group".to_string(),
             service: "RadrootsPrivateMedia".to_string(),
         }],

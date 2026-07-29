@@ -6,8 +6,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    envelope::kind::KIND_RESOURCE_AREA, farm::resource_cap::RadrootsResourceHarvestCap,
-    tag::name::TAG_D,
+    envelope::kind::KIND_RESOURCE_AREA, farm::resource_cap::ResourceHarvestCap, tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag;
@@ -16,7 +15,7 @@ use crate::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
 use radroots_event::envelope::kind::KIND_RESOURCE_HARVEST_CAP;
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_A: &str = "a";
 const TAG_P: &str = "p";
@@ -30,7 +29,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-fn resource_area_address(cap: &RadrootsResourceHarvestCap) -> Result<String, EventEncodeError> {
+fn resource_area_address(cap: &ResourceHarvestCap) -> Result<String, EventEncodeError> {
     let area = &cap.resource_area;
     if area.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("resource_area.pubkey"));
@@ -49,7 +48,7 @@ fn resource_area_address(cap: &RadrootsResourceHarvestCap) -> Result<String, Eve
 }
 
 pub fn resource_harvest_cap_build_tags(
-    cap: &RadrootsResourceHarvestCap,
+    cap: &ResourceHarvestCap,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if cap.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
@@ -80,23 +79,21 @@ pub fn resource_harvest_cap_build_tags(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(
-    cap: &RadrootsResourceHarvestCap,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(cap: &ResourceHarvestCap) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(cap, KIND_RESOURCE_HARVEST_CAP)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    cap: &RadrootsResourceHarvestCap,
+    cap: &ResourceHarvestCap,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_RESOURCE_HARVEST_CAP {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = resource_harvest_cap_build_tags(cap)?;
     let content = serde_json::to_string(cap).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,
@@ -108,17 +105,17 @@ mod tests {
     use super::*;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use radroots_core::{Decimal, Quantity, Unit};
-    use radroots_event::farm::resource_area::RadrootsResourceAreaRef;
-    use radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct;
+    use radroots_event::farm::resource_area::ResourceAreaRef;
+    use radroots_event::farm::resource_cap::ResourceHarvestProduct;
 
-    fn sample_cap_with_category(category: Option<&str>) -> RadrootsResourceHarvestCap {
-        RadrootsResourceHarvestCap {
+    fn sample_cap_with_category(category: Option<&str>) -> ResourceHarvestCap {
+        ResourceHarvestCap {
             d_tag: "AAAAAAAAAAAAAAAAAAAABA".to_string(),
-            resource_area: RadrootsResourceAreaRef {
+            resource_area: ResourceAreaRef {
                 pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             },
-            product: RadrootsResourceHarvestProduct {
+            product: ResourceHarvestProduct {
                 key: "nutmeg".to_string(),
                 category: category.map(|value| value.to_string()),
             },

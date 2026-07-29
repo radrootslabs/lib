@@ -3,15 +3,15 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
     envelope::kind::KIND_LIST_READ_WRITE_RELAYS,
-    social::list::{RadrootsList, RadrootsListEntry},
+    social::list::{List, ListEntry},
     tag::name::TAG_R,
 };
 
 use super::is_generic_list_codec_kind;
 use crate::error::EventEncodeError;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
-fn entry_tag(entry: &RadrootsListEntry) -> Result<Vec<String>, EventEncodeError> {
+fn entry_tag(entry: &ListEntry) -> Result<Vec<String>, EventEncodeError> {
     if entry.tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("entry.tag"));
     }
@@ -28,9 +28,7 @@ fn entry_tag(entry: &RadrootsListEntry) -> Result<Vec<String>, EventEncodeError>
     Ok(tag)
 }
 
-pub fn list_entries_to_tags(
-    entries: &[RadrootsListEntry],
-) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn list_entries_to_tags(entries: &[ListEntry]) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::with_capacity(entries.len());
     for entry in entries {
         tags.push(entry_tag(entry)?);
@@ -38,14 +36,14 @@ pub fn list_entries_to_tags(
     Ok(tags)
 }
 
-pub fn list_build_tags(list: &RadrootsList) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn list_build_tags(list: &List) -> Result<Vec<Vec<String>>, EventEncodeError> {
     list_entries_to_tags(&list.entries)
 }
 
 pub fn to_wire_parts_with_kind(
-    list: &RadrootsList,
+    list: &List,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if !is_generic_list_codec_kind(kind) {
         return Err(EventEncodeError::InvalidKind(kind));
     }
@@ -53,14 +51,14 @@ pub fn to_wire_parts_with_kind(
         validate_relay_entries(&list.entries)?;
     }
     let tags = list_build_tags(list)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: list.content.clone(),
         tags,
     })
 }
 
-fn validate_relay_entries(entries: &[RadrootsListEntry]) -> Result<(), EventEncodeError> {
+fn validate_relay_entries(entries: &[ListEntry]) -> Result<(), EventEncodeError> {
     if entries.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("relay.entries"));
     }
@@ -93,9 +91,7 @@ fn is_ws_relay_url(value: &str) -> bool {
 }
 
 #[cfg(feature = "serde_json")]
-pub fn list_private_entries_json(
-    entries: &[RadrootsListEntry],
-) -> Result<String, EventEncodeError> {
+pub fn list_private_entries_json(entries: &[ListEntry]) -> Result<String, EventEncodeError> {
     let tags = list_entries_to_tags(entries)?;
     serde_json::to_string(&tags).map_err(|_| EventEncodeError::Json)
 }

@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use nostr::nips::nip04;
 #[cfg(feature = "events")]
-use radroots_event::post::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
+use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 use radroots_nostr::error::RadrootsNostrTagsResolveError;
 use radroots_nostr::events::jobs::{
     radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result,
@@ -128,13 +128,10 @@ fn post_helpers_cover_success_and_error_paths() {
             .expect("parent");
         let author_hex = root.pubkey.to_hex();
 
-        let root_reference = RadrootsNip10ReplyReference::parse(
-            root.id.to_hex(),
-            &author_hex,
-            Some(RELAY_PRIMARY_WSS),
-        )
-        .expect("root reference");
-        let direct = RadrootsAuthoredNip10Reply::direct("direct reply", root_reference.clone())
+        let root_reference =
+            Nip10ReplyReference::parse(root.id.to_hex(), &author_hex, Some(RELAY_PRIMARY_WSS))
+                .expect("root reference");
+        let direct = AuthoredNip10Reply::direct("direct reply", root_reference.clone())
             .expect("direct reply");
         let direct_builder =
             radroots_nostr_build_nip10_reply_event(&direct).expect("direct reply builder");
@@ -142,29 +139,27 @@ fn post_helpers_cover_success_and_error_paths() {
             .sign_with_keys(&keys)
             .expect("direct reply signs through the typed boundary");
 
-        let parent_reference =
-            RadrootsNip10ReplyReference::parse(parent.id.to_hex(), &author_hex, None)
-                .expect("parent reference");
-        let nested =
-            RadrootsAuthoredNip10Reply::nested("nested reply", root_reference, parent_reference)
-                .expect("nested reply");
+        let parent_reference = Nip10ReplyReference::parse(parent.id.to_hex(), &author_hex, None)
+            .expect("parent reference");
+        let nested = AuthoredNip10Reply::nested("nested reply", root_reference, parent_reference)
+            .expect("nested reply");
         let nested_builder =
             radroots_nostr_build_nip10_reply_event(&nested).expect("nested reply builder");
         let _ = nested_builder
             .sign_with_keys(&keys)
             .expect("nested reply signs through the typed boundary");
 
-        assert!(RadrootsNip10ReplyReference::parse("bad", &author_hex, None).is_err());
-        assert!(RadrootsNip10ReplyReference::parse(root.id.to_hex(), "bad", None).is_err());
+        assert!(Nip10ReplyReference::parse("bad", &author_hex, None).is_err());
+        assert!(Nip10ReplyReference::parse(root.id.to_hex(), "bad", None).is_err());
         assert!(
-            RadrootsNip10ReplyReference::parse(
+            Nip10ReplyReference::parse(
                 root.id.to_hex(),
                 &author_hex,
                 Some("https://relay.example"),
             )
             .is_err()
         );
-        assert!(RadrootsAuthoredNip10Reply::direct(" ", nested.root().clone()).is_err());
+        assert!(AuthoredNip10Reply::direct(" ", nested.root().clone()).is_err());
     }
 }
 

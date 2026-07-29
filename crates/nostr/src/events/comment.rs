@@ -5,9 +5,7 @@ use crate::{
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{
-    post::comment::RadrootsAuthoredNip22Comment, wire::RadrootsNip01EventWireParts,
-};
+use radroots_event::{post::comment::AuthoredNip22Comment, wire::Nip01EventWireParts};
 use radroots_event_codec::comment::authored::authored_nip22_comment_to_wire_parts;
 
 /// A sealed builder for a validated strict NIP-22 Comment.
@@ -46,13 +44,13 @@ impl RadrootsNostrNip22CommentEventBuilder {
 }
 
 pub fn radroots_nostr_build_nip22_comment_event(
-    comment: &RadrootsAuthoredNip22Comment,
+    comment: &AuthoredNip22Comment,
 ) -> Result<RadrootsNostrNip22CommentEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_nip22_comment_to_wire_parts(comment))
 }
 
 fn builder_from_wire_parts(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
 ) -> Result<RadrootsNostrNip22CommentEventBuilder, RadrootsNostrError> {
     let inner =
         crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;
@@ -65,20 +63,19 @@ mod tests {
     use crate::test_fixtures::FIXTURE_BOB_PUBLIC_KEY_HEX;
     use radroots_event::{
         envelope::kind::{KIND_CLASSIFIED_LISTING, KIND_COMMENT},
-        post::comment::{RadrootsAuthoredNip22Comment, RadrootsNip22EventRootReference},
+        post::comment::{AuthoredNip22Comment, Nip22EventRootReference},
     };
 
     #[test]
     fn typed_comment_builder_signs_exact_kind_and_tags() {
-        let root = RadrootsNip22EventRootReference::parse(
+        let root = Nip22EventRootReference::parse(
             "a".repeat(64),
             FIXTURE_BOB_PUBLIC_KEY_HEX,
             KIND_CLASSIFIED_LISTING,
             None,
         )
         .expect("root");
-        let comment =
-            RadrootsAuthoredNip22Comment::top_level_event("Comment", root).expect("comment");
+        let comment = AuthoredNip22Comment::top_level_event("Comment", root).expect("comment");
         let keys = RadrootsNostrKeys::generate();
         let event = radroots_nostr_build_nip22_comment_event(&comment)
             .expect("builder")

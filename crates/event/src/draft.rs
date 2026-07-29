@@ -7,23 +7,20 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::contract::registry_v7::{
-    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError,
-    RadrootsEventContract, event_contract, validate_event_contract_parts,
+    ContractValidationError, EventContract, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
+    event_contract, validate_event_contract_parts,
 };
-use crate::envelope::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventKind, RadrootsEventTags,
-    RadrootsEventTimestamp,
-};
-use crate::id::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
+use crate::envelope::{EventEnvelope, EventEnvelopeError, EventKind, EventTags, EventTimestamp};
+use crate::id::{EventId, EventSignature, ParseError, parse_public_key};
 use crate::wire::v1::{
-    RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsNip01EventWire,
-    canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
+    CanonicalEventIdError, EventWireError, Nip01EventWire, canonical_nip01_event_id_preimage,
+    compute_canonical_nip01_event_id,
 };
 use core::fmt;
 use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsDraftError {
+pub enum DraftError {
     UnknownContract(String),
     ContractKindMismatch {
         contract_id: String,
@@ -43,7 +40,7 @@ pub enum RadrootsDraftError {
     },
     ContractShape {
         contract_id: String,
-        error: RadrootsContractValidationError,
+        error: ContractValidationError,
     },
     SignedEventPubkeyMismatch {
         expected_pubkey: String,
@@ -73,13 +70,13 @@ pub enum RadrootsDraftError {
         expected_event_id: String,
         computed_event_id: String,
     },
-    IdParse(RadrootsIdParseError),
-    CanonicalEventId(RadrootsCanonicalEventIdError),
-    Envelope(RadrootsEventEnvelopeError),
-    SignedEvent(RadrootsSignedEventError),
+    IdParse(ParseError),
+    CanonicalEventId(CanonicalEventIdError),
+    Envelope(EventEnvelopeError),
+    SignedEvent(SignedEventError),
 }
 
-impl fmt::Display for RadrootsDraftError {
+impl fmt::Display for DraftError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownContract(contract_id) => {
@@ -171,49 +168,49 @@ impl fmt::Display for RadrootsDraftError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsDraftError {}
+impl std::error::Error for DraftError {}
 
-impl From<RadrootsIdParseError> for RadrootsDraftError {
-    fn from(value: RadrootsIdParseError) -> Self {
+impl From<ParseError> for DraftError {
+    fn from(value: ParseError) -> Self {
         Self::IdParse(value)
     }
 }
 
-impl From<RadrootsCanonicalEventIdError> for RadrootsDraftError {
-    fn from(value: RadrootsCanonicalEventIdError) -> Self {
+impl From<CanonicalEventIdError> for DraftError {
+    fn from(value: CanonicalEventIdError) -> Self {
         match value {
-            RadrootsCanonicalEventIdError::InvalidPubkey(error) => Self::IdParse(error),
+            CanonicalEventIdError::InvalidPubkey(error) => Self::IdParse(error),
             error => Self::CanonicalEventId(error),
         }
     }
 }
 
-impl From<RadrootsEventEnvelopeError> for RadrootsDraftError {
-    fn from(value: RadrootsEventEnvelopeError) -> Self {
+impl From<EventEnvelopeError> for DraftError {
+    fn from(value: EventEnvelopeError) -> Self {
         Self::Envelope(value)
     }
 }
 
-impl From<RadrootsSignedEventError> for RadrootsDraftError {
-    fn from(value: RadrootsSignedEventError) -> Self {
+impl From<SignedEventError> for DraftError {
+    fn from(value: SignedEventError) -> Self {
         Self::SignedEvent(value)
     }
 }
 
 #[cfg_attr(any(feature = "serde", test), derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventDraft {
+pub struct EventDraft {
     contract_id: String,
     contract_registry_version: u32,
-    kind: RadrootsEventKind,
-    created_at: RadrootsEventTimestamp,
-    tags: RadrootsEventTags,
+    kind: EventKind,
+    created_at: EventTimestamp,
+    tags: EventTags,
     content: String,
     expected_pubkey: PublicKey,
-    expected_event_id: RadrootsEventId,
+    expected_event_id: EventId,
 }
 
-impl RadrootsEventDraft {
+impl EventDraft {
     pub fn new(
         contract_id: impl Into<String>,
         kind: u32,
@@ -221,14 +218,14 @@ impl RadrootsEventDraft {
         tags: Vec<Vec<String>>,
         content: impl Into<String>,
         expected_pubkey: impl AsRef<str>,
-    ) -> Result<Self, RadrootsDraftError> {
+    ) -> Result<Self, DraftError> {
         let contract_id = contract_id.into();
         let contract = match event_contract(&contract_id) {
             Some(contract) => contract,
-            None => return Err(RadrootsDraftError::UnknownContract(contract_id.clone())),
+            None => return Err(DraftError::UnknownContract(contract_id.clone())),
         };
         if contract.kind != kind {
-            return Err(RadrootsDraftError::ContractKindMismatch {
+            return Err(DraftError::ContractKindMismatch {
                 contract_id,
                 expected_kind: contract.kind,
                 actual_kind: kind,
@@ -238,12 +235,12 @@ impl RadrootsEventDraft {
         let expected_pubkey = parse_public_key(expected_pubkey.as_ref())?;
         let content = content.into();
         validate_event_contract_parts(kind, &tags, content.as_str(), contract.id).map_err(
-            |error| RadrootsDraftError::ContractShape {
+            |error| DraftError::ContractShape {
                 contract_id: contract.id.to_owned(),
                 error,
             },
         )?;
-        let typed_tags = RadrootsEventTags::new(tags)?;
+        let typed_tags = EventTags::new(tags)?;
         let expected_pubkey_hex = expected_pubkey.to_hex();
         let expected_event_id = compute_nip01_event_id_for_valid_pubkey(
             expected_pubkey_hex.as_str(),
@@ -255,8 +252,8 @@ impl RadrootsEventDraft {
         Ok(Self {
             contract_id: contract.id.to_owned(),
             contract_registry_version: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
-            kind: RadrootsEventKind::new(kind),
-            created_at: RadrootsEventTimestamp::new(created_at),
+            kind: EventKind::new(kind),
+            created_at: EventTimestamp::new(created_at),
             tags: typed_tags,
             content,
             expected_pubkey,
@@ -264,7 +261,7 @@ impl RadrootsEventDraft {
         })
     }
 
-    pub fn nip01_preimage(&self) -> Result<String, RadrootsDraftError> {
+    pub fn nip01_preimage(&self) -> Result<String, DraftError> {
         let expected_pubkey = self.expected_pubkey.to_hex();
         Ok(nip01_event_id_preimage_for_valid_pubkey(
             expected_pubkey.as_str(),
@@ -279,17 +276,17 @@ impl RadrootsEventDraft {
     ///
     /// Signing boundaries must call this even for a previously validated draft
     /// so persisted data cannot bypass current registry authority.
-    pub fn validate_for_signing(&self) -> Result<(), RadrootsDraftError> {
+    pub fn validate_for_signing(&self) -> Result<(), DraftError> {
         if self.contract_registry_version != RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
-            return Err(RadrootsDraftError::ContractRegistryVersionMismatch {
+            return Err(DraftError::ContractRegistryVersionMismatch {
                 expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
                 actual: self.contract_registry_version,
             });
         }
         let contract = event_contract(self.contract_id())
-            .ok_or_else(|| RadrootsDraftError::UnknownContract(self.contract_id().to_owned()))?;
+            .ok_or_else(|| DraftError::UnknownContract(self.contract_id().to_owned()))?;
         if contract.kind != self.kind_u32() {
-            return Err(RadrootsDraftError::ContractKindMismatch {
+            return Err(DraftError::ContractKindMismatch {
                 contract_id: contract.id.to_owned(),
                 expected_kind: contract.kind,
                 actual_kind: self.kind_u32(),
@@ -302,7 +299,7 @@ impl RadrootsEventDraft {
             self.content(),
             contract.id,
         )
-        .map_err(|error| RadrootsDraftError::ContractShape {
+        .map_err(|error| DraftError::ContractShape {
             contract_id: contract.id.to_owned(),
             error,
         })?;
@@ -315,7 +312,7 @@ impl RadrootsEventDraft {
             self.content(),
         );
         if actual_event_id != self.expected_event_id {
-            return Err(RadrootsDraftError::DraftExpectedEventIdMismatch {
+            return Err(DraftError::DraftExpectedEventIdMismatch {
                 expected_event_id: actual_event_id.to_hex(),
                 actual_event_id: self.expected_event_id.to_hex(),
             });
@@ -334,7 +331,7 @@ impl RadrootsEventDraft {
     }
 
     #[inline]
-    pub fn kind(&self) -> RadrootsEventKind {
+    pub fn kind(&self) -> EventKind {
         self.kind
     }
 
@@ -344,7 +341,7 @@ impl RadrootsEventDraft {
     }
 
     #[inline]
-    pub fn created_at(&self) -> RadrootsEventTimestamp {
+    pub fn created_at(&self) -> EventTimestamp {
         self.created_at
     }
 
@@ -354,7 +351,7 @@ impl RadrootsEventDraft {
     }
 
     #[inline]
-    pub fn tags(&self) -> &RadrootsEventTags {
+    pub fn tags(&self) -> &EventTags {
         &self.tags
     }
 
@@ -373,7 +370,7 @@ impl RadrootsEventDraft {
     }
 
     #[inline]
-    pub fn expected_event_id(&self) -> &RadrootsEventId {
+    pub fn expected_event_id(&self) -> &EventId {
         &self.expected_event_id
     }
 
@@ -383,11 +380,9 @@ impl RadrootsEventDraft {
     }
 }
 
-fn ensure_generic_draft_authorable(
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsDraftError> {
+fn ensure_generic_draft_authorable(contract: &EventContract) -> Result<(), DraftError> {
     if !contract.authoring_policy().permits_generic_draft() {
-        return Err(RadrootsDraftError::ContractNotDraftAuthorable {
+        return Err(DraftError::ContractNotDraftAuthorable {
             contract_id: contract.id.to_owned(),
         });
     }
@@ -395,7 +390,7 @@ fn ensure_generic_draft_authorable(
 }
 
 #[cfg(any(feature = "serde", test))]
-impl<'de> serde::Deserialize<'de> for RadrootsEventDraft {
+impl<'de> serde::Deserialize<'de> for EventDraft {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -405,18 +400,18 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventDraft {
         struct DraftSerde {
             contract_id: String,
             contract_registry_version: u32,
-            kind: RadrootsEventKind,
-            created_at: RadrootsEventTimestamp,
-            tags: RadrootsEventTags,
+            kind: EventKind,
+            created_at: EventTimestamp,
+            tags: EventTags,
             content: String,
             expected_pubkey: PublicKey,
-            expected_event_id: RadrootsEventId,
+            expected_event_id: EventId,
         }
 
         let value = DraftSerde::deserialize(deserializer)?;
         if value.contract_registry_version != RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
             return Err(serde::de::Error::custom(
-                RadrootsDraftError::ContractRegistryVersionMismatch {
+                DraftError::ContractRegistryVersionMismatch {
                     expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
                     actual: value.contract_registry_version,
                 },
@@ -433,7 +428,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventDraft {
         .map_err(serde::de::Error::custom)?;
         if draft.expected_event_id != value.expected_event_id {
             return Err(serde::de::Error::custom(
-                RadrootsDraftError::DraftExpectedEventIdMismatch {
+                DraftError::DraftExpectedEventIdMismatch {
                     expected_event_id: draft.expected_event_id.to_hex(),
                     actual_event_id: value.expected_event_id.to_hex(),
                 },
@@ -448,7 +443,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventDraft {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsSignedEventParts {
+pub struct SignedEventParts {
     pub id: String,
     pub pubkey: String,
     pub created_at: u64,
@@ -460,21 +455,21 @@ pub struct RadrootsSignedEventParts {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsSignedEvent {
-    envelope: RadrootsEventEnvelope,
-    wire: RadrootsNip01EventWire,
+pub struct SignedEvent {
+    envelope: EventEnvelope,
+    wire: Nip01EventWire,
     raw_json: String,
 }
 
 #[cfg(any(feature = "serde", test))]
-impl serde::Serialize for RadrootsSignedEvent {
+impl serde::Serialize for SignedEvent {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
 
-        let mut state = serializer.serialize_struct("RadrootsSignedEvent", 2)?;
+        let mut state = serializer.serialize_struct("SignedEvent", 2)?;
         state.serialize_field("wire", &self.wire)?;
         state.serialize_field("raw_json", &self.raw_json)?;
         state.end()
@@ -482,32 +477,32 @@ impl serde::Serialize for RadrootsSignedEvent {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl<'de> serde::Deserialize<'de> for RadrootsSignedEvent {
+impl<'de> serde::Deserialize<'de> for SignedEvent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         #[derive(serde::Deserialize)]
         struct SignedEventSerde {
-            wire: RadrootsNip01EventWire,
+            wire: Nip01EventWire,
             raw_json: String,
         }
 
         let value = SignedEventSerde::deserialize(deserializer)?;
-        RadrootsSignedEvent::from_wire_verified_id(value.wire, value.raw_json)
+        SignedEvent::from_wire_verified_id(value.wire, value.raw_json)
             .map_err(serde::de::Error::custom)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsSignedEventError {
-    Wire(RadrootsEventWireError),
-    RawJson(RadrootsEventWireError),
+pub enum SignedEventError {
+    Wire(EventWireError),
+    RawJson(EventWireError),
     RawJsonMismatch,
-    Envelope(RadrootsEventEnvelopeError),
+    Envelope(EventEnvelopeError),
 }
 
-impl fmt::Display for RadrootsSignedEventError {
+impl fmt::Display for SignedEventError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Wire(error) => write!(f, "signed event wire is invalid: {error}"),
@@ -524,26 +519,26 @@ impl fmt::Display for RadrootsSignedEventError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsSignedEventError {}
+impl std::error::Error for SignedEventError {}
 
-impl From<RadrootsEventEnvelopeError> for RadrootsSignedEventError {
-    fn from(value: RadrootsEventEnvelopeError) -> Self {
+impl From<EventEnvelopeError> for SignedEventError {
+    fn from(value: EventEnvelopeError) -> Self {
         Self::Envelope(value)
     }
 }
 
-impl RadrootsSignedEvent {
-    pub fn new(parts: RadrootsSignedEventParts) -> Result<Self, RadrootsSignedEventError> {
-        let id = RadrootsEventId::parse(parts.id)
-            .map_err(RadrootsEventEnvelopeError::InvalidId)?
+impl SignedEvent {
+    pub fn new(parts: SignedEventParts) -> Result<Self, SignedEventError> {
+        let id = EventId::parse(parts.id)
+            .map_err(EventEnvelopeError::InvalidId)?
             .into_string();
         let pubkey = parse_public_key(parts.pubkey)
-            .map_err(RadrootsEventEnvelopeError::InvalidAuthor)?
+            .map_err(EventEnvelopeError::InvalidAuthor)?
             .to_hex();
-        let sig = RadrootsEventSignature::parse(parts.sig)
-            .map_err(RadrootsEventEnvelopeError::InvalidSignature)?
+        let sig = EventSignature::parse(parts.sig)
+            .map_err(EventEnvelopeError::InvalidSignature)?
             .into_string();
-        let wire = RadrootsNip01EventWire {
+        let wire = Nip01EventWire {
             id,
             pubkey,
             created_at: parts.created_at,
@@ -557,20 +552,20 @@ impl RadrootsSignedEvent {
     }
 
     pub fn from_wire_verified_id(
-        wire: RadrootsNip01EventWire,
+        wire: Nip01EventWire,
         raw_json: impl Into<String>,
-    ) -> Result<Self, RadrootsSignedEventError> {
-        wire.verify_id().map_err(RadrootsSignedEventError::Wire)?;
+    ) -> Result<Self, SignedEventError> {
+        wire.verify_id().map_err(SignedEventError::Wire)?;
         let raw_json = raw_json.into();
-        let parsed = RadrootsNip01EventWire::parse_json(raw_json.as_str())
-            .map_err(RadrootsSignedEventError::RawJson)?;
+        let parsed =
+            Nip01EventWire::parse_json(raw_json.as_str()).map_err(SignedEventError::RawJson)?;
         if parsed != wire {
-            return Err(RadrootsSignedEventError::RawJsonMismatch);
+            return Err(SignedEventError::RawJsonMismatch);
         }
         let envelope = wire
             .clone()
             .into_envelope_unchecked_id()
-            .map_err(RadrootsSignedEventError::Envelope)?;
+            .map_err(SignedEventError::Envelope)?;
         Ok(Self {
             envelope,
             wire,
@@ -580,13 +575,13 @@ impl RadrootsSignedEvent {
 
     #[cfg(test)]
     fn from_wire_unchecked(
-        wire: RadrootsNip01EventWire,
+        wire: Nip01EventWire,
         raw_json: impl Into<String>,
-    ) -> Result<Self, RadrootsSignedEventError> {
+    ) -> Result<Self, SignedEventError> {
         let envelope = wire
             .clone()
             .into_envelope_unchecked_id()
-            .map_err(RadrootsSignedEventError::Envelope)?;
+            .map_err(SignedEventError::Envelope)?;
         Ok(Self {
             envelope,
             wire,
@@ -595,12 +590,12 @@ impl RadrootsSignedEvent {
     }
 
     #[inline]
-    pub fn envelope(&self) -> &RadrootsEventEnvelope {
+    pub fn envelope(&self) -> &EventEnvelope {
         &self.envelope
     }
 
     #[inline]
-    pub fn wire(&self) -> &RadrootsNip01EventWire {
+    pub fn wire(&self) -> &Nip01EventWire {
         &self.wire
     }
 
@@ -610,7 +605,7 @@ impl RadrootsSignedEvent {
     }
 
     #[inline]
-    pub fn id(&self) -> &RadrootsEventId {
+    pub fn id(&self) -> &EventId {
         self.envelope.id()
     }
 
@@ -650,7 +645,7 @@ impl RadrootsSignedEvent {
     }
 
     #[inline]
-    pub fn sig(&self) -> &RadrootsEventSignature {
+    pub fn sig(&self) -> &EventSignature {
         self.envelope.sig()
     }
 
@@ -667,24 +662,24 @@ impl RadrootsSignedEvent {
 }
 
 pub fn validate_signed_nostr_event_matches_draft(
-    signed_event: &RadrootsSignedEvent,
-    draft: &RadrootsEventDraft,
-) -> Result<(), RadrootsDraftError> {
+    signed_event: &SignedEvent,
+    draft: &EventDraft,
+) -> Result<(), DraftError> {
     draft.validate_for_signing()?;
     if signed_event.pubkey() != draft.expected_pubkey() {
-        return Err(RadrootsDraftError::SignedEventPubkeyMismatch {
+        return Err(DraftError::SignedEventPubkeyMismatch {
             expected_pubkey: draft.expected_pubkey().to_hex(),
             actual_pubkey: signed_event.pubkey().to_hex(),
         });
     }
     if signed_event.created_at() != draft.created_at_u64() {
-        return Err(RadrootsDraftError::SignedEventCreatedAtMismatch {
+        return Err(DraftError::SignedEventCreatedAtMismatch {
             expected_created_at: draft.created_at_u64(),
             actual_created_at: signed_event.created_at(),
         });
     }
     if signed_event.kind() != draft.kind_u32() {
-        return Err(RadrootsDraftError::SignedEventKindMismatch {
+        return Err(DraftError::SignedEventKindMismatch {
             expected_kind: draft.kind_u32(),
             actual_kind: signed_event.kind(),
         });
@@ -692,19 +687,19 @@ pub fn validate_signed_nostr_event_matches_draft(
     let signed_tags = signed_event.tags_as_vec();
     let draft_tags = draft.tags_as_vec();
     if signed_tags != draft_tags {
-        return Err(RadrootsDraftError::SignedEventTagsMismatch {
+        return Err(DraftError::SignedEventTagsMismatch {
             expected_len: draft_tags.len(),
             actual_len: signed_tags.len(),
         });
     }
     if signed_event.content() != draft.content() {
-        return Err(RadrootsDraftError::SignedEventContentMismatch {
+        return Err(DraftError::SignedEventContentMismatch {
             expected_len: draft.content().len(),
             actual_len: signed_event.content().len(),
         });
     }
     if signed_event.id() != draft.expected_event_id() {
-        return Err(RadrootsDraftError::SignedEventIdMismatch {
+        return Err(DraftError::SignedEventIdMismatch {
             expected_event_id: draft.expected_event_id.to_hex(),
             actual_event_id: signed_event.id().to_hex(),
         });
@@ -718,7 +713,7 @@ pub fn validate_signed_nostr_event_matches_draft(
         signed_event.content(),
     );
     if computed_event_id != *signed_event.id() {
-        return Err(RadrootsDraftError::SignedEventComputedIdMismatch {
+        return Err(DraftError::SignedEventComputedIdMismatch {
             expected_event_id: signed_event.id().to_hex(),
             computed_event_id: computed_event_id.to_hex(),
         });
@@ -732,7 +727,7 @@ pub fn compute_nip01_event_id(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsEventId, RadrootsDraftError> {
+) -> Result<EventId, DraftError> {
     parse_public_key(pubkey)?;
     Ok(compute_nip01_event_id_for_valid_pubkey(
         pubkey, created_at, kind, tags, content,
@@ -745,7 +740,7 @@ pub fn nip01_event_id_preimage(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<String, RadrootsDraftError> {
+) -> Result<String, DraftError> {
     parse_public_key(pubkey)?;
     Ok(nip01_event_id_preimage_for_valid_pubkey(
         pubkey, created_at, kind, tags, content,
@@ -759,7 +754,7 @@ fn compute_nip01_event_id_for_valid_pubkey(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> RadrootsEventId {
+) -> EventId {
     compute_canonical_nip01_event_id(pubkey, created_at, kind, tags, content)
         .expect("a validated public key always produces a canonical event id")
 }
@@ -792,7 +787,7 @@ mod tests {
         core::iter::repeat_n(character, 128).collect()
     }
 
-    fn raw_json_for_wire(wire: &RadrootsNip01EventWire) -> String {
+    fn raw_json_for_wire(wire: &Nip01EventWire) -> String {
         serde_json::to_string(&serde_json::json!({
             "id": wire.id,
             "pubkey": wire.pubkey,
@@ -812,7 +807,7 @@ mod tests {
         tags: Vec<Vec<String>>,
         content: String,
         sig: String,
-    ) -> RadrootsNip01EventWire {
+    ) -> Nip01EventWire {
         let id = compute_canonical_nip01_event_id(
             pubkey.as_str(),
             created_at,
@@ -822,7 +817,7 @@ mod tests {
         )
         .expect("event id")
         .into_string();
-        RadrootsNip01EventWire {
+        Nip01EventWire {
             id,
             pubkey,
             created_at,
@@ -842,8 +837,8 @@ mod tests {
         tags: Vec<Vec<String>>,
         content: String,
         sig: String,
-    ) -> RadrootsNip01EventWire {
-        RadrootsNip01EventWire {
+    ) -> Nip01EventWire {
+        Nip01EventWire {
             id,
             pubkey,
             created_at,
@@ -855,7 +850,7 @@ mod tests {
         }
     }
 
-    fn signed_event_for_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
+    fn signed_event_for_draft(draft: &EventDraft) -> SignedEvent {
         let wire = verified_wire(
             draft.expected_pubkey().to_hex(),
             draft.created_at_u64(),
@@ -865,11 +860,11 @@ mod tests {
             hex_128('b'),
         );
         let raw_json = raw_json_for_wire(&wire);
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn generic_draft() -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn generic_draft() -> EventDraft {
+        EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1_700_000_000,
@@ -886,7 +881,7 @@ mod tests {
 
     #[test]
     fn draft_computes_expected_event_id() {
-        let draft = RadrootsEventDraft::new(
+        let draft = EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1_700_000_000,
@@ -955,11 +950,11 @@ mod tests {
 
     #[test]
     fn draft_constructor_rejects_unknown_contract_and_kind_mismatch() {
-        let unknown = RadrootsEventDraft::new("missing", KIND_POST, 1, Vec::new(), "", hex_64('a'))
+        let unknown = EventDraft::new("missing", KIND_POST, 1, Vec::new(), "", hex_64('a'))
             .expect_err("unknown contract");
-        assert!(matches!(unknown, RadrootsDraftError::UnknownContract(_)));
+        assert!(matches!(unknown, DraftError::UnknownContract(_)));
 
-        let mismatch = RadrootsEventDraft::new(
+        let mismatch = EventDraft::new(
             "radroots.social.post.v1",
             KIND_PROFILE,
             1,
@@ -968,12 +963,9 @@ mod tests {
             hex_64('a'),
         )
         .expect_err("kind mismatch");
-        assert!(matches!(
-            mismatch,
-            RadrootsDraftError::ContractKindMismatch { .. }
-        ));
+        assert!(matches!(mismatch, DraftError::ContractKindMismatch { .. }));
 
-        let invalid_pubkey = RadrootsEventDraft::new(
+        let invalid_pubkey = EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1,
@@ -982,7 +974,7 @@ mod tests {
             "not-hex",
         )
         .expect_err("invalid pubkey");
-        assert!(matches!(invalid_pubkey, RadrootsDraftError::IdParse(_)));
+        assert!(matches!(invalid_pubkey, DraftError::IdParse(_)));
     }
 
     #[test]
@@ -997,12 +989,11 @@ mod tests {
             ("radroots.social.deletion_request.v1", KIND_DELETION_REQUEST),
             ("radroots.social.comment.v1", KIND_COMMENT),
         ] {
-            let error =
-                RadrootsEventDraft::new(contract_id, kind, 1, Vec::new(), "hello", hex_64('a'))
-                    .expect_err("governed typed or read-only contract must reject generic drafts");
+            let error = EventDraft::new(contract_id, kind, 1, Vec::new(), "hello", hex_64('a'))
+                .expect_err("governed typed or read-only contract must reject generic drafts");
             assert_eq!(
                 error,
-                RadrootsDraftError::ContractNotDraftAuthorable {
+                DraftError::ContractNotDraftAuthorable {
                     contract_id: contract_id.to_owned(),
                 }
             );
@@ -1013,44 +1004,44 @@ mod tests {
     fn draft_deserialization_revalidates_registry_policy_shape_and_event_id() {
         let draft = generic_draft();
         let value = serde_json::to_value(&draft).expect("draft json");
-        let decoded: RadrootsEventDraft =
+        let decoded: EventDraft =
             serde_json::from_value(value.clone()).expect("validated roundtrip");
         assert_eq!(decoded, draft);
 
         for stale_version in 1..RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
             let mut tampered = value.clone();
             tampered["contract_registry_version"] = serde_json::json!(stale_version);
-            let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+            let error = serde_json::from_value::<EventDraft>(tampered)
                 .expect_err("stale registry generation must fail");
             assert!(error.to_string().contains("registry version mismatch"));
         }
 
         let mut tampered = value.clone();
         tampered["expected_event_id"] = serde_json::Value::String(hex_64('f'));
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+        let error = serde_json::from_value::<EventDraft>(tampered)
             .expect_err("tampered deterministic ID must fail");
         assert!(error.to_string().contains("frozen draft event ID mismatch"));
 
         let mut tampered = value.clone();
         tampered["contract_id"] = serde_json::Value::String("missing".to_owned());
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+        let error = serde_json::from_value::<EventDraft>(tampered)
             .expect_err("unknown persisted contract must fail");
         assert!(error.to_string().contains("unknown event contract"));
 
         let mut tampered = value.clone();
         tampered["kind"] = serde_json::json!(KIND_PROFILE);
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+        let error = serde_json::from_value::<EventDraft>(tampered)
             .expect_err("persisted contract kind mismatch must fail");
         assert!(error.to_string().contains("expects kind"));
 
         let mut tampered = value.clone();
         tampered["contract_id"] = serde_json::Value::String("radroots.social.post.v1".to_owned());
         tampered["kind"] = serde_json::json!(KIND_POST);
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+        let error = serde_json::from_value::<EventDraft>(tampered)
             .expect_err("read-only persisted contract must fail");
         assert!(error.to_string().contains("not authorable"));
 
-        let json_draft = RadrootsEventDraft::new(
+        let json_draft = EventDraft::new(
             "radroots.farm.crdt_change.v1",
             KIND_FARM_CRDT_CHANGE,
             1,
@@ -1061,20 +1052,20 @@ mod tests {
         .expect("generic JSON draft");
         let mut tampered = serde_json::to_value(json_draft).expect("JSON draft value");
         tampered["content"] = serde_json::Value::String("not-json".to_owned());
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+        let error = serde_json::from_value::<EventDraft>(tampered)
             .expect_err("persisted contract shape mismatch must fail");
         assert!(error.to_string().contains("shape validation failed"));
 
         let mut tampered = value;
         tampered["unexpected"] = serde_json::json!(true);
-        let error = serde_json::from_value::<RadrootsEventDraft>(tampered)
+        let error = serde_json::from_value::<EventDraft>(tampered)
             .expect_err("unknown persisted draft field must fail");
         assert!(error.to_string().contains("unknown field"));
     }
 
     #[test]
     fn draft_constructor_rejects_contract_shape_errors() {
-        let missing_contract = RadrootsEventDraft::new(
+        let missing_contract = EventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -1085,8 +1076,8 @@ mod tests {
         .expect_err("missing contract tag");
         assert!(matches!(
             missing_contract,
-            RadrootsDraftError::ContractShape {
-                error: RadrootsContractValidationError::MissingTag {
+            DraftError::ContractShape {
+                error: ContractValidationError::MissingTag {
                     name: "contract",
                     ..
                 },
@@ -1094,7 +1085,7 @@ mod tests {
             }
         ));
 
-        let invalid_event_pointer = RadrootsEventDraft::new(
+        let invalid_event_pointer = EventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -1117,13 +1108,13 @@ mod tests {
         .expect_err("invalid event pointer");
         assert!(matches!(
             invalid_event_pointer,
-            RadrootsDraftError::ContractShape {
-                error: RadrootsContractValidationError::TagValueMismatch { name: "source", .. },
+            DraftError::ContractShape {
+                error: ContractValidationError::TagValueMismatch { name: "source", .. },
                 ..
             }
         ));
 
-        let invalid_relay = RadrootsEventDraft::new(
+        let invalid_relay = EventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -1147,13 +1138,13 @@ mod tests {
         .expect_err("invalid event pointer relay");
         assert!(matches!(
             invalid_relay,
-            RadrootsDraftError::ContractShape {
-                error: RadrootsContractValidationError::TagValueMismatch { name: "source", .. },
+            DraftError::ContractShape {
+                error: ContractValidationError::TagValueMismatch { name: "source", .. },
                 ..
             }
         ));
 
-        let invalid_json = RadrootsEventDraft::new(
+        let invalid_json = EventDraft::new(
             "radroots.knowledge.claim.v1",
             KIND_KNOWLEDGE_CLAIM,
             1,
@@ -1167,8 +1158,8 @@ mod tests {
         .expect_err("invalid json");
         assert!(matches!(
             invalid_json,
-            RadrootsDraftError::ContractShape {
-                error: RadrootsContractValidationError::InvalidJsonContent { .. },
+            DraftError::ContractShape {
+                error: ContractValidationError::InvalidJsonContent { .. },
                 ..
             }
         ));
@@ -1185,7 +1176,7 @@ mod tests {
             hex_128('f'),
         );
         let raw_json = raw_json_for_wire(&wire);
-        let signed = RadrootsSignedEvent::new(RadrootsSignedEventParts {
+        let signed = SignedEvent::new(SignedEventParts {
             id: wire.id.clone(),
             pubkey: wire.pubkey.clone(),
             created_at: wire.created_at,
@@ -1197,7 +1188,7 @@ mod tests {
         })
         .expect("signed event");
         let json = serde_json::to_string(&signed).expect("serialize");
-        let decoded: RadrootsSignedEvent = serde_json::from_str(&json).expect("deserialize");
+        let decoded: SignedEvent = serde_json::from_str(&json).expect("deserialize");
 
         assert_eq!(decoded, signed);
         assert_eq!(decoded.envelope().id_hex(), decoded.id_hex());
@@ -1223,7 +1214,7 @@ mod tests {
             hex_128('3'),
         );
         let raw_json = raw_json_for_wire(&wire);
-        let signed = RadrootsSignedEvent::from_wire_verified_id(wire.clone(), raw_json.clone())
+        let signed = SignedEvent::from_wire_verified_id(wire.clone(), raw_json.clone())
             .expect("signed event");
 
         assert_eq!(signed.id_hex(), wire.id);
@@ -1231,7 +1222,7 @@ mod tests {
         assert_eq!(signed.signature_hex(), hex_128('3'));
         assert_eq!(signed.raw_json(), raw_json);
 
-        let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
+        let invalid = SignedEvent::new(SignedEventParts {
             id: "not-hex".to_owned(),
             pubkey: hex_64('e'),
             created_at: 10,
@@ -1244,10 +1235,10 @@ mod tests {
         .expect_err("invalid id");
         assert!(matches!(
             invalid,
-            RadrootsSignedEventError::Envelope(RadrootsEventEnvelopeError::InvalidId(_))
+            SignedEventError::Envelope(EventEnvelopeError::InvalidId(_))
         ));
 
-        let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
+        let invalid = SignedEvent::new(SignedEventParts {
             id: hex_64('d'),
             pubkey: "not-hex".to_owned(),
             created_at: 10,
@@ -1260,10 +1251,10 @@ mod tests {
         .expect_err("invalid pubkey");
         assert!(matches!(
             invalid,
-            RadrootsSignedEventError::Envelope(RadrootsEventEnvelopeError::InvalidAuthor(_))
+            SignedEventError::Envelope(EventEnvelopeError::InvalidAuthor(_))
         ));
 
-        let invalid = RadrootsSignedEvent::new(RadrootsSignedEventParts {
+        let invalid = SignedEvent::new(SignedEventParts {
             id: hex_64('d'),
             pubkey: hex_64('e'),
             created_at: 10,
@@ -1276,15 +1267,12 @@ mod tests {
         .expect_err("invalid sig");
         assert!(matches!(
             invalid,
-            RadrootsSignedEventError::Envelope(RadrootsEventEnvelopeError::InvalidSignature(_))
+            SignedEventError::Envelope(EventEnvelopeError::InvalidSignature(_))
         ));
 
         let mismatched_raw =
-            RadrootsSignedEvent::from_wire_verified_id(wire, "{}").expect_err("raw mismatch");
-        assert!(matches!(
-            mismatched_raw,
-            RadrootsSignedEventError::RawJson(_)
-        ));
+            SignedEvent::from_wire_verified_id(wire, "{}").expect_err("raw mismatch");
+        assert!(matches!(mismatched_raw, SignedEventError::RawJson(_)));
     }
 
     #[test]
@@ -1299,7 +1287,7 @@ mod tests {
     fn signed_event_validation_rejects_draft_mismatches() {
         let draft = generic_draft();
 
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
+        let signed = SignedEvent::from_wire_unchecked(
             unchecked_wire(
                 draft.expected_event_id_hex(),
                 hex_64('c'),
@@ -1316,10 +1304,10 @@ mod tests {
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
         assert!(matches!(
             error,
-            RadrootsDraftError::SignedEventPubkeyMismatch { .. }
+            DraftError::SignedEventPubkeyMismatch { .. }
         ));
 
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
+        let signed = SignedEvent::from_wire_unchecked(
             unchecked_wire(
                 hex_64('d'),
                 draft.expected_pubkey().to_hex(),
@@ -1334,12 +1322,9 @@ mod tests {
         .expect("unchecked signed event");
         let error =
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
-        assert!(matches!(
-            error,
-            RadrootsDraftError::SignedEventIdMismatch { .. }
-        ));
+        assert!(matches!(error, DraftError::SignedEventIdMismatch { .. }));
 
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
+        let signed = SignedEvent::from_wire_unchecked(
             unchecked_wire(
                 draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
@@ -1356,10 +1341,10 @@ mod tests {
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
         assert!(matches!(
             error,
-            RadrootsDraftError::SignedEventCreatedAtMismatch { .. }
+            DraftError::SignedEventCreatedAtMismatch { .. }
         ));
 
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
+        let signed = SignedEvent::from_wire_unchecked(
             unchecked_wire(
                 draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
@@ -1374,14 +1359,11 @@ mod tests {
         .expect("unchecked signed event");
         let error =
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
-        assert!(matches!(
-            error,
-            RadrootsDraftError::SignedEventKindMismatch { .. }
-        ));
+        assert!(matches!(error, DraftError::SignedEventKindMismatch { .. }));
 
         let mut tags = draft.tags_as_vec();
         tags.push(vec!["p".to_owned(), hex_64('e')]);
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
+        let signed = SignedEvent::from_wire_unchecked(
             unchecked_wire(
                 draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
@@ -1396,12 +1378,9 @@ mod tests {
         .expect("unchecked signed event");
         let error =
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
-        assert!(matches!(
-            error,
-            RadrootsDraftError::SignedEventTagsMismatch { .. }
-        ));
+        assert!(matches!(error, DraftError::SignedEventTagsMismatch { .. }));
 
-        let signed = RadrootsSignedEvent::from_wire_unchecked(
+        let signed = SignedEvent::from_wire_unchecked(
             unchecked_wire(
                 draft.expected_event_id_hex(),
                 draft.expected_pubkey().to_hex(),
@@ -1418,73 +1397,71 @@ mod tests {
             validate_signed_nostr_event_matches_draft(&signed, &draft).expect_err("mismatch");
         assert!(matches!(
             error,
-            RadrootsDraftError::SignedEventContentMismatch { .. }
+            DraftError::SignedEventContentMismatch { .. }
         ));
     }
 
     #[test]
     fn draft_errors_format_all_variants() {
         let errors = [
-            RadrootsDraftError::UnknownContract("missing".to_owned()),
-            RadrootsDraftError::ContractKindMismatch {
+            DraftError::UnknownContract("missing".to_owned()),
+            DraftError::ContractKindMismatch {
                 contract_id: "radroots.social.post.v1".to_owned(),
                 expected_kind: KIND_POST,
                 actual_kind: KIND_PROFILE,
             },
-            RadrootsDraftError::ContractNotDraftAuthorable {
+            DraftError::ContractNotDraftAuthorable {
                 contract_id: "radroots.social.post.v1".to_owned(),
             },
-            RadrootsDraftError::ContractRegistryVersionMismatch {
+            DraftError::ContractRegistryVersionMismatch {
                 expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
                 actual: 1,
             },
-            RadrootsDraftError::DraftExpectedEventIdMismatch {
+            DraftError::DraftExpectedEventIdMismatch {
                 expected_event_id: hex_64('a'),
                 actual_event_id: hex_64('b'),
             },
-            RadrootsDraftError::ContractShape {
+            DraftError::ContractShape {
                 contract_id: "radroots.knowledge.claim.v1".to_owned(),
-                error: RadrootsContractValidationError::MissingTag {
+                error: ContractValidationError::MissingTag {
                     contract_id: "radroots.knowledge.claim.v1",
                     name: "contract",
                 },
             },
-            RadrootsDraftError::SignedEventPubkeyMismatch {
+            DraftError::SignedEventPubkeyMismatch {
                 expected_pubkey: hex_64('a'),
                 actual_pubkey: hex_64('b'),
             },
-            RadrootsDraftError::SignedEventIdMismatch {
+            DraftError::SignedEventIdMismatch {
                 expected_event_id: hex_64('c'),
                 actual_event_id: hex_64('d'),
             },
-            RadrootsDraftError::SignedEventCreatedAtMismatch {
+            DraftError::SignedEventCreatedAtMismatch {
                 expected_created_at: 1,
                 actual_created_at: 2,
             },
-            RadrootsDraftError::SignedEventKindMismatch {
+            DraftError::SignedEventKindMismatch {
                 expected_kind: KIND_POST,
                 actual_kind: KIND_PROFILE,
             },
-            RadrootsDraftError::SignedEventTagsMismatch {
+            DraftError::SignedEventTagsMismatch {
                 expected_len: 1,
                 actual_len: 2,
             },
-            RadrootsDraftError::SignedEventContentMismatch {
+            DraftError::SignedEventContentMismatch {
                 expected_len: 5,
                 actual_len: 7,
             },
-            RadrootsDraftError::SignedEventComputedIdMismatch {
+            DraftError::SignedEventComputedIdMismatch {
                 expected_event_id: hex_64('e'),
                 computed_event_id: hex_64('f'),
             },
-            RadrootsDraftError::from(RadrootsIdParseError::Empty),
-            RadrootsDraftError::CanonicalEventId(
-                RadrootsCanonicalEventIdError::InvalidComputedEventId(
-                    RadrootsIdParseError::InvalidFormat,
-                ),
-            ),
-            RadrootsDraftError::from(RadrootsEventEnvelopeError::NonCanonicalId),
-            RadrootsDraftError::from(RadrootsSignedEventError::RawJsonMismatch),
+            DraftError::from(ParseError::Empty),
+            DraftError::CanonicalEventId(CanonicalEventIdError::InvalidComputedEventId(
+                ParseError::InvalidFormat,
+            )),
+            DraftError::from(EventEnvelopeError::NonCanonicalId),
+            DraftError::from(SignedEventError::RawJsonMismatch),
         ];
 
         for error in errors {
@@ -1492,26 +1469,24 @@ mod tests {
         }
 
         assert!(
-            RadrootsDraftError::CanonicalEventId(
-                RadrootsCanonicalEventIdError::InvalidComputedEventId(
-                    RadrootsIdParseError::InvalidFormat,
-                ),
-            )
+            DraftError::CanonicalEventId(CanonicalEventIdError::InvalidComputedEventId(
+                ParseError::InvalidFormat,
+            ),)
             .to_string()
             .contains("canonical event id digest")
         );
 
         assert!(matches!(
-            RadrootsDraftError::from(RadrootsCanonicalEventIdError::InvalidPubkey(
-                RadrootsIdParseError::InvalidFormat,
+            DraftError::from(CanonicalEventIdError::InvalidPubkey(
+                ParseError::InvalidFormat,
             )),
-            RadrootsDraftError::IdParse(_)
+            DraftError::IdParse(_)
         ));
         assert!(matches!(
-            RadrootsDraftError::from(RadrootsCanonicalEventIdError::InvalidComputedEventId(
-                RadrootsIdParseError::InvalidFormat,
+            DraftError::from(CanonicalEventIdError::InvalidComputedEventId(
+                ParseError::InvalidFormat,
             )),
-            RadrootsDraftError::CanonicalEventId(_)
+            DraftError::CanonicalEventId(_)
         ));
     }
 
@@ -1541,14 +1516,10 @@ mod tests {
         assert_eq!(signed.sig().to_hex(), signed.signature_hex());
 
         for error in [
-            RadrootsSignedEventError::Wire(RadrootsEventWireError::NonCanonicalIdentifier {
-                field: "id",
-            }),
-            RadrootsSignedEventError::RawJson(RadrootsEventWireError::NonCanonicalIdentifier {
-                field: "id",
-            }),
-            RadrootsSignedEventError::RawJsonMismatch,
-            RadrootsSignedEventError::from(RadrootsEventEnvelopeError::NonCanonicalId),
+            SignedEventError::Wire(EventWireError::NonCanonicalIdentifier { field: "id" }),
+            SignedEventError::RawJson(EventWireError::NonCanonicalIdentifier { field: "id" }),
+            SignedEventError::RawJsonMismatch,
+            SignedEventError::from(EventEnvelopeError::NonCanonicalId),
         ] {
             assert!(!error.to_string().is_empty());
         }
@@ -1565,19 +1536,18 @@ mod tests {
         )
         .expect("different id")
         .into_string();
-        let error =
-            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json_for_wire(&different_wire))
-                .expect_err("raw JSON mismatch");
-        assert_eq!(error, RadrootsSignedEventError::RawJsonMismatch);
+        let error = SignedEvent::from_wire_verified_id(wire, raw_json_for_wire(&different_wire))
+            .expect_err("raw JSON mismatch");
+        assert_eq!(error, SignedEventError::RawJsonMismatch);
     }
 
     #[test]
     fn event_id_computation_rejects_invalid_pubkeys() {
         let error =
             compute_nip01_event_id("not-hex", 1, KIND_POST, &[], "").expect_err("invalid pubkey");
-        assert!(matches!(error, RadrootsDraftError::IdParse(_)));
+        assert!(matches!(error, DraftError::IdParse(_)));
         let error = nip01_event_id_preimage("not-hex", 1, KIND_POST, &[], "")
             .expect_err("invalid preimage pubkey");
-        assert!(matches!(error, RadrootsDraftError::IdParse(_)));
+        assert!(matches!(error, DraftError::IdParse(_)));
     }
 }

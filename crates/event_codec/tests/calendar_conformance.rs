@@ -3,18 +3,16 @@ use std::{borrow::Cow, fs, path::Path};
 use radroots_blossom::{BlobDescriptor, ByteVerifiedDescriptor, Error};
 use radroots_event::{
     calendar::{
-        RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS, RadrootsAuthoredCalendar,
-        RadrootsAuthoredCalendarDateEvent, RadrootsAuthoredCalendarEventRsvp,
-        RadrootsAuthoredCalendarTimeEvent, RadrootsCalendarAdmissionError, RadrootsCalendarDate,
-        RadrootsCalendarEventAuthorReference, RadrootsCalendarEventError,
-        RadrootsCalendarEventFreeBusy, RadrootsCalendarEventReference,
-        RadrootsCalendarEventRevisionReference, RadrootsCalendarEventRsvpStatus,
-        RadrootsCalendarParticipant, RadrootsCalendarRequest, RadrootsCalendarUid,
-        RadrootsCalendarUri, RadrootsIanaTimeZoneId, RadrootsParsedNip52Calendar,
-        RadrootsParsedNip52CalendarCommon, RadrootsParsedNip52CalendarEventRsvp,
+        AuthoredCalendar, AuthoredCalendarDateEvent, AuthoredCalendarEventRsvp,
+        AuthoredCalendarTimeEvent, CalendarAdmissionError, CalendarDate,
+        CalendarEventAuthorReference, CalendarEventError, CalendarEventFreeBusy,
+        CalendarEventReference, CalendarEventRevisionReference, CalendarEventRsvpStatus,
+        CalendarParticipant, CalendarRequest, CalendarUid, CalendarUri, IanaTimeZoneId,
+        ParsedNip52Calendar, ParsedNip52CalendarCommon, ParsedNip52CalendarEventRsvp,
+        RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS,
     },
     contract::validate_event_contract_parts,
-    media::RadrootsAuthoredImage,
+    media::AuthoredImage,
 };
 use radroots_event_codec::{
     calendar::{
@@ -194,7 +192,7 @@ fn baseline_date_valid(vector: &Value) {
     assert_common(parsed.common(), expected, vector);
     assert_eq!(parsed.start().as_str(), value_str(expected, "start"));
     assert_optional_str(
-        parsed.end().map(RadrootsCalendarDate::as_str),
+        parsed.end().map(CalendarDate::as_str),
         expected,
         "end",
         vector,
@@ -240,21 +238,19 @@ fn baseline_time_valid(vector: &Value) {
         vector_id(vector)
     );
     assert_optional_str(
-        parsed.start_tzid().map(RadrootsIanaTimeZoneId::as_str),
+        parsed.start_tzid().map(IanaTimeZoneId::as_str),
         expected,
         "start_tzid",
         vector,
     );
     assert_optional_str(
-        parsed.end_tzid().map(RadrootsIanaTimeZoneId::as_str),
+        parsed.end_tzid().map(IanaTimeZoneId::as_str),
         expected,
         "end_tzid",
         vector,
     );
     assert_optional_str(
-        parsed
-            .effective_end_tzid()
-            .map(RadrootsIanaTimeZoneId::as_str),
+        parsed.effective_end_tzid().map(IanaTimeZoneId::as_str),
         expected,
         "effective_end_tzid",
         vector,
@@ -303,11 +299,7 @@ fn baseline_rsvp_invalid(vector: &Value) {
     assert_parse_error(vector, &error);
 }
 
-fn assert_parsed_collection(
-    parsed: &RadrootsParsedNip52Calendar,
-    expected: &Value,
-    vector: &Value,
-) {
+fn assert_parsed_collection(parsed: &ParsedNip52Calendar, expected: &Value, vector: &Value) {
     assert_eq!(
         parsed.d_tag(),
         value_str(expected, "d"),
@@ -333,7 +325,7 @@ fn assert_parsed_collection(
         vector,
     );
     assert_optional_str(
-        parsed.image().map(RadrootsCalendarUri::as_str),
+        parsed.image().map(CalendarUri::as_str),
         expected,
         "image",
         vector,
@@ -346,11 +338,7 @@ fn assert_parsed_collection(
     );
 }
 
-fn assert_parsed_rsvp(
-    parsed: &RadrootsParsedNip52CalendarEventRsvp,
-    expected: &Value,
-    vector: &Value,
-) {
+fn assert_parsed_rsvp(parsed: &ParsedNip52CalendarEventRsvp, expected: &Value, vector: &Value) {
     assert_eq!(
         parsed.d_tag(),
         value_str(expected, "d"),
@@ -385,7 +373,7 @@ fn assert_parsed_rsvp(
     assert_optional_str(parsed.note(), expected, "note", vector);
 }
 
-fn assert_common(common: &RadrootsParsedNip52CalendarCommon, expected: &Value, vector: &Value) {
+fn assert_common(common: &ParsedNip52CalendarCommon, expected: &Value, vector: &Value) {
     assert_eq!(
         common.d_tag(),
         value_str(expected, "d"),
@@ -408,7 +396,7 @@ fn assert_common(common: &RadrootsParsedNip52CalendarCommon, expected: &Value, v
     assert_optional_str(common.geohash(), expected, "geohash", vector);
     assert_optional_str(common.summary(), expected, "summary", vector);
     assert_optional_str(
-        common.image().map(RadrootsCalendarUri::as_str),
+        common.image().map(CalendarUri::as_str),
         expected,
         "image",
         vector,
@@ -424,7 +412,7 @@ fn assert_common(common: &RadrootsParsedNip52CalendarCommon, expected: &Value, v
         common
             .references()
             .iter()
-            .map(RadrootsCalendarUri::as_str)
+            .map(CalendarUri::as_str)
             .collect::<Vec<_>>(),
         expected["references"]
             .as_array()
@@ -439,11 +427,7 @@ fn assert_common(common: &RadrootsParsedNip52CalendarCommon, expected: &Value, v
     assert_optional_str(common.legacy_name(), expected, "legacy_name", vector);
 }
 
-fn assert_participants(
-    common: &RadrootsParsedNip52CalendarCommon,
-    expected: &Value,
-    vector: &Value,
-) {
+fn assert_participants(common: &ParsedNip52CalendarCommon, expected: &Value, vector: &Value) {
     if let Some(count) = expected["participants"].as_u64() {
         assert_eq!(
             common.participants().len() as u64,
@@ -472,11 +456,7 @@ fn assert_participants(
     );
 }
 
-fn assert_calendar_requests(
-    common: &RadrootsParsedNip52CalendarCommon,
-    expected: &Value,
-    vector: &Value,
-) {
+fn assert_calendar_requests(common: &ParsedNip52CalendarCommon, expected: &Value, vector: &Value) {
     if let Some(count) = expected["calendar_requests"].as_u64() {
         assert_eq!(
             common.calendar_requests().len() as u64,
@@ -505,7 +485,7 @@ fn assert_calendar_requests(
 }
 
 fn assert_event_references(
-    actual: &[RadrootsCalendarEventReference],
+    actual: &[CalendarEventReference],
     expected: &Value,
     key: &str,
     vector: &Value,
@@ -519,11 +499,7 @@ fn assert_event_references(
     }
 }
 
-fn assert_event_reference(
-    actual: &RadrootsCalendarEventReference,
-    expected: &Value,
-    vector: &Value,
-) {
+fn assert_event_reference(actual: &CalendarEventReference, expected: &Value, vector: &Value) {
     let coordinate = value_str(expected, "coordinate");
     let relay = expected.get("relay").and_then(Value::as_str);
     assert_eq!(
@@ -534,11 +510,11 @@ fn assert_event_reference(
     );
     assert_eq!(actual.relay(), relay, "{}", vector_id(vector));
 
-    let parts = radroots_event::id::RadrootsAddressableCoordinateParts::parse(coordinate)
+    let parts = radroots_event::id::AddressableCoordinateParts::parse(coordinate)
         .expect("expected event reference coordinate");
     let canonical_coordinate = format!("{}:{}:{}", parts.kind, parts.pubkey, parts.d_tag);
     let canonical_relay =
-        relay.is_none_or(|relay| radroots_event::id::RadrootsRelayUrl::parse(relay).is_ok());
+        relay.is_none_or(|relay| radroots_event::id::RelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
         coordinate == canonical_coordinate && canonical_relay,
@@ -548,7 +524,7 @@ fn assert_event_reference(
 }
 
 fn assert_revision_reference(
-    actual: Option<&RadrootsCalendarEventRevisionReference>,
+    actual: Option<&CalendarEventRevisionReference>,
     expected: &Value,
     vector: &Value,
 ) {
@@ -571,7 +547,7 @@ fn assert_revision_reference(
     );
     assert_eq!(actual.relay(), relay, "{}", vector_id(vector));
     let canonical_relay =
-        relay.is_none_or(|relay| radroots_event::id::RadrootsRelayUrl::parse(relay).is_ok());
+        relay.is_none_or(|relay| radroots_event::id::RelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
         event_id == actual.event_id().to_hex() && canonical_relay,
@@ -581,7 +557,7 @@ fn assert_revision_reference(
 }
 
 fn assert_author_reference(
-    actual: Option<&RadrootsCalendarEventAuthorReference>,
+    actual: Option<&CalendarEventAuthorReference>,
     expected: &Value,
     vector: &Value,
 ) {
@@ -601,7 +577,7 @@ fn assert_author_reference(
     );
     assert_eq!(actual.relay(), relay, "{}", vector_id(vector));
     let canonical_relay =
-        relay.is_none_or(|relay| radroots_event::id::RadrootsRelayUrl::parse(relay).is_ok());
+        relay.is_none_or(|relay| radroots_event::id::RelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
         pubkey == actual.pubkey().to_hex() && canonical_relay,
@@ -610,29 +586,29 @@ fn assert_author_reference(
     );
 }
 
-fn rsvp_status_str(status: &RadrootsCalendarEventRsvpStatus) -> &'static str {
+fn rsvp_status_str(status: &CalendarEventRsvpStatus) -> &'static str {
     match status {
-        RadrootsCalendarEventRsvpStatus::Accepted => "accepted",
-        RadrootsCalendarEventRsvpStatus::Declined => "declined",
-        RadrootsCalendarEventRsvpStatus::Tentative => "tentative",
+        CalendarEventRsvpStatus::Accepted => "accepted",
+        CalendarEventRsvpStatus::Declined => "declined",
+        CalendarEventRsvpStatus::Tentative => "tentative",
     }
 }
 
-fn free_busy_str(free_busy: &RadrootsCalendarEventFreeBusy) -> &'static str {
+fn free_busy_str(free_busy: &CalendarEventFreeBusy) -> &'static str {
     match free_busy {
-        RadrootsCalendarEventFreeBusy::Free => "free",
-        RadrootsCalendarEventFreeBusy::Busy => "busy",
+        CalendarEventFreeBusy::Free => "free",
+        CalendarEventFreeBusy::Busy => "busy",
     }
 }
 
 fn profile_date_parse_valid(vector: &Value) {
-    let parsed = RadrootsCalendarDate::parse(input_str(vector, "value"))
+    let parsed = CalendarDate::parse(input_str(vector, "value"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector_id(vector)));
     assert_eq!(parsed.as_str(), expected_str(vector, "value"));
 }
 
 fn profile_date_parse_invalid(vector: &Value) {
-    let error = RadrootsCalendarDate::parse(input_str(vector, "value"))
+    let error = CalendarDate::parse(input_str(vector, "value"))
         .expect_err("invalid profile date must fail");
     assert_calendar_event_error(vector, &error);
 }
@@ -675,9 +651,7 @@ fn profile_authored_time_valid(vector: &Value) {
     let event = authored_time_event(input(vector), vector_id(vector))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector_id(vector)));
     assert_optional_str(
-        event
-            .effective_end_tzid()
-            .map(RadrootsIanaTimeZoneId::as_str),
+        event.effective_end_tzid().map(IanaTimeZoneId::as_str),
         expected(vector),
         "effective_end_tzid",
         vector,
@@ -788,7 +762,7 @@ fn profile_authored_collection_valid(vector: &Value) {
         vector_id(vector)
     );
     assert_eq!(
-        parsed.image().map(RadrootsCalendarUri::as_str),
+        parsed.image().map(CalendarUri::as_str),
         calendar
             .image()
             .map(|image| image.descriptor().url().as_str()),
@@ -799,7 +773,7 @@ fn profile_authored_collection_valid(vector: &Value) {
         parsed
             .event_references()
             .iter()
-            .all(RadrootsCalendarEventReference::is_canonical),
+            .all(CalendarEventReference::is_canonical),
         "{}",
         vector_id(vector)
     );
@@ -1048,7 +1022,7 @@ fn profile_admit_collection_valid(vector: &Value) {
         .and_then(|tag| tag.get(1))
         .map(String::as_str);
     assert_eq!(
-        admitted.parsed().image().map(RadrootsCalendarUri::as_str),
+        admitted.parsed().image().map(CalendarUri::as_str),
         image,
         "{}",
         vector_id(vector)
@@ -1137,7 +1111,7 @@ fn profile_admit_rsvp_valid(vector: &Value) {
 }
 
 fn assert_admitted_rsvp_references_against_tags(
-    admitted: &radroots_event::calendar::RadrootsAdmittedCalendarEventRsvp,
+    admitted: &radroots_event::calendar::AdmittedCalendarEventRsvp,
     tags: &[Vec<String>],
     vector: &Value,
 ) {
@@ -1203,15 +1177,15 @@ fn profile_admit_rsvp_invalid(vector: &Value) {
 fn authored_collection(
     input: &Map<String, Value>,
     vector_id: &str,
-) -> Result<RadrootsAuthoredCalendar, RadrootsCalendarEventError> {
-    let uid = RadrootsCalendarUid::parse(map_str(input, "d"))?;
+) -> Result<AuthoredCalendar, CalendarEventError> {
+    let uid = CalendarUid::parse(map_str(input, "d"))?;
     let event_references = input["event_references"]
         .as_array()
         .expect("input.event_references")
         .iter()
         .map(calendar_event_reference)
         .collect::<Result<Vec<_>, _>>()?;
-    let mut calendar = RadrootsAuthoredCalendar::new(
+    let mut calendar = AuthoredCalendar::new(
         uid,
         map_str(input, "title"),
         map_optional_str(input, "content").unwrap_or_default(),
@@ -1228,10 +1202,10 @@ fn authored_collection(
 
 fn authored_rsvp(
     input: &Map<String, Value>,
-) -> Result<RadrootsAuthoredCalendarEventRsvp, RadrootsCalendarEventError> {
-    let uid = RadrootsCalendarUid::parse(map_str(input, "d"))?;
+) -> Result<AuthoredCalendarEventRsvp, CalendarEventError> {
+    let uid = CalendarUid::parse(map_str(input, "d"))?;
     let event_reference = calendar_event_reference(&input["event_reference"])?;
-    let mut rsvp = RadrootsAuthoredCalendarEventRsvp::new(
+    let mut rsvp = AuthoredCalendarEventRsvp::new(
         uid,
         event_reference,
         parse_authored_rsvp_status(map_str(input, "status")),
@@ -1251,10 +1225,8 @@ fn authored_rsvp(
     Ok(rsvp)
 }
 
-fn calendar_event_reference(
-    value: &Value,
-) -> Result<RadrootsCalendarEventReference, RadrootsCalendarEventError> {
-    RadrootsCalendarEventReference::parse(
+fn calendar_event_reference(value: &Value) -> Result<CalendarEventReference, CalendarEventError> {
+    CalendarEventReference::parse(
         value["coordinate"]
             .as_str()
             .expect("event_reference.coordinate"),
@@ -1264,8 +1236,8 @@ fn calendar_event_reference(
 
 fn calendar_revision_reference(
     value: &Value,
-) -> Result<RadrootsCalendarEventRevisionReference, RadrootsCalendarEventError> {
-    RadrootsCalendarEventRevisionReference::parse(
+) -> Result<CalendarEventRevisionReference, CalendarEventError> {
+    CalendarEventRevisionReference::parse(
         value["id"].as_str().expect("revision_reference.id"),
         value.get("relay").and_then(Value::as_str),
     )
@@ -1273,26 +1245,26 @@ fn calendar_revision_reference(
 
 fn calendar_author_reference(
     value: &Value,
-) -> Result<RadrootsCalendarEventAuthorReference, RadrootsCalendarEventError> {
-    RadrootsCalendarEventAuthorReference::parse(
+) -> Result<CalendarEventAuthorReference, CalendarEventError> {
+    CalendarEventAuthorReference::parse(
         value["pubkey"].as_str().expect("author_hint.pubkey"),
         value.get("relay").and_then(Value::as_str),
     )
 }
 
-fn parse_authored_rsvp_status(value: &str) -> RadrootsCalendarEventRsvpStatus {
+fn parse_authored_rsvp_status(value: &str) -> CalendarEventRsvpStatus {
     match value {
-        "accepted" => RadrootsCalendarEventRsvpStatus::Accepted,
-        "declined" => RadrootsCalendarEventRsvpStatus::Declined,
-        "tentative" => RadrootsCalendarEventRsvpStatus::Tentative,
+        "accepted" => CalendarEventRsvpStatus::Accepted,
+        "declined" => CalendarEventRsvpStatus::Declined,
+        "tentative" => CalendarEventRsvpStatus::Tentative,
         value => panic!("unsupported authored RSVP status {value}"),
     }
 }
 
-fn parse_authored_free_busy(value: &str) -> RadrootsCalendarEventFreeBusy {
+fn parse_authored_free_busy(value: &str) -> CalendarEventFreeBusy {
     match value {
-        "free" => RadrootsCalendarEventFreeBusy::Free,
-        "busy" => RadrootsCalendarEventFreeBusy::Busy,
+        "free" => CalendarEventFreeBusy::Free,
+        "busy" => CalendarEventFreeBusy::Busy,
         value => panic!("unsupported authored RSVP free/busy value {value}"),
     }
 }
@@ -1300,25 +1272,22 @@ fn parse_authored_free_busy(value: &str) -> RadrootsCalendarEventFreeBusy {
 fn authored_date_event(
     input: &Map<String, Value>,
     vector_id: &str,
-) -> Result<RadrootsAuthoredCalendarDateEvent, RadrootsCalendarEventError> {
-    let start = RadrootsCalendarDate::parse(map_str(input, "start"))?;
-    let mut event = RadrootsAuthoredCalendarDateEvent::new(
-        map_str(input, "d"),
-        map_str(input, "title"),
-        start,
-    )?;
+) -> Result<AuthoredCalendarDateEvent, CalendarEventError> {
+    let start = CalendarDate::parse(map_str(input, "start"))?;
+    let mut event =
+        AuthoredCalendarDateEvent::new(map_str(input, "d"), map_str(input, "title"), start)?;
     if let Some(value) = map_optional_str(input, "end") {
-        event = event.with_end(RadrootsCalendarDate::parse(value)?)?;
+        event = event.with_end(CalendarDate::parse(value)?)?;
     }
     event = apply_authored_date_common(event, input, vector_id)?;
     Ok(event)
 }
 
 fn apply_authored_date_common(
-    mut event: RadrootsAuthoredCalendarDateEvent,
+    mut event: AuthoredCalendarDateEvent,
     input: &Map<String, Value>,
     vector_id: &str,
-) -> Result<RadrootsAuthoredCalendarDateEvent, RadrootsCalendarEventError> {
+) -> Result<AuthoredCalendarDateEvent, CalendarEventError> {
     if let Some(value) = map_optional_str(input, "description") {
         event = event.with_description(value)?;
     }
@@ -1344,7 +1313,7 @@ fn apply_authored_date_common(
         event = event.with_references(
             value
                 .into_iter()
-                .map(RadrootsCalendarUri::parse)
+                .map(CalendarUri::parse)
                 .collect::<Result<Vec<_>, _>>()?,
         )?;
     }
@@ -1357,8 +1326,8 @@ fn apply_authored_date_common(
 fn authored_time_event(
     input: &Map<String, Value>,
     vector_id: &str,
-) -> Result<RadrootsAuthoredCalendarTimeEvent, RadrootsCalendarEventError> {
-    let mut event = RadrootsAuthoredCalendarTimeEvent::new(
+) -> Result<AuthoredCalendarTimeEvent, CalendarEventError> {
+    let mut event = AuthoredCalendarTimeEvent::new(
         map_str(input, "d"),
         map_str(input, "title"),
         map_u64(input, "start"),
@@ -1397,7 +1366,7 @@ fn authored_time_event(
         event = event.with_references(
             value
                 .into_iter()
-                .map(RadrootsCalendarUri::parse)
+                .map(CalendarUri::parse)
                 .collect::<Result<Vec<_>, _>>()?,
         )?;
     }
@@ -1407,8 +1376,8 @@ fn authored_time_event(
     Ok(event)
 }
 
-fn authored_image(input: &Value, vector_id: &str) -> RadrootsAuthoredImage {
-    RadrootsAuthoredImage::try_from(verified_descriptor(input, vector_id))
+fn authored_image(input: &Value, vector_id: &str) -> AuthoredImage {
+    AuthoredImage::try_from(verified_descriptor(input, vector_id))
         .unwrap_or_else(|error| panic!("{vector_id} image failed: {error}"))
 }
 
@@ -1430,12 +1399,12 @@ fn verified_descriptor_result(input: &Value) -> Result<ByteVerifiedDescriptor, E
     )
 }
 
-fn participants(input: &Value, vector_id: &str) -> Vec<RadrootsCalendarParticipant> {
+fn participants(input: &Value, vector_id: &str) -> Vec<CalendarParticipant> {
     input
         .as_array()
         .unwrap_or_else(|| panic!("{vector_id} participants must be an array"))
         .iter()
-        .map(|value| RadrootsCalendarParticipant {
+        .map(|value| CalendarParticipant {
             pubkey: value["pubkey"]
                 .as_str()
                 .expect("participant.pubkey")
@@ -1452,13 +1421,13 @@ fn participants(input: &Value, vector_id: &str) -> Vec<RadrootsCalendarParticipa
         .collect()
 }
 
-fn calendar_requests(input: &Value, vector_id: &str) -> Vec<RadrootsCalendarRequest> {
+fn calendar_requests(input: &Value, vector_id: &str) -> Vec<CalendarRequest> {
     input
         .as_array()
         .unwrap_or_else(|| panic!("{vector_id} calendar_requests must be an array"))
         .iter()
         .map(|value| {
-            RadrootsCalendarRequest::new(
+            CalendarRequest::new(
                 value["calendar"].as_str().expect("request.calendar"),
                 value.get("relay").and_then(Value::as_str),
             )
@@ -1487,7 +1456,7 @@ fn assert_authored_media_claims(vector: &Value, image_expected: bool) {
     );
 }
 
-fn assert_calendar_event_error(vector: &Value, error: &RadrootsCalendarEventError) {
+fn assert_calendar_event_error(vector: &Value, error: &CalendarEventError) {
     assert_eq!(
         error.code(),
         expected_str(vector, "error"),
@@ -1495,13 +1464,13 @@ fn assert_calendar_event_error(vector: &Value, error: &RadrootsCalendarEventErro
         vector_id(vector)
     );
     assert!(!error.to_string().is_empty());
-    if let RadrootsCalendarEventError::CoveredDayLimitExceeded { max, actual } = error {
+    if let CalendarEventError::CoveredDayLimitExceeded { max, actual } = error {
         assert_eq!(*max, expected_u64(vector, "max"));
         assert_eq!(*actual, expected_u64(vector, "actual"));
     }
 }
 
-fn assert_admission_error(vector: &Value, error: &RadrootsCalendarAdmissionError) {
+fn assert_admission_error(vector: &Value, error: &CalendarAdmissionError) {
     assert_eq!(
         error.code(),
         expected_str(vector, "error"),
@@ -1510,7 +1479,7 @@ fn assert_admission_error(vector: &Value, error: &RadrootsCalendarAdmissionError
     );
     assert!(!error.to_string().is_empty());
     if let Some(expected_field) = expected(vector).get("field").and_then(Value::as_str) {
-        let RadrootsCalendarAdmissionError::NonCanonicalField(actual_field) = error else {
+        let CalendarAdmissionError::NonCanonicalField(actual_field) = error else {
             panic!(
                 "{} expected a field-bearing admission error",
                 vector_id(vector)
@@ -1518,7 +1487,7 @@ fn assert_admission_error(vector: &Value, error: &RadrootsCalendarAdmissionError
         };
         assert_eq!(*actual_field, expected_field, "{}", vector_id(vector));
     }
-    if let RadrootsCalendarAdmissionError::CoveredDayLimitExceeded { max, actual } = error {
+    if let CalendarAdmissionError::CoveredDayLimitExceeded { max, actual } = error {
         assert_eq!(*max, expected_u64(vector, "max"));
         assert_eq!(*actual, expected_u64(vector, "actual"));
     }
@@ -1554,7 +1523,7 @@ fn parse_error_tag(error: &EventParseError) -> Option<&'static str> {
 }
 
 fn assert_wire_parts(
-    wire: &radroots_event::wire::RadrootsNip01EventWireParts,
+    wire: &radroots_event::wire::Nip01EventWireParts,
     expected: &Value,
     vector_id: &str,
 ) {

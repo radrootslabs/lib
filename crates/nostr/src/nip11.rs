@@ -1,11 +1,11 @@
 #[cfg(all(feature = "http", feature = "codec"))]
-use radroots_event::social::relay_document::RadrootsRelayDocument;
+use radroots_event::social::relay_document::RelayDocument;
 
 #[cfg(all(feature = "http", feature = "codec"))]
 use crate::util::ws_to_http;
 
 #[cfg(all(feature = "http", feature = "codec"))]
-pub async fn fetch_nip11(ws_url: &str) -> Option<RadrootsRelayDocument> {
+pub async fn fetch_nip11(ws_url: &str) -> Option<RelayDocument> {
     let http_url = ws_to_http(ws_url)?;
     let client = reqwest::Client::new();
     client
@@ -14,7 +14,7 @@ pub async fn fetch_nip11(ws_url: &str) -> Option<RadrootsRelayDocument> {
         .send()
         .await
         .ok()?
-        .json::<RadrootsRelayDocument>()
+        .json::<RelayDocument>()
         .await
         .ok()
 }

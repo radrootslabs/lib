@@ -10,10 +10,9 @@ use crate::{
         KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
     },
     id::{
-        RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
-        RadrootsIdParseError, parse_public_key,
+        AddressableCoordinate, AddressableCoordinateParts, EventId, ParseError, parse_public_key,
     },
-    tag::relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::NostrRelayHint,
     wire::{
         DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES,
         DEFAULT_TAG_MAX_COUNT, DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES,
@@ -43,17 +42,17 @@ const RADROOTS_NIP22_COMMENT_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\"".
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsNip22CommentError {
+pub enum Nip22CommentError {
     ContentMissing,
     ContentTooLarge { max: usize, actual: usize },
-    RootEventIdInvalid(RadrootsIdParseError),
-    RootAuthorInvalid(RadrootsIdParseError),
-    RootCoordinateInvalid(RadrootsIdParseError),
-    ParentEventIdInvalid(RadrootsIdParseError),
-    ParentAuthorInvalid(RadrootsIdParseError),
-    RevisionEventIdInvalid(RadrootsIdParseError),
+    RootEventIdInvalid(ParseError),
+    RootAuthorInvalid(ParseError),
+    RootCoordinateInvalid(ParseError),
+    ParentEventIdInvalid(ParseError),
+    ParentAuthorInvalid(ParseError),
+    RevisionEventIdInvalid(ParseError),
     RootKindUnsupported { actual: u32 },
-    RelayInvalid(RadrootsIdParseError),
+    RelayInvalid(ParseError),
     ParentReferenceMismatch,
     TagCountExceeded { max: usize, actual: usize },
     TagElementCountExceeded { max: usize, actual: usize },
@@ -62,7 +61,7 @@ pub enum RadrootsNip22CommentError {
     EventWireTooLarge { max: usize, actual: usize },
 }
 
-impl RadrootsNip22CommentError {
+impl Nip22CommentError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::ContentMissing => "comment_content_missing",
@@ -85,7 +84,7 @@ impl RadrootsNip22CommentError {
     }
 }
 
-impl fmt::Display for RadrootsNip22CommentError {
+impl fmt::Display for Nip22CommentError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ContentMissing => {
@@ -163,7 +162,7 @@ impl fmt::Display for RadrootsNip22CommentError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsNip22CommentError {
+impl std::error::Error for Nip22CommentError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::RootEventIdInvalid(error)
@@ -180,13 +179,13 @@ impl std::error::Error for RadrootsNip22CommentError {
 
 /// Root event kinds supported by the strict Radroots NIP-22 profile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RadrootsNip22CommentRootKind {
+pub enum Nip22CommentRootKind {
     ClassifiedListing,
     CalendarDateEvent,
     CalendarTimeEvent,
 }
 
-impl RadrootsNip22CommentRootKind {
+impl Nip22CommentRootKind {
     pub const fn as_u32(self) -> u32 {
         match self {
             Self::ClassifiedListing => KIND_CLASSIFIED_LISTING,
@@ -195,24 +194,24 @@ impl RadrootsNip22CommentRootKind {
         }
     }
 
-    pub const fn parse(kind: u32) -> Result<Self, RadrootsNip22CommentError> {
+    pub const fn parse(kind: u32) -> Result<Self, Nip22CommentError> {
         match kind {
             KIND_CLASSIFIED_LISTING => Ok(Self::ClassifiedListing),
             KIND_CALENDAR_DATE_EVENT => Ok(Self::CalendarDateEvent),
             KIND_CALENDAR_TIME_EVENT => Ok(Self::CalendarTimeEvent),
-            actual => Err(RadrootsNip22CommentError::RootKindUnsupported { actual }),
+            actual => Err(Nip22CommentError::RootKindUnsupported { actual }),
         }
     }
 }
 
-impl From<RadrootsNip22CommentRootKind> for u32 {
-    fn from(value: RadrootsNip22CommentRootKind) -> Self {
+impl From<Nip22CommentRootKind> for u32 {
+    fn from(value: Nip22CommentRootKind) -> Self {
         value.as_u32()
     }
 }
 
-impl TryFrom<u32> for RadrootsNip22CommentRootKind {
-    type Error = RadrootsNip22CommentError;
+impl TryFrom<u32> for Nip22CommentRootKind {
+    type Error = Nip22CommentError;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -224,20 +223,20 @@ impl TryFrom<u32> for RadrootsNip22CommentRootKind {
 /// The caller asserts the target kind and author. This does not prove event
 /// existence, signature validity, actual authorship, or relay availability.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip22EventRootReference {
-    event_id: RadrootsEventId,
+pub struct Nip22EventRootReference {
+    event_id: EventId,
     author: PublicKey,
-    kind: RadrootsNip22CommentRootKind,
-    relay: Option<RadrootsNostrRelayHint>,
+    kind: Nip22CommentRootKind,
+    relay: Option<NostrRelayHint>,
 }
 
-impl RadrootsNip22EventRootReference {
+impl Nip22EventRootReference {
     pub fn new(
-        event_id: RadrootsEventId,
+        event_id: EventId,
         author: PublicKey,
-        kind: RadrootsNip22CommentRootKind,
-        relay: Option<RadrootsNostrRelayHint>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+        kind: Nip22CommentRootKind,
+        relay: Option<NostrRelayHint>,
+    ) -> Result<Self, Nip22CommentError> {
         validate_optional_relay(&relay)?;
         Ok(Self {
             event_id,
@@ -252,17 +251,16 @@ impl RadrootsNip22EventRootReference {
         author: impl AsRef<str>,
         kind: u32,
         relay: Option<&str>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+    ) -> Result<Self, Nip22CommentError> {
         Self::new(
-            RadrootsEventId::parse(event_id)
-                .map_err(RadrootsNip22CommentError::RootEventIdInvalid)?,
-            parse_public_key(author).map_err(RadrootsNip22CommentError::RootAuthorInvalid)?,
-            RadrootsNip22CommentRootKind::parse(kind)?,
+            EventId::parse(event_id).map_err(Nip22CommentError::RootEventIdInvalid)?,
+            parse_public_key(author).map_err(Nip22CommentError::RootAuthorInvalid)?,
+            Nip22CommentRootKind::parse(kind)?,
             parse_optional_relay(relay)?,
         )
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -270,11 +268,11 @@ impl RadrootsNip22EventRootReference {
         &self.author
     }
 
-    pub const fn kind(&self) -> RadrootsNip22CommentRootKind {
+    pub const fn kind(&self) -> Nip22CommentRootKind {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -289,28 +287,28 @@ impl RadrootsNip22EventRootReference {
 /// does not prove event existence, signature validity, a current revision, or
 /// relay availability.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip22AddressRootReference {
-    coordinate: RadrootsAddressableCoordinate,
+pub struct Nip22AddressRootReference {
+    coordinate: AddressableCoordinate,
     author: PublicKey,
-    kind: RadrootsNip22CommentRootKind,
-    relay: Option<RadrootsNostrRelayHint>,
+    kind: Nip22CommentRootKind,
+    relay: Option<NostrRelayHint>,
 }
 
-impl RadrootsNip22AddressRootReference {
+impl Nip22AddressRootReference {
     pub fn new(
-        coordinate: RadrootsAddressableCoordinate,
-        relay: Option<RadrootsNostrRelayHint>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
-        let parts = RadrootsAddressableCoordinateParts::parse(coordinate.as_str())
-            .map_err(RadrootsNip22CommentError::RootCoordinateInvalid)?;
-        let kind = RadrootsNip22CommentRootKind::parse(parts.kind)?;
-        let coordinate = RadrootsAddressableCoordinate::parse(format!(
+        coordinate: AddressableCoordinate,
+        relay: Option<NostrRelayHint>,
+    ) -> Result<Self, Nip22CommentError> {
+        let parts = AddressableCoordinateParts::parse(coordinate.as_str())
+            .map_err(Nip22CommentError::RootCoordinateInvalid)?;
+        let kind = Nip22CommentRootKind::parse(parts.kind)?;
+        let coordinate = AddressableCoordinate::parse(format!(
             "{}:{}:{}",
             kind.as_u32(),
             parts.pubkey,
             parts.d_tag
         ))
-        .map_err(RadrootsNip22CommentError::RootCoordinateInvalid)?;
+        .map_err(Nip22CommentError::RootCoordinateInvalid)?;
         validate_tag_element(coordinate.as_str())?;
         validate_optional_relay(&relay)?;
         Ok(Self {
@@ -324,15 +322,15 @@ impl RadrootsNip22AddressRootReference {
     pub fn parse(
         coordinate: impl AsRef<str>,
         relay: Option<&str>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+    ) -> Result<Self, Nip22CommentError> {
         Self::new(
-            RadrootsAddressableCoordinate::parse(coordinate)
-                .map_err(RadrootsNip22CommentError::RootCoordinateInvalid)?,
+            AddressableCoordinate::parse(coordinate)
+                .map_err(Nip22CommentError::RootCoordinateInvalid)?,
             parse_optional_relay(relay)?,
         )
     }
 
-    pub const fn coordinate(&self) -> &RadrootsAddressableCoordinate {
+    pub const fn coordinate(&self) -> &AddressableCoordinate {
         &self.coordinate
     }
 
@@ -340,11 +338,11 @@ impl RadrootsNip22AddressRootReference {
         &self.author
     }
 
-    pub const fn kind(&self) -> RadrootsNip22CommentRootKind {
+    pub const fn kind(&self) -> Nip22CommentRootKind {
         self.kind
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -359,18 +357,18 @@ impl RadrootsNip22AddressRootReference {
 /// not prove event existence, target kind, signature validity, actual
 /// authorship, or relay availability.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip22CommentParentReference {
-    event_id: RadrootsEventId,
+pub struct Nip22CommentParentReference {
+    event_id: EventId,
     author: PublicKey,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
 }
 
-impl RadrootsNip22CommentParentReference {
+impl Nip22CommentParentReference {
     pub fn new(
-        event_id: RadrootsEventId,
+        event_id: EventId,
         author: PublicKey,
-        relay: Option<RadrootsNostrRelayHint>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+        relay: Option<NostrRelayHint>,
+    ) -> Result<Self, Nip22CommentError> {
         validate_optional_relay(&relay)?;
         Ok(Self {
             event_id,
@@ -383,16 +381,15 @@ impl RadrootsNip22CommentParentReference {
         event_id: impl AsRef<str>,
         author: impl AsRef<str>,
         relay: Option<&str>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+    ) -> Result<Self, Nip22CommentError> {
         Self::new(
-            RadrootsEventId::parse(event_id)
-                .map_err(RadrootsNip22CommentError::ParentEventIdInvalid)?,
-            parse_public_key(author).map_err(RadrootsNip22CommentError::ParentAuthorInvalid)?,
+            EventId::parse(event_id).map_err(Nip22CommentError::ParentEventIdInvalid)?,
+            parse_public_key(author).map_err(Nip22CommentError::ParentAuthorInvalid)?,
             parse_optional_relay(relay)?,
         )
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -400,7 +397,7 @@ impl RadrootsNip22CommentParentReference {
         &self.author
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -410,13 +407,13 @@ impl RadrootsNip22CommentParentReference {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsNip22CommentRoot {
-    Event(RadrootsNip22EventRootReference),
-    Address(RadrootsNip22AddressRootReference),
+pub enum Nip22CommentRoot {
+    Event(Nip22EventRootReference),
+    Address(Nip22AddressRootReference),
 }
 
-impl RadrootsNip22CommentRoot {
-    pub const fn kind(&self) -> RadrootsNip22CommentRootKind {
+impl Nip22CommentRoot {
+    pub const fn kind(&self) -> Nip22CommentRootKind {
         match self {
             Self::Event(reference) => reference.kind(),
             Self::Address(reference) => reference.kind(),
@@ -430,7 +427,7 @@ impl RadrootsNip22CommentRoot {
         }
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         match self {
             Self::Event(reference) => reference.relay(),
             Self::Address(reference) => reference.relay(),
@@ -438,27 +435,23 @@ impl RadrootsNip22CommentRoot {
     }
 }
 
-impl From<RadrootsNip22EventRootReference> for RadrootsNip22CommentRoot {
-    fn from(value: RadrootsNip22EventRootReference) -> Self {
+impl From<Nip22EventRootReference> for Nip22CommentRoot {
+    fn from(value: Nip22EventRootReference) -> Self {
         Self::Event(value)
     }
 }
 
-impl From<RadrootsNip22AddressRootReference> for RadrootsNip22CommentRoot {
-    fn from(value: RadrootsNip22AddressRootReference) -> Self {
+impl From<Nip22AddressRootReference> for Nip22CommentRoot {
+    fn from(value: Nip22AddressRootReference) -> Self {
         Self::Address(value)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsNip22CommentPosition {
+pub enum Nip22CommentPosition {
     TopLevelEvent,
-    TopLevelAddress {
-        current_revision: RadrootsEventId,
-    },
-    Nested {
-        parent: RadrootsNip22CommentParentReference,
-    },
+    TopLevelAddress { current_revision: EventId },
+    Nested { parent: Nip22CommentParentReference },
 }
 
 /// Strict authored kind-1111 NIP-22 comment.
@@ -466,78 +459,77 @@ pub enum RadrootsNip22CommentPosition {
 /// This type is opaque and has no Serde construction path.
 ///
 /// ```compile_fail
-/// let _: radroots_event::post::comment::RadrootsAuthoredNip22Comment =
+/// let _: radroots_event::post::comment::AuthoredNip22Comment =
 ///     serde_json::from_str(r#"{"content":"comment"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredNip22Comment {
+pub struct AuthoredNip22Comment {
     content: String,
-    root: RadrootsNip22CommentRoot,
-    position: RadrootsNip22CommentPosition,
+    root: Nip22CommentRoot,
+    position: Nip22CommentPosition,
 }
 
-impl RadrootsAuthoredNip22Comment {
+impl AuthoredNip22Comment {
     pub fn top_level_event(
         content: impl Into<String>,
-        root: RadrootsNip22EventRootReference,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+        root: Nip22EventRootReference,
+    ) -> Result<Self, Nip22CommentError> {
         Self::new(
             content.into(),
-            RadrootsNip22CommentRoot::Event(root),
-            RadrootsNip22CommentPosition::TopLevelEvent,
+            Nip22CommentRoot::Event(root),
+            Nip22CommentPosition::TopLevelEvent,
         )
     }
 
     pub fn top_level_address(
         content: impl Into<String>,
-        root: RadrootsNip22AddressRootReference,
-        current_revision: RadrootsEventId,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+        root: Nip22AddressRootReference,
+        current_revision: EventId,
+    ) -> Result<Self, Nip22CommentError> {
         Self::new(
             content.into(),
-            RadrootsNip22CommentRoot::Address(root),
-            RadrootsNip22CommentPosition::TopLevelAddress { current_revision },
+            Nip22CommentRoot::Address(root),
+            Nip22CommentPosition::TopLevelAddress { current_revision },
         )
     }
 
     pub fn parse_top_level_address(
         content: impl Into<String>,
-        root: RadrootsNip22AddressRootReference,
+        root: Nip22AddressRootReference,
         current_revision: impl AsRef<str>,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+    ) -> Result<Self, Nip22CommentError> {
         Self::top_level_address(
             content,
             root,
-            RadrootsEventId::parse(current_revision)
-                .map_err(RadrootsNip22CommentError::RevisionEventIdInvalid)?,
+            EventId::parse(current_revision).map_err(Nip22CommentError::RevisionEventIdInvalid)?,
         )
     }
 
     pub fn nested(
         content: impl Into<String>,
-        root: impl Into<RadrootsNip22CommentRoot>,
-        parent: RadrootsNip22CommentParentReference,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+        root: impl Into<Nip22CommentRoot>,
+        parent: Nip22CommentParentReference,
+    ) -> Result<Self, Nip22CommentError> {
         let root = root.into();
         if matches!(
             &root,
-            RadrootsNip22CommentRoot::Event(reference)
+            Nip22CommentRoot::Event(reference)
                 if reference.event_id() == parent.event_id()
         ) {
-            return Err(RadrootsNip22CommentError::ParentReferenceMismatch);
+            return Err(Nip22CommentError::ParentReferenceMismatch);
         }
         Self::new(
             content.into(),
             root,
-            RadrootsNip22CommentPosition::Nested { parent },
+            Nip22CommentPosition::Nested { parent },
         )
     }
 
     fn new(
         content: String,
-        root: RadrootsNip22CommentRoot,
-        position: RadrootsNip22CommentPosition,
-    ) -> Result<Self, RadrootsNip22CommentError> {
+        root: Nip22CommentRoot,
+        position: Nip22CommentPosition,
+    ) -> Result<Self, Nip22CommentError> {
         validate_content(&content)?;
         validate_authored_comment_wire_size(&content, &root, &position)?;
         Ok(Self {
@@ -551,48 +543,44 @@ impl RadrootsAuthoredNip22Comment {
         &self.content
     }
 
-    pub const fn root(&self) -> &RadrootsNip22CommentRoot {
+    pub const fn root(&self) -> &Nip22CommentRoot {
         &self.root
     }
 
-    pub const fn position(&self) -> &RadrootsNip22CommentPosition {
+    pub const fn position(&self) -> &Nip22CommentPosition {
         &self.position
     }
 }
 
-fn parse_optional_relay(
-    relay: Option<&str>,
-) -> Result<Option<RadrootsNostrRelayHint>, RadrootsNip22CommentError> {
+fn parse_optional_relay(relay: Option<&str>) -> Result<Option<NostrRelayHint>, Nip22CommentError> {
     match relay {
         None | Some("") => Ok(None),
         Some(relay) => {
             validate_tag_element(relay)?;
-            RadrootsNostrRelayHint::parse(relay)
+            NostrRelayHint::parse(relay)
                 .map(Some)
-                .map_err(RadrootsNip22CommentError::RelayInvalid)
+                .map_err(Nip22CommentError::RelayInvalid)
         }
     }
 }
 
-fn validate_optional_relay(
-    relay: &Option<RadrootsNostrRelayHint>,
-) -> Result<(), RadrootsNip22CommentError> {
+fn validate_optional_relay(relay: &Option<NostrRelayHint>) -> Result<(), Nip22CommentError> {
     if let Some(relay) = relay {
         validate_tag_element(relay.as_str())?;
     }
     Ok(())
 }
 
-fn relay_or_empty(relay: Option<&RadrootsNostrRelayHint>) -> &str {
-    relay.map_or("", RadrootsNostrRelayHint::as_str)
+fn relay_or_empty(relay: Option<&NostrRelayHint>) -> &str {
+    relay.map_or("", NostrRelayHint::as_str)
 }
 
-fn validate_content(content: &str) -> Result<(), RadrootsNip22CommentError> {
+fn validate_content(content: &str) -> Result<(), Nip22CommentError> {
     if content.trim().is_empty() {
-        return Err(RadrootsNip22CommentError::ContentMissing);
+        return Err(Nip22CommentError::ContentMissing);
     }
     if content.len() > RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES {
-        return Err(RadrootsNip22CommentError::ContentTooLarge {
+        return Err(Nip22CommentError::ContentTooLarge {
             max: RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES,
             actual: content.len(),
         });
@@ -600,9 +588,9 @@ fn validate_content(content: &str) -> Result<(), RadrootsNip22CommentError> {
     Ok(())
 }
 
-fn validate_tag_element(element: &str) -> Result<(), RadrootsNip22CommentError> {
+fn validate_tag_element(element: &str) -> Result<(), Nip22CommentError> {
     if element.len() > RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES {
-        return Err(RadrootsNip22CommentError::TagElementTooLarge {
+        return Err(Nip22CommentError::TagElementTooLarge {
             max: RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES,
             actual: element.len(),
         });
@@ -612,16 +600,16 @@ fn validate_tag_element(element: &str) -> Result<(), RadrootsNip22CommentError> 
 
 fn validate_authored_comment_wire_size(
     content: &str,
-    root: &RadrootsNip22CommentRoot,
-    position: &RadrootsNip22CommentPosition,
-) -> Result<(), RadrootsNip22CommentError> {
+    root: &Nip22CommentRoot,
+    position: &Nip22CommentPosition,
+) -> Result<(), Nip22CommentError> {
     let mut tag_bytes = 0usize;
     let mut tags_json_bytes = 2usize;
     let mut tag_count = 0usize;
     let root_kind = root.kind().as_u32().to_string();
 
     let root_tag_element_count = match root {
-        RadrootsNip22CommentRoot::Event(reference) => {
+        Nip22CommentRoot::Event(reference) => {
             add_tag(
                 &mut tag_bytes,
                 &mut tags_json_bytes,
@@ -635,7 +623,7 @@ fn validate_authored_comment_wire_size(
             );
             8usize + usize::from(reference.relay().is_some())
         }
-        RadrootsNip22CommentRoot::Address(reference) => {
+        Nip22CommentRoot::Address(reference) => {
             add_optional_relay_tag(
                 &mut tag_bytes,
                 &mut tags_json_bytes,
@@ -663,10 +651,7 @@ fn validate_authored_comment_wire_size(
     );
 
     let position_tag_element_count = match (root, position) {
-        (
-            RadrootsNip22CommentRoot::Event(reference),
-            RadrootsNip22CommentPosition::TopLevelEvent,
-        ) => {
+        (Nip22CommentRoot::Event(reference), Nip22CommentPosition::TopLevelEvent) => {
             add_tag(
                 &mut tag_bytes,
                 &mut tags_json_bytes,
@@ -695,8 +680,8 @@ fn validate_authored_comment_wire_size(
             8usize + usize::from(reference.relay().is_some())
         }
         (
-            RadrootsNip22CommentRoot::Address(reference),
-            RadrootsNip22CommentPosition::TopLevelAddress { current_revision },
+            Nip22CommentRoot::Address(reference),
+            Nip22CommentPosition::TopLevelAddress { current_revision },
         ) => {
             add_optional_relay_tag(
                 &mut tag_bytes,
@@ -730,7 +715,7 @@ fn validate_authored_comment_wire_size(
             );
             8usize + 3 * usize::from(reference.relay().is_some())
         }
-        (_, RadrootsNip22CommentPosition::Nested { parent }) => {
+        (_, Nip22CommentPosition::Nested { parent }) => {
             add_tag(
                 &mut tag_bytes,
                 &mut tags_json_bytes,
@@ -762,21 +747,21 @@ fn validate_authored_comment_wire_size(
     };
 
     if tag_count > RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT {
-        return Err(RadrootsNip22CommentError::TagCountExceeded {
+        return Err(Nip22CommentError::TagCountExceeded {
             max: RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT,
             actual: tag_count,
         });
     }
     let tag_element_count = root_tag_element_count.saturating_add(position_tag_element_count);
     if tag_element_count > RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT {
-        return Err(RadrootsNip22CommentError::TagElementCountExceeded {
+        return Err(Nip22CommentError::TagElementCountExceeded {
             max: RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT,
             actual: tag_element_count,
         });
     }
 
     if tag_bytes > RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES {
-        return Err(RadrootsNip22CommentError::TagBytesExceeded {
+        return Err(Nip22CommentError::TagBytesExceeded {
             max: RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES,
             actual: tag_bytes,
         });
@@ -785,7 +770,7 @@ fn validate_authored_comment_wire_size(
         .saturating_add(tags_json_bytes)
         .saturating_add(canonical_json_string_bytes(content));
     if actual > RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES {
-        return Err(RadrootsNip22CommentError::EventWireTooLarge {
+        return Err(Nip22CommentError::EventWireTooLarge {
             max: RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
             actual,
         });
@@ -799,7 +784,7 @@ fn add_optional_relay_tag(
     tag_count: &mut usize,
     name: &str,
     value: &str,
-    relay: Option<&RadrootsNostrRelayHint>,
+    relay: Option<&NostrRelayHint>,
 ) {
     if let Some(relay) = relay {
         add_tag(
@@ -847,8 +832,8 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 mod tests {
     use super::*;
 
-    fn event_root(kind: u32) -> RadrootsNip22EventRootReference {
-        RadrootsNip22EventRootReference::parse(
+    fn event_root(kind: u32) -> Nip22EventRootReference {
+        Nip22EventRootReference::parse(
             "a".repeat(64),
             crate::test_valid_hex_64('b'),
             kind,
@@ -857,16 +842,16 @@ mod tests {
         .expect("event root")
     }
 
-    fn address_root(kind: u32) -> RadrootsNip22AddressRootReference {
-        RadrootsNip22AddressRootReference::parse(
+    fn address_root(kind: u32) -> Nip22AddressRootReference {
+        Nip22AddressRootReference::parse(
             format!("{kind}:{}:victoria-market", crate::test_valid_hex_64('b')),
             Some("wss://relay.example"),
         )
         .expect("address root")
     }
 
-    fn parent() -> RadrootsNip22CommentParentReference {
-        RadrootsNip22CommentParentReference::parse(
+    fn parent() -> Nip22CommentParentReference {
+        Nip22CommentParentReference::parse(
             "c".repeat(64),
             "d".repeat(64),
             Some("wss://comments.example"),
@@ -881,17 +866,17 @@ mod tests {
             KIND_CALENDAR_DATE_EVENT,
             KIND_CALENDAR_TIME_EVENT,
         ] {
-            RadrootsAuthoredNip22Comment::top_level_event("Comment", event_root(kind))
+            AuthoredNip22Comment::top_level_event("Comment", event_root(kind))
                 .expect("event comment");
-            RadrootsAuthoredNip22Comment::parse_top_level_address(
+            AuthoredNip22Comment::parse_top_level_address(
                 "Comment",
                 address_root(kind),
                 "e".repeat(64),
             )
             .expect("address comment");
-            RadrootsAuthoredNip22Comment::nested("Reply", event_root(kind), parent())
+            AuthoredNip22Comment::nested("Reply", event_root(kind), parent())
                 .expect("nested event comment");
-            RadrootsAuthoredNip22Comment::nested("Reply", address_root(kind), parent())
+            AuthoredNip22Comment::nested("Reply", address_root(kind), parent())
                 .expect("nested address comment");
         }
     }
@@ -900,32 +885,29 @@ mod tests {
     fn rejects_other_root_kinds_and_ambiguous_parent() {
         for kind in [1, KIND_COMMENT, 30_023] {
             assert!(matches!(
-                RadrootsNip22EventRootReference::parse(
+                Nip22EventRootReference::parse(
                     "a".repeat(64),
                     crate::test_valid_hex_64('b'),
                     kind,
                     None
                 ),
-                Err(RadrootsNip22CommentError::RootKindUnsupported { actual }) if actual == kind
+                Err(Nip22CommentError::RootKindUnsupported { actual }) if actual == kind
             ));
         }
 
         let root = event_root(KIND_CLASSIFIED_LISTING);
-        let parent = RadrootsNip22CommentParentReference::parse(
-            root.event_id().to_hex(),
-            "d".repeat(64),
-            None,
-        )
-        .expect("parent");
+        let parent =
+            Nip22CommentParentReference::parse(root.event_id().to_hex(), "d".repeat(64), None)
+                .expect("parent");
         assert_eq!(
-            RadrootsAuthoredNip22Comment::nested("Reply", root, parent).unwrap_err(),
-            RadrootsNip22CommentError::ParentReferenceMismatch
+            AuthoredNip22Comment::nested("Reply", root, parent).unwrap_err(),
+            Nip22CommentError::ParentReferenceMismatch
         );
     }
 
     #[test]
     fn canonicalizes_address_author_and_requires_current_revision() {
-        let root = RadrootsNip22AddressRootReference::parse(
+        let root = Nip22AddressRootReference::parse(
             format!("30402:{}:listing", crate::test_valid_hex_64('B')),
             None,
         )
@@ -940,11 +922,11 @@ mod tests {
         );
 
         let comment =
-            RadrootsAuthoredNip22Comment::parse_top_level_address("Comment", root, "E".repeat(64))
+            AuthoredNip22Comment::parse_top_level_address("Comment", root, "E".repeat(64))
                 .expect("top-level address");
         assert!(matches!(
             comment.position(),
-            RadrootsNip22CommentPosition::TopLevelAddress { current_revision }
+            Nip22CommentPosition::TopLevelAddress { current_revision }
                 if current_revision.to_hex() == "e".repeat(64)
         ));
     }
@@ -952,7 +934,7 @@ mod tests {
     #[test]
     fn address_root_rechecks_the_canonical_coordinate_tag_element() {
         let maximum_d_tag = "x".repeat(512);
-        let root = RadrootsNip22AddressRootReference::parse(
+        let root = Nip22AddressRootReference::parse(
             format!("30402:{}:{maximum_d_tag}", crate::test_valid_hex_64('b')),
             None,
         )
@@ -965,9 +947,9 @@ mod tests {
             "x".repeat(513)
         );
         assert!(matches!(
-            RadrootsNip22AddressRootReference::parse(oversized, None),
-            Err(RadrootsNip22CommentError::RootCoordinateInvalid(
-                RadrootsIdParseError::TooLong {
+            Nip22AddressRootReference::parse(oversized, None),
+            Err(Nip22CommentError::RootCoordinateInvalid(
+                ParseError::TooLong {
                     max: 512,
                     actual: 513
                 }
@@ -979,13 +961,13 @@ mod tests {
     fn relay_element_budget_precedes_relay_syntax() {
         let oversized_noncanonical_relay = format!("WSS://relay.example/{}", "x".repeat(4096));
         assert!(matches!(
-            RadrootsNip22EventRootReference::parse(
+            Nip22EventRootReference::parse(
                 "a".repeat(64),
                 crate::test_valid_hex_64('b'),
                 KIND_CLASSIFIED_LISTING,
                 Some(&oversized_noncanonical_relay),
             ),
-            Err(RadrootsNip22CommentError::TagElementTooLarge {
+            Err(Nip22CommentError::TagElementTooLarge {
                 max: RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES,
                 actual,
             }) if actual == oversized_noncanonical_relay.len()
@@ -994,17 +976,17 @@ mod tests {
 
     #[test]
     fn enforces_content_and_relay_element_boundaries() {
-        RadrootsAuthoredNip22Comment::top_level_event(
+        AuthoredNip22Comment::top_level_event(
             "x".repeat(RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES),
             event_root(KIND_CLASSIFIED_LISTING),
         )
         .expect("exact content limit");
         assert!(matches!(
-            RadrootsAuthoredNip22Comment::top_level_event(
+            AuthoredNip22Comment::top_level_event(
                 "x".repeat(RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES + 1),
                 event_root(KIND_CLASSIFIED_LISTING)
             ),
-            Err(RadrootsNip22CommentError::ContentTooLarge { max, actual })
+            Err(Nip22CommentError::ContentTooLarge { max, actual })
                 if max == RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES
                     && actual == max + 1
         ));
@@ -1014,7 +996,7 @@ mod tests {
             "{prefix}{}",
             "a".repeat(RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES - prefix.len())
         );
-        RadrootsNip22EventRootReference::parse(
+        Nip22EventRootReference::parse(
             "a".repeat(64),
             crate::test_valid_hex_64('b'),
             KIND_CLASSIFIED_LISTING,
@@ -1023,13 +1005,13 @@ mod tests {
         .expect("exact tag-element limit");
         let overflow = format!("{exact_relay}a");
         assert!(matches!(
-            RadrootsNip22EventRootReference::parse(
+            Nip22EventRootReference::parse(
                 "a".repeat(64),
                 crate::test_valid_hex_64('b'),
                 KIND_CLASSIFIED_LISTING,
                 Some(&overflow)
             ),
-            Err(RadrootsNip22CommentError::TagElementTooLarge { max, actual })
+            Err(Nip22CommentError::TagElementTooLarge { max, actual })
                 if max == RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES
                     && actual == max + 1
         ));
@@ -1037,18 +1019,12 @@ mod tests {
 
     #[test]
     fn uses_unicode_white_space_for_blank_content() {
-        RadrootsAuthoredNip22Comment::top_level_event(
-            "\u{001c}",
-            event_root(KIND_CLASSIFIED_LISTING),
-        )
-        .expect("U+001C is not Unicode White_Space");
+        AuthoredNip22Comment::top_level_event("\u{001c}", event_root(KIND_CLASSIFIED_LISTING))
+            .expect("U+001C is not Unicode White_Space");
         assert_eq!(
-            RadrootsAuthoredNip22Comment::top_level_event(
-                "\u{00a0}",
-                event_root(KIND_CLASSIFIED_LISTING)
-            )
-            .unwrap_err(),
-            RadrootsNip22CommentError::ContentMissing
+            AuthoredNip22Comment::top_level_event("\u{00a0}", event_root(KIND_CLASSIFIED_LISTING))
+                .unwrap_err(),
+            Nip22CommentError::ContentMissing
         );
     }
 
@@ -1058,7 +1034,7 @@ mod tests {
         let mut upper = RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES;
         while lower < upper {
             let candidate = lower + (upper - lower).div_ceil(2);
-            if RadrootsAuthoredNip22Comment::top_level_event(
+            if AuthoredNip22Comment::top_level_event(
                 "\u{0001}".repeat(candidate),
                 event_root(KIND_CLASSIFIED_LISTING),
             )
@@ -1070,17 +1046,17 @@ mod tests {
             }
         }
 
-        RadrootsAuthoredNip22Comment::top_level_event(
+        AuthoredNip22Comment::top_level_event(
             "\u{0001}".repeat(lower),
             event_root(KIND_CLASSIFIED_LISTING),
         )
         .expect("largest escaped content fitting the wire budget");
         assert!(matches!(
-            RadrootsAuthoredNip22Comment::top_level_event(
+            AuthoredNip22Comment::top_level_event(
                 "\u{0001}".repeat(lower + 1),
                 event_root(KIND_CLASSIFIED_LISTING)
             ),
-            Err(RadrootsNip22CommentError::EventWireTooLarge { max, .. })
+            Err(Nip22CommentError::EventWireTooLarge { max, .. })
                 if max == RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES
         ));
     }

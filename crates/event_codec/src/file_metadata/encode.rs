@@ -6,7 +6,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_PUBLIC_FILE_METADATA,
-    media::file_metadata::RadrootsFileMetadata,
+    media::file_metadata::FileMetadata,
     tag::name::{
         TAG_ALT, TAG_BLURHASH, TAG_DIMENSIONS, TAG_FALLBACK, TAG_MAGNET, TAG_MIME,
         TAG_ORIGINAL_SHA256, TAG_SERVICE, TAG_SHA256, TAG_SIZE, TAG_SUMMARY, TAG_URL,
@@ -18,12 +18,12 @@ use crate::field_helpers::{
     push_optional_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
 use crate::social_helpers::{dimensions_tag, push_thumbnail, validate_http_url};
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_PUBLIC_FILE_METADATA;
 
 pub fn file_metadata_build_tags(
-    metadata: &RadrootsFileMetadata,
+    metadata: &FileMetadata,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_metadata(metadata)?;
     let mut tags = Vec::new();
@@ -64,27 +64,25 @@ pub fn file_metadata_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    metadata: &RadrootsFileMetadata,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(metadata: &FileMetadata) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(metadata, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
-    metadata: &RadrootsFileMetadata,
+    metadata: &FileMetadata,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: metadata.content.clone().unwrap_or_default(),
         tags: file_metadata_build_tags(metadata)?,
     })
 }
 
-fn validate_metadata(metadata: &RadrootsFileMetadata) -> Result<(), EventEncodeError> {
+fn validate_metadata(metadata: &FileMetadata) -> Result<(), EventEncodeError> {
     validate_http_url(&metadata.url, "url")?;
     validate_non_empty_field(&metadata.mime_type, "mime_type")?;
     validate_lowercase_hex_64(&metadata.sha256, "sha256")?;

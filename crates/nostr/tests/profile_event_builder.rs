@@ -1,7 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_event::profile::RadrootsAuthoredProfile;
+use radroots_event::profile::AuthoredProfile;
 use radroots_nostr::prelude::{
     RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp,
     radroots_nostr_build_profile_event,
@@ -13,7 +13,7 @@ fn typed_profile_builder_preserves_the_strict_replacement_snapshot() {
         RadrootsNostrSecretKey::from_hex(test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX).unwrap(),
     );
     let created_at = RadrootsNostrTimestamp::from_secs(1_784_347_200);
-    let profile = RadrootsAuthoredProfile::new("Alice")
+    let profile = AuthoredProfile::new("Alice")
         .unwrap()
         .with_display_name("Alice's Orchard")
         .with_about("Tree fruit")

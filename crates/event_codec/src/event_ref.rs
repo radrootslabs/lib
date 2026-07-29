@@ -6,14 +6,14 @@ use alloc::{
 };
 
 use radroots_event::{
-    id::{RadrootsDTag, RadrootsEventId, RadrootsRelayUrl},
-    tag::RadrootsEventRef,
+    id::{DTag, EventId, RelayUrl},
+    tag::EventRef,
 };
 use radroots_identity::PublicKey;
 
 use crate::error::EventParseError;
 
-pub fn build_event_ref_tag(tag: &str, event: &RadrootsEventRef) -> Vec<String> {
+pub fn build_event_ref_tag(tag: &str, event: &EventRef) -> Vec<String> {
     let relays_len = event.relays.as_ref().map(|r| r.len()).unwrap_or(0);
     let mut out = Vec::with_capacity(5 + relays_len);
     out.push(tag.to_string());
@@ -30,7 +30,7 @@ pub fn build_event_ref_tag(tag: &str, event: &RadrootsEventRef) -> Vec<String> {
 pub fn parse_event_ref_tag(
     tag: &[String],
     tag_name: &'static str,
-) -> Result<RadrootsEventRef, EventParseError> {
+) -> Result<EventRef, EventParseError> {
     if tag.first().map(|s| s.as_str()) != Some(tag_name) {
         return Err(EventParseError::InvalidTag(tag_name));
     }
@@ -38,7 +38,7 @@ pub fn parse_event_ref_tag(
         return Err(EventParseError::InvalidTag(tag_name));
     }
     let id = &tag[1];
-    RadrootsEventId::parse(id).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+    EventId::parse(id).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let author = &tag[2];
     let author = PublicKey::from_hex(author).map_err(|_| EventParseError::InvalidTag(tag_name))?;
     let kind_s = &tag[3];
@@ -50,23 +50,23 @@ pub fn parse_event_ref_tag(
     let d_tag = if d_tag_value.is_empty() {
         None
     } else {
-        if RadrootsRelayUrl::parse(d_tag_value).is_ok() {
+        if RelayUrl::parse(d_tag_value).is_ok() {
             return Err(EventParseError::InvalidTag(tag_name));
         }
-        RadrootsDTag::parse(d_tag_value).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+        DTag::parse(d_tag_value).map_err(|_| EventParseError::InvalidTag(tag_name))?;
         Some(d_tag_value.clone())
     };
 
     let relays = if tag.len() > 5 {
         for relay in &tag[5..] {
-            RadrootsRelayUrl::parse(relay).map_err(|_| EventParseError::InvalidTag(tag_name))?;
+            RelayUrl::parse(relay).map_err(|_| EventParseError::InvalidTag(tag_name))?;
         }
         Some(tag[5..].to_vec())
     } else {
         None
     };
 
-    Ok(RadrootsEventRef {
+    Ok(EventRef {
         id: id.clone(),
         author,
         kind,
@@ -85,7 +85,7 @@ pub fn find_event_ref_tag<'a>(
 
 pub fn push_nip10_ref_tags(
     tags: &mut Vec<Vec<String>>,
-    event: &RadrootsEventRef,
+    event: &EventRef,
     tag_e: &'static str,
     tag_p: &'static str,
     tag_k: &'static str,
@@ -133,7 +133,7 @@ pub fn parse_nip10_ref_tags(
     tag_p: &'static str,
     tag_k: &'static str,
     tag_a: &'static str,
-) -> Result<RadrootsEventRef, EventParseError> {
+) -> Result<EventRef, EventParseError> {
     let e_tag = find_event_ref_tag(tags, tag_e).ok_or(EventParseError::MissingTag(tag_e))?;
     let id = e_tag.get(1).ok_or(EventParseError::InvalidTag(tag_e))?;
     if id.trim().is_empty() {
@@ -186,7 +186,7 @@ pub fn parse_nip10_ref_tags(
 
     let relays = relays.or(addr_relays);
 
-    Ok(RadrootsEventRef {
+    Ok(EventRef {
         id: id.clone(),
         author,
         kind,

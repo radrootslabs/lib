@@ -1,5 +1,5 @@
 use super::*;
-use radroots_event::post::RadrootsAuthoredUpdate;
+use radroots_event::post::AuthoredUpdate;
 
 #[test]
 fn thread_exclusion_precedes_ask_and_media_projection() {
@@ -268,7 +268,7 @@ fn empty_inbound_root_is_update_without_becoming_valid_authored_content() {
         projection.classification(),
         RadrootsPostClassification::Update
     );
-    assert!(RadrootsAuthoredUpdate::new("\t").is_err());
+    assert!(AuthoredUpdate::new("\t").is_err());
 }
 
 #[test]

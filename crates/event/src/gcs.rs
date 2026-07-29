@@ -8,7 +8,7 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsGeoJsonPoint {
+pub struct GeoJsonPoint {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "type"))]
     pub r#type: String,
     pub coordinates: [f64; 2],
@@ -21,7 +21,7 @@ pub struct RadrootsGeoJsonPoint {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsGeoJsonPolygon {
+pub struct GeoJsonPolygon {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "type"))]
     pub r#type: String,
     pub coordinates: Vec<Vec<[f64; 2]>>,
@@ -34,12 +34,12 @@ pub struct RadrootsGeoJsonPolygon {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsGcsLocation {
+pub struct GcsLocation {
     pub lat: f64,
     pub lng: f64,
     pub geohash: String,
-    pub point: RadrootsGeoJsonPoint,
-    pub polygon: RadrootsGeoJsonPolygon,
+    pub point: GeoJsonPoint,
+    pub polygon: GeoJsonPolygon,
     pub accuracy: Option<f64>,
     pub altitude: Option<f64>,
     pub tag_0: Option<String>,

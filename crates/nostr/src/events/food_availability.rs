@@ -5,7 +5,7 @@ use crate::{
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::food::availability::RadrootsFoodAvailabilityDetails;
+use radroots_event::food::availability::FoodAvailabilityDetails;
 use radroots_event_codec::food_availability::authored::authored_food_availability_to_wire_parts;
 
 /// A sealed builder for a validated focused FoodAvailability event.
@@ -58,7 +58,7 @@ impl RadrootsNostrFoodAvailabilityEventBuilder {
 ///
 /// This validates media descriptors but does not attest BUD-02 upload.
 pub fn radroots_nostr_build_food_availability_event(
-    details: &RadrootsFoodAvailabilityDetails,
+    details: &FoodAvailabilityDetails,
     created_at: RadrootsNostrTimestamp,
 ) -> Result<RadrootsNostrFoodAvailabilityEventBuilder, RadrootsNostrError> {
     let parts = authored_food_availability_to_wire_parts(details, created_at.as_secs())?;

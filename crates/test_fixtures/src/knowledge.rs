@@ -5,20 +5,19 @@ use radroots_event::envelope::kind::{
     KIND_WIKI_MERGE_REQUEST, KIND_WIKI_REDIRECT,
 };
 use radroots_event::knowledge::{
+    AddressableRef, ContributionAttestation, EvidenceBounty, KnowledgeChangeProposal,
+    KnowledgeCitationSpan, KnowledgeClaim, KnowledgeFieldContext, KnowledgeFieldReport,
+    KnowledgeLocation, KnowledgeLocationPrecision, KnowledgeNodeRef, KnowledgeObservation,
+    KnowledgeObservationValue, KnowledgeRelation, KnowledgeReview, KnowledgeReviewScope,
+    KnowledgeReviewScore, KnowledgeReviewTarget, KnowledgeSource,
     RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA, RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
     RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
     RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
     RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-    RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef, RadrootsContributionAttestation,
-    RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal, RadrootsKnowledgeCitationSpan,
-    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldContext, RadrootsKnowledgeFieldReport,
-    RadrootsKnowledgeLocation, RadrootsKnowledgeLocationPrecision, RadrootsKnowledgeNodeRef,
-    RadrootsKnowledgeObservation, RadrootsKnowledgeObservationValue, RadrootsKnowledgeRelation,
-    RadrootsKnowledgeReview, RadrootsKnowledgeReviewScope, RadrootsKnowledgeReviewScore,
-    RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, WikiArticle, WikiArticleVersionRef, WikiMergeRequest,
+    WikiRedirect,
 };
-use radroots_event::tag::RadrootsEventRef;
+use radroots_event::tag::EventRef;
 use radroots_identity::PublicKey;
 
 use crate::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
@@ -116,17 +115,17 @@ pub const RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES: [RadrootsKnowledgeAdversarial
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsKnowledgeFixture {
-    WikiArticle(RadrootsWikiArticle),
-    WikiRedirect(RadrootsWikiRedirect),
-    WikiMergeRequest(RadrootsWikiMergeRequest),
-    KnowledgeSource(RadrootsKnowledgeSource),
-    KnowledgeClaim(RadrootsKnowledgeClaim),
-    KnowledgeRelation(RadrootsKnowledgeRelation),
-    KnowledgeReview(RadrootsKnowledgeReview),
-    KnowledgeFieldReport(RadrootsKnowledgeFieldReport),
-    EvidenceBounty(RadrootsEvidenceBounty),
-    KnowledgeChangeProposal(RadrootsKnowledgeChangeProposal),
-    ContributionAttestation(RadrootsContributionAttestation),
+    WikiArticle(WikiArticle),
+    WikiRedirect(WikiRedirect),
+    WikiMergeRequest(WikiMergeRequest),
+    KnowledgeSource(KnowledgeSource),
+    KnowledgeClaim(KnowledgeClaim),
+    KnowledgeRelation(KnowledgeRelation),
+    KnowledgeReview(KnowledgeReview),
+    KnowledgeFieldReport(KnowledgeFieldReport),
+    EvidenceBounty(EvidenceBounty),
+    KnowledgeChangeProposal(KnowledgeChangeProposal),
+    ContributionAttestation(ContributionAttestation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,8 +140,8 @@ pub fn hex_64(character: char) -> String {
     core::iter::repeat_n(character, 64).collect()
 }
 
-pub fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
-    RadrootsEventRef {
+pub fn event_ref(character: char, kind: u32) -> EventRef {
+    EventRef {
         id: hex_64(character),
         author: PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX)
             .expect("fixture public key is valid"),
@@ -152,8 +151,8 @@ pub fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
     }
 }
 
-pub fn address_ref() -> RadrootsAddressableRef {
-    RadrootsAddressableRef {
+pub fn address_ref() -> AddressableRef {
+    AddressableRef {
         kind: KIND_WIKI_ARTICLE,
         pubkey: hex_64('a'),
         d_tag: "soil-health".to_string(),
@@ -161,8 +160,8 @@ pub fn address_ref() -> RadrootsAddressableRef {
     }
 }
 
-pub fn deferred_address_ref() -> RadrootsAddressableRef {
-    RadrootsAddressableRef {
+pub fn deferred_address_ref() -> AddressableRef {
+    AddressableRef {
         kind: KIND_WIKI_ARTICLE,
         pubkey: hex_64('a'),
         d_tag: "soil-health-v2".to_string(),
@@ -170,22 +169,22 @@ pub fn deferred_address_ref() -> RadrootsAddressableRef {
     }
 }
 
-pub fn wiki_article_version_ref() -> RadrootsWikiArticleVersionRef {
-    RadrootsWikiArticleVersionRef {
+pub fn wiki_article_version_ref() -> WikiArticleVersionRef {
+    WikiArticleVersionRef {
         event_id: hex_64('b'),
         address_ref: address_ref(),
     }
 }
 
-pub fn wiki_article_deferred_version_ref() -> RadrootsWikiArticleVersionRef {
-    RadrootsWikiArticleVersionRef {
+pub fn wiki_article_deferred_version_ref() -> WikiArticleVersionRef {
+    WikiArticleVersionRef {
         event_id: hex_64('c'),
         address_ref: deferred_address_ref(),
     }
 }
 
-pub fn wiki_article() -> RadrootsWikiArticle {
-    RadrootsWikiArticle {
+pub fn wiki_article() -> WikiArticle {
+    WikiArticle {
         d_tag: "soil-health".to_string(),
         title: Some("Soil health".to_string()),
         content_djot: "# Soil health\n\nLiving soil supports resilient local food systems."
@@ -198,15 +197,15 @@ pub fn wiki_article() -> RadrootsWikiArticle {
     }
 }
 
-pub fn wiki_redirect() -> RadrootsWikiRedirect {
-    RadrootsWikiRedirect {
+pub fn wiki_redirect() -> WikiRedirect {
+    WikiRedirect {
         d_tag: "soil".to_string(),
         target: address_ref(),
     }
 }
 
-pub fn wiki_merge_request() -> RadrootsWikiMergeRequest {
-    RadrootsWikiMergeRequest {
+pub fn wiki_merge_request() -> WikiMergeRequest {
+    WikiMergeRequest {
         target_article: address_ref(),
         destination_pubkey: hex_64('a'),
         base_version_event_id: Some(hex_64('e')),
@@ -215,15 +214,15 @@ pub fn wiki_merge_request() -> RadrootsWikiMergeRequest {
     }
 }
 
-pub fn wiki_merge_request_without_base_version() -> RadrootsWikiMergeRequest {
-    RadrootsWikiMergeRequest {
+pub fn wiki_merge_request_without_base_version() -> WikiMergeRequest {
+    WikiMergeRequest {
         base_version_event_id: None,
         ..wiki_merge_request()
     }
 }
 
-pub fn knowledge_source() -> RadrootsKnowledgeSource {
-    RadrootsKnowledgeSource {
+pub fn knowledge_source() -> KnowledgeSource {
+    KnowledgeSource {
         schema: RADROOTS_KNOWLEDGE_SOURCE_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         d_tag: "soil-source".to_string(),
@@ -241,13 +240,13 @@ pub fn knowledge_source() -> RadrootsKnowledgeSource {
     }
 }
 
-pub fn knowledge_claim() -> RadrootsKnowledgeClaim {
-    RadrootsKnowledgeClaim {
+pub fn knowledge_claim() -> KnowledgeClaim {
+    KnowledgeClaim {
         schema: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         claim_type: "practice_effect".to_string(),
         text: "Cover crops improve soil structure.".to_string(),
-        citation_spans: vec![RadrootsKnowledgeCitationSpan {
+        citation_spans: vec![KnowledgeCitationSpan {
             source_ref: event_ref('4', KIND_KNOWLEDGE_SOURCE),
             artifact_ref: None,
             page_start: Some(12),
@@ -263,8 +262,8 @@ pub fn knowledge_claim() -> RadrootsKnowledgeClaim {
     }
 }
 
-pub fn knowledge_node_ref(label: &str) -> RadrootsKnowledgeNodeRef {
-    RadrootsKnowledgeNodeRef {
+pub fn knowledge_node_ref(label: &str) -> KnowledgeNodeRef {
+    KnowledgeNodeRef {
         node_type: "event".to_string(),
         event_ref: Some(event_ref('6', KIND_KNOWLEDGE_CLAIM)),
         address_ref: None,
@@ -273,8 +272,8 @@ pub fn knowledge_node_ref(label: &str) -> RadrootsKnowledgeNodeRef {
     }
 }
 
-pub fn knowledge_relation() -> RadrootsKnowledgeRelation {
-    RadrootsKnowledgeRelation {
+pub fn knowledge_relation() -> KnowledgeRelation {
+    KnowledgeRelation {
         schema: RADROOTS_KNOWLEDGE_RELATION_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         subject: knowledge_node_ref("cover crops"),
@@ -286,21 +285,21 @@ pub fn knowledge_relation() -> RadrootsKnowledgeRelation {
     }
 }
 
-pub fn knowledge_review() -> RadrootsKnowledgeReview {
-    RadrootsKnowledgeReview {
+pub fn knowledge_review() -> KnowledgeReview {
+    KnowledgeReview {
         schema: RADROOTS_KNOWLEDGE_REVIEW_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
-        target: RadrootsKnowledgeReviewTarget {
+        target: KnowledgeReviewTarget {
             event_id: hex_64('8'),
             author_pubkey: hex_64('a'),
             kind: KIND_KNOWLEDGE_CLAIM,
             address: None,
             relays: vec![RELAY_PRIMARY_WSS.to_string()],
-            review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,
+            review_scope: KnowledgeReviewScope::SpecificVersion,
         },
         reviewer_role: "peer".to_string(),
         verdict: "needs_more_evidence".to_string(),
-        scores: vec![RadrootsKnowledgeReviewScore {
+        scores: vec![KnowledgeReviewScore {
             dimension: "evidence".to_string(),
             value: "partial".to_string(),
             note: None,
@@ -310,16 +309,16 @@ pub fn knowledge_review() -> RadrootsKnowledgeReview {
     }
 }
 
-pub fn knowledge_field_report() -> RadrootsKnowledgeFieldReport {
-    RadrootsKnowledgeFieldReport {
+pub fn knowledge_field_report() -> KnowledgeFieldReport {
+    KnowledgeFieldReport {
         schema: RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         report_type: "observation".to_string(),
         title: "Field observation".to_string(),
         summary: Some("Observed cover crop residue.".to_string()),
-        context: RadrootsKnowledgeFieldContext {
-            location_precision: RadrootsKnowledgeLocationPrecision::CoarseGeohash,
-            public_location: Some(RadrootsKnowledgeLocation {
+        context: KnowledgeFieldContext {
+            location_precision: KnowledgeLocationPrecision::CoarseGeohash,
+            public_location: Some(KnowledgeLocation {
                 label: Some("watershed".to_string()),
                 region: Some("synthetic-region".to_string()),
                 locality: None,
@@ -329,11 +328,11 @@ pub fn knowledge_field_report() -> RadrootsKnowledgeFieldReport {
             topics: vec!["field".to_string()],
             context_tags: vec!["observation".to_string()],
         },
-        observations: vec![RadrootsKnowledgeObservation {
+        observations: vec![KnowledgeObservation {
             observation_type: "residue".to_string(),
             text: "Residue was visible across beds.".to_string(),
             observed_at: Some("2026-07-05".to_string()),
-            values: vec![RadrootsKnowledgeObservationValue {
+            values: vec![KnowledgeObservationValue {
                 key: "coverage".to_string(),
                 value: "medium".to_string(),
                 unit: None,
@@ -345,8 +344,8 @@ pub fn knowledge_field_report() -> RadrootsKnowledgeFieldReport {
     }
 }
 
-pub fn evidence_bounty() -> RadrootsEvidenceBounty {
-    RadrootsEvidenceBounty {
+pub fn evidence_bounty() -> EvidenceBounty {
+    EvidenceBounty {
         schema: RADROOTS_EVIDENCE_BOUNTY_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         d_tag: "soil-bounty".to_string(),
@@ -359,8 +358,8 @@ pub fn evidence_bounty() -> RadrootsEvidenceBounty {
     }
 }
 
-pub fn knowledge_change_proposal() -> RadrootsKnowledgeChangeProposal {
-    RadrootsKnowledgeChangeProposal {
+pub fn knowledge_change_proposal() -> KnowledgeChangeProposal {
+    KnowledgeChangeProposal {
         schema: RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         target: event_ref('b', KIND_KNOWLEDGE_CLAIM),
@@ -372,8 +371,8 @@ pub fn knowledge_change_proposal() -> RadrootsKnowledgeChangeProposal {
     }
 }
 
-pub fn contribution_attestation() -> RadrootsContributionAttestation {
-    RadrootsContributionAttestation {
+pub fn contribution_attestation() -> ContributionAttestation {
+    ContributionAttestation {
         schema: RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA.to_string(),
         schema_version: RADROOTS_KNOWLEDGE_SCHEMA_VERSION,
         contributor_pubkey: hex_64('a'),

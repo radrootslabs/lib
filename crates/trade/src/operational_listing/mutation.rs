@@ -10,10 +10,10 @@ use alloc::string::{String, ToString};
 #[cfg(all(feature = "serde_json", feature = "std"))]
 use std::string::{String, ToString};
 
-use radroots_event::id::RadrootsClassifiedListingAddress;
+use radroots_event::id::ClassifiedListingAddress;
 #[cfg(feature = "serde_json")]
 use radroots_event::{
-    draft::{RadrootsDraftError, RadrootsEventDraft},
+    draft::{DraftError, EventDraft},
     envelope::kind::KIND_CLASSIFIED_LISTING,
 };
 #[cfg(feature = "serde_json")]
@@ -37,7 +37,7 @@ pub enum RadrootsOperationalListingMutation {
         draft: RadrootsOperationalListingCanonicalEdit,
     },
     Archive {
-        listing_addr: RadrootsClassifiedListingAddress,
+        listing_addr: ClassifiedListingAddress,
     },
 }
 
@@ -53,7 +53,7 @@ pub enum RadrootsOperationalListingMutationError {
     #[cfg(feature = "serde_json")]
     EncodeListing(String),
     #[cfg(feature = "serde_json")]
-    FrozenDraft(RadrootsDraftError),
+    FrozenDraft(DraftError),
 }
 
 impl fmt::Display for RadrootsOperationalListingMutationError {
@@ -90,7 +90,7 @@ impl RadrootsOperationalListingMutation {
         Self::SaveDraft { draft }
     }
 
-    pub fn archive(listing_addr: RadrootsClassifiedListingAddress) -> Self {
+    pub fn archive(listing_addr: ClassifiedListingAddress) -> Self {
         Self::Archive { listing_addr }
     }
 
@@ -125,7 +125,7 @@ impl RadrootsOperationalListingMutation {
 
     pub fn listing_addr(
         &self,
-    ) -> Result<&RadrootsClassifiedListingAddress, RadrootsOperationalListingMutationError> {
+    ) -> Result<&ClassifiedListingAddress, RadrootsOperationalListingMutationError> {
         match self {
             Self::Publish { draft } | Self::Update { draft } => Ok(draft.public_listing_addr()),
             Self::SaveDraft { draft } => Ok(draft.public_listing_addr()),
@@ -140,7 +140,7 @@ impl RadrootsOperationalListingMutation {
 pub fn build_operational_listing_mutation_draft(
     mutation: &RadrootsOperationalListingMutation,
     created_at: u64,
-) -> Result<RadrootsEventDraft, RadrootsOperationalListingMutationError> {
+) -> Result<EventDraft, RadrootsOperationalListingMutationError> {
     let (draft, kind, contract_id) = match mutation {
         RadrootsOperationalListingMutation::Publish { draft }
         | RadrootsOperationalListingMutation::Update { draft } => (
@@ -156,7 +156,7 @@ pub fn build_operational_listing_mutation_draft(
     let parts = to_wire_parts_with_kind(draft.listing(), kind).map_err(|error| {
         RadrootsOperationalListingMutationError::EncodeListing(error.to_string())
     })?;
-    RadrootsEventDraft::new(
+    EventDraft::new(
         contract_id,
         parts.kind,
         created_at,
@@ -173,14 +173,13 @@ mod tests {
     use radroots_event::{
         contract::validate_event_contract_shape,
         envelope::kind::KIND_CLASSIFIED_LISTING,
-        farm::RadrootsFarmRef,
-        farm::resource_area::RadrootsResourceAreaRef,
-        id::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
+        farm::FarmRef,
+        farm::resource_area::ResourceAreaRef,
+        id::{ClassifiedListingAddress, DTag, InventoryBinId},
         listing::operational::{
-            RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-            RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-            RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
-            RadrootsOperationalListingStatus,
+            OperationalListing, OperationalListingAvailability, OperationalListingBin,
+            OperationalListingDeliveryMethod, OperationalListingProduct,
+            OperationalListingPublicLocation, OperationalListingStatus,
         },
     };
     use radroots_event_codec::verification::verify_nip01_event;
@@ -201,23 +200,23 @@ mod tests {
 
     const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
-    fn d_tag(raw: &str) -> RadrootsDTag {
-        RadrootsDTag::parse(raw).expect("d tag")
+    fn d_tag(raw: &str) -> DTag {
+        DTag::parse(raw).expect("d tag")
     }
 
-    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
-        RadrootsInventoryBinId::parse(raw).expect("bin id")
+    fn bin_id(raw: &str) -> InventoryBinId {
+        InventoryBinId::parse(raw).expect("bin id")
     }
 
-    fn listing() -> RadrootsOperationalListing {
-        RadrootsOperationalListing {
+    fn listing() -> OperationalListing {
+        OperationalListing {
             d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: SELLER.to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsOperationalListingProduct {
+            product: OperationalListingProduct {
                 key: "coffee".to_string(),
                 title: "Coffee".to_string(),
                 category: "coffee".to_string(),
@@ -229,7 +228,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: bin_id("bin-1"),
-            bins: vec![RadrootsOperationalListingBin {
+            bins: vec![OperationalListingBin {
                 bin_id: bin_id("bin-1"),
                 quantity: Quantity::try_new(Decimal::from(1000u32), Unit::MassG).unwrap(),
                 price_per_canonical_unit: QuantityPrice::try_new(
@@ -247,11 +246,11 @@ mod tests {
             plot: None,
             discounts: None,
             inventory_available: Some(Decimal::from(5u32)),
-            availability: Some(RadrootsOperationalListingAvailability::Status {
-                status: RadrootsOperationalListingStatus::Active,
+            availability: Some(OperationalListingAvailability::Status {
+                status: OperationalListingStatus::Active,
             }),
-            delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
-            location: Some(RadrootsOperationalListingPublicLocation {
+            delivery_method: Some(OperationalListingDeliveryMethod::Pickup),
+            location: Some(OperationalListingPublicLocation {
                 primary: "Farm".to_string(),
                 city: Some("Town".to_string()),
                 region: Some("Region".to_string()),
@@ -356,7 +355,7 @@ mod tests {
     #[test]
     fn archive_is_explicitly_unsupported() {
         let archive = RadrootsOperationalListingMutation::archive(
-            RadrootsClassifiedListingAddress::parse(format!(
+            ClassifiedListingAddress::parse(format!(
                 "{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
             ))
             .expect("listing address"),
@@ -415,7 +414,7 @@ mod tests {
     #[test]
     fn build_operational_listing_mutation_draft_rejects_archive() {
         let archive = RadrootsOperationalListingMutation::archive(
-            RadrootsClassifiedListingAddress::parse(format!(
+            ClassifiedListingAddress::parse(format!(
                 "{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
             ))
             .expect("listing address"),
@@ -430,7 +429,7 @@ mod tests {
     #[test]
     fn build_operational_listing_mutation_draft_reports_encode_errors() {
         let mut listing = listing();
-        listing.resource_area = Some(RadrootsResourceAreaRef {
+        listing.resource_area = Some(ResourceAreaRef {
             pubkey: SELLER.to_string(),
             d_tag: "bad d tag".to_string(),
         });

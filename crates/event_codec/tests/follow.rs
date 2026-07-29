@@ -5,7 +5,7 @@ mod test_fixtures;
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_FOLLOW, KIND_POST},
-    social::follow::{RadrootsFollow, RadrootsFollowProfile},
+    social::follow::{Follow, FollowProfile},
 };
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
@@ -18,8 +18,8 @@ use test_fixtures::{RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
 #[test]
 fn follow_to_wire_parts_builds_p_tags() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 42,
             public_key: "pubkey".to_string(),
             relay_url: Some("wss://relay".to_string()),
@@ -41,8 +41,8 @@ fn follow_to_wire_parts_builds_p_tags() {
 
 #[test]
 fn follow_to_wire_parts_requires_public_key() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: "  ".to_string(),
             relay_url: None,
@@ -217,15 +217,15 @@ fn follow_index_from_event_propagates_parse_errors() {
 
 #[test]
 fn follow_apply_adds_and_updates_entries() {
-    let follow = RadrootsFollow {
+    let follow = Follow {
         list: vec![
-            RadrootsFollowProfile {
+            FollowProfile {
                 published_at: 1,
                 public_key: "pubkey-a".to_string(),
                 relay_url: None,
                 contact_name: Some("alice".to_string()),
             },
-            RadrootsFollowProfile {
+            FollowProfile {
                 published_at: 1,
                 public_key: "pubkey-b".to_string(),
                 relay_url: None,
@@ -266,15 +266,15 @@ fn follow_apply_adds_and_updates_entries() {
 
 #[test]
 fn follow_apply_unfollow_removes_entries() {
-    let follow = RadrootsFollow {
+    let follow = Follow {
         list: vec![
-            RadrootsFollowProfile {
+            FollowProfile {
                 published_at: 1,
                 public_key: "pubkey-a".to_string(),
                 relay_url: None,
                 contact_name: None,
             },
-            RadrootsFollowProfile {
+            FollowProfile {
                 published_at: 1,
                 public_key: "pubkey-b".to_string(),
                 relay_url: None,
@@ -296,8 +296,8 @@ fn follow_apply_unfollow_removes_entries() {
 
 #[test]
 fn follow_apply_toggle_adds_or_removes() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: "pubkey-a".to_string(),
             relay_url: None,
@@ -331,7 +331,7 @@ fn follow_apply_toggle_adds_or_removes() {
 
 #[test]
 fn follow_apply_rejects_empty_pubkey() {
-    let follow = RadrootsFollow { list: Vec::new() };
+    let follow = Follow { list: Vec::new() };
     let err = follow_apply(
         &follow,
         FollowMutation::Follow {
@@ -349,7 +349,7 @@ fn follow_apply_rejects_empty_pubkey() {
 
 #[test]
 fn follow_apply_rejects_empty_pubkey_for_unfollow_and_toggle() {
-    let follow = RadrootsFollow { list: Vec::new() };
+    let follow = Follow { list: Vec::new() };
     let err = follow_apply(
         &follow,
         FollowMutation::Unfollow {
@@ -379,8 +379,8 @@ fn follow_apply_rejects_empty_pubkey_for_unfollow_and_toggle() {
 
 #[test]
 fn follow_apply_rejects_invalid_existing_entries_and_after_mutation_propagates_error() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: " ".to_string(),
             relay_url: None,
@@ -401,7 +401,7 @@ fn follow_apply_rejects_invalid_existing_entries_and_after_mutation_propagates_e
     ));
 
     let err = follow_to_wire_parts_after(
-        &RadrootsFollow { list: Vec::new() },
+        &Follow { list: Vec::new() },
         FollowMutation::Follow {
             public_key: " ".to_string(),
             relay_url: None,
@@ -417,8 +417,8 @@ fn follow_apply_rejects_invalid_existing_entries_and_after_mutation_propagates_e
 
 #[test]
 fn follow_build_tags_normalizes_empty_optional_values() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: "pubkey".to_string(),
             relay_url: Some("".to_string()),
@@ -434,8 +434,8 @@ fn follow_build_tags_normalizes_empty_optional_values() {
 
 #[test]
 fn follow_to_wire_parts_with_kind_and_after_mutation_work() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: "pubkey-a".to_string(),
             relay_url: None,
@@ -460,15 +460,15 @@ fn follow_to_wire_parts_with_kind_and_after_mutation_work() {
 
 #[test]
 fn follow_apply_normalizes_optional_fields_and_deduplicates_existing_list() {
-    let follow = RadrootsFollow {
+    let follow = Follow {
         list: vec![
-            RadrootsFollowProfile {
+            FollowProfile {
                 published_at: 1,
                 public_key: " pubkey-a ".to_string(),
                 relay_url: Some(" ".to_string()),
                 contact_name: Some(" ".to_string()),
             },
-            RadrootsFollowProfile {
+            FollowProfile {
                 published_at: 2,
                 public_key: "pubkey-a".to_string(),
                 relay_url: Some(RELAY_SECONDARY_WSS.to_string()),
@@ -495,8 +495,8 @@ fn follow_apply_normalizes_optional_fields_and_deduplicates_existing_list() {
 
 #[test]
 fn follow_apply_follow_with_none_preserves_existing_values() {
-    let follow = RadrootsFollow {
-        list: vec![RadrootsFollowProfile {
+    let follow = Follow {
+        list: vec![FollowProfile {
             published_at: 1,
             public_key: "pubkey-a".to_string(),
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),

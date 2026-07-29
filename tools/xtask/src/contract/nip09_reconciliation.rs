@@ -835,7 +835,7 @@ const SEMANTIC_DEPENDENCY_SPECS: &[SemanticDependencySpec] = &[
         canonical_path: "contracts/conformance/vectors/event/nip01_wire.v1.json",
         mirror_path: None,
         executors: &[
-            "radroots_event::wire::v1::RadrootsNip01EventWire::parse_json",
+            "radroots_event::wire::v1::Nip01EventWire::parse_json",
             "radroots_event::wire::v1::compute_canonical_nip01_event_id_v1",
         ],
     },
@@ -1331,23 +1331,23 @@ const SOURCE_ROUTE_WITNESS_SPECS: &[SourceRouteWitnessSpec] = &[
         uses: &[
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "draft::RadrootsEventDraft as EventDraft",
+                path: "draft::EventDraft as EventDraft",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "draft::RadrootsSignedEvent as SignedEvent",
+                path: "draft::SignedEvent as SignedEvent",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "envelope::RadrootsEventEnvelope as Event",
+                path: "envelope::EventEnvelope as Event",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "envelope::RadrootsEventKind as EventKind",
+                path: "envelope::EventKind as EventKind",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
-                path: "envelope::RadrootsEventTag as EventTag",
+                path: "envelope::EventTag as EventTag",
             },
             UseRouteSpec {
                 visibility: RouteVisibility::Public,
@@ -5692,11 +5692,11 @@ fn validate_public_crate_root_resolution_authority(
                     let curated_event_alias = relative == "crates/event/src/lib.rs"
                         && matches!(
                             route.as_str(),
-                            "draft::RadrootsEventDraft as EventDraft"
-                                | "draft::RadrootsSignedEvent as SignedEvent"
-                                | "envelope::RadrootsEventEnvelope as Event"
-                                | "envelope::RadrootsEventKind as EventKind"
-                                | "envelope::RadrootsEventTag as EventTag"
+                            "draft::EventDraft as EventDraft"
+                                | "draft::SignedEvent as SignedEvent"
+                                | "envelope::EventEnvelope as Event"
+                                | "envelope::EventKind as EventKind"
+                                | "envelope::EventTag as EventTag"
                                 | "verification::SignatureVerifiedEvent as VerifiedEvent"
                         );
                     if route.ends_with("::*") || (route.contains(" as ") && !curated_event_alias) {
@@ -9451,13 +9451,13 @@ fn validate_post_core_extension_source(relative: &str, bytes: &[u8]) -> Result<(
         "super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult",
         "crate::error::RadrootsEventStoreError",
         "crate::model::RadrootsEventIngest",
-        "radroots_event::id::RadrootsTradeCandidateId",
-        "radroots_event::id::RadrootsTradeMutationId",
+        "radroots_event::id::TradeCandidateId",
+        "radroots_event::id::TradeMutationId",
         "radroots_event::trade::RADROOTS_TRADE_MUTATION_CONTRACT_IDS",
-        "radroots_event::trade::RadrootsSellerReservationAssertionV1",
-        "radroots_event::trade::RadrootsTradeDecisionV1",
-        "radroots_event::trade::RadrootsTradeMutationBodyV1",
-        "radroots_event::trade::RadrootsTradeMutationEnvelopeV1",
+        "radroots_event::trade::SellerReservationAssertionV1",
+        "radroots_event::trade::TradeDecisionV1",
+        "radroots_event::trade::TradeMutationBodyV1",
+        "radroots_event::trade::TradeMutationEnvelopeV1",
         "radroots_event::trade::trade_mutation_from_canonical_content",
         "sha2::Digest",
         "sha2::Sha256",
@@ -9599,12 +9599,12 @@ fn validate_post_core_storage_source(
     let expected_use_routes = [
         "crate::error::RadrootsEventStoreError",
         "crate::model::RadrootsTransportObservation",
-        "radroots_event::envelope::RadrootsEventEnvelope",
-        "radroots_event::id::RadrootsTradeCandidateId",
-        "radroots_event::id::RadrootsTradeMutationId",
-        "radroots_event::trade::RadrootsSellerReservationAssertionV1",
-        "radroots_event::trade::RadrootsTradeMutationEnvelopeV1",
-        "radroots_event::trade::RadrootsTradeMutationKindV1",
+        "radroots_event::envelope::EventEnvelope",
+        "radroots_event::id::TradeCandidateId",
+        "radroots_event::id::TradeMutationId",
+        "radroots_event::trade::SellerReservationAssertionV1",
+        "radroots_event::trade::TradeMutationEnvelopeV1",
+        "radroots_event::trade::TradeMutationKindV1",
         "radroots_transport::RadrootsTransportKind",
         "sqlx::Sqlite",
         "sqlx::Transaction",
@@ -10178,8 +10178,8 @@ impl<'ast> syn::visit::Visit<'ast> for PostCoreExtensionAuthorityAudit<'_> {
             || route.first().is_some_and(|segment| {
                 matches!(
                     segment.as_str(),
-                    "RadrootsTradeDecisionV1"
-                        | "RadrootsTradeMutationBodyV1"
+                    "TradeDecisionV1"
+                        | "TradeMutationBodyV1"
                         | "Sha256"
                         | "TradeProjectionWrite"
                         | "hex"
@@ -12807,7 +12807,7 @@ fn validate_source_maintenance_runtime_token_authority(
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,
             "ingest_event_protocol_reconciliation_v1",
-            "91bec3d7d7aa061297babc1a85aae1f8be187d8378e6d54a410f0c9af9a39337",
+            "70a685be81a910933ce4fbf8844f03ab74405554fea5cbfdfcd653f1ced39ebd",
         ),
         (
             EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE,

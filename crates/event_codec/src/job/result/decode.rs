@@ -1,7 +1,6 @@
 use radroots_event::{
-    envelope::kind::is_result_kind, social::job::JobPaymentRequest,
-    social::job_request::RadrootsJobInput, social::job_result::RadrootsJobResult,
-    tag::RadrootsEventPtr,
+    envelope::kind::is_result_kind, social::job::JobPaymentRequest, social::job_request::JobInput,
+    social::job_result::JobResult, tag::EventPtr,
 };
 
 #[cfg(not(feature = "std"))]
@@ -20,7 +19,7 @@ pub fn job_result_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsJobResult, JobParseError> {
+) -> Result<JobResult, JobParseError> {
     let kind = u16::try_from(kind).map_err(|_| JobParseError::KindOutOfRange(kind))?;
     let etag = tags
         .iter()
@@ -39,7 +38,7 @@ pub fn job_result_from_tags(
         .find(|t| t.first().map(|s| s.as_str()) == Some("request"))
         .and_then(|t| t.get(1).cloned());
 
-    let inputs: Vec<RadrootsJobInput> = parse_i_tags(tags);
+    let inputs: Vec<JobInput> = parse_i_tags(tags);
 
     let payment = parse_amount_tag_sat(tags)?.map(|(sat, bolt11)| JobPaymentRequest {
         amount_sat: sat,
@@ -53,9 +52,9 @@ pub fn job_result_from_tags(
         .find(|t| t.first().map(|s| s.as_str()) == Some("p"))
         .and_then(|t| t.get(1).cloned());
 
-    Ok(RadrootsJobResult {
+    Ok(JobResult {
         kind,
-        request_event: RadrootsEventPtr {
+        request_event: EventPtr {
             id: req_id,
             relays: relay_hint,
         },
@@ -79,7 +78,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsJobResult>, JobParseError> {
+) -> Result<RadrootsParsedData<JobResult>, JobParseError> {
     if !is_result_kind(kind) {
         return Err(JobParseError::InvalidTag("kind (expected 6000-6999)"));
     }
@@ -101,7 +100,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsJobResult>, JobParseError> {
+) -> Result<RadrootsParsedEvent<JobResult>, JobParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

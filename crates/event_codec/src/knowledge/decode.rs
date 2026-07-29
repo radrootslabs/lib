@@ -11,15 +11,14 @@ use radroots_event::envelope::kind::{
     KIND_WIKI_REDIRECT,
 };
 use radroots_event::knowledge::{
-    RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA, RADROOTS_EVIDENCE_BOUNTY_SCHEMA,
-    RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
-    RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RADROOTS_KNOWLEDGE_RELATION_SCHEMA,
-    RADROOTS_KNOWLEDGE_REVIEW_SCHEMA, RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, RadrootsAddressableRef,
-    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
-    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
-    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsKnowledgeValidationError,
-    RadrootsWikiArticle, RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest,
-    RadrootsWikiRedirect, validate_contribution_attestation, validate_evidence_bounty,
+    AddressableRef, ContributionAttestation, EvidenceBounty, KnowledgeChangeProposal,
+    KnowledgeClaim, KnowledgeFieldReport, KnowledgeRelation, KnowledgeReview, KnowledgeSource,
+    KnowledgeValidationError, RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA,
+    RADROOTS_EVIDENCE_BOUNTY_SCHEMA, RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA,
+    RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA,
+    RADROOTS_KNOWLEDGE_RELATION_SCHEMA, RADROOTS_KNOWLEDGE_REVIEW_SCHEMA,
+    RADROOTS_KNOWLEDGE_SOURCE_SCHEMA, WikiArticle, WikiArticleVersionRef, WikiMergeRequest,
+    WikiRedirect, validate_contribution_attestation, validate_evidence_bounty,
     validate_knowledge_change_proposal, validate_knowledge_claim, validate_knowledge_field_report,
     validate_knowledge_relation, validate_knowledge_review, validate_knowledge_source,
     validate_wiki_article, validate_wiki_d_tag, validate_wiki_merge_request,
@@ -28,7 +27,7 @@ use radroots_event::knowledge::{
 use radroots_event::tag::name::{
     TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T,
 };
-use radroots_event::{envelope::RadrootsEventEnvelope, tag::RadrootsEventRef};
+use radroots_event::{envelope::EventEnvelope, tag::EventRef};
 use serde::de::DeserializeOwned;
 
 use crate::error::EventParseError;
@@ -173,10 +172,7 @@ fn ensure_mirrored_tags(
     }
 }
 
-fn event_refs(
-    tags: &[Vec<String>],
-    name: &'static str,
-) -> Result<Vec<RadrootsEventRef>, EventParseError> {
+fn event_refs(tags: &[Vec<String>], name: &'static str) -> Result<Vec<EventRef>, EventParseError> {
     matching_tags(tags, name)
         .into_iter()
         .map(|tag| parse_event_ref_tag(tag, name))
@@ -233,10 +229,7 @@ fn unmarked_tags<'a>(tags: &'a [Vec<String>], name: &'static str) -> Vec<&'a Vec
         .collect()
 }
 
-fn address_from_tag(
-    tag: &[String],
-    name: &'static str,
-) -> Result<RadrootsAddressableRef, EventParseError> {
+fn address_from_tag(tag: &[String], name: &'static str) -> Result<AddressableRef, EventParseError> {
     let value = tag.get(1).ok_or(EventParseError::InvalidTag(name))?;
     let mut parts = value.splitn(3, ':');
     let kind = parts
@@ -257,7 +250,7 @@ fn address_from_tag(
     } else {
         tag.len()
     };
-    Ok(RadrootsAddressableRef {
+    Ok(AddressableRef {
         kind,
         pubkey: pubkey.to_string(),
         d_tag: d_tag.to_string(),
@@ -277,7 +270,7 @@ fn address_from_tag(
 fn address_from_a_tag(
     tags: &[Vec<String>],
     name: &'static str,
-) -> Result<RadrootsAddressableRef, EventParseError> {
+) -> Result<AddressableRef, EventParseError> {
     let matches = unmarked_tags(tags, name);
     if matches.is_empty() {
         return Err(EventParseError::MissingTag(name));
@@ -291,7 +284,7 @@ fn address_from_a_tag(
 fn wiki_version_refs(
     tags: &[Vec<String>],
     marker_name: &'static str,
-) -> Result<Vec<RadrootsWikiArticleVersionRef>, EventParseError> {
+) -> Result<Vec<WikiArticleVersionRef>, EventParseError> {
     let mut refs = Vec::new();
     let mut index = 0;
     while let Some(tag) = tags.get(index) {
@@ -327,7 +320,7 @@ fn wiki_version_refs(
                     .filter(|value| !value.trim().is_empty())
                     .ok_or(EventParseError::InvalidTag(TAG_E))?
                     .clone();
-                refs.push(RadrootsWikiArticleVersionRef {
+                refs.push(WikiArticleVersionRef {
                     event_id,
                     address_ref,
                 });
@@ -377,7 +370,7 @@ fn json_content<T: DeserializeOwned>(content: &str) -> Result<T, EventParseError
     serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))
 }
 
-fn parsed<T>(event: RadrootsEventEnvelope, data: T) -> RadrootsParsedEvent<T> {
+fn parsed<T>(event: EventEnvelope, data: T) -> RadrootsParsedEvent<T> {
     let parsed_data = RadrootsParsedData::new(
         event.id_hex(),
         event.author().to_hex().to_string(),
@@ -400,7 +393,7 @@ fn require_contract_tag(
     }
 }
 
-fn parse_validation_error(error: RadrootsKnowledgeValidationError) -> EventParseError {
+fn parse_validation_error(error: KnowledgeValidationError) -> EventParseError {
     match error.field() {
         "d_tag" => EventParseError::InvalidTag(TAG_D),
         "references" => EventParseError::InvalidTag(TAG_SOURCE),
@@ -444,8 +437,8 @@ fn contains_private_coordinate_key(value: &serde_json::Value) -> bool {
 }
 
 pub fn wiki_article_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsWikiArticle>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<WikiArticle>, EventParseError> {
     ensure_kind(event.kind_u32(), KIND_WIKI_ARTICLE, "wiki article")?;
     let d_tag = required_one_value(&event.tags_as_vec(), TAG_D)?;
     validate_wiki_d_tag(&d_tag).map_err(|_| EventParseError::InvalidTag(TAG_D))?;
@@ -459,7 +452,7 @@ pub fn wiki_article_from_event(
         return Err(EventParseError::InvalidTag(TAG_A));
     }
     let deferred_to = deferred_refs.pop();
-    let article = RadrootsWikiArticle {
+    let article = WikiArticle {
         d_tag,
         title,
         content_djot: event.content().to_string(),
@@ -474,8 +467,8 @@ pub fn wiki_article_from_event(
 }
 
 pub fn wiki_redirect_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsWikiRedirect>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<WikiRedirect>, EventParseError> {
     ensure_kind(event.kind_u32(), KIND_WIKI_REDIRECT, "wiki redirect")?;
     if !event.content().is_empty() {
         return Err(EventParseError::InvalidJson("content"));
@@ -486,14 +479,14 @@ pub fn wiki_redirect_from_event(
     if target.kind != KIND_WIKI_ARTICLE {
         return Err(EventParseError::InvalidTag(TAG_A));
     }
-    let redirect = RadrootsWikiRedirect { d_tag, target };
+    let redirect = WikiRedirect { d_tag, target };
     validate_wiki_redirect(&redirect).map_err(parse_validation_error)?;
     Ok(parsed(event, redirect))
 }
 
 pub fn wiki_merge_request_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsWikiMergeRequest>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<WikiMergeRequest>, EventParseError> {
     ensure_kind(
         event.kind_u32(),
         KIND_WIKI_MERGE_REQUEST,
@@ -511,7 +504,7 @@ pub fn wiki_merge_request_from_event(
     } else {
         Some(event.content().to_string())
     };
-    let request = RadrootsWikiMergeRequest {
+    let request = WikiMergeRequest {
         target_article,
         destination_pubkey,
         base_version_event_id,
@@ -523,11 +516,11 @@ pub fn wiki_merge_request_from_event(
 }
 
 pub fn knowledge_source_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsKnowledgeSource>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<KnowledgeSource>, EventParseError> {
     ensure_kind(event.kind_u32(), KIND_KNOWLEDGE_SOURCE, "knowledge source")?;
     require_contract_tag(&event.tags_as_vec(), RADROOTS_KNOWLEDGE_SOURCE_SCHEMA)?;
-    let source: RadrootsKnowledgeSource = json_content(event.content())?;
+    let source: KnowledgeSource = json_content(event.content())?;
     let d_tag = required_one_value(&event.tags_as_vec(), TAG_D)?;
     if d_tag != source.d_tag {
         return Err(EventParseError::InvalidTag(TAG_D));
@@ -544,11 +537,11 @@ pub fn knowledge_source_from_event(
 }
 
 pub fn evidence_bounty_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsEvidenceBounty>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<EvidenceBounty>, EventParseError> {
     ensure_kind(event.kind_u32(), KIND_EVIDENCE_BOUNTY, "evidence bounty")?;
     require_contract_tag(&event.tags_as_vec(), RADROOTS_EVIDENCE_BOUNTY_SCHEMA)?;
-    let bounty: RadrootsEvidenceBounty = json_content(event.content())?;
+    let bounty: EvidenceBounty = json_content(event.content())?;
     let d_tag = required_one_value(&event.tags_as_vec(), TAG_D)?;
     if d_tag != bounty.d_tag {
         return Err(EventParseError::InvalidTag(TAG_D));
@@ -565,11 +558,11 @@ pub fn evidence_bounty_from_event(
 }
 
 pub fn knowledge_claim_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsKnowledgeClaim>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<KnowledgeClaim>, EventParseError> {
     ensure_kind(event.kind_u32(), KIND_KNOWLEDGE_CLAIM, "knowledge claim")?;
     require_contract_tag(&event.tags_as_vec(), RADROOTS_KNOWLEDGE_CLAIM_SCHEMA)?;
-    let claim: RadrootsKnowledgeClaim = json_content(event.content())?;
+    let claim: KnowledgeClaim = json_content(event.content())?;
     validate_knowledge_claim(&claim).map_err(parse_validation_error)?;
     let expected_tags =
         knowledge_claim_build_tags(&claim).map_err(|_| EventParseError::InvalidTag(TAG_SOURCE))?;
@@ -582,15 +575,15 @@ pub fn knowledge_claim_from_event(
 }
 
 pub fn knowledge_relation_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsKnowledgeRelation>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<KnowledgeRelation>, EventParseError> {
     ensure_kind(
         event.kind_u32(),
         KIND_KNOWLEDGE_RELATION,
         "knowledge relation",
     )?;
     require_contract_tag(&event.tags_as_vec(), RADROOTS_KNOWLEDGE_RELATION_SCHEMA)?;
-    let relation: RadrootsKnowledgeRelation = json_content(event.content())?;
+    let relation: KnowledgeRelation = json_content(event.content())?;
     validate_knowledge_relation(&relation).map_err(parse_validation_error)?;
     let expected_tags = knowledge_relation_build_tags(&relation)
         .map_err(|_| EventParseError::InvalidTag(TAG_SOURCE))?;
@@ -599,12 +592,12 @@ pub fn knowledge_relation_from_event(
 }
 
 pub fn knowledge_review_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsKnowledgeReview>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<KnowledgeReview>, EventParseError> {
     ensure_kind(event.kind_u32(), KIND_KNOWLEDGE_REVIEW, "knowledge review")?;
     require_contract_tag(&event.tags_as_vec(), RADROOTS_KNOWLEDGE_REVIEW_SCHEMA)?;
     required_one_value(&event.tags_as_vec(), TAG_REVIEW_TARGET)?;
-    let review: RadrootsKnowledgeReview = json_content(event.content())?;
+    let review: KnowledgeReview = json_content(event.content())?;
     validate_knowledge_review(&review).map_err(parse_validation_error)?;
     let expected_tags = knowledge_review_build_tags(&review)
         .map_err(|_| EventParseError::InvalidTag(TAG_REVIEW_TARGET))?;
@@ -617,8 +610,8 @@ pub fn knowledge_review_from_event(
 }
 
 pub fn knowledge_field_report_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsKnowledgeFieldReport>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<KnowledgeFieldReport>, EventParseError> {
     ensure_kind(
         event.kind_u32(),
         KIND_KNOWLEDGE_FIELD_REPORT,
@@ -626,7 +619,7 @@ pub fn knowledge_field_report_from_event(
     )?;
     require_contract_tag(&event.tags_as_vec(), RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA)?;
     reject_private_coordinate_keys(event.content())?;
-    let report: RadrootsKnowledgeFieldReport = json_content(event.content())?;
+    let report: KnowledgeFieldReport = json_content(event.content())?;
     validate_knowledge_field_report(&report).map_err(parse_validation_error)?;
     let expected_tags = knowledge_field_report_build_tags(&report)
         .map_err(|_| EventParseError::InvalidTag(TAG_EVIDENCE))?;
@@ -639,8 +632,8 @@ pub fn knowledge_field_report_from_event(
 }
 
 pub fn knowledge_change_proposal_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsKnowledgeChangeProposal>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<KnowledgeChangeProposal>, EventParseError> {
     ensure_kind(
         event.kind_u32(),
         KIND_KNOWLEDGE_CHANGE_PROPOSAL,
@@ -650,7 +643,7 @@ pub fn knowledge_change_proposal_from_event(
         &event.tags_as_vec(),
         RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA,
     )?;
-    let proposal: RadrootsKnowledgeChangeProposal = json_content(event.content())?;
+    let proposal: KnowledgeChangeProposal = json_content(event.content())?;
     validate_knowledge_change_proposal(&proposal).map_err(parse_validation_error)?;
     let expected_tags = knowledge_change_proposal_build_tags(&proposal)
         .map_err(|_| EventParseError::InvalidTag(TAG_EVIDENCE))?;
@@ -659,8 +652,8 @@ pub fn knowledge_change_proposal_from_event(
 }
 
 pub fn contribution_attestation_from_event(
-    event: RadrootsEventEnvelope,
-) -> Result<RadrootsParsedEvent<RadrootsContributionAttestation>, EventParseError> {
+    event: EventEnvelope,
+) -> Result<RadrootsParsedEvent<ContributionAttestation>, EventParseError> {
     ensure_kind(
         event.kind_u32(),
         KIND_CONTRIBUTION_ATTESTATION,
@@ -670,7 +663,7 @@ pub fn contribution_attestation_from_event(
         &event.tags_as_vec(),
         RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA,
     )?;
-    let attestation: RadrootsContributionAttestation = json_content(event.content())?;
+    let attestation: ContributionAttestation = json_content(event.content())?;
     validate_contribution_attestation(&attestation).map_err(parse_validation_error)?;
     let expected_tags = contribution_attestation_build_tags(&attestation)
         .map_err(|_| EventParseError::InvalidTag(TAG_EVIDENCE))?;

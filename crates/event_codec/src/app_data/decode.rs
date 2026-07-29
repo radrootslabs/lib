@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    social::app_data::{KIND_APP_DATA, RadrootsAppData},
+    social::app_data::{AppData, KIND_APP_DATA},
     tag::name::TAG_D,
 };
 
@@ -31,7 +31,7 @@ pub fn app_data_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsAppData, EventParseError> {
+) -> Result<AppData, EventParseError> {
     if kind != KIND_APP_DATA {
         return Err(EventParseError::InvalidKind {
             expected: "30078",
@@ -39,7 +39,7 @@ pub fn app_data_from_tags(
         });
     }
     let d_tag = parse_d_tag(tags)?;
-    Ok(RadrootsAppData {
+    Ok(AppData {
         d_tag,
         content: content.to_string(),
     })
@@ -52,7 +52,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsAppData>, EventParseError> {
+) -> Result<RadrootsParsedData<AppData>, EventParseError> {
     let app_data = app_data_from_tags(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -71,7 +71,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsAppData>, EventParseError> {
+) -> Result<RadrootsParsedEvent<AppData>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

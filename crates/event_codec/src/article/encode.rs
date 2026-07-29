@@ -6,7 +6,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_ARTICLE,
-    post::article::RadrootsArticle,
+    post::article::Article,
     tag::name::{TAG_D, TAG_IMAGE, TAG_PUBLISHED_AT, TAG_SUMMARY, TAG_T, TAG_TITLE},
 };
 
@@ -14,11 +14,11 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{push_optional_tag, push_tag, validate_non_empty_field};
 use crate::social_helpers::push_location_tags;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_ARTICLE;
 
-pub fn article_build_tags(article: &RadrootsArticle) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn article_build_tags(article: &Article) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_article(article)?;
     let mut tags = Vec::new();
     push_tag(&mut tags, TAG_D, article.d_tag.as_str());
@@ -42,27 +42,25 @@ pub fn article_build_tags(article: &RadrootsArticle) -> Result<Vec<Vec<String>>,
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    article: &RadrootsArticle,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(article: &Article) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(article, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
-    article: &RadrootsArticle,
+    article: &Article,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: article.content.clone(),
         tags: article_build_tags(article)?,
     })
 }
 
-fn validate_article(article: &RadrootsArticle) -> Result<(), EventEncodeError> {
+fn validate_article(article: &Article) -> Result<(), EventEncodeError> {
     validate_d_tag(&article.d_tag, "d_tag")?;
     validate_non_empty_field(&article.title, "title")?;
     validate_non_empty_field(&article.content, "content")?;

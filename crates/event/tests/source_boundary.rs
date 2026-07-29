@@ -17,11 +17,11 @@ const FORBIDDEN_EVENT_NAMES: &[ForbiddenEventName] = &[
     },
     ForbiddenEventName {
         pattern: "WireEventParts",
-        reason: "event construction must use RadrootsNip01EventWireParts",
+        reason: "event construction must use Nip01EventWireParts",
     },
     ForbiddenEventName {
         pattern: "RadrootsFrozenEventDraft",
-        reason: "event construction must use RadrootsEventDraft",
+        reason: "event construction must use EventDraft",
     },
     ForbiddenEventName {
         pattern: "RadrootsNostrEvent",
@@ -29,20 +29,27 @@ const FORBIDDEN_EVENT_NAMES: &[ForbiddenEventName] = &[
     },
     ForbiddenEventName {
         pattern: "RadrootsNostrEventRef",
-        reason: "product-level event references must use RadrootsEventRef",
+        reason: "product-level event references must use EventRef",
     },
     ForbiddenEventName {
         pattern: "RadrootsNostrEventPtr",
-        reason: "product-level event pointers must use RadrootsEventPtr",
+        reason: "product-level event pointers must use EventPtr",
     },
     ForbiddenEventName {
         pattern: "RadrootsSignedNostrEvent",
-        reason: "signed-event surfaces must use RadrootsSignedEvent",
+        reason: "signed-event surfaces must use SignedEvent",
     },
     ForbiddenEventName {
         pattern: "RadrootsSignedNostrEventParts",
         reason: "signed-event parts must use protocol-neutral domain names",
     },
+];
+
+const RETIRED_EVENT_MODULE_PATHS: &[&str] = &[
+    "radroots_event::event_head",
+    "radroots_event::events",
+    "radroots_event::ids",
+    "radroots_event::kinds",
 ];
 
 #[test]
@@ -76,6 +83,60 @@ fn generic_event_source_does_not_reintroduce_old_core_nostr_event_names() {
     );
 }
 
+#[test]
+fn first_party_sources_do_not_reintroduce_retired_event_module_paths() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("lib repo root");
+    let mut findings = Vec::new();
+
+    for path in source_boundary_guard_files(repo_root) {
+        let relative_path = relative_path(repo_root, path.as_path());
+        let source = fs::read_to_string(path.as_path()).expect("read source file");
+        for retired_path in RETIRED_EVENT_MODULE_PATHS {
+            if source.contains(retired_path) {
+                findings.push(format!(
+                    "{relative_path} contains retired event module path `{retired_path}`"
+                ));
+            }
+        }
+    }
+
+    assert!(
+        findings.is_empty(),
+        "retired radroots_event module paths remain:\n{}",
+        findings.join("\n")
+    );
+}
+
+#[test]
+fn public_api_has_no_redundant_radroots_type_prefixes() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("lib repo root");
+    let baseline = fs::read_to_string(repo_root.join("docs/api/radroots_event.txt"))
+        .expect("read radroots_event public API baseline");
+    let mut prefixed = baseline
+        .split(|character: char| !is_identifier_character(character))
+        .filter(|identifier| {
+            identifier
+                .strip_prefix("Radroots")
+                .and_then(|suffix| suffix.chars().next())
+                .is_some_and(|character| character.is_ascii_uppercase())
+        })
+        .collect::<Vec<_>>();
+    prefixed.sort_unstable();
+    prefixed.dedup();
+
+    assert!(
+        prefixed.is_empty(),
+        "radroots_event public API contains redundant prefixed identifiers: {}",
+        prefixed.join(", ")
+    );
+}
+
 fn source_boundary_guard_files(repo_root: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for relative_root in ["crates", "contracts"] {
@@ -95,7 +156,7 @@ fn collect_source_boundary_guard_files(root: &Path, paths: &mut Vec<PathBuf>) {
         if path.is_dir() {
             if matches!(
                 path.file_name().and_then(|file_name| file_name.to_str()),
-                Some("target")
+                Some("generated" | "target")
             ) {
                 continue;
             }
@@ -104,6 +165,13 @@ fn collect_source_boundary_guard_files(root: &Path, paths: &mut Vec<PathBuf>) {
         }
 
         if path.file_name().and_then(|file_name| file_name.to_str()) == Some("source_boundary.rs") {
+            continue;
+        }
+
+        if path.ends_with("event_store/src/nip09/reconciliation_v1/result_vector_executor.rs") {
+            // This predecessor is an authenticated immutable artifact. Active NIP-09
+            // execution uses the maintained successor surface; the frozen source must
+            // retain its historical bytes so its provenance check remains meaningful.
             continue;
         }
 

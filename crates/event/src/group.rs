@@ -38,7 +38,7 @@ pub const KIND_GROUP_ROLES: u32 = KIND_GROUP_ROLES_EVENT;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupPutUser {
+pub struct GroupPutUser {
     pub group_id: String,
     pub message: Option<String>,
     pub pubkey: String,
@@ -50,7 +50,7 @@ pub struct RadrootsGroupPutUser {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupRemoveUser {
+pub struct GroupRemoveUser {
     pub group_id: String,
     pub message: Option<String>,
     pub pubkey: String,
@@ -61,10 +61,10 @@ pub struct RadrootsGroupRemoveUser {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupCreateGroup {
+pub struct GroupCreateGroup {
     pub group_id: String,
     pub message: Option<String>,
-    pub metadata: RadrootsGroupEditableMetadata,
+    pub metadata: GroupEditableMetadata,
 }
 
 #[cfg_attr(
@@ -72,10 +72,10 @@ pub struct RadrootsGroupCreateGroup {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupEditMetadata {
+pub struct GroupEditMetadata {
     pub group_id: String,
     pub message: Option<String>,
-    pub metadata: RadrootsGroupEditableMetadata,
+    pub metadata: GroupEditableMetadata,
 }
 
 #[cfg_attr(
@@ -83,7 +83,7 @@ pub struct RadrootsGroupEditMetadata {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupDeleteGroup {
+pub struct GroupDeleteGroup {
     pub group_id: String,
     pub message: Option<String>,
 }
@@ -93,7 +93,7 @@ pub struct RadrootsGroupDeleteGroup {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupDeleteEvent {
+pub struct GroupDeleteEvent {
     pub group_id: String,
     pub message: Option<String>,
     pub event_id: String,
@@ -104,7 +104,7 @@ pub struct RadrootsGroupDeleteEvent {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupCreateInvite {
+pub struct GroupCreateInvite {
     pub group_id: String,
     pub message: Option<String>,
     pub code: String,
@@ -115,7 +115,7 @@ pub struct RadrootsGroupCreateInvite {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupJoinRequest {
+pub struct GroupJoinRequest {
     pub group_id: String,
     pub message: Option<String>,
     pub code: Option<String>,
@@ -126,7 +126,7 @@ pub struct RadrootsGroupJoinRequest {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupLeaveRequest {
+pub struct GroupLeaveRequest {
     pub group_id: String,
     pub message: Option<String>,
 }
@@ -136,9 +136,9 @@ pub struct RadrootsGroupLeaveRequest {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupMetadata {
+pub struct GroupMetadata {
     pub d_tag: String,
-    pub metadata: RadrootsGroupEditableMetadata,
+    pub metadata: GroupEditableMetadata,
 }
 
 #[cfg_attr(
@@ -146,10 +146,10 @@ pub struct RadrootsGroupMetadata {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupAdmins {
+pub struct GroupAdmins {
     pub d_tag: String,
     pub description: Option<String>,
-    pub admins: Vec<RadrootsGroupUserRef>,
+    pub admins: Vec<GroupUserRef>,
 }
 
 #[cfg_attr(
@@ -157,10 +157,10 @@ pub struct RadrootsGroupAdmins {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupMembers {
+pub struct GroupMembers {
     pub d_tag: String,
     pub description: Option<String>,
-    pub members: Vec<RadrootsGroupUserRef>,
+    pub members: Vec<GroupUserRef>,
 }
 
 #[cfg_attr(
@@ -168,10 +168,10 @@ pub struct RadrootsGroupMembers {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupRoles {
+pub struct GroupRoles {
     pub d_tag: String,
     pub description: Option<String>,
-    pub roles: Vec<RadrootsGroupRole>,
+    pub roles: Vec<GroupRole>,
 }
 
 #[cfg_attr(
@@ -179,7 +179,7 @@ pub struct RadrootsGroupRoles {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsGroupEditableMetadata {
+pub struct GroupEditableMetadata {
     pub name: Option<String>,
     pub about: Option<String>,
     pub picture: Option<String>,
@@ -195,7 +195,7 @@ pub struct RadrootsGroupEditableMetadata {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupUserRef {
+pub struct GroupUserRef {
     pub pubkey: String,
     pub roles: Vec<String>,
 }
@@ -205,7 +205,7 @@ pub struct RadrootsGroupUserRef {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsGroupRole {
+pub struct GroupRole {
     pub name: String,
     pub description: Option<String>,
     pub permissions: Vec<String>,
@@ -217,18 +217,18 @@ mod tests {
 
     #[test]
     fn group_user_and_moderation_models_use_h_group_id_semantics() {
-        let put = RadrootsGroupPutUser {
+        let put = GroupPutUser {
             group_id: "field-group".to_string(),
             message: Some("add member".to_string()),
             pubkey: "member_pubkey".to_string(),
             roles: vec!["member".to_string()],
         };
-        let delete = RadrootsGroupDeleteEvent {
+        let delete = GroupDeleteEvent {
             group_id: "field-group".to_string(),
             message: Some("remove duplicate event".to_string()),
             event_id: "event_id".to_string(),
         };
-        let join = RadrootsGroupJoinRequest {
+        let join = GroupJoinRequest {
             group_id: "field-group".to_string(),
             message: Some("requesting access".to_string()),
             code: Some("invite-code".to_string()),
@@ -244,19 +244,19 @@ mod tests {
 
     #[test]
     fn group_metadata_and_lists_use_d_tag_semantics() {
-        let metadata = RadrootsGroupMetadata {
+        let metadata = GroupMetadata {
             d_tag: "field-group".to_string(),
             metadata: sample_metadata(),
         };
-        let members = RadrootsGroupMembers {
+        let members = GroupMembers {
             d_tag: "field-group".to_string(),
             description: Some("group members".to_string()),
             members: vec![sample_user_ref()],
         };
-        let roles = RadrootsGroupRoles {
+        let roles = GroupRoles {
             d_tag: "field-group".to_string(),
             description: Some("group roles".to_string()),
-            roles: vec![RadrootsGroupRole {
+            roles: vec![GroupRole {
                 name: "member".to_string(),
                 description: Some("can read and write group events".to_string()),
                 permissions: vec!["read".to_string(), "write".to_string()],
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn group_models_are_infrastructure_not_field_business_authorization() {
-        let admins = RadrootsGroupAdmins {
+        let admins = GroupAdmins {
             d_tag: "field-group".to_string(),
             description: Some("group admins".to_string()),
             admins: vec![sample_user_ref()],
@@ -285,12 +285,12 @@ mod tests {
 
     #[test]
     fn group_models_serialize_stable_shapes() {
-        let create = RadrootsGroupCreateGroup {
+        let create = GroupCreateGroup {
             group_id: "field-group".to_string(),
             message: None,
             metadata: sample_metadata(),
         };
-        let invite = RadrootsGroupCreateInvite {
+        let invite = GroupCreateInvite {
             group_id: "field-group".to_string(),
             message: Some("join the field group".to_string()),
             code: "invite-code".to_string(),
@@ -307,8 +307,8 @@ mod tests {
         assert_eq!(KIND_GROUP_CREATE_INVITE, 9009);
     }
 
-    fn sample_metadata() -> RadrootsGroupEditableMetadata {
-        RadrootsGroupEditableMetadata {
+    fn sample_metadata() -> GroupEditableMetadata {
+        GroupEditableMetadata {
             name: Some("Small Regen Farm".to_string()),
             about: Some("Field app group".to_string()),
             picture: Some("https://media.example.invalid/group.png".to_string()),
@@ -320,8 +320,8 @@ mod tests {
         }
     }
 
-    fn sample_user_ref() -> RadrootsGroupUserRef {
-        RadrootsGroupUserRef {
+    fn sample_user_ref() -> GroupUserRef {
+        GroupUserRef {
             pubkey: "admin_pubkey".to_string(),
             roles: vec!["admin".to_string()],
         }

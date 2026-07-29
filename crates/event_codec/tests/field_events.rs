@@ -2,24 +2,23 @@
 
 use radroots_event::{
     envelope::kind::{KIND_FARM_FILE_METADATA, KIND_POST},
-    farm::RadrootsFarmRef,
+    farm::FarmRef,
     farm::crdt::{
-        RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtChange,
-        RadrootsFarmCrdtDocumentKind, RadrootsFarmSemanticKind,
+        CrdtBackend, FarmCrdtChange, FarmCrdtDocumentKind, FarmSemanticKind,
+        RADROOTS_FARM_CRDT_CHANGE_SCHEMA,
     },
-    farm::file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
+    farm::file::{FarmFileDimensions, FarmFileMetadata, FarmFileSource},
     farm::workspace::{
-        RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION, RADROOTS_FARM_WORKSPACE_SCHEMA,
-        RadrootsFarmWorkspaceManifest, RadrootsFarmWorkspaceMediaServer, RadrootsFarmWorkspaceRef,
-        RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
+        FarmWorkspaceManifest, FarmWorkspaceMediaServer, FarmWorkspaceRef, FarmWorkspaceRelay,
+        FarmWorkspaceRelayMode, RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION,
+        RADROOTS_FARM_WORKSPACE_SCHEMA,
     },
     social::group::{
-        KIND_GROUP_CREATE_INVITE, KIND_GROUP_METADATA, RadrootsGroupAdmins,
-        RadrootsGroupCreateInvite, RadrootsGroupEditableMetadata, RadrootsGroupMetadata,
-        RadrootsGroupPutUser, RadrootsGroupUserRef,
+        GroupAdmins, GroupCreateInvite, GroupEditableMetadata, GroupMetadata, GroupPutUser,
+        GroupUserRef, KIND_GROUP_CREATE_INVITE, KIND_GROUP_METADATA,
     },
-    social::http_auth::RadrootsHttpAuth,
-    social::relay_auth::RadrootsRelayAuth,
+    social::http_auth::HttpAuth,
+    social::relay_auth::RelayAuth,
 };
 use radroots_event_codec::{
     error::EventParseError,
@@ -93,7 +92,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
         file
     );
 
-    let relay_auth = RadrootsRelayAuth {
+    let relay_auth = RelayAuth {
         relay: "wss://relay.example.invalid/farm/field-group".to_string(),
         challenge: "relay-provided-challenge".to_string(),
     };
@@ -104,7 +103,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
         relay_auth
     );
 
-    let http_auth = RadrootsHttpAuth {
+    let http_auth = HttpAuth {
         url: "https://media.example.invalid/upload".to_string(),
         method: "POST".to_string(),
         payload_sha256: Some(SHA256.to_string()),
@@ -116,7 +115,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
         http_auth
     );
 
-    let metadata = RadrootsGroupMetadata {
+    let metadata = GroupMetadata {
         d_tag: GROUP_ID.to_string(),
         metadata: sample_group_metadata(),
     };
@@ -131,10 +130,10 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
         metadata
     );
 
-    let admins = RadrootsGroupAdmins {
+    let admins = GroupAdmins {
         d_tag: GROUP_ID.to_string(),
         description: Some("field group admins".to_string()),
-        admins: vec![RadrootsGroupUserRef {
+        admins: vec![GroupUserRef {
             pubkey: "admin_pubkey".to_string(),
             roles: vec!["admin".to_string()],
         }],
@@ -146,7 +145,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
         admins
     );
 
-    let put = RadrootsGroupPutUser {
+    let put = GroupPutUser {
         group_id: GROUP_ID.to_string(),
         message: Some("add field member".to_string()),
         pubkey: "member_pubkey".to_string(),
@@ -159,7 +158,7 @@ fn field_codec_matrix_roundtrips_all_new_event_families() {
         put
     );
 
-    let invite = RadrootsGroupCreateInvite {
+    let invite = GroupCreateInvite {
         group_id: GROUP_ID.to_string(),
         message: Some("join the field group".to_string()),
         code: "invite-code".to_string(),
@@ -203,7 +202,7 @@ fn field_codec_matrix_rejects_missing_required_tags_and_mismatches() {
         Err(EventParseError::InvalidTag("d"))
     ));
 
-    let put_parts = group_put_user_to_wire_parts(&RadrootsGroupPutUser {
+    let put_parts = group_put_user_to_wire_parts(&GroupPutUser {
         group_id: GROUP_ID.to_string(),
         message: None,
         pubkey: "member_pubkey".to_string(),
@@ -267,7 +266,7 @@ fn field_codec_matrix_rejects_bad_hash_base64_kind_and_content() {
         })
     ));
 
-    let relay_parts = relay_auth_to_wire_parts(&RadrootsRelayAuth {
+    let relay_parts = relay_auth_to_wire_parts(&RelayAuth {
         relay: "wss://relay.example.invalid/farm/field-group".to_string(),
         challenge: "relay-provided-challenge".to_string(),
     })
@@ -277,7 +276,7 @@ fn field_codec_matrix_rejects_bad_hash_base64_kind_and_content() {
         Err(EventParseError::InvalidJson("content"))
     ));
 
-    let mut http_parts = http_auth_to_wire_parts(&RadrootsHttpAuth {
+    let mut http_parts = http_auth_to_wire_parts(&HttpAuth {
         url: "https://media.example.invalid/upload".to_string(),
         method: "POST".to_string(),
         payload_sha256: Some(SHA256.to_string()),
@@ -290,22 +289,22 @@ fn field_codec_matrix_rejects_bad_hash_base64_kind_and_content() {
     ));
 }
 
-fn sample_workspace() -> RadrootsFarmWorkspaceManifest {
-    RadrootsFarmWorkspaceManifest {
+fn sample_workspace() -> FarmWorkspaceManifest {
+    FarmWorkspaceManifest {
         d_tag: WORKSPACE_D_TAG.to_string(),
         schema: RADROOTS_FARM_WORKSPACE_SCHEMA.to_string(),
         farm_group_id: GROUP_ID.to_string(),
         name: "Small Regen Farm".to_string(),
         owner_pubkey: "workspace_owner_pubkey".to_string(),
-        farm: Some(RadrootsFarmRef {
+        farm: Some(FarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: FILE_D_TAG.to_string(),
         }),
-        relays: vec![RadrootsFarmWorkspaceRelay {
+        relays: vec![FarmWorkspaceRelay {
             url: "wss://relay.example.invalid/farm/field-group".to_string(),
-            mode: RadrootsFarmWorkspaceRelayMode::ReadWrite,
+            mode: FarmWorkspaceRelayMode::ReadWrite,
         }],
-        media_servers: vec![RadrootsFarmWorkspaceMediaServer {
+        media_servers: vec![FarmWorkspaceMediaServer {
             url: "https://media.example.invalid/farm/field-group".to_string(),
             service: "RadrootsPrivateMedia".to_string(),
         }],
@@ -316,51 +315,51 @@ fn sample_workspace() -> RadrootsFarmWorkspaceManifest {
     }
 }
 
-fn sample_crdt_change() -> RadrootsFarmCrdtChange {
-    RadrootsFarmCrdtChange {
+fn sample_crdt_change() -> FarmCrdtChange {
+    FarmCrdtChange {
         schema: RADROOTS_FARM_CRDT_CHANGE_SCHEMA.to_string(),
-        workspace: RadrootsFarmWorkspaceRef {
+        workspace: FarmWorkspaceRef {
             pubkey: "workspace_pubkey".to_string(),
             d_tag: WORKSPACE_D_TAG.to_string(),
         },
         farm_group_id: GROUP_ID.to_string(),
         document_id: DOCUMENT_ID.to_string(),
-        document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
-        crdt_backend: RadrootsCrdtBackend::Automerge,
+        document_kind: FarmCrdtDocumentKind::FarmTask,
+        crdt_backend: CrdtBackend::Automerge,
         crdt_backend_version: Some("0.x".to_string()),
         actor_id: "actor_abc".to_string(),
         change_hash: "crdt_hash_abc".to_string(),
         dependencies: Vec::new(),
         encoded_change: "abc-DEF_012".to_string(),
-        semantic_kind: RadrootsFarmSemanticKind::FarmTaskCreate,
+        semantic_kind: FarmSemanticKind::FarmTaskCreate,
         business_time_ms: 1_780_000_000_000,
         author_member_id: Some("member_abc".to_string()),
         app_version: Some("0.1.0".to_string()),
     }
 }
 
-fn sample_file_metadata() -> RadrootsFarmFileMetadata {
-    RadrootsFarmFileMetadata {
+fn sample_file_metadata() -> FarmFileMetadata {
+    FarmFileMetadata {
         d_tag: FILE_D_TAG.to_string(),
-        workspace: RadrootsFarmWorkspaceRef {
+        workspace: FarmWorkspaceRef {
             pubkey: "workspace_pubkey".to_string(),
             d_tag: WORKSPACE_D_TAG.to_string(),
         },
         farm_group_id: GROUP_ID.to_string(),
         owner_document_id: DOCUMENT_ID.to_string(),
-        owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+        owner_document_kind: FarmCrdtDocumentKind::FarmTask,
         caption: Some("Tomatoes harvested from Patch Y.".to_string()),
         url: "https://media.example.invalid/blob/sha256".to_string(),
         mime_type: "image/jpeg".to_string(),
         sha256: SHA256.to_string(),
         original_sha256: None,
         size_bytes: Some(123_456),
-        dimensions: Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 }),
+        dimensions: Some(FarmFileDimensions { w: 1600, h: 1200 }),
         blurhash: None,
-        thumb: Some(RadrootsFarmFileSource {
+        thumb: Some(FarmFileSource {
             url: "https://media.example.invalid/thumb/sha256".to_string(),
             mime_type: Some("image/jpeg".to_string()),
-            dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 240 }),
+            dimensions: Some(FarmFileDimensions { w: 320, h: 240 }),
         }),
         image: None,
         alt: Some("Harvested tomatoes in a crate".to_string()),
@@ -368,8 +367,8 @@ fn sample_file_metadata() -> RadrootsFarmFileMetadata {
     }
 }
 
-fn sample_group_metadata() -> RadrootsGroupEditableMetadata {
-    RadrootsGroupEditableMetadata {
+fn sample_group_metadata() -> GroupEditableMetadata {
+    GroupEditableMetadata {
         name: Some("Small Regen Farm".to_string()),
         about: Some("Field app group".to_string()),
         picture: Some("https://media.example.invalid/group.png".to_string()),

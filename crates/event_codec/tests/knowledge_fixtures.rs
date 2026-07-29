@@ -3,18 +3,17 @@
 use std::collections::BTreeSet;
 
 use radroots_event::contract::{
-    RadrootsContractValidationError, RadrootsEventClass, all_event_contracts,
-    validate_event_contract_shape,
+    ContractValidationError, EventClass, all_event_contracts, validate_event_contract_shape,
 };
 use radroots_event::envelope::kind::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM,
     KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_WIKI_ARTICLE,
 };
 use radroots_event::knowledge::{
-    RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RadrootsWikiArticle,
+    RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, WikiArticle,
 };
-use radroots_event::wire::RadrootsNip01EventWireParts;
-use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
+use radroots_event::wire::Nip01EventWireParts;
+use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::knowledge::{
     contribution_attestation_to_wire_parts, evidence_bounty_to_wire_parts,
@@ -36,8 +35,8 @@ use radroots_test_fixtures::knowledge::{
     wiki_redirect,
 };
 
-fn event_from_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+fn event_from_parts(parts: Nip01EventWireParts) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: hex_64('0'),
         author: hex_64('a'),
         created_at: 1_800_000_000,
@@ -49,7 +48,7 @@ fn event_from_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope
     .unwrap()
 }
 
-fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
+fn sign_parts(parts: Nip01EventWireParts) -> EventEnvelope {
     let tags = parts
         .tags
         .into_iter()
@@ -65,7 +64,7 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
         .custom_created_at(nostr::Timestamp::from_secs(1_800_000_000))
         .sign_with_keys(&keys)
         .expect("signed event");
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: event.id.to_hex(),
         author: event.pubkey.to_hex(),
         created_at: event.created_at.as_secs(),
@@ -83,12 +82,12 @@ fn sign_parts(parts: RadrootsNip01EventWireParts) -> RadrootsEventEnvelope {
 }
 
 fn event_with_parts(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     tags: Vec<Vec<String>>,
     content: String,
     sig: String,
-) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: event.id_hex().to_string(),
         author: event.author().to_hex().to_string(),
         created_at: event.created_at_u64(),
@@ -100,7 +99,7 @@ fn event_with_parts(
     .unwrap()
 }
 
-fn mutate_tags(event: &mut RadrootsEventEnvelope, update: impl FnOnce(&mut Vec<Vec<String>>)) {
+fn mutate_tags(event: &mut EventEnvelope, update: impl FnOnce(&mut Vec<Vec<String>>)) {
     let mut tags = event.tags_as_vec();
     update(&mut tags);
     *event = event_with_parts(
@@ -111,7 +110,7 @@ fn mutate_tags(event: &mut RadrootsEventEnvelope, update: impl FnOnce(&mut Vec<V
     );
 }
 
-fn replace_content(event: &mut RadrootsEventEnvelope, content: String) {
+fn replace_content(event: &mut EventEnvelope, content: String) {
     *event = event_with_parts(
         event,
         event.tags_as_vec(),
@@ -120,11 +119,11 @@ fn replace_content(event: &mut RadrootsEventEnvelope, content: String) {
     );
 }
 
-fn replace_sig(event: &mut RadrootsEventEnvelope, sig: String) {
+fn replace_sig(event: &mut EventEnvelope, sig: String) {
     *event = event_with_parts(event, event.tags_as_vec(), event.content().to_string(), sig);
 }
 
-fn parts_for_fixture(fixture: &RadrootsKnowledgeFixture) -> RadrootsNip01EventWireParts {
+fn parts_for_fixture(fixture: &RadrootsKnowledgeFixture) -> Nip01EventWireParts {
     match fixture {
         RadrootsKnowledgeFixture::WikiArticle(value) => wiki_article_to_wire_parts(value).unwrap(),
         RadrootsKnowledgeFixture::WikiRedirect(value) => {
@@ -279,7 +278,7 @@ fn adversarial_knowledge_fixtures_reject_at_expected_stages() {
     mutate_tags(&mut missing_contract_event, |tags| {
         tags.retain(|tag| tag.first().map(|value| value.as_str()) != Some("contract"));
     });
-    let signed = sign_parts(RadrootsNip01EventWireParts {
+    let signed = sign_parts(Nip01EventWireParts {
         kind: missing_contract_event.kind_u32(),
         content: missing_contract_event.content().to_string(),
         tags: missing_contract_event.tags_as_vec(),
@@ -301,7 +300,7 @@ fn adversarial_knowledge_fixtures_reject_at_expected_stages() {
         &mut private_event,
         serde_json::to_string(&private_value).unwrap(),
     );
-    let signed = sign_parts(RadrootsNip01EventWireParts {
+    let signed = sign_parts(Nip01EventWireParts {
         kind: private_event.kind_u32(),
         content: private_event.content().to_string(),
         tags: private_event.tags_as_vec(),
@@ -328,7 +327,7 @@ fn adversarial_knowledge_fixtures_reject_at_expected_stages() {
             }
         }
     });
-    let signed = sign_parts(RadrootsNip01EventWireParts {
+    let signed = sign_parts(Nip01EventWireParts {
         kind: unsupported_event.kind_u32(),
         content: unsupported_event.content().to_string(),
         tags: unsupported_event.tags_as_vec(),
@@ -344,7 +343,7 @@ fn nip54_and_signature_adversarial_fixtures_are_rejected() {
         .iter()
         .find(|fixture| fixture.id == "invalid_nip54_d_tag")
         .unwrap();
-    let mut article: RadrootsWikiArticle = wiki_article();
+    let mut article: WikiArticle = wiki_article();
     article.d_tag = "Soil Health".to_string();
     let error = wiki_article_to_wire_parts(&article).unwrap_err();
     assert_eq!(invalid_d_tag.pipeline_stage, "encode");
@@ -495,7 +494,7 @@ fn authoritative_knowledge_status_fields_are_rejected() {
             validate_event_contract_shape(&event, RADROOTS_KNOWLEDGE_CLAIM_SCHEMA).unwrap_err();
         assert_eq!(
             error,
-            RadrootsContractValidationError::ForbiddenContentField {
+            ContractValidationError::ForbiddenContentField {
                 contract_id: RADROOTS_KNOWLEDGE_CLAIM_SCHEMA,
                 field,
             }
@@ -528,7 +527,7 @@ fn immutable_knowledge_contracts_are_regular_events() {
             .find(|contract| contract.id == contract_id)
             .unwrap();
         assert_eq!(contract.kind, kind);
-        assert_eq!(contract.class, RadrootsEventClass::Regular);
+        assert_eq!(contract.class, EventClass::Regular);
     }
 }
 

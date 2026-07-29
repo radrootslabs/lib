@@ -12,10 +12,8 @@ use alloc::{
 #[cfg(any(feature = "std", test))]
 use std::{collections::BTreeMap, string::String, vec::Vec};
 
-use crate::envelope::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
-};
-use crate::id::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
+use crate::envelope::{EventEnvelope, EventEnvelopeError, EventEnvelopeParts};
+use crate::id::{EventId, EventSignature, ParseError, parse_public_key};
 use core::fmt;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -30,7 +28,7 @@ pub const DEFAULT_EXTRA_MAX_FIELDS: usize = 64;
 pub const DEFAULT_EXTRA_TOTAL_JSON_MAX_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsEventWireLimits {
+pub struct EventWireLimits {
     pub max_raw_json_bytes: usize,
     pub max_content_bytes: usize,
     pub max_tag_count: usize,
@@ -41,7 +39,7 @@ pub struct RadrootsEventWireLimits {
     pub max_total_extra_json_bytes: usize,
 }
 
-impl Default for RadrootsEventWireLimits {
+impl Default for EventWireLimits {
     fn default() -> Self {
         Self {
             max_raw_json_bytes: DEFAULT_RAW_JSON_MAX_BYTES,
@@ -57,12 +55,12 @@ impl Default for RadrootsEventWireLimits {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsCanonicalEventIdError {
-    InvalidPubkey(RadrootsIdParseError),
-    InvalidComputedEventId(RadrootsIdParseError),
+pub enum CanonicalEventIdError {
+    InvalidPubkey(ParseError),
+    InvalidComputedEventId(ParseError),
 }
 
-impl fmt::Display for RadrootsCanonicalEventIdError {
+impl fmt::Display for CanonicalEventIdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPubkey(error) => {
@@ -76,17 +74,17 @@ impl fmt::Display for RadrootsCanonicalEventIdError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsCanonicalEventIdError {}
+impl std::error::Error for CanonicalEventIdError {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventWireError {
+pub enum EventWireError {
     Json(String),
     RootNotObject,
     MissingField(&'static str),
     InvalidField(&'static str),
     InvalidIdentifier {
         field: &'static str,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     NonCanonicalIdentifier {
         field: &'static str,
@@ -134,15 +132,15 @@ pub enum RadrootsEventWireError {
         max: usize,
         actual: usize,
     },
-    CanonicalEventId(RadrootsCanonicalEventIdError),
-    Envelope(RadrootsEventEnvelopeError),
+    CanonicalEventId(CanonicalEventIdError),
+    Envelope(EventEnvelopeError),
     EventIdMismatch {
         declared: String,
         computed: String,
     },
 }
 
-impl fmt::Display for RadrootsEventWireError {
+impl fmt::Display for EventWireError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Json(error) => write!(f, "event wire json is invalid: {error}"),
@@ -204,16 +202,16 @@ impl fmt::Display for RadrootsEventWireError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsEventWireError {}
+impl std::error::Error for EventWireError {}
 
-impl From<RadrootsCanonicalEventIdError> for RadrootsEventWireError {
-    fn from(value: RadrootsCanonicalEventIdError) -> Self {
+impl From<CanonicalEventIdError> for EventWireError {
+    fn from(value: CanonicalEventIdError) -> Self {
         Self::CanonicalEventId(value)
     }
 }
 
-impl From<RadrootsEventEnvelopeError> for RadrootsEventWireError {
-    fn from(value: RadrootsEventEnvelopeError) -> Self {
+impl From<EventEnvelopeError> for EventWireError {
+    fn from(value: EventEnvelopeError) -> Self {
         Self::Envelope(value)
     }
 }
@@ -223,7 +221,7 @@ impl From<RadrootsEventEnvelopeError> for RadrootsEventWireError {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip01EventWireParts {
+pub struct Nip01EventWireParts {
     pub kind: u32,
     pub content: String,
     pub tags: Vec<Vec<String>>,
@@ -234,7 +232,7 @@ pub struct RadrootsNip01EventWireParts {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip01EventWire {
+pub struct Nip01EventWire {
     pub id: String,
     pub pubkey: String,
     pub created_at: u64,
@@ -246,28 +244,28 @@ pub struct RadrootsNip01EventWire {
     pub extra: BTreeMap<String, Value>,
 }
 
-impl RadrootsNip01EventWire {
-    pub fn parse_json(raw_json: &str) -> Result<Self, RadrootsEventWireError> {
-        Self::parse_json_with_limits(raw_json, RadrootsEventWireLimits::default())
+impl Nip01EventWire {
+    pub fn parse_json(raw_json: &str) -> Result<Self, EventWireError> {
+        Self::parse_json_with_limits(raw_json, EventWireLimits::default())
     }
 
     pub fn parse_json_with_limits(
         raw_json: &str,
-        limits: RadrootsEventWireLimits,
-    ) -> Result<Self, RadrootsEventWireError> {
+        limits: EventWireLimits,
+    ) -> Result<Self, EventWireError> {
         let raw_len = raw_json.len();
         if raw_len > limits.max_raw_json_bytes {
-            return Err(RadrootsEventWireError::RawJsonTooLarge {
+            return Err(EventWireError::RawJsonTooLarge {
                 max: limits.max_raw_json_bytes,
                 actual: raw_len,
             });
         }
         let value = serde_json::from_str::<Value>(raw_json)
-            .map_err(|error| RadrootsEventWireError::Json(error.to_string()))?;
+            .map_err(|error| EventWireError::Json(error.to_string()))?;
         Self::from_json_value(value, limits)
     }
 
-    pub fn canonical_id_preimage(&self) -> Result<String, RadrootsCanonicalEventIdError> {
+    pub fn canonical_id_preimage(&self) -> Result<String, CanonicalEventIdError> {
         canonical_nip01_event_id_preimage(
             self.pubkey.as_str(),
             self.created_at,
@@ -277,7 +275,7 @@ impl RadrootsNip01EventWire {
         )
     }
 
-    pub fn computed_event_id(&self) -> Result<RadrootsEventId, RadrootsCanonicalEventIdError> {
+    pub fn computed_event_id(&self) -> Result<EventId, CanonicalEventIdError> {
         compute_canonical_nip01_event_id(
             self.pubkey.as_str(),
             self.created_at,
@@ -287,10 +285,10 @@ impl RadrootsNip01EventWire {
         )
     }
 
-    pub fn verify_id(&self) -> Result<(), RadrootsEventWireError> {
+    pub fn verify_id(&self) -> Result<(), EventWireError> {
         let computed = self.computed_event_id()?.into_string();
         if computed.as_str() != self.id.as_str() {
-            return Err(RadrootsEventWireError::EventIdMismatch {
+            return Err(EventWireError::EventIdMismatch {
                 declared: self.id.clone(),
                 computed,
             });
@@ -298,16 +296,14 @@ impl RadrootsNip01EventWire {
         Ok(())
     }
 
-    pub fn into_envelope(self) -> Result<RadrootsEventEnvelope, RadrootsEventWireError> {
+    pub fn into_envelope(self) -> Result<EventEnvelope, EventWireError> {
         self.verify_id()?;
         self.into_envelope_unchecked_id()
-            .map_err(RadrootsEventWireError::Envelope)
+            .map_err(EventWireError::Envelope)
     }
 
-    pub(crate) fn into_envelope_unchecked_id(
-        self,
-    ) -> Result<RadrootsEventEnvelope, RadrootsEventEnvelopeError> {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    pub(crate) fn into_envelope_unchecked_id(self) -> Result<EventEnvelope, EventEnvelopeError> {
+        EventEnvelope::new(EventEnvelopeParts {
             id: self.id,
             author: self.pubkey,
             created_at: self.created_at,
@@ -318,13 +314,10 @@ impl RadrootsNip01EventWire {
         })
     }
 
-    fn from_json_value(
-        value: Value,
-        limits: RadrootsEventWireLimits,
-    ) -> Result<Self, RadrootsEventWireError> {
+    fn from_json_value(value: Value, limits: EventWireLimits) -> Result<Self, EventWireError> {
         let mut object = match value {
             Value::Object(object) => object,
-            _ => return Err(RadrootsEventWireError::RootNotObject),
+            _ => return Err(EventWireError::RootNotObject),
         };
         let id = take_canonical_event_id(&mut object)?;
         let pubkey = take_canonical_pubkey(&mut object)?;
@@ -334,7 +327,7 @@ impl RadrootsNip01EventWire {
         let content = take_string(&mut object, "content")?;
         let content_len = content.len();
         if content_len > limits.max_content_bytes {
-            return Err(RadrootsEventWireError::ContentTooLarge {
+            return Err(EventWireError::ContentTooLarge {
                 max: limits.max_content_bytes,
                 actual: content_len,
             });
@@ -362,7 +355,7 @@ pub fn canonical_nip01_event_id_preimage(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<String, RadrootsCanonicalEventIdError> {
+) -> Result<String, CanonicalEventIdError> {
     canonical_nip01_event_id_preimage_v1(pubkey, created_at, kind, tags, content)
 }
 
@@ -373,8 +366,8 @@ pub fn canonical_nip01_event_id_preimage_v1(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<String, RadrootsCanonicalEventIdError> {
-    let pubkey = parse_public_key(pubkey).map_err(RadrootsCanonicalEventIdError::InvalidPubkey)?;
+) -> Result<String, CanonicalEventIdError> {
+    let pubkey = parse_public_key(pubkey).map_err(CanonicalEventIdError::InvalidPubkey)?;
     let pubkey = pubkey.to_hex();
     let mut preimage = String::new();
     preimage.push_str("[0,");
@@ -409,7 +402,7 @@ pub fn compute_canonical_nip01_event_id(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsEventId, RadrootsCanonicalEventIdError> {
+) -> Result<EventId, CanonicalEventIdError> {
     compute_canonical_nip01_event_id_v1(pubkey, created_at, kind, tags, content)
 }
 
@@ -420,56 +413,48 @@ pub fn compute_canonical_nip01_event_id_v1(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsEventId, RadrootsCanonicalEventIdError> {
+) -> Result<EventId, CanonicalEventIdError> {
     let preimage = canonical_nip01_event_id_preimage_v1(pubkey, created_at, kind, tags, content)?;
     let digest = Sha256::digest(preimage.as_bytes());
     let event_id = hex::encode(digest);
-    RadrootsEventId::parse(event_id).map_err(RadrootsCanonicalEventIdError::InvalidComputedEventId)
+    EventId::parse(event_id).map_err(CanonicalEventIdError::InvalidComputedEventId)
 }
 
 fn take_string(
     object: &mut Map<String, Value>,
     field: &'static str,
-) -> Result<String, RadrootsEventWireError> {
+) -> Result<String, EventWireError> {
     match object.remove(field) {
         Some(Value::String(value)) => Ok(value),
-        Some(_) => Err(RadrootsEventWireError::InvalidField(field)),
-        None => Err(RadrootsEventWireError::MissingField(field)),
+        Some(_) => Err(EventWireError::InvalidField(field)),
+        None => Err(EventWireError::MissingField(field)),
     }
 }
 
-fn take_canonical_event_id(
-    object: &mut Map<String, Value>,
-) -> Result<String, RadrootsEventWireError> {
+fn take_canonical_event_id(object: &mut Map<String, Value>) -> Result<String, EventWireError> {
     let raw = take_string(object, "id")?;
-    let parsed = RadrootsEventId::parse(raw.as_str())
-        .map_err(|error| RadrootsEventWireError::InvalidIdentifier { field: "id", error })?;
+    let parsed = EventId::parse(raw.as_str())
+        .map_err(|error| EventWireError::InvalidIdentifier { field: "id", error })?;
     canonical_identifier_string("id", raw, parsed.into_string())
 }
 
-fn take_canonical_pubkey(
-    object: &mut Map<String, Value>,
-) -> Result<String, RadrootsEventWireError> {
+fn take_canonical_pubkey(object: &mut Map<String, Value>) -> Result<String, EventWireError> {
     let raw = take_string(object, "pubkey")?;
-    let parsed = parse_public_key(raw.as_str()).map_err(|error| {
-        RadrootsEventWireError::InvalidIdentifier {
+    let parsed =
+        parse_public_key(raw.as_str()).map_err(|error| EventWireError::InvalidIdentifier {
             field: "pubkey",
             error,
-        }
-    })?;
+        })?;
     canonical_identifier_string("pubkey", raw, parsed.to_hex())
 }
 
-fn take_canonical_signature(
-    object: &mut Map<String, Value>,
-) -> Result<String, RadrootsEventWireError> {
+fn take_canonical_signature(object: &mut Map<String, Value>) -> Result<String, EventWireError> {
     let raw = take_string(object, "sig")?;
-    let parsed = RadrootsEventSignature::parse(raw.as_str()).map_err(|error| {
-        RadrootsEventWireError::InvalidIdentifier {
+    let parsed =
+        EventSignature::parse(raw.as_str()).map_err(|error| EventWireError::InvalidIdentifier {
             field: "sig",
             error,
-        }
-    })?;
+        })?;
     canonical_identifier_string("sig", raw, parsed.into_string())
 }
 
@@ -477,58 +462,50 @@ fn canonical_identifier_string(
     field: &'static str,
     raw: String,
     canonical: String,
-) -> Result<String, RadrootsEventWireError> {
+) -> Result<String, EventWireError> {
     if canonical.as_str() != raw.as_str() {
-        return Err(RadrootsEventWireError::NonCanonicalIdentifier { field });
+        return Err(EventWireError::NonCanonicalIdentifier { field });
     }
     Ok(canonical)
 }
 
-fn take_u64(
-    object: &mut Map<String, Value>,
-    field: &'static str,
-) -> Result<u64, RadrootsEventWireError> {
+fn take_u64(object: &mut Map<String, Value>, field: &'static str) -> Result<u64, EventWireError> {
     match object.remove(field) {
-        Some(Value::Number(value)) => value
-            .as_u64()
-            .ok_or(RadrootsEventWireError::InvalidField(field)),
-        Some(_) => Err(RadrootsEventWireError::InvalidField(field)),
-        None => Err(RadrootsEventWireError::MissingField(field)),
+        Some(Value::Number(value)) => value.as_u64().ok_or(EventWireError::InvalidField(field)),
+        Some(_) => Err(EventWireError::InvalidField(field)),
+        None => Err(EventWireError::MissingField(field)),
     }
 }
 
-fn take_u32(
-    object: &mut Map<String, Value>,
-    field: &'static str,
-) -> Result<u32, RadrootsEventWireError> {
+fn take_u32(object: &mut Map<String, Value>, field: &'static str) -> Result<u32, EventWireError> {
     let value = take_u64(object, field)?;
-    u32::try_from(value).map_err(|_| RadrootsEventWireError::InvalidField(field))
+    u32::try_from(value).map_err(|_| EventWireError::InvalidField(field))
 }
 
 fn take_tags(
     object: &mut Map<String, Value>,
-    limits: RadrootsEventWireLimits,
-) -> Result<Vec<Vec<String>>, RadrootsEventWireError> {
+    limits: EventWireLimits,
+) -> Result<Vec<Vec<String>>, EventWireError> {
     let raw_tags = match object.remove("tags") {
         Some(Value::Array(raw_tags)) => raw_tags,
-        Some(_) => return Err(RadrootsEventWireError::InvalidField("tags")),
-        None => return Err(RadrootsEventWireError::MissingField("tags")),
+        Some(_) => return Err(EventWireError::InvalidField("tags")),
+        None => return Err(EventWireError::MissingField("tags")),
     };
     let tag_count = raw_tags.len();
     if tag_count > limits.max_tag_count {
-        return Err(RadrootsEventWireError::TooManyTags {
+        return Err(EventWireError::TooManyTags {
             max: limits.max_tag_count,
             actual: tag_count,
         });
     }
     let total_tag_elements = raw_tags.iter().try_fold(0usize, |total, raw_tag| {
         let Value::Array(values) = raw_tag else {
-            return Err(RadrootsEventWireError::InvalidField("tags"));
+            return Err(EventWireError::InvalidField("tags"));
         };
         Ok(total.saturating_add(values.len()))
     })?;
     if total_tag_elements > limits.max_total_tag_elements {
-        return Err(RadrootsEventWireError::TooManyTagElements {
+        return Err(EventWireError::TooManyTagElements {
             max: limits.max_total_tag_elements,
             actual: total_tag_elements,
         });
@@ -538,20 +515,20 @@ fn take_tags(
     for (tag_index, raw_tag) in raw_tags.into_iter().enumerate() {
         let raw_values = match raw_tag {
             Value::Array(values) => values,
-            _ => return Err(RadrootsEventWireError::InvalidField("tags")),
+            _ => return Err(EventWireError::InvalidField("tags")),
         };
         if raw_values.is_empty() {
-            return Err(RadrootsEventWireError::EmptyTag { index: tag_index });
+            return Err(EventWireError::EmptyTag { index: tag_index });
         }
         let mut tag = Vec::with_capacity(raw_values.len());
         for (element_index, raw_value) in raw_values.into_iter().enumerate() {
             let value = match raw_value {
                 Value::String(value) => value,
-                _ => return Err(RadrootsEventWireError::InvalidField("tags")),
+                _ => return Err(EventWireError::InvalidField("tags")),
             };
             let value_len = value.len();
             if value_len > limits.max_tag_element_bytes {
-                return Err(RadrootsEventWireError::TagElementTooLarge {
+                return Err(EventWireError::TagElementTooLarge {
                     tag_index,
                     element_index,
                     max: limits.max_tag_element_bytes,
@@ -563,7 +540,7 @@ fn take_tags(
             }
             total_tag_bytes = total_tag_bytes.saturating_add(value_len);
             if total_tag_bytes > limits.max_total_tag_bytes {
-                return Err(RadrootsEventWireError::TagsTooLarge {
+                return Err(EventWireError::TagsTooLarge {
                     max: limits.max_total_tag_bytes,
                     actual: total_tag_bytes,
                 });
@@ -575,23 +552,23 @@ fn take_tags(
     Ok(tags)
 }
 
-fn validate_tag_key(index: usize, value: &str) -> Result<(), RadrootsEventWireError> {
+fn validate_tag_key(index: usize, value: &str) -> Result<(), EventWireError> {
     if value.is_empty() {
-        return Err(RadrootsEventWireError::EmptyTagKey { index });
+        return Err(EventWireError::EmptyTagKey { index });
     }
     if value.chars().any(char::is_control) {
-        return Err(RadrootsEventWireError::ControlCharacterTagKey { index });
+        return Err(EventWireError::ControlCharacterTagKey { index });
     }
     Ok(())
 }
 
 fn validate_extra(
     object: Map<String, Value>,
-    limits: RadrootsEventWireLimits,
-) -> Result<BTreeMap<String, Value>, RadrootsEventWireError> {
+    limits: EventWireLimits,
+) -> Result<BTreeMap<String, Value>, EventWireError> {
     let extra_count = object.len();
     if extra_count > limits.max_extra_fields {
-        return Err(RadrootsEventWireError::TooManyExtraFields {
+        return Err(EventWireError::TooManyExtraFields {
             max: limits.max_extra_fields,
             actual: extra_count,
         });
@@ -606,7 +583,7 @@ fn validate_extra(
             .saturating_add(1)
             .saturating_add(value_json_len);
         if total_json_bytes > limits.max_total_extra_json_bytes {
-            return Err(RadrootsEventWireError::ExtraJsonTooLarge {
+            return Err(EventWireError::ExtraJsonTooLarge {
                 max: limits.max_total_extra_json_bytes,
                 actual: total_json_bytes,
             });

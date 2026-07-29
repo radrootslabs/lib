@@ -1,13 +1,12 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsActorContext, RadrootsAuthorityError, RadrootsEventSigner};
-use radroots_event::contract::{RadrootsEventContract, event_contract};
+use radroots_event::contract::{EventContract, event_contract};
 use radroots_event::draft::{
-    RadrootsDraftError, RadrootsEventDraft, RadrootsSignedEvent,
-    validate_signed_nostr_event_matches_draft,
+    DraftError, EventDraft, SignedEvent, validate_signed_nostr_event_matches_draft,
 };
 #[cfg(test)]
-use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event::wire::Nip01EventWire;
 
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::ToString};
@@ -16,7 +15,7 @@ use std::{borrow::ToOwned, string::ToString};
 
 pub fn authorize_actor_for_contract(
     actor: &RadrootsActorContext,
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
 ) -> Result<(), RadrootsAuthorityError> {
     if actor.satisfies(contract.required_author_role()) {
         Ok(())
@@ -30,8 +29,8 @@ pub fn authorize_actor_for_contract(
 
 pub fn authorize_actor_for_draft(
     actor: &RadrootsActorContext,
-    draft: &RadrootsEventDraft,
-) -> Result<&'static RadrootsEventContract, RadrootsAuthorityError> {
+    draft: &EventDraft,
+) -> Result<&'static EventContract, RadrootsAuthorityError> {
     let contract = event_contract(draft.contract_id()).ok_or_else(|| {
         RadrootsAuthorityError::UnknownContract {
             contract_id: draft.contract_id().to_owned(),
@@ -56,7 +55,7 @@ pub fn authorize_actor_for_draft(
 
 pub fn authorize_signer_for_draft<S>(
     signer: &S,
-    draft: &RadrootsEventDraft,
+    draft: &EventDraft,
 ) -> Result<(), RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
@@ -74,8 +73,8 @@ where
 pub fn sign_authorized_draft<S>(
     actor: &RadrootsActorContext,
     signer: &S,
-    draft: &RadrootsEventDraft,
-) -> Result<RadrootsSignedEvent, RadrootsAuthorityError>
+    draft: &EventDraft,
+) -> Result<SignedEvent, RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
 {
@@ -85,12 +84,12 @@ where
 fn sign_authorized_draft_with_validator<S, V>(
     actor: &RadrootsActorContext,
     signer: &S,
-    draft: &RadrootsEventDraft,
+    draft: &EventDraft,
     validate_draft: V,
-) -> Result<RadrootsSignedEvent, RadrootsAuthorityError>
+) -> Result<SignedEvent, RadrootsAuthorityError>
 where
     S: RadrootsEventSigner + ?Sized,
-    V: FnOnce(&RadrootsEventDraft) -> Result<(), RadrootsDraftError>,
+    V: FnOnce(&EventDraft) -> Result<(), DraftError>,
 {
     validate_draft(draft).map_err(RadrootsAuthorityError::DraftValidation)?;
     authorize_actor_for_draft(actor, draft)?;
@@ -101,58 +100,58 @@ where
 }
 
 pub fn validate_signed_event_matches_draft(
-    signed_event: &RadrootsSignedEvent,
-    draft: &RadrootsEventDraft,
+    signed_event: &SignedEvent,
+    draft: &EventDraft,
 ) -> Result<(), RadrootsAuthorityError> {
     validate_signed_nostr_event_matches_draft(signed_event, draft)
         .map_err(authority_error_from_draft_validation)
 }
 
-fn authority_error_from_draft_validation(error: RadrootsDraftError) -> RadrootsAuthorityError {
+fn authority_error_from_draft_validation(error: DraftError) -> RadrootsAuthorityError {
     match error {
-        RadrootsDraftError::SignedEventPubkeyMismatch {
+        DraftError::SignedEventPubkeyMismatch {
             expected_pubkey,
             actual_pubkey,
         } => RadrootsAuthorityError::SignedEventPubkeyMismatch {
             expected_pubkey,
             actual_pubkey,
         },
-        RadrootsDraftError::SignedEventIdMismatch {
+        DraftError::SignedEventIdMismatch {
             expected_event_id,
             actual_event_id,
         } => RadrootsAuthorityError::SignedEventIdMismatch {
             expected_event_id,
             actual_event_id,
         },
-        RadrootsDraftError::SignedEventCreatedAtMismatch {
+        DraftError::SignedEventCreatedAtMismatch {
             expected_created_at,
             actual_created_at,
         } => RadrootsAuthorityError::SignedEventCreatedAtMismatch {
             expected_created_at,
             actual_created_at,
         },
-        RadrootsDraftError::SignedEventKindMismatch {
+        DraftError::SignedEventKindMismatch {
             expected_kind,
             actual_kind,
         } => RadrootsAuthorityError::SignedEventKindMismatch {
             expected_kind,
             actual_kind,
         },
-        RadrootsDraftError::SignedEventTagsMismatch {
+        DraftError::SignedEventTagsMismatch {
             expected_len,
             actual_len,
         } => RadrootsAuthorityError::SignedEventTagsMismatch {
             expected_len,
             actual_len,
         },
-        RadrootsDraftError::SignedEventContentMismatch {
+        DraftError::SignedEventContentMismatch {
             expected_len,
             actual_len,
         } => RadrootsAuthorityError::SignedEventContentMismatch {
             expected_len,
             actual_len,
         },
-        RadrootsDraftError::SignedEventComputedIdMismatch {
+        DraftError::SignedEventComputedIdMismatch {
             expected_event_id,
             computed_event_id,
         } => RadrootsAuthorityError::SignedEventComputedIdMismatch {
@@ -195,8 +194,8 @@ mod tests {
         RadrootsActorContext::explicit_pubkey(pubkey, [AuthorRole::Buyer]).expect("buyer")
     }
 
-    fn operational_listing_event_draft(pubkey: &str) -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn operational_listing_event_draft(pubkey: &str) -> EventDraft {
+        EventDraft::new(
             "radroots.operational_listing.published.v1",
             KIND_CLASSIFIED_LISTING,
             1_700_000_000,
@@ -276,9 +275,9 @@ mod tests {
 
         fn sign_frozen_draft(
             &self,
-            draft: &RadrootsEventDraft,
-        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
-            let wire = RadrootsNip01EventWire {
+            draft: &EventDraft,
+        ) -> Result<SignedEvent, RadrootsSignerError> {
+            let wire = Nip01EventWire {
                 id: self
                     .overrides
                     .event_id
@@ -310,7 +309,7 @@ mod tests {
                     .into_string();
             }
             let raw_json = raw_json_for_wire(&wire);
-            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
+            SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
                 RadrootsSignerError::SigningFailed {
                     message: error.to_string(),
                 }
@@ -343,15 +342,15 @@ mod tests {
 
         fn sign_frozen_draft(
             &self,
-            _draft: &RadrootsEventDraft,
-        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+            _draft: &EventDraft,
+        ) -> Result<SignedEvent, RadrootsSignerError> {
             self.sign_invocations
                 .set(self.sign_invocations.get().saturating_add(1));
             Err(RadrootsSignerError::Rejected)
         }
     }
 
-    fn signed_event_from_draft(draft: &RadrootsEventDraft) -> RadrootsSignedEvent {
+    fn signed_event_from_draft(draft: &EventDraft) -> SignedEvent {
         signed_event_from_parts(
             draft.expected_pubkey().to_hex().to_owned(),
             draft.created_at_u64(),
@@ -367,8 +366,8 @@ mod tests {
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsSignedEvent {
-        let mut wire = RadrootsNip01EventWire {
+    ) -> SignedEvent {
+        let mut wire = Nip01EventWire {
             id: String::new(),
             pubkey,
             created_at,
@@ -380,10 +379,10 @@ mod tests {
         };
         wire.id = wire.computed_event_id().expect("event id").into_string();
         let raw_json = raw_json_for_wire(&wire);
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn raw_json_for_wire(wire: &RadrootsNip01EventWire) -> String {
+    fn raw_json_for_wire(wire: &Nip01EventWire) -> String {
         serde_json::json!({
             "id": wire.id,
             "pubkey": wire.pubkey,
@@ -467,7 +466,7 @@ mod tests {
             let rejected_contract = event_contract(contract_id).expect("rejected contract");
             assert!(!rejected_contract.authoring_policy().permits_generic_draft());
             let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
-                Err(RadrootsDraftError::ContractNotDraftAuthorable {
+                Err(DraftError::ContractNotDraftAuthorable {
                     contract_id: contract_id.to_owned(),
                 })
             })
@@ -475,11 +474,9 @@ mod tests {
 
             assert_eq!(
                 error,
-                RadrootsAuthorityError::DraftValidation(
-                    RadrootsDraftError::ContractNotDraftAuthorable {
-                        contract_id: contract_id.to_owned(),
-                    }
-                )
+                RadrootsAuthorityError::DraftValidation(DraftError::ContractNotDraftAuthorable {
+                    contract_id: contract_id.to_owned(),
+                })
             );
         }
         assert_eq!(signer.identity_invocations.get(), 0);
@@ -495,7 +492,7 @@ mod tests {
 
         for actual in 1..RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
             let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
-                Err(RadrootsDraftError::ContractRegistryVersionMismatch {
+                Err(DraftError::ContractRegistryVersionMismatch {
                     expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
                     actual,
                 })
@@ -505,7 +502,7 @@ mod tests {
             assert_eq!(
                 error,
                 RadrootsAuthorityError::DraftValidation(
-                    RadrootsDraftError::ContractRegistryVersionMismatch {
+                    DraftError::ContractRegistryVersionMismatch {
                         expected: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
                         actual,
                     }
@@ -653,7 +650,7 @@ mod tests {
 
     #[test]
     fn draft_validation_fallback_errors_map_to_computed_id_invalid() {
-        let error = authority_error_from_draft_validation(RadrootsDraftError::UnknownContract(
+        let error = authority_error_from_draft_validation(DraftError::UnknownContract(
             "radroots.unknown.v1".to_owned(),
         ));
 
@@ -692,7 +689,7 @@ mod tests {
     #[test]
     fn trade_proposal_draft_requires_buyer_role() {
         let pubkey = hex_64('a');
-        let draft = RadrootsEventDraft::new(
+        let draft = EventDraft::new(
             "radroots.trade.proposal.v1",
             KIND_TRADE_PROPOSAL,
             1_700_000_000,

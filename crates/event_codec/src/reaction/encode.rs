@@ -7,40 +7,36 @@ use alloc::{
 };
 
 use radroots_event::{
-    envelope::kind::KIND_REACTION, post::reaction::RadrootsReaction, social::RadrootsSocialTarget,
+    envelope::kind::KIND_REACTION, post::reaction::Reaction, social::SocialTarget,
 };
 
 use crate::error::EventEncodeError;
 use crate::field_helpers::{
     parse_address_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_REACTION;
 
-pub fn reaction_build_tags(
-    reaction: &RadrootsReaction,
-) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn reaction_build_tags(reaction: &Reaction) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::with_capacity(4);
     push_reaction_target(&mut tags, &reaction.target)?;
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    reaction: &RadrootsReaction,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(reaction: &Reaction) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(reaction, DEFAULT_KIND)
 }
 
 pub fn to_wire_parts_with_kind(
-    reaction: &RadrootsReaction,
+    reaction: &Reaction,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = reaction_build_tags(reaction)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: reaction.content.clone(),
         tags,
@@ -49,10 +45,10 @@ pub fn to_wire_parts_with_kind(
 
 fn push_reaction_target(
     tags: &mut Vec<Vec<String>>,
-    target: &RadrootsSocialTarget,
+    target: &SocialTarget,
 ) -> Result<(), EventEncodeError> {
     match target {
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             id,
             author,
             event_kind,
@@ -74,7 +70,7 @@ fn push_reaction_target(
                 tags.push(vec!["k".to_string(), kind.to_string()]);
             }
         }
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address,
             author,
             event_kind,
@@ -105,7 +101,7 @@ fn push_reaction_target(
             tags.push(vec!["p".to_string(), parsed.pubkey]);
             tags.push(vec!["k".to_string(), parsed.kind.to_string()]);
         }
-        RadrootsSocialTarget::External { .. } => {
+        SocialTarget::External { .. } => {
             return Err(EventEncodeError::InvalidField("target"));
         }
     }
@@ -118,8 +114,8 @@ mod tests {
 
     #[test]
     fn reaction_event_target_encodes_without_relays() {
-        let reaction = RadrootsReaction {
-            target: RadrootsSocialTarget::Event {
+        let reaction = Reaction {
+            target: SocialTarget::Event {
                 id: "a".repeat(64),
                 author: Some("b".repeat(64)),
                 event_kind: Some(1),

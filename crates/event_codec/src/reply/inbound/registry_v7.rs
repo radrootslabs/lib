@@ -8,12 +8,12 @@ use std::collections::BTreeSet;
 
 use radroots_event::{
     envelope::kind::KIND_POST,
-    id::{RadrootsEventId, RadrootsIdParseError},
+    id::{EventId, ParseError},
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
-    tag::relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::NostrRelayHint,
 };
 use radroots_identity::{Error as PublicKeyError, PublicKey};
 
@@ -50,7 +50,7 @@ pub enum RadrootsNip10ReplyDiagnostic {
     ReferenceRelayIgnored {
         tag_index: usize,
         raw_tag: Vec<String>,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     ReferenceAuthorIgnored {
         tag_index: usize,
@@ -64,7 +64,7 @@ pub enum RadrootsNip10ReplyDiagnostic {
     CitationEventIdIgnored {
         tag_index: usize,
         raw_tag: Vec<String>,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     CitationMarkerIgnored {
         tag_index: usize,
@@ -82,7 +82,7 @@ pub enum RadrootsNip10ReplyDiagnostic {
     ReplyAuthorRelayIgnored {
         tag_index: usize,
         raw_tag: Vec<String>,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     ReplyAuthorDuplicateIgnored {
         tag_index: usize,
@@ -148,8 +148,8 @@ impl RadrootsNip10ReplyDiagnostic {
 pub struct RadrootsInboundNip10EventReference {
     tag_index: usize,
     raw_tag: Vec<String>,
-    event_id: RadrootsEventId,
-    relay: Option<RadrootsNostrRelayHint>,
+    event_id: EventId,
+    relay: Option<NostrRelayHint>,
     author_hint: Option<PublicKey>,
 }
 
@@ -162,11 +162,11 @@ impl RadrootsInboundNip10EventReference {
         &self.raw_tag
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
@@ -180,7 +180,7 @@ pub struct RadrootsInboundNip10Participant {
     tag_index: usize,
     raw_tag: Vec<String>,
     pubkey: PublicKey,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
 }
 
 impl RadrootsInboundNip10Participant {
@@ -196,7 +196,7 @@ impl RadrootsInboundNip10Participant {
         &self.pubkey
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 }
@@ -268,7 +268,7 @@ pub enum RadrootsNip10ReplyProjectionError {
     },
     EventIdInvalid {
         tag_index: usize,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     ReplyReferenceAmbiguous,
     TagElementTooLarge {
@@ -560,7 +560,7 @@ fn parse_event_reference(
         .get(1)
         .ok_or(RadrootsNip10ReplyProjectionError::EventReferenceShape { tag_index })
         .and_then(|value| {
-            RadrootsEventId::parse(value).map_err(|error| {
+            EventId::parse(value).map_err(|error| {
                 RadrootsNip10ReplyProjectionError::EventIdInvalid { tag_index, error }
             })
         })?;
@@ -629,7 +629,7 @@ fn project_supplemental_reference(
             return None;
         }
     }
-    let event_id = match RadrootsEventId::parse(&tag[1]) {
+    let event_id = match EventId::parse(&tag[1]) {
         Ok(event_id) => event_id,
         Err(error) => {
             diagnostics.push(RadrootsNip10ReplyDiagnostic::CitationEventIdIgnored {
@@ -745,12 +745,10 @@ fn project_participants(
     participants
 }
 
-fn parse_relay_hint(
-    value: Option<&str>,
-) -> Result<Option<RadrootsNostrRelayHint>, RadrootsIdParseError> {
+fn parse_relay_hint(value: Option<&str>) -> Result<Option<NostrRelayHint>, ParseError> {
     match value {
         None | Some("") => Ok(None),
-        Some(value) => RadrootsNostrRelayHint::parse(value).map(Some),
+        Some(value) => NostrRelayHint::parse(value).map(Some),
     }
 }
 

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use radroots_blossom::Sha256;
-use radroots_event::food::availability::RadrootsFoodIdentifier;
+use radroots_event::food::availability::FoodIdentifier;
 use radroots_event_store::{
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
     RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1,
@@ -404,7 +404,7 @@ async fn execute_case(case: ProjectionCase) {
     assert_eq!(case.expected.coordinate.kind, 30_402, "{}", case.id);
     let public_key = PublicKey::from_hex(&case.expected.coordinate.pubkey)
         .unwrap_or_else(|error| panic!("{}: expected public key: {error}", case.id));
-    let identifier = RadrootsFoodIdentifier::parse(&case.expected.coordinate.d_tag)
+    let identifier = FoodIdentifier::parse(&case.expected.coordinate.d_tag)
         .unwrap_or_else(|error| panic!("{}: expected identifier: {error}", case.id));
     let projection = store
         .food_availability_v1(&public_key, &identifier)

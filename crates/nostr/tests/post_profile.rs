@@ -3,10 +3,9 @@ mod test_fixtures;
 
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
-    media::RadrootsAuthoredImage,
+    media::AuthoredImage,
     post::{
-        RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostImage,
-        RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
+        AuthoredAsk, AuthoredPhotoUpdate, AuthoredPostImage, AuthoredUpdate, PostImageDimensions,
     },
 };
 use radroots_nostr::{
@@ -23,7 +22,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
         RadrootsNostrSecretKey::from_hex(test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX).unwrap(),
     );
     let created_at = RadrootsNostrTimestamp::from_secs(1_784_347_200);
-    let update = RadrootsAuthoredUpdate::new("Farm update").unwrap();
+    let update = AuthoredUpdate::new("Farm update").unwrap();
     let event = radroots_nostr_build_update_event(&update)
         .unwrap()
         .custom_created_at(created_at)
@@ -36,8 +35,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
 
     let image = authored_image();
     let photo =
-        RadrootsAuthoredPhotoUpdate::new(format!("Harvest {}", image.url()), vec![image.clone()])
-            .unwrap();
+        AuthoredPhotoUpdate::new(format!("Harvest {}", image.url()), vec![image.clone()]).unwrap();
     let event = radroots_nostr_build_photo_update_event(&photo)
         .unwrap()
         .custom_created_at(created_at)
@@ -47,8 +45,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
     assert_eq!(event.tags.iter().next().unwrap().as_slice()[0], "imeta");
     assert!(event.verify().is_ok());
 
-    let ask =
-        RadrootsAuthoredAsk::new(format!("Is this ready? {}", image.url()), vec![image]).unwrap();
+    let ask = AuthoredAsk::new(format!("Is this ready? {}", image.url()), vec![image]).unwrap();
     let event = radroots_nostr_build_ask_event(&ask)
         .unwrap()
         .custom_created_at(created_at)
@@ -61,7 +58,7 @@ fn typed_post_builders_preserve_strict_wire_profiles() {
     assert!(event.verify().is_ok());
 }
 
-fn authored_image() -> RadrootsAuthoredPostImage {
+fn authored_image() -> AuthoredPostImage {
     let bytes = b"strawberries";
     let hash = Sha256::digest(bytes);
     let media_type = MediaType::parse("image/webp").unwrap();
@@ -77,9 +74,9 @@ fn authored_image() -> RadrootsAuthoredPostImage {
     .unwrap()
     .verify_bytes(bytes, &media_type)
     .unwrap();
-    RadrootsAuthoredPostImage::new(
-        RadrootsAuthoredImage::try_from(descriptor).unwrap(),
-        RadrootsPostImageDimensions::new(1200, 900).unwrap(),
+    AuthoredPostImage::new(
+        AuthoredImage::try_from(descriptor).unwrap(),
+        PostImageDimensions::new(1200, 900).unwrap(),
         "Harvest",
     )
     .unwrap()

@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{envelope::kind::KIND_MESSAGE, social::message::RadrootsMessage};
+use radroots_event::{envelope::kind::KIND_MESSAGE, social::message::Message};
 
 use crate::error::EventParseError;
 use crate::message::tags::{parse_recipients, parse_reply_tag, parse_subject_tag};
@@ -16,7 +16,7 @@ pub fn message_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsMessage, EventParseError> {
+) -> Result<Message, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "14",
@@ -33,7 +33,7 @@ pub fn message_from_tags(
 
     let subject = parse_subject_tag(tags)?;
 
-    Ok(RadrootsMessage {
+    Ok(Message {
         recipients,
         content: content.to_string(),
         reply_to,
@@ -48,7 +48,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsMessage>, EventParseError> {
+) -> Result<RadrootsParsedData<Message>, EventParseError> {
     let message = message_from_tags(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -67,7 +67,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsMessage>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Message>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

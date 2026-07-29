@@ -2,7 +2,7 @@
 
 use radroots_core::{Decimal, Quantity, Unit};
 
-use crate::farm::resource_area::RadrootsResourceAreaRef;
+use crate::farm::resource_area::ResourceAreaRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -14,7 +14,7 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsResourceHarvestProduct {
+pub struct ResourceHarvestProduct {
     pub key: String,
     pub category: Option<String>,
 }
@@ -26,10 +26,10 @@ pub struct RadrootsResourceHarvestProduct {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
-pub struct RadrootsResourceHarvestCap {
+pub struct ResourceHarvestCap {
     pub d_tag: String,
-    pub resource_area: RadrootsResourceAreaRef,
-    pub product: RadrootsResourceHarvestProduct,
+    pub resource_area: ResourceAreaRef,
+    pub product: ResourceHarvestProduct,
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     pub start: u64,
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]

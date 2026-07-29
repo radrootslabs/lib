@@ -8,8 +8,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_REPORT,
-    post::report::RadrootsReport,
-    social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
+    post::report::Report,
+    social::{ReportFileTarget, ReportType, SocialTarget},
     tag::name::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
 };
 
@@ -18,9 +18,9 @@ use crate::field_helpers::{
     parse_address_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
 use crate::social_helpers::validate_http_url;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
-pub fn report_build_tags(report: &RadrootsReport) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn report_build_tags(report: &Report) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_report(report)?;
     let report_type = report_type_as_str(&report.report_type);
     let mut tags = Vec::new();
@@ -38,27 +38,25 @@ pub fn report_build_tags(report: &RadrootsReport) -> Result<Vec<Vec<String>>, Ev
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    report: &RadrootsReport,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(report: &Report) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(report, KIND_REPORT)
 }
 
 pub fn to_wire_parts_with_kind(
-    report: &RadrootsReport,
+    report: &Report,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_REPORT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: report.content.clone().unwrap_or_default(),
         tags: report_build_tags(report)?,
     })
 }
 
-fn validate_report(report: &RadrootsReport) -> Result<(), EventEncodeError> {
+fn validate_report(report: &Report) -> Result<(), EventEncodeError> {
     validate_non_empty_field(&report.reported_pubkey, "reported_pubkey")?;
     validate_lowercase_hex_64(&report.reported_pubkey, "reported_pubkey")?;
     if let Some(file) = report.file.as_ref() {
@@ -69,11 +67,11 @@ fn validate_report(report: &RadrootsReport) -> Result<(), EventEncodeError> {
 
 fn push_report_event_target(
     tags: &mut Vec<Vec<String>>,
-    target: &RadrootsSocialTarget,
+    target: &SocialTarget,
     report_type: &'static str,
 ) -> Result<(), EventEncodeError> {
     match target {
-        RadrootsSocialTarget::Event { id, relays, .. } => {
+        SocialTarget::Event { id, relays, .. } => {
             validate_lowercase_hex_64(id, "event.id")?;
             let mut tag = vec![TAG_E.to_string(), id.clone(), report_type.to_string()];
             if let Some(relays) = relays.as_ref() {
@@ -87,7 +85,7 @@ fn push_report_event_target(
             tags.push(tag);
             Ok(())
         }
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address, relays, ..
         } => {
             let address = parse_address_tag(address, "event.address")
@@ -108,13 +106,13 @@ fn push_report_event_target(
             tags.push(tag);
             Ok(())
         }
-        RadrootsSocialTarget::External { .. } => Err(EventEncodeError::InvalidField("event")),
+        SocialTarget::External { .. } => Err(EventEncodeError::InvalidField("event")),
     }
 }
 
 fn push_report_file_target(
     tags: &mut Vec<Vec<String>>,
-    file: &RadrootsReportFileTarget,
+    file: &ReportFileTarget,
     report_type: &'static str,
 ) -> Result<(), EventEncodeError> {
     if let Some(hash) = file.sha256.as_deref() {
@@ -133,7 +131,7 @@ fn push_report_file_target(
     Ok(())
 }
 
-fn validate_file_target(file: &RadrootsReportFileTarget) -> Result<(), EventEncodeError> {
+fn validate_file_target(file: &ReportFileTarget) -> Result<(), EventEncodeError> {
     if file.sha256.is_none() && file.url.is_none() && file.magnet.is_none() {
         return Err(EventEncodeError::EmptyRequiredField("file"));
     }
@@ -149,14 +147,14 @@ fn validate_file_target(file: &RadrootsReportFileTarget) -> Result<(), EventEnco
     Ok(())
 }
 
-fn report_type_as_str(report_type: &RadrootsReportType) -> &'static str {
+fn report_type_as_str(report_type: &ReportType) -> &'static str {
     match report_type {
-        RadrootsReportType::Nudity => "nudity",
-        RadrootsReportType::Malware => "malware",
-        RadrootsReportType::Profanity => "profanity",
-        RadrootsReportType::Illegal => "illegal",
-        RadrootsReportType::Spam => "spam",
-        RadrootsReportType::Impersonation => "impersonation",
-        RadrootsReportType::Other => "other",
+        ReportType::Nudity => "nudity",
+        ReportType::Malware => "malware",
+        ReportType::Profanity => "profanity",
+        ReportType::Illegal => "illegal",
+        ReportType::Spam => "spam",
+        ReportType::Impersonation => "impersonation",
+        ReportType::Other => "other",
     }
 }

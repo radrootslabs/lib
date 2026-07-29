@@ -9,11 +9,11 @@ use alloc::{
 
 use base64::Engine as _;
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
+    envelope::EventEnvelope,
     envelope::kind::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
-    id::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts},
+    id::{AddressableCoordinate, AddressableCoordinateParts},
     tag::name::{TAG_A, TAG_D},
-    wire::RadrootsNip01EventWireParts,
+    wire::Nip01EventWireParts,
 };
 use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ pub struct RadrootsValidatorSetV1 {
 pub struct RadrootsVerifiedValidatorSetV1 {
     pub set: RadrootsValidatorSetV1,
     pub event_id: String,
-    pub address: RadrootsAddressableCoordinate,
+    pub address: AddressableCoordinate,
     pub authority_pubkey: PublicKey,
 }
 
@@ -157,7 +157,7 @@ impl RadrootsTradeCommitmentConfidence {
 #[serde(deny_unknown_fields)]
 pub struct RadrootsTradeValidationTrustPolicy {
     pub validator_set: Option<RadrootsValidatorSetV1>,
-    pub validator_set_addr: Option<RadrootsAddressableCoordinate>,
+    pub validator_set_addr: Option<AddressableCoordinate>,
     pub validator_set_event_id: Option<String>,
     pub require_cryptographic_proof: bool,
 }
@@ -185,7 +185,7 @@ impl RadrootsTradeValidationTrustPolicy {
     pub fn with_validator_set(
         mut self,
         validator_set: RadrootsValidatorSetV1,
-        validator_set_addr: RadrootsAddressableCoordinate,
+        validator_set_addr: AddressableCoordinate,
         validator_set_event_id: impl Into<String>,
     ) -> Self {
         self.validator_set = Some(validator_set);
@@ -298,7 +298,7 @@ pub struct RadrootsValidationReceiptStatement {
     pub listing_event_id: String,
     pub root_event_id: String,
     pub target_event_id: String,
-    pub validator_set_addr: RadrootsAddressableCoordinate,
+    pub validator_set_addr: AddressableCoordinate,
     pub validator_set_event_id: String,
     #[serde(rename = "type")]
     pub statement_type: RadrootsValidationReceiptType,
@@ -343,7 +343,7 @@ pub struct RadrootsValidationReceiptTags {
     pub reducer_output_root: String,
     pub root_event_id: String,
     pub target_event_id: String,
-    pub validator_set_addr: RadrootsAddressableCoordinate,
+    pub validator_set_addr: AddressableCoordinate,
     pub validator_set_event_id: String,
 }
 
@@ -429,18 +429,16 @@ impl RadrootsValidatorSetV1 {
 pub fn validator_set_address(
     authority_pubkey: &PublicKey,
     set_id: &str,
-) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
+) -> Result<AddressableCoordinate, RadrootsValidationReceiptError> {
     validate_uuidv7(set_id, "validator_set.set_id")?;
-    RadrootsAddressableCoordinate::parse(format!(
-        "{KIND_VALIDATOR_SET}:{authority_pubkey}:{set_id}"
-    ))
-    .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))
+    AddressableCoordinate::parse(format!("{KIND_VALIDATOR_SET}:{authority_pubkey}:{set_id}"))
+        .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))
 }
 
 pub fn validator_set_address_from_str(
     value: impl AsRef<str>,
-) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
-    let address = RadrootsAddressableCoordinate::parse(value.as_ref())
+) -> Result<AddressableCoordinate, RadrootsValidationReceiptError> {
+    let address = AddressableCoordinate::parse(value.as_ref())
         .map_err(|_| RadrootsValidationReceiptError::InvalidField("validator_set.address"))?;
     validate_validator_set_address(&address, "validator_set.address")?;
     Ok(address)
@@ -469,8 +467,8 @@ pub fn validator_set_content_from_str(
 
 pub fn validator_set_event_build(
     validator_set: &RadrootsValidatorSetV1,
-) -> Result<RadrootsNip01EventWireParts, RadrootsValidationReceiptError> {
-    Ok(RadrootsNip01EventWireParts {
+) -> Result<Nip01EventWireParts, RadrootsValidationReceiptError> {
+    Ok(Nip01EventWireParts {
         kind: KIND_VALIDATOR_SET,
         content: validator_set_canonical_content(validator_set)?,
         tags: vec![vec![TAG_D.to_string(), validator_set.set_id.clone()]],
@@ -478,13 +476,13 @@ pub fn validator_set_event_build(
 }
 
 pub fn validator_set_from_event(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<RadrootsVerifiedValidatorSetV1, RadrootsValidationReceiptError> {
     verify_validator_set_event(event, None)
 }
 
 pub fn verify_validator_set_event(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     expected_author: Option<&PublicKey>,
 ) -> Result<RadrootsVerifiedValidatorSetV1, RadrootsValidationReceiptError> {
     if event.kind_u32() != KIND_VALIDATOR_SET {
@@ -751,8 +749,8 @@ pub fn validation_receipt_tags_from_tags(
 pub fn validation_receipt_event_build(
     order_id: &str,
     receipt: &RadrootsTradeValidationReceipt,
-) -> Result<RadrootsNip01EventWireParts, RadrootsValidationReceiptError> {
-    Ok(RadrootsNip01EventWireParts {
+) -> Result<Nip01EventWireParts, RadrootsValidationReceiptError> {
+    Ok(Nip01EventWireParts {
         kind: KIND_TRADE_VALIDATION_RECEIPT,
         content: validation_receipt_canonical_content(receipt)?,
         tags: validation_receipt_tags(order_id, receipt)?,
@@ -760,13 +758,13 @@ pub fn validation_receipt_event_build(
 }
 
 pub fn validation_receipt_from_event(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
     verify_validation_receipt_event(event, RadrootsValidationReceiptExpectedBinding::default())
 }
 
 pub fn verify_validation_receipt_event(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     expected: RadrootsValidationReceiptExpectedBinding<'_>,
 ) -> Result<RadrootsVerifiedValidationReceipt, RadrootsValidationReceiptError> {
     if event.kind_u32() != KIND_TRADE_VALIDATION_RECEIPT {
@@ -964,7 +962,7 @@ fn required_event_marker(
 fn required_address_marker(
     tags: &[Vec<String>],
     marker: &'static str,
-) -> Result<RadrootsAddressableCoordinate, RadrootsValidationReceiptError> {
+) -> Result<AddressableCoordinate, RadrootsValidationReceiptError> {
     let mut matches = tags.iter().filter(|tag| {
         tag.first().map(|value| value.as_str()) == Some(TAG_A)
             && tag.get(3).map(|value| value.as_str()) == Some(marker)
@@ -979,7 +977,7 @@ fn required_address_marker(
         .get(1)
         .ok_or(RadrootsValidationReceiptError::InvalidTag(marker))?;
     validate_required_str(value, marker)?;
-    RadrootsAddressableCoordinate::parse(value)
+    AddressableCoordinate::parse(value)
         .map_err(|_| RadrootsValidationReceiptError::InvalidTag(marker))
 }
 
@@ -1040,10 +1038,10 @@ fn validate_uuidv7(value: &str, field: &'static str) -> Result<(), RadrootsValid
 }
 
 fn validate_validator_set_address(
-    value: &RadrootsAddressableCoordinate,
+    value: &AddressableCoordinate,
     field: &'static str,
 ) -> Result<(), RadrootsValidationReceiptError> {
-    let parts = RadrootsAddressableCoordinateParts::parse(value.as_str())
+    let parts = AddressableCoordinateParts::parse(value.as_str())
         .expect("typed addressable coordinates must contain valid coordinate parts");
     if parts.kind != KIND_VALIDATOR_SET {
         return Err(RadrootsValidationReceiptError::InvalidField(field));
@@ -1146,10 +1144,10 @@ mod tests {
         verify_validation_receipt_event, verify_validator_set_event,
     };
     use radroots_event::{
-        envelope::RadrootsEventEnvelope,
-        envelope::RadrootsEventEnvelopeParts,
+        envelope::EventEnvelope,
+        envelope::EventEnvelopeParts,
         envelope::kind::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
-        id::RadrootsAddressableCoordinate,
+        id::AddressableCoordinate,
         tag::name::TAG_D,
     };
     use radroots_identity::PublicKey;
@@ -1177,7 +1175,7 @@ mod tests {
         PublicKey::from_hex(FIXTURE_CAROL_PUBLIC_KEY_HEX).expect("validator pubkey")
     }
 
-    fn validator_set_addr() -> radroots_event::id::RadrootsAddressableCoordinate {
+    fn validator_set_addr() -> radroots_event::id::AddressableCoordinate {
         validator_set_address(&validator_set_author(), &validator_set_id())
             .expect("validator set address")
     }
@@ -1241,7 +1239,7 @@ mod tests {
         receipt
     }
 
-    fn sample_validation_receipt_event() -> RadrootsEventEnvelope {
+    fn sample_validation_receipt_event() -> EventEnvelope {
         let receipt = sample_validation_receipt();
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
         validation_receipt_event_with_parts(parts.kind, parts.tags, parts.content)
@@ -1251,8 +1249,8 @@ mod tests {
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    ) -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: event_id('9'),
             author: event_id('a'),
             created_at: 1,
@@ -1264,7 +1262,7 @@ mod tests {
         .expect("receipt event")
     }
 
-    fn validation_receipt_event_with_tags(tags: Vec<Vec<String>>) -> RadrootsEventEnvelope {
+    fn validation_receipt_event_with_tags(tags: Vec<Vec<String>>) -> EventEnvelope {
         let receipt = sample_validation_receipt();
         let parts = validation_receipt_event_build("order-1", &receipt).expect("event parts");
         validation_receipt_event_with_parts(parts.kind, tags, parts.content)
@@ -1274,8 +1272,8 @@ mod tests {
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    ) -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: event_id('7'),
             author: validator_set_author().to_hex(),
             created_at: 1_700_000_001,
@@ -1426,7 +1424,7 @@ mod tests {
             vec![vec![TAG_D.to_string(), validator_set_id()]]
         );
 
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let event = EventEnvelope::new(EventEnvelopeParts {
             id: event_id('7'),
             author: validator_set_author().to_hex(),
             created_at: 1_700_000_001,
@@ -1629,7 +1627,7 @@ mod tests {
         );
 
         let mut receipt = sample_validation_receipt();
-        receipt.statement.validator_set_addr = RadrootsAddressableCoordinate::parse(format!(
+        receipt.statement.validator_set_addr = AddressableCoordinate::parse(format!(
             "1:{}:{}",
             validator_set_author(),
             validator_set_id()

@@ -6,8 +6,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_PUBLIC_FILE_METADATA,
-    media::file_metadata::RadrootsFileMetadata,
-    social::RadrootsSocialMediaThumbnail,
+    media::file_metadata::FileMetadata,
+    social::SocialMediaThumbnail,
     tag::name::{
         TAG_ALT, TAG_BLURHASH, TAG_DIMENSIONS, TAG_FALLBACK, TAG_MAGNET, TAG_MIME,
         TAG_ORIGINAL_SHA256, TAG_SERVICE, TAG_SHA256, TAG_SIZE, TAG_SUMMARY, TAG_THUMB, TAG_URL,
@@ -28,7 +28,7 @@ pub fn file_metadata_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsFileMetadata, EventParseError> {
+) -> Result<FileMetadata, EventParseError> {
     if kind != KIND_PUBLIC_FILE_METADATA {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -52,7 +52,7 @@ pub fn file_metadata_from_event(
         .map(|value| parse_dimensions_tag(&value, TAG_DIMENSIONS))
         .transpose()?;
 
-    Ok(RadrootsFileMetadata {
+    Ok(FileMetadata {
         url,
         mime_type,
         sha256,
@@ -93,7 +93,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsFileMetadata>, EventParseError> {
+) -> Result<RadrootsParsedData<FileMetadata>, EventParseError> {
     let metadata = file_metadata_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -112,7 +112,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsFileMetadata>, EventParseError> {
+) -> Result<RadrootsParsedEvent<FileMetadata>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -137,7 +137,7 @@ fn optional_hash_tag(
 
 fn parse_thumbnails(
     tags: &[Vec<String>],
-) -> Result<Option<Vec<RadrootsSocialMediaThumbnail>>, EventParseError> {
+) -> Result<Option<Vec<SocialMediaThumbnail>>, EventParseError> {
     let thumbnails = tags
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(TAG_THUMB))
@@ -151,7 +151,7 @@ fn parse_thumbnails(
                 .filter(|value| !value.trim().is_empty())
                 .map(|value| parse_dimensions_tag(value, TAG_THUMB))
                 .transpose()?;
-            Ok(RadrootsSocialMediaThumbnail { url, dimensions })
+            Ok(SocialMediaThumbnail { url, dimensions })
         })
         .collect::<Result<Vec<_>, EventParseError>>()?;
     Ok(non_empty_vec(thumbnails))

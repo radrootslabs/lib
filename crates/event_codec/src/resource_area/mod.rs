@@ -12,30 +12,28 @@ mod tests {
         resource_area_members_farms_list_set, resource_area_members_plots_list_set,
         resource_area_stewards_list_set,
     };
-    use radroots_event::farm::RadrootsFarmRef;
-    use radroots_event::farm::change_set::{
-        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    };
-    use radroots_event::farm::plot::RadrootsPlotRef;
+    use radroots_event::farm::FarmRef;
+    use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+    use radroots_event::farm::plot::PlotRef;
     use radroots_event::farm::resource_area::{
-        RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
+        ResourceArea, ResourceAreaLocation, ResourceAreaRef,
     };
 
-    fn sample_location() -> RadrootsResourceAreaLocation {
-        RadrootsResourceAreaLocation {
+    fn sample_location() -> ResourceAreaLocation {
+        ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
             country: None,
-            gcs: RadrootsGcsLocation {
+            gcs: GcsLocation {
                 lat: -4.527,
                 lng: 129.898,
                 geohash: "pmb5v".to_string(),
-                point: RadrootsGeoJsonPoint {
+                point: GeoJsonPoint {
                     r#type: "Point".to_string(),
                     coordinates: [129.898, -4.527],
                 },
-                polygon: RadrootsGeoJsonPolygon {
+                polygon: GeoJsonPolygon {
                     r#type: "Polygon".to_string(),
                     coordinates: vec![vec![
                         [129.898, -4.527],
@@ -64,7 +62,7 @@ mod tests {
 
     #[test]
     fn resource_area_tags_include_required_fields() {
-        let area = RadrootsResourceArea {
+        let area = ResourceArea {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             name: "Banda Grove".to_string(),
             about: None,
@@ -89,7 +87,7 @@ mod tests {
 
     #[test]
     fn resource_area_tags_allow_missing_optional_fields() {
-        let area = RadrootsResourceArea {
+        let area = ResourceArea {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             name: "Banda Grove".to_string(),
             about: None,
@@ -115,7 +113,7 @@ mod tests {
 
     #[test]
     fn resource_area_ref_tags_include_p_and_a() {
-        let area_ref = RadrootsResourceAreaRef {
+        let area_ref = ResourceAreaRef {
             pubkey: "area_pubkey".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         };
@@ -130,7 +128,7 @@ mod tests {
                 .any(|tag| tag.first().map(|v| v.as_str()) == Some("a"))
         );
 
-        let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+        let err = resource_area_ref_tags(&ResourceAreaRef {
             pubkey: "area_pubkey".to_string(),
             d_tag: "invalid".to_string(),
         })
@@ -143,7 +141,7 @@ mod tests {
 
     #[test]
     fn resource_area_build_tags_rejects_invalid_d_tag() {
-        let area = RadrootsResourceArea {
+        let area = ResourceArea {
             d_tag: "invalid".to_string(),
             name: "Banda Grove".to_string(),
             about: None,
@@ -157,7 +155,7 @@ mod tests {
 
     #[test]
     fn resource_area_encode_rejects_empty_required_fields() {
-        let mut area = RadrootsResourceArea {
+        let mut area = ResourceArea {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
             name: "Banda Grove".to_string(),
             about: None,
@@ -182,7 +180,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("location.gcs.geohash")
         ));
 
-        let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+        let err = resource_area_ref_tags(&ResourceAreaRef {
             pubkey: " ".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         })
@@ -192,7 +190,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("resource_area.pubkey")
         ));
 
-        let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+        let err = resource_area_ref_tags(&ResourceAreaRef {
             pubkey: "area_pubkey".to_string(),
             d_tag: " ".to_string(),
         })
@@ -207,7 +205,7 @@ mod tests {
     fn resource_area_list_sets_include_expected_tags() {
         let farms = resource_area_members_farms_list_set(
             "AAAAAAAAAAAAAAAAAAAAAw",
-            [RadrootsFarmRef {
+            [FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],
@@ -219,7 +217,7 @@ mod tests {
 
         let plots = resource_area_members_plots_list_set(
             "AAAAAAAAAAAAAAAAAAAAAw",
-            [RadrootsPlotRef {
+            [PlotRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
             }],

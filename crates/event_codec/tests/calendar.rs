@@ -1,19 +1,18 @@
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     calendar::{
-        RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS, RADROOTS_CALENDAR_SECONDS_PER_DAY,
-        RadrootsAuthoredCalendar, RadrootsAuthoredCalendarDateEvent,
-        RadrootsAuthoredCalendarEventRsvp, RadrootsAuthoredCalendarTimeEvent,
-        RadrootsCalendarAdmissionError, RadrootsCalendarDate, RadrootsCalendarEventError,
-        RadrootsCalendarEventReference, RadrootsCalendarEventRsvpStatus,
-        RadrootsCalendarParticipant, RadrootsCalendarUid, RadrootsIanaTimeZoneId, covered_utc_days,
+        AuthoredCalendar, AuthoredCalendarDateEvent, AuthoredCalendarEventRsvp,
+        AuthoredCalendarTimeEvent, CalendarAdmissionError, CalendarDate, CalendarEventError,
+        CalendarEventReference, CalendarEventRsvpStatus, CalendarParticipant, CalendarUid,
+        IanaTimeZoneId, RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS, RADROOTS_CALENDAR_SECONDS_PER_DAY,
+        covered_utc_days,
     },
-    envelope::RadrootsEventTags,
+    envelope::EventTags,
     envelope::kind::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP,
         KIND_CALENDAR_TIME_EVENT, KIND_POST,
     },
-    media::RadrootsAuthoredImage,
+    media::AuthoredImage,
     tag::name::{
         TAG_A, TAG_D, TAG_D_DAY, TAG_END, TAG_END_TZID, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_P,
         TAG_R, TAG_START, TAG_START_TZID, TAG_SUMMARY, TAG_T, TAG_TITLE,
@@ -49,11 +48,11 @@ const EVENT_SIG: &str = concat!(
     "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 );
 
-fn date(value: &str) -> RadrootsCalendarDate {
-    RadrootsCalendarDate::parse(value).unwrap()
+fn date(value: &str) -> CalendarDate {
+    CalendarDate::parse(value).unwrap()
 }
 
-fn authored_image() -> RadrootsAuthoredImage {
+fn authored_image() -> AuthoredImage {
     let bytes = b"canonical-calendar-image";
     let hash = Sha256::digest(bytes);
     let media_type = MediaType::parse("image/webp").unwrap();
@@ -69,11 +68,11 @@ fn authored_image() -> RadrootsAuthoredImage {
     .unwrap()
     .verify_bytes(bytes, &media_type)
     .unwrap();
-    RadrootsAuthoredImage::try_from(descriptor).unwrap()
+    AuthoredImage::try_from(descriptor).unwrap()
 }
 
-fn sample_date_event() -> RadrootsAuthoredCalendarDateEvent {
-    RadrootsAuthoredCalendarDateEvent::new(DATE_D_TAG, "CSA pickup", date("2026-06-20"))
+fn sample_date_event() -> AuthoredCalendarDateEvent {
+    AuthoredCalendarDateEvent::new(DATE_D_TAG, "CSA pickup", date("2026-06-20"))
         .unwrap()
         .with_end(date("2026-06-21"))
         .unwrap()
@@ -87,7 +86,7 @@ fn sample_date_event() -> RadrootsAuthoredCalendarDateEvent {
         .unwrap()
         .with_image(authored_image())
         .unwrap()
-        .with_participants(vec![RadrootsCalendarParticipant {
+        .with_participants(vec![CalendarParticipant {
             pubkey: EVENT_AUTHOR.to_string(),
             relay: Some("wss://relay.example.test".to_string()),
             role: Some("host".to_string()),
@@ -97,8 +96,8 @@ fn sample_date_event() -> RadrootsAuthoredCalendarDateEvent {
         .unwrap()
 }
 
-fn sample_time_event() -> RadrootsAuthoredCalendarTimeEvent {
-    RadrootsAuthoredCalendarTimeEvent::new(TIME_D_TAG, "Wash pack shift", 86_399)
+fn sample_time_event() -> AuthoredCalendarTimeEvent {
+    AuthoredCalendarTimeEvent::new(TIME_D_TAG, "Wash pack shift", 86_399)
         .unwrap()
         .with_end(172_801)
         .unwrap()
@@ -112,7 +111,7 @@ fn sample_time_event() -> RadrootsAuthoredCalendarTimeEvent {
         .unwrap()
         .with_summary("Prepare CSA bins")
         .unwrap()
-        .with_participants(vec![RadrootsCalendarParticipant {
+        .with_participants(vec![CalendarParticipant {
             pubkey: EVENT_AUTHOR.to_string(),
             relay: None,
             role: Some("participant".to_string()),
@@ -208,9 +207,7 @@ fn authored_date_event_emits_canonical_fields_and_no_uppercase_day_tag() {
 fn authored_time_event_derives_exact_ordered_days_and_iana_fallback() {
     let event = sample_time_event();
     assert_eq!(
-        event
-            .effective_end_tzid()
-            .map(RadrootsIanaTimeZoneId::as_str),
+        event.effective_end_tzid().map(IanaTimeZoneId::as_str),
         Some("America/Vancouver")
     );
     assert_eq!(event.end_tzid(), None);
@@ -307,9 +304,7 @@ fn baseline_time_parser_accepts_nip52_should_level_variance() {
         vec![("000", 0, false), ("2", 2, true)]
     );
     assert_eq!(
-        parsed
-            .effective_end_tzid()
-            .map(RadrootsIanaTimeZoneId::as_str),
+        parsed.effective_end_tzid().map(IanaTimeZoneId::as_str),
         Some("America/Vancouver")
     );
 }
@@ -326,7 +321,7 @@ fn strict_admission_rejects_date_extensions_noncanonical_metadata_and_non_blosso
         parse_nip52_calendar_date_event(KIND_CALENDAR_DATE_EVENT, &extension_tags, "").unwrap();
     assert_eq!(
         admit_radroots_calendar_date_event(parsed),
-        Err(RadrootsCalendarAdmissionError::ForbiddenDateDayIndex)
+        Err(CalendarAdmissionError::ForbiddenDateDayIndex)
     );
 
     extension_tags.retain(|tag| tag[0] != TAG_D_DAY);
@@ -335,9 +330,7 @@ fn strict_admission_rejects_date_extensions_noncanonical_metadata_and_non_blosso
         parse_nip52_calendar_date_event(KIND_CALENDAR_DATE_EVENT, &extension_tags, "").unwrap();
     assert_eq!(
         admit_radroots_calendar_date_event(parsed),
-        Err(RadrootsCalendarAdmissionError::NonCanonicalField(
-            "metadata"
-        ))
+        Err(CalendarAdmissionError::NonCanonicalField("metadata"))
     );
 
     replace_tag_value(&mut extension_tags, TAG_TITLE, "CSA pickup");
@@ -349,7 +342,7 @@ fn strict_admission_rejects_date_extensions_noncanonical_metadata_and_non_blosso
         parse_nip52_calendar_date_event(KIND_CALENDAR_DATE_EVENT, &extension_tags, "").unwrap();
     assert_eq!(
         admit_radroots_calendar_date_event(parsed),
-        Err(RadrootsCalendarAdmissionError::NonBlossomImage)
+        Err(CalendarAdmissionError::NonBlossomImage)
     );
 }
 
@@ -376,7 +369,7 @@ fn strict_time_admission_requires_canonical_exact_coverage() {
         let parsed = parse_nip52_calendar_time_event(KIND_CALENDAR_TIME_EVENT, &tags, "").unwrap();
         assert_eq!(
             admit_radroots_calendar_time_event(parsed),
-            Err(RadrootsCalendarAdmissionError::IncompleteDayCoverage)
+            Err(CalendarAdmissionError::IncompleteDayCoverage)
         );
     }
 
@@ -389,9 +382,7 @@ fn strict_time_admission_requires_canonical_exact_coverage() {
             .unwrap();
     assert_eq!(
         admit_radroots_calendar_time_event(parsed),
-        Err(RadrootsCalendarAdmissionError::NonCanonicalField(
-            "timestamp"
-        ))
+        Err(CalendarAdmissionError::NonCanonicalField("timestamp"))
     );
 }
 
@@ -409,7 +400,7 @@ fn baseline_can_parse_overlong_ranges_that_strict_admission_rejects() {
     assert_eq!(parsed.end(), Some(end));
     assert_eq!(
         admit_radroots_calendar_time_event(parsed),
-        Err(RadrootsCalendarAdmissionError::CoveredDayLimitExceeded {
+        Err(CalendarAdmissionError::CoveredDayLimitExceeded {
             max: RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS,
             actual: RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS + 1,
         })
@@ -419,41 +410,41 @@ fn baseline_can_parse_overlong_ranges_that_strict_admission_rejects() {
 #[test]
 fn authored_construction_rejects_invalid_fields_before_encoding() {
     assert_eq!(
-        RadrootsAuthoredCalendarDateEvent::new(DATE_D_TAG, " CSA pickup ", date("2026-06-20")),
-        Err(RadrootsCalendarEventError::InvalidTitle)
+        AuthoredCalendarDateEvent::new(DATE_D_TAG, " CSA pickup ", date("2026-06-20")),
+        Err(CalendarEventError::InvalidTitle)
     );
     assert_eq!(
-        RadrootsAuthoredCalendarTimeEvent::new(TIME_D_TAG, "Shift", 10)
+        AuthoredCalendarTimeEvent::new(TIME_D_TAG, "Shift", 10)
             .unwrap()
             .with_start_tzid("america/vancouver"),
-        Err(RadrootsCalendarEventError::InvalidTimeZone)
+        Err(CalendarEventError::InvalidTimeZone)
     );
     assert!(matches!(
-        RadrootsAuthoredCalendarDateEvent::new(DATE_D_TAG, "Pickup", date("2026-06-20"))
+        AuthoredCalendarDateEvent::new(DATE_D_TAG, "Pickup", date("2026-06-20"))
             .unwrap()
             .with_summary("x".repeat(DEFAULT_TAG_ELEMENT_MAX_BYTES + 1)),
-        Err(RadrootsCalendarEventError::TagElementTooLarge {
+        Err(CalendarEventError::TagElementTooLarge {
             field: "summary",
             ..
         })
     ));
     assert!(matches!(
-        RadrootsAuthoredCalendarDateEvent::new(DATE_D_TAG, "Pickup", date("2026-06-20"))
+        AuthoredCalendarDateEvent::new(DATE_D_TAG, "Pickup", date("2026-06-20"))
             .unwrap()
             .with_description("x".repeat(DEFAULT_CONTENT_MAX_BYTES + 1)),
-        Err(RadrootsCalendarEventError::ContentTooLarge { .. })
+        Err(CalendarEventError::ContentTooLarge { .. })
     ));
 
-    let invalid_participant = RadrootsCalendarParticipant {
+    let invalid_participant = CalendarParticipant {
         pubkey: EVENT_AUTHOR.to_ascii_uppercase(),
         relay: None,
         role: None,
     };
     assert!(matches!(
-        RadrootsAuthoredCalendarDateEvent::new(DATE_D_TAG, "Pickup", date("2026-06-20"))
+        AuthoredCalendarDateEvent::new(DATE_D_TAG, "Pickup", date("2026-06-20"))
             .unwrap()
             .with_participants(vec![invalid_participant]),
-        Err(RadrootsCalendarEventError::InvalidParticipant { index: 0 })
+        Err(CalendarEventError::InvalidParticipant { index: 0 })
     ));
 }
 
@@ -566,7 +557,7 @@ fn baseline_parser_rejects_malformed_fields_and_bounds_before_projection() {
         (too_many_tags.len()..=DEFAULT_TAG_MAX_COUNT)
             .map(|_| vec!["x".to_string(), "y".to_string()]),
     );
-    assert!(RadrootsEventTags::new(too_many_tags.clone()).is_err());
+    assert!(EventTags::new(too_many_tags.clone()).is_err());
     assert!(matches!(
         parse_nip52_calendar_date_event(KIND_CALENDAR_DATE_EVENT, &too_many_tags, ""),
         Err(EventParseError::InvalidEnvelope)
@@ -609,13 +600,13 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
     assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.common().d_tag(), DATE_D_TAG);
 
-    let event_reference = RadrootsCalendarEventReference::parse(
+    let event_reference = CalendarEventReference::parse(
         format!("{KIND_CALENDAR_TIME_EVENT}:{EVENT_AUTHOR}:{TIME_D_TAG}"),
         Some("wss://relay.example.test/events"),
     )
     .unwrap();
-    let calendar = RadrootsAuthoredCalendar::new(
-        RadrootsCalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAA").unwrap(),
+    let calendar = AuthoredCalendar::new(
+        CalendarUid::parse("AAAAAAAAAAAAAAAAAAAAAA").unwrap(),
         "Farm calendar",
         "Shared farm schedule.",
         vec![event_reference.clone()],
@@ -653,10 +644,10 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
     assert_eq!(parsed.event.signature_hex(), EVENT_SIG);
     assert_eq!(parsed.data.data.title(), "Farm calendar");
 
-    let rsvp = RadrootsAuthoredCalendarEventRsvp::new(
-        RadrootsCalendarUid::parse("DDDDDDDDDDDDDDDDDDDDDw").unwrap(),
+    let rsvp = AuthoredCalendarEventRsvp::new(
+        CalendarUid::parse("DDDDDDDDDDDDDDDDDDDDDw").unwrap(),
         event_reference,
-        RadrootsCalendarEventRsvpStatus::Accepted,
+        CalendarEventRsvpStatus::Accepted,
     )
     .unwrap();
     assert!(matches!(
@@ -674,10 +665,7 @@ fn kind_specific_encoders_and_parsed_wrappers_preserve_envelopes() {
         parts.tags.clone(),
     )
     .unwrap();
-    assert_eq!(
-        data.data.status(),
-        &RadrootsCalendarEventRsvpStatus::Accepted
-    );
+    assert_eq!(data.data.status(), &CalendarEventRsvpStatus::Accepted);
     let parsed = nip52_calendar_event_rsvp_parsed_from_event(
         EVENT_ID.to_string(),
         EVENT_AUTHOR.to_string(),
@@ -708,6 +696,6 @@ fn exclusive_end_day_math_is_bounded() {
     );
     assert_eq!(
         covered_utc_days(10, Some(10)),
-        Err(RadrootsCalendarEventError::InvalidRange)
+        Err(CalendarEventError::InvalidRange)
     );
 }

@@ -6,11 +6,11 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{social::message::RadrootsMessageRecipient, tag::RadrootsEventPtr};
+use radroots_event::{social::message::MessageRecipient, tag::EventPtr};
 
 use crate::error::{EventEncodeError, EventParseError};
 
-fn validate_recipient(recipient: &RadrootsMessageRecipient) -> Result<(), EventEncodeError> {
+fn validate_recipient(recipient: &MessageRecipient) -> Result<(), EventEncodeError> {
     if recipient.public_key.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField(
             "recipients.public_key",
@@ -25,7 +25,7 @@ fn validate_recipient(recipient: &RadrootsMessageRecipient) -> Result<(), EventE
 }
 
 pub(crate) fn build_recipient_tags(
-    recipients: &[RadrootsMessageRecipient],
+    recipients: &[MessageRecipient],
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if recipients.is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("recipients"));
@@ -46,7 +46,7 @@ pub(crate) fn build_recipient_tags(
 }
 
 pub(crate) fn build_reply_tag(
-    reply_to: &Option<RadrootsEventPtr>,
+    reply_to: &Option<EventPtr>,
 ) -> Result<Option<Vec<String>>, EventEncodeError> {
     let reply_to = match reply_to {
         Some(reply_to) => reply_to,
@@ -80,7 +80,7 @@ pub(crate) fn build_subject_tag(
     Ok(Some(vec!["subject".to_string(), subject.clone()]))
 }
 
-fn parse_recipient_tag(tag: &[String]) -> Result<RadrootsMessageRecipient, EventParseError> {
+fn parse_recipient_tag(tag: &[String]) -> Result<MessageRecipient, EventParseError> {
     let public_key = tag.get(1).ok_or(EventParseError::InvalidTag("p"))?;
     if public_key.trim().is_empty() {
         return Err(EventParseError::InvalidTag("p"));
@@ -90,7 +90,7 @@ fn parse_recipient_tag(tag: &[String]) -> Result<RadrootsMessageRecipient, Event
         Some(value) => Some(value.clone()),
         None => None,
     };
-    Ok(RadrootsMessageRecipient {
+    Ok(MessageRecipient {
         public_key: public_key.clone(),
         relay_url,
     })
@@ -98,7 +98,7 @@ fn parse_recipient_tag(tag: &[String]) -> Result<RadrootsMessageRecipient, Event
 
 pub(crate) fn parse_recipients(
     tags: &[Vec<String>],
-) -> Result<Vec<RadrootsMessageRecipient>, EventParseError> {
+) -> Result<Vec<MessageRecipient>, EventParseError> {
     let mut recipients = Vec::new();
     for tag in tags
         .iter()
@@ -112,9 +112,7 @@ pub(crate) fn parse_recipients(
     Ok(recipients)
 }
 
-pub(crate) fn parse_reply_tag(
-    tags: &[Vec<String>],
-) -> Result<Option<RadrootsEventPtr>, EventParseError> {
+pub(crate) fn parse_reply_tag(tags: &[Vec<String>]) -> Result<Option<EventPtr>, EventParseError> {
     let tag = match tags
         .iter()
         .find(|t| t.first().map(|s| s.as_str()) == Some("e"))
@@ -131,7 +129,7 @@ pub(crate) fn parse_reply_tag(
         Some(value) => Some(value.clone()),
         None => None,
     };
-    Ok(Some(RadrootsEventPtr {
+    Ok(Some(EventPtr {
         id: id.clone(),
         relays: relay,
     }))
@@ -156,7 +154,7 @@ pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, 
 mod tests {
     use super::*;
     use crate::test_fixtures::RELAY_PRIMARY_WSS;
-    use radroots_event::{social::message::RadrootsMessageRecipient, tag::RadrootsEventPtr};
+    use radroots_event::{social::message::MessageRecipient, tag::EventPtr};
 
     #[test]
     fn parse_recipients_rejects_missing_p_tags() {
@@ -185,7 +183,7 @@ mod tests {
             parse_reply_tag(&[vec!["e".to_string(), " ".to_string()]]).expect_err("empty reply id");
         assert!(matches!(err, EventParseError::InvalidTag("e")));
 
-        let err = build_reply_tag(&Some(RadrootsEventPtr {
+        let err = build_reply_tag(&Some(EventPtr {
             id: " ".to_string(),
             relays: None,
         }))
@@ -198,7 +196,7 @@ mod tests {
 
     #[test]
     fn build_and_parse_reply_tags_cover_optional_relay_paths() {
-        let tag = build_reply_tag(&Some(RadrootsEventPtr {
+        let tag = build_reply_tag(&Some(EventPtr {
             id: "reply".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         }))
@@ -211,7 +209,7 @@ mod tests {
             Some(RELAY_PRIMARY_WSS.to_string())
         );
 
-        let tag = build_reply_tag(&Some(RadrootsEventPtr {
+        let tag = build_reply_tag(&Some(EventPtr {
             id: "reply".to_string(),
             relays: None,
         }))
@@ -226,7 +224,7 @@ mod tests {
             .expect("parse reply tag without relay");
         assert_eq!(
             parsed,
-            Some(RadrootsEventPtr {
+            Some(EventPtr {
                 id: "reply".to_string(),
                 relays: None,
             })
@@ -235,7 +233,7 @@ mod tests {
 
     #[test]
     fn recipient_and_subject_tag_builders_cover_error_paths() {
-        let tags = build_recipient_tags(&[RadrootsMessageRecipient {
+        let tags = build_recipient_tags(&[MessageRecipient {
             public_key: "recipient-without-relay".to_string(),
             relay_url: None,
         }])
@@ -243,7 +241,7 @@ mod tests {
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].len(), 2);
 
-        let tags = build_recipient_tags(&[RadrootsMessageRecipient {
+        let tags = build_recipient_tags(&[MessageRecipient {
             public_key: "recipient".to_string(),
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         }])
@@ -257,7 +255,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("recipients")
         ));
 
-        let err = build_recipient_tags(&[RadrootsMessageRecipient {
+        let err = build_recipient_tags(&[MessageRecipient {
             public_key: " ".to_string(),
             relay_url: None,
         }])
@@ -267,7 +265,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("recipients.public_key")
         ));
 
-        let err = build_recipient_tags(&[RadrootsMessageRecipient {
+        let err = build_recipient_tags(&[MessageRecipient {
             public_key: "recipient".to_string(),
             relay_url: Some(" ".to_string()),
         }])
@@ -315,7 +313,7 @@ mod tests {
         .expect_err("invalid recipient relay");
         assert!(matches!(err, EventParseError::InvalidTag("p")));
 
-        let err = build_reply_tag(&Some(RadrootsEventPtr {
+        let err = build_reply_tag(&Some(EventPtr {
             id: "reply".to_string(),
             relays: Some(" ".to_string()),
         }))

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use crate::social::message::RadrootsMessageRecipient;
-use crate::tag::RadrootsEventPtr;
+use crate::social::message::MessageRecipient;
+use crate::tag::EventPtr;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -13,10 +13,10 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsMessageFile {
-    pub recipients: Vec<RadrootsMessageRecipient>,
+pub struct MessageFile {
+    pub recipients: Vec<MessageRecipient>,
     pub file_url: String,
-    pub reply_to: Option<RadrootsEventPtr>,
+    pub reply_to: Option<EventPtr>,
     pub subject: Option<String>,
     pub file_type: String,
     pub encryption_algorithm: String,
@@ -26,7 +26,7 @@ pub struct RadrootsMessageFile {
     pub original_hash: Option<String>,
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     pub size: Option<u64>,
-    pub dimensions: Option<RadrootsMessageFileDimensions>,
+    pub dimensions: Option<MessageFileDimensions>,
     pub blurhash: Option<String>,
     pub thumb: Option<String>,
     pub fallbacks: Vec<String>,
@@ -39,7 +39,7 @@ pub struct RadrootsMessageFile {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsMessageFileDimensions {
+pub struct MessageFileDimensions {
     pub w: u32,
     pub h: u32,
 }

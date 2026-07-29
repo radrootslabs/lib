@@ -5,8 +5,8 @@ mod test_fixtures;
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
-    social::list::RadrootsListEntry,
-    social::list_set::RadrootsListSet,
+    social::list::ListEntry,
+    social::list_set::ListSet,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::list_set::decode::{
@@ -19,16 +19,16 @@ fn app_url(path: &str) -> String {
     format!("{APP_PRIMARY_HTTPS}/{path}")
 }
 
-fn sample_list_set() -> RadrootsListSet {
-    RadrootsListSet {
+fn sample_list_set() -> ListSet {
+    ListSet {
         d_tag: "members.owners".to_string(),
         content: "private".to_string(),
         entries: vec![
-            RadrootsListEntry {
+            ListEntry {
                 tag: "p".to_string(),
                 values: vec!["owner".to_string()],
             },
-            RadrootsListEntry {
+            ListEntry {
                 tag: "t".to_string(),
                 values: vec!["orchard".to_string()],
             },
@@ -83,7 +83,7 @@ fn generic_list_set_encode_rejects_calendar_kind() {
 
 #[test]
 fn list_set_encode_and_decode_reject_invalid_inputs() {
-    let invalid = RadrootsListSet {
+    let invalid = ListSet {
         d_tag: " ".to_string(),
         content: "".to_string(),
         entries: Vec::new(),
@@ -96,7 +96,7 @@ fn list_set_encode_and_decode_reject_invalid_inputs() {
     let err = to_wire_parts_with_kind(&invalid, KIND_LIST_SET_FOLLOW).unwrap_err();
     assert!(matches!(err, EventEncodeError::EmptyRequiredField("d_tag")));
 
-    let invalid = RadrootsListSet {
+    let invalid = ListSet {
         d_tag: "farm:invalid:owners".to_string(),
         content: "".to_string(),
         entries: Vec::new(),

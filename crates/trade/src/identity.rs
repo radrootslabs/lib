@@ -2,9 +2,7 @@
 
 use core::str::FromStr;
 
-use radroots_event::id::{
-    RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError, RadrootsOrderId,
-};
+use radroots_event::id::{ClassifiedListingAddress, EventId, OrderId, ParseError};
 use radroots_identity::PublicKey;
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -12,18 +10,18 @@ use radroots_identity::PublicKey;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(transparent))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsTradeId(RadrootsOrderId);
+pub struct TradeId(OrderId);
 
-impl RadrootsTradeId {
-    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsIdParseError> {
-        RadrootsOrderId::parse(value).map(Self)
+impl TradeId {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, ParseError> {
+        OrderId::parse(value).map(Self)
     }
 
-    pub fn as_order_id(&self) -> &RadrootsOrderId {
+    pub fn as_order_id(&self) -> &OrderId {
         &self.0
     }
 
-    pub fn into_order_id(self) -> RadrootsOrderId {
+    pub fn into_order_id(self) -> OrderId {
         self.0
     }
 
@@ -32,26 +30,26 @@ impl RadrootsTradeId {
     }
 }
 
-impl From<RadrootsOrderId> for RadrootsTradeId {
-    fn from(order_id: RadrootsOrderId) -> Self {
+impl From<OrderId> for TradeId {
+    fn from(order_id: OrderId) -> Self {
         Self(order_id)
     }
 }
 
-impl From<RadrootsTradeId> for RadrootsOrderId {
-    fn from(trade_id: RadrootsTradeId) -> Self {
+impl From<TradeId> for OrderId {
+    fn from(trade_id: TradeId) -> Self {
         trade_id.into_order_id()
     }
 }
 
-impl AsRef<str> for RadrootsTradeId {
+impl AsRef<str> for TradeId {
     fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
 
-impl FromStr for RadrootsTradeId {
-    type Err = RadrootsIdParseError;
+impl FromStr for TradeId {
+    type Err = ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -63,11 +61,11 @@ impl FromStr for RadrootsTradeId {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeLocator {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub root_event_id: Option<RadrootsEventId>,
+    pub root_event_id: Option<EventId>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub listing_addr: Option<RadrootsClassifiedListingAddress>,
+    pub listing_addr: Option<ClassifiedListingAddress>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub buyer_pubkey: Option<PublicKey>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
@@ -75,7 +73,7 @@ pub struct RadrootsTradeLocator {
 }
 
 impl RadrootsTradeLocator {
-    pub fn new(trade_id: impl Into<RadrootsTradeId>) -> Self {
+    pub fn new(trade_id: impl Into<TradeId>) -> Self {
         Self {
             trade_id: trade_id.into(),
             root_event_id: None,
@@ -85,20 +83,20 @@ impl RadrootsTradeLocator {
         }
     }
 
-    pub fn from_order_id(order_id: RadrootsOrderId) -> Self {
+    pub fn from_order_id(order_id: OrderId) -> Self {
         Self::new(order_id)
     }
 
-    pub fn order_id(&self) -> &RadrootsOrderId {
+    pub fn order_id(&self) -> &OrderId {
         self.trade_id.as_order_id()
     }
 
-    pub fn with_root_event_id(mut self, root_event_id: RadrootsEventId) -> Self {
+    pub fn with_root_event_id(mut self, root_event_id: EventId) -> Self {
         self.root_event_id = Some(root_event_id);
         self
     }
 
-    pub fn with_listing_addr(mut self, listing_addr: RadrootsClassifiedListingAddress) -> Self {
+    pub fn with_listing_addr(mut self, listing_addr: ClassifiedListingAddress) -> Self {
         self.listing_addr = Some(listing_addr);
         self
     }
@@ -119,11 +117,11 @@ impl RadrootsTradeLocator {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeLocatorCandidate {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub root_event_id: RadrootsEventId,
+    pub root_event_id: EventId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub listing_addr: RadrootsClassifiedListingAddress,
+    pub listing_addr: ClassifiedListingAddress,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
@@ -151,20 +149,20 @@ mod tests {
     const BUYER: &str = FIXTURE_BOB_PUBLIC_KEY_HEX;
     const SELLER: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
-    fn event_id(raw: u8) -> RadrootsEventId {
-        RadrootsEventId::parse(format!("{raw:064x}")).expect("event id")
+    fn event_id(raw: u8) -> EventId {
+        EventId::parse(format!("{raw:064x}")).expect("event id")
     }
 
-    fn order_id() -> RadrootsOrderId {
-        RadrootsOrderId::parse("order-1").expect("order id")
+    fn order_id() -> OrderId {
+        OrderId::parse("order-1").expect("order id")
     }
 
     fn public_key(raw: &str) -> PublicKey {
         PublicKey::from_hex(raw).expect("public key")
     }
 
-    fn listing_addr() -> RadrootsClassifiedListingAddress {
-        RadrootsClassifiedListingAddress::parse(format!(
+    fn listing_addr() -> ClassifiedListingAddress {
+        ClassifiedListingAddress::parse(format!(
             "{KIND_CLASSIFIED_LISTING}:{SELLER}:AAAAAAAAAAAAAAAAAAAAAg"
         ))
         .expect("listing address")
@@ -173,15 +171,15 @@ mod tests {
     #[test]
     fn trade_id_and_locator_accessors_cover_public_surface() {
         let order_id = order_id();
-        let trade_id = RadrootsTradeId::parse(order_id.as_str()).expect("trade id");
+        let trade_id = TradeId::parse(order_id.as_str()).expect("trade id");
 
         assert_eq!(trade_id.as_order_id(), &order_id);
         assert_eq!(trade_id.as_str(), "order-1");
         assert_eq!(trade_id.as_ref(), "order-1");
-        assert_eq!(RadrootsTradeId::from_str("order-1").unwrap(), trade_id);
-        assert!(RadrootsTradeId::parse(" ").is_err());
+        assert_eq!(TradeId::from_str("order-1").unwrap(), trade_id);
+        assert!(TradeId::parse(" ").is_err());
         assert_eq!(
-            RadrootsOrderId::from(trade_id.clone()),
+            OrderId::from(trade_id.clone()),
             trade_id.clone().into_order_id()
         );
 

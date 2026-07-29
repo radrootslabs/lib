@@ -5,17 +5,15 @@ use std::{borrow::Cow, collections::BTreeMap, fs, path::Path};
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
     contract::identify_event_contract,
-    envelope::RadrootsEventEnvelope,
-    media::RadrootsAuthoredImage,
-    post::reply::{
-        RadrootsAuthoredNip10Reply, RadrootsNip10ReplyError, RadrootsNip10ReplyReference,
-    },
+    envelope::EventEnvelope,
+    media::AuthoredImage,
+    post::reply::{AuthoredNip10Reply, Nip10ReplyError, Nip10ReplyReference},
     post::{
-        RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostError,
-        RadrootsAuthoredPostImage, RadrootsAuthoredUpdate, RadrootsPostImageDimensions,
+        AuthoredAsk, AuthoredPhotoUpdate, AuthoredPostError, AuthoredPostImage, AuthoredUpdate,
+        PostImageDimensions,
     },
-    wire::RadrootsNip01EventWire,
-    wire::RadrootsNip01EventWireParts,
+    wire::Nip01EventWire,
+    wire::Nip01EventWireParts,
 };
 use radroots_event_codec::post::{
     admission::{RadrootsPostAdmissionOutcome, verify_and_admit_post_event},
@@ -355,7 +353,7 @@ fn conformance_vectors() -> Cow<'static, str> {
 fn execute(vector: &Vector) {
     match vector.kind.as_str() {
         "social.update.build_authored_draft.valid" => {
-            let update = RadrootsAuthoredUpdate::new(input_str(vector, "content"))
+            let update = AuthoredUpdate::new(input_str(vector, "content"))
                 .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
             let first = authored_update_to_wire_parts(&update);
             let second = authored_update_to_wire_parts(&update);
@@ -363,14 +361,14 @@ fn execute(vector: &Vector) {
             assert_eq!(wire_parts_value(&first), vector.expected, "{}", vector.id);
         }
         "social.update.build_authored_draft.invalid" => {
-            let error = RadrootsAuthoredUpdate::new(input_str(vector, "content"))
+            let error = AuthoredUpdate::new(input_str(vector, "content"))
                 .expect_err("invalid authored Update must fail");
             assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
         }
         "social.photo_update.build_authored_draft.valid" => {
             let images = authored_images(vector)
                 .unwrap_or_else(|error| panic!("{} image construction failed: {error}", vector.id));
-            let photo = RadrootsAuthoredPhotoUpdate::new(input_str(vector, "content"), images)
+            let photo = AuthoredPhotoUpdate::new(input_str(vector, "content"), images)
                 .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
             let first = authored_photo_update_to_wire_parts(&photo);
             let second = authored_photo_update_to_wire_parts(&photo);
@@ -384,7 +382,7 @@ fn execute(vector: &Vector) {
         "social.ask.build_authored_draft.valid" => {
             let images = authored_images(vector)
                 .unwrap_or_else(|error| panic!("{} image construction failed: {error}", vector.id));
-            let ask = RadrootsAuthoredAsk::new(input_str(vector, "content"), images)
+            let ask = AuthoredAsk::new(input_str(vector, "content"), images)
                 .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
             let first = authored_ask_to_wire_parts(&ask);
             let second = authored_ask_to_wire_parts(&ask);
@@ -392,7 +390,7 @@ fn execute(vector: &Vector) {
             assert_eq!(wire_parts_value(&first), vector.expected, "{}", vector.id);
         }
         "social.ask.build_authored_draft.invalid" => {
-            let error = RadrootsAuthoredAsk::new(input_str(vector, "content"), Vec::new())
+            let error = AuthoredAsk::new(input_str(vector, "content"), Vec::new())
                 .expect_err("invalid authored Ask must fail");
             assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
         }
@@ -605,7 +603,7 @@ fn reply_diagnostic_value(diagnostic: &RadrootsNip10ReplyDiagnostic) -> Value {
     })
 }
 
-fn wire_parts_value(parts: &RadrootsNip01EventWireParts) -> Value {
+fn wire_parts_value(parts: &Nip01EventWireParts) -> Value {
     json!({
         "kind": parts.kind,
         "content": parts.content,
@@ -613,13 +611,11 @@ fn wire_parts_value(parts: &RadrootsNip01EventWireParts) -> Value {
     })
 }
 
-fn authored_reply(vector: &Vector) -> Result<RadrootsAuthoredNip10Reply, RadrootsNip10ReplyError> {
+fn authored_reply(vector: &Vector) -> Result<AuthoredNip10Reply, Nip10ReplyError> {
     let root = authored_reply_reference(vector, &vector.input["root"])?;
     match vector.input.get("parent") {
-        None | Some(Value::Null) => {
-            RadrootsAuthoredNip10Reply::direct(input_str(vector, "content"), root)
-        }
-        Some(parent) => RadrootsAuthoredNip10Reply::nested(
+        None | Some(Value::Null) => AuthoredNip10Reply::direct(input_str(vector, "content"), root),
+        Some(parent) => AuthoredNip10Reply::nested(
             input_str(vector, "content"),
             root,
             authored_reply_reference(vector, parent)?,
@@ -630,7 +626,7 @@ fn authored_reply(vector: &Vector) -> Result<RadrootsAuthoredNip10Reply, Radroot
 fn authored_reply_reference(
     vector: &Vector,
     input: &Value,
-) -> Result<RadrootsNip10ReplyReference, RadrootsNip10ReplyError> {
+) -> Result<Nip10ReplyReference, Nip10ReplyError> {
     let relay = match input.get("relay") {
         None | Some(Value::Null) => None,
         Some(relay) => Some(
@@ -639,16 +635,14 @@ fn authored_reply_reference(
                 .unwrap_or_else(|| panic!("{} Reply relay must be a string or null", vector.id)),
         ),
     };
-    RadrootsNip10ReplyReference::parse(
+    Nip10ReplyReference::parse(
         value_str(vector, input, "event_id"),
         value_str(vector, input, "author"),
         relay,
     )
 }
 
-fn authored_images(
-    vector: &Vector,
-) -> Result<Vec<RadrootsAuthoredPostImage>, RadrootsAuthoredPostError> {
+fn authored_images(vector: &Vector) -> Result<Vec<AuthoredPostImage>, AuthoredPostError> {
     vector
         .input
         .get("images")
@@ -664,10 +658,7 @@ fn authored_images(
         )
 }
 
-fn authored_image(
-    vector: &Vector,
-    input: &Value,
-) -> Result<RadrootsAuthoredPostImage, RadrootsAuthoredPostError> {
+fn authored_image(vector: &Vector, input: &Value) -> Result<AuthoredPostImage, AuthoredPostError> {
     let bytes = value_str(vector, input, "bytes_utf8").as_bytes();
     let media_type = MediaType::parse(value_str(vector, input, "media_type"))
         .unwrap_or_else(|error| panic!("{} media type setup failed: {error}", vector.id));
@@ -685,16 +676,15 @@ fn authored_image(
     .unwrap_or_else(|error| panic!("{} URL approval failed: {error}", vector.id))
     .verify_bytes(bytes, &media_type)
     .unwrap_or_else(|error| panic!("{} byte verification failed: {error}", vector.id));
-    let image = RadrootsAuthoredImage::try_from(descriptor)
+    let image = AuthoredImage::try_from(descriptor)
         .unwrap_or_else(|error| panic!("{} image typestate setup failed: {error}", vector.id));
-    let dimensions = RadrootsPostImageDimensions::new(
+    let dimensions = PostImageDimensions::new(
         u32::try_from(value_u64(vector, input, "width"))
             .unwrap_or_else(|_| panic!("{} image.width must fit u32", vector.id)),
         u32::try_from(value_u64(vector, input, "height"))
             .unwrap_or_else(|_| panic!("{} image.height must fit u32", vector.id)),
     )?;
-    let mut image =
-        RadrootsAuthoredPostImage::new(image, dimensions, value_str(vector, input, "alt"))?;
+    let mut image = AuthoredPostImage::new(image, dimensions, value_str(vector, input, "alt"))?;
     if let Some(fallbacks) = input.get("fallbacks").and_then(Value::as_array) {
         for fallback in fallbacks {
             image = image.try_with_fallback(
@@ -737,8 +727,8 @@ fn diagnostic_codes(diagnostics: &[RadrootsPostDiagnostic]) -> Vec<&'static str>
         .collect()
 }
 
-fn canonical_envelope(raw_json: &str) -> RadrootsEventEnvelope {
-    RadrootsNip01EventWire::parse_json(raw_json)
+fn canonical_envelope(raw_json: &str) -> EventEnvelope {
+    Nip01EventWire::parse_json(raw_json)
         .expect("canonical raw event")
         .into_envelope()
         .expect("event envelope")

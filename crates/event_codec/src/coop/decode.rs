@@ -7,7 +7,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{envelope::kind::KIND_COOP, farm::coop::RadrootsCoop, tag::name::TAG_D};
+use radroots_event::{envelope::kind::KIND_COOP, farm::coop::Coop, tag::name::TAG_D};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
@@ -35,7 +35,7 @@ pub fn coop_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsCoop, EventParseError> {
+) -> Result<Coop, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "30360",
@@ -46,7 +46,7 @@ pub fn coop_from_event(
         return Err(EventParseError::InvalidJson("content"));
     }
     let d_tag = parse_d_tag(tags)?;
-    let mut coop: RadrootsCoop =
+    let mut coop: Coop =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
     if coop.d_tag.trim().is_empty() {
@@ -65,7 +65,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsCoop>, EventParseError> {
+) -> Result<RadrootsParsedData<Coop>, EventParseError> {
     let coop = coop_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -84,7 +84,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsCoop>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Coop>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

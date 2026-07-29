@@ -1,12 +1,11 @@
 use radroots_event::social::group::{
+    GroupAdmins, GroupCreateGroup, GroupCreateInvite, GroupDeleteEvent, GroupDeleteGroup,
+    GroupEditMetadata, GroupEditableMetadata, GroupJoinRequest, GroupLeaveRequest, GroupMembers,
+    GroupMetadata, GroupPutUser, GroupRemoveUser, GroupRole, GroupRoles, GroupUserRef,
     KIND_GROUP_ADMINS, KIND_GROUP_CREATE_GROUP, KIND_GROUP_CREATE_INVITE, KIND_GROUP_DELETE_EVENT,
     KIND_GROUP_DELETE_GROUP, KIND_GROUP_EDIT_METADATA, KIND_GROUP_JOIN_REQUEST,
     KIND_GROUP_LEAVE_REQUEST, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA, KIND_GROUP_PUT_USER,
-    KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES, RadrootsGroupAdmins, RadrootsGroupCreateGroup,
-    RadrootsGroupCreateInvite, RadrootsGroupDeleteEvent, RadrootsGroupDeleteGroup,
-    RadrootsGroupEditMetadata, RadrootsGroupEditableMetadata, RadrootsGroupJoinRequest,
-    RadrootsGroupLeaveRequest, RadrootsGroupMembers, RadrootsGroupMetadata, RadrootsGroupPutUser,
-    RadrootsGroupRemoveUser, RadrootsGroupRole, RadrootsGroupRoles, RadrootsGroupUserRef,
+    KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::group::decode::{
@@ -30,86 +29,86 @@ const PUBKEY: &str = "member_pubkey";
 
 #[test]
 fn group_public_codecs_roundtrip_all_group_wire_shapes() {
-    let put = RadrootsGroupPutUser {
+    let put = GroupPutUser {
         group_id: GROUP_ID.to_string(),
         message: None,
         pubkey: PUBKEY.to_string(),
         roles: Vec::new(),
     };
-    let remove = RadrootsGroupRemoveUser {
+    let remove = GroupRemoveUser {
         group_id: GROUP_ID.to_string(),
         message: Some("remove member".to_string()),
         pubkey: PUBKEY.to_string(),
     };
-    let create = RadrootsGroupCreateGroup {
+    let create = GroupCreateGroup {
         group_id: GROUP_ID.to_string(),
         message: Some("create group".to_string()),
         metadata: full_metadata(),
     };
-    let edit = RadrootsGroupEditMetadata {
+    let edit = GroupEditMetadata {
         group_id: GROUP_ID.to_string(),
         message: None,
         metadata: minimal_metadata(),
     };
-    let delete_group = RadrootsGroupDeleteGroup {
+    let delete_group = GroupDeleteGroup {
         group_id: GROUP_ID.to_string(),
         message: None,
     };
-    let delete_event = RadrootsGroupDeleteEvent {
+    let delete_event = GroupDeleteEvent {
         group_id: GROUP_ID.to_string(),
         message: Some("delete event".to_string()),
         event_id: "event_id".to_string(),
     };
-    let invite = RadrootsGroupCreateInvite {
+    let invite = GroupCreateInvite {
         group_id: GROUP_ID.to_string(),
         message: None,
         code: "invite-code".to_string(),
     };
-    let join = RadrootsGroupJoinRequest {
+    let join = GroupJoinRequest {
         group_id: GROUP_ID.to_string(),
         message: None,
         code: None,
     };
-    let leave = RadrootsGroupLeaveRequest {
+    let leave = GroupLeaveRequest {
         group_id: GROUP_ID.to_string(),
         message: None,
     };
-    let metadata = RadrootsGroupMetadata {
+    let metadata = GroupMetadata {
         d_tag: GROUP_ID.to_string(),
         metadata: minimal_metadata(),
     };
-    let admins = RadrootsGroupAdmins {
+    let admins = GroupAdmins {
         d_tag: GROUP_ID.to_string(),
         description: None,
         admins: vec![
-            RadrootsGroupUserRef {
+            GroupUserRef {
                 pubkey: "admin_pubkey".to_string(),
                 roles: vec!["admin".to_string()],
             },
-            RadrootsGroupUserRef {
+            GroupUserRef {
                 pubkey: "observer_pubkey".to_string(),
                 roles: Vec::new(),
             },
         ],
     };
-    let members = RadrootsGroupMembers {
+    let members = GroupMembers {
         d_tag: GROUP_ID.to_string(),
         description: Some("group members".to_string()),
-        members: vec![RadrootsGroupUserRef {
+        members: vec![GroupUserRef {
             pubkey: PUBKEY.to_string(),
             roles: vec!["member".to_string()],
         }],
     };
-    let roles = RadrootsGroupRoles {
+    let roles = GroupRoles {
         d_tag: GROUP_ID.to_string(),
         description: None,
         roles: vec![
-            RadrootsGroupRole {
+            GroupRole {
                 name: "admin".to_string(),
                 description: Some("full access".to_string()),
                 permissions: vec!["read".to_string(), "write".to_string()],
             },
-            RadrootsGroupRole {
+            GroupRole {
                 name: "viewer".to_string(),
                 description: None,
                 permissions: Vec::new(),
@@ -272,7 +271,7 @@ fn group_public_codecs_reject_invalid_decode_shapes() {
     ));
     assert!(matches!(
         group_metadata_from_event(KIND_GROUP_METADATA, &[tag("d", GROUP_ID)], "").unwrap(),
-        RadrootsGroupMetadata { .. }
+        GroupMetadata { .. }
     ));
     assert!(matches!(
         group_metadata_from_event(
@@ -329,7 +328,7 @@ fn group_public_codecs_reject_invalid_decode_shapes() {
 #[test]
 fn group_public_encoders_reject_empty_required_fields() {
     assert_empty_required(
-        group_create_group_to_wire_parts(&RadrootsGroupCreateGroup {
+        group_create_group_to_wire_parts(&GroupCreateGroup {
             group_id: GROUP_ID.to_string(),
             message: Some(String::new()),
             metadata: minimal_metadata(),
@@ -337,10 +336,10 @@ fn group_public_encoders_reject_empty_required_fields() {
         "message",
     );
     assert_empty_required(
-        group_edit_metadata_to_wire_parts(&RadrootsGroupEditMetadata {
+        group_edit_metadata_to_wire_parts(&GroupEditMetadata {
             group_id: GROUP_ID.to_string(),
             message: None,
-            metadata: RadrootsGroupEditableMetadata {
+            metadata: GroupEditableMetadata {
                 about: Some(String::new()),
                 ..minimal_metadata()
             },
@@ -348,7 +347,7 @@ fn group_public_encoders_reject_empty_required_fields() {
         "about",
     );
     assert_empty_required(
-        group_join_request_to_wire_parts(&RadrootsGroupJoinRequest {
+        group_join_request_to_wire_parts(&GroupJoinRequest {
             group_id: GROUP_ID.to_string(),
             message: None,
             code: Some(String::new()),
@@ -356,10 +355,10 @@ fn group_public_encoders_reject_empty_required_fields() {
         "code",
     );
     assert_empty_required(
-        group_roles_to_wire_parts(&RadrootsGroupRoles {
+        group_roles_to_wire_parts(&GroupRoles {
             d_tag: GROUP_ID.to_string(),
             description: None,
-            roles: vec![RadrootsGroupRole {
+            roles: vec![GroupRole {
                 name: "member".to_string(),
                 description: Some(String::new()),
                 permissions: Vec::new(),
@@ -368,10 +367,10 @@ fn group_public_encoders_reject_empty_required_fields() {
         "role.description",
     );
     assert_empty_required(
-        group_roles_to_wire_parts(&RadrootsGroupRoles {
+        group_roles_to_wire_parts(&GroupRoles {
             d_tag: GROUP_ID.to_string(),
             description: None,
-            roles: vec![RadrootsGroupRole {
+            roles: vec![GroupRole {
                 name: "member".to_string(),
                 description: None,
                 permissions: vec![String::new()],
@@ -381,8 +380,8 @@ fn group_public_encoders_reject_empty_required_fields() {
     );
 }
 
-fn full_metadata() -> RadrootsGroupEditableMetadata {
-    RadrootsGroupEditableMetadata {
+fn full_metadata() -> GroupEditableMetadata {
+    GroupEditableMetadata {
         name: Some("Small Regen Farm".to_string()),
         about: Some("Field app group".to_string()),
         picture: Some("https://media.example.invalid/group.png".to_string()),
@@ -394,8 +393,8 @@ fn full_metadata() -> RadrootsGroupEditableMetadata {
     }
 }
 
-fn minimal_metadata() -> RadrootsGroupEditableMetadata {
-    RadrootsGroupEditableMetadata {
+fn minimal_metadata() -> GroupEditableMetadata {
+    GroupEditableMetadata {
         name: None,
         about: None,
         picture: None,

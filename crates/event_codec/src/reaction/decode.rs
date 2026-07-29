@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    envelope::kind::KIND_REACTION, post::reaction::RadrootsReaction, social::RadrootsSocialTarget,
+    envelope::kind::KIND_REACTION, post::reaction::Reaction, social::SocialTarget,
     tag::name::TAG_E_ROOT,
 };
 
@@ -19,7 +19,7 @@ pub fn reaction_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsReaction, EventParseError> {
+) -> Result<Reaction, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "7",
@@ -33,7 +33,7 @@ pub fn reaction_from_tags(
         return Err(EventParseError::InvalidTag(TAG_E_ROOT));
     }
     let target = parse_reaction_target(tags)?;
-    Ok(RadrootsReaction {
+    Ok(Reaction {
         target,
         content: content.to_string(),
     })
@@ -46,7 +46,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsReaction>, EventParseError> {
+) -> Result<RadrootsParsedData<Reaction>, EventParseError> {
     let reaction = reaction_from_tags(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -65,7 +65,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsReaction>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Reaction>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -77,7 +77,7 @@ pub fn parsed_from_event(
     RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
-fn parse_reaction_target(tags: &[Vec<String>]) -> Result<RadrootsSocialTarget, EventParseError> {
+fn parse_reaction_target(tags: &[Vec<String>]) -> Result<SocialTarget, EventParseError> {
     let event_tag = find_tag(tags, "e");
     let address_tag = find_tag(tags, "a");
     match (event_tag, address_tag) {
@@ -94,7 +94,7 @@ fn parse_reaction_target(tags: &[Vec<String>]) -> Result<RadrootsSocialTarget, E
             } else {
                 None
             };
-            Ok(RadrootsSocialTarget::Event {
+            Ok(SocialTarget::Event {
                 id,
                 author: optional_tag_value(tags, "p")?,
                 event_kind: optional_numeric_tag(tags, "k")?,
@@ -120,7 +120,7 @@ fn parse_reaction_target(tags: &[Vec<String>]) -> Result<RadrootsSocialTarget, E
             } else {
                 None
             };
-            Ok(RadrootsSocialTarget::Address {
+            Ok(SocialTarget::Address {
                 address: value,
                 author: Some(author),
                 event_kind: Some(kind),

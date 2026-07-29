@@ -1,6 +1,6 @@
 //! Social graph, messaging, access, and job event models.
 
-use crate::farm::RadrootsFarmRef;
+use crate::farm::FarmRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -15,7 +15,7 @@ use alloc::{string::String, vec::Vec};
     serde(rename_all = "snake_case", tag = "kind")
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsSocialTarget {
+pub enum SocialTarget {
     Event {
         id: String,
         author: Option<String>,
@@ -41,8 +41,8 @@ pub enum RadrootsSocialTarget {
 )]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default)]
-pub struct RadrootsSocialFarmAnchor {
-    pub farm: RadrootsFarmRef,
+pub struct SocialFarmAnchor {
+    pub farm: FarmRef,
     pub relays: Option<Vec<String>>,
 }
 
@@ -52,7 +52,7 @@ pub struct RadrootsSocialFarmAnchor {
 )]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsSocialLocation {
+pub struct SocialLocation {
     pub name: Option<String>,
     pub geohash: Option<String>,
 }
@@ -63,7 +63,7 @@ pub struct RadrootsSocialLocation {
 )]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsSocialMediaDimensions {
+pub struct SocialMediaDimensions {
     pub width: u32,
     pub height: u32,
 }
@@ -74,9 +74,9 @@ pub struct RadrootsSocialMediaDimensions {
 )]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsSocialMediaThumbnail {
+pub struct SocialMediaThumbnail {
     pub url: String,
-    pub dimensions: Option<RadrootsSocialMediaDimensions>,
+    pub dimensions: Option<SocialMediaDimensions>,
 }
 
 #[cfg_attr(
@@ -85,16 +85,16 @@ pub struct RadrootsSocialMediaThumbnail {
 )]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsSocialMediaMetadata {
+pub struct SocialMediaMetadata {
     pub url: Option<String>,
     pub mime_type: Option<String>,
     pub sha256: Option<String>,
     pub original_sha256: Option<String>,
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     pub size: Option<u64>,
-    pub dimensions: Option<RadrootsSocialMediaDimensions>,
+    pub dimensions: Option<SocialMediaDimensions>,
     pub blurhash: Option<String>,
-    pub thumbnails: Option<Vec<RadrootsSocialMediaThumbnail>>,
+    pub thumbnails: Option<Vec<SocialMediaThumbnail>>,
     pub image: Option<String>,
     pub summary: Option<String>,
     pub alt: Option<String>,
@@ -111,7 +111,7 @@ pub struct RadrootsSocialMediaMetadata {
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsReportType {
+pub enum ReportType {
     Nudity,
     Malware,
     Profanity,
@@ -126,7 +126,7 @@ pub enum RadrootsReportType {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsReportFileTarget {
+pub struct ReportFileTarget {
     pub sha256: Option<String>,
     pub url: Option<String>,
     pub magnet: Option<String>,
@@ -137,10 +137,10 @@ pub struct RadrootsReportFileTarget {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsReportTarget {
+pub struct ReportTarget {
     pub reported_pubkey: String,
-    pub event: Option<RadrootsSocialTarget>,
-    pub file: Option<RadrootsReportFileTarget>,
+    pub event: Option<SocialTarget>,
+    pub file: Option<ReportFileTarget>,
 }
 
 #[cfg(test)]
@@ -149,37 +149,37 @@ mod tests {
 
     #[test]
     fn supports_nip22_target_shapes() {
-        let event = RadrootsSocialTarget::Event {
+        let event = SocialTarget::Event {
             id: "a".repeat(64),
             author: Some(crate::test_valid_hex_64('b')),
             event_kind: Some(30023),
             relays: Some(vec!["wss://relay.example".to_string()]),
         };
-        let address = RadrootsSocialTarget::Address {
+        let address = SocialTarget::Address {
             address: "30023:pubkey:d-tag".to_string(),
             author: None,
             event_kind: Some(30023),
             relays: None,
         };
-        let external = RadrootsSocialTarget::External {
+        let external = SocialTarget::External {
             id: "https://example.test/object".to_string(),
             external_kind: "web".to_string(),
             hint: None,
         };
 
-        assert!(matches!(event, RadrootsSocialTarget::Event { .. }));
-        assert!(matches!(address, RadrootsSocialTarget::Address { .. }));
-        assert!(matches!(external, RadrootsSocialTarget::External { .. }));
+        assert!(matches!(event, SocialTarget::Event { .. }));
+        assert!(matches!(address, SocialTarget::Address { .. }));
+        assert!(matches!(external, SocialTarget::External { .. }));
     }
 
     #[test]
     fn defaults_media_and_farm_anchor_primitives() {
-        let media = RadrootsSocialMediaMetadata::default();
+        let media = SocialMediaMetadata::default();
         assert!(media.url.is_none());
         assert!(media.content_hashes.is_none());
         assert!(media.services.is_none());
 
-        let anchor = RadrootsSocialFarmAnchor::default();
+        let anchor = SocialFarmAnchor::default();
         assert!(anchor.farm.pubkey.is_empty());
         assert!(anchor.farm.d_tag.is_empty());
         assert!(anchor.relays.is_none());
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn exposes_report_enums() {
-        assert_eq!(RadrootsReportType::Spam, RadrootsReportType::Spam);
+        assert_eq!(ReportType::Spam, ReportType::Spam);
     }
 }
 #[path = "app_data.rs"]

@@ -5,9 +5,9 @@ mod common;
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_ARTICLE, KIND_POST},
-    farm::RadrootsFarmRef,
-    post::article::RadrootsArticle,
-    social::{RadrootsSocialFarmAnchor, RadrootsSocialLocation},
+    farm::FarmRef,
+    post::article::Article,
+    social::{SocialFarmAnchor, SocialLocation},
     tag::name::{TAG_A, TAG_D, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_PUBLISHED_AT, TAG_T, TAG_TITLE},
 };
 use radroots_event_codec::{
@@ -22,22 +22,22 @@ const VALID_D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const FARM_D_TAG: &str = "BBBBBBBBBBBBBBBBBBBBBA";
 const FARM_PUBKEY: &str = "farm_pubkey";
 
-fn sample_article() -> RadrootsArticle {
-    RadrootsArticle {
+fn sample_article() -> Article {
+    Article {
         d_tag: VALID_D_TAG.to_string(),
         title: "Spring soil notes".to_string(),
         content: "# Spring soil notes".to_string(),
         summary: Some("Field update".to_string()),
         image: Some("https://media.example.test/soil.jpg".to_string()),
         published_at: Some(1_781_895_600),
-        farm: Some(RadrootsSocialFarmAnchor {
-            farm: RadrootsFarmRef {
+        farm: Some(SocialFarmAnchor {
+            farm: FarmRef {
                 pubkey: FARM_PUBKEY.to_string(),
                 d_tag: FARM_D_TAG.to_string(),
             },
             relays: None,
         }),
-        location: Some(RadrootsSocialLocation {
+        location: Some(SocialLocation {
             name: Some("North field".to_string()),
             geohash: Some("c23nb62w20st".to_string()),
         }),
@@ -163,7 +163,7 @@ fn article_decode_handles_minimal_and_invalid_optional_tags() {
 
 #[test]
 fn article_build_tags_handles_absent_optional_metadata() {
-    let article = RadrootsArticle {
+    let article = Article {
         d_tag: VALID_D_TAG.to_string(),
         title: "Minimal article".to_string(),
         content: "Body".to_string(),

@@ -1,6 +1,6 @@
 use core::fmt;
 
-use radroots_event::{contract::RadrootsEventContract, envelope::RadrootsEventEnvelope};
+use radroots_event::{contract::EventContract, envelope::EventEnvelope};
 
 use crate::{
     post::inbound::{
@@ -23,7 +23,7 @@ impl RadrootsAdmittedRootPostEvent {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -31,7 +31,7 @@ impl RadrootsAdmittedRootPostEvent {
         &self.projection
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         debug_assert!(self.projection.classification().is_root_card());
         radroots_event::contract::event_contract(self.projection.classification().contract_id())
             .expect("root post projection contract IDs are registry-owned")
@@ -62,7 +62,7 @@ impl RadrootsThreadExcludedPostCandidate {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -165,7 +165,7 @@ pub fn admit_verified_post_event(
 /// A verified thread candidate is returned as thread-excluded compatibility
 /// data; this boundary does not claim that it is a valid Radroots reply.
 pub fn verify_and_admit_post_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsPostAdmissionOutcome, RadrootsPostAdmissionError> {
     admit_verified_post_event(verify_nip01_event(event)?)
 }

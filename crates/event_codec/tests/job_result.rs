@@ -4,20 +4,20 @@ mod test_fixtures;
 
 use radroots_event::envelope::kind::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
 use radroots_event::social::job::{JobInputType, JobPaymentRequest};
-use radroots_event::social::job_request::RadrootsJobInput;
-use radroots_event::social::job_result::RadrootsJobResult;
+use radroots_event::social::job_request::JobInput;
+use radroots_event::social::job_result::JobResult;
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::job::error::JobParseError;
 use radroots_event_codec::job::result::decode::{job_result_from_tags, parsed_from_event};
 use radroots_event_codec::job::result::encode::to_wire_parts;
 use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS, RELAY_SECONDARY_WSS};
 
-fn sample_result() -> RadrootsJobResult {
-    RadrootsJobResult {
+fn sample_result() -> JobResult {
+    JobResult {
         kind: u16::try_from(KIND_JOB_RESULT_MIN + 1).expect("result kind must fit NIP-01"),
         request_event: common::event_ptr("req", Some(RELAY_PRIMARY_WSS)),
         request_json: Some("{\"foo\":\"bar\"}".to_string()),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: APP_PRIMARY_HTTPS.to_string(),
             input_type: JobInputType::Url,
             relay: None,
@@ -63,7 +63,7 @@ fn job_result_roundtrip_with_empty_content_sets_none() {
 #[test]
 fn job_result_roundtrip_preserves_input_relay_and_marker() {
     let mut res = sample_result();
-    res.inputs = vec![RadrootsJobInput {
+    res.inputs = vec![JobInput {
         data: "note1payload".to_string(),
         input_type: JobInputType::Event,
         relay: Some(RELAY_SECONDARY_WSS.to_string()),

@@ -4,7 +4,7 @@
 use alloc::string::String;
 use core::{fmt, str::FromStr};
 
-use crate::media::RadrootsAuthoredImage;
+use crate::media::AuthoredImage;
 
 pub const RADROOTS_PROFILE_TYPE_TAG_KEY: &str = "t";
 pub const RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL: &str = "radroots:type:individual";
@@ -23,7 +23,7 @@ pub const RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES: usize =
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq, Copy)]
-pub enum RadrootsProfileType {
+pub enum ProfileType {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "individual"))]
     Individual,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "farm"))]
@@ -36,58 +36,37 @@ pub enum RadrootsProfileType {
     Radrootsd,
 }
 
-pub fn radroots_profile_type_tag_value(profile_type: RadrootsProfileType) -> &'static str {
+pub fn radroots_profile_type_tag_value(profile_type: ProfileType) -> &'static str {
     match profile_type {
-        RadrootsProfileType::Individual => RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL,
-        RadrootsProfileType::Farm => RADROOTS_PROFILE_TYPE_TAG_FARM,
-        RadrootsProfileType::Coop => RADROOTS_PROFILE_TYPE_TAG_COOP,
-        RadrootsProfileType::Any => RADROOTS_PROFILE_TYPE_TAG_ANY,
-        RadrootsProfileType::Radrootsd => RADROOTS_PROFILE_TYPE_TAG_RADROOTSD,
+        ProfileType::Individual => RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL,
+        ProfileType::Farm => RADROOTS_PROFILE_TYPE_TAG_FARM,
+        ProfileType::Coop => RADROOTS_PROFILE_TYPE_TAG_COOP,
+        ProfileType::Any => RADROOTS_PROFILE_TYPE_TAG_ANY,
+        ProfileType::Radrootsd => RADROOTS_PROFILE_TYPE_TAG_RADROOTSD,
     }
 }
 
-pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<RadrootsProfileType> {
+pub fn radroots_profile_type_from_tag_value(value: &str) -> Option<ProfileType> {
     match value {
-        RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL => Some(RadrootsProfileType::Individual),
-        RADROOTS_PROFILE_TYPE_TAG_FARM => Some(RadrootsProfileType::Farm),
-        RADROOTS_PROFILE_TYPE_TAG_COOP => Some(RadrootsProfileType::Coop),
-        RADROOTS_PROFILE_TYPE_TAG_ANY => Some(RadrootsProfileType::Any),
-        RADROOTS_PROFILE_TYPE_TAG_RADROOTSD => Some(RadrootsProfileType::Radrootsd),
+        RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL => Some(ProfileType::Individual),
+        RADROOTS_PROFILE_TYPE_TAG_FARM => Some(ProfileType::Farm),
+        RADROOTS_PROFILE_TYPE_TAG_COOP => Some(ProfileType::Coop),
+        RADROOTS_PROFILE_TYPE_TAG_ANY => Some(ProfileType::Any),
+        RADROOTS_PROFILE_TYPE_TAG_RADROOTSD => Some(ProfileType::Radrootsd),
         _ => None,
     }
 }
 
-#[cfg_attr(any(feature = "serde", test), derive(serde::Deserialize))]
-/// Read-only compatibility projection used by legacy inbound codecs.
-///
-/// This type deliberately has no serializer or DTO export. Its media fields are
-/// unverified strings and its `bot` field is not a JSON Boolean, so it must not
-/// cross an authored or publication boundary. New reads use the tolerant
-/// inbound metadata model; new authoring must use `RadrootsAuthoredProfile`.
-#[derive(Clone, Debug)]
-pub struct RadrootsProfile {
-    pub name: String,
-    pub display_name: Option<String>,
-    pub nip05: Option<String>,
-    pub about: Option<String>,
-    pub website: Option<String>,
-    pub picture: Option<String>,
-    pub banner: Option<String>,
-    pub lud06: Option<String>,
-    pub lud16: Option<String>,
-    pub bot: Option<String>,
-}
-
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsNip05IdentifierError {
+pub enum Nip05IdentifierError {
     MissingSeparator,
     MultipleSeparators,
     InvalidLocalPart,
     InvalidDomain,
 }
 
-impl RadrootsNip05IdentifierError {
+impl Nip05IdentifierError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::MissingSeparator => "missing_separator",
@@ -98,7 +77,7 @@ impl RadrootsNip05IdentifierError {
     }
 }
 
-impl fmt::Display for RadrootsNip05IdentifierError {
+impl fmt::Display for Nip05IdentifierError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MissingSeparator => f.write_str("NIP-05 identifier must contain one @ separator"),
@@ -112,22 +91,22 @@ impl fmt::Display for RadrootsNip05IdentifierError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsNip05IdentifierError {}
+impl std::error::Error for Nip05IdentifierError {}
 
 /// A syntax-checked NIP-05 internet identifier.
 ///
 /// The DNS domain is canonicalized to lowercase. This type performs no network
 /// resolution and makes no identity-verification claim.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsNip05Identifier(String);
+pub struct Nip05Identifier(String);
 
-impl RadrootsNip05Identifier {
-    pub fn parse(value: &str) -> Result<Self, RadrootsNip05IdentifierError> {
+impl Nip05Identifier {
+    pub fn parse(value: &str) -> Result<Self, Nip05IdentifierError> {
         let Some((local_part, domain)) = value.split_once('@') else {
-            return Err(RadrootsNip05IdentifierError::MissingSeparator);
+            return Err(Nip05IdentifierError::MissingSeparator);
         };
         if domain.contains('@') {
-            return Err(RadrootsNip05IdentifierError::MultipleSeparators);
+            return Err(Nip05IdentifierError::MultipleSeparators);
         }
         if local_part.is_empty()
             || !local_part.bytes().all(|byte| {
@@ -136,11 +115,11 @@ impl RadrootsNip05Identifier {
                     || matches!(byte, b'-' | b'_' | b'.')
             })
         {
-            return Err(RadrootsNip05IdentifierError::InvalidLocalPart);
+            return Err(Nip05IdentifierError::InvalidLocalPart);
         }
         let domain = domain.to_ascii_lowercase();
         if !valid_nip05_domain(&domain) {
-            return Err(RadrootsNip05IdentifierError::InvalidDomain);
+            return Err(Nip05IdentifierError::InvalidDomain);
         }
         let mut canonical = String::with_capacity(value.len());
         canonical.push_str(local_part);
@@ -168,14 +147,14 @@ impl RadrootsNip05Identifier {
     }
 }
 
-impl fmt::Display for RadrootsNip05Identifier {
+impl fmt::Display for Nip05Identifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
 }
 
-impl FromStr for RadrootsNip05Identifier {
-    type Err = RadrootsNip05IdentifierError;
+impl FromStr for Nip05Identifier {
+    type Err = Nip05IdentifierError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
@@ -204,11 +183,11 @@ fn valid_nip05_domain(domain: &str) -> bool {
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsAuthoredProfileError {
+pub enum AuthoredProfileError {
     InvalidName,
 }
 
-impl RadrootsAuthoredProfileError {
+impl AuthoredProfileError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidName => "invalid_name",
@@ -216,7 +195,7 @@ impl RadrootsAuthoredProfileError {
     }
 }
 
-impl fmt::Display for RadrootsAuthoredProfileError {
+impl fmt::Display for AuthoredProfileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidName => {
@@ -227,7 +206,7 @@ impl fmt::Display for RadrootsAuthoredProfileError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsAuthoredProfileError {}
+impl std::error::Error for AuthoredProfileError {}
 
 /// Metadata accepted by the strict authored kind-0 Profile operation.
 ///
@@ -239,25 +218,25 @@ impl std::error::Error for RadrootsAuthoredProfileError {}
 /// Omitting an existing field removes it from the authored replacement.
 ///
 /// ```compile_fail
-/// let _: radroots_event::profile::RadrootsAuthoredProfile =
+/// let _: radroots_event::profile::AuthoredProfile =
 ///     serde_json::from_str(r#"{"name":"alice"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredProfile {
+pub struct AuthoredProfile {
     name: String,
     display_name: Option<String>,
     about: Option<String>,
-    picture: Option<RadrootsAuthoredImage>,
-    banner: Option<RadrootsAuthoredImage>,
-    nip05: Option<RadrootsNip05Identifier>,
+    picture: Option<AuthoredImage>,
+    banner: Option<AuthoredImage>,
+    nip05: Option<Nip05Identifier>,
     bot: Option<bool>,
 }
 
-impl RadrootsAuthoredProfile {
-    pub fn new(name: impl Into<String>) -> Result<Self, RadrootsAuthoredProfileError> {
+impl AuthoredProfile {
+    pub fn new(name: impl Into<String>) -> Result<Self, AuthoredProfileError> {
         let name = name.into();
         if name.trim().is_empty() || name.chars().any(char::is_control) {
-            return Err(RadrootsAuthoredProfileError::InvalidName);
+            return Err(AuthoredProfileError::InvalidName);
         }
         Ok(Self {
             name,
@@ -283,19 +262,19 @@ impl RadrootsAuthoredProfile {
     }
 
     #[must_use]
-    pub fn with_picture(mut self, value: RadrootsAuthoredImage) -> Self {
+    pub fn with_picture(mut self, value: AuthoredImage) -> Self {
         self.picture = Some(value);
         self
     }
 
     #[must_use]
-    pub fn with_banner(mut self, value: RadrootsAuthoredImage) -> Self {
+    pub fn with_banner(mut self, value: AuthoredImage) -> Self {
         self.banner = Some(value);
         self
     }
 
     #[must_use]
-    pub fn with_nip05(mut self, value: RadrootsNip05Identifier) -> Self {
+    pub fn with_nip05(mut self, value: Nip05Identifier) -> Self {
         self.nip05 = Some(value);
         self
     }
@@ -318,15 +297,15 @@ impl RadrootsAuthoredProfile {
         self.about.as_deref()
     }
 
-    pub fn picture(&self) -> Option<&RadrootsAuthoredImage> {
+    pub fn picture(&self) -> Option<&AuthoredImage> {
         self.picture.as_ref()
     }
 
-    pub fn banner(&self) -> Option<&RadrootsAuthoredImage> {
+    pub fn banner(&self) -> Option<&AuthoredImage> {
         self.banner.as_ref()
     }
 
-    pub fn nip05(&self) -> Option<&RadrootsNip05Identifier> {
+    pub fn nip05(&self) -> Option<&Nip05Identifier> {
         self.nip05.as_ref()
     }
 
@@ -343,23 +322,23 @@ mod tests {
     #[test]
     fn maps_profile_type_to_tag_value() {
         assert_eq!(
-            radroots_profile_type_tag_value(RadrootsProfileType::Individual),
+            radroots_profile_type_tag_value(ProfileType::Individual),
             RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL
         );
         assert_eq!(
-            radroots_profile_type_tag_value(RadrootsProfileType::Farm),
+            radroots_profile_type_tag_value(ProfileType::Farm),
             RADROOTS_PROFILE_TYPE_TAG_FARM
         );
         assert_eq!(
-            radroots_profile_type_tag_value(RadrootsProfileType::Coop),
+            radroots_profile_type_tag_value(ProfileType::Coop),
             RADROOTS_PROFILE_TYPE_TAG_COOP
         );
         assert_eq!(
-            radroots_profile_type_tag_value(RadrootsProfileType::Any),
+            radroots_profile_type_tag_value(ProfileType::Any),
             RADROOTS_PROFILE_TYPE_TAG_ANY
         );
         assert_eq!(
-            radroots_profile_type_tag_value(RadrootsProfileType::Radrootsd),
+            radroots_profile_type_tag_value(ProfileType::Radrootsd),
             RADROOTS_PROFILE_TYPE_TAG_RADROOTSD
         );
     }
@@ -368,23 +347,23 @@ mod tests {
     fn maps_tag_value_to_profile_type() {
         assert_eq!(
             radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_INDIVIDUAL),
-            Some(RadrootsProfileType::Individual)
+            Some(ProfileType::Individual)
         );
         assert_eq!(
             radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_FARM),
-            Some(RadrootsProfileType::Farm)
+            Some(ProfileType::Farm)
         );
         assert_eq!(
             radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_COOP),
-            Some(RadrootsProfileType::Coop)
+            Some(ProfileType::Coop)
         );
         assert_eq!(
             radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_ANY),
-            Some(RadrootsProfileType::Any)
+            Some(ProfileType::Any)
         );
         assert_eq!(
             radroots_profile_type_from_tag_value(RADROOTS_PROFILE_TYPE_TAG_RADROOTSD),
-            Some(RadrootsProfileType::Radrootsd)
+            Some(ProfileType::Radrootsd)
         );
         assert_eq!(radroots_profile_type_from_tag_value("unknown"), None);
     }
@@ -402,16 +381,13 @@ mod tests {
             ("alice@xn--bcher-kva.example", "alice@xn--bcher-kva.example"),
             ("alice@Example.COM", "alice@example.com"),
         ] {
-            let identifier = RadrootsNip05Identifier::parse(value).unwrap();
+            let identifier = Nip05Identifier::parse(value).unwrap();
             assert_eq!(identifier.as_str(), canonical);
             assert_eq!(identifier.to_string(), canonical);
-            assert_eq!(
-                canonical.parse::<RadrootsNip05Identifier>().unwrap(),
-                identifier
-            );
+            assert_eq!(canonical.parse::<Nip05Identifier>().unwrap(), identifier);
         }
 
-        let identifier = RadrootsNip05Identifier::parse("alice@example.com").unwrap();
+        let identifier = Nip05Identifier::parse("alice@example.com").unwrap();
         assert_eq!(identifier.local_part(), "alice");
         assert_eq!(identifier.domain(), "example.com");
     }
@@ -419,48 +395,27 @@ mod tests {
     #[test]
     fn nip05_identifier_rejects_noncanonical_or_ambiguous_syntax() {
         let cases = [
-            ("alice", RadrootsNip05IdentifierError::MissingSeparator),
+            ("alice", Nip05IdentifierError::MissingSeparator),
             (
                 "alice@example.com@other.example",
-                RadrootsNip05IdentifierError::MultipleSeparators,
+                Nip05IdentifierError::MultipleSeparators,
             ),
-            (
-                "@example.com",
-                RadrootsNip05IdentifierError::InvalidLocalPart,
-            ),
-            (
-                "Alice@example.com",
-                RadrootsNip05IdentifierError::InvalidLocalPart,
-            ),
+            ("@example.com", Nip05IdentifierError::InvalidLocalPart),
+            ("Alice@example.com", Nip05IdentifierError::InvalidLocalPart),
             (
                 "alice+farm@example.com",
-                RadrootsNip05IdentifierError::InvalidLocalPart,
+                Nip05IdentifierError::InvalidLocalPart,
             ),
-            ("alice@", RadrootsNip05IdentifierError::InvalidDomain),
-            (
-                "alice@-example.com",
-                RadrootsNip05IdentifierError::InvalidDomain,
-            ),
-            (
-                "alice@example-.com",
-                RadrootsNip05IdentifierError::InvalidDomain,
-            ),
-            (
-                "alice@example..com",
-                RadrootsNip05IdentifierError::InvalidDomain,
-            ),
-            (
-                "alice@example.com.",
-                RadrootsNip05IdentifierError::InvalidDomain,
-            ),
-            (
-                "alice@example_com",
-                RadrootsNip05IdentifierError::InvalidDomain,
-            ),
+            ("alice@", Nip05IdentifierError::InvalidDomain),
+            ("alice@-example.com", Nip05IdentifierError::InvalidDomain),
+            ("alice@example-.com", Nip05IdentifierError::InvalidDomain),
+            ("alice@example..com", Nip05IdentifierError::InvalidDomain),
+            ("alice@example.com.", Nip05IdentifierError::InvalidDomain),
+            ("alice@example_com", Nip05IdentifierError::InvalidDomain),
         ];
 
         for (value, expected) in cases {
-            let error = RadrootsNip05Identifier::parse(value).unwrap_err();
+            let error = Nip05Identifier::parse(value).unwrap_err();
             assert_eq!(error, expected, "{value}");
             assert!(!error.code().is_empty());
             assert!(!error.to_string().is_empty());
@@ -468,35 +423,34 @@ mod tests {
 
         let long_label = "a".repeat(64);
         assert_eq!(
-            RadrootsNip05Identifier::parse(&format!("alice@{long_label}.example")),
-            Err(RadrootsNip05IdentifierError::InvalidDomain)
+            Nip05Identifier::parse(&format!("alice@{long_label}.example")),
+            Err(Nip05IdentifierError::InvalidDomain)
         );
         let long_domain = (0..43).map(|_| "aaaaa").collect::<Vec<_>>().join(".");
         assert!(long_domain.len() > 253);
         assert_eq!(
-            RadrootsNip05Identifier::parse(&format!("alice@{long_domain}")),
-            Err(RadrootsNip05IdentifierError::InvalidDomain)
+            Nip05Identifier::parse(&format!("alice@{long_domain}")),
+            Err(Nip05IdentifierError::InvalidDomain)
         );
     }
 
     #[test]
     fn authored_profile_requires_name_and_image_only_verified_media() {
-        let media =
-            RadrootsAuthoredImage::try_from(verified_descriptor("image/webp", "webp")).unwrap();
-        let profile = RadrootsAuthoredProfile::new("alice")
+        let media = AuthoredImage::try_from(verified_descriptor("image/webp", "webp")).unwrap();
+        let profile = AuthoredProfile::new("alice")
             .unwrap()
             .with_display_name("Alice")
             .with_about("Victoria grower")
             .with_picture(media.clone())
             .with_banner(media)
-            .with_nip05(RadrootsNip05Identifier::parse("alice@example.com").unwrap())
+            .with_nip05(Nip05Identifier::parse("alice@example.com").unwrap())
             .with_bot(false);
 
         assert_eq!(profile.name(), "alice");
         assert_eq!(profile.display_name(), Some("Alice"));
         assert_eq!(profile.about(), Some("Victoria grower"));
         assert_eq!(
-            profile.nip05().map(RadrootsNip05Identifier::as_str),
+            profile.nip05().map(Nip05Identifier::as_str),
             Some("alice@example.com")
         );
         assert_eq!(profile.bot(), Some(false));
@@ -517,18 +471,14 @@ mod tests {
                 .map(|value| value.descriptor().url().as_str())
         );
 
-        let error =
-            RadrootsAuthoredImage::try_from(verified_descriptor("text/plain", "txt")).unwrap_err();
-        assert_eq!(
-            error,
-            crate::media::RadrootsAuthoredImageError::MediaTypeNotImage
-        );
+        let error = AuthoredImage::try_from(verified_descriptor("text/plain", "txt")).unwrap_err();
+        assert_eq!(error, crate::media::AuthoredImageError::MediaTypeNotImage);
         assert_eq!(error.code(), "media_type_not_image");
         assert!(!error.to_string().is_empty());
 
         for invalid_name in ["", "   ", "alice\n"] {
-            let error = RadrootsAuthoredProfile::new(invalid_name).unwrap_err();
-            assert_eq!(error, RadrootsAuthoredProfileError::InvalidName);
+            let error = AuthoredProfile::new(invalid_name).unwrap_err();
+            assert_eq!(error, AuthoredProfileError::InvalidName);
             assert_eq!(error.code(), "invalid_name");
             assert!(!error.to_string().is_empty());
         }

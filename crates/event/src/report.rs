@@ -1,26 +1,26 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-use crate::social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget};
+use crate::social::{ReportFileTarget, ReportType, SocialTarget};
 
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsReport {
+pub struct Report {
     pub reported_pubkey: String,
-    pub report_type: RadrootsReportType,
+    pub report_type: ReportType,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub event: Option<RadrootsSocialTarget>,
+    pub event: Option<SocialTarget>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub file: Option<RadrootsReportFileTarget>,
+    pub file: Option<ReportFileTarget>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -34,10 +34,10 @@ mod tests {
 
     #[test]
     fn report_model_requires_reported_pubkey_field() {
-        let report = RadrootsReport {
+        let report = Report {
             reported_pubkey: "a".repeat(64),
-            report_type: RadrootsReportType::Spam,
-            event: Some(RadrootsSocialTarget::Event {
+            report_type: ReportType::Spam,
+            event: Some(SocialTarget::Event {
                 id: "b".repeat(64),
                 author: Some("a".repeat(64)),
                 event_kind: Some(1),
@@ -48,20 +48,17 @@ mod tests {
         };
 
         assert_eq!(report.reported_pubkey.len(), 64);
-        assert_eq!(report.report_type, RadrootsReportType::Spam);
-        assert!(matches!(
-            report.event,
-            Some(RadrootsSocialTarget::Event { .. })
-        ));
+        assert_eq!(report.report_type, ReportType::Spam);
+        assert!(matches!(report.event, Some(SocialTarget::Event { .. })));
     }
 
     #[test]
     fn report_model_supports_file_targets_with_required_pubkey() {
-        let report = RadrootsReport {
+        let report = Report {
             reported_pubkey: "a".repeat(64),
-            report_type: RadrootsReportType::Malware,
+            report_type: ReportType::Malware,
             event: None,
-            file: Some(RadrootsReportFileTarget {
+            file: Some(ReportFileTarget {
                 sha256: Some("b".repeat(64)),
                 url: Some("https://example.test/file".to_string()),
                 magnet: None,

@@ -10,9 +10,7 @@ use std::{collections::BTreeMap, string::String};
 
 use core::fmt;
 
-use radroots_event::profile::{
-    RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES, RadrootsNip05Identifier,
-};
+use radroots_event::profile::{Nip05Identifier, RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES};
 use serde::de::{IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
@@ -110,7 +108,7 @@ pub struct RadrootsInboundProfileMetadata {
     about: Option<String>,
     picture: Option<RadrootsUnverifiedProfileMediaReference>,
     banner: Option<RadrootsUnverifiedProfileMediaReference>,
-    nip05: Option<RadrootsNip05Identifier>,
+    nip05: Option<Nip05Identifier>,
     bot: Option<bool>,
 }
 
@@ -148,7 +146,7 @@ impl RadrootsInboundProfileMetadata {
     }
 
     /// Returns only a syntax-checked identifier; no NIP-05 resolution occurred.
-    pub fn nip05(&self) -> Option<&RadrootsNip05Identifier> {
+    pub fn nip05(&self) -> Option<&Nip05Identifier> {
         self.nip05.as_ref()
     }
 
@@ -242,9 +240,9 @@ fn project_bool(
 fn project_nip05(
     raw_fields: &BTreeMap<String, Value>,
     residual_fields: &mut BTreeMap<String, Value>,
-) -> Option<RadrootsNip05Identifier> {
+) -> Option<Nip05Identifier> {
     let value = raw_fields.get("nip05")?.as_str()?;
-    let identifier = RadrootsNip05Identifier::parse(value).ok()?;
+    let identifier = Nip05Identifier::parse(value).ok()?;
     residual_fields.remove("nip05");
     Some(identifier)
 }

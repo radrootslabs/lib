@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::farm::change_set::RadrootsGcsLocation;
+use crate::farm::change_set::GcsLocation;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -12,11 +12,11 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsResourceArea {
+pub struct ResourceArea {
     pub d_tag: String,
     pub name: String,
     pub about: Option<String>,
-    pub location: RadrootsResourceAreaLocation,
+    pub location: ResourceAreaLocation,
     pub tags: Option<Vec<String>>,
 }
 
@@ -27,7 +27,7 @@ pub struct RadrootsResourceArea {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsResourceAreaRef {
+pub struct ResourceAreaRef {
     pub pubkey: String,
     pub d_tag: String,
 }
@@ -39,10 +39,10 @@ pub struct RadrootsResourceAreaRef {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsResourceAreaLocation {
+pub struct ResourceAreaLocation {
     pub primary: Option<String>,
     pub city: Option<String>,
     pub region: Option<String>,
     pub country: Option<String>,
-    pub gcs: RadrootsGcsLocation,
+    pub gcs: GcsLocation,
 }

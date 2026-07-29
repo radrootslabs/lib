@@ -6,16 +6,15 @@ use alloc::{boxed::Box, string::String, string::ToString, vec::Vec};
 use core::fmt;
 use radroots_blossom::{BlobUrl, Sha256};
 use radroots_event::{
-    envelope::RadrootsEventTags,
+    envelope::EventTags,
     envelope::kind::KIND_CLASSIFIED_LISTING,
     food::availability::{
-        RADROOTS_FOOD_DECIMAL_MAX_DIGITS, RADROOTS_FOOD_IMAGE_MAX_COUNT,
-        RadrootsFoodAvailabilityError, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
-        RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodImageDimensions,
-        RadrootsFoodPrice, RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText,
-        RadrootsFoodUnit, food_media_blossom_digest, food_media_http_url_is_valid,
+        FoodAvailabilityError, FoodAvailabilityStatus, FoodContent, FoodCurrency, FoodIdentifier,
+        FoodImageDimensions, FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
+        RADROOTS_FOOD_DECIMAL_MAX_DIGITS, RADROOTS_FOOD_IMAGE_MAX_COUNT, food_media_blossom_digest,
+        food_media_http_url_is_valid,
     },
-    listing::classified::RadrootsClassifiedListingPartition,
+    listing::classified::ClassifiedListingPartition,
     wire::DEFAULT_RAW_JSON_MAX_BYTES,
 };
 
@@ -85,7 +84,7 @@ impl fmt::Display for RadrootsFoodAvailabilityImageDiagnostic {
 pub struct RadrootsInboundFoodAvailabilityImage {
     raw_tag: Vec<String>,
     url: Option<String>,
-    dimensions: Option<RadrootsFoodImageDimensions>,
+    dimensions: Option<FoodImageDimensions>,
     diagnostics: Vec<RadrootsFoodAvailabilityImageDiagnostic>,
 }
 
@@ -98,7 +97,7 @@ impl RadrootsInboundFoodAvailabilityImage {
         self.url.as_deref()
     }
 
-    pub const fn dimensions(&self) -> Option<RadrootsFoodImageDimensions> {
+    pub const fn dimensions(&self) -> Option<FoodImageDimensions> {
         self.dimensions
     }
 
@@ -113,53 +112,53 @@ impl RadrootsInboundFoodAvailabilityImage {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsInboundFoodAvailabilityProjection {
-    content: RadrootsFoodContent,
-    identifier: RadrootsFoodIdentifier,
-    title: RadrootsFoodText,
-    summary: RadrootsFoodText,
-    published_at: RadrootsFoodPublishedAt,
-    location: RadrootsFoodText,
-    price: RadrootsFoodPrice,
-    quantity: Option<RadrootsFoodQuantity>,
-    status: RadrootsFoodAvailabilityStatus,
+    content: FoodContent,
+    identifier: FoodIdentifier,
+    title: FoodText,
+    summary: FoodText,
+    published_at: FoodPublishedAt,
+    location: FoodText,
+    price: FoodPrice,
+    quantity: Option<FoodQuantity>,
+    status: FoodAvailabilityStatus,
     images: Vec<RadrootsInboundFoodAvailabilityImage>,
     diagnostics: Vec<RadrootsFoodAvailabilityImageDiagnostic>,
 }
 
 impl RadrootsInboundFoodAvailabilityProjection {
-    pub fn content(&self) -> &RadrootsFoodContent {
+    pub fn content(&self) -> &FoodContent {
         &self.content
     }
 
-    pub fn identifier(&self) -> &RadrootsFoodIdentifier {
+    pub fn identifier(&self) -> &FoodIdentifier {
         &self.identifier
     }
 
-    pub fn title(&self) -> &RadrootsFoodText {
+    pub fn title(&self) -> &FoodText {
         &self.title
     }
 
-    pub fn summary(&self) -> &RadrootsFoodText {
+    pub fn summary(&self) -> &FoodText {
         &self.summary
     }
 
-    pub const fn published_at(&self) -> RadrootsFoodPublishedAt {
+    pub const fn published_at(&self) -> FoodPublishedAt {
         self.published_at
     }
 
-    pub fn location(&self) -> &RadrootsFoodText {
+    pub fn location(&self) -> &FoodText {
         &self.location
     }
 
-    pub fn price(&self) -> &RadrootsFoodPrice {
+    pub fn price(&self) -> &FoodPrice {
         &self.price
     }
 
-    pub fn quantity(&self) -> Option<&RadrootsFoodQuantity> {
+    pub fn quantity(&self) -> Option<&FoodQuantity> {
         self.quantity.as_ref()
     }
 
-    pub const fn status(&self) -> RadrootsFoodAvailabilityStatus {
+    pub const fn status(&self) -> FoodAvailabilityStatus {
         self.status
     }
 
@@ -176,7 +175,7 @@ impl RadrootsInboundFoodAvailabilityProjection {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsFoodAvailabilityProjectionOutcome {
     Focused(Box<RadrootsInboundFoodAvailabilityProjection>),
-    Excluded(RadrootsClassifiedListingPartition),
+    Excluded(ClassifiedListingPartition),
 }
 
 #[non_exhaustive]
@@ -189,7 +188,7 @@ pub enum RadrootsFoodAvailabilityProjectionError {
     PriceFrequencyForbidden,
     PriceUnitMissing,
     EventWireTooLarge { max: usize, actual: usize },
-    Domain(RadrootsFoodAvailabilityError),
+    Domain(FoodAvailabilityError),
 }
 
 impl RadrootsFoodAvailabilityProjectionError {
@@ -247,8 +246,8 @@ impl std::error::Error for RadrootsFoodAvailabilityProjectionError {
     }
 }
 
-impl From<RadrootsFoodAvailabilityError> for RadrootsFoodAvailabilityProjectionError {
-    fn from(value: RadrootsFoodAvailabilityError) -> Self {
+impl From<FoodAvailabilityError> for RadrootsFoodAvailabilityProjectionError {
+    fn from(value: FoodAvailabilityError) -> Self {
         Self::Domain(value)
     }
 }
@@ -279,7 +278,7 @@ pub fn project_verified_food_availability_event_registry_v7(
 pub(crate) fn project_inbound_food_availability_parts(
     kind: u32,
     created_at: u64,
-    tags: &RadrootsEventTags,
+    tags: &EventTags,
     content: &str,
 ) -> Result<RadrootsFoodAvailabilityProjectionOutcome, RadrootsFoodAvailabilityProjectionError> {
     if kind != KIND_CLASSIFIED_LISTING {
@@ -290,16 +289,16 @@ pub(crate) fn project_inbound_food_availability_parts(
     }
 
     match classify_classified_listing_tags_registry_v7(tags) {
-        RadrootsClassifiedListingPartition::Ambiguous => {
+        ClassifiedListingPartition::Ambiguous => {
             return Err(RadrootsFoodAvailabilityProjectionError::ProfileAmbiguous);
         }
-        partition @ (RadrootsClassifiedListingPartition::OperationalListing
-        | RadrootsClassifiedListingPartition::GenericNip99) => {
+        partition @ (ClassifiedListingPartition::OperationalListing
+        | ClassifiedListingPartition::GenericNip99) => {
             return Ok(RadrootsFoodAvailabilityProjectionOutcome::Excluded(
                 partition,
             ));
         }
-        RadrootsClassifiedListingPartition::FocusedFoodAvailability => {}
+        ClassifiedListingPartition::FocusedFoodAvailability => {}
     }
 
     let tags = tags.to_vec();
@@ -320,26 +319,26 @@ pub(crate) fn project_inbound_food_availability_parts(
     let location_value = singleton_value(&tags, "location")?;
     let status_value = singleton_value(&tags, "status")?;
 
-    let content = RadrootsFoodContent::new(content.to_string())?;
-    let identifier = RadrootsFoodIdentifier::parse(identifier_value)?;
-    let title = RadrootsFoodText::new(title_value.to_string())?;
-    let summary = RadrootsFoodText::new(summary_value.to_string())?;
-    let published_at = RadrootsFoodPublishedAt::parse(published_at_value)?;
+    let content = FoodContent::new(content.to_string())?;
+    let identifier = FoodIdentifier::parse(identifier_value)?;
+    let title = FoodText::new(title_value.to_string())?;
+    let summary = FoodText::new(summary_value.to_string())?;
+    let published_at = FoodPublishedAt::parse(published_at_value)?;
     published_at.validate_created_at(created_at)?;
-    let location = RadrootsFoodText::new(location_value.to_string())?;
+    let location = FoodText::new(location_value.to_string())?;
 
     let price_tags = matching_tags(&tags, "price");
     let price_tag = match price_tags.as_slice() {
         [tag] => *tag,
-        _ => return Err(RadrootsFoodAvailabilityError::PriceInvalid.into()),
+        _ => return Err(FoodAvailabilityError::PriceInvalid.into()),
     };
     if price_tag.len() > 3 {
         return Err(RadrootsFoodAvailabilityProjectionError::PriceFrequencyForbidden);
     }
     if price_tag.len() != 3 {
-        return Err(RadrootsFoodAvailabilityError::PriceInvalid.into());
+        return Err(FoodAvailabilityError::PriceInvalid.into());
     }
-    let amount = normalize_decimal(&price_tag[1], RadrootsFoodAvailabilityError::PriceInvalid)?;
+    let amount = normalize_decimal(&price_tag[1], FoodAvailabilityError::PriceInvalid)?;
     let currency = normalize_currency(&price_tag[2])?;
 
     let price_unit_tags = matching_tags(&tags, "radroots:price_unit");
@@ -348,10 +347,10 @@ pub(crate) fn project_inbound_food_availability_parts(
     }
     let unit_value = match price_unit_tags.as_slice() {
         [tag] if tag.len() == 2 => tag[1].as_str(),
-        _ => return Err(RadrootsFoodAvailabilityError::PriceUnitInvalid.into()),
+        _ => return Err(FoodAvailabilityError::PriceUnitInvalid.into()),
     };
-    let unit = RadrootsFoodUnit::parse(unit_value)?;
-    let price = RadrootsFoodPrice::new(amount, currency, unit)?;
+    let unit = FoodUnit::parse(unit_value)?;
+    let price = FoodPrice::new(amount, currency, unit)?;
 
     let quantity_tags = matching_tags(&tags, "radroots:quantity");
     let quantity = if quantity_tags.is_empty() {
@@ -360,19 +359,19 @@ pub(crate) fn project_inbound_food_availability_parts(
         let tag = match quantity_tags.as_slice() {
             [tag] if tag.len() == 3 => *tag,
             _ => {
-                return Err(RadrootsFoodAvailabilityError::QuantityInvalid.into());
+                return Err(FoodAvailabilityError::QuantityInvalid.into());
             }
         };
-        let amount = normalize_decimal(&tag[1], RadrootsFoodAvailabilityError::QuantityInvalid)?;
-        let quantity_unit = RadrootsFoodUnit::parse(&tag[2])
-            .map_err(|_| RadrootsFoodAvailabilityError::QuantityInvalid)?;
+        let amount = normalize_decimal(&tag[1], FoodAvailabilityError::QuantityInvalid)?;
+        let quantity_unit =
+            FoodUnit::parse(&tag[2]).map_err(|_| FoodAvailabilityError::QuantityInvalid)?;
         if quantity_unit != unit {
-            return Err(RadrootsFoodAvailabilityError::QuantityInvalid.into());
+            return Err(FoodAvailabilityError::QuantityInvalid.into());
         }
-        Some(RadrootsFoodQuantity::new(amount, quantity_unit)?)
+        Some(FoodQuantity::new(amount, quantity_unit)?)
     };
 
-    let status = RadrootsFoodAvailabilityStatus::parse(status_value)?;
+    let status = FoodAvailabilityStatus::parse(status_value)?;
     let image_tags = matching_tags(&tags, "image");
     let (images, diagnostics) = project_images(&image_tags);
 
@@ -393,9 +392,7 @@ pub(crate) fn project_inbound_food_availability_parts(
     ))
 }
 
-fn classify_classified_listing_tags_registry_v7(
-    tags: &RadrootsEventTags,
-) -> RadrootsClassifiedListingPartition {
+fn classify_classified_listing_tags_registry_v7(tags: &EventTags) -> ClassifiedListingPartition {
     let mut has_focused_marker = false;
     let mut has_operational_marker = false;
 
@@ -413,15 +410,15 @@ fn classify_classified_listing_tags_registry_v7(
         }
 
         if has_focused_marker && has_operational_marker {
-            return RadrootsClassifiedListingPartition::Ambiguous;
+            return ClassifiedListingPartition::Ambiguous;
         }
     }
 
     match (has_focused_marker, has_operational_marker) {
-        (true, false) => RadrootsClassifiedListingPartition::FocusedFoodAvailability,
-        (false, true) => RadrootsClassifiedListingPartition::OperationalListing,
-        (false, false) => RadrootsClassifiedListingPartition::GenericNip99,
-        (true, true) => RadrootsClassifiedListingPartition::Ambiguous,
+        (true, false) => ClassifiedListingPartition::FocusedFoodAvailability,
+        (false, true) => ClassifiedListingPartition::OperationalListing,
+        (false, false) => ClassifiedListingPartition::GenericNip99,
+        (true, true) => ClassifiedListingPartition::Ambiguous,
     }
 }
 
@@ -459,7 +456,7 @@ fn exact_single_tag_from_matches(
 
 fn normalize_decimal(
     value: &str,
-    error: RadrootsFoodAvailabilityError,
+    error: FoodAvailabilityError,
 ) -> Result<String, RadrootsFoodAvailabilityProjectionError> {
     let mut digits = 0usize;
     let mut dot = None;
@@ -496,16 +493,16 @@ fn normalize_decimal(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RadrootsStrictFoodAvailabilityProjection {
-    identifier: RadrootsFoodIdentifier,
-    published_at: RadrootsFoodPublishedAt,
+    identifier: FoodIdentifier,
+    published_at: FoodPublishedAt,
 }
 
 impl RadrootsStrictFoodAvailabilityProjection {
-    pub(crate) fn identifier(&self) -> &RadrootsFoodIdentifier {
+    pub(crate) fn identifier(&self) -> &FoodIdentifier {
         &self.identifier
     }
 
-    pub(crate) const fn published_at(&self) -> RadrootsFoodPublishedAt {
+    pub(crate) const fn published_at(&self) -> FoodPublishedAt {
         self.published_at
     }
 }
@@ -564,7 +561,7 @@ pub(crate) fn project_strict_verified_food_availability_event(
         });
     }
     if classify_classified_listing_tags_registry_v7(event.tags())
-        != RadrootsClassifiedListingPartition::FocusedFoodAvailability
+        != ClassifiedListingPartition::FocusedFoodAvailability
     {
         return Err(RadrootsFoodAvailabilityProjectionError::ProfileAmbiguous);
     }
@@ -616,30 +613,28 @@ pub(crate) fn project_strict_verified_food_availability_event(
         [tag] if tag.len() > 3 => {
             return Err(RadrootsFoodAvailabilityProjectionError::PriceFrequencyForbidden);
         }
-        _ => return Err(RadrootsFoodAvailabilityError::PriceInvalid.into()),
+        _ => return Err(FoodAvailabilityError::PriceInvalid.into()),
     };
-    let normalized_price =
-        normalize_decimal(&price[1], RadrootsFoodAvailabilityError::PriceInvalid)?;
+    let normalized_price = normalize_decimal(&price[1], FoodAvailabilityError::PriceInvalid)?;
     if normalized_price != price[1] {
-        return Err(RadrootsFoodAvailabilityError::PriceInvalid.into());
+        return Err(FoodAvailabilityError::PriceInvalid.into());
     }
     if normalize_currency(&price[2])?.as_str() != price[2] {
-        return Err(RadrootsFoodAvailabilityError::PriceCurrencyInvalid.into());
+        return Err(FoodAvailabilityError::PriceCurrencyInvalid.into());
     }
 
     if let Some(quantity) = matching_tags(&tags, "radroots:quantity").first() {
         if quantity.len() != 3 {
-            return Err(RadrootsFoodAvailabilityError::QuantityInvalid.into());
+            return Err(FoodAvailabilityError::QuantityInvalid.into());
         }
-        let normalized =
-            normalize_decimal(&quantity[1], RadrootsFoodAvailabilityError::QuantityInvalid)?;
+        let normalized = normalize_decimal(&quantity[1], FoodAvailabilityError::QuantityInvalid)?;
         if normalized != quantity[1] {
-            return Err(RadrootsFoodAvailabilityError::QuantityInvalid.into());
+            return Err(FoodAvailabilityError::QuantityInvalid.into());
         }
     }
 
     if image_count > RADROOTS_FOOD_IMAGE_MAX_COUNT {
-        return Err(RadrootsFoodAvailabilityError::ImageCountExceeded {
+        return Err(FoodAvailabilityError::ImageCountExceeded {
             max: RADROOTS_FOOD_IMAGE_MAX_COUNT,
             actual: image_count,
         }
@@ -654,13 +649,13 @@ pub(crate) fn project_strict_verified_food_availability_event(
         let url = BlobUrl::parse(&tag[1])
             .and_then(BlobUrl::approve)
             .map_err(|_| RadrootsFoodAvailabilityProjectionError::TagInvalid)?;
-        RadrootsFoodImageDimensions::parse(&tag[2])?;
+        FoodImageDimensions::parse(&tag[2])?;
         if seen_urls.iter().any(|seen| seen == &tag[1]) {
-            return Err(RadrootsFoodAvailabilityError::ImageDuplicateUrl.into());
+            return Err(FoodAvailabilityError::ImageDuplicateUrl.into());
         }
         let digest = url.as_blob_url().hash_path().hash();
         if seen_digests.contains(&digest) {
-            return Err(RadrootsFoodAvailabilityError::ImageDuplicateDigest.into());
+            return Err(FoodAvailabilityError::ImageDuplicateDigest.into());
         }
         seen_urls.push(tag[1].clone());
         seen_digests.push(digest);
@@ -686,11 +681,11 @@ pub(crate) fn project_strict_verified_food_availability_event(
 
 fn normalize_currency(
     value: &str,
-) -> Result<RadrootsFoodCurrency, RadrootsFoodAvailabilityProjectionError> {
+) -> Result<FoodCurrency, RadrootsFoodAvailabilityProjectionError> {
     if value.len() != 3 || !value.bytes().all(|byte| byte.is_ascii_alphabetic()) {
-        return Err(RadrootsFoodAvailabilityError::PriceCurrencyInvalid.into());
+        return Err(FoodAvailabilityError::PriceCurrencyInvalid.into());
     }
-    Ok(RadrootsFoodCurrency::parse(value.to_ascii_uppercase())?)
+    Ok(FoodCurrency::parse(value.to_ascii_uppercase())?)
 }
 
 fn project_images(
@@ -728,7 +723,7 @@ fn project_images(
                 image_diagnostics.push(RadrootsFoodAvailabilityImageDiagnostic::DimensionsMissing);
                 None
             }
-            Some(value) => match RadrootsFoodImageDimensions::parse(value) {
+            Some(value) => match FoodImageDimensions::parse(value) {
                 Ok(dimensions) => Some(dimensions),
                 Err(_) => {
                     image_diagnostics

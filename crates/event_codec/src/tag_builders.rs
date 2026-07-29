@@ -5,22 +5,18 @@ use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "knowledge")]
 use radroots_event::knowledge::{
-    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
-    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
-    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    ContributionAttestation, EvidenceBounty, KnowledgeChangeProposal, KnowledgeClaim,
+    KnowledgeFieldReport, KnowledgeRelation, KnowledgeReview, KnowledgeSource, WikiArticle,
+    WikiMergeRequest, WikiRedirect,
 };
 use radroots_event::{
-    farm::RadrootsFarm, farm::coop::RadrootsCoop, farm::plot::RadrootsPlot,
-    farm::resource_area::RadrootsResourceArea, farm::resource_cap::RadrootsResourceHarvestCap,
-    listing::operational::RadrootsOperationalListing, post::document::RadrootsDocument,
-    post::reaction::RadrootsReaction, social::app_data::RadrootsAppData,
-    social::follow::RadrootsFollow, social::geochat::RadrootsGeoChat,
-    social::gift_wrap::RadrootsGiftWrap, social::job_feedback::RadrootsJobFeedback,
-    social::job_request::RadrootsJobRequest, social::job_result::RadrootsJobResult,
-    social::list::RadrootsList, social::list_set::RadrootsListSet,
-    social::message::RadrootsMessage, social::message_file::RadrootsMessageFile,
-    social::seal::RadrootsSeal,
+    farm::Farm, farm::coop::Coop, farm::plot::Plot, farm::resource_area::ResourceArea,
+    farm::resource_cap::ResourceHarvestCap, listing::operational::OperationalListing,
+    post::document::Document, post::reaction::Reaction, social::app_data::AppData,
+    social::follow::Follow, social::geochat::GeoChat, social::gift_wrap::GiftWrap,
+    social::job_feedback::JobFeedback, social::job_request::JobRequest,
+    social::job_result::JobResult, social::list::List, social::list_set::ListSet,
+    social::message::Message, social::message_file::MessageFile, social::seal::Seal,
 };
 
 use crate::app_data::encode::app_data_build_tags;
@@ -59,7 +55,7 @@ pub trait RadrootsEventTagBuilder {
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error>;
 }
 
-impl RadrootsEventTagBuilder for RadrootsOperationalListing {
+impl RadrootsEventTagBuilder for OperationalListing {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -67,7 +63,7 @@ impl RadrootsEventTagBuilder for RadrootsOperationalListing {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsAppData {
+impl RadrootsEventTagBuilder for AppData {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -75,7 +71,7 @@ impl RadrootsEventTagBuilder for RadrootsAppData {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsReaction {
+impl RadrootsEventTagBuilder for Reaction {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -83,7 +79,7 @@ impl RadrootsEventTagBuilder for RadrootsReaction {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsMessage {
+impl RadrootsEventTagBuilder for Message {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -91,7 +87,7 @@ impl RadrootsEventTagBuilder for RadrootsMessage {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsMessageFile {
+impl RadrootsEventTagBuilder for MessageFile {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -99,7 +95,7 @@ impl RadrootsEventTagBuilder for RadrootsMessageFile {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsGeoChat {
+impl RadrootsEventTagBuilder for GeoChat {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -107,7 +103,7 @@ impl RadrootsEventTagBuilder for RadrootsGeoChat {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsFollow {
+impl RadrootsEventTagBuilder for Follow {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -115,7 +111,7 @@ impl RadrootsEventTagBuilder for RadrootsFollow {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsFarm {
+impl RadrootsEventTagBuilder for Farm {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -123,7 +119,7 @@ impl RadrootsEventTagBuilder for RadrootsFarm {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsResourceArea {
+impl RadrootsEventTagBuilder for ResourceArea {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -131,7 +127,7 @@ impl RadrootsEventTagBuilder for RadrootsResourceArea {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsResourceHarvestCap {
+impl RadrootsEventTagBuilder for ResourceHarvestCap {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -139,7 +135,7 @@ impl RadrootsEventTagBuilder for RadrootsResourceHarvestCap {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsCoop {
+impl RadrootsEventTagBuilder for Coop {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -147,7 +143,7 @@ impl RadrootsEventTagBuilder for RadrootsCoop {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsDocument {
+impl RadrootsEventTagBuilder for Document {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -155,7 +151,7 @@ impl RadrootsEventTagBuilder for RadrootsDocument {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsList {
+impl RadrootsEventTagBuilder for List {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -163,7 +159,7 @@ impl RadrootsEventTagBuilder for RadrootsList {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsListSet {
+impl RadrootsEventTagBuilder for ListSet {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -171,7 +167,7 @@ impl RadrootsEventTagBuilder for RadrootsListSet {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsPlot {
+impl RadrootsEventTagBuilder for Plot {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -179,7 +175,7 @@ impl RadrootsEventTagBuilder for RadrootsPlot {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsJobRequest {
+impl RadrootsEventTagBuilder for JobRequest {
     type Error = JobEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -190,7 +186,7 @@ impl RadrootsEventTagBuilder for RadrootsJobRequest {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsJobResult {
+impl RadrootsEventTagBuilder for JobResult {
     type Error = JobEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -198,7 +194,7 @@ impl RadrootsEventTagBuilder for RadrootsJobResult {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsJobFeedback {
+impl RadrootsEventTagBuilder for JobFeedback {
     type Error = JobEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -206,7 +202,7 @@ impl RadrootsEventTagBuilder for RadrootsJobFeedback {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsSeal {
+impl RadrootsEventTagBuilder for Seal {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -214,7 +210,7 @@ impl RadrootsEventTagBuilder for RadrootsSeal {
     }
 }
 
-impl RadrootsEventTagBuilder for RadrootsGiftWrap {
+impl RadrootsEventTagBuilder for GiftWrap {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -223,7 +219,7 @@ impl RadrootsEventTagBuilder for RadrootsGiftWrap {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsWikiArticle {
+impl RadrootsEventTagBuilder for WikiArticle {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -232,7 +228,7 @@ impl RadrootsEventTagBuilder for RadrootsWikiArticle {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsWikiRedirect {
+impl RadrootsEventTagBuilder for WikiRedirect {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -241,7 +237,7 @@ impl RadrootsEventTagBuilder for RadrootsWikiRedirect {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsWikiMergeRequest {
+impl RadrootsEventTagBuilder for WikiMergeRequest {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -250,7 +246,7 @@ impl RadrootsEventTagBuilder for RadrootsWikiMergeRequest {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsKnowledgeSource {
+impl RadrootsEventTagBuilder for KnowledgeSource {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -259,7 +255,7 @@ impl RadrootsEventTagBuilder for RadrootsKnowledgeSource {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsKnowledgeClaim {
+impl RadrootsEventTagBuilder for KnowledgeClaim {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -268,7 +264,7 @@ impl RadrootsEventTagBuilder for RadrootsKnowledgeClaim {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsKnowledgeRelation {
+impl RadrootsEventTagBuilder for KnowledgeRelation {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -277,7 +273,7 @@ impl RadrootsEventTagBuilder for RadrootsKnowledgeRelation {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsKnowledgeReview {
+impl RadrootsEventTagBuilder for KnowledgeReview {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -286,7 +282,7 @@ impl RadrootsEventTagBuilder for RadrootsKnowledgeReview {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsKnowledgeFieldReport {
+impl RadrootsEventTagBuilder for KnowledgeFieldReport {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -295,7 +291,7 @@ impl RadrootsEventTagBuilder for RadrootsKnowledgeFieldReport {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsEvidenceBounty {
+impl RadrootsEventTagBuilder for EvidenceBounty {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -304,7 +300,7 @@ impl RadrootsEventTagBuilder for RadrootsEvidenceBounty {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsKnowledgeChangeProposal {
+impl RadrootsEventTagBuilder for KnowledgeChangeProposal {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {
@@ -313,7 +309,7 @@ impl RadrootsEventTagBuilder for RadrootsKnowledgeChangeProposal {
 }
 
 #[cfg(feature = "knowledge")]
-impl RadrootsEventTagBuilder for RadrootsContributionAttestation {
+impl RadrootsEventTagBuilder for ContributionAttestation {
     type Error = EventEncodeError;
 
     fn build_tags(&self) -> Result<Vec<Vec<String>>, Self::Error> {

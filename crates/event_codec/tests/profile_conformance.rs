@@ -4,10 +4,10 @@ use std::{borrow::Cow, fs, path::Path};
 
 use radroots_blossom::{BlobDescriptor, ByteVerifiedDescriptor};
 use radroots_event::{
-    media::{RadrootsAuthoredImage, RadrootsAuthoredImageError},
+    media::{AuthoredImage, AuthoredImageError},
     profile::{
-        RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES, RadrootsAuthoredProfile,
-        RadrootsAuthoredProfileError, RadrootsNip05Identifier,
+        AuthoredProfile, AuthoredProfileError, Nip05Identifier,
+        RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES,
     },
 };
 use radroots_event_codec::profile::{
@@ -109,7 +109,7 @@ fn execute(vector: &Vector) {
 }
 
 fn nip05_valid(vector: &Vector) {
-    let identifier = RadrootsNip05Identifier::parse(input_str(vector, "identifier"))
+    let identifier = Nip05Identifier::parse(input_str(vector, "identifier"))
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
         identifier.as_str(),
@@ -136,7 +136,7 @@ fn nip05_valid(vector: &Vector) {
 }
 
 fn nip05_invalid(vector: &Vector) {
-    let error = RadrootsNip05Identifier::parse(input_str(vector, "identifier"))
+    let error = Nip05Identifier::parse(input_str(vector, "identifier"))
         .expect_err("invalid NIP-05 vector must fail");
     assert_eq!(error.code(), expected_str(vector, "error"), "{}", vector.id);
 }
@@ -171,9 +171,9 @@ fn authored_valid(vector: &Vector) {
 }
 
 fn authored_name_invalid(vector: &Vector) {
-    let error = RadrootsAuthoredProfile::new(input_str(vector, "name"))
+    let error = AuthoredProfile::new(input_str(vector, "name"))
         .expect_err("invalid authored Profile name must fail");
-    assert_eq!(error, RadrootsAuthoredProfileError::InvalidName);
+    assert_eq!(error, AuthoredProfileError::InvalidName);
     assert_eq!(error.code(), expected_str(vector, "error"));
 }
 
@@ -181,7 +181,7 @@ fn authored_limit_valid(vector: &Vector) {
     let name_bytes = vector.input["generated_name_bytes"]
         .as_u64()
         .expect("generated_name_bytes") as usize;
-    let profile = RadrootsAuthoredProfile::new("a".repeat(name_bytes)).unwrap();
+    let profile = AuthoredProfile::new("a".repeat(name_bytes)).unwrap();
     let wire = authored_profile_to_wire_parts(&profile)
         .unwrap_or_else(|error| panic!("{} failed: {error}", vector.id));
     assert_eq!(
@@ -207,9 +207,8 @@ fn authored_image_invalid(vector: &Vector) {
     let input: AuthoredMediaInput = serde_json::from_value(vector.input["media"].clone())
         .unwrap_or_else(|error| panic!("{} media fixture failed: {error}", vector.id));
     let descriptor = verified_descriptor(&input, &vector.id);
-    let error =
-        RadrootsAuthoredImage::try_from(descriptor).expect_err("non-image Profile media must fail");
-    assert_eq!(error, RadrootsAuthoredImageError::MediaTypeNotImage);
+    let error = AuthoredImage::try_from(descriptor).expect_err("non-image Profile media must fail");
+    assert_eq!(error, AuthoredImageError::MediaTypeNotImage);
     assert_eq!(error.code(), expected_str(vector, "error"));
 }
 
@@ -217,7 +216,7 @@ fn authored_invalid(vector: &Vector) {
     let name_bytes = vector.input["generated_name_bytes"]
         .as_u64()
         .expect("generated_name_bytes") as usize;
-    let profile = RadrootsAuthoredProfile::new("a".repeat(name_bytes)).unwrap();
+    let profile = AuthoredProfile::new("a".repeat(name_bytes)).unwrap();
     let error = authored_profile_to_wire_parts(&profile)
         .expect_err("oversized authored Profile metadata must fail");
     assert_eq!(error.code(), expected_str(vector, "error"));
@@ -232,10 +231,10 @@ fn authored_invalid(vector: &Vector) {
     }
 }
 
-fn authored_profile(input: &Value, vector_id: &str) -> RadrootsAuthoredProfile {
+fn authored_profile(input: &Value, vector_id: &str) -> AuthoredProfile {
     let input: AuthoredProfileInput = serde_json::from_value(input.clone())
         .unwrap_or_else(|error| panic!("{vector_id} authored input failed: {error}"));
-    let mut profile = RadrootsAuthoredProfile::new(input.name)
+    let mut profile = AuthoredProfile::new(input.name)
         .unwrap_or_else(|error| panic!("{vector_id} name failed: {error}"));
     if let Some(value) = input.display_name {
         profile = profile.with_display_name(value);
@@ -251,7 +250,7 @@ fn authored_profile(input: &Value, vector_id: &str) -> RadrootsAuthoredProfile {
     }
     if let Some(value) = input.nip05 {
         profile = profile.with_nip05(
-            RadrootsNip05Identifier::parse(&value)
+            Nip05Identifier::parse(&value)
                 .unwrap_or_else(|error| panic!("{vector_id} NIP-05 failed: {error}")),
         );
     }
@@ -261,8 +260,8 @@ fn authored_profile(input: &Value, vector_id: &str) -> RadrootsAuthoredProfile {
     profile
 }
 
-fn authored_image(input: &AuthoredMediaInput, vector_id: &str) -> RadrootsAuthoredImage {
-    RadrootsAuthoredImage::try_from(verified_descriptor(input, vector_id))
+fn authored_image(input: &AuthoredMediaInput, vector_id: &str) -> AuthoredImage {
+    AuthoredImage::try_from(verified_descriptor(input, vector_id))
         .unwrap_or_else(|error| panic!("{vector_id} Profile image failed: {error}"))
 }
 

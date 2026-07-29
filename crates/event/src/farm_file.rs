@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use crate::envelope::kind::KIND_FARM_FILE_METADATA as KIND_FARM_FILE_METADATA_EVENT;
-use crate::farm::crdt::RadrootsFarmCrdtDocumentKind;
-use crate::farm::workspace::RadrootsFarmWorkspaceRef;
+use crate::farm::crdt::FarmCrdtDocumentKind;
+use crate::farm::workspace::FarmWorkspaceRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -14,22 +14,22 @@ pub const KIND_FARM_FILE_METADATA: u32 = KIND_FARM_FILE_METADATA_EVENT;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsFarmFileMetadata {
+pub struct FarmFileMetadata {
     pub d_tag: String,
-    pub workspace: RadrootsFarmWorkspaceRef,
+    pub workspace: FarmWorkspaceRef,
     pub farm_group_id: String,
     pub owner_document_id: String,
-    pub owner_document_kind: RadrootsFarmCrdtDocumentKind,
+    pub owner_document_kind: FarmCrdtDocumentKind,
     pub caption: Option<String>,
     pub url: String,
     pub mime_type: String,
     pub sha256: String,
     pub original_sha256: Option<String>,
     pub size_bytes: Option<u64>,
-    pub dimensions: Option<RadrootsFarmFileDimensions>,
+    pub dimensions: Option<FarmFileDimensions>,
     pub blurhash: Option<String>,
-    pub thumb: Option<RadrootsFarmFileSource>,
-    pub image: Option<RadrootsFarmFileSource>,
+    pub thumb: Option<FarmFileSource>,
+    pub image: Option<FarmFileSource>,
     pub alt: Option<String>,
     pub fallbacks: Vec<String>,
 }
@@ -39,7 +39,7 @@ pub struct RadrootsFarmFileMetadata {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsFarmFileDimensions {
+pub struct FarmFileDimensions {
     pub w: u32,
     pub h: u32,
 }
@@ -49,10 +49,10 @@ pub struct RadrootsFarmFileDimensions {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsFarmFileSource {
+pub struct FarmFileSource {
     pub url: String,
     pub mime_type: Option<String>,
-    pub dimensions: Option<RadrootsFarmFileDimensions>,
+    pub dimensions: Option<FarmFileDimensions>,
 }
 
 #[cfg(all(test, feature = "serde"))]
@@ -70,10 +70,7 @@ mod tests {
 
         assert_eq!(metadata.d_tag, "EFGHIJKLMNOPQRSTUVWXYZ");
         assert_eq!(metadata.owner_document_id, "DEFGHIJKLMNOPQRSTUVWXY");
-        assert_eq!(
-            metadata.owner_document_kind,
-            RadrootsFarmCrdtDocumentKind::FarmTask
-        );
+        assert_eq!(metadata.owner_document_kind, FarmCrdtDocumentKind::FarmTask);
         assert_eq!(
             metadata.caption.as_deref(),
             Some("Tomatoes harvested from Patch Y.")
@@ -81,7 +78,7 @@ mod tests {
         assert_eq!(metadata.mime_type, "image/jpeg");
         assert_eq!(
             metadata.dimensions,
-            Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 })
+            Some(FarmFileDimensions { w: 1600, h: 1200 })
         );
         assert_eq!(metadata.fallbacks.len(), 1);
     }
@@ -103,16 +100,16 @@ mod tests {
         assert_eq!(value["dimensions"]["h"], 1200);
     }
 
-    fn sample_file_metadata() -> RadrootsFarmFileMetadata {
-        RadrootsFarmFileMetadata {
+    fn sample_file_metadata() -> FarmFileMetadata {
+        FarmFileMetadata {
             d_tag: "EFGHIJKLMNOPQRSTUVWXYZ".to_string(),
-            workspace: RadrootsFarmWorkspaceRef {
+            workspace: FarmWorkspaceRef {
                 pubkey: "workspace_pubkey".to_string(),
                 d_tag: "ABCDEFGHIJKLMNOPQRSTUV".to_string(),
             },
             farm_group_id: "BCDEFGHIJKLMNOPQRSTUVW".to_string(),
             owner_document_id: "DEFGHIJKLMNOPQRSTUVWXY".to_string(),
-            owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+            owner_document_kind: FarmCrdtDocumentKind::FarmTask,
             caption: Some("Tomatoes harvested from Patch Y.".to_string()),
             url: "https://media.example.invalid/blob/sha256".to_string(),
             mime_type: "image/jpeg".to_string(),
@@ -121,12 +118,12 @@ mod tests {
                 "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".to_string(),
             ),
             size_bytes: Some(123_456),
-            dimensions: Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 }),
+            dimensions: Some(FarmFileDimensions { w: 1600, h: 1200 }),
             blurhash: Some("LEHV6nWB2yk8pyo0adR*.7kCMdnj".to_string()),
-            thumb: Some(RadrootsFarmFileSource {
+            thumb: Some(FarmFileSource {
                 url: "https://media.example.invalid/thumb/sha256".to_string(),
                 mime_type: Some("image/jpeg".to_string()),
-                dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 240 }),
+                dimensions: Some(FarmFileDimensions { w: 320, h: 240 }),
             }),
             image: None,
             alt: Some("Harvested tomatoes in a crate".to_string()),

@@ -12,7 +12,7 @@ pub const KIND_ACCOUNT_CLAIM: u32 = KIND_ACCOUNT_CLAIM_EVENT;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsAccountClaim {
+pub struct AccountClaim {
     pub username: String,
     pub pubkey: String,
     pub nip05: Option<String>,

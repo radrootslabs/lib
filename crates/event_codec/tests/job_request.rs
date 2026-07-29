@@ -5,24 +5,24 @@ use radroots_event::envelope::kind::{
     KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
 };
 use radroots_event::social::job::JobInputType;
-use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
+use radroots_event::social::job_request::{JobInput, JobParam, JobRequest};
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::job::error::JobParseError;
 use radroots_event_codec::job::request::decode::{job_request_from_tags, parsed_from_event};
 use radroots_event_codec::job::request::encode::to_wire_parts;
 use test_fixtures::{APP_PRIMARY_HTTPS, RELAY_PRIMARY_WSS};
 
-fn sample_request() -> RadrootsJobRequest {
-    RadrootsJobRequest {
+fn sample_request() -> JobRequest {
+    JobRequest {
         kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: APP_PRIMARY_HTTPS.to_string(),
             input_type: JobInputType::Url,
             relay: Some(RELAY_PRIMARY_WSS.to_string()),
             marker: Some("source".to_string()),
         }],
         output: Some("json".to_string()),
-        params: vec![RadrootsJobParam {
+        params: vec![JobParam {
             key: "foo".to_string(),
             value: "bar".to_string(),
         }],

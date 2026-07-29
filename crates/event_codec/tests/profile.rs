@@ -3,9 +3,9 @@
 use radroots_event::{
     envelope::kind::{KIND_POST, KIND_PROFILE},
     profile::{
-        RADROOTS_PROFILE_TYPE_TAG_ANY, RADROOTS_PROFILE_TYPE_TAG_COOP,
+        ProfileType, RADROOTS_PROFILE_TYPE_TAG_ANY, RADROOTS_PROFILE_TYPE_TAG_COOP,
         RADROOTS_PROFILE_TYPE_TAG_FARM, RADROOTS_PROFILE_TYPE_TAG_KEY,
-        RADROOTS_PROFILE_TYPE_TAG_RADROOTSD, RadrootsProfileType,
+        RADROOTS_PROFILE_TYPE_TAG_RADROOTSD,
     },
 };
 use radroots_event_codec::error::EventParseError;
@@ -114,7 +114,7 @@ fn profile_metadata_reads_profile_type_tag() {
     )
     .expect("metadata");
 
-    assert_eq!(metadata.data.profile_type, Some(RadrootsProfileType::Farm));
+    assert_eq!(metadata.data.profile_type, Some(ProfileType::Farm));
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn profile_metadata_reads_profile_type_any_tag() {
     )
     .expect("metadata");
 
-    assert_eq!(metadata.data.profile_type, Some(RadrootsProfileType::Any));
+    assert_eq!(metadata.data.profile_type, Some(ProfileType::Any));
 }
 
 #[test]
@@ -150,10 +150,7 @@ fn profile_metadata_reads_profile_type_radrootsd_tag() {
     )
     .expect("metadata");
 
-    assert_eq!(
-        metadata.data.profile_type,
-        Some(RadrootsProfileType::Radrootsd)
-    );
+    assert_eq!(metadata.data.profile_type, Some(ProfileType::Radrootsd));
 }
 
 #[test]
@@ -179,7 +176,7 @@ fn profile_metadata_ignores_short_unknown_and_unrelated_profile_type_tags() {
     )
     .expect("metadata");
 
-    assert_eq!(metadata.data.profile_type, Some(RadrootsProfileType::Coop));
+    assert_eq!(metadata.data.profile_type, Some(ProfileType::Coop));
 }
 
 #[test]
@@ -218,8 +215,5 @@ fn profile_parsed_event_preserves_wire_event_and_decoded_data() {
         )
     );
     assert_eq!(parsed.data.data.profile.name, "alice");
-    assert_eq!(
-        parsed.data.data.profile_type,
-        Some(RadrootsProfileType::Farm)
-    );
+    assert_eq!(parsed.data.data.profile_type, Some(ProfileType::Farm));
 }

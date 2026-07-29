@@ -7,11 +7,7 @@ use core::fmt;
 use radroots_blossom::url::ApprovedBlobUrl;
 use url_nostd::Url;
 
-use crate::media::RadrootsAuthoredImage;
-use crate::social::{
-    RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaMetadata,
-    RadrootsSocialTarget,
-};
+use crate::media::AuthoredImage;
 use crate::tag::name::TAG_IMETA;
 
 pub const RADROOTS_POST_CONTENT_MAX_BYTES: usize = crate::wire::v1::DEFAULT_CONTENT_MAX_BYTES;
@@ -38,55 +34,9 @@ const RADROOTS_POST_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\"".len()
     + 128
     + "\"}".len();
 
-#[cfg_attr(
-    any(feature = "serde", test),
-    derive(serde::Serialize, serde::Deserialize)
-)]
-#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
-#[cfg_attr(all(test, feature = "std"), dto(export))]
-#[derive(Clone, Debug)]
-/// Compatibility projection for the legacy social post decoder.
-///
-/// This mutable model is not an authored event boundary. New publication code
-/// must use `RadrootsAuthoredUpdate`, `RadrootsAuthoredPhotoUpdate`, or
-/// `RadrootsAuthoredAsk` so raw `imeta` cannot bypass the strict profile.
-pub struct RadrootsPost {
-    pub content: String,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub farm: Option<RadrootsSocialFarmAnchor>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub address_refs: Option<Vec<RadrootsSocialTarget>>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub location: Option<RadrootsSocialLocation>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub topics: Option<Vec<String>>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub quote_refs: Option<Vec<RadrootsSocialTarget>>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
-    pub media: Option<Vec<RadrootsSocialMediaMetadata>>,
-}
-
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsAuthoredPostError {
+pub enum AuthoredPostError {
     ContentMissing,
     ContentTooLarge { max: usize, actual: usize },
     ImageMissing,
@@ -104,7 +54,7 @@ pub enum RadrootsAuthoredPostError {
     EventWireTooLarge { max: usize, actual: usize },
 }
 
-impl RadrootsAuthoredPostError {
+impl AuthoredPostError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::ContentMissing => "post_content_missing",
@@ -126,7 +76,7 @@ impl RadrootsAuthoredPostError {
     }
 }
 
-impl fmt::Display for RadrootsAuthoredPostError {
+impl fmt::Display for AuthoredPostError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ContentMissing => {
@@ -192,19 +142,19 @@ impl fmt::Display for RadrootsAuthoredPostError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsAuthoredPostError {}
+impl std::error::Error for AuthoredPostError {}
 
 /// Nonzero pixel dimensions for one strict authored NIP-92 image.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsPostImageDimensions {
+pub struct PostImageDimensions {
     width: u32,
     height: u32,
 }
 
-impl RadrootsPostImageDimensions {
-    pub const fn new(width: u32, height: u32) -> Result<Self, RadrootsAuthoredPostError> {
+impl PostImageDimensions {
+    pub const fn new(width: u32, height: u32) -> Result<Self, AuthoredPostError> {
         if width == 0 || height == 0 {
-            return Err(RadrootsAuthoredPostError::ImageDimensionsInvalid);
+            return Err(AuthoredPostError::ImageDimensionsInvalid);
         }
         Ok(Self { width, height })
     }
@@ -225,33 +175,33 @@ impl RadrootsPostImageDimensions {
 /// network availability. Publication runtimes must separately require a
 /// successful BUD-02 upload before signing.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredPostImage {
-    image: RadrootsAuthoredImage,
-    dimensions: RadrootsPostImageDimensions,
+pub struct AuthoredPostImage {
+    image: AuthoredImage,
+    dimensions: PostImageDimensions,
     alt: String,
     fallbacks: Vec<ApprovedBlobUrl>,
     imeta_tag: Vec<String>,
 }
 
-impl RadrootsAuthoredPostImage {
+impl AuthoredPostImage {
     pub fn new(
-        image: RadrootsAuthoredImage,
-        dimensions: RadrootsPostImageDimensions,
+        image: AuthoredImage,
+        dimensions: PostImageDimensions,
         alt: impl Into<String>,
-    ) -> Result<Self, RadrootsAuthoredPostError> {
+    ) -> Result<Self, AuthoredPostError> {
         let descriptor = image.descriptor();
         if descriptor.size() == 0 {
-            return Err(RadrootsAuthoredPostError::ImageSizeInvalid);
+            return Err(AuthoredPostError::ImageSizeInvalid);
         }
         if !post_image_media_type_is_valid(descriptor.media_type().as_str()) {
-            return Err(RadrootsAuthoredPostError::ImageMediaTypeInvalid);
+            return Err(AuthoredPostError::ImageMediaTypeInvalid);
         }
         let alt = alt.into();
         if alt.trim().is_empty() {
-            return Err(RadrootsAuthoredPostError::ImageAltInvalid);
+            return Err(AuthoredPostError::ImageAltInvalid);
         }
         if alt.len() > RADROOTS_POST_ALT_MAX_BYTES {
-            return Err(RadrootsAuthoredPostError::ImageAltTooLarge {
+            return Err(AuthoredPostError::ImageAltTooLarge {
                 max: RADROOTS_POST_ALT_MAX_BYTES,
                 actual: alt.len(),
             });
@@ -270,9 +220,9 @@ impl RadrootsAuthoredPostImage {
     pub fn try_with_fallback(
         mut self,
         fallback: ApprovedBlobUrl,
-    ) -> Result<Self, RadrootsAuthoredPostError> {
+    ) -> Result<Self, AuthoredPostError> {
         if fallback.as_blob_url().hash_path().hash() != self.image.descriptor().sha256() {
-            return Err(RadrootsAuthoredPostError::ImageFallbackHashMismatch);
+            return Err(AuthoredPostError::ImageFallbackHashMismatch);
         }
         let fallback_element = format!("fallback {fallback}");
         validate_tag_element(&fallback_element)?;
@@ -284,11 +234,11 @@ impl RadrootsAuthoredPostImage {
         Ok(self)
     }
 
-    pub fn image(&self) -> &RadrootsAuthoredImage {
+    pub fn image(&self) -> &AuthoredImage {
         &self.image
     }
 
-    pub const fn dimensions(&self) -> RadrootsPostImageDimensions {
+    pub const fn dimensions(&self) -> PostImageDimensions {
         self.dimensions
     }
 
@@ -313,16 +263,16 @@ impl RadrootsAuthoredPostImage {
 /// Strict authored root kind-1 Update without Ask or media tags.
 ///
 /// ```compile_fail
-/// let _: radroots_event::post::RadrootsAuthoredUpdate =
+/// let _: radroots_event::post::AuthoredUpdate =
 ///     serde_json::from_str(r#"{"content":"harvest"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredUpdate {
+pub struct AuthoredUpdate {
     content: String,
 }
 
-impl RadrootsAuthoredUpdate {
-    pub fn new(content: impl Into<String>) -> Result<Self, RadrootsAuthoredPostError> {
+impl AuthoredUpdate {
+    pub fn new(content: impl Into<String>) -> Result<Self, AuthoredPostError> {
         let content = content.into();
         validate_authored_root_content(&content)?;
         validate_post_event_wire_size(&content, false, &[])?;
@@ -336,16 +286,16 @@ impl RadrootsAuthoredUpdate {
 
 /// Strict authored root kind-1 PhotoUpdate with deterministic NIP-92 tags.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredPhotoUpdate {
+pub struct AuthoredPhotoUpdate {
     content: String,
-    images: Vec<RadrootsAuthoredPostImage>,
+    images: Vec<AuthoredPostImage>,
 }
 
-impl RadrootsAuthoredPhotoUpdate {
+impl AuthoredPhotoUpdate {
     pub fn new(
         content: impl Into<String>,
-        images: Vec<RadrootsAuthoredPostImage>,
-    ) -> Result<Self, RadrootsAuthoredPostError> {
+        images: Vec<AuthoredPostImage>,
+    ) -> Result<Self, AuthoredPostError> {
         let content = content.into();
         validate_content_size(&content)?;
         validate_authored_images(&content, &images, 0)?;
@@ -357,27 +307,27 @@ impl RadrootsAuthoredPhotoUpdate {
         &self.content
     }
 
-    pub fn images(&self) -> &[RadrootsAuthoredPostImage] {
+    pub fn images(&self) -> &[AuthoredPostImage] {
         &self.images
     }
 }
 
 /// Strict authored root kind-1 Ask with its exact product marker.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredAsk {
+pub struct AuthoredAsk {
     content: String,
-    images: Vec<RadrootsAuthoredPostImage>,
+    images: Vec<AuthoredPostImage>,
 }
 
-impl RadrootsAuthoredAsk {
+impl AuthoredAsk {
     pub fn new(
         content: impl Into<String>,
-        images: Vec<RadrootsAuthoredPostImage>,
-    ) -> Result<Self, RadrootsAuthoredPostError> {
+        images: Vec<AuthoredPostImage>,
+    ) -> Result<Self, AuthoredPostError> {
         let content = content.into();
         validate_authored_root_content(&content)?;
         if images.len() > RADROOTS_POST_IMETA_MAX_COUNT {
-            return Err(RadrootsAuthoredPostError::ImageCountExceeded {
+            return Err(AuthoredPostError::ImageCountExceeded {
                 max: RADROOTS_POST_IMETA_MAX_COUNT,
                 actual: images.len(),
             });
@@ -393,22 +343,22 @@ impl RadrootsAuthoredAsk {
         &self.content
     }
 
-    pub fn images(&self) -> &[RadrootsAuthoredPostImage] {
+    pub fn images(&self) -> &[AuthoredPostImage] {
         &self.images
     }
 }
 
-fn validate_authored_root_content(content: &str) -> Result<(), RadrootsAuthoredPostError> {
+fn validate_authored_root_content(content: &str) -> Result<(), AuthoredPostError> {
     validate_content_size(content)?;
     if content.trim().is_empty() {
-        return Err(RadrootsAuthoredPostError::ContentMissing);
+        return Err(AuthoredPostError::ContentMissing);
     }
     Ok(())
 }
 
-fn validate_content_size(content: &str) -> Result<(), RadrootsAuthoredPostError> {
+fn validate_content_size(content: &str) -> Result<(), AuthoredPostError> {
     if content.len() > RADROOTS_POST_CONTENT_MAX_BYTES {
-        return Err(RadrootsAuthoredPostError::ContentTooLarge {
+        return Err(AuthoredPostError::ContentTooLarge {
             max: RADROOTS_POST_CONTENT_MAX_BYTES,
             actual: content.len(),
         });
@@ -418,27 +368,27 @@ fn validate_content_size(content: &str) -> Result<(), RadrootsAuthoredPostError>
 
 fn validate_authored_images(
     content: &str,
-    images: &[RadrootsAuthoredPostImage],
+    images: &[AuthoredPostImage],
     initial_tag_bytes: usize,
-) -> Result<(), RadrootsAuthoredPostError> {
+) -> Result<(), AuthoredPostError> {
     if images.is_empty() {
-        return Err(RadrootsAuthoredPostError::ImageMissing);
+        return Err(AuthoredPostError::ImageMissing);
     }
     if images.len() > RADROOTS_POST_IMETA_MAX_COUNT {
-        return Err(RadrootsAuthoredPostError::ImageCountExceeded {
+        return Err(AuthoredPostError::ImageCountExceeded {
             max: RADROOTS_POST_IMETA_MAX_COUNT,
             actual: images.len(),
         });
     }
     for (index, image) in images.iter().enumerate() {
         if !content.contains(image.url()) {
-            return Err(RadrootsAuthoredPostError::ImageUrlMissingFromContent);
+            return Err(AuthoredPostError::ImageUrlMissingFromContent);
         }
         if images[..index]
             .iter()
             .any(|candidate| candidate.url() == image.url())
         {
-            return Err(RadrootsAuthoredPostError::DuplicateImageUrl);
+            return Err(AuthoredPostError::DuplicateImageUrl);
         }
     }
     let total_tag_bytes = images.iter().fold(initial_tag_bytes, |total, image| {
@@ -449,11 +399,11 @@ fn validate_authored_images(
 }
 
 fn derive_imeta_tag(
-    image: &RadrootsAuthoredImage,
-    dimensions: RadrootsPostImageDimensions,
+    image: &AuthoredImage,
+    dimensions: PostImageDimensions,
     alt: &str,
     fallbacks: &[ApprovedBlobUrl],
-) -> Result<Vec<String>, RadrootsAuthoredPostError> {
+) -> Result<Vec<String>, AuthoredPostError> {
     let descriptor = image.descriptor();
     let mut tag = Vec::with_capacity(7 + fallbacks.len());
     tag.push(TAG_IMETA.into());
@@ -479,9 +429,9 @@ fn derive_imeta_tag(
     Ok(tag)
 }
 
-fn validate_tag_element(element: &str) -> Result<(), RadrootsAuthoredPostError> {
+fn validate_tag_element(element: &str) -> Result<(), AuthoredPostError> {
     if element.len() > RADROOTS_POST_TAG_ELEMENT_MAX_BYTES {
-        return Err(RadrootsAuthoredPostError::TagElementTooLarge {
+        return Err(AuthoredPostError::TagElementTooLarge {
             max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
             actual: element.len(),
         });
@@ -489,9 +439,9 @@ fn validate_tag_element(element: &str) -> Result<(), RadrootsAuthoredPostError> 
     Ok(())
 }
 
-fn validate_tag_bytes(actual: usize) -> Result<(), RadrootsAuthoredPostError> {
+fn validate_tag_bytes(actual: usize) -> Result<(), AuthoredPostError> {
     if actual > RADROOTS_POST_TAG_TOTAL_MAX_BYTES {
-        return Err(RadrootsAuthoredPostError::TagBytesExceeded {
+        return Err(AuthoredPostError::TagBytesExceeded {
             max: RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
             actual,
         });
@@ -507,8 +457,8 @@ fn imeta_tag_bytes(tag: &[String]) -> usize {
 fn validate_post_event_wire_size(
     content: &str,
     ask_marker: bool,
-    images: &[RadrootsAuthoredPostImage],
-) -> Result<(), RadrootsAuthoredPostError> {
+    images: &[AuthoredPostImage],
+) -> Result<(), AuthoredPostError> {
     let mut tags_json_bytes = 2usize;
     let mut tag_count = 0usize;
     if ask_marker {
@@ -529,7 +479,7 @@ fn validate_post_event_wire_size(
         .saturating_add(tags_json_bytes)
         .saturating_add(canonical_json_string_bytes(content));
     if actual > RADROOTS_POST_EVENT_WIRE_MAX_BYTES {
-        return Err(RadrootsAuthoredPostError::EventWireTooLarge {
+        return Err(AuthoredPostError::EventWireTooLarge {
             max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
             actual,
         });
@@ -619,36 +569,6 @@ pub fn post_media_http_url_is_valid(value: &str) -> bool {
 #[cfg(all(test, feature = "std", feature = "serde"))]
 mod tests {
     use super::*;
-
-    #[test]
-    fn content_only_post_deserializes_without_social_metadata() {
-        let post: RadrootsPost =
-            serde_json::from_str(r#"{"content":"farm update"}"#).expect("post");
-
-        assert_eq!(post.content, "farm update");
-        assert!(post.farm.is_none());
-        assert!(post.address_refs.is_none());
-        assert!(post.location.is_none());
-        assert!(post.topics.is_none());
-        assert!(post.quote_refs.is_none());
-        assert!(post.media.is_none());
-    }
-
-    #[test]
-    fn content_only_post_serializes_without_null_social_metadata() {
-        let post = RadrootsPost {
-            content: "farm update".to_string(),
-            farm: None,
-            address_refs: None,
-            location: None,
-            topics: None,
-            quote_refs: None,
-            media: None,
-        };
-
-        let json = serde_json::to_string(&post).expect("json");
-        assert_eq!(json, r#"{"content":"farm update"}"#);
-    }
 
     #[test]
     fn post_image_media_type_uses_exact_product_grammar() {

@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    social::relay_auth::{KIND_RELAY_AUTH, RadrootsRelayAuth},
+    social::relay_auth::{KIND_RELAY_AUTH, RelayAuth},
     tag::name::{TAG_CHALLENGE, TAG_RELAY},
 };
 
@@ -16,7 +16,7 @@ pub fn relay_auth_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsRelayAuth, EventParseError> {
+) -> Result<RelayAuth, EventParseError> {
     if kind != KIND_RELAY_AUTH {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -24,7 +24,7 @@ pub fn relay_auth_from_event(
         });
     }
     require_empty_content(content, "content")?;
-    Ok(RadrootsRelayAuth {
+    Ok(RelayAuth {
         relay: required_tag_value(tags, TAG_RELAY)?,
         challenge: required_tag_value(tags, TAG_CHALLENGE)?,
     })
@@ -37,7 +37,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsRelayAuth>, EventParseError> {
+) -> Result<RadrootsParsedData<RelayAuth>, EventParseError> {
     let auth = relay_auth_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -56,7 +56,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsRelayAuth>, EventParseError> {
+) -> Result<RadrootsParsedEvent<RelayAuth>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

@@ -9,9 +9,9 @@ use alloc::{
 };
 
 use radroots_event::envelope::kind::KIND_FARM;
-use radroots_event::farm::RadrootsFarmRef;
-use radroots_event::social::list::RadrootsListEntry;
-use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::farm::FarmRef;
+use radroots_event::social::list::ListEntry;
+use radroots_event::social::list_set::ListSet;
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -27,7 +27,7 @@ fn coop_list_set_id(coop_id: &str, suffix: &str) -> Result<String, EventEncodeEr
     Ok(format!("coop:{coop_id}:{suffix}"))
 }
 
-fn list_entries<I, S>(tag: &str, values: I) -> Result<Vec<RadrootsListEntry>, EventEncodeError>
+fn list_entries<I, S>(tag: &str, values: I) -> Result<Vec<ListEntry>, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -38,7 +38,7 @@ where
         if value.is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("entry.values"));
         }
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: tag.to_string(),
             values: vec![value.to_string()],
         });
@@ -46,7 +46,7 @@ where
     Ok(entries)
 }
 
-fn farm_address(farm: &RadrootsFarmRef) -> Result<String, EventEncodeError> {
+fn farm_address(farm: &FarmRef) -> Result<String, EventEncodeError> {
     if farm.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("farm.pubkey"));
     }
@@ -63,15 +63,12 @@ fn farm_address(farm: &RadrootsFarmRef) -> Result<String, EventEncodeError> {
     Ok(addr)
 }
 
-pub fn coop_members_list_set<I, S>(
-    coop_id: &str,
-    members: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn coop_members_list_set<I, S>(coop_id: &str, members: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: coop_list_set_id(coop_id, "members")?,
         content: String::new(),
         entries: list_entries("p", members)?,
@@ -81,26 +78,23 @@ where
     })
 }
 
-pub fn coop_members_farms_list_set<I>(
-    coop_id: &str,
-    farms: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn coop_members_farms_list_set<I>(coop_id: &str, farms: I) -> Result<ListSet, EventEncodeError>
 where
-    I: IntoIterator<Item = RadrootsFarmRef>,
+    I: IntoIterator<Item = FarmRef>,
 {
     let mut entries = Vec::new();
     for farm in farms {
         let address = farm_address(&farm)?;
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "a".to_string(),
             values: vec![address],
         });
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "p".to_string(),
             values: vec![farm.pubkey],
         });
     }
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: coop_list_set_id(coop_id, "members.farms")?,
         content: String::new(),
         entries,
@@ -110,15 +104,12 @@ where
     })
 }
 
-pub fn coop_owners_list_set<I, S>(
-    coop_id: &str,
-    owners: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn coop_owners_list_set<I, S>(coop_id: &str, owners: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: coop_list_set_id(coop_id, "members.owners")?,
         content: String::new(),
         entries: list_entries("p", owners)?,
@@ -128,15 +119,12 @@ where
     })
 }
 
-pub fn coop_admins_list_set<I, S>(
-    coop_id: &str,
-    admins: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn coop_admins_list_set<I, S>(coop_id: &str, admins: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: coop_list_set_id(coop_id, "members.admins")?,
         content: String::new(),
         entries: list_entries("p", admins)?,
@@ -149,12 +137,12 @@ where
 pub fn coop_items_list_set<I, S>(
     coop_id: &str,
     item_addresses: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: coop_list_set_id(coop_id, "items")?,
         content: String::new(),
         entries: list_entries("a", item_addresses)?,
@@ -164,12 +152,12 @@ where
     })
 }
 
-pub fn member_of_coops_list_set<I, S>(coop_pubkeys: I) -> Result<RadrootsListSet, EventEncodeError>
+pub fn member_of_coops_list_set<I, S>(coop_pubkeys: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: MEMBER_OF_COOPS.to_string(),
         content: String::new(),
         entries: list_entries("p", coop_pubkeys)?,
@@ -233,7 +221,7 @@ mod tests {
 
     #[test]
     fn farm_address_rejects_empty_and_invalid_d_tag() {
-        let err = farm_address(&RadrootsFarmRef {
+        let err = farm_address(&FarmRef {
             pubkey: " ".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         })
@@ -243,7 +231,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("farm.pubkey")
         ));
 
-        let err = farm_address(&RadrootsFarmRef {
+        let err = farm_address(&FarmRef {
             pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
             d_tag: " ".to_string(),
         })
@@ -253,7 +241,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("farm.d_tag")
         ));
 
-        let err = farm_address(&RadrootsFarmRef {
+        let err = farm_address(&FarmRef {
             pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
             d_tag: "invalid".to_string(),
         })
@@ -329,7 +317,7 @@ mod tests {
 
     #[test]
     fn coop_members_farms_list_set_covers_success_and_invalid_coop_id() {
-        let farms = vec![RadrootsFarmRef {
+        let farms = vec![FarmRef {
             pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }];

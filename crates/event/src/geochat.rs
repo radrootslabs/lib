@@ -10,7 +10,7 @@ use alloc::string::String;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsGeoChat {
+pub struct GeoChat {
     pub geohash: String,
     pub content: String,
     pub nickname: Option<String>,

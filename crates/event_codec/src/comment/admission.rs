@@ -1,6 +1,6 @@
 use core::fmt;
 
-use radroots_event::{contract::RadrootsEventContract, envelope::RadrootsEventEnvelope};
+use radroots_event::{contract::EventContract, envelope::EventEnvelope};
 
 use crate::{
     comment::inbound::{
@@ -24,7 +24,7 @@ impl RadrootsAdmittedNip22CommentEvent {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -32,7 +32,7 @@ impl RadrootsAdmittedNip22CommentEvent {
         &self.projection
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         radroots_event::contract::event_contract(self.projection.contract_id())
             .expect("NIP-22 Comment contract is registry-owned")
     }
@@ -105,7 +105,7 @@ pub fn admit_verified_nip22_comment_event(
 }
 
 pub fn verify_and_admit_nip22_comment_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsAdmittedNip22CommentEvent, RadrootsNip22CommentAdmissionError> {
     admit_verified_nip22_comment_event(verify_nip01_event(event)?)
 }

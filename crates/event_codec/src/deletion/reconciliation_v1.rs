@@ -7,10 +7,8 @@ pub mod admission {
 
     use core::fmt;
 
-    use radroots_event::contract::registry_v7::{
-        RadrootsEventContract, event_contract_registry_v7,
-    };
-    use radroots_event::envelope::RadrootsEventEnvelope;
+    use radroots_event::contract::registry_v7::{EventContract, event_contract_registry_v7};
+    use radroots_event::envelope::EventEnvelope;
 
     use crate::{
         deletion::reconciliation_v1::inbound::{
@@ -40,7 +38,7 @@ pub mod admission {
             &self.verified_event
         }
 
-        pub fn event(&self) -> &RadrootsEventEnvelope {
+        pub fn event(&self) -> &EventEnvelope {
             self.verified_event.event()
         }
 
@@ -48,7 +46,7 @@ pub mod admission {
             &self.projection
         }
 
-        pub fn contract(&self) -> &'static RadrootsEventContract {
+        pub fn contract(&self) -> &'static EventContract {
             event_contract_registry_v7(self.projection.contract_id())
                 .expect("NIP-09 deletion request contract is registry-owned")
         }
@@ -131,7 +129,7 @@ pub mod admission {
     }
 
     pub fn verify_and_admit_nip09_deletion_request_event(
-        event: RadrootsEventEnvelope,
+        event: EventEnvelope,
     ) -> Result<RadrootsAdmittedNip09DeletionRequestEvent, RadrootsNip09DeletionAdmissionError>
     {
         admit_verified_nip09_deletion_request_event_v1(verify_nip01_event_v1(event)?)
@@ -149,7 +147,7 @@ pub mod evaluator {
 
     use radroots_event::{
         envelope::kind::KIND_DELETION_REQUEST,
-        id::{RadrootsEventId, RadrootsNip01Coordinate},
+        id::{EventId, Nip01Coordinate},
     };
 
     use crate::verification::v1::RadrootsSignatureVerifiedEvent;
@@ -201,11 +199,11 @@ pub mod evaluator {
     /// Canonical evidence for an authorized exact event-id reference.
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RadrootsNip09EventReferenceEvidence {
-        request_id: RadrootsEventId,
+        request_id: EventId,
     }
 
     impl RadrootsNip09EventReferenceEvidence {
-        pub const fn request_id(&self) -> &RadrootsEventId {
+        pub const fn request_id(&self) -> &EventId {
             &self.request_id
         }
     }
@@ -213,13 +211,13 @@ pub mod evaluator {
     /// Canonical evidence for authorized address references.
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RadrootsNip09AddressReferenceEvidence {
-        coordinate: RadrootsNip01Coordinate,
+        coordinate: Nip01Coordinate,
         inclusive_cutoff: u64,
-        request_id: RadrootsEventId,
+        request_id: EventId,
     }
 
     impl RadrootsNip09AddressReferenceEvidence {
-        pub const fn coordinate(&self) -> &RadrootsNip01Coordinate {
+        pub const fn coordinate(&self) -> &Nip01Coordinate {
             &self.coordinate
         }
 
@@ -227,7 +225,7 @@ pub mod evaluator {
             self.inclusive_cutoff
         }
 
-        pub const fn request_id(&self) -> &RadrootsEventId {
+        pub const fn request_id(&self) -> &EventId {
             &self.request_id
         }
     }
@@ -382,9 +380,7 @@ pub mod evaluator {
         decision(outcome, reason, event_reference, address_reference)
     }
 
-    fn nip01_coordinate(
-        target: &RadrootsSignatureVerifiedEvent,
-    ) -> Option<RadrootsNip01Coordinate> {
+    fn nip01_coordinate(target: &RadrootsSignatureVerifiedEvent) -> Option<Nip01Coordinate> {
         let event = target.event();
         let kind = event.kind_u32();
         let identifier = if matches!(kind, 0 | 3) || (10_000..=19_999).contains(&kind) {
@@ -400,7 +396,7 @@ pub mod evaluator {
         } else {
             return None;
         };
-        RadrootsNip01Coordinate::parse(format!("{kind}:{}:{identifier}", event.author())).ok()
+        Nip01Coordinate::parse(format!("{kind}:{}:{identifier}", event.author())).ok()
     }
 
     const fn decision(
@@ -440,10 +436,7 @@ pub mod inbound {
 
     use radroots_event::{
         envelope::kind::KIND_DELETION_REQUEST,
-        id::{
-            RadrootsEventId, RadrootsIdParseError, RadrootsNip01Coordinate,
-            RadrootsNip01CoordinateParseError,
-        },
+        id::{EventId, Nip01Coordinate, Nip01CoordinateParseError, ParseError},
         post::deletion::{
             RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
             RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
@@ -529,7 +522,7 @@ pub mod inbound {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RadrootsInboundNip09DeletionEventTarget {
         tag_index: usize,
-        event_id: RadrootsEventId,
+        event_id: EventId,
         raw_tag: Vec<String>,
     }
 
@@ -538,7 +531,7 @@ pub mod inbound {
             self.tag_index
         }
 
-        pub const fn event_id(&self) -> &RadrootsEventId {
+        pub const fn event_id(&self) -> &EventId {
             &self.event_id
         }
 
@@ -550,7 +543,7 @@ pub mod inbound {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RadrootsInboundNip09DeletionAddressTarget {
         tag_index: usize,
-        coordinate: RadrootsNip01Coordinate,
+        coordinate: Nip01Coordinate,
         raw_tag: Vec<String>,
     }
 
@@ -559,7 +552,7 @@ pub mod inbound {
             self.tag_index
         }
 
-        pub const fn coordinate(&self) -> &RadrootsNip01Coordinate {
+        pub const fn coordinate(&self) -> &Nip01Coordinate {
             &self.coordinate
         }
 
@@ -666,14 +659,14 @@ pub mod inbound {
         },
         EventTargetInvalid {
             tag_index: usize,
-            error: RadrootsIdParseError,
+            error: ParseError,
         },
         AddressTargetShape {
             tag_index: usize,
         },
         AddressTargetInvalid {
             tag_index: usize,
-            error: RadrootsNip01CoordinateParseError,
+            error: Nip01CoordinateParseError,
         },
         TargetMissing,
     }
@@ -816,7 +809,7 @@ pub mod inbound {
                             tag_index,
                         });
                     };
-                    let event_id = RadrootsEventId::parse(value).map_err(|error| {
+                    let event_id = EventId::parse(value).map_err(|error| {
                         RadrootsNip09DeletionProjectionError::EventTargetInvalid {
                             tag_index,
                             error,
@@ -836,7 +829,7 @@ pub mod inbound {
                             tag_index,
                         });
                     };
-                    let coordinate = RadrootsNip01Coordinate::parse(value).map_err(|error| {
+                    let coordinate = Nip01Coordinate::parse(value).map_err(|error| {
                         RadrootsNip09DeletionProjectionError::AddressTargetInvalid {
                             tag_index,
                             error,
@@ -863,7 +856,7 @@ pub mod inbound {
         let has_event_targets = !event_targets.is_empty();
         let address_kinds = address_targets
             .keys()
-            .map(RadrootsNip01Coordinate::kind)
+            .map(Nip01Coordinate::kind)
             .collect::<BTreeSet<_>>();
         let mut kind_advisories = BTreeMap::new();
         let mut diagnostics = Vec::new();

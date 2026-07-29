@@ -17,12 +17,11 @@ mod tests {
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     #[cfg(feature = "serde_json")]
     use radroots_event::envelope::kind::KIND_FARM;
-    use radroots_event::farm::plot::RadrootsPlot;
-    use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-    use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+    use radroots_event::farm::plot::Plot;
+    use radroots_event::farm::{Farm, FarmPublicLocation, FarmRef};
+    use radroots_event::id::{DTag, InventoryBinId};
     use radroots_event::listing::operational::{
-        RadrootsOperationalListing, RadrootsOperationalListingBin,
-        RadrootsOperationalListingProduct,
+        OperationalListing, OperationalListingBin, OperationalListingProduct,
     };
 
     #[cfg(feature = "serde_json")]
@@ -35,24 +34,24 @@ mod tests {
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     );
 
-    fn d_tag(raw: &str) -> RadrootsDTag {
+    fn d_tag(raw: &str) -> DTag {
         raw.parse().unwrap()
     }
 
-    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    fn bin_id(raw: &str) -> InventoryBinId {
         raw.parse().unwrap()
     }
 
     #[test]
     fn farm_tags_include_required_fields() {
-        let farm = RadrootsFarm {
+        let farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsFarmPublicLocation {
+            location: Some(FarmPublicLocation {
                 primary: "Test Farm".to_string(),
                 city: Some("Santa Cruz".to_string()),
                 region: Some("California".to_string()),
@@ -70,7 +69,7 @@ mod tests {
 
     #[test]
     fn farm_tags_allow_missing_optional_fields() {
-        let farm = RadrootsFarm {
+        let farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
@@ -100,7 +99,7 @@ mod tests {
 
     #[test]
     fn farm_build_tags_rejects_invalid_d_tag() {
-        let farm = RadrootsFarm {
+        let farm = Farm {
             d_tag: "farm:invalid".to_string(),
             name: "Test Farm".to_string(),
             about: None,
@@ -119,7 +118,7 @@ mod tests {
     #[cfg_attr(coverage_nightly, coverage(off))]
     #[cfg(feature = "serde_json")]
     fn farm_decode_rejects_empty_d_tag_and_content() {
-        let farm = RadrootsFarm {
+        let farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
@@ -182,7 +181,7 @@ mod tests {
 
     #[test]
     fn farm_ref_tags_include_p_and_a() {
-        let farm = RadrootsFarmRef {
+        let farm = FarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         };
@@ -197,7 +196,7 @@ mod tests {
         assert!(has_a);
         assert!(has_p);
 
-        let err = farm_ref_tags(&RadrootsFarmRef {
+        let err = farm_ref_tags(&FarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: "invalid".to_string(),
         })
@@ -207,14 +206,14 @@ mod tests {
 
     #[test]
     fn farm_encode_rejects_empty_required_fields() {
-        let mut farm = RadrootsFarm {
+        let mut farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsFarmPublicLocation {
+            location: Some(FarmPublicLocation {
                 primary: "Test Farm".to_string(),
                 city: Some("Santa Cruz".to_string()),
                 region: Some("California".to_string()),
@@ -248,7 +247,7 @@ mod tests {
             EventEncodeError::InvalidField("location.geohash")
         ));
 
-        let err = farm_ref_tags(&RadrootsFarmRef {
+        let err = farm_ref_tags(&FarmRef {
             pubkey: " ".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         })
@@ -258,7 +257,7 @@ mod tests {
             EventEncodeError::EmptyRequiredField("farm.pubkey")
         ));
 
-        let err = farm_ref_tags(&RadrootsFarmRef {
+        let err = farm_ref_tags(&FarmRef {
             pubkey: "farm_pubkey".to_string(),
             d_tag: " ".to_string(),
         })
@@ -268,14 +267,14 @@ mod tests {
             EventEncodeError::EmptyRequiredField("farm.d_tag")
         ));
 
-        let mut farm = RadrootsFarm {
+        let mut farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsFarmPublicLocation {
+            location: Some(FarmPublicLocation {
                 primary: " ".to_string(),
                 city: Some("null".to_string()),
                 region: None,
@@ -304,14 +303,14 @@ mod tests {
     #[cfg_attr(coverage_nightly, coverage(off))]
     #[cfg(feature = "serde_json")]
     fn farm_decode_rejects_private_location_and_ops_shapes() {
-        let farm = RadrootsFarm {
+        let farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Farm".to_string(),
             about: None,
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsFarmPublicLocation {
+            location: Some(FarmPublicLocation {
                 primary: "Test Farm".to_string(),
                 city: Some("Santa Cruz".to_string()),
                 region: Some("California".to_string()),
@@ -449,9 +448,9 @@ mod tests {
 
     #[test]
     fn farm_plots_list_set_uses_plot_addresses() {
-        let plots = vec![RadrootsPlot {
+        let plots = vec![Plot {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
@@ -475,14 +474,14 @@ mod tests {
 
     #[test]
     fn farm_listings_list_set_uses_listing_addresses() {
-        let listings = vec![RadrootsOperationalListing {
+        let listings = vec![OperationalListing {
             d_tag: d_tag("AAAAAAAAAAAAAAAAAAAAAg"),
             published_at: None,
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
-            product: RadrootsOperationalListingProduct {
+            product: OperationalListingProduct {
                 key: "coffee".to_string(),
                 title: "Coffee".to_string(),
                 category: "coffee".to_string(),
@@ -494,7 +493,7 @@ mod tests {
                 year: None,
             },
             primary_bin_id: bin_id("bin-1"),
-            bins: vec![RadrootsOperationalListingBin {
+            bins: vec![OperationalListingBin {
                 bin_id: bin_id("bin-1"),
                 quantity: Quantity::try_new(Decimal::from(1u32), Unit::Each).unwrap(),
                 price_per_canonical_unit: QuantityPrice::try_new(

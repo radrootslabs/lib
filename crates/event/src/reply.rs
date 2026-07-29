@@ -3,12 +3,12 @@ use alloc::string::String;
 use core::fmt;
 
 use crate::{
-    id::{RadrootsEventId, RadrootsIdParseError, parse_public_key},
+    id::{EventId, ParseError, parse_public_key},
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
-    tag::relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::NostrRelayHint,
 };
 use radroots_identity::PublicKey;
 
@@ -26,19 +26,19 @@ const RADROOTS_NIP10_REPLY_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\"".le
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsNip10ReplyError {
+pub enum Nip10ReplyError {
     ContentMissing,
     ContentTooLarge { max: usize, actual: usize },
-    EventIdInvalid(RadrootsIdParseError),
-    AuthorInvalid(RadrootsIdParseError),
-    RelayInvalid(RadrootsIdParseError),
+    EventIdInvalid(ParseError),
+    AuthorInvalid(ParseError),
+    RelayInvalid(ParseError),
     NestedParentMatchesRoot,
     TagElementTooLarge { max: usize, actual: usize },
     TagBytesExceeded { max: usize, actual: usize },
     EventWireTooLarge { max: usize, actual: usize },
 }
 
-impl RadrootsNip10ReplyError {
+impl Nip10ReplyError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::ContentMissing => "reply_content_missing",
@@ -54,7 +54,7 @@ impl RadrootsNip10ReplyError {
     }
 }
 
-impl fmt::Display for RadrootsNip10ReplyError {
+impl fmt::Display for Nip10ReplyError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ContentMissing => {
@@ -99,7 +99,7 @@ impl fmt::Display for RadrootsNip10ReplyError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsNip10ReplyError {
+impl std::error::Error for Nip10ReplyError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::EventIdInvalid(error)
@@ -115,18 +115,18 @@ impl std::error::Error for RadrootsNip10ReplyError {
 /// The caller asserts that the target is a kind-1 event. This value does not
 /// retrieve the target or prove its existence, kind, signature, or author.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip10ReplyReference {
-    event_id: RadrootsEventId,
+pub struct Nip10ReplyReference {
+    event_id: EventId,
     author: PublicKey,
-    relay: Option<RadrootsNostrRelayHint>,
+    relay: Option<NostrRelayHint>,
 }
 
-impl RadrootsNip10ReplyReference {
+impl Nip10ReplyReference {
     pub fn new(
-        event_id: RadrootsEventId,
+        event_id: EventId,
         author: PublicKey,
-        relay: Option<RadrootsNostrRelayHint>,
-    ) -> Result<Self, RadrootsNip10ReplyError> {
+        relay: Option<NostrRelayHint>,
+    ) -> Result<Self, Nip10ReplyError> {
         if let Some(relay) = &relay {
             validate_tag_element(relay.as_str())?;
         }
@@ -141,21 +141,19 @@ impl RadrootsNip10ReplyReference {
         event_id: impl AsRef<str>,
         author: impl AsRef<str>,
         relay: Option<&str>,
-    ) -> Result<Self, RadrootsNip10ReplyError> {
-        let event_id =
-            RadrootsEventId::parse(event_id).map_err(RadrootsNip10ReplyError::EventIdInvalid)?;
-        let author = parse_public_key(author).map_err(RadrootsNip10ReplyError::AuthorInvalid)?;
+    ) -> Result<Self, Nip10ReplyError> {
+        let event_id = EventId::parse(event_id).map_err(Nip10ReplyError::EventIdInvalid)?;
+        let author = parse_public_key(author).map_err(Nip10ReplyError::AuthorInvalid)?;
         let relay = match relay {
             None | Some("") => None,
-            Some(relay) => Some(
-                RadrootsNostrRelayHint::parse(relay)
-                    .map_err(RadrootsNip10ReplyError::RelayInvalid)?,
-            ),
+            Some(relay) => {
+                Some(NostrRelayHint::parse(relay).map_err(Nip10ReplyError::RelayInvalid)?)
+            }
         };
         Self::new(event_id, author, relay)
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -163,14 +161,12 @@ impl RadrootsNip10ReplyReference {
         &self.author
     }
 
-    pub const fn relay(&self) -> Option<&RadrootsNostrRelayHint> {
+    pub const fn relay(&self) -> Option<&NostrRelayHint> {
         self.relay.as_ref()
     }
 
     pub fn relay_or_empty(&self) -> &str {
-        self.relay
-            .as_ref()
-            .map_or("", RadrootsNostrRelayHint::as_str)
+        self.relay.as_ref().map_or("", NostrRelayHint::as_str)
     }
 }
 
@@ -181,40 +177,40 @@ impl RadrootsNip10ReplyReference {
 /// and has no Serde construction path.
 ///
 /// ```compile_fail
-/// let _: radroots_event::post::reply::RadrootsAuthoredNip10Reply =
+/// let _: radroots_event::post::reply::AuthoredNip10Reply =
 ///     serde_json::from_str(r#"{"content":"reply"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredNip10Reply {
+pub struct AuthoredNip10Reply {
     content: String,
-    root: RadrootsNip10ReplyReference,
-    parent: Option<RadrootsNip10ReplyReference>,
+    root: Nip10ReplyReference,
+    parent: Option<Nip10ReplyReference>,
 }
 
-impl RadrootsAuthoredNip10Reply {
+impl AuthoredNip10Reply {
     pub fn direct(
         content: impl Into<String>,
-        root: RadrootsNip10ReplyReference,
-    ) -> Result<Self, RadrootsNip10ReplyError> {
+        root: Nip10ReplyReference,
+    ) -> Result<Self, Nip10ReplyError> {
         Self::new(content.into(), root, None)
     }
 
     pub fn nested(
         content: impl Into<String>,
-        root: RadrootsNip10ReplyReference,
-        parent: RadrootsNip10ReplyReference,
-    ) -> Result<Self, RadrootsNip10ReplyError> {
+        root: Nip10ReplyReference,
+        parent: Nip10ReplyReference,
+    ) -> Result<Self, Nip10ReplyError> {
         if root.event_id == parent.event_id {
-            return Err(RadrootsNip10ReplyError::NestedParentMatchesRoot);
+            return Err(Nip10ReplyError::NestedParentMatchesRoot);
         }
         Self::new(content.into(), root, Some(parent))
     }
 
     fn new(
         content: String,
-        root: RadrootsNip10ReplyReference,
-        parent: Option<RadrootsNip10ReplyReference>,
-    ) -> Result<Self, RadrootsNip10ReplyError> {
+        root: Nip10ReplyReference,
+        parent: Option<Nip10ReplyReference>,
+    ) -> Result<Self, Nip10ReplyError> {
         validate_content(&content)?;
         validate_authored_reply_wire_size(&content, &root, parent.as_ref())?;
         Ok(Self {
@@ -228,11 +224,11 @@ impl RadrootsAuthoredNip10Reply {
         &self.content
     }
 
-    pub const fn root(&self) -> &RadrootsNip10ReplyReference {
+    pub const fn root(&self) -> &Nip10ReplyReference {
         &self.root
     }
 
-    pub const fn parent(&self) -> Option<&RadrootsNip10ReplyReference> {
+    pub const fn parent(&self) -> Option<&Nip10ReplyReference> {
         self.parent.as_ref()
     }
 
@@ -241,12 +237,12 @@ impl RadrootsAuthoredNip10Reply {
     }
 }
 
-fn validate_content(content: &str) -> Result<(), RadrootsNip10ReplyError> {
+fn validate_content(content: &str) -> Result<(), Nip10ReplyError> {
     if content.trim().is_empty() {
-        return Err(RadrootsNip10ReplyError::ContentMissing);
+        return Err(Nip10ReplyError::ContentMissing);
     }
     if content.len() > RADROOTS_POST_CONTENT_MAX_BYTES {
-        return Err(RadrootsNip10ReplyError::ContentTooLarge {
+        return Err(Nip10ReplyError::ContentTooLarge {
             max: RADROOTS_POST_CONTENT_MAX_BYTES,
             actual: content.len(),
         });
@@ -254,9 +250,9 @@ fn validate_content(content: &str) -> Result<(), RadrootsNip10ReplyError> {
     Ok(())
 }
 
-fn validate_tag_element(element: &str) -> Result<(), RadrootsNip10ReplyError> {
+fn validate_tag_element(element: &str) -> Result<(), Nip10ReplyError> {
     if element.len() > RADROOTS_POST_TAG_ELEMENT_MAX_BYTES {
-        return Err(RadrootsNip10ReplyError::TagElementTooLarge {
+        return Err(Nip10ReplyError::TagElementTooLarge {
             max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
             actual: element.len(),
         });
@@ -266,9 +262,9 @@ fn validate_tag_element(element: &str) -> Result<(), RadrootsNip10ReplyError> {
 
 fn validate_authored_reply_wire_size(
     content: &str,
-    root: &RadrootsNip10ReplyReference,
-    parent: Option<&RadrootsNip10ReplyReference>,
-) -> Result<(), RadrootsNip10ReplyError> {
+    root: &Nip10ReplyReference,
+    parent: Option<&Nip10ReplyReference>,
+) -> Result<(), Nip10ReplyError> {
     let mut tag_bytes = 0usize;
     let mut tags_json_bytes = 2usize;
     let mut tag_count = 0usize;
@@ -310,7 +306,7 @@ fn validate_authored_reply_wire_size(
     }
 
     if tag_bytes > RADROOTS_POST_TAG_TOTAL_MAX_BYTES {
-        return Err(RadrootsNip10ReplyError::TagBytesExceeded {
+        return Err(Nip10ReplyError::TagBytesExceeded {
             max: RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
             actual: tag_bytes,
         });
@@ -319,7 +315,7 @@ fn validate_authored_reply_wire_size(
         .saturating_add(tags_json_bytes)
         .saturating_add(canonical_json_string_bytes(content));
     if actual > RADROOTS_POST_EVENT_WIRE_MAX_BYTES {
-        return Err(RadrootsNip10ReplyError::EventWireTooLarge {
+        return Err(Nip10ReplyError::EventWireTooLarge {
             max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
             actual,
         });
@@ -361,8 +357,8 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 mod tests {
     use super::*;
 
-    fn reference(event: char, author: char) -> RadrootsNip10ReplyReference {
-        RadrootsNip10ReplyReference::parse(
+    fn reference(event: char, author: char) -> Nip10ReplyReference {
+        Nip10ReplyReference::parse(
             event.to_string().repeat(64),
             crate::test_valid_hex_64(author),
             Some("wss://relay.example"),
@@ -372,14 +368,12 @@ mod tests {
 
     #[test]
     fn builds_direct_and_nested_replies_with_distinct_coordinates() {
-        let direct =
-            RadrootsAuthoredNip10Reply::direct("Direct", reference('a', 'b')).expect("direct");
+        let direct = AuthoredNip10Reply::direct("Direct", reference('a', 'b')).expect("direct");
         assert!(direct.is_direct());
         assert!(direct.parent().is_none());
 
-        let nested =
-            RadrootsAuthoredNip10Reply::nested("Nested", reference('a', 'b'), reference('c', 'd'))
-                .expect("nested");
+        let nested = AuthoredNip10Reply::nested("Nested", reference('a', 'b'), reference('c', 'd'))
+            .expect("nested");
         assert!(!nested.is_direct());
         assert_eq!(
             nested.parent().expect("parent").event_id().to_hex(),
@@ -390,21 +384,21 @@ mod tests {
     #[test]
     fn rejects_blank_content_and_ambiguous_nested_parent() {
         assert_eq!(
-            RadrootsAuthoredNip10Reply::direct("\t", reference('a', 'b')).unwrap_err(),
-            RadrootsNip10ReplyError::ContentMissing
+            AuthoredNip10Reply::direct("\t", reference('a', 'b')).unwrap_err(),
+            Nip10ReplyError::ContentMissing
         );
 
         let root = reference('a', 'b');
         let parent = reference('a', 'c');
         assert_eq!(
-            RadrootsAuthoredNip10Reply::nested("Nested", root, parent).unwrap_err(),
-            RadrootsNip10ReplyError::NestedParentMatchesRoot
+            AuthoredNip10Reply::nested("Nested", root, parent).unwrap_err(),
+            Nip10ReplyError::NestedParentMatchesRoot
         );
     }
 
     #[test]
     fn parses_and_canonicalizes_reference_identifiers() {
-        let reference = RadrootsNip10ReplyReference::parse(
+        let reference = Nip10ReplyReference::parse(
             "A".repeat(64),
             crate::test_valid_hex_64('B'),
             Some("wss://relay.example"),
@@ -417,23 +411,22 @@ mod tests {
             "wss://relay.example"
         );
 
-        let error =
-            RadrootsNip10ReplyReference::parse("not-an-id", crate::test_valid_hex_64('b'), None)
-                .unwrap_err();
+        let error = Nip10ReplyReference::parse("not-an-id", crate::test_valid_hex_64('b'), None)
+            .unwrap_err();
         assert_eq!(error.code(), "reply_event_id_invalid");
     }
 
     #[test]
     fn enforces_content_and_relay_element_boundaries() {
         let exact_content = "x".repeat(RADROOTS_POST_CONTENT_MAX_BYTES);
-        RadrootsAuthoredNip10Reply::direct(exact_content, reference('a', 'b'))
+        AuthoredNip10Reply::direct(exact_content, reference('a', 'b'))
             .expect("exact decoded content limit");
         assert!(matches!(
-            RadrootsAuthoredNip10Reply::direct(
+            AuthoredNip10Reply::direct(
                 "x".repeat(RADROOTS_POST_CONTENT_MAX_BYTES + 1),
                 reference('a', 'b'),
             ),
-            Err(RadrootsNip10ReplyError::ContentTooLarge {
+            Err(Nip10ReplyError::ContentTooLarge {
                 max: RADROOTS_POST_CONTENT_MAX_BYTES,
                 actual,
             }) if actual == RADROOTS_POST_CONTENT_MAX_BYTES + 1
@@ -444,7 +437,7 @@ mod tests {
             "{prefix}{}",
             "a".repeat(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES - prefix.len())
         );
-        RadrootsNip10ReplyReference::parse(
+        Nip10ReplyReference::parse(
             "a".repeat(64),
             crate::test_valid_hex_64('b'),
             Some(&exact_relay),
@@ -452,12 +445,12 @@ mod tests {
         .expect("exact tag-element limit");
         let overflow_relay = format!("{exact_relay}a");
         assert!(matches!(
-            RadrootsNip10ReplyReference::parse(
+            Nip10ReplyReference::parse(
                 "a".repeat(64),
                 crate::test_valid_hex_64('b'),
                 Some(&overflow_relay),
             ),
-            Err(RadrootsNip10ReplyError::TagElementTooLarge {
+            Err(Nip10ReplyError::TagElementTooLarge {
                 max: RADROOTS_POST_TAG_ELEMENT_MAX_BYTES,
                 actual,
             }) if actual == RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1
@@ -470,8 +463,7 @@ mod tests {
         let mut upper = RADROOTS_POST_CONTENT_MAX_BYTES;
         while lower < upper {
             let candidate = lower + (upper - lower).div_ceil(2);
-            if RadrootsAuthoredNip10Reply::direct("\u{0001}".repeat(candidate), reference('a', 'b'))
-                .is_ok()
+            if AuthoredNip10Reply::direct("\u{0001}".repeat(candidate), reference('a', 'b')).is_ok()
             {
                 lower = candidate;
             } else {
@@ -479,11 +471,11 @@ mod tests {
             }
         }
 
-        RadrootsAuthoredNip10Reply::direct("\u{0001}".repeat(lower), reference('a', 'b'))
+        AuthoredNip10Reply::direct("\u{0001}".repeat(lower), reference('a', 'b'))
             .expect("largest escaped content fitting the wire budget");
         assert!(matches!(
-            RadrootsAuthoredNip10Reply::direct("\u{0001}".repeat(lower + 1), reference('a', 'b'),),
-            Err(RadrootsNip10ReplyError::EventWireTooLarge {
+            AuthoredNip10Reply::direct("\u{0001}".repeat(lower + 1), reference('a', 'b'),),
+            Err(Nip10ReplyError::EventWireTooLarge {
                 max: RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
                 ..
             })

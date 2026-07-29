@@ -17,7 +17,7 @@ pub mod relay_hint;
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventRef {
+pub struct EventRef {
     pub id: String,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub author: radroots_identity::PublicKey,
@@ -33,7 +33,7 @@ pub struct RadrootsEventRef {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventPtr {
+pub struct EventPtr {
     pub id: String,
     pub relays: Option<String>,
 }

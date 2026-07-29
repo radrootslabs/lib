@@ -9,10 +9,10 @@ use alloc::{
 };
 
 use radroots_event::envelope::kind::KIND_CLASSIFIED_LISTING;
-use radroots_event::farm::plot::RadrootsPlot;
-use radroots_event::listing::operational::RadrootsOperationalListing;
-use radroots_event::social::list::RadrootsListEntry;
-use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::farm::plot::Plot;
+use radroots_event::listing::operational::OperationalListing;
+use radroots_event::social::list::ListEntry;
+use radroots_event::social::list_set::ListSet;
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -29,7 +29,7 @@ fn farm_list_set_id(farm_id: &str, suffix: &str) -> Result<String, EventEncodeEr
     Ok(format!("farm:{farm_id}:{suffix}"))
 }
 
-fn list_entries<I, S>(tag: &str, values: I) -> Result<Vec<RadrootsListEntry>, EventEncodeError>
+fn list_entries<I, S>(tag: &str, values: I) -> Result<Vec<ListEntry>, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -40,7 +40,7 @@ where
         if value.is_empty() {
             return Err(EventEncodeError::EmptyRequiredField("entry.values"));
         }
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: tag.to_string(),
             values: vec![value.to_string()],
         });
@@ -48,15 +48,12 @@ where
     Ok(entries)
 }
 
-pub fn farm_members_list_set<I, S>(
-    farm_id: &str,
-    members: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn farm_members_list_set<I, S>(farm_id: &str, members: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: farm_list_set_id(farm_id, "members")?,
         content: String::new(),
         entries: list_entries("p", members)?,
@@ -66,15 +63,12 @@ where
     })
 }
 
-pub fn farm_owners_list_set<I, S>(
-    farm_id: &str,
-    owners: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn farm_owners_list_set<I, S>(farm_id: &str, owners: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: farm_list_set_id(farm_id, "members.owners")?,
         content: String::new(),
         entries: list_entries("p", owners)?,
@@ -84,15 +78,12 @@ where
     })
 }
 
-pub fn farm_workers_list_set<I, S>(
-    farm_id: &str,
-    workers: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+pub fn farm_workers_list_set<I, S>(farm_id: &str, workers: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: farm_list_set_id(farm_id, "members.workers")?,
         content: String::new(),
         entries: list_entries("p", workers)?,
@@ -106,7 +97,7 @@ pub fn farm_plots_list_set<I, S>(
     farm_id: &str,
     farm_pubkey: &str,
     plot_ids: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -115,12 +106,12 @@ where
     for plot_id in plot_ids {
         let plot_id = plot_id.as_ref();
         let address = plot_address(farm_pubkey, plot_id)?;
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "a".to_string(),
             values: vec![address],
         });
     }
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: farm_list_set_id(farm_id, "plots")?,
         content: String::new(),
         entries,
@@ -134,7 +125,7 @@ pub fn farm_operational_listings_list_set<I, S>(
     farm_id: &str,
     farm_pubkey: &str,
     listing_ids: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -152,12 +143,12 @@ where
         address.push_str(farm_pubkey);
         address.push(':');
         address.push_str(listing_id);
-        entries.push(RadrootsListEntry {
+        entries.push(ListEntry {
             tag: "a".to_string(),
             values: vec![address],
         });
     }
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: farm_list_set_id(farm_id, "listings")?,
         content: String::new(),
         entries,
@@ -171,9 +162,9 @@ pub fn farm_operational_listings_list_set_from_listings<'a, I>(
     farm_id: &str,
     farm_pubkey: &str,
     listings: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
-    I: IntoIterator<Item = &'a RadrootsOperationalListing>,
+    I: IntoIterator<Item = &'a OperationalListing>,
 {
     farm_operational_listings_list_set(
         farm_id,
@@ -186,9 +177,9 @@ pub fn farm_plots_list_set_from_plots<'a, I>(
     farm_id: &str,
     farm_pubkey: &str,
     plots: I,
-) -> Result<RadrootsListSet, EventEncodeError>
+) -> Result<ListSet, EventEncodeError>
 where
-    I: IntoIterator<Item = &'a RadrootsPlot>,
+    I: IntoIterator<Item = &'a Plot>,
 {
     farm_plots_list_set(
         farm_id,
@@ -197,12 +188,12 @@ where
     )
 }
 
-pub fn member_of_farms_list_set<I, S>(farm_pubkeys: I) -> Result<RadrootsListSet, EventEncodeError>
+pub fn member_of_farms_list_set<I, S>(farm_pubkeys: I) -> Result<ListSet, EventEncodeError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    Ok(RadrootsListSet {
+    Ok(ListSet {
         d_tag: MEMBER_OF_FARMS.to_string(),
         content: String::new(),
         entries: list_entries("p", farm_pubkeys)?,

@@ -8,38 +8,38 @@ use core::fmt;
 use core::str::FromStr;
 
 use radroots_event::contract::registry_v7::{
-    RadrootsContractValidationError, RadrootsEventContract,
+    ContractValidationError, EventContract,
     validate_event_contract_registry_v7 as validate_radroots_event_contract_registry_v7,
 };
-use radroots_event::envelope::RadrootsEventEnvelope;
+use radroots_event::envelope::EventEnvelope;
 use radroots_event::wire::v1::compute_canonical_nip01_event_id_v1;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsIdVerifiedEvent {
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 }
 
 impl RadrootsIdVerifiedEvent {
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         &self.event
     }
 
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.event
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsSignatureVerifiedEvent {
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 }
 
 impl RadrootsSignatureVerifiedEvent {
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         &self.event
     }
 
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.event
     }
 }
@@ -48,7 +48,7 @@ impl RadrootsSignatureVerifiedEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsContractValidatedEvent {
     verified_event: RadrootsSignatureVerifiedEvent,
-    contract: &'static RadrootsEventContract,
+    contract: &'static EventContract,
 }
 
 impl RadrootsContractValidatedEvent {
@@ -56,11 +56,11 @@ impl RadrootsContractValidatedEvent {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         self.contract
     }
 
@@ -72,7 +72,7 @@ impl RadrootsContractValidatedEvent {
         self.verified_event
     }
 
-    pub fn into_event(self) -> RadrootsEventEnvelope {
+    pub fn into_event(self) -> EventEnvelope {
         self.verified_event.into_event()
     }
 }
@@ -124,14 +124,14 @@ impl fmt::Display for RadrootsNip01VerificationError {
 impl std::error::Error for RadrootsNip01VerificationError {}
 
 pub fn verify_event_id(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsIdVerifiedEvent, RadrootsNip01VerificationError> {
     verify_event_id_v1(event)
 }
 
 /// Verifies the canonical identifier with reconciliation-v1 semantics.
 pub fn verify_event_id_v1(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsIdVerifiedEvent, RadrootsNip01VerificationError> {
     u16::try_from(event.kind_u32()).map_err(|_| {
         RadrootsNip01VerificationError::KindOutOfRange {
@@ -192,14 +192,14 @@ pub fn verify_event_signature_v1(
 
 /// Verifies the canonical NIP-01 identifier and Schnorr signature in order.
 pub fn verify_nip01_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
     verify_nip01_event_v1(event)
 }
 
 /// Verifies a NIP-01 event with the behavior frozen for reconciliation v1.
 pub fn verify_nip01_event_v1(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
     verify_event_signature_v1(verify_event_id_v1(event)?)
 }
@@ -207,14 +207,14 @@ pub fn verify_nip01_event_v1(
 /// Applies full registry contract-shape validation to an already verified event.
 pub fn validate_event_contract(
     event: RadrootsSignatureVerifiedEvent,
-) -> Result<RadrootsContractValidatedEvent, RadrootsContractValidationError> {
+) -> Result<RadrootsContractValidatedEvent, ContractValidationError> {
     validate_event_contract_registry_v7(event)
 }
 
 /// Applies the immutable registry-v7 contract-shape validation boundary.
 pub fn validate_event_contract_registry_v7(
     event: RadrootsSignatureVerifiedEvent,
-) -> Result<RadrootsContractValidatedEvent, RadrootsContractValidationError> {
+) -> Result<RadrootsContractValidatedEvent, ContractValidationError> {
     let contract = validate_radroots_event_contract_registry_v7(event.event())?;
     Ok(RadrootsContractValidatedEvent {
         verified_event: event,
@@ -224,7 +224,7 @@ pub fn validate_event_contract_registry_v7(
 
 #[cfg(feature = "nostr")]
 fn raw_event_from_radroots(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<nostr::Event, RadrootsNip01VerificationError> {
     let event_id = event.id_hex();
     let id = nostr::EventId::from_hex(event_id.as_str())

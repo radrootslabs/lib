@@ -1,8 +1,8 @@
 use core::fmt;
 
 use radroots_event::{
-    contract::{RadrootsEventContract, event_contract},
-    envelope::RadrootsEventEnvelope,
+    contract::{EventContract, event_contract},
+    envelope::EventEnvelope,
     envelope::kind::KIND_PROFILE,
 };
 
@@ -26,7 +26,7 @@ impl RadrootsAdmittedProfileEvent {
         &self.verified_event
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event.event()
     }
 
@@ -34,7 +34,7 @@ impl RadrootsAdmittedProfileEvent {
         &self.metadata
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         event_contract("radroots.profile.metadata.v1")
             .expect("Profile metadata contract is registry-owned")
     }
@@ -125,7 +125,7 @@ pub fn admit_verified_profile_event(
 
 /// Verifies id and signature before parsing and admitting exact kind-0 content.
 pub fn verify_and_admit_profile_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsAdmittedProfileEvent, RadrootsProfileAdmissionError> {
     admit_verified_profile_event(verify_nip01_event(event)?)
 }

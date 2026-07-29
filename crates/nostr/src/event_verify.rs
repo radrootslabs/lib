@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use radroots_event::envelope::RadrootsEventEnvelope;
+use radroots_event::envelope::EventEnvelope;
 use radroots_event_codec::verification::{
     RadrootsNip01VerificationError, verify_event_id, verify_nip01_event,
 };
@@ -14,18 +14,14 @@ pub enum RadrootsNostrEventVerification {
     MalformedEnvelope,
 }
 
-pub fn radroots_nostr_verify_event(
-    event: &RadrootsEventEnvelope,
-) -> RadrootsNostrEventVerification {
+pub fn radroots_nostr_verify_event(event: &EventEnvelope) -> RadrootsNostrEventVerification {
     match verify_nip01_event(event.clone()) {
         Ok(_) => RadrootsNostrEventVerification::Verified,
         Err(error) => verification_error_status(&error),
     }
 }
 
-pub fn radroots_nostr_verify_event_id(
-    event: &RadrootsEventEnvelope,
-) -> RadrootsNostrEventVerification {
+pub fn radroots_nostr_verify_event_id(event: &EventEnvelope) -> RadrootsNostrEventVerification {
     match verify_event_id(event.clone()) {
         Ok(_) => RadrootsNostrEventVerification::IdVerified,
         Err(error) => verification_error_status(&error),
@@ -59,7 +55,7 @@ mod tests {
     use crate::test_fixtures::FIXTURE_ALICE;
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp};
     use radroots_event::{
-        envelope::RadrootsEventEnvelopeParts, envelope::kind::KIND_POST,
+        envelope::EventEnvelopeParts, envelope::kind::KIND_POST,
         wire::compute_canonical_nip01_event_id,
     };
 
@@ -69,7 +65,7 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn signed_event() -> RadrootsEventEnvelope {
+    fn signed_event() -> EventEnvelope {
         let raw_event = radroots_nostr_build_event_unchecked(
             KIND_POST,
             "hello",
@@ -83,12 +79,12 @@ mod tests {
     }
 
     fn envelope_with(
-        event: &RadrootsEventEnvelope,
+        event: &EventEnvelope,
         content: String,
         kind: u32,
         sig: String,
-    ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    ) -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: event.id_hex(),
             author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
@@ -182,7 +178,7 @@ mod tests {
         )
         .expect("canonical id")
         .into_string();
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let event = EventEnvelope::new(EventEnvelopeParts {
             id,
             author: original.author().to_hex().to_owned(),
             created_at: original.created_at_u64(),

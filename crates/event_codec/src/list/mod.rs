@@ -14,19 +14,19 @@ mod tests {
     use super::{decode::list_from_tags, encode::list_build_tags, is_generic_list_codec_kind};
     use radroots_event::{
         envelope::kind::{KIND_CALENDAR, KIND_LIST_MUTE, KIND_LIST_SET_FOLLOW, KIND_POST},
-        social::list::{RadrootsList, RadrootsListEntry},
+        social::list::{List, ListEntry},
     };
 
     #[test]
     fn list_tags_round_trip() {
-        let list = RadrootsList {
+        let list = List {
             content: "private".to_string(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec!["abc".to_string(), "wss://relay".to_string()],
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "t".to_string(),
                     values: vec!["radroots".to_string()],
                 },

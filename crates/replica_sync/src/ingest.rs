@@ -12,26 +12,26 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use radroots_core::Decimal;
-use radroots_event::contract::RadrootsEventClass;
+use radroots_event::contract::EventClass;
 #[cfg(test)]
-use radroots_event::envelope::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::EventEnvelopeParts;
 use radroots_event::envelope::event_head::{
-    RadrootsCurrentEventHead, RadrootsEventHeadCandidateResult, RadrootsEventHeadCoordinate,
-    RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_class,
+    CurrentEventHead, EventHeadCandidateResult, EventHeadCoordinate,
+    EventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_class,
     event_head_candidate_for_event, select_event_head,
 };
 use radroots_event::envelope::kind::{
     KIND_CALENDAR, KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_PLOT, KIND_PROFILE,
     is_nip51_list_set_kind,
 };
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use radroots_event::listing::operational::{
-    RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-    RadrootsOperationalListingBin, RadrootsOperationalListingStatus,
+    OperationalListing, OperationalListingAvailability, OperationalListingBin,
+    OperationalListingStatus,
 };
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
-    listing::classified::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
+    envelope::EventEnvelope,
+    listing::classified::{ClassifiedListingPartition, classify_classified_listing_tags},
 };
 use radroots_event_codec::farm::decode as farm_decode;
 use radroots_event_codec::food_availability::inbound::{
@@ -177,7 +177,7 @@ impl RadrootsReplicaIdFactory for RadrootsReplicaDefaultIdFactory {
 /// not the strict Profile inbound-admission boundary.
 pub fn radroots_replica_ingest_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     radroots_replica_ingest_event_with_factory(exec, event, &RadrootsReplicaDefaultIdFactory)
 }
@@ -188,7 +188,7 @@ pub fn radroots_replica_ingest_event(
 /// not the strict Profile inbound-admission boundary.
 pub fn radroots_replica_ingest_event_with_factory(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let verified_classified_listing = if event.kind_u32() == KIND_CLASSIFIED_LISTING {
@@ -221,7 +221,7 @@ pub fn radroots_replica_ingest_event_with_factory(
 
 fn ingest_event_inner(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
     verified_classified_listing: Option<&RadrootsSignatureVerifiedEvent>,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
@@ -249,7 +249,7 @@ fn ingest_event_inner(
 
 fn ingest_profile_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let data_result = profile_decode::data_from_event(
         event.id_hex(),
@@ -275,11 +275,11 @@ fn ingest_profile_event(
     }
 
     let profile_type = match profile_type {
-        radroots_event::profile::RadrootsProfileType::Individual => "individual",
-        radroots_event::profile::RadrootsProfileType::Farm => "farm",
-        radroots_event::profile::RadrootsProfileType::Coop => "coop",
-        radroots_event::profile::RadrootsProfileType::Any => "any",
-        radroots_event::profile::RadrootsProfileType::Radrootsd => "radrootsd",
+        radroots_event::profile::ProfileType::Individual => "individual",
+        radroots_event::profile::ProfileType::Farm => "farm",
+        radroots_event::profile::ProfileType::Coop => "coop",
+        radroots_event::profile::ProfileType::Any => "any",
+        radroots_event::profile::ProfileType::Radrootsd => "radrootsd",
     };
 
     let existing_result = nostr_profile::find_one(
@@ -340,7 +340,7 @@ fn ingest_profile_event(
 
 fn ingest_farm_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     _factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let farm =
@@ -424,7 +424,7 @@ fn ingest_farm_event(
 
 fn ingest_plot_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     let plot =
@@ -510,7 +510,7 @@ fn ingest_listing_event(
     }
 
     let partition = classify_classified_listing_tags(event.tags());
-    if partition == RadrootsClassifiedListingPartition::FocusedFoodAvailability {
+    if partition == ClassifiedListingPartition::FocusedFoodAvailability {
         let outcome = match project_verified_food_availability_event(verified_event) {
             Ok(RadrootsFoodAvailabilityProjectionOutcome::Focused(_)) => {
                 RadrootsReplicaIngestOutcome::Excluded
@@ -522,14 +522,14 @@ fn ingest_listing_event(
         };
         return replace_listing_projection_with_raw_head(exec, &decision, outcome);
     }
-    if partition == RadrootsClassifiedListingPartition::GenericNip99 {
+    if partition == ClassifiedListingPartition::GenericNip99 {
         return replace_listing_projection_with_raw_head(
             exec,
             &decision,
             RadrootsReplicaIngestOutcome::Excluded,
         );
     }
-    if partition == RadrootsClassifiedListingPartition::Ambiguous {
+    if partition == ClassifiedListingPartition::Ambiguous {
         return replace_listing_projection_with_raw_head(
             exec,
             &decision,
@@ -589,7 +589,7 @@ fn replace_listing_projection_with_raw_head(
 
 fn ingest_list_set_event(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     if event.kind_u32() != radroots_event::envelope::kind::KIND_LIST_SET_GENERIC {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
@@ -653,17 +653,17 @@ fn ingest_list_set_event(
     ))
 }
 
-fn listing_is_orderable(listing: &RadrootsOperationalListing) -> bool {
+fn listing_is_orderable(listing: &OperationalListing) -> bool {
     match listing.availability.as_ref() {
-        Some(RadrootsOperationalListingAvailability::Status { status }) => {
-            matches!(status, RadrootsOperationalListingStatus::Active)
+        Some(OperationalListingAvailability::Status { status }) => {
+            matches!(status, OperationalListingStatus::Active)
         }
-        Some(RadrootsOperationalListingAvailability::Window { .. }) | None => true,
+        Some(OperationalListingAvailability::Window { .. }) | None => true,
     }
 }
 
 fn trade_product_fields_from_listing(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
     listing_addr: &str,
 ) -> Result<ITradeProductFields, RadrootsReplicaEventsError> {
     let bin = primary_listing_bin(listing)?;
@@ -740,7 +740,7 @@ fn trade_product_fields_from_listing(
 }
 
 fn trade_product_notes_from_listing(
-    listing: &RadrootsOperationalListing,
+    listing: &OperationalListing,
 ) -> Result<Option<String>, RadrootsReplicaEventsError> {
     let Some(discounts) = listing
         .discounts
@@ -758,8 +758,8 @@ fn trade_product_notes_from_listing(
 }
 
 fn primary_listing_bin(
-    listing: &RadrootsOperationalListing,
-) -> Result<&RadrootsOperationalListingBin, RadrootsReplicaEventsError> {
+    listing: &OperationalListing,
+) -> Result<&OperationalListingBin, RadrootsReplicaEventsError> {
     listing
         .bins
         .iter()
@@ -925,7 +925,7 @@ fn trade_product_partial_from_fields(fields: &ITradeProductFields) -> ITradeProd
 /// cleanup must be applied atomically through full replica ingestion.
 pub fn radroots_replica_ingest_event_head(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
     if event.kind_u32() == KIND_CLASSIFIED_LISTING {
         verify_nip01_event(event.clone())?;
@@ -994,10 +994,10 @@ fn upsert_event_head(
 
 fn event_head_decision(
     exec: &dyn SqlExecutor,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> Result<EventHeadDecision, RadrootsReplicaEventsError> {
     let candidate_result = if event.kind_u32() == KIND_CLASSIFIED_LISTING {
-        event_head_candidate_for_class(event, RadrootsEventClass::Addressable)
+        event_head_candidate_for_class(event, EventClass::Addressable)
     } else {
         match event_head_candidate_for_event(event) {
             Ok(candidate) => candidate,
@@ -1009,13 +1009,13 @@ fn event_head_decision(
         }
     };
     let candidate = match candidate_result {
-        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
-        RadrootsEventHeadCandidateResult::NotHeadSelected => {
+        EventHeadCandidateResult::Candidate(candidate) => candidate,
+        EventHeadCandidateResult::NotHeadSelected => {
             return Err(RadrootsReplicaEventsError::InvalidData(
                 "event is not head-selected".to_string(),
             ));
         }
-        RadrootsEventHeadCandidateResult::NotPersisted => {
+        EventHeadCandidateResult::NotPersisted => {
             return Ok(EventHeadDecision {
                 apply: false,
                 key: String::new(),
@@ -1027,7 +1027,7 @@ fn event_head_decision(
                 content_hash: String::new(),
             });
         }
-        RadrootsEventHeadCandidateResult::Malformed(err) => {
+        EventHeadCandidateResult::Malformed(err) => {
             return Err(RadrootsReplicaEventsError::InvalidData(format!(
                 "malformed event head: {err:?}"
             )));
@@ -1077,25 +1077,23 @@ fn event_head_decision(
 
 fn current_event_head_from_row(
     row: &NostrEventHead,
-    coordinate: &RadrootsEventHeadCoordinate,
-) -> Result<RadrootsCurrentEventHead, RadrootsReplicaEventsError> {
-    let event_id = RadrootsEventId::parse(&row.last_event_id).map_err(|err| {
+    coordinate: &EventHeadCoordinate,
+) -> Result<CurrentEventHead, RadrootsReplicaEventsError> {
+    let event_id = EventId::parse(&row.last_event_id).map_err(|err| {
         RadrootsReplicaEventsError::InvalidData(format!(
             "nostr event head last_event_id invalid: {err}"
         ))
     })?;
-    Ok(RadrootsCurrentEventHead {
+    Ok(CurrentEventHead {
         coordinate: coordinate.clone(),
         event_id,
         created_at: row.last_created_at,
     })
 }
 
-fn event_head_coordinate_fields(
-    coordinate: &RadrootsEventHeadCoordinate,
-) -> (String, u32, String, String) {
+fn event_head_coordinate_fields(coordinate: &EventHeadCoordinate) -> (String, u32, String, String) {
     match coordinate {
-        RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
+        EventHeadCoordinate::Replaceable { kind, pubkey } => {
             let pubkey = pubkey.to_string();
             (
                 event_head_key(*kind, &pubkey, ""),
@@ -1104,7 +1102,7 @@ fn event_head_coordinate_fields(
                 String::new(),
             )
         }
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind,
             pubkey,
             d_tag,
@@ -1241,7 +1239,7 @@ fn upsert_plot_tags(
 fn upsert_plot_location(
     exec: &dyn SqlExecutor,
     plot_id: &str,
-    location: Option<radroots_event::farm::plot::RadrootsPlotLocation>,
+    location: Option<radroots_event::farm::plot::PlotLocation>,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<(), RadrootsReplicaEventsError> {
     clear_plot_locations(exec, plot_id)?;
@@ -1318,7 +1316,7 @@ fn clear_plot_locations(
 
 fn create_gcs_location(
     exec: &dyn SqlExecutor,
-    gcs: radroots_event::farm::change_set::RadrootsGcsLocation,
+    gcs: radroots_event::farm::change_set::GcsLocation,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<String, RadrootsReplicaEventsError> {
     let d_tag = factory.new_d_tag();
@@ -1370,7 +1368,7 @@ fn map_gcs_polygon_serialize_error(_err: serde_json::Error) -> RadrootsReplicaEv
 
 #[cfg(test)]
 fn serialize_gcs_point(
-    point: &radroots_event::farm::change_set::RadrootsGeoJsonPoint,
+    point: &radroots_event::farm::change_set::GeoJsonPoint,
 ) -> Result<String, serde_json::Error> {
     #[cfg(test)]
     if failpoints::take_gcs_point_serialize_error() {
@@ -1380,13 +1378,13 @@ fn serialize_gcs_point(
 }
 
 #[cfg(not(test))]
-fn serialize_gcs_point(point: &radroots_event::farm::change_set::RadrootsGeoJsonPoint) -> String {
+fn serialize_gcs_point(point: &radroots_event::farm::change_set::GeoJsonPoint) -> String {
     serde_json::to_string(point).expect("gcs.point serializes")
 }
 
 #[cfg(test)]
 fn serialize_gcs_polygon(
-    polygon: &radroots_event::farm::change_set::RadrootsGeoJsonPolygon,
+    polygon: &radroots_event::farm::change_set::GeoJsonPolygon,
 ) -> Result<String, serde_json::Error> {
     #[cfg(test)]
     if failpoints::take_gcs_polygon_serialize_error() {
@@ -1396,9 +1394,7 @@ fn serialize_gcs_polygon(
 }
 
 #[cfg(not(test))]
-fn serialize_gcs_polygon(
-    polygon: &radroots_event::farm::change_set::RadrootsGeoJsonPolygon,
-) -> String {
+fn serialize_gcs_polygon(polygon: &radroots_event::farm::change_set::GeoJsonPolygon) -> String {
     serde_json::to_string(polygon).expect("gcs.polygon serializes")
 }
 
@@ -1411,7 +1407,7 @@ fn upsert_farm_members(
     exec: &dyn SqlExecutor,
     farm_id: &str,
     role: ListSetRole,
-    list_set: &radroots_event::social::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::ListSet,
 ) -> Result<(), RadrootsReplicaEventsError> {
     let role_value = match role {
         ListSetRole::Members => ROLE_MEMBER,
@@ -1465,7 +1461,7 @@ fn upsert_farm_members(
 fn upsert_member_claims(
     exec: &dyn SqlExecutor,
     member_pubkey: &str,
-    list_set: &radroots_event::social::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::ListSet,
 ) -> Result<(), RadrootsReplicaEventsError> {
     let existing_query = farm_member_claim::find_many(
         exec,
@@ -1531,7 +1527,7 @@ enum ListSetRole {
 }
 
 fn unpack_farm_location_strings(
-    location: Option<&radroots_event::farm::RadrootsFarmPublicLocation>,
+    location: Option<&radroots_event::farm::FarmPublicLocation>,
 ) -> (
     Option<String>,
     Option<String>,
@@ -1550,7 +1546,7 @@ fn unpack_farm_location_strings(
 }
 
 fn unpack_plot_location_strings(
-    location: Option<&radroots_event::farm::plot::RadrootsPlotLocation>,
+    location: Option<&radroots_event::farm::plot::PlotLocation>,
 ) -> (
     Option<String>,
     Option<String>,
@@ -1569,7 +1565,7 @@ fn unpack_plot_location_strings(
 }
 
 fn ensure_list_set_entries_tag(
-    list_set: &radroots_event::social::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::ListSet,
     expected: &str,
     label: &str,
 ) -> Result<(), RadrootsReplicaEventsError> {
@@ -1627,17 +1623,15 @@ mod tests {
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::envelope::kind::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
-    use radroots_event::farm::change_set::{
-        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    };
-    use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotLocation};
-    use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-    use radroots_event::listing::operational::RadrootsOperationalListingProduct;
+    use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+    use radroots_event::farm::plot::{Plot, PlotLocation};
+    use radroots_event::farm::{Farm, FarmPublicLocation, FarmRef};
+    use radroots_event::listing::operational::OperationalListingProduct;
     use radroots_event::profile::{
-        RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfileType, radroots_profile_type_tag_value,
+        ProfileType, RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_tag_value,
     };
-    use radroots_event::social::list::RadrootsListEntry;
-    use radroots_event::social::list_set::RadrootsListSet;
+    use radroots_event::social::list::ListEntry;
+    use radroots_event::social::list_set::ListSet;
     use radroots_event_codec::farm::encode as farm_encode;
     use radroots_event_codec::farm::list_sets as farm_list_sets;
     use radroots_event_codec::list_set::encode as list_set_encode;
@@ -1667,8 +1661,8 @@ mod tests {
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    ) -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: format!("{id:064x}"),
             author: author.to_string(),
             created_at,
@@ -1681,12 +1675,12 @@ mod tests {
     }
 
     fn test_event_with_parts(
-        event: &RadrootsEventEnvelope,
+        event: &EventEnvelope,
         kind: u32,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    ) -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: event.id_hex(),
             author: event.author().to_hex().to_owned(),
             created_at: event.created_at_u64(),
@@ -1698,10 +1692,7 @@ mod tests {
         .expect("test event envelope parts")
     }
 
-    fn test_event_with_content(
-        event: &RadrootsEventEnvelope,
-        content: String,
-    ) -> RadrootsEventEnvelope {
+    fn test_event_with_content(event: &EventEnvelope, content: String) -> EventEnvelope {
         test_event_with_parts(event, event.kind_u32(), event.tags_as_vec(), content)
     }
 
@@ -1849,16 +1840,16 @@ mod tests {
         }
     }
 
-    fn sample_gcs(lat: f64, lng: f64, geohash: &str) -> RadrootsGcsLocation {
-        RadrootsGcsLocation {
+    fn sample_gcs(lat: f64, lng: f64, geohash: &str) -> GcsLocation {
+        GcsLocation {
             lat,
             lng,
             geohash: geohash.to_string(),
-            point: RadrootsGeoJsonPoint {
+            point: GeoJsonPoint {
                 r#type: "Point".to_string(),
                 coordinates: [lng, lat],
             },
-            polygon: RadrootsGeoJsonPolygon {
+            polygon: GeoJsonPolygon {
                 r#type: "Polygon".to_string(),
                 coordinates: vec![vec![
                     [lng, lat],
@@ -1888,9 +1879,9 @@ mod tests {
         id: u64,
         author: &str,
         created_at: u32,
-        profile_type: Option<RadrootsProfileType>,
+        profile_type: Option<ProfileType>,
         name: &str,
-    ) -> RadrootsEventEnvelope {
+    ) -> EventEnvelope {
         let profile = serde_json::json!({
             "name": name,
             "display_name": format!("{name}-display"),
@@ -1925,10 +1916,10 @@ mod tests {
         created_at: u32,
         d_tag: &str,
         name: &str,
-        location: Option<RadrootsFarmPublicLocation>,
+        location: Option<FarmPublicLocation>,
         tags: Option<Vec<String>>,
-    ) -> RadrootsEventEnvelope {
-        let farm = RadrootsFarm {
+    ) -> EventEnvelope {
+        let farm = Farm {
             d_tag: d_tag.to_string(),
             name: name.to_string(),
             about: Some("about".to_string()),
@@ -1955,12 +1946,12 @@ mod tests {
         author: &str,
         created_at: u32,
         d_tag: &str,
-        farm_ref: RadrootsFarmRef,
+        farm_ref: FarmRef,
         name: &str,
-        location: Option<RadrootsPlotLocation>,
+        location: Option<PlotLocation>,
         tags: Option<Vec<String>>,
-    ) -> RadrootsEventEnvelope {
-        let plot = RadrootsPlot {
+    ) -> EventEnvelope {
+        let plot = Plot {
             d_tag: d_tag.to_string(),
             farm: farm_ref,
             name: name.to_string(),
@@ -1984,8 +1975,8 @@ mod tests {
         author: &str,
         created_at: u32,
         kind: u32,
-        list_set: &RadrootsListSet,
-    ) -> RadrootsEventEnvelope {
+        list_set: &ListSet,
+    ) -> EventEnvelope {
         let parts = list_set_encode::to_wire_parts_with_kind(list_set, kind).expect("list set");
         test_event_envelope(
             id,
@@ -2003,7 +1994,7 @@ mod tests {
         d_tag: &str,
         status: &str,
         title: &str,
-    ) -> RadrootsEventEnvelope {
+    ) -> EventEnvelope {
         let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
         signed_listing_event(
             author,
@@ -2055,7 +2046,7 @@ mod tests {
         created_at: u64,
         tags: Vec<Vec<String>>,
         content: String,
-    ) -> RadrootsEventEnvelope {
+    ) -> EventEnvelope {
         assert_eq!(
             author, FIXTURE_ALICE_PUBLIC_KEY_HEX,
             "listing tests must use the approved fixture signer"
@@ -2077,7 +2068,7 @@ mod tests {
         radroots_event_from_nostr(&event).expect("listing event adapter")
     }
 
-    fn focused_listing_event(author: &str, created_at: u64, d_tag: &str) -> RadrootsEventEnvelope {
+    fn focused_listing_event(author: &str, created_at: u64, d_tag: &str) -> EventEnvelope {
         focused_listing_event_with_content(
             author,
             created_at,
@@ -2091,7 +2082,7 @@ mod tests {
         created_at: u64,
         d_tag: &str,
         content: &str,
-    ) -> RadrootsEventEnvelope {
+    ) -> EventEnvelope {
         signed_listing_event(
             author,
             created_at,
@@ -2109,7 +2100,7 @@ mod tests {
         )
     }
 
-    fn generic_listing_event(author: &str, created_at: u64, d_tag: &str) -> RadrootsEventEnvelope {
+    fn generic_listing_event(author: &str, created_at: u64, d_tag: &str) -> EventEnvelope {
         signed_listing_event(
             author,
             created_at,
@@ -2130,15 +2121,15 @@ mod tests {
         "USD".parse().expect("currency")
     }
 
-    fn listing_model() -> RadrootsOperationalListing {
-        RadrootsOperationalListing {
+    fn listing_model() -> OperationalListing {
+        OperationalListing {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".parse().expect("d tag"),
             published_at: Some(1),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "c".repeat(64),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAZ".to_string(),
             },
-            product: RadrootsOperationalListingProduct {
+            product: OperationalListingProduct {
                 key: "pasture-eggs".to_string(),
                 title: "Pasture Eggs".to_string(),
                 category: "eggs".to_string(),
@@ -2150,7 +2141,7 @@ mod tests {
                 year: Some("2026".to_string()),
             },
             primary_bin_id: "bin-a".parse().expect("primary bin id"),
-            bins: vec![RadrootsOperationalListingBin {
+            bins: vec![OperationalListingBin {
                 bin_id: "bin-a".parse().expect("bin id"),
                 quantity: Quantity::try_new(listing_decimal("12"), Unit::Each)
                     .unwrap()
@@ -2170,8 +2161,8 @@ mod tests {
             plot: None,
             discounts: Some(Vec::new()),
             inventory_available: Some(listing_decimal("5")),
-            availability: Some(RadrootsOperationalListingAvailability::Status {
-                status: RadrootsOperationalListingStatus::Active,
+            availability: Some(OperationalListingAvailability::Status {
+                status: OperationalListingStatus::Active,
             }),
             delivery_method: None,
             location: None,
@@ -2220,7 +2211,7 @@ mod tests {
             last_created_at: 1,
             content_hash: "hash".to_string(),
         };
-        let coordinate = RadrootsEventHeadCoordinate::Replaceable {
+        let coordinate = EventHeadCoordinate::Replaceable {
             kind: KIND_PROFILE,
             pubkey: "a".repeat(64).parse().expect("pubkey"),
         };
@@ -2480,7 +2471,7 @@ mod tests {
             10,
             &profile_pubkey,
             1,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "alice",
         );
         let profile_no_type = profile_event(9, &profile_pubkey, 0, None, "alice-none");
@@ -2493,7 +2484,7 @@ mod tests {
             11,
             &profile_pubkey,
             2,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "alice-2",
         );
         assert_eq!(
@@ -2508,7 +2499,7 @@ mod tests {
             8,
             &profile_pubkey,
             1,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "alice-old",
         );
         let decision_old = event_head_decision(&exec, &profile_older).expect("decision old");
@@ -2519,7 +2510,7 @@ mod tests {
             12,
             &profile_pubkey,
             2,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "alice-3",
         );
         let decision = event_head_decision(&exec, &profile_same_time_higher_id).expect("decision");
@@ -2528,7 +2519,7 @@ mod tests {
             10,
             &profile_pubkey,
             2,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "alice-0",
         );
         let decision = event_head_decision(&exec, &profile_same_time_lower_id).expect("decision");
@@ -2542,7 +2533,7 @@ mod tests {
             10,
             farm_d_tag,
             "farm-a",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
@@ -2583,12 +2574,12 @@ mod tests {
             &farm_pubkey,
             20,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "plot-a",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("p".to_string()),
                 city: Some("c".to_string()),
                 region: Some("r".to_string()),
@@ -2606,7 +2597,7 @@ mod tests {
             &farm_pubkey,
             21,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -2663,10 +2654,10 @@ mod tests {
             );
         }
 
-        let bad_description = RadrootsListSet {
+        let bad_description = ListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec![farm_pubkey.clone()],
             }],
@@ -2683,10 +2674,10 @@ mod tests {
         );
         assert!(ingest_list_set_event(&exec, &bad_description_event).is_err());
 
-        let bad_image = RadrootsListSet {
+        let bad_image = ListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec![farm_pubkey.clone()],
             }],
@@ -2698,10 +2689,10 @@ mod tests {
             list_set_event(91, &profile_pubkey, 101, KIND_LIST_SET_GENERIC, &bad_image);
         assert!(ingest_list_set_event(&exec, &bad_image_event).is_err());
 
-        let bad_title = RadrootsListSet {
+        let bad_title = ListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec![farm_pubkey.clone()],
             }],
@@ -2713,10 +2704,10 @@ mod tests {
             list_set_event(92, &profile_pubkey, 102, KIND_LIST_SET_GENERIC, &bad_title);
         assert!(ingest_list_set_event(&exec, &bad_title_event).is_err());
 
-        let bad_content = RadrootsListSet {
+        let bad_content = ListSet {
             d_tag: "member_of.farms".to_string(),
             content: "bad".to_string(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec![farm_pubkey.clone()],
             }],
@@ -2733,10 +2724,10 @@ mod tests {
         );
         assert!(ingest_list_set_event(&exec, &bad_content_event).is_err());
 
-        let unknown_farm_list_set = RadrootsListSet {
+        let unknown_farm_list_set = ListSet {
             d_tag: format!("farm:{farm_d_tag}:unknown"),
             content: String::new(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec![profile_pubkey.clone()],
             }],
@@ -2757,7 +2748,7 @@ mod tests {
         assert!(parse_farm_list_set_d_tag("farm:AAAAAAAAAAAAAAAAAAAAAA:plots").is_some());
         assert_eq!(to_value_opt(Some("x".to_string())), Some(Value::from("x")));
         assert_eq!(to_value_opt(None), Some(Value::Null));
-        let location = RadrootsFarmPublicLocation {
+        let location = FarmPublicLocation {
             primary: "p".to_string(),
             city: Some("c".to_string()),
             region: Some("r".to_string()),
@@ -2769,7 +2760,7 @@ mod tests {
             Some("p".to_string())
         );
         assert_eq!(
-            unpack_plot_location_strings(Some(&RadrootsPlotLocation {
+            unpack_plot_location_strings(Some(&PlotLocation {
                 primary: Some("p".to_string()),
                 city: None,
                 region: None,
@@ -2782,10 +2773,10 @@ mod tests {
         assert!(ensure_list_set_entries_tag(&bad_image, "p", "x").is_ok());
         assert!(
             ensure_list_set_entries_tag(
-                &RadrootsListSet {
+                &ListSet {
                     d_tag: "x".to_string(),
                     content: String::new(),
-                    entries: vec![RadrootsListEntry {
+                    entries: vec![ListEntry {
                         tag: "a".to_string(),
                         values: vec!["x".to_string()],
                     }],
@@ -3305,7 +3296,7 @@ mod tests {
             upsert_plot_location(
                 &not_found_plot_locations,
                 &plot_id,
-                Some(RadrootsPlotLocation {
+                Some(PlotLocation {
                     primary: None,
                     city: None,
                     region: None,
@@ -3404,7 +3395,7 @@ mod tests {
             upsert_plot_location(
                 &internal_plot_locations,
                 &plot_id,
-                Some(RadrootsPlotLocation {
+                Some(PlotLocation {
                     primary: None,
                     city: None,
                     region: None,
@@ -3465,7 +3456,7 @@ mod tests {
             500,
             &profile_pubkey,
             50,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "pass-profile",
         );
         assert_eq!(
@@ -3484,7 +3475,7 @@ mod tests {
             51,
             farm_d_tag,
             "pass-farm",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
@@ -3503,12 +3494,12 @@ mod tests {
             &farm_pubkey,
             52,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "pass-plot",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("plot".to_string()),
                 city: None,
                 region: None,
@@ -3539,15 +3530,15 @@ mod tests {
         );
 
         let farm_row = find_farm_by_ref(&pass, &farm_pubkey, farm_d_tag).expect("farm row");
-        let mixed_member_entries = RadrootsListSet {
+        let mixed_member_entries = ListSet {
             d_tag: format!("farm:{farm_d_tag}:members"),
             content: String::new(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: Vec::new(),
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec!["6".repeat(64)],
                 },
@@ -3565,15 +3556,15 @@ mod tests {
             )
             .is_ok()
         );
-        let mixed_claim_entries = RadrootsListSet {
+        let mixed_claim_entries = ListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: Vec::new(),
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec![farm_pubkey.clone()],
                 },
@@ -3614,7 +3605,7 @@ mod tests {
             60,
             farm_d_tag,
             "wrapper-farm",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: None,
@@ -3648,12 +3639,12 @@ mod tests {
             &farm_pubkey,
             62,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "wrapper-plot",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("plot-primary".to_string()),
                 city: None,
                 region: None,
@@ -3672,7 +3663,7 @@ mod tests {
             &farm_pubkey,
             63,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -3702,7 +3693,7 @@ mod tests {
             700,
             &profile_pubkey,
             70,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "txn-profile",
         );
         assert_eq!(
@@ -3731,7 +3722,7 @@ mod tests {
             71,
             farm_d_tag,
             "txn-farm",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: None,
@@ -3750,12 +3741,12 @@ mod tests {
             &farm_pubkey,
             72,
             "AAAAAAAAAAAAAAAAAAAAAQ",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "txn-plot",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("primary".to_string()),
                 city: None,
                 region: None,
@@ -3786,7 +3777,7 @@ mod tests {
             upsert_plot_location(
                 &pass_txn,
                 &plot_id,
-                Some(RadrootsPlotLocation {
+                Some(PlotLocation {
                     primary: Some("primary".to_string()),
                     city: None,
                     region: None,
@@ -3837,7 +3828,7 @@ mod tests {
             upsert_plot_location(
                 &txn,
                 "plot-id",
-                Some(RadrootsPlotLocation {
+                Some(PlotLocation {
                     primary: Some("primary".to_string()),
                     city: None,
                     region: None,
@@ -3883,7 +3874,7 @@ mod tests {
             800,
             &profile_pubkey,
             80,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "profile-base",
         );
         let profile_bad_content = test_event_with_content(&profile, "{".to_string());
@@ -3904,7 +3895,7 @@ mod tests {
             801,
             &profile_pubkey,
             81,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "profile-update",
         );
         let profile_update_fail = QueryFailExecutor {
@@ -3923,7 +3914,7 @@ mod tests {
             802,
             &"7".repeat(64),
             82,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "profile-new",
         );
         assert!(ingest_profile_event(&profile_create_fail, &profile_new).is_err());
@@ -3937,7 +3928,7 @@ mod tests {
             803,
             &"c".repeat(64),
             83,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "profile-state",
         );
         assert!(ingest_profile_event(&profile_state_fail, &profile_state_event).is_err());
@@ -3948,7 +3939,7 @@ mod tests {
             90,
             farm_d_tag,
             "farm-seed",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: Some("region".to_string()),
@@ -4040,7 +4031,7 @@ mod tests {
             95,
             farm_d_tag,
             "farm-gcs",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: None,
@@ -4065,7 +4056,7 @@ mod tests {
             96,
             farm_d_tag,
             "farm-rel",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: None,
@@ -4101,7 +4092,7 @@ mod tests {
             98,
             farm_d_tag,
             "farm-public-location",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: None,
@@ -4122,7 +4113,7 @@ mod tests {
             99,
             farm_d_tag,
             "farm-public-locality",
-            Some(RadrootsFarmPublicLocation {
+            Some(FarmPublicLocation {
                 primary: "primary".to_string(),
                 city: Some("city".to_string()),
                 region: None,
@@ -4142,12 +4133,12 @@ mod tests {
             &farm_pubkey,
             100,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "plot-seed",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("primary".to_string()),
                 city: None,
                 region: None,
@@ -4174,7 +4165,7 @@ mod tests {
             &farm_pubkey,
             101,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -4194,7 +4185,7 @@ mod tests {
             &farm_pubkey,
             102,
             plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -4214,7 +4205,7 @@ mod tests {
             &farm_pubkey,
             103,
             "AAAAAAAAAAAAAAAAAAAAAg",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -4234,7 +4225,7 @@ mod tests {
             &farm_pubkey,
             104,
             "AAAAAAAAAAAAAAAAAAAAAw",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -4254,12 +4245,12 @@ mod tests {
             &farm_pubkey,
             105,
             "AAAAAAAAAAAAAAAAAAAAAw",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "plot-gcs",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("primary".to_string()),
                 city: None,
                 region: None,
@@ -4280,12 +4271,12 @@ mod tests {
             &farm_pubkey,
             106,
             "AAAAAAAAAAAAAAAAAAAAAw",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
             "plot-rel",
-            Some(RadrootsPlotLocation {
+            Some(PlotLocation {
                 primary: Some("primary".to_string()),
                 city: None,
                 region: None,
@@ -4306,7 +4297,7 @@ mod tests {
             &farm_pubkey,
             107,
             "AAAAAAAAAAAAAAAAAAAAAw",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.to_string(),
             },
@@ -4316,13 +4307,8 @@ mod tests {
         );
         assert!(ingest_plot_event(&plot_state_fail, &plot_state_event, &FixedFactory).is_err());
 
-        let list_decode_fail = profile_event(
-            830,
-            &farm_pubkey,
-            108,
-            Some(RadrootsProfileType::Farm),
-            "unused",
-        );
+        let list_decode_fail =
+            profile_event(830, &farm_pubkey, 108, Some(ProfileType::Farm), "unused");
         let list_decode_fail = test_event_with_parts(
             &list_decode_fail,
             KIND_LIST_SET_GENERIC,
@@ -4420,7 +4406,7 @@ mod tests {
             808,
             &"9".repeat(64),
             101,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "profile-update-error",
         );
         assert!(radroots_replica_ingest_event_head(&state_update_fail, &profile_update).is_err());
@@ -4435,7 +4421,7 @@ mod tests {
             900,
             &"e".repeat(64),
             120,
-            Some(RadrootsProfileType::Individual),
+            Some(ProfileType::Individual),
             "profile-state-insert",
         );
         let state_insert_fail = QueryFailExecutor {
@@ -4461,7 +4447,7 @@ mod tests {
             &farm_pubkey,
             122,
             "AAAAAAAAAAAAAAAAAAAAAg",
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: farm_pubkey.clone(),
                 d_tag: farm_d_tag.clone(),
             },
@@ -4549,7 +4535,7 @@ mod tests {
             upsert_plot_location(
                 &plot_gcs_insert_fail,
                 &plot_id,
-                Some(RadrootsPlotLocation {
+                Some(PlotLocation {
                     primary: Some("primary".to_string()),
                     city: None,
                     region: None,
@@ -4570,7 +4556,7 @@ mod tests {
             upsert_plot_location(
                 &plot_rel_insert_fail,
                 &plot_id,
-                Some(RadrootsPlotLocation {
+                Some(PlotLocation {
                     primary: Some("primary".to_string()),
                     city: None,
                     region: None,
@@ -4621,19 +4607,19 @@ mod tests {
         let (farm_id, farm_pubkey, _, _) = seed_rows(&exec);
 
         let member_pubkey = "6".repeat(64);
-        let member_list_set = RadrootsListSet {
+        let member_list_set = ListSet {
             d_tag: "farm:AAAAAAAAAAAAAAAAAAAAAQ:members".to_string(),
             content: String::new(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: Vec::new(),
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec![member_pubkey.clone(), "ignored".to_string()],
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec![member_pubkey.clone()],
                 },
@@ -4666,19 +4652,19 @@ mod tests {
             .expect("plots is no-op");
 
         let claimant_pubkey = "7".repeat(64);
-        let claims_list_set = RadrootsListSet {
+        let claims_list_set = ListSet {
             d_tag: "member_of.farms".to_string(),
             content: String::new(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: Vec::new(),
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec![farm_pubkey.clone(), "ignored".to_string()],
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec![farm_pubkey.clone()],
                 },
@@ -4716,7 +4702,7 @@ mod tests {
             &farm_pubkey,
             220,
             &plot_d_tag,
-            RadrootsFarmRef {
+            FarmRef {
                 pubkey: "1".repeat(64),
                 d_tag: farm_d_tag.clone(),
             },

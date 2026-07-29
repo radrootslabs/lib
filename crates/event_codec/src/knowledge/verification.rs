@@ -3,13 +3,12 @@ use alloc::string::{String, ToString};
 
 use core::fmt;
 
-use radroots_event::contract::RadrootsContractValidationError;
-use radroots_event::envelope::RadrootsEventEnvelope;
+use radroots_event::contract::ContractValidationError;
+use radroots_event::envelope::EventEnvelope;
 use radroots_event::knowledge::{
-    RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
-    RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,
-    RadrootsKnowledgeReview, RadrootsKnowledgeSource, RadrootsWikiArticle,
-    RadrootsWikiMergeRequest, RadrootsWikiRedirect,
+    ContributionAttestation, EvidenceBounty, KnowledgeChangeProposal, KnowledgeClaim,
+    KnowledgeFieldReport, KnowledgeRelation, KnowledgeReview, KnowledgeSource, WikiArticle,
+    WikiMergeRequest, WikiRedirect,
 };
 
 use crate::error::EventParseError;
@@ -27,7 +26,7 @@ use crate::verification::{RadrootsNip01VerificationError, verify_nip01_event};
 #[derive(Debug)]
 pub enum RadrootsDecodeError {
     Nip01Verification(RadrootsNip01VerificationError),
-    ContractValidation(RadrootsContractValidationError),
+    ContractValidation(ContractValidationError),
     EventParse(EventParseError),
     UnsupportedContract { contract_id: String },
 }
@@ -77,8 +76,8 @@ impl From<RadrootsNip01VerificationError> for RadrootsDecodeError {
     }
 }
 
-impl From<RadrootsContractValidationError> for RadrootsDecodeError {
-    fn from(value: RadrootsContractValidationError) -> Self {
+impl From<ContractValidationError> for RadrootsDecodeError {
+    fn from(value: ContractValidationError) -> Self {
         Self::ContractValidation(value)
     }
 }
@@ -86,21 +85,21 @@ impl From<RadrootsContractValidationError> for RadrootsDecodeError {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug)]
 pub enum RadrootsDecodedEvent {
-    WikiArticle(RadrootsParsedEvent<RadrootsWikiArticle>),
-    WikiRedirect(RadrootsParsedEvent<RadrootsWikiRedirect>),
-    WikiMergeRequest(RadrootsParsedEvent<RadrootsWikiMergeRequest>),
-    KnowledgeSource(RadrootsParsedEvent<RadrootsKnowledgeSource>),
-    KnowledgeClaim(RadrootsParsedEvent<RadrootsKnowledgeClaim>),
-    KnowledgeRelation(RadrootsParsedEvent<RadrootsKnowledgeRelation>),
-    KnowledgeReview(RadrootsParsedEvent<RadrootsKnowledgeReview>),
-    KnowledgeFieldReport(RadrootsParsedEvent<RadrootsKnowledgeFieldReport>),
-    EvidenceBounty(RadrootsParsedEvent<RadrootsEvidenceBounty>),
-    KnowledgeChangeProposal(RadrootsParsedEvent<RadrootsKnowledgeChangeProposal>),
-    ContributionAttestation(RadrootsParsedEvent<RadrootsContributionAttestation>),
+    WikiArticle(RadrootsParsedEvent<WikiArticle>),
+    WikiRedirect(RadrootsParsedEvent<WikiRedirect>),
+    WikiMergeRequest(RadrootsParsedEvent<WikiMergeRequest>),
+    KnowledgeSource(RadrootsParsedEvent<KnowledgeSource>),
+    KnowledgeClaim(RadrootsParsedEvent<KnowledgeClaim>),
+    KnowledgeRelation(RadrootsParsedEvent<KnowledgeRelation>),
+    KnowledgeReview(RadrootsParsedEvent<KnowledgeReview>),
+    KnowledgeFieldReport(RadrootsParsedEvent<KnowledgeFieldReport>),
+    EvidenceBounty(RadrootsParsedEvent<EvidenceBounty>),
+    KnowledgeChangeProposal(RadrootsParsedEvent<KnowledgeChangeProposal>),
+    ContributionAttestation(RadrootsParsedEvent<ContributionAttestation>),
 }
 
 impl RadrootsDecodedEvent {
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         match self {
             Self::WikiArticle(parsed) => &parsed.event,
             Self::WikiRedirect(parsed) => &parsed.event,
@@ -168,7 +167,7 @@ pub fn decode_validated_event(
 
 /// Verifies NIP-01 identity before applying the knowledge contract and decoder.
 pub fn verify_and_decode_radroots_event(
-    event: RadrootsEventEnvelope,
+    event: EventEnvelope,
 ) -> Result<RadrootsDecodedEvent, RadrootsDecodeError> {
     let verified = verify_nip01_event(event)?;
     let contract_validated = validate_event_contract(verified)?;

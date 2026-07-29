@@ -1,14 +1,14 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use crate::social::{RadrootsSocialMediaDimensions, RadrootsSocialMediaThumbnail};
+use crate::social::{SocialMediaDimensions, SocialMediaThumbnail};
 
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsFileMetadata {
+pub struct FileMetadata {
     pub url: String,
     pub mime_type: String,
     pub sha256: String,
@@ -26,7 +26,7 @@ pub struct RadrootsFileMetadata {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dimensions: Option<RadrootsSocialMediaDimensions>,
+    pub dimensions: Option<SocialMediaDimensions>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -36,7 +36,7 @@ pub struct RadrootsFileMetadata {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub thumbnails: Option<Vec<RadrootsSocialMediaThumbnail>>,
+    pub thumbnails: Option<Vec<SocialMediaThumbnail>>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -80,13 +80,13 @@ mod tests {
 
     #[test]
     fn file_metadata_represents_required_nip94_fields() {
-        let metadata = RadrootsFileMetadata {
+        let metadata = FileMetadata {
             url: "https://example.test/file.jpg".to_string(),
             mime_type: "image/jpeg".to_string(),
             sha256: "a".repeat(64),
             original_sha256: Some("b".repeat(64)),
             size: Some(1024),
-            dimensions: Some(RadrootsSocialMediaDimensions {
+            dimensions: Some(SocialMediaDimensions {
                 width: 640,
                 height: 480,
             }),

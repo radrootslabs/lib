@@ -1,8 +1,7 @@
 use radroots_event::{
     envelope::kind::KIND_DELETION_REQUEST,
     post::deletion::{
-        RadrootsAuthoredNip09DeletionRequest, RadrootsNip09DeletionAddressTarget,
-        RadrootsNip09DeletionEventTarget,
+        AuthoredNip09DeletionRequest, Nip09DeletionAddressTarget, Nip09DeletionEventTarget,
     },
 };
 use radroots_event_codec::deletion::admission::verify_and_admit_nip09_deletion_request_event;
@@ -129,16 +128,16 @@ async fn typed_nip09_deletion_request_reaches_client_publication() {
     assert!(matches!(helper_error, RadrootsNostrError::ClientError(_)));
 }
 
-fn request() -> RadrootsAuthoredNip09DeletionRequest {
-    RadrootsAuthoredNip09DeletionRequest::new(
+fn request() -> AuthoredNip09DeletionRequest {
+    AuthoredNip09DeletionRequest::new(
         "superseded",
-        vec![RadrootsNip09DeletionEventTarget::parse(TARGET_EVENT_ID, 1).expect("event target")],
+        vec![Nip09DeletionEventTarget::parse(TARGET_EVENT_ID, 1).expect("event target")],
         vec![
-            RadrootsNip09DeletionAddressTarget::parse(format!(
+            Nip09DeletionAddressTarget::parse(format!(
                 "30402:{FIXTURE_BOB_PUBLIC_KEY_HEX}:carrots"
             ))
             .expect("listing target"),
-            RadrootsNip09DeletionAddressTarget::parse(format!("0:{FIXTURE_BOB_PUBLIC_KEY_HEX}:"))
+            Nip09DeletionAddressTarget::parse(format!("0:{FIXTURE_BOB_PUBLIC_KEY_HEX}:"))
                 .expect("profile target"),
         ],
     )

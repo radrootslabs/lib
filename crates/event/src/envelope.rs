@@ -11,18 +11,18 @@ use alloc::{string::String, vec::Vec};
 #[cfg(any(feature = "std", test))]
 use std::{string::String, vec::Vec};
 
-use crate::id::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
+use crate::id::{EventId, EventSignature, ParseError, parse_public_key};
 use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
-    DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,
+    DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES, Nip01EventWire,
 };
 use core::fmt;
 use radroots_identity::PublicKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsEventTimestamp(u64);
+pub struct EventTimestamp(u64);
 
-impl RadrootsEventTimestamp {
+impl EventTimestamp {
     pub const fn new(value: u64) -> Self {
         Self(value)
     }
@@ -33,7 +33,7 @@ impl RadrootsEventTimestamp {
     }
 }
 
-impl From<u64> for RadrootsEventTimestamp {
+impl From<u64> for EventTimestamp {
     #[inline]
     fn from(value: u64) -> Self {
         Self::new(value)
@@ -41,7 +41,7 @@ impl From<u64> for RadrootsEventTimestamp {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl serde::Serialize for RadrootsEventTimestamp {
+impl serde::Serialize for EventTimestamp {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -51,7 +51,7 @@ impl serde::Serialize for RadrootsEventTimestamp {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl<'de> serde::Deserialize<'de> for RadrootsEventTimestamp {
+impl<'de> serde::Deserialize<'de> for EventTimestamp {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -62,16 +62,16 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventTimestamp {
 }
 
 #[cfg(all(test, feature = "std"))]
-impl dto_bindgen::Dto for RadrootsEventTimestamp {
+impl dto_bindgen::Dto for EventTimestamp {
     fn describe(ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         <u64 as dto_bindgen::Dto>::describe(ctx)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsEventKind(u32);
+pub struct EventKind(u32);
 
-impl RadrootsEventKind {
+impl EventKind {
     pub const fn new(value: u32) -> Self {
         Self(value)
     }
@@ -81,18 +81,18 @@ impl RadrootsEventKind {
         self.0
     }
 
-    pub const fn class(self) -> RadrootsEventKindClass {
+    pub const fn class(self) -> EventKindClass {
         match self.0 {
-            0 | 3 => RadrootsEventKindClass::Replaceable,
-            10_000..=19_999 => RadrootsEventKindClass::Replaceable,
-            20_000..=29_999 => RadrootsEventKindClass::Ephemeral,
-            30_000..=39_999 => RadrootsEventKindClass::Addressable,
-            _ => RadrootsEventKindClass::Regular,
+            0 | 3 => EventKindClass::Replaceable,
+            10_000..=19_999 => EventKindClass::Replaceable,
+            20_000..=29_999 => EventKindClass::Ephemeral,
+            30_000..=39_999 => EventKindClass::Addressable,
+            _ => EventKindClass::Regular,
         }
     }
 }
 
-impl From<u32> for RadrootsEventKind {
+impl From<u32> for EventKind {
     #[inline]
     fn from(value: u32) -> Self {
         Self::new(value)
@@ -100,7 +100,7 @@ impl From<u32> for RadrootsEventKind {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl serde::Serialize for RadrootsEventKind {
+impl serde::Serialize for EventKind {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -110,7 +110,7 @@ impl serde::Serialize for RadrootsEventKind {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl<'de> serde::Deserialize<'de> for RadrootsEventKind {
+impl<'de> serde::Deserialize<'de> for EventKind {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -121,14 +121,14 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventKind {
 }
 
 #[cfg(all(test, feature = "std"))]
-impl dto_bindgen::Dto for RadrootsEventKind {
+impl dto_bindgen::Dto for EventKind {
     fn describe(ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         <u32 as dto_bindgen::Dto>::describe(ctx)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RadrootsEventKindClass {
+pub enum EventKindClass {
     Regular,
     Replaceable,
     Ephemeral,
@@ -136,10 +136,10 @@ pub enum RadrootsEventKindClass {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventEnvelopeError {
-    InvalidId(RadrootsIdParseError),
-    InvalidAuthor(RadrootsIdParseError),
-    InvalidSignature(RadrootsIdParseError),
+pub enum EventEnvelopeError {
+    InvalidId(ParseError),
+    InvalidAuthor(ParseError),
+    InvalidSignature(ParseError),
     NonCanonicalId,
     NonCanonicalAuthor,
     NonCanonicalSignature,
@@ -176,7 +176,7 @@ pub enum RadrootsEventEnvelopeError {
     },
 }
 
-impl fmt::Display for RadrootsEventEnvelopeError {
+impl fmt::Display for EventEnvelopeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidId(error) => write!(f, "event envelope id is invalid: {error}"),
@@ -231,10 +231,10 @@ impl fmt::Display for RadrootsEventEnvelopeError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsEventEnvelopeError {}
+impl std::error::Error for EventEnvelopeError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsEventEnvelopeLimits {
+pub struct EventEnvelopeLimits {
     pub max_content_bytes: usize,
     pub max_tag_count: usize,
     pub max_total_tag_elements: usize,
@@ -242,7 +242,7 @@ pub struct RadrootsEventEnvelopeLimits {
     pub max_total_tag_bytes: usize,
 }
 
-impl Default for RadrootsEventEnvelopeLimits {
+impl Default for EventEnvelopeLimits {
     fn default() -> Self {
         Self {
             max_content_bytes: DEFAULT_CONTENT_MAX_BYTES,
@@ -255,29 +255,29 @@ impl Default for RadrootsEventEnvelopeLimits {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventTag(Vec<String>);
+pub struct EventTag(Vec<String>);
 
-impl RadrootsEventTag {
-    pub fn new(index: usize, values: Vec<String>) -> Result<Self, RadrootsEventEnvelopeError> {
-        Self::new_with_limits(index, values, RadrootsEventEnvelopeLimits::default())
+impl EventTag {
+    pub fn new(index: usize, values: Vec<String>) -> Result<Self, EventEnvelopeError> {
+        Self::new_with_limits(index, values, EventEnvelopeLimits::default())
     }
 
     pub fn new_with_limits(
         index: usize,
         values: Vec<String>,
-        limits: RadrootsEventEnvelopeLimits,
-    ) -> Result<Self, RadrootsEventEnvelopeError> {
+        limits: EventEnvelopeLimits,
+    ) -> Result<Self, EventEnvelopeError> {
         validate_tag(index, &values)?;
         let total_tag_elements = values.len();
         if total_tag_elements > limits.max_total_tag_elements {
-            return Err(RadrootsEventEnvelopeError::TooManyTagElements {
+            return Err(EventEnvelopeError::TooManyTagElements {
                 max: limits.max_total_tag_elements,
                 actual: total_tag_elements,
             });
         }
         let total_bytes = validate_tag_elements(index, &values, limits)?;
         if total_bytes > limits.max_total_tag_bytes {
-            return Err(RadrootsEventEnvelopeError::TagsTooLarge {
+            return Err(EventEnvelopeError::TagsTooLarge {
                 max: limits.max_total_tag_bytes,
                 actual: total_bytes,
             });
@@ -297,7 +297,7 @@ impl RadrootsEventTag {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl serde::Serialize for RadrootsEventTag {
+impl serde::Serialize for EventTag {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -307,7 +307,7 @@ impl serde::Serialize for RadrootsEventTag {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl<'de> serde::Deserialize<'de> for RadrootsEventTag {
+impl<'de> serde::Deserialize<'de> for EventTag {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -318,20 +318,20 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventTag {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventTags(Vec<RadrootsEventTag>);
+pub struct EventTags(Vec<EventTag>);
 
-impl RadrootsEventTags {
-    pub fn new(values: Vec<Vec<String>>) -> Result<Self, RadrootsEventEnvelopeError> {
-        Self::new_with_limits(values, RadrootsEventEnvelopeLimits::default())
+impl EventTags {
+    pub fn new(values: Vec<Vec<String>>) -> Result<Self, EventEnvelopeError> {
+        Self::new_with_limits(values, EventEnvelopeLimits::default())
     }
 
     pub fn new_with_limits(
         values: Vec<Vec<String>>,
-        limits: RadrootsEventEnvelopeLimits,
-    ) -> Result<Self, RadrootsEventEnvelopeError> {
+        limits: EventEnvelopeLimits,
+    ) -> Result<Self, EventEnvelopeError> {
         let tag_count = values.len();
         if tag_count > limits.max_tag_count {
-            return Err(RadrootsEventEnvelopeError::TooManyTags {
+            return Err(EventEnvelopeError::TooManyTags {
                 max: limits.max_tag_count,
                 actual: tag_count,
             });
@@ -340,7 +340,7 @@ impl RadrootsEventTags {
             .iter()
             .fold(0usize, |total, tag| total.saturating_add(tag.len()));
         if total_tag_elements > limits.max_total_tag_elements {
-            return Err(RadrootsEventEnvelopeError::TooManyTagElements {
+            return Err(EventEnvelopeError::TooManyTagElements {
                 max: limits.max_total_tag_elements,
                 actual: total_tag_elements,
             });
@@ -352,18 +352,18 @@ impl RadrootsEventTags {
             total_tag_bytes =
                 total_tag_bytes.saturating_add(validate_tag_elements(index, &tag, limits)?);
             if total_tag_bytes > limits.max_total_tag_bytes {
-                return Err(RadrootsEventEnvelopeError::TagsTooLarge {
+                return Err(EventEnvelopeError::TagsTooLarge {
                     max: limits.max_total_tag_bytes,
                     actual: total_tag_bytes,
                 });
             }
-            tags.push(RadrootsEventTag(tag));
+            tags.push(EventTag(tag));
         }
         Ok(Self(tags))
     }
 
     #[inline]
-    pub fn as_slice(&self) -> &[RadrootsEventTag] {
+    pub fn as_slice(&self) -> &[EventTag] {
         self.0.as_slice()
     }
 
@@ -373,7 +373,7 @@ impl RadrootsEventTags {
 
     #[inline]
     pub fn into_vec(self) -> Vec<Vec<String>> {
-        self.0.into_iter().map(RadrootsEventTag::into_vec).collect()
+        self.0.into_iter().map(EventTag::into_vec).collect()
     }
 
     #[inline]
@@ -388,7 +388,7 @@ impl RadrootsEventTags {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl serde::Serialize for RadrootsEventTags {
+impl serde::Serialize for EventTags {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -398,7 +398,7 @@ impl serde::Serialize for RadrootsEventTags {
 }
 
 #[cfg(any(feature = "serde", test))]
-impl<'de> serde::Deserialize<'de> for RadrootsEventTags {
+impl<'de> serde::Deserialize<'de> for EventTags {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -409,14 +409,14 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventTags {
 }
 
 #[cfg(all(test, feature = "std"))]
-impl dto_bindgen::Dto for RadrootsEventTags {
+impl dto_bindgen::Dto for EventTags {
     fn describe(ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         <Vec<Vec<String>> as dto_bindgen::Dto>::describe(ctx)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventEnvelopeParts {
+pub struct EventEnvelopeParts {
     pub id: String,
     pub author: String,
     pub created_at: u64,
@@ -434,55 +434,54 @@ pub struct RadrootsEventEnvelopeParts {
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsEventEnvelopeDto")))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventEnvelope {
-    id: RadrootsEventId,
+pub struct EventEnvelope {
+    id: EventId,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     author: PublicKey,
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_number"))]
-    created_at: RadrootsEventTimestamp,
-    kind: RadrootsEventKind,
-    tags: RadrootsEventTags,
+    created_at: EventTimestamp,
+    kind: EventKind,
+    tags: EventTags,
     content: String,
-    sig: RadrootsEventSignature,
+    sig: EventSignature,
 }
 
-impl RadrootsEventEnvelope {
-    pub fn new(parts: RadrootsEventEnvelopeParts) -> Result<Self, RadrootsEventEnvelopeError> {
-        Self::new_with_limits(parts, RadrootsEventEnvelopeLimits::default())
+impl EventEnvelope {
+    pub fn new(parts: EventEnvelopeParts) -> Result<Self, EventEnvelopeError> {
+        Self::new_with_limits(parts, EventEnvelopeLimits::default())
     }
 
     pub fn new_with_limits(
-        parts: RadrootsEventEnvelopeParts,
-        limits: RadrootsEventEnvelopeLimits,
-    ) -> Result<Self, RadrootsEventEnvelopeError> {
-        let id = RadrootsEventId::parse(parts.id.as_str())
-            .map_err(RadrootsEventEnvelopeError::InvalidId)?;
+        parts: EventEnvelopeParts,
+        limits: EventEnvelopeLimits,
+    ) -> Result<Self, EventEnvelopeError> {
+        let id = EventId::parse(parts.id.as_str()).map_err(EventEnvelopeError::InvalidId)?;
         if id.to_hex() != parts.id {
-            return Err(RadrootsEventEnvelopeError::NonCanonicalId);
+            return Err(EventEnvelopeError::NonCanonicalId);
         }
-        let author = parse_public_key(parts.author.as_str())
-            .map_err(RadrootsEventEnvelopeError::InvalidAuthor)?;
+        let author =
+            parse_public_key(parts.author.as_str()).map_err(EventEnvelopeError::InvalidAuthor)?;
         if author.to_hex() != parts.author {
-            return Err(RadrootsEventEnvelopeError::NonCanonicalAuthor);
+            return Err(EventEnvelopeError::NonCanonicalAuthor);
         }
-        let sig = RadrootsEventSignature::parse(parts.sig.as_str())
-            .map_err(RadrootsEventEnvelopeError::InvalidSignature)?;
+        let sig = EventSignature::parse(parts.sig.as_str())
+            .map_err(EventEnvelopeError::InvalidSignature)?;
         if sig.to_hex() != parts.sig {
-            return Err(RadrootsEventEnvelopeError::NonCanonicalSignature);
+            return Err(EventEnvelopeError::NonCanonicalSignature);
         }
         let content_len = parts.content.len();
         if content_len > limits.max_content_bytes {
-            return Err(RadrootsEventEnvelopeError::ContentTooLarge {
+            return Err(EventEnvelopeError::ContentTooLarge {
                 max: limits.max_content_bytes,
                 actual: content_len,
             });
         }
-        let tags = RadrootsEventTags::new_with_limits(parts.tags, limits)?;
+        let tags = EventTags::new_with_limits(parts.tags, limits)?;
         Ok(Self {
             id,
             author,
-            created_at: RadrootsEventTimestamp::new(parts.created_at),
-            kind: RadrootsEventKind::new(parts.kind),
+            created_at: EventTimestamp::new(parts.created_at),
+            kind: EventKind::new(parts.kind),
             tags,
             content: parts.content,
             sig,
@@ -490,7 +489,7 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn id(&self) -> &RadrootsEventId {
+    pub fn id(&self) -> &EventId {
         &self.id
     }
 
@@ -505,7 +504,7 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn created_at(&self) -> RadrootsEventTimestamp {
+    pub fn created_at(&self) -> EventTimestamp {
         self.created_at
     }
 
@@ -515,7 +514,7 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn kind(&self) -> RadrootsEventKind {
+    pub fn kind(&self) -> EventKind {
         self.kind
     }
 
@@ -525,17 +524,17 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn kind_class(&self) -> RadrootsEventKindClass {
+    pub fn kind_class(&self) -> EventKindClass {
         self.kind.class()
     }
 
     #[inline]
-    pub fn tags(&self) -> &RadrootsEventTags {
+    pub fn tags(&self) -> &EventTags {
         &self.tags
     }
 
     #[inline]
-    pub fn tag_slices(&self) -> &[RadrootsEventTag] {
+    pub fn tag_slices(&self) -> &[EventTag] {
         self.tags.as_slice()
     }
 
@@ -549,7 +548,7 @@ impl RadrootsEventEnvelope {
     }
 
     #[inline]
-    pub fn sig(&self) -> &RadrootsEventSignature {
+    pub fn sig(&self) -> &EventSignature {
         &self.sig
     }
 
@@ -558,8 +557,8 @@ impl RadrootsEventEnvelope {
         self.sig.to_hex()
     }
 
-    pub fn to_nip01_wire(&self) -> RadrootsNip01EventWire {
-        RadrootsNip01EventWire {
+    pub fn to_nip01_wire(&self) -> Nip01EventWire {
+        Nip01EventWire {
             id: self.id.to_hex(),
             pubkey: self.author.to_hex(),
             created_at: self.created_at.as_u64(),
@@ -572,15 +571,15 @@ impl RadrootsEventEnvelope {
     }
 }
 
-fn validate_tag(index: usize, values: &[String]) -> Result<(), RadrootsEventEnvelopeError> {
+fn validate_tag(index: usize, values: &[String]) -> Result<(), EventEnvelopeError> {
     let Some(key) = values.first() else {
-        return Err(RadrootsEventEnvelopeError::EmptyTag { index });
+        return Err(EventEnvelopeError::EmptyTag { index });
     };
     if key.is_empty() {
-        return Err(RadrootsEventEnvelopeError::EmptyTagKey { index });
+        return Err(EventEnvelopeError::EmptyTagKey { index });
     }
     if key.chars().any(char::is_control) {
-        return Err(RadrootsEventEnvelopeError::ControlCharacterTagKey { index });
+        return Err(EventEnvelopeError::ControlCharacterTagKey { index });
     }
     Ok(())
 }
@@ -588,13 +587,13 @@ fn validate_tag(index: usize, values: &[String]) -> Result<(), RadrootsEventEnve
 fn validate_tag_elements(
     tag_index: usize,
     values: &[String],
-    limits: RadrootsEventEnvelopeLimits,
-) -> Result<usize, RadrootsEventEnvelopeError> {
+    limits: EventEnvelopeLimits,
+) -> Result<usize, EventEnvelopeError> {
     let mut total_tag_bytes = 0usize;
     for (element_index, value) in values.iter().enumerate() {
         let value_len = value.len();
         if value_len > limits.max_tag_element_bytes {
-            return Err(RadrootsEventEnvelopeError::TagElementTooLarge {
+            return Err(EventEnvelopeError::TagElementTooLarge {
                 tag_index,
                 element_index,
                 max: limits.max_tag_element_bytes,
@@ -618,8 +617,8 @@ mod tests {
         core::iter::repeat_n(character, 128).collect()
     }
 
-    fn event_parts() -> RadrootsEventEnvelopeParts {
-        RadrootsEventEnvelopeParts {
+    fn event_parts() -> EventEnvelopeParts {
+        EventEnvelopeParts {
             id: hex_64('1'),
             author: hex_64('a'),
             created_at: u64::from(u32::MAX) + 1,
@@ -632,13 +631,13 @@ mod tests {
 
     #[test]
     fn envelope_uses_private_typed_state_and_getters() {
-        let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
+        let envelope = EventEnvelope::new(event_parts()).expect("envelope");
 
         assert_eq!(envelope.id_hex(), hex_64('1'));
         assert_eq!(envelope.author().to_hex(), hex_64('a'));
         assert_eq!(envelope.created_at_u64(), u64::from(u32::MAX) + 1);
         assert_eq!(envelope.kind_u32(), 30_023);
-        assert_eq!(envelope.kind_class(), RadrootsEventKindClass::Addressable);
+        assert_eq!(envelope.kind_class(), EventKindClass::Addressable);
         assert_eq!(envelope.content(), "hello");
         assert_eq!(envelope.signature_hex(), hex_128('b'));
         assert_eq!(
@@ -652,113 +651,80 @@ mod tests {
         let mut parts = event_parts();
         parts.id = "bad".to_owned();
         assert!(matches!(
-            RadrootsEventEnvelope::new(parts),
-            Err(RadrootsEventEnvelopeError::InvalidId(_))
+            EventEnvelope::new(parts),
+            Err(EventEnvelopeError::InvalidId(_))
         ));
 
         let mut parts = event_parts();
         parts.tags = vec![Vec::new()];
         assert_eq!(
-            RadrootsEventEnvelope::new(parts),
-            Err(RadrootsEventEnvelopeError::EmptyTag { index: 0 })
+            EventEnvelope::new(parts),
+            Err(EventEnvelopeError::EmptyTag { index: 0 })
         );
     }
 
     #[test]
     fn kind_classifies_nip01_ranges() {
-        assert_eq!(
-            RadrootsEventKind::new(0).class(),
-            RadrootsEventKindClass::Replaceable
-        );
-        assert_eq!(
-            RadrootsEventKind::new(1).class(),
-            RadrootsEventKindClass::Regular
-        );
-        assert_eq!(
-            RadrootsEventKind::new(3).class(),
-            RadrootsEventKindClass::Replaceable
-        );
-        assert_eq!(
-            RadrootsEventKind::new(9_999).class(),
-            RadrootsEventKindClass::Regular
-        );
-        assert_eq!(
-            RadrootsEventKind::new(10_000).class(),
-            RadrootsEventKindClass::Replaceable
-        );
-        assert_eq!(
-            RadrootsEventKind::new(19_999).class(),
-            RadrootsEventKindClass::Replaceable
-        );
-        assert_eq!(
-            RadrootsEventKind::new(20_000).class(),
-            RadrootsEventKindClass::Ephemeral
-        );
-        assert_eq!(
-            RadrootsEventKind::new(29_999).class(),
-            RadrootsEventKindClass::Ephemeral
-        );
-        assert_eq!(
-            RadrootsEventKind::new(30_000).class(),
-            RadrootsEventKindClass::Addressable
-        );
-        assert_eq!(
-            RadrootsEventKind::new(39_999).class(),
-            RadrootsEventKindClass::Addressable
-        );
-        assert_eq!(
-            RadrootsEventKind::new(40_000).class(),
-            RadrootsEventKindClass::Regular
-        );
+        assert_eq!(EventKind::new(0).class(), EventKindClass::Replaceable);
+        assert_eq!(EventKind::new(1).class(), EventKindClass::Regular);
+        assert_eq!(EventKind::new(3).class(), EventKindClass::Replaceable);
+        assert_eq!(EventKind::new(9_999).class(), EventKindClass::Regular);
+        assert_eq!(EventKind::new(10_000).class(), EventKindClass::Replaceable);
+        assert_eq!(EventKind::new(19_999).class(), EventKindClass::Replaceable);
+        assert_eq!(EventKind::new(20_000).class(), EventKindClass::Ephemeral);
+        assert_eq!(EventKind::new(29_999).class(), EventKindClass::Ephemeral);
+        assert_eq!(EventKind::new(30_000).class(), EventKindClass::Addressable);
+        assert_eq!(EventKind::new(39_999).class(), EventKindClass::Addressable);
+        assert_eq!(EventKind::new(40_000).class(), EventKindClass::Regular);
     }
 
     #[test]
     fn envelope_rejects_domain_budget_violations() {
         let mut parts = event_parts();
         assert_eq!(
-            RadrootsEventEnvelope::new_with_limits(
+            EventEnvelope::new_with_limits(
                 parts.clone(),
-                RadrootsEventEnvelopeLimits {
+                EventEnvelopeLimits {
                     max_content_bytes: 4,
-                    ..RadrootsEventEnvelopeLimits::default()
+                    ..EventEnvelopeLimits::default()
                 }
             ),
-            Err(RadrootsEventEnvelopeError::ContentTooLarge { max: 4, actual: 5 })
+            Err(EventEnvelopeError::ContentTooLarge { max: 4, actual: 5 })
         );
 
         parts.tags = vec![vec!["d".to_owned()]];
         assert_eq!(
-            RadrootsEventEnvelope::new_with_limits(
+            EventEnvelope::new_with_limits(
                 parts.clone(),
-                RadrootsEventEnvelopeLimits {
+                EventEnvelopeLimits {
                     max_tag_count: 0,
-                    ..RadrootsEventEnvelopeLimits::default()
+                    ..EventEnvelopeLimits::default()
                 }
             ),
-            Err(RadrootsEventEnvelopeError::TooManyTags { max: 0, actual: 1 })
+            Err(EventEnvelopeError::TooManyTags { max: 0, actual: 1 })
         );
 
         parts.tags = vec![vec!["d".to_owned(), "abcd".to_owned()]];
         assert_eq!(
-            RadrootsEventEnvelope::new_with_limits(
+            EventEnvelope::new_with_limits(
                 parts.clone(),
-                RadrootsEventEnvelopeLimits {
+                EventEnvelopeLimits {
                     max_total_tag_elements: 1,
-                    ..RadrootsEventEnvelopeLimits::default()
+                    ..EventEnvelopeLimits::default()
                 }
             ),
-            Err(RadrootsEventEnvelopeError::TooManyTagElements { max: 1, actual: 2 })
+            Err(EventEnvelopeError::TooManyTagElements { max: 1, actual: 2 })
         );
 
         assert_eq!(
-            RadrootsEventEnvelope::new_with_limits(
+            EventEnvelope::new_with_limits(
                 parts.clone(),
-                RadrootsEventEnvelopeLimits {
+                EventEnvelopeLimits {
                     max_tag_element_bytes: 3,
-                    ..RadrootsEventEnvelopeLimits::default()
+                    ..EventEnvelopeLimits::default()
                 }
             ),
-            Err(RadrootsEventEnvelopeError::TagElementTooLarge {
+            Err(EventEnvelopeError::TagElementTooLarge {
                 tag_index: 0,
                 element_index: 1,
                 max: 3,
@@ -768,14 +734,14 @@ mod tests {
 
         parts.tags = vec![vec!["d".to_owned(), "soil".to_owned()]];
         assert_eq!(
-            RadrootsEventEnvelope::new_with_limits(
+            EventEnvelope::new_with_limits(
                 parts,
-                RadrootsEventEnvelopeLimits {
+                EventEnvelopeLimits {
                     max_total_tag_bytes: 4,
-                    ..RadrootsEventEnvelopeLimits::default()
+                    ..EventEnvelopeLimits::default()
                 }
             ),
-            Err(RadrootsEventEnvelopeError::TagsTooLarge { max: 4, actual: 5 })
+            Err(EventEnvelopeError::TagsTooLarge { max: 4, actual: 5 })
         );
     }
 
@@ -785,9 +751,9 @@ mod tests {
         parts.content = "hello".to_owned();
         parts.tags = vec![vec!["d".to_owned(), "soil".to_owned()]];
 
-        let envelope = RadrootsEventEnvelope::new_with_limits(
+        let envelope = EventEnvelope::new_with_limits(
             parts,
-            RadrootsEventEnvelopeLimits {
+            EventEnvelopeLimits {
                 max_content_bytes: 5,
                 max_tag_count: 1,
                 max_total_tag_elements: 2,
@@ -806,7 +772,7 @@ mod tests {
 
     #[test]
     fn envelope_serializes_to_domain_shape() {
-        let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
+        let envelope = EventEnvelope::new(event_parts()).expect("envelope");
         let encoded = serde_json::to_value(&envelope).expect("json");
 
         assert_eq!(
@@ -831,17 +797,17 @@ mod tests {
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
         struct MissingTimestamp {
-            value: RadrootsEventTimestamp,
+            value: EventTimestamp,
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
         struct MissingKind {
-            value: RadrootsEventKind,
+            value: EventKind,
         }
         #[allow(dead_code)]
         #[derive(Debug, serde::Deserialize)]
         struct MissingTags {
-            value: RadrootsEventTags,
+            value: EventTags,
         }
 
         for message in [
@@ -858,84 +824,81 @@ mod tests {
             assert!(message.contains("missing field `value`"));
         }
 
-        let timestamp = RadrootsEventTimestamp::from(42);
+        let timestamp = EventTimestamp::from(42);
         assert_eq!(timestamp.as_u64(), 42);
         assert_eq!(
-            serde_json::from_str::<RadrootsEventTimestamp>(
+            serde_json::from_str::<EventTimestamp>(
                 &serde_json::to_string(&timestamp).expect("timestamp json"),
             )
             .expect("timestamp"),
             timestamp
         );
-        let kind = RadrootsEventKind::from(30_023);
+        let kind = EventKind::from(30_023);
         assert_eq!(kind.as_u32(), 30_023);
         assert_eq!(
-            serde_json::from_str::<RadrootsEventKind>(
-                &serde_json::to_string(&kind).expect("kind json"),
-            )
-            .expect("kind"),
+            serde_json::from_str::<EventKind>(&serde_json::to_string(&kind).expect("kind json"),)
+                .expect("kind"),
             kind
         );
 
-        let parse_error = RadrootsEventId::parse("bad").expect_err("invalid id");
+        let parse_error = EventId::parse("bad").expect_err("invalid id");
         for error in [
-            RadrootsEventEnvelopeError::InvalidId(parse_error.clone()),
-            RadrootsEventEnvelopeError::InvalidAuthor(parse_error.clone()),
-            RadrootsEventEnvelopeError::InvalidSignature(parse_error),
-            RadrootsEventEnvelopeError::NonCanonicalId,
-            RadrootsEventEnvelopeError::NonCanonicalAuthor,
-            RadrootsEventEnvelopeError::NonCanonicalSignature,
-            RadrootsEventEnvelopeError::EmptyTag { index: 1 },
-            RadrootsEventEnvelopeError::EmptyTagKey { index: 1 },
-            RadrootsEventEnvelopeError::ControlCharacterTagKey { index: 1 },
-            RadrootsEventEnvelopeError::ContentTooLarge { max: 1, actual: 2 },
-            RadrootsEventEnvelopeError::TooManyTags { max: 1, actual: 2 },
-            RadrootsEventEnvelopeError::TooManyTagElements { max: 1, actual: 2 },
-            RadrootsEventEnvelopeError::TagElementTooLarge {
+            EventEnvelopeError::InvalidId(parse_error.clone()),
+            EventEnvelopeError::InvalidAuthor(parse_error.clone()),
+            EventEnvelopeError::InvalidSignature(parse_error),
+            EventEnvelopeError::NonCanonicalId,
+            EventEnvelopeError::NonCanonicalAuthor,
+            EventEnvelopeError::NonCanonicalSignature,
+            EventEnvelopeError::EmptyTag { index: 1 },
+            EventEnvelopeError::EmptyTagKey { index: 1 },
+            EventEnvelopeError::ControlCharacterTagKey { index: 1 },
+            EventEnvelopeError::ContentTooLarge { max: 1, actual: 2 },
+            EventEnvelopeError::TooManyTags { max: 1, actual: 2 },
+            EventEnvelopeError::TooManyTagElements { max: 1, actual: 2 },
+            EventEnvelopeError::TagElementTooLarge {
                 tag_index: 1,
                 element_index: 2,
                 max: 3,
                 actual: 4,
             },
-            RadrootsEventEnvelopeError::TagsTooLarge { max: 1, actual: 2 },
+            EventEnvelopeError::TagsTooLarge { max: 1, actual: 2 },
         ] {
             assert!(!error.to_string().is_empty());
         }
 
-        let tag = RadrootsEventTag::new(0, vec!["t".to_owned(), "soil".to_owned()]).expect("tag");
+        let tag = EventTag::new(0, vec!["t".to_owned(), "soil".to_owned()]).expect("tag");
         assert_eq!(tag.clone().into_vec(), vec!["t", "soil"]);
         let tag_json = serde_json::to_string(&tag).expect("tag json");
         assert_eq!(
-            serde_json::from_str::<RadrootsEventTag>(&tag_json).expect("tag"),
+            serde_json::from_str::<EventTag>(&tag_json).expect("tag"),
             tag
         );
-        assert!(serde_json::from_str::<RadrootsEventTag>("[]").is_err());
+        assert!(serde_json::from_str::<EventTag>("[]").is_err());
         assert!(
-            RadrootsEventTag::new_with_limits(
+            EventTag::new_with_limits(
                 0,
                 vec!["tag".to_owned()],
-                RadrootsEventEnvelopeLimits {
+                EventEnvelopeLimits {
                     max_total_tag_bytes: 2,
-                    ..RadrootsEventEnvelopeLimits::default()
+                    ..EventEnvelopeLimits::default()
                 },
             )
             .is_err()
         );
 
-        let empty_tags = RadrootsEventTags::new(Vec::new()).expect("empty tags");
+        let empty_tags = EventTags::new(Vec::new()).expect("empty tags");
         assert_eq!(empty_tags.len(), 0);
         assert!(empty_tags.is_empty());
         assert!(empty_tags.clone().into_vec().is_empty());
-        let tags =
-            RadrootsEventTags::new(vec![vec!["t".to_owned(), "soil".to_owned()]]).expect("tags");
+        let tags = EventTags::new(vec![vec!["t".to_owned(), "soil".to_owned()]]).expect("tags");
         let tags_json = serde_json::to_string(&tags).expect("tags json");
         assert_eq!(
-            serde_json::from_str::<RadrootsEventTags>(&tags_json).expect("tags"),
+            serde_json::from_str::<EventTags>(&tags_json).expect("tags"),
             tags
         );
-        assert!(serde_json::from_str::<RadrootsEventTags>("[[]]").is_err());
+        assert!(serde_json::from_str::<EventTags>("[[]]").is_err());
 
-        let envelope = RadrootsEventEnvelope::new(event_parts()).expect("envelope");
+        let envelope = EventEnvelope::new(event_parts()).expect("envelope");
         assert_eq!(envelope.id().to_hex(), envelope.id_hex());
         assert_eq!(envelope.author().to_hex(), hex_64('a'));
         assert_eq!(envelope.created_at().as_u64(), envelope.created_at_u64());
@@ -947,7 +910,7 @@ mod tests {
         assert_eq!(wire.id, envelope.id_hex());
         let encoded = serde_json::to_string(&envelope).expect("envelope json");
         assert_eq!(
-            serde_json::from_str::<RadrootsEventEnvelope>(&encoded).expect("envelope"),
+            serde_json::from_str::<EventEnvelope>(&encoded).expect("envelope"),
             envelope
         );
 
@@ -963,7 +926,7 @@ mod tests {
                 "sig" => parts.sig = value,
                 _ => unreachable!("fixture field"),
             }
-            assert!(RadrootsEventEnvelope::new(parts).is_err());
+            assert!(EventEnvelope::new(parts).is_err());
         }
         for tags in [
             vec![vec![String::new()]],
@@ -971,7 +934,7 @@ mod tests {
         ] {
             let mut parts = event_parts();
             parts.tags = tags;
-            assert!(RadrootsEventEnvelope::new(parts).is_err());
+            assert!(EventEnvelope::new(parts).is_err());
         }
     }
 }

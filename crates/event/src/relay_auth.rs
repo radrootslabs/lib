@@ -12,7 +12,7 @@ pub const KIND_RELAY_AUTH: u32 = KIND_RELAY_AUTH_EVENT;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsRelayAuth {
+pub struct RelayAuth {
     pub relay: String,
     pub challenge: String,
 }
@@ -28,7 +28,7 @@ mod tests {
 
     #[test]
     fn relay_auth_serializes_nip42_tags() {
-        let value = serde_json::to_value(RadrootsRelayAuth {
+        let value = serde_json::to_value(RelayAuth {
             relay: "wss://relay.example.invalid/farm/ABCDEFGHIJKLMNOPQRSTUV".to_string(),
             challenge: "relay-provided-challenge".to_string(),
         })

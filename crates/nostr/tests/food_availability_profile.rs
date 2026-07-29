@@ -1,11 +1,10 @@
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::food::availability::{
-    RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityDetailsParts,
-    RadrootsFoodAvailabilityImage, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
-    RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodImageDimensions, RadrootsFoodPrice,
-    RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText, RadrootsFoodUnit,
+    FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityImage,
+    FoodAvailabilityStatus, FoodContent, FoodCurrency, FoodIdentifier, FoodImageDimensions,
+    FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
 };
-use radroots_event::media::RadrootsAuthoredImage;
+use radroots_event::media::AuthoredImage;
 use radroots_event_codec::food_availability::admission::{
     RadrootsFoodAvailabilityAdmissionOutcome, verify_and_admit_food_availability_event,
 };
@@ -181,34 +180,32 @@ fn fixture_keys() -> RadrootsNostrKeys {
     )
 }
 
-fn details() -> RadrootsFoodAvailabilityDetails {
+fn details() -> FoodAvailabilityDetails {
     details_with_images(Vec::new())
 }
 
-fn details_with_images(
-    images: Vec<RadrootsFoodAvailabilityImage>,
-) -> RadrootsFoodAvailabilityDetails {
-    RadrootsFoodAvailabilityDetails::new(RadrootsFoodAvailabilityDetailsParts {
-        content: RadrootsFoodContent::new("Carrots available this week.").expect("content"),
-        identifier: RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier"),
-        title: RadrootsFoodText::new("Nantes Carrots").expect("title"),
-        summary: RadrootsFoodText::new("Fresh bunches").expect("summary"),
-        published_at: RadrootsFoodPublishedAt::new(1_784_347_100).expect("published_at"),
-        location: RadrootsFoodText::new("Central Saanich, BC").expect("location"),
-        price: RadrootsFoodPrice::new(
+fn details_with_images(images: Vec<FoodAvailabilityImage>) -> FoodAvailabilityDetails {
+    FoodAvailabilityDetails::new(FoodAvailabilityDetailsParts {
+        content: FoodContent::new("Carrots available this week.").expect("content"),
+        identifier: FoodIdentifier::parse("nantes-carrots").expect("identifier"),
+        title: FoodText::new("Nantes Carrots").expect("title"),
+        summary: FoodText::new("Fresh bunches").expect("summary"),
+        published_at: FoodPublishedAt::new(1_784_347_100).expect("published_at"),
+        location: FoodText::new("Central Saanich, BC").expect("location"),
+        price: FoodPrice::new(
             "3",
-            RadrootsFoodCurrency::parse("CAD").expect("currency"),
-            RadrootsFoodUnit::Pound,
+            FoodCurrency::parse("CAD").expect("currency"),
+            FoodUnit::Pound,
         )
         .expect("price"),
-        quantity: Some(RadrootsFoodQuantity::new("24", RadrootsFoodUnit::Pound).expect("quantity")),
-        status: RadrootsFoodAvailabilityStatus::Active,
+        quantity: Some(FoodQuantity::new("24", FoodUnit::Pound).expect("quantity")),
+        status: FoodAvailabilityStatus::Active,
         images,
     })
     .expect("FoodAvailability details")
 }
 
-fn blossom_image() -> RadrootsFoodAvailabilityImage {
+fn blossom_image() -> FoodAvailabilityImage {
     let bytes = b"victoria-carrots-image-fixture";
     let hash = Sha256::digest(bytes);
     let media_type = MediaType::parse("image/webp").expect("image media type");
@@ -224,8 +221,7 @@ fn blossom_image() -> RadrootsFoodAvailabilityImage {
     .expect("approved Blossom reference")
     .verify_bytes(bytes, &media_type)
     .expect("byte-verified Blossom descriptor");
-    let image =
-        RadrootsAuthoredImage::try_from_verified_descriptor(verified).expect("authored image");
-    let dimensions = RadrootsFoodImageDimensions::new(640, 480).expect("image dimensions");
-    RadrootsFoodAvailabilityImage::new(image, dimensions)
+    let image = AuthoredImage::try_from_verified_descriptor(verified).expect("authored image");
+    let dimensions = FoodImageDimensions::new(640, 480).expect("image dimensions");
+    FoodAvailabilityImage::new(image, dimensions)
 }

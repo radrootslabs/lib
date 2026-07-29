@@ -28,7 +28,7 @@
               "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
             ]
           ],
-          "content_shape": "RadrootsTradeMutationEnvelopeV1"
+          "content_shape": "TradeMutationEnvelopeV1"
         }
       }
     }

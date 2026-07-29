@@ -4,11 +4,10 @@ use crate::error::RadrootsEventStoreError;
 #[cfg(test)]
 use crate::model::RadrootsEventIngest;
 use crate::model::RadrootsTransportObservation;
-use radroots_event::envelope::RadrootsEventEnvelope;
-use radroots_event::id::{RadrootsTradeCandidateId, RadrootsTradeMutationId};
+use radroots_event::envelope::EventEnvelope;
+use radroots_event::id::{CandidateId, MutationId};
 use radroots_event::trade::{
-    RadrootsSellerReservationAssertionV1, RadrootsTradeMutationEnvelopeV1,
-    RadrootsTradeMutationKindV1,
+    SellerReservationAssertionV1, TradeMutationEnvelopeV1, TradeMutationKindV1,
 };
 use radroots_transport::RadrootsTransportKind;
 use sqlx::{Sqlite, Transaction};
@@ -18,31 +17,31 @@ pub(super) struct PostCoreStorageV1<'borrow, 'db> {
 }
 
 pub(super) struct TradeProjectionWrite<'a> {
-    event: &'a RadrootsEventEnvelope,
+    event: &'a EventEnvelope,
     stored_event_seq: i64,
-    mutation: &'a RadrootsTradeMutationEnvelopeV1,
-    mutation_id: &'a RadrootsTradeMutationId,
-    candidate_id: Option<&'a RadrootsTradeCandidateId>,
-    proposal_mutation_id: Option<&'a RadrootsTradeMutationId>,
-    target_claim_mutation_id: Option<&'a RadrootsTradeMutationId>,
+    mutation: &'a TradeMutationEnvelopeV1,
+    mutation_id: &'a MutationId,
+    candidate_id: Option<&'a CandidateId>,
+    proposal_mutation_id: Option<&'a MutationId>,
+    target_claim_mutation_id: Option<&'a MutationId>,
     payload_sha256: &'a str,
     observed_at_ms: i64,
-    reservation: Option<&'a RadrootsSellerReservationAssertionV1>,
+    reservation: Option<&'a SellerReservationAssertionV1>,
 }
 
 impl<'a> TradeProjectionWrite<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        event: &'a RadrootsEventEnvelope,
+        event: &'a EventEnvelope,
         stored_event_seq: i64,
-        mutation: &'a RadrootsTradeMutationEnvelopeV1,
-        mutation_id: &'a RadrootsTradeMutationId,
-        candidate_id: Option<&'a RadrootsTradeCandidateId>,
-        proposal_mutation_id: Option<&'a RadrootsTradeMutationId>,
-        target_claim_mutation_id: Option<&'a RadrootsTradeMutationId>,
+        mutation: &'a TradeMutationEnvelopeV1,
+        mutation_id: &'a MutationId,
+        candidate_id: Option<&'a CandidateId>,
+        proposal_mutation_id: Option<&'a MutationId>,
+        target_claim_mutation_id: Option<&'a MutationId>,
         payload_sha256: &'a str,
         observed_at_ms: i64,
-        reservation: Option<&'a RadrootsSellerReservationAssertionV1>,
+        reservation: Option<&'a SellerReservationAssertionV1>,
     ) -> Self {
         Self {
             event,
@@ -180,8 +179,8 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
 
     async fn insert_trade_mutation_parents(
         &mut self,
-        mutation_id: &RadrootsTradeMutationId,
-        parents: &[RadrootsTradeMutationId],
+        mutation_id: &MutationId,
+        parents: &[MutationId],
     ) -> Result<(), RadrootsEventStoreError> {
         for (index, parent) in parents.iter().enumerate() {
             sqlx::query(
@@ -245,7 +244,7 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
 
     async fn delete_resolved_missing_parent_records(
         &mut self,
-        mutation_id: &RadrootsTradeMutationId,
+        mutation_id: &MutationId,
     ) -> Result<(), RadrootsEventStoreError> {
         sqlx::query("DELETE FROM trade_missing_parent WHERE missing_parent_mutation_id = ?")
             .bind(mutation_id.to_hex())
@@ -256,9 +255,9 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
 
     async fn insert_seller_reservation(
         &mut self,
-        mutation: &RadrootsTradeMutationEnvelopeV1,
-        claim_mutation_id: &RadrootsTradeMutationId,
-        reservation: &RadrootsSellerReservationAssertionV1,
+        mutation: &TradeMutationEnvelopeV1,
+        claim_mutation_id: &MutationId,
+        reservation: &SellerReservationAssertionV1,
         inserted_at_ms: i64,
     ) -> Result<(), RadrootsEventStoreError> {
         let reservation_json = serde_json::to_string(reservation)?;
@@ -337,13 +336,13 @@ impl<'borrow, 'db> PostCoreStorageV1<'borrow, 'db> {
     }
 }
 
-fn trade_mutation_kind_storage_value(kind: RadrootsTradeMutationKindV1) -> &'static str {
+fn trade_mutation_kind_storage_value(kind: TradeMutationKindV1) -> &'static str {
     match kind {
-        RadrootsTradeMutationKindV1::Proposal => "proposal",
-        RadrootsTradeMutationKindV1::Decision => "decision",
-        RadrootsTradeMutationKindV1::RevisionProposal => "revision_proposal",
-        RadrootsTradeMutationKindV1::RevisionDecision => "revision_decision",
-        RadrootsTradeMutationKindV1::Cancellation => "cancellation",
+        TradeMutationKindV1::Proposal => "proposal",
+        TradeMutationKindV1::Decision => "decision",
+        TradeMutationKindV1::RevisionProposal => "revision_proposal",
+        TradeMutationKindV1::RevisionDecision => "revision_decision",
+        TradeMutationKindV1::Cancellation => "cancellation",
     }
 }
 
@@ -399,7 +398,7 @@ pub(super) fn register_protocol_post_extension_schema_forge(trigger_event_id: St
 
 #[cfg(test)]
 pub(super) fn trade_mutation_kind_storage_value_for_test(
-    kind: RadrootsTradeMutationKindV1,
+    kind: TradeMutationKindV1,
 ) -> &'static str {
     trade_mutation_kind_storage_value(kind)
 }

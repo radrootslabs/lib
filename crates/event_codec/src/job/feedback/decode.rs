@@ -1,6 +1,6 @@
 use radroots_event::{
     envelope::kind::KIND_JOB_FEEDBACK, social::job::JobPaymentRequest,
-    social::job_feedback::RadrootsJobFeedback, tag::RadrootsEventPtr,
+    social::job_feedback::JobFeedback, tag::EventPtr,
 };
 
 #[cfg(not(feature = "std"))]
@@ -19,7 +19,7 @@ pub fn job_feedback_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsJobFeedback, JobParseError> {
+) -> Result<JobFeedback, JobParseError> {
     let kind = u16::try_from(kind).map_err(|_| JobParseError::KindOutOfRange(kind))?;
     let etag = tags
         .iter()
@@ -56,11 +56,11 @@ pub fn job_feedback_from_tags(
         .find(|t| t.first().map(|s| s.as_str()) == Some("p"))
         .and_then(|t| t.get(1).cloned());
 
-    Ok(RadrootsJobFeedback {
+    Ok(JobFeedback {
         kind,
         status,
         extra_info,
-        request_event: RadrootsEventPtr {
+        request_event: EventPtr {
             id: req_id,
             relays: relay_hint,
         },
@@ -82,7 +82,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsJobFeedback>, JobParseError> {
+) -> Result<RadrootsParsedData<JobFeedback>, JobParseError> {
     if kind != KIND_JOB_FEEDBACK {
         return Err(JobParseError::InvalidTag("kind (expected 7000)"));
     }
@@ -104,7 +104,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsJobFeedback>, JobParseError> {
+) -> Result<RadrootsParsedEvent<JobFeedback>, JobParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

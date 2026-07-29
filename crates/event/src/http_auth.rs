@@ -12,7 +12,7 @@ pub const KIND_HTTP_AUTH: u32 = KIND_HTTP_AUTH_EVENT;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsHttpAuth {
+pub struct HttpAuth {
     pub url: String,
     pub method: String,
     pub payload_sha256: Option<String>,
@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn http_auth_serializes_optional_payload_hash() {
-        let value = serde_json::to_value(RadrootsHttpAuth {
+        let value = serde_json::to_value(HttpAuth {
             url: "https://media.example.invalid/upload".to_string(),
             method: "POST".to_string(),
             payload_sha256: Some(
@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn http_auth_allows_absent_payload_hash() {
-        let auth = RadrootsHttpAuth {
+        let auth = HttpAuth {
             url: "https://media.example.invalid/download".to_string(),
             method: "GET".to_string(),
             payload_sha256: None,

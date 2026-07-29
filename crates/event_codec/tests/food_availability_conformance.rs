@@ -6,17 +6,15 @@ use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::food::availability::{
-    RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityDetailsParts,
-    RadrootsFoodAvailabilityError, RadrootsFoodAvailabilityImage, RadrootsFoodAvailabilityStatus,
-    RadrootsFoodContent, RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodImageDimensions,
-    RadrootsFoodPrice, RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText,
-    RadrootsFoodUnit,
+    FoodAvailabilityDetails, FoodAvailabilityDetailsParts, FoodAvailabilityError,
+    FoodAvailabilityImage, FoodAvailabilityStatus, FoodContent, FoodCurrency, FoodIdentifier,
+    FoodImageDimensions, FoodPrice, FoodPublishedAt, FoodQuantity, FoodText, FoodUnit,
 };
-use radroots_event::media::RadrootsAuthoredImage;
-use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
+use radroots_event::media::AuthoredImage;
+use radroots_event::wire::{Nip01EventWire, compute_canonical_nip01_event_id};
 use radroots_event::{
-    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
-    listing::classified::RadrootsClassifiedListingPartition,
+    envelope::EventEnvelope, envelope::EventEnvelopeParts,
+    listing::classified::ClassifiedListingPartition,
 };
 use radroots_event_codec::food_availability::admission::{
     RadrootsFoodAvailabilityAdmissionError, RadrootsFoodAvailabilityAdmissionOutcome,
@@ -339,24 +337,21 @@ fn authored_input(vector: &Vector) -> AuthoredInput {
         .unwrap_or_else(|error| panic!("{} authored input is invalid: {error}", vector.id))
 }
 
-fn strict_details(
-    input: &DetailsInput,
-    vector_id: &str,
-) -> (RadrootsFoodAvailabilityDetails, String) {
+fn strict_details(input: &DetailsInput, vector_id: &str) -> (FoodAvailabilityDetails, String) {
     let content = input.content.materialize(vector_id);
-    let price_unit = RadrootsFoodUnit::parse(&input.price.unit)
+    let price_unit = FoodUnit::parse(&input.price.unit)
         .unwrap_or_else(|error| panic!("{vector_id} price unit failed: {error}"));
-    let price = RadrootsFoodPrice::new(
+    let price = FoodPrice::new(
         input.price.amount.clone(),
-        RadrootsFoodCurrency::parse(&input.price.currency)
+        FoodCurrency::parse(&input.price.currency)
             .unwrap_or_else(|error| panic!("{vector_id} currency failed: {error}")),
         price_unit,
     )
     .unwrap_or_else(|error| panic!("{vector_id} price failed: {error}"));
     let quantity = input.quantity.as_ref().map(|quantity| {
-        let unit = RadrootsFoodUnit::parse(&quantity.unit)
+        let unit = FoodUnit::parse(&quantity.unit)
             .unwrap_or_else(|error| panic!("{vector_id} quantity unit failed: {error}"));
-        RadrootsFoodQuantity::new(quantity.amount.clone(), unit)
+        FoodQuantity::new(quantity.amount.clone(), unit)
             .unwrap_or_else(|error| panic!("{vector_id} quantity failed: {error}"))
     });
     let images = input
@@ -364,22 +359,22 @@ fn strict_details(
         .iter()
         .map(|image| strict_image(image, vector_id))
         .collect();
-    let details = RadrootsFoodAvailabilityDetails::new(RadrootsFoodAvailabilityDetailsParts {
-        content: RadrootsFoodContent::new(content.clone())
+    let details = FoodAvailabilityDetails::new(FoodAvailabilityDetailsParts {
+        content: FoodContent::new(content.clone())
             .unwrap_or_else(|error| panic!("{vector_id} content failed: {error}")),
-        identifier: RadrootsFoodIdentifier::parse(&input.identifier)
+        identifier: FoodIdentifier::parse(&input.identifier)
             .unwrap_or_else(|error| panic!("{vector_id} identifier failed: {error}")),
-        title: RadrootsFoodText::new(input.title.clone())
+        title: FoodText::new(input.title.clone())
             .unwrap_or_else(|error| panic!("{vector_id} title failed: {error}")),
-        summary: RadrootsFoodText::new(input.summary.clone())
+        summary: FoodText::new(input.summary.clone())
             .unwrap_or_else(|error| panic!("{vector_id} summary failed: {error}")),
-        published_at: RadrootsFoodPublishedAt::new(input.published_at)
+        published_at: FoodPublishedAt::new(input.published_at)
             .unwrap_or_else(|error| panic!("{vector_id} published_at failed: {error}")),
-        location: RadrootsFoodText::new(input.location.clone())
+        location: FoodText::new(input.location.clone())
             .unwrap_or_else(|error| panic!("{vector_id} location failed: {error}")),
         price,
         quantity,
-        status: RadrootsFoodAvailabilityStatus::parse(&input.status)
+        status: FoodAvailabilityStatus::parse(&input.status)
             .unwrap_or_else(|error| panic!("{vector_id} status failed: {error}")),
         images,
     })
@@ -387,7 +382,7 @@ fn strict_details(
     (details, content)
 }
 
-fn strict_image(input: &ImageInput, vector_id: &str) -> RadrootsFoodAvailabilityImage {
+fn strict_image(input: &ImageInput, vector_id: &str) -> FoodAvailabilityImage {
     let bytes = input.bytes_utf8.as_bytes();
     let hash = Sha256::digest(bytes);
     let media_type = MediaType::parse(&input.media_type)
@@ -405,11 +400,11 @@ fn strict_image(input: &ImageInput, vector_id: &str) -> RadrootsFoodAvailability
     .unwrap_or_else(|error| panic!("{vector_id} image reference failed: {error}"))
     .verify_bytes(bytes, &media_type)
     .unwrap_or_else(|error| panic!("{vector_id} image bytes failed: {error}"));
-    let image = RadrootsAuthoredImage::try_from_verified_descriptor(verified)
+    let image = AuthoredImage::try_from_verified_descriptor(verified)
         .unwrap_or_else(|error| panic!("{vector_id} authored image failed: {error}"));
-    let dimensions = RadrootsFoodImageDimensions::parse(&input.dimensions)
+    let dimensions = FoodImageDimensions::parse(&input.dimensions)
         .unwrap_or_else(|error| panic!("{vector_id} image dimensions failed: {error}"));
-    RadrootsFoodAvailabilityImage::new(image, dimensions)
+    FoodAvailabilityImage::new(image, dimensions)
 }
 
 impl TextRecipe {
@@ -430,12 +425,10 @@ impl TextRecipe {
 
 fn authored_error_value(error: &RadrootsFoodAvailabilityEncodeError) -> Value {
     match error {
-        RadrootsFoodAvailabilityEncodeError::Domain(
-            RadrootsFoodAvailabilityError::PublishedAtFuture {
-                published_at,
-                created_at,
-            },
-        ) => json!({
+        RadrootsFoodAvailabilityEncodeError::Domain(FoodAvailabilityError::PublishedAtFuture {
+            published_at,
+            created_at,
+        }) => json!({
             "code": error.code(),
             "message": error.to_string(),
             "published_at": published_at,
@@ -609,12 +602,12 @@ fn diagnostic_codes(diagnostics: &[RadrootsFoodAvailabilityImageDiagnostic]) -> 
         .collect()
 }
 
-fn partition_name(partition: RadrootsClassifiedListingPartition) -> &'static str {
+fn partition_name(partition: ClassifiedListingPartition) -> &'static str {
     match partition {
-        RadrootsClassifiedListingPartition::FocusedFoodAvailability => "focused_food_availability",
-        RadrootsClassifiedListingPartition::OperationalListing => "operational_listing",
-        RadrootsClassifiedListingPartition::GenericNip99 => "generic_nip99",
-        RadrootsClassifiedListingPartition::Ambiguous => "ambiguous",
+        ClassifiedListingPartition::FocusedFoodAvailability => "focused_food_availability",
+        ClassifiedListingPartition::OperationalListing => "operational_listing",
+        ClassifiedListingPartition::GenericNip99 => "generic_nip99",
+        ClassifiedListingPartition::Ambiguous => "ambiguous",
     }
 }
 
@@ -693,9 +686,9 @@ fn verified_event(value: &Value, vector_id: &str) -> RadrootsSignatureVerifiedEv
         .unwrap_or_else(|error| panic!("{vector_id} Radroots verification failed: {error}"))
 }
 
-fn canonical_envelope(value: &Value, vector_id: &str) -> RadrootsEventEnvelope {
+fn canonical_envelope(value: &Value, vector_id: &str) -> EventEnvelope {
     let raw_json = serde_json::to_string(value).expect("raw event must serialize");
-    let wire = RadrootsNip01EventWire::parse_json(&raw_json)
+    let wire = Nip01EventWire::parse_json(&raw_json)
         .unwrap_or_else(|error| panic!("{vector_id} wire parsing failed: {error}"));
     wire.verify_id()
         .unwrap_or_else(|error| panic!("{vector_id} event id failed: {error}"));
@@ -728,7 +721,7 @@ fn directly_signed_verified_event(
     raw.id = id.into_string();
     raw.sig = signature.to_string();
 
-    let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    let event = EventEnvelope::new(EventEnvelopeParts {
         id: raw.id,
         author: raw.pubkey,
         created_at: raw.created_at,

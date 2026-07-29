@@ -62,7 +62,7 @@ marker takes precedence. Structural inbound URLs remain unverified and no
 network retrieval occurs.
 
 The Reply codec deterministically emits strict marked direct and nested NIP-10
-wire parts from `RadrootsAuthoredNip10Reply`. Its inbound boundary projects
+wire parts from `AuthoredNip10Reply`. Its inbound boundary projects
 only signature-and-id verified kind-1 envelopes, accepts marked and deprecated
 positional thread anchors, retains valid supplemental citations, and reports
 malformed advisory relay, author, participant, and citation metadata through
@@ -70,7 +70,7 @@ ordered diagnostics. Root and parent ambiguity or malformed hard anchors
 remain projection failures.
 
 Authored and inbound NIP-10 Reply and NIP-22 Comment relay metadata uses the
-shared `RadrootsNostrRelayHint` profile: exact lowercase `ws://` or `wss://`,
+shared `NostrRelayHint` profile: exact lowercase `ws://` or `wss://`,
 visible ASCII, canonical lowercase DNS or four-octet IPv4 or bracketed
 pure-hex RFC 5952 IPv6, canonical optional port `1..65535`, and RFC 3986
 path-abempty/query syntax with uppercase `%HH` escapes. IDNA or
@@ -259,7 +259,7 @@ Strict date admission rejects every uppercase-`D` extension. Strict time
 admission requires canonical decimal timestamps and the exact ascending
 uppercase-`D` sequence for the exclusive interval, bounded to 366 covered
 days. Authored codecs derive that sequence and emit unsigned
-`RadrootsNip01EventWireParts`; signing and transport stay at the owning runtime
+`Nip01EventWireParts`; signing and transport stay at the owning runtime
 boundary.
 
 Kind `31924` is handled only by the calendar-specific codec. Generic NIP-51

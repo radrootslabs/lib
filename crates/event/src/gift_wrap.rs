@@ -10,8 +10,8 @@ use alloc::string::String;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsGiftWrap {
-    pub recipient: RadrootsGiftWrapRecipient,
+pub struct GiftWrap {
+    pub recipient: GiftWrapRecipient,
     pub content: String,
     pub expiration: Option<u32>,
 }
@@ -23,7 +23,7 @@ pub struct RadrootsGiftWrap {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsGiftWrapRecipient {
+pub struct GiftWrapRecipient {
     pub public_key: String,
     pub relay_url: Option<String>,
 }

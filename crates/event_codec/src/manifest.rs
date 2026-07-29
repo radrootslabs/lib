@@ -7,10 +7,9 @@ use alloc::{
 
 use radroots_event::contract::VERSION;
 use radroots_event::contract::{
-    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContentSchema, RadrootsContractFamily,
-    RadrootsEventClass, RadrootsEventContract, RadrootsEventDiscriminator, RadrootsEventPrivacy,
-    RadrootsEventStability, RadrootsNostrStandard, RadrootsReducer, RadrootsTagCardinality,
-    RadrootsTagContract, RadrootsTagSemantic, RadrootsTagValueType, all_event_contracts,
+    ContentSchema, ContractFamily, EventClass, EventContract, EventDiscriminator, EventPrivacy,
+    EventStability, NostrStandard, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, Reducer,
+    TagCardinality, TagContract, TagSemantic, TagValueType, all_event_contracts,
     event_contract_family, kind_contract,
 };
 use serde::{Deserialize, Serialize};
@@ -125,9 +124,7 @@ pub struct RadrootsKnowledgeManifestCodecSupport {
 pub fn knowledge_contract_manifest() -> RadrootsKnowledgeContractManifest {
     let mut contracts = all_event_contracts()
         .iter()
-        .filter(|contract| {
-            event_contract_family(contract) == Some(RadrootsContractFamily::Knowledge)
-        })
+        .filter(|contract| event_contract_family(contract) == Some(ContractFamily::Knowledge))
         .map(manifest_entry)
         .collect::<Vec<_>>();
     contracts.sort_by(|left, right| left.contract_id.cmp(&right.contract_id));
@@ -153,7 +150,7 @@ pub fn contract_manifest_sha256() -> Result<String, serde_json::Error> {
     Ok(hex::encode(Sha256::digest(json.as_bytes())))
 }
 
-fn manifest_entry(contract: &RadrootsEventContract) -> RadrootsKnowledgeContractManifestEntry {
+fn manifest_entry(contract: &EventContract) -> RadrootsKnowledgeContractManifestEntry {
     let standard = kind_contract(contract.kind)
         .map(|contract| standard_label(contract.standard))
         .unwrap_or("unknown");
@@ -217,72 +214,66 @@ fn mvp_sdk_and_wasm_tag_support(contract_id: &str) -> bool {
 }
 
 fn discriminator_manifest(
-    discriminator: &RadrootsEventDiscriminator,
+    discriminator: &EventDiscriminator,
 ) -> RadrootsKnowledgeManifestDiscriminator {
     match discriminator {
-        RadrootsEventDiscriminator::KindOnly => RadrootsKnowledgeManifestDiscriminator::KindOnly,
-        RadrootsEventDiscriminator::AdmissionOnly => {
-            RadrootsKnowledgeManifestDiscriminator::AdmissionOnly
-        }
-        RadrootsEventDiscriminator::ClassifiedListingPartition(value) => {
+        EventDiscriminator::KindOnly => RadrootsKnowledgeManifestDiscriminator::KindOnly,
+        EventDiscriminator::AdmissionOnly => RadrootsKnowledgeManifestDiscriminator::AdmissionOnly,
+        EventDiscriminator::ClassifiedListingPartition(value) => {
             RadrootsKnowledgeManifestDiscriminator::ClassifiedListingPartition {
                 value: classified_listing_partition_label(*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::DTagExact(value) => {
-            RadrootsKnowledgeManifestDiscriminator::DTagExact {
-                value: (*value).to_string(),
-            }
-        }
-        RadrootsEventDiscriminator::DTagPrefix(prefix) => {
+        EventDiscriminator::DTagExact(value) => RadrootsKnowledgeManifestDiscriminator::DTagExact {
+            value: (*value).to_string(),
+        },
+        EventDiscriminator::DTagPrefix(prefix) => {
             RadrootsKnowledgeManifestDiscriminator::DTagPrefix {
                 prefix: (*prefix).to_string(),
             }
         }
-        RadrootsEventDiscriminator::DTagSuffix(suffix) => {
+        EventDiscriminator::DTagSuffix(suffix) => {
             RadrootsKnowledgeManifestDiscriminator::DTagSuffix {
                 suffix: (*suffix).to_string(),
             }
         }
-        RadrootsEventDiscriminator::TagEquals { name, value } => {
+        EventDiscriminator::TagEquals { name, value } => {
             RadrootsKnowledgeManifestDiscriminator::TagEquals {
                 name: (*name).to_string(),
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::ContentJsonFieldEquals { field, value } => {
+        EventDiscriminator::ContentJsonFieldEquals { field, value } => {
             RadrootsKnowledgeManifestDiscriminator::ContentJsonFieldEquals {
                 field: (*field).to_string(),
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::EnvelopeType(value) => {
+        EventDiscriminator::EnvelopeType(value) => {
             RadrootsKnowledgeManifestDiscriminator::EnvelopeType {
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::Composite(parts) => {
-            RadrootsKnowledgeManifestDiscriminator::Composite {
-                parts: parts.iter().map(discriminator_manifest).collect(),
-            }
-        }
+        EventDiscriminator::Composite(parts) => RadrootsKnowledgeManifestDiscriminator::Composite {
+            parts: parts.iter().map(discriminator_manifest).collect(),
+        },
     }
 }
 
 fn classified_listing_partition_label(
-    value: radroots_event::listing::classified::RadrootsClassifiedListingPartition,
+    value: radroots_event::listing::classified::ClassifiedListingPartition,
 ) -> &'static str {
-    use radroots_event::listing::classified::RadrootsClassifiedListingPartition;
+    use radroots_event::listing::classified::ClassifiedListingPartition;
 
     match value {
-        RadrootsClassifiedListingPartition::FocusedFoodAvailability => "focused_food_availability",
-        RadrootsClassifiedListingPartition::OperationalListing => "operational_listing",
-        RadrootsClassifiedListingPartition::GenericNip99 => "generic_nip99",
-        RadrootsClassifiedListingPartition::Ambiguous => "ambiguous",
+        ClassifiedListingPartition::FocusedFoodAvailability => "focused_food_availability",
+        ClassifiedListingPartition::OperationalListing => "operational_listing",
+        ClassifiedListingPartition::GenericNip99 => "generic_nip99",
+        ClassifiedListingPartition::Ambiguous => "ambiguous",
     }
 }
 
-fn tag_contract_manifest(contract: &RadrootsTagContract) -> RadrootsKnowledgeManifestTagContract {
+fn tag_contract_manifest(contract: &TagContract) -> RadrootsKnowledgeManifestTagContract {
     RadrootsKnowledgeManifestTagContract {
         name: contract.name.to_string(),
         cardinality: tag_cardinality_label(contract.cardinality).to_string(),
@@ -292,171 +283,171 @@ fn tag_contract_manifest(contract: &RadrootsTagContract) -> RadrootsKnowledgeMan
     }
 }
 
-fn class_label(value: RadrootsEventClass) -> &'static str {
+fn class_label(value: EventClass) -> &'static str {
     match value {
-        RadrootsEventClass::Regular => "regular",
-        RadrootsEventClass::Replaceable => "replaceable",
-        RadrootsEventClass::Addressable => "addressable",
-        RadrootsEventClass::Ephemeral => "ephemeral",
+        EventClass::Regular => "regular",
+        EventClass::Replaceable => "replaceable",
+        EventClass::Addressable => "addressable",
+        EventClass::Ephemeral => "ephemeral",
     }
 }
 
-fn standard_label(value: RadrootsNostrStandard) -> &'static str {
+fn standard_label(value: NostrStandard) -> &'static str {
     match value {
-        RadrootsNostrStandard::Nip01 => "nip01",
-        RadrootsNostrStandard::Nip09 => "nip09",
-        RadrootsNostrStandard::Nip17 => "nip17",
-        RadrootsNostrStandard::Nip18 => "nip18",
-        RadrootsNostrStandard::Nip22 => "nip22",
-        RadrootsNostrStandard::Nip23 => "nip23",
-        RadrootsNostrStandard::Nip25 => "nip25",
-        RadrootsNostrStandard::Nip28 => "nip28",
-        RadrootsNostrStandard::Nip29 => "nip29",
-        RadrootsNostrStandard::Nip42 => "nip42",
-        RadrootsNostrStandard::Nip51 => "nip51",
-        RadrootsNostrStandard::Nip52 => "nip52",
-        RadrootsNostrStandard::Nip53 => "nip53",
-        RadrootsNostrStandard::Nip54 => "nip54",
-        RadrootsNostrStandard::Nip56 => "nip56",
-        RadrootsNostrStandard::Nip57 => "nip57",
-        RadrootsNostrStandard::Nip78 => "nip78",
-        RadrootsNostrStandard::Nip90 => "nip90",
-        RadrootsNostrStandard::Nip94 => "nip94",
-        RadrootsNostrStandard::Nip98 => "nip98",
-        RadrootsNostrStandard::Nip99 => "nip99",
-        RadrootsNostrStandard::Radroots => "radroots",
+        NostrStandard::Nip01 => "nip01",
+        NostrStandard::Nip09 => "nip09",
+        NostrStandard::Nip17 => "nip17",
+        NostrStandard::Nip18 => "nip18",
+        NostrStandard::Nip22 => "nip22",
+        NostrStandard::Nip23 => "nip23",
+        NostrStandard::Nip25 => "nip25",
+        NostrStandard::Nip28 => "nip28",
+        NostrStandard::Nip29 => "nip29",
+        NostrStandard::Nip42 => "nip42",
+        NostrStandard::Nip51 => "nip51",
+        NostrStandard::Nip52 => "nip52",
+        NostrStandard::Nip53 => "nip53",
+        NostrStandard::Nip54 => "nip54",
+        NostrStandard::Nip56 => "nip56",
+        NostrStandard::Nip57 => "nip57",
+        NostrStandard::Nip78 => "nip78",
+        NostrStandard::Nip90 => "nip90",
+        NostrStandard::Nip94 => "nip94",
+        NostrStandard::Nip98 => "nip98",
+        NostrStandard::Nip99 => "nip99",
+        NostrStandard::Radroots => "radroots",
     }
 }
 
-fn stability_label(value: RadrootsEventStability) -> &'static str {
+fn stability_label(value: EventStability) -> &'static str {
     match value {
-        RadrootsEventStability::Stable => "stable",
-        RadrootsEventStability::Experimental => "experimental",
+        EventStability::Stable => "stable",
+        EventStability::Experimental => "experimental",
     }
 }
 
-fn privacy_label(value: RadrootsEventPrivacy) -> &'static str {
+fn privacy_label(value: EventPrivacy) -> &'static str {
     match value {
-        RadrootsEventPrivacy::Public => "public",
-        RadrootsEventPrivacy::Encrypted => "encrypted",
-        RadrootsEventPrivacy::LocalOnly => "local_only",
-        RadrootsEventPrivacy::Secret => "secret",
+        EventPrivacy::Public => "public",
+        EventPrivacy::Encrypted => "encrypted",
+        EventPrivacy::LocalOnly => "local_only",
+        EventPrivacy::Secret => "secret",
     }
 }
 
-fn content_schema_label(value: RadrootsContentSchema) -> &'static str {
+fn content_schema_label(value: ContentSchema) -> &'static str {
     match value {
-        RadrootsContentSchema::Empty => "empty",
-        RadrootsContentSchema::JsonObject => "json_object",
-        RadrootsContentSchema::PlainText => "plain_text",
-        RadrootsContentSchema::Markdown => "markdown",
-        RadrootsContentSchema::Djot => "djot",
-        RadrootsContentSchema::Encrypted => "encrypted",
-        RadrootsContentSchema::BinaryReference => "binary_reference",
+        ContentSchema::Empty => "empty",
+        ContentSchema::JsonObject => "json_object",
+        ContentSchema::PlainText => "plain_text",
+        ContentSchema::Markdown => "markdown",
+        ContentSchema::Djot => "djot",
+        ContentSchema::Encrypted => "encrypted",
+        ContentSchema::BinaryReference => "binary_reference",
     }
 }
 
-fn tag_cardinality_label(value: RadrootsTagCardinality) -> &'static str {
+fn tag_cardinality_label(value: TagCardinality) -> &'static str {
     match value {
-        RadrootsTagCardinality::RequiredOne => "required_one",
-        RadrootsTagCardinality::OptionalOne => "optional_one",
-        RadrootsTagCardinality::OptionalMany => "optional_many",
-        RadrootsTagCardinality::RequiredMany => "required_many",
+        TagCardinality::RequiredOne => "required_one",
+        TagCardinality::OptionalOne => "optional_one",
+        TagCardinality::OptionalMany => "optional_many",
+        TagCardinality::RequiredMany => "required_many",
     }
 }
 
-fn tag_semantic_label(value: RadrootsTagSemantic) -> &'static str {
+fn tag_semantic_label(value: TagSemantic) -> &'static str {
     match value {
-        RadrootsTagSemantic::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagSemantic::CalendarEventAuthor => "calendar_event_author",
-        RadrootsTagSemantic::CalendarEventReference => "calendar_event_reference",
-        RadrootsTagSemantic::CalendarEventRevision => "calendar_event_revision",
-        RadrootsTagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
-        RadrootsTagSemantic::CalendarEnd => "calendar_end",
-        RadrootsTagSemantic::CalendarStart => "calendar_start",
-        RadrootsTagSemantic::Category => "category",
-        RadrootsTagSemantic::Citation => "citation",
-        RadrootsTagSemantic::Contract => "contract",
-        RadrootsTagSemantic::Counterparty => "counterparty",
-        RadrootsTagSemantic::Evidence => "evidence",
-        RadrootsTagSemantic::EventPointer => "event_pointer",
-        RadrootsTagSemantic::FreeBusy => "free_busy",
-        RadrootsTagSemantic::Geohash => "geohash",
-        RadrootsTagSemantic::GroupId => "group_id",
-        RadrootsTagSemantic::Identifier => "identifier",
-        RadrootsTagSemantic::Image => "image",
-        RadrootsTagSemantic::Kind => "kind",
-        RadrootsTagSemantic::ClassifiedListingAddress => "listing_address",
-        RadrootsTagSemantic::OperationalListingSnapshot => "listing_snapshot",
-        RadrootsTagSemantic::ListDescription => "list_description",
-        RadrootsTagSemantic::Location => "location",
-        RadrootsTagSemantic::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagSemantic::Participant => "participant",
-        RadrootsTagSemantic::PreviousEvent => "previous_event",
-        RadrootsTagSemantic::Price => "price",
-        RadrootsTagSemantic::PublishedAt => "published_at",
-        RadrootsTagSemantic::Relay => "relay",
-        RadrootsTagSemantic::Reference => "reference",
-        RadrootsTagSemantic::ReviewTarget => "review_target",
-        RadrootsTagSemantic::RootEvent => "root_event",
-        RadrootsTagSemantic::ServiceInput => "service_input",
-        RadrootsTagSemantic::ServiceOutput => "service_output",
-        RadrootsTagSemantic::Source => "source",
-        RadrootsTagSemantic::Status => "status",
-        RadrootsTagSemantic::Summary => "summary",
-        RadrootsTagSemantic::Title => "title",
-        RadrootsTagSemantic::Topic => "topic",
-        RadrootsTagSemantic::TimeZone => "time_zone",
-        RadrootsTagSemantic::Url => "url",
-        RadrootsTagSemantic::UtcDayCoverage => "utc_day_coverage",
+        TagSemantic::AddressableCoordinate => "addressable_coordinate",
+        TagSemantic::CalendarEventAuthor => "calendar_event_author",
+        TagSemantic::CalendarEventReference => "calendar_event_reference",
+        TagSemantic::CalendarEventRevision => "calendar_event_revision",
+        TagSemantic::CalendarInclusionRequest => "calendar_inclusion_request",
+        TagSemantic::CalendarEnd => "calendar_end",
+        TagSemantic::CalendarStart => "calendar_start",
+        TagSemantic::Category => "category",
+        TagSemantic::Citation => "citation",
+        TagSemantic::Contract => "contract",
+        TagSemantic::Counterparty => "counterparty",
+        TagSemantic::Evidence => "evidence",
+        TagSemantic::EventPointer => "event_pointer",
+        TagSemantic::FreeBusy => "free_busy",
+        TagSemantic::Geohash => "geohash",
+        TagSemantic::GroupId => "group_id",
+        TagSemantic::Identifier => "identifier",
+        TagSemantic::Image => "image",
+        TagSemantic::Kind => "kind",
+        TagSemantic::ClassifiedListingAddress => "listing_address",
+        TagSemantic::OperationalListingSnapshot => "listing_snapshot",
+        TagSemantic::ListDescription => "list_description",
+        TagSemantic::Location => "location",
+        TagSemantic::Nip01Coordinate => "nip01_coordinate",
+        TagSemantic::Participant => "participant",
+        TagSemantic::PreviousEvent => "previous_event",
+        TagSemantic::Price => "price",
+        TagSemantic::PublishedAt => "published_at",
+        TagSemantic::Relay => "relay",
+        TagSemantic::Reference => "reference",
+        TagSemantic::ReviewTarget => "review_target",
+        TagSemantic::RootEvent => "root_event",
+        TagSemantic::ServiceInput => "service_input",
+        TagSemantic::ServiceOutput => "service_output",
+        TagSemantic::Source => "source",
+        TagSemantic::Status => "status",
+        TagSemantic::Summary => "summary",
+        TagSemantic::Title => "title",
+        TagSemantic::Topic => "topic",
+        TagSemantic::TimeZone => "time_zone",
+        TagSemantic::Url => "url",
+        TagSemantic::UtcDayCoverage => "utc_day_coverage",
     }
 }
 
-fn tag_value_type_label(value: RadrootsTagValueType) -> &'static str {
+fn tag_value_type_label(value: TagValueType) -> &'static str {
     match value {
-        RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagValueType::CalendarDate => "calendar_date",
-        RadrootsTagValueType::CalendarEventCoordinate => "calendar_event_coordinate",
-        RadrootsTagValueType::CalendarFreeBusy => "calendar_free_busy",
-        RadrootsTagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
-        RadrootsTagValueType::CalendarUid => "calendar_uid",
-        RadrootsTagValueType::ContractId => "contract_id",
-        RadrootsTagValueType::DTag => "d_tag",
-        RadrootsTagValueType::EventId => "event_id",
-        RadrootsTagValueType::EventPointer => "event_pointer",
-        RadrootsTagValueType::Geohash => "geohash",
-        RadrootsTagValueType::IanaTimeZoneId => "iana_time_zone_id",
-        RadrootsTagValueType::Kind => "kind",
-        RadrootsTagValueType::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagValueType::PublicKey => "public_key",
-        RadrootsTagValueType::RelayUrl => "relay_url",
-        RadrootsTagValueType::Sha256 => "sha256",
-        RadrootsTagValueType::Text => "text",
-        RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
-        RadrootsTagValueType::Uri => "uri",
-        RadrootsTagValueType::Url => "url",
-        RadrootsTagValueType::UtcDayIndex => "utc_day_index",
-        RadrootsTagValueType::Uuid => "uuid",
+        TagValueType::AddressableCoordinate => "addressable_coordinate",
+        TagValueType::CalendarDate => "calendar_date",
+        TagValueType::CalendarEventCoordinate => "calendar_event_coordinate",
+        TagValueType::CalendarFreeBusy => "calendar_free_busy",
+        TagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
+        TagValueType::CalendarUid => "calendar_uid",
+        TagValueType::ContractId => "contract_id",
+        TagValueType::DTag => "d_tag",
+        TagValueType::EventId => "event_id",
+        TagValueType::EventPointer => "event_pointer",
+        TagValueType::Geohash => "geohash",
+        TagValueType::IanaTimeZoneId => "iana_time_zone_id",
+        TagValueType::Kind => "kind",
+        TagValueType::Nip01Coordinate => "nip01_coordinate",
+        TagValueType::PublicKey => "public_key",
+        TagValueType::RelayUrl => "relay_url",
+        TagValueType::Sha256 => "sha256",
+        TagValueType::Text => "text",
+        TagValueType::UnixTimestamp => "unix_timestamp",
+        TagValueType::Uri => "uri",
+        TagValueType::Url => "url",
+        TagValueType::UtcDayIndex => "utc_day_index",
+        TagValueType::Uuid => "uuid",
     }
 }
 
-fn reducer_label(value: RadrootsReducer) -> &'static str {
+fn reducer_label(value: Reducer) -> &'static str {
     match value {
-        RadrootsReducer::CalendarProjection => "calendar_projection",
-        RadrootsReducer::FarmOpsProjection => "farm_ops_projection",
-        RadrootsReducer::GroupProjection => "group_projection",
-        RadrootsReducer::KnowledgeProjection => "knowledge_projection",
-        RadrootsReducer::OperationalListingInventoryAccounting => {
+        Reducer::CalendarProjection => "calendar_projection",
+        Reducer::FarmOpsProjection => "farm_ops_projection",
+        Reducer::GroupProjection => "group_projection",
+        Reducer::KnowledgeProjection => "knowledge_projection",
+        Reducer::OperationalListingInventoryAccounting => {
             "operational_listing_inventory_accounting"
         }
-        RadrootsReducer::OperationalListingProjection => "operational_listing_projection",
-        RadrootsReducer::MarketProjection => "market_projection",
-        RadrootsReducer::OrderProjection => "order_projection",
-        RadrootsReducer::ProfileProjection => "profile_projection",
-        RadrootsReducer::NostrRelayPolicyProjection => "nostr_relay_policy_projection",
-        RadrootsReducer::SocialProjection => "social_projection",
-        RadrootsReducer::TradeProjection => "trade_projection",
-        RadrootsReducer::TradeValidation => "trade_validation",
+        Reducer::OperationalListingProjection => "operational_listing_projection",
+        Reducer::MarketProjection => "market_projection",
+        Reducer::OrderProjection => "order_projection",
+        Reducer::ProfileProjection => "profile_projection",
+        Reducer::NostrRelayPolicyProjection => "nostr_relay_policy_projection",
+        Reducer::SocialProjection => "social_projection",
+        Reducer::TradeProjection => "trade_projection",
+        Reducer::TradeValidation => "trade_validation",
     }
 }
 
@@ -464,23 +455,23 @@ fn reducer_label(value: RadrootsReducer) -> &'static str {
 mod tests {
     use super::{discriminator_manifest, reducer_label, standard_label};
     use radroots_event::{
-        contract::{RadrootsEventDiscriminator, RadrootsNostrStandard, RadrootsReducer},
-        listing::classified::RadrootsClassifiedListingPartition,
+        contract::{EventDiscriminator, NostrStandard, Reducer},
+        listing::classified::ClassifiedListingPartition,
     };
 
     #[test]
     fn classified_listing_standard_label_is_nip99() {
-        assert_eq!(standard_label(RadrootsNostrStandard::Nip99), "nip99");
+        assert_eq!(standard_label(NostrStandard::Nip99), "nip99");
     }
 
     #[test]
     fn operational_listing_reducer_labels_are_unambiguous() {
         assert_eq!(
-            reducer_label(RadrootsReducer::OperationalListingProjection),
+            reducer_label(Reducer::OperationalListingProjection),
             "operational_listing_projection"
         );
         assert_eq!(
-            reducer_label(RadrootsReducer::OperationalListingInventoryAccounting),
+            reducer_label(Reducer::OperationalListingInventoryAccounting),
             "operational_listing_inventory_accounting"
         );
     }
@@ -489,22 +480,18 @@ mod tests {
     fn classified_listing_partition_discriminators_render_exactly() {
         for (partition, expected) in [
             (
-                RadrootsClassifiedListingPartition::FocusedFoodAvailability,
+                ClassifiedListingPartition::FocusedFoodAvailability,
                 "focused_food_availability",
             ),
             (
-                RadrootsClassifiedListingPartition::OperationalListing,
+                ClassifiedListingPartition::OperationalListing,
                 "operational_listing",
             ),
-            (
-                RadrootsClassifiedListingPartition::GenericNip99,
-                "generic_nip99",
-            ),
-            (RadrootsClassifiedListingPartition::Ambiguous, "ambiguous"),
+            (ClassifiedListingPartition::GenericNip99, "generic_nip99"),
+            (ClassifiedListingPartition::Ambiguous, "ambiguous"),
         ] {
-            let manifest = discriminator_manifest(
-                &RadrootsEventDiscriminator::ClassifiedListingPartition(partition),
-            );
+            let manifest =
+                discriminator_manifest(&EventDiscriminator::ClassifiedListingPartition(partition));
             assert_eq!(
                 serde_json::to_value(manifest).expect("serialized discriminator"),
                 serde_json::json!({

@@ -5,11 +5,11 @@ mod common;
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_POST, KIND_PUBLIC_FILE_METADATA},
-    farm::crdt::RadrootsFarmCrdtDocumentKind,
-    farm::file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
-    farm::workspace::RadrootsFarmWorkspaceRef,
-    media::file_metadata::RadrootsFileMetadata,
-    social::{RadrootsSocialMediaDimensions, RadrootsSocialMediaThumbnail},
+    farm::crdt::FarmCrdtDocumentKind,
+    farm::file::{FarmFileDimensions, FarmFileMetadata, FarmFileSource},
+    farm::workspace::FarmWorkspaceRef,
+    media::file_metadata::FileMetadata,
+    social::{SocialMediaDimensions, SocialMediaThumbnail},
     tag::name::{
         TAG_ALT, TAG_DIMENSIONS, TAG_FALLBACK, TAG_MAGNET, TAG_MIME, TAG_ORIGINAL_SHA256,
         TAG_SERVICE, TAG_SHA256, TAG_SIZE, TAG_SUMMARY, TAG_THUMB, TAG_URL,
@@ -29,21 +29,21 @@ use radroots_event_codec::{
 const VALID_HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const OTHER_HASH: &str = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
-fn sample_metadata() -> RadrootsFileMetadata {
-    RadrootsFileMetadata {
+fn sample_metadata() -> FileMetadata {
+    FileMetadata {
         url: "https://media.example.test/field.jpg".to_string(),
         mime_type: "image/jpeg".to_string(),
         sha256: VALID_HASH.to_string(),
         original_sha256: Some(OTHER_HASH.to_string()),
         size: Some(4096),
-        dimensions: Some(RadrootsSocialMediaDimensions {
+        dimensions: Some(SocialMediaDimensions {
             width: 1200,
             height: 800,
         }),
         blurhash: Some("L6PZfSi_.AyE_3t7t7R**0o#DgR4".to_string()),
-        thumbnails: Some(vec![RadrootsSocialMediaThumbnail {
+        thumbnails: Some(vec![SocialMediaThumbnail {
             url: "https://media.example.test/field-thumb.jpg".to_string(),
-            dimensions: Some(RadrootsSocialMediaDimensions {
+            dimensions: Some(SocialMediaDimensions {
                 width: 320,
                 height: 200,
             }),
@@ -58,23 +58,23 @@ fn sample_metadata() -> RadrootsFileMetadata {
     }
 }
 
-fn sample_farm_file_metadata() -> RadrootsFarmFileMetadata {
-    RadrootsFarmFileMetadata {
+fn sample_farm_file_metadata() -> FarmFileMetadata {
+    FarmFileMetadata {
         d_tag: "BBBBBBBBBBBBBBBBBBBBBA".to_string(),
-        workspace: RadrootsFarmWorkspaceRef {
+        workspace: FarmWorkspaceRef {
             pubkey: "workspace_pubkey".to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
         },
         farm_group_id: "field-group".to_string(),
         owner_document_id: "CCCCCCCCCCCCCCCCCCCCCA".to_string(),
-        owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+        owner_document_kind: FarmCrdtDocumentKind::FarmTask,
         caption: Some("Private crop photo".to_string()),
         url: "https://media.example.test/private.jpg".to_string(),
         mime_type: "image/jpeg".to_string(),
         sha256: VALID_HASH.to_string(),
         original_sha256: None,
         size_bytes: Some(2048),
-        dimensions: Some(RadrootsFarmFileDimensions { w: 800, h: 600 }),
+        dimensions: Some(FarmFileDimensions { w: 800, h: 600 }),
         blurhash: None,
         thumb: None,
         image: None,
@@ -193,7 +193,7 @@ fn file_metadata_encode_handles_minimal_optional_shape_and_invalid_dimensions() 
     );
 
     let mut metadata = sample_metadata();
-    metadata.dimensions = Some(RadrootsSocialMediaDimensions {
+    metadata.dimensions = Some(SocialMediaDimensions {
         width: 0,
         height: 800,
     });
@@ -203,7 +203,7 @@ fn file_metadata_encode_handles_minimal_optional_shape_and_invalid_dimensions() 
     ));
 
     let mut metadata = sample_metadata();
-    metadata.dimensions = Some(RadrootsSocialMediaDimensions {
+    metadata.dimensions = Some(SocialMediaDimensions {
         width: 1200,
         height: 0,
     });
@@ -225,12 +225,12 @@ fn file_metadata_public_and_private_kind1063_contracts_do_not_cross_decode() {
     ));
 
     let mut private_metadata = sample_farm_file_metadata();
-    private_metadata.thumb = Some(RadrootsFarmFileSource {
+    private_metadata.thumb = Some(FarmFileSource {
         url: "https://media.example.test/private-thumb.jpg".to_string(),
         mime_type: Some("image/jpeg".to_string()),
-        dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 240 }),
+        dimensions: Some(FarmFileDimensions { w: 320, h: 240 }),
     });
-    private_metadata.image = Some(RadrootsFarmFileSource {
+    private_metadata.image = Some(FarmFileSource {
         url: "https://media.example.test/private-image.jpg".to_string(),
         mime_type: Some("image/jpeg".to_string()),
         dimensions: None,
@@ -241,7 +241,7 @@ fn file_metadata_public_and_private_kind1063_contracts_do_not_cross_decode() {
     assert_eq!(decoded_private.owner_document_id, "CCCCCCCCCCCCCCCCCCCCCA");
     assert_eq!(
         decoded_private.thumb.and_then(|source| source.dimensions),
-        Some(RadrootsFarmFileDimensions { w: 320, h: 240 })
+        Some(FarmFileDimensions { w: 320, h: 240 })
     );
     assert_eq!(
         decoded_private

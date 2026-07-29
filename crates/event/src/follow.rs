@@ -8,8 +8,8 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsFollow {
-    pub list: Vec<RadrootsFollowProfile>,
+pub struct Follow {
+    pub list: Vec<FollowProfile>,
 }
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
@@ -19,7 +19,7 @@ pub struct RadrootsFollow {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsFollowProfile {
+pub struct FollowProfile {
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_number"))]
     pub published_at: u64,
     pub public_key: String,

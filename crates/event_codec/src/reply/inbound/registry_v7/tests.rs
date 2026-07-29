@@ -199,7 +199,7 @@ fn inbound_relay_syntax_and_tag_element_budgets_remain_separate() {
         "a".repeat(RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1 - prefix.len())
     );
     assert_eq!(relay.len(), RADROOTS_POST_TAG_ELEMENT_MAX_BYTES + 1);
-    RadrootsNostrRelayHint::parse(&relay).expect("relay syntax has no Reply wire budget");
+    NostrRelayHint::parse(&relay).expect("relay syntax has no Reply wire budget");
 
     let tags = vec![
         vec!["e".to_string(), h('a'), relay, "root".to_string()],

@@ -7,18 +7,17 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::{
     calendar::{
-        RADROOTS_CALENDAR_MAX_PARTICIPANTS, RadrootsCalendarDate, RadrootsCalendarUid,
-        RadrootsCalendarUri, RadrootsIanaTimeZoneId, canonical_calendar_geohash_is_valid,
-        canonical_calendar_tag_text_is_valid, covered_utc_days,
+        CalendarDate, CalendarUid, CalendarUri, IanaTimeZoneId, RADROOTS_CALENDAR_MAX_PARTICIPANTS,
+        canonical_calendar_geohash_is_valid, canonical_calendar_tag_text_is_valid,
+        covered_utc_days,
     },
-    envelope::RadrootsEventEnvelope,
+    envelope::EventEnvelope,
     envelope::kind::*,
     id::{
-        RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsNip01Coordinate,
-        parse_public_key, relay_url_is_valid,
+        AddressableCoordinate, DTag, EventId, Nip01Coordinate, parse_public_key, relay_url_is_valid,
     },
     listing::classified::{
-        RadrootsClassifiedListingPartition, TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY,
+        ClassifiedListingPartition, TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY,
     },
 };
 use radroots_blossom::BlobUrl;
@@ -26,7 +25,7 @@ use radroots_blossom::BlobUrl;
 pub const RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION: u32 = 7;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventClass {
+pub enum EventClass {
     Regular,
     Replaceable,
     Addressable,
@@ -34,7 +33,7 @@ pub enum RadrootsEventClass {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsNostrStandard {
+pub enum NostrStandard {
     Nip01,
     Nip09,
     Nip17,
@@ -60,7 +59,7 @@ pub enum RadrootsNostrStandard {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventPrivacy {
+pub enum EventPrivacy {
     Public,
     Encrypted,
     LocalOnly,
@@ -68,7 +67,7 @@ pub enum RadrootsEventPrivacy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventStability {
+pub enum EventStability {
     Stable,
     Experimental,
 }
@@ -121,7 +120,7 @@ impl AuthorRole {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsReducer {
+pub enum Reducer {
     CalendarProjection,
     FarmOpsProjection,
     GroupProjection,
@@ -138,7 +137,7 @@ pub enum RadrootsReducer {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsContentSchema {
+pub enum ContentSchema {
     Empty,
     JsonObject,
     PlainText,
@@ -149,7 +148,7 @@ pub enum RadrootsContentSchema {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsTagCardinality {
+pub enum TagCardinality {
     RequiredOne,
     OptionalOne,
     OptionalMany,
@@ -157,7 +156,7 @@ pub enum RadrootsTagCardinality {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsTagSemantic {
+pub enum TagSemantic {
     AddressableCoordinate,
     CalendarEventAuthor,
     CalendarEventReference,
@@ -203,7 +202,7 @@ pub enum RadrootsTagSemantic {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsTagValueType {
+pub enum TagValueType {
     AddressableCoordinate,
     CalendarDate,
     CalendarEventCoordinate,
@@ -230,21 +229,21 @@ pub enum RadrootsTagValueType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsTagContract {
+pub struct TagContract {
     pub name: &'static str,
-    pub cardinality: RadrootsTagCardinality,
-    pub semantic: RadrootsTagSemantic,
-    pub value_type: RadrootsTagValueType,
+    pub cardinality: TagCardinality,
+    pub semantic: TagSemantic,
+    pub value_type: TagValueType,
     pub relay_indexed: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventDiscriminator {
+pub enum EventDiscriminator {
     KindOnly,
     /// Exact profile selection is owned by a verified admission algorithm.
     AdmissionOnly,
     /// Exact NIP-99 profile selection uses the central raw marker partition.
-    ClassifiedListingPartition(RadrootsClassifiedListingPartition),
+    ClassifiedListingPartition(ClassifiedListingPartition),
     DTagExact(&'static str),
     DTagPrefix(&'static str),
     DTagSuffix(&'static str),
@@ -257,12 +256,12 @@ pub enum RadrootsEventDiscriminator {
         value: &'static str,
     },
     EnvelopeType(&'static str),
-    Composite(&'static [RadrootsEventDiscriminator]),
+    Composite(&'static [EventDiscriminator]),
 }
 
 /// Governs whether a contract may enter the generic frozen-draft boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsEventAuthoringPolicy {
+pub enum EventAuthoringPolicy {
     /// Generic contract validation is sufficient to construct a frozen draft.
     GenericDraft,
     /// Authoring requires a sealed typed API instead of generic draft parts.
@@ -271,7 +270,7 @@ pub enum RadrootsEventAuthoringPolicy {
     ReadOnly,
 }
 
-impl RadrootsEventAuthoringPolicy {
+impl EventAuthoringPolicy {
     /// Returns whether untyped contract parts may construct a frozen draft.
     #[must_use]
     pub const fn permits_generic_draft(self) -> bool {
@@ -292,14 +291,14 @@ impl RadrootsEventAuthoringPolicy {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsContractMatchError {
+pub enum ContractMatchError {
     UnsupportedKind(u32),
     UnsupportedShape(u32),
     AmbiguousShape(u32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsContractFamily {
+pub enum ContractFamily {
     Account,
     Application,
     Calendar,
@@ -318,14 +317,14 @@ pub enum RadrootsContractFamily {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsContractFamilyMetadata {
-    pub family: RadrootsContractFamily,
+pub struct ContractFamilyMetadata {
+    pub family: ContractFamily,
     pub id: &'static str,
     pub name: &'static str,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsContractValidationError {
+pub enum ContractValidationError {
     UnknownContract {
         contract_id: String,
     },
@@ -333,7 +332,7 @@ pub enum RadrootsContractValidationError {
         contract_id: &'static str,
     },
     ContractMatch {
-        error: RadrootsContractMatchError,
+        error: ContractMatchError,
     },
     KindMismatch {
         expected: u32,
@@ -374,7 +373,7 @@ pub enum RadrootsContractValidationError {
     },
 }
 
-impl RadrootsContractValidationError {
+impl ContractValidationError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::UnknownContract { .. } => "unknown_contract",
@@ -394,33 +393,33 @@ impl RadrootsContractValidationError {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsKindContract {
+pub struct KindContract {
     pub kind: u32,
     pub canonical_constant: &'static str,
     pub name: &'static str,
-    pub class: RadrootsEventClass,
-    pub standard: RadrootsNostrStandard,
+    pub class: EventClass,
+    pub standard: NostrStandard,
     pub accepted_event_contracts: &'static [&'static str],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RadrootsEventContract {
+pub struct EventContract {
     pub id: &'static str,
     pub kind: u32,
     pub name: &'static str,
     pub payload_type: &'static str,
-    pub class: RadrootsEventClass,
-    pub stability: RadrootsEventStability,
-    pub privacy: RadrootsEventPrivacy,
+    pub class: EventClass,
+    pub stability: EventStability,
+    pub privacy: EventPrivacy,
     required_author_role: AuthorRole,
-    pub content_schema: RadrootsContentSchema,
-    authoring_policy: RadrootsEventAuthoringPolicy,
-    pub discriminator: RadrootsEventDiscriminator,
-    pub tags: &'static [RadrootsTagContract],
-    pub reducers: &'static [RadrootsReducer],
+    pub content_schema: ContentSchema,
+    authoring_policy: EventAuthoringPolicy,
+    pub discriminator: EventDiscriminator,
+    pub tags: &'static [TagContract],
+    pub reducers: &'static [Reducer],
 }
 
-impl RadrootsEventContract {
+impl EventContract {
     /// Returns the event-authoring role required by this contract.
     ///
     /// Hosts decide whether a concrete signer or actor has this role; the
@@ -432,84 +431,84 @@ impl RadrootsEventContract {
 
     /// Returns the single registry-owned policy governing authoring routes.
     #[must_use]
-    pub const fn authoring_policy(&self) -> RadrootsEventAuthoringPolicy {
+    pub const fn authoring_policy(&self) -> EventAuthoringPolicy {
         self.authoring_policy
     }
 }
 
-static CONTRACT_FAMILIES: &[RadrootsContractFamilyMetadata] = &[
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Account,
+static CONTRACT_FAMILIES: &[ContractFamilyMetadata] = &[
+    ContractFamilyMetadata {
+        family: ContractFamily::Account,
         id: "account",
         name: "Account",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Application,
+    ContractFamilyMetadata {
+        family: ContractFamily::Application,
         id: "application",
         name: "Application",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Calendar,
+    ContractFamilyMetadata {
+        family: ContractFamily::Calendar,
         id: "calendar",
         name: "Calendar",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Farm,
+    ContractFamilyMetadata {
+        family: ContractFamily::Farm,
         id: "farm",
         name: "Farm",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Group,
+    ContractFamilyMetadata {
+        family: ContractFamily::Group,
         id: "group",
         name: "Group",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Http,
+    ContractFamilyMetadata {
+        family: ContractFamily::Http,
         id: "http",
         name: "HTTP",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Job,
+    ContractFamilyMetadata {
+        family: ContractFamily::Job,
         id: "job",
         name: "Job",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Knowledge,
+    ContractFamilyMetadata {
+        family: ContractFamily::Knowledge,
         id: "knowledge",
         name: "Knowledge",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::List,
+    ContractFamilyMetadata {
+        family: ContractFamily::List,
         id: "list",
         name: "List",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Market,
+    ContractFamilyMetadata {
+        family: ContractFamily::Market,
         id: "market",
         name: "Market",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Message,
+    ContractFamilyMetadata {
+        family: ContractFamily::Message,
         id: "message",
         name: "Message",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Profile,
+    ContractFamilyMetadata {
+        family: ContractFamily::Profile,
         id: "profile",
         name: "Profile",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Relay,
+    ContractFamilyMetadata {
+        family: ContractFamily::Relay,
         id: "relay",
         name: "Relay",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Social,
+    ContractFamilyMetadata {
+        family: ContractFamily::Social,
         id: "social",
         name: "Social",
     },
-    RadrootsContractFamilyMetadata {
-        family: RadrootsContractFamily::Trade,
+    ContractFamilyMetadata {
+        family: ContractFamily::Trade,
         id: "trade",
         name: "Trade",
     },
@@ -517,12 +516,12 @@ static CONTRACT_FAMILIES: &[RadrootsContractFamilyMetadata] = &[
 
 const fn tag(
     name: &'static str,
-    cardinality: RadrootsTagCardinality,
-    semantic: RadrootsTagSemantic,
-    value_type: RadrootsTagValueType,
+    cardinality: TagCardinality,
+    semantic: TagSemantic,
+    value_type: TagValueType,
     relay_indexed: bool,
-) -> RadrootsTagContract {
-    RadrootsTagContract {
+) -> TagContract {
+    TagContract {
         name,
         cardinality,
         semantic,
@@ -531,665 +530,665 @@ const fn tag(
     }
 }
 
-const TAG_D: RadrootsTagContract = tag(
+const TAG_D: TagContract = tag(
     "d",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Identifier,
-    RadrootsTagValueType::DTag,
+    TagCardinality::RequiredOne,
+    TagSemantic::Identifier,
+    TagValueType::DTag,
     true,
 );
-const TAG_P_REQUIRED: RadrootsTagContract = tag(
+const TAG_P_REQUIRED: TagContract = tag(
     "p",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Counterparty,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::RequiredOne,
+    TagSemantic::Counterparty,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_P_MANY: RadrootsTagContract = tag(
+const TAG_P_MANY: TagContract = tag(
     "p",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Counterparty,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::OptionalMany,
+    TagSemantic::Counterparty,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_CALENDAR_PARTICIPANT: RadrootsTagContract = tag(
+const TAG_CALENDAR_PARTICIPANT: TagContract = tag(
     "p",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Participant,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::OptionalMany,
+    TagSemantic::Participant,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_A_ADDRESS_REQUIRED: RadrootsTagContract = tag(
+const TAG_A_ADDRESS_REQUIRED: TagContract = tag(
     "a",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::RequiredOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_A_OPTIONAL: RadrootsTagContract = tag(
+const TAG_A_OPTIONAL: TagContract = tag(
     "a",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_A_MANY: RadrootsTagContract = tag(
+const TAG_A_MANY: TagContract = tag(
     "a",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalMany,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_CALENDAR_INCLUSION_REQUEST: RadrootsTagContract = tag(
+const TAG_CALENDAR_INCLUSION_REQUEST: TagContract = tag(
     "a",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::CalendarInclusionRequest,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalMany,
+    TagSemantic::CalendarInclusionRequest,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_E_ROOT: RadrootsTagContract = tag(
+const TAG_E_ROOT: TagContract = tag(
     "e",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::RootEvent,
-    RadrootsTagValueType::EventId,
+    TagCardinality::RequiredOne,
+    TagSemantic::RootEvent,
+    TagValueType::EventId,
     true,
 );
-const TAG_E_SOURCE_VERSION: RadrootsTagContract = tag(
+const TAG_E_SOURCE_VERSION: TagContract = tag(
     "e",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Source,
-    RadrootsTagValueType::EventId,
+    TagCardinality::RequiredOne,
+    TagSemantic::Source,
+    TagValueType::EventId,
     true,
 );
-const TAG_E_BASE_VERSION: RadrootsTagContract = tag(
+const TAG_E_BASE_VERSION: TagContract = tag(
     "e",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::PreviousEvent,
-    RadrootsTagValueType::EventId,
+    TagCardinality::OptionalOne,
+    TagSemantic::PreviousEvent,
+    TagValueType::EventId,
     true,
 );
-const TAG_E_MANY: RadrootsTagContract = tag(
+const TAG_E_MANY: TagContract = tag(
     "e",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::EventPointer,
-    RadrootsTagValueType::EventId,
+    TagCardinality::OptionalMany,
+    TagSemantic::EventPointer,
+    TagValueType::EventId,
     true,
 );
-const TAG_NIP09_E_TARGET: RadrootsTagContract = tag(
+const TAG_NIP09_E_TARGET: TagContract = tag(
     "e",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::EventPointer,
-    RadrootsTagValueType::EventId,
+    TagCardinality::OptionalMany,
+    TagSemantic::EventPointer,
+    TagValueType::EventId,
     true,
 );
-const TAG_NIP09_A_TARGET: RadrootsTagContract = tag(
+const TAG_NIP09_A_TARGET: TagContract = tag(
     "a",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Nip01Coordinate,
-    RadrootsTagValueType::Nip01Coordinate,
+    TagCardinality::OptionalMany,
+    TagSemantic::Nip01Coordinate,
+    TagValueType::Nip01Coordinate,
     true,
 );
-const TAG_NIP09_K_ADVISORY: RadrootsTagContract = tag(
+const TAG_NIP09_K_ADVISORY: TagContract = tag(
     "k",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Kind,
-    RadrootsTagValueType::Kind,
+    TagCardinality::OptionalMany,
+    TagSemantic::Kind,
+    TagValueType::Kind,
     true,
 );
-const TAG_NIP10_E_REQUIRED: RadrootsTagContract = tag(
+const TAG_NIP10_E_REQUIRED: TagContract = tag(
     "e",
-    RadrootsTagCardinality::RequiredMany,
-    RadrootsTagSemantic::EventPointer,
-    RadrootsTagValueType::EventId,
+    TagCardinality::RequiredMany,
+    TagSemantic::EventPointer,
+    TagValueType::EventId,
     true,
 );
-const TAG_NIP10_P_OPTIONAL: RadrootsTagContract = tag(
+const TAG_NIP10_P_OPTIONAL: TagContract = tag(
     "p",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Participant,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::OptionalMany,
+    TagSemantic::Participant,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_NIP22_E_ROOT: RadrootsTagContract = tag(
+const TAG_NIP22_E_ROOT: TagContract = tag(
     "E",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::RootEvent,
-    RadrootsTagValueType::EventId,
+    TagCardinality::OptionalOne,
+    TagSemantic::RootEvent,
+    TagValueType::EventId,
     true,
 );
-const TAG_NIP22_A_ROOT: RadrootsTagContract = tag(
+const TAG_NIP22_A_ROOT: TagContract = tag(
     "A",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_NIP22_K_ROOT: RadrootsTagContract = tag(
+const TAG_NIP22_K_ROOT: TagContract = tag(
     "K",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Kind,
-    RadrootsTagValueType::Kind,
+    TagCardinality::RequiredOne,
+    TagSemantic::Kind,
+    TagValueType::Kind,
     true,
 );
-const TAG_NIP22_P_ROOT: RadrootsTagContract = tag(
+const TAG_NIP22_P_ROOT: TagContract = tag(
     "P",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Participant,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::RequiredOne,
+    TagSemantic::Participant,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_NIP22_A_PARENT: RadrootsTagContract = tag(
+const TAG_NIP22_A_PARENT: TagContract = tag(
     "a",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_NIP22_E_PARENT: RadrootsTagContract = tag(
+const TAG_NIP22_E_PARENT: TagContract = tag(
     "e",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::EventPointer,
-    RadrootsTagValueType::EventId,
+    TagCardinality::RequiredOne,
+    TagSemantic::EventPointer,
+    TagValueType::EventId,
     true,
 );
-const TAG_NIP22_K_PARENT: RadrootsTagContract = tag(
+const TAG_NIP22_K_PARENT: TagContract = tag(
     "k",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Kind,
-    RadrootsTagValueType::Kind,
+    TagCardinality::RequiredOne,
+    TagSemantic::Kind,
+    TagValueType::Kind,
     true,
 );
-const TAG_NIP22_P_PARENT: RadrootsTagContract = tag(
+const TAG_NIP22_P_PARENT: TagContract = tag(
     "p",
-    RadrootsTagCardinality::RequiredMany,
-    RadrootsTagSemantic::Participant,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::RequiredMany,
+    TagSemantic::Participant,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_KIND: RadrootsTagContract = tag(
+const TAG_KIND: TagContract = tag(
     "k",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Kind,
-    RadrootsTagValueType::Kind,
+    TagCardinality::OptionalOne,
+    TagSemantic::Kind,
+    TagValueType::Kind,
     true,
 );
-const TAG_RELAY: RadrootsTagContract = tag(
+const TAG_RELAY: TagContract = tag(
     "relay",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Relay,
-    RadrootsTagValueType::RelayUrl,
+    TagCardinality::OptionalMany,
+    TagSemantic::Relay,
+    TagValueType::RelayUrl,
     false,
 );
-const TAG_GROUP: RadrootsTagContract = tag(
+const TAG_GROUP: TagContract = tag(
     "h",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::GroupId,
-    RadrootsTagValueType::DTag,
+    TagCardinality::RequiredOne,
+    TagSemantic::GroupId,
+    TagValueType::DTag,
     true,
 );
-const TAG_TITLE: RadrootsTagContract = tag(
+const TAG_TITLE: TagContract = tag(
     "title",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Title,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Title,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_TITLE: RadrootsTagContract = tag(
+const TAG_CALENDAR_TITLE: TagContract = tag(
     "title",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Title,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Title,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_LEGACY_NAME: RadrootsTagContract = tag(
+const TAG_CALENDAR_LEGACY_NAME: TagContract = tag(
     "name",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Title,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Title,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_UID: RadrootsTagContract = tag(
+const TAG_CALENDAR_UID: TagContract = tag(
     "d",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Identifier,
-    RadrootsTagValueType::CalendarUid,
+    TagCardinality::RequiredOne,
+    TagSemantic::Identifier,
+    TagValueType::CalendarUid,
     true,
 );
-const TAG_CALENDAR_COLLECTION_DESCRIPTION: RadrootsTagContract = tag(
+const TAG_CALENDAR_COLLECTION_DESCRIPTION: TagContract = tag(
     "description",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::ListDescription,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::ListDescription,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_COLLECTION_EVENT: RadrootsTagContract = tag(
+const TAG_CALENDAR_COLLECTION_EVENT: TagContract = tag(
     "a",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::CalendarEventReference,
-    RadrootsTagValueType::CalendarEventCoordinate,
+    TagCardinality::OptionalMany,
+    TagSemantic::CalendarEventReference,
+    TagValueType::CalendarEventCoordinate,
     true,
 );
-const TAG_CALENDAR_RSVP_EVENT: RadrootsTagContract = tag(
+const TAG_CALENDAR_RSVP_EVENT: TagContract = tag(
     "a",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::CalendarEventReference,
-    RadrootsTagValueType::CalendarEventCoordinate,
+    TagCardinality::RequiredOne,
+    TagSemantic::CalendarEventReference,
+    TagValueType::CalendarEventCoordinate,
     true,
 );
-const TAG_CALENDAR_RSVP_REVISION: RadrootsTagContract = tag(
+const TAG_CALENDAR_RSVP_REVISION: TagContract = tag(
     "e",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::CalendarEventRevision,
-    RadrootsTagValueType::EventId,
+    TagCardinality::OptionalOne,
+    TagSemantic::CalendarEventRevision,
+    TagValueType::EventId,
     true,
 );
-const TAG_CALENDAR_RSVP_STATUS: RadrootsTagContract = tag(
+const TAG_CALENDAR_RSVP_STATUS: TagContract = tag(
     "status",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Status,
-    RadrootsTagValueType::CalendarRsvpStatus,
+    TagCardinality::RequiredOne,
+    TagSemantic::Status,
+    TagValueType::CalendarRsvpStatus,
     false,
 );
-const TAG_CALENDAR_RSVP_FREE_BUSY: RadrootsTagContract = tag(
+const TAG_CALENDAR_RSVP_FREE_BUSY: TagContract = tag(
     "fb",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::FreeBusy,
-    RadrootsTagValueType::CalendarFreeBusy,
+    TagCardinality::OptionalOne,
+    TagSemantic::FreeBusy,
+    TagValueType::CalendarFreeBusy,
     false,
 );
-const TAG_CALENDAR_RSVP_AUTHOR: RadrootsTagContract = tag(
+const TAG_CALENDAR_RSVP_AUTHOR: TagContract = tag(
     "p",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::CalendarEventAuthor,
-    RadrootsTagValueType::PublicKey,
+    TagCardinality::OptionalOne,
+    TagSemantic::CalendarEventAuthor,
+    TagValueType::PublicKey,
     true,
 );
-const TAG_CALENDAR_DATE_START: RadrootsTagContract = tag(
+const TAG_CALENDAR_DATE_START: TagContract = tag(
     "start",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::CalendarStart,
-    RadrootsTagValueType::CalendarDate,
+    TagCardinality::RequiredOne,
+    TagSemantic::CalendarStart,
+    TagValueType::CalendarDate,
     false,
 );
-const TAG_CALENDAR_DATE_END: RadrootsTagContract = tag(
+const TAG_CALENDAR_DATE_END: TagContract = tag(
     "end",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::CalendarEnd,
-    RadrootsTagValueType::CalendarDate,
+    TagCardinality::OptionalOne,
+    TagSemantic::CalendarEnd,
+    TagValueType::CalendarDate,
     false,
 );
-const TAG_CALENDAR_TIME_START: RadrootsTagContract = tag(
+const TAG_CALENDAR_TIME_START: TagContract = tag(
     "start",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::CalendarStart,
-    RadrootsTagValueType::UnixTimestamp,
+    TagCardinality::RequiredOne,
+    TagSemantic::CalendarStart,
+    TagValueType::UnixTimestamp,
     false,
 );
-const TAG_CALENDAR_TIME_END: RadrootsTagContract = tag(
+const TAG_CALENDAR_TIME_END: TagContract = tag(
     "end",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::CalendarEnd,
-    RadrootsTagValueType::UnixTimestamp,
+    TagCardinality::OptionalOne,
+    TagSemantic::CalendarEnd,
+    TagValueType::UnixTimestamp,
     false,
 );
-const TAG_CALENDAR_COVERED_UTC_DAY: RadrootsTagContract = tag(
+const TAG_CALENDAR_COVERED_UTC_DAY: TagContract = tag(
     "D",
-    RadrootsTagCardinality::RequiredMany,
-    RadrootsTagSemantic::UtcDayCoverage,
-    RadrootsTagValueType::UtcDayIndex,
+    TagCardinality::RequiredMany,
+    TagSemantic::UtcDayCoverage,
+    TagValueType::UtcDayIndex,
     true,
 );
-const TAG_CALENDAR_START_TZID: RadrootsTagContract = tag(
+const TAG_CALENDAR_START_TZID: TagContract = tag(
     "start_tzid",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::TimeZone,
-    RadrootsTagValueType::IanaTimeZoneId,
+    TagCardinality::OptionalOne,
+    TagSemantic::TimeZone,
+    TagValueType::IanaTimeZoneId,
     false,
 );
-const TAG_CALENDAR_END_TZID: RadrootsTagContract = tag(
+const TAG_CALENDAR_END_TZID: TagContract = tag(
     "end_tzid",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::TimeZone,
-    RadrootsTagValueType::IanaTimeZoneId,
+    TagCardinality::OptionalOne,
+    TagSemantic::TimeZone,
+    TagValueType::IanaTimeZoneId,
     false,
 );
-const TAG_SUMMARY: RadrootsTagContract = tag(
+const TAG_SUMMARY: TagContract = tag(
     "summary",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Summary,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Summary,
+    TagValueType::Text,
     false,
 );
-const TAG_PUBLISHED_AT: RadrootsTagContract = tag(
+const TAG_PUBLISHED_AT: TagContract = tag(
     "published_at",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::PublishedAt,
-    RadrootsTagValueType::UnixTimestamp,
+    TagCardinality::OptionalOne,
+    TagSemantic::PublishedAt,
+    TagValueType::UnixTimestamp,
     false,
 );
-const TAG_LOCATION: RadrootsTagContract = tag(
+const TAG_LOCATION: TagContract = tag(
     "location",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Location,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalMany,
+    TagSemantic::Location,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_LOCATION: RadrootsTagContract = tag(
+const TAG_CALENDAR_LOCATION: TagContract = tag(
     "location",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Location,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalMany,
+    TagSemantic::Location,
+    TagValueType::Text,
     false,
 );
-const TAG_PRICE: RadrootsTagContract = tag(
+const TAG_PRICE: TagContract = tag(
     "price",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Price,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalMany,
+    TagSemantic::Price,
+    TagValueType::Text,
     false,
 );
-const TAG_STATUS: RadrootsTagContract = tag(
+const TAG_STATUS: TagContract = tag(
     "status",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Status,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Status,
+    TagValueType::Text,
     false,
 );
-const TAG_IMAGE: RadrootsTagContract = tag(
+const TAG_IMAGE: TagContract = tag(
     "image",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Image,
-    RadrootsTagValueType::Url,
+    TagCardinality::OptionalMany,
+    TagSemantic::Image,
+    TagValueType::Url,
     false,
 );
-const TAG_FOOD_TITLE: RadrootsTagContract = tag(
+const TAG_FOOD_TITLE: TagContract = tag(
     "title",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Title,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Title,
+    TagValueType::Text,
     false,
 );
-const TAG_FOOD_SUMMARY: RadrootsTagContract = tag(
+const TAG_FOOD_SUMMARY: TagContract = tag(
     "summary",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Summary,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Summary,
+    TagValueType::Text,
     false,
 );
-const TAG_FOOD_PUBLISHED_AT: RadrootsTagContract = tag(
+const TAG_FOOD_PUBLISHED_AT: TagContract = tag(
     "published_at",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::PublishedAt,
-    RadrootsTagValueType::UnixTimestamp,
+    TagCardinality::RequiredOne,
+    TagSemantic::PublishedAt,
+    TagValueType::UnixTimestamp,
     false,
 );
-const TAG_FOOD_LOCATION: RadrootsTagContract = tag(
+const TAG_FOOD_LOCATION: TagContract = tag(
     "location",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Location,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Location,
+    TagValueType::Text,
     false,
 );
-const TAG_FOOD_PRICE: RadrootsTagContract = tag(
+const TAG_FOOD_PRICE: TagContract = tag(
     "price",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Price,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Price,
+    TagValueType::Text,
     false,
 );
-const TAG_FOOD_PRICE_UNIT: RadrootsTagContract = tag(
+const TAG_FOOD_PRICE_UNIT: TagContract = tag(
     TAG_RADROOTS_PRICE_UNIT,
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Price,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Price,
+    TagValueType::Text,
     false,
 );
-const TAG_FOOD_QUANTITY: RadrootsTagContract = tag(
+const TAG_FOOD_QUANTITY: TagContract = tag(
     TAG_RADROOTS_QUANTITY,
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Price,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Price,
+    TagValueType::Text,
     false,
 );
-const TAG_FOOD_STATUS: RadrootsTagContract = tag(
+const TAG_FOOD_STATUS: TagContract = tag(
     "status",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Status,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Status,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_FARM: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_FARM: TagContract = tag(
     "a",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::RequiredOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     true,
 );
-const TAG_OPERATIONAL_LISTING_PRODUCT_KEY: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_PRODUCT_KEY: TagContract = tag(
     "key",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Category,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Category,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_TITLE: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_TITLE: TagContract = tag(
     "title",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Title,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Title,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_CATEGORY: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_CATEGORY: TagContract = tag(
     "category",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Category,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Category,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_PRIMARY_BIN: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_PRIMARY_BIN: TagContract = tag(
     "radroots:primary_bin",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::OperationalListingSnapshot,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::OperationalListingSnapshot,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_BIN: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_BIN: TagContract = tag(
     "radroots:bin",
-    RadrootsTagCardinality::RequiredMany,
-    RadrootsTagSemantic::OperationalListingSnapshot,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredMany,
+    TagSemantic::OperationalListingSnapshot,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_PRICE: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_PRICE: TagContract = tag(
     "radroots:price",
-    RadrootsTagCardinality::RequiredMany,
-    RadrootsTagSemantic::Price,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredMany,
+    TagSemantic::Price,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_DISCOUNT: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_DISCOUNT: TagContract = tag(
     "radroots:discount",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Price,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalMany,
+    TagSemantic::Price,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_RESOURCE_AREA: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_RESOURCE_AREA: TagContract = tag(
     "radroots:resource_area",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     false,
 );
-const TAG_OPERATIONAL_LISTING_PLOT: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_PLOT: TagContract = tag(
     "radroots:plot",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::AddressableCoordinate,
-    RadrootsTagValueType::AddressableCoordinate,
+    TagCardinality::OptionalOne,
+    TagSemantic::AddressableCoordinate,
+    TagValueType::AddressableCoordinate,
     false,
 );
-const TAG_OPERATIONAL_LISTING_INVENTORY: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_INVENTORY: TagContract = tag(
     "inventory",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::OperationalListingSnapshot,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::OperationalListingSnapshot,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_AVAILABILITY_START: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_AVAILABILITY_START: TagContract = tag(
     "radroots:availability_start",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Status,
-    RadrootsTagValueType::UnixTimestamp,
+    TagCardinality::OptionalOne,
+    TagSemantic::Status,
+    TagValueType::UnixTimestamp,
     false,
 );
-const TAG_OPERATIONAL_LISTING_EXPIRES_AT: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_EXPIRES_AT: TagContract = tag(
     "expires_at",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Status,
-    RadrootsTagValueType::UnixTimestamp,
+    TagCardinality::OptionalOne,
+    TagSemantic::Status,
+    TagValueType::UnixTimestamp,
     false,
 );
-const TAG_OPERATIONAL_LISTING_DELIVERY: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_DELIVERY: TagContract = tag(
     "delivery",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Reference,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Reference,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_PROCESS: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_PROCESS: TagContract = tag(
     "process",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Category,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Category,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_LOT: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_LOT: TagContract = tag(
     "lot",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Reference,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Reference,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_PROFILE: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_PROFILE: TagContract = tag(
     "profile",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Category,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Category,
+    TagValueType::Text,
     false,
 );
-const TAG_OPERATIONAL_LISTING_YEAR: RadrootsTagContract = tag(
+const TAG_OPERATIONAL_LISTING_YEAR: TagContract = tag(
     "year",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Category,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalOne,
+    TagSemantic::Category,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_IMAGE: RadrootsTagContract = tag(
+const TAG_CALENDAR_IMAGE: TagContract = tag(
     "image",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Image,
-    RadrootsTagValueType::Url,
+    TagCardinality::OptionalOne,
+    TagSemantic::Image,
+    TagValueType::Url,
     false,
 );
-const TAG_SERVICE_OUTPUT: RadrootsTagContract = tag(
+const TAG_SERVICE_OUTPUT: TagContract = tag(
     "output",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::ServiceOutput,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::ServiceOutput,
+    TagValueType::Text,
     false,
 );
-const TAG_URL: RadrootsTagContract = tag(
+const TAG_URL: TagContract = tag(
     "url",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Url,
-    RadrootsTagValueType::Url,
+    TagCardinality::OptionalOne,
+    TagSemantic::Url,
+    TagValueType::Url,
     false,
 );
-const TAG_CONTRACT_REQUIRED: RadrootsTagContract = tag(
+const TAG_CONTRACT_REQUIRED: TagContract = tag(
     "contract",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Contract,
-    RadrootsTagValueType::ContractId,
+    TagCardinality::RequiredOne,
+    TagSemantic::Contract,
+    TagValueType::ContractId,
     false,
 );
-const TAG_TOPIC_MANY: RadrootsTagContract = tag(
+const TAG_TOPIC_MANY: TagContract = tag(
     "t",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Topic,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalMany,
+    TagSemantic::Topic,
+    TagValueType::Text,
     true,
 );
-const TAG_ASK_MARKER: RadrootsTagContract = tag(
+const TAG_ASK_MARKER: TagContract = tag(
     "t",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::Topic,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredOne,
+    TagSemantic::Topic,
+    TagValueType::Text,
     true,
 );
-const TAG_IMETA_REQUIRED_MANY: RadrootsTagContract = tag(
+const TAG_IMETA_REQUIRED_MANY: TagContract = tag(
     "imeta",
-    RadrootsTagCardinality::RequiredMany,
-    RadrootsTagSemantic::Image,
-    RadrootsTagValueType::Text,
+    TagCardinality::RequiredMany,
+    TagSemantic::Image,
+    TagValueType::Text,
     false,
 );
-const TAG_IMETA_OPTIONAL_MANY: RadrootsTagContract = tag(
+const TAG_IMETA_OPTIONAL_MANY: TagContract = tag(
     "imeta",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Image,
-    RadrootsTagValueType::Text,
+    TagCardinality::OptionalMany,
+    TagSemantic::Image,
+    TagValueType::Text,
     false,
 );
-const TAG_CALENDAR_REFERENCE: RadrootsTagContract = tag(
+const TAG_CALENDAR_REFERENCE: TagContract = tag(
     "r",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Reference,
-    RadrootsTagValueType::Uri,
+    TagCardinality::OptionalMany,
+    TagSemantic::Reference,
+    TagValueType::Uri,
     true,
 );
-const TAG_GEOHASH_OPTIONAL: RadrootsTagContract = tag(
+const TAG_GEOHASH_OPTIONAL: TagContract = tag(
     "g",
-    RadrootsTagCardinality::OptionalOne,
-    RadrootsTagSemantic::Geohash,
-    RadrootsTagValueType::Geohash,
+    TagCardinality::OptionalOne,
+    TagSemantic::Geohash,
+    TagValueType::Geohash,
     true,
 );
-const TAG_SOURCE_MANY: RadrootsTagContract = tag(
+const TAG_SOURCE_MANY: TagContract = tag(
     "source",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Source,
-    RadrootsTagValueType::EventPointer,
+    TagCardinality::OptionalMany,
+    TagSemantic::Source,
+    TagValueType::EventPointer,
     false,
 );
-const TAG_CITATION_MANY: RadrootsTagContract = tag(
+const TAG_CITATION_MANY: TagContract = tag(
     "citation",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Citation,
-    RadrootsTagValueType::Sha256,
+    TagCardinality::OptionalMany,
+    TagSemantic::Citation,
+    TagValueType::Sha256,
     false,
 );
-const TAG_REVIEW_TARGET_REQUIRED: RadrootsTagContract = tag(
+const TAG_REVIEW_TARGET_REQUIRED: TagContract = tag(
     "review_target",
-    RadrootsTagCardinality::RequiredOne,
-    RadrootsTagSemantic::ReviewTarget,
-    RadrootsTagValueType::EventPointer,
+    TagCardinality::RequiredOne,
+    TagSemantic::ReviewTarget,
+    TagValueType::EventPointer,
     false,
 );
-const TAG_EVIDENCE_MANY: RadrootsTagContract = tag(
+const TAG_EVIDENCE_MANY: TagContract = tag(
     "evidence",
-    RadrootsTagCardinality::OptionalMany,
-    RadrootsTagSemantic::Evidence,
-    RadrootsTagValueType::EventPointer,
+    TagCardinality::OptionalMany,
+    TagSemantic::Evidence,
+    TagValueType::EventPointer,
     false,
 );
 
-const NO_TAGS: &[RadrootsTagContract] = &[];
-const D_TAGS: &[RadrootsTagContract] = &[TAG_D];
-const P_TAGS: &[RadrootsTagContract] = &[TAG_P_MANY];
-const EVENT_POINTER_TAGS: &[RadrootsTagContract] = &[TAG_E_MANY, TAG_P_MANY, TAG_KIND];
-const NIP09_DELETION_TAGS: &[RadrootsTagContract] =
+const NO_TAGS: &[TagContract] = &[];
+const D_TAGS: &[TagContract] = &[TAG_D];
+const P_TAGS: &[TagContract] = &[TAG_P_MANY];
+const EVENT_POINTER_TAGS: &[TagContract] = &[TAG_E_MANY, TAG_P_MANY, TAG_KIND];
+const NIP09_DELETION_TAGS: &[TagContract] =
     &[TAG_NIP09_E_TARGET, TAG_NIP09_A_TARGET, TAG_NIP09_K_ADVISORY];
-const NIP22_COMMENT_TAGS: &[RadrootsTagContract] = &[
+const NIP22_COMMENT_TAGS: &[TagContract] = &[
     TAG_NIP22_E_ROOT,
     TAG_NIP22_A_ROOT,
     TAG_NIP22_K_ROOT,
@@ -1199,14 +1198,14 @@ const NIP22_COMMENT_TAGS: &[RadrootsTagContract] = &[
     TAG_NIP22_K_PARENT,
     TAG_NIP22_P_PARENT,
 ];
-const LIST_TAGS: &[RadrootsTagContract] = &[TAG_E_MANY, TAG_A_OPTIONAL, TAG_P_MANY, TAG_RELAY];
-const LIST_SET_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_E_MANY, TAG_A_OPTIONAL, TAG_P_MANY];
-const PROFILE_TAGS: &[RadrootsTagContract] = &[TAG_P_MANY];
-const GROUP_ACTION_TAGS: &[RadrootsTagContract] = &[TAG_GROUP, TAG_P_MANY, TAG_E_MANY];
-const GROUP_STATE_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_P_MANY, TAG_E_MANY];
-const FILE_METADATA_TAGS: &[RadrootsTagContract] = &[TAG_URL, TAG_IMAGE];
-const ARTICLE_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_TITLE, TAG_SUMMARY, TAG_PUBLISHED_AT];
-const WIKI_ARTICLE_TAGS: &[RadrootsTagContract] = &[
+const LIST_TAGS: &[TagContract] = &[TAG_E_MANY, TAG_A_OPTIONAL, TAG_P_MANY, TAG_RELAY];
+const LIST_SET_TAGS: &[TagContract] = &[TAG_D, TAG_E_MANY, TAG_A_OPTIONAL, TAG_P_MANY];
+const PROFILE_TAGS: &[TagContract] = &[TAG_P_MANY];
+const GROUP_ACTION_TAGS: &[TagContract] = &[TAG_GROUP, TAG_P_MANY, TAG_E_MANY];
+const GROUP_STATE_TAGS: &[TagContract] = &[TAG_D, TAG_P_MANY, TAG_E_MANY];
+const FILE_METADATA_TAGS: &[TagContract] = &[TAG_URL, TAG_IMAGE];
+const ARTICLE_TAGS: &[TagContract] = &[TAG_D, TAG_TITLE, TAG_SUMMARY, TAG_PUBLISHED_AT];
+const WIKI_ARTICLE_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_TITLE,
     TAG_SUMMARY,
@@ -1216,14 +1215,14 @@ const WIKI_ARTICLE_TAGS: &[RadrootsTagContract] = &[
     TAG_A_MANY,
     TAG_E_MANY,
 ];
-const WIKI_REDIRECT_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_A_ADDRESS_REQUIRED];
-const WIKI_MERGE_REQUEST_TAGS: &[RadrootsTagContract] = &[
+const WIKI_REDIRECT_TAGS: &[TagContract] = &[TAG_D, TAG_A_ADDRESS_REQUIRED];
+const WIKI_MERGE_REQUEST_TAGS: &[TagContract] = &[
     TAG_A_ADDRESS_REQUIRED,
     TAG_P_REQUIRED,
     TAG_E_SOURCE_VERSION,
     TAG_E_BASE_VERSION,
 ];
-const CALENDAR_DATE_EVENT_TAGS: &[RadrootsTagContract] = &[
+const CALENDAR_DATE_EVENT_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_CALENDAR_TITLE,
     TAG_CALENDAR_LEGACY_NAME,
@@ -1238,7 +1237,7 @@ const CALENDAR_DATE_EVENT_TAGS: &[RadrootsTagContract] = &[
     TAG_CALENDAR_REFERENCE,
     TAG_CALENDAR_INCLUSION_REQUEST,
 ];
-const CALENDAR_TIME_EVENT_TAGS: &[RadrootsTagContract] = &[
+const CALENDAR_TIME_EVENT_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_CALENDAR_TITLE,
     TAG_CALENDAR_LEGACY_NAME,
@@ -1256,14 +1255,14 @@ const CALENDAR_TIME_EVENT_TAGS: &[RadrootsTagContract] = &[
     TAG_CALENDAR_REFERENCE,
     TAG_CALENDAR_INCLUSION_REQUEST,
 ];
-const CALENDAR_COLLECTION_TAGS: &[RadrootsTagContract] = &[
+const CALENDAR_COLLECTION_TAGS: &[TagContract] = &[
     TAG_CALENDAR_UID,
     TAG_CALENDAR_TITLE,
     TAG_CALENDAR_COLLECTION_DESCRIPTION,
     TAG_CALENDAR_IMAGE,
     TAG_CALENDAR_COLLECTION_EVENT,
 ];
-const CALENDAR_RSVP_TAGS: &[RadrootsTagContract] = &[
+const CALENDAR_RSVP_TAGS: &[TagContract] = &[
     TAG_CALENDAR_UID,
     TAG_CALENDAR_RSVP_EVENT,
     TAG_CALENDAR_RSVP_REVISION,
@@ -1271,8 +1270,8 @@ const CALENDAR_RSVP_TAGS: &[RadrootsTagContract] = &[
     TAG_CALENDAR_RSVP_FREE_BUSY,
     TAG_CALENDAR_RSVP_AUTHOR,
 ];
-const FARM_TAGS: &[RadrootsTagContract] = &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_IMAGE];
-const FOOD_AVAILABILITY_TAGS: &[RadrootsTagContract] = &[
+const FARM_TAGS: &[TagContract] = &[TAG_D, TAG_TITLE, TAG_LOCATION, TAG_IMAGE];
+const FOOD_AVAILABILITY_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_FOOD_TITLE,
     TAG_FOOD_SUMMARY,
@@ -1284,7 +1283,7 @@ const FOOD_AVAILABILITY_TAGS: &[RadrootsTagContract] = &[
     TAG_FOOD_STATUS,
     TAG_IMAGE,
 ];
-const OPERATIONAL_LISTING_TAGS: &[RadrootsTagContract] = &[
+const OPERATIONAL_LISTING_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_P_REQUIRED,
     TAG_OPERATIONAL_LISTING_FARM,
@@ -1313,92 +1312,90 @@ const OPERATIONAL_LISTING_TAGS: &[RadrootsTagContract] = &[
     TAG_OPERATIONAL_LISTING_EXPIRES_AT,
     TAG_OPERATIONAL_LISTING_DELIVERY,
 ];
-const TRADE_MUTATION_TAGS: &[RadrootsTagContract] =
+const TRADE_MUTATION_TAGS: &[TagContract] =
     &[TAG_CONTRACT_REQUIRED, TAG_D, TAG_P_REQUIRED, TAG_E_MANY];
-const TRADE_VALIDATION_RECEIPT_TAGS: &[RadrootsTagContract] =
+const TRADE_VALIDATION_RECEIPT_TAGS: &[TagContract] =
     &[TAG_E_ROOT, TAG_A_OPTIONAL, TAG_SERVICE_OUTPUT];
-const KNOWLEDGE_SOURCE_TAGS: &[RadrootsTagContract] = &[
+const KNOWLEDGE_SOURCE_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_CONTRACT_REQUIRED,
     TAG_TOPIC_MANY,
     TAG_SOURCE_MANY,
 ];
-const KNOWLEDGE_CLAIM_TAGS: &[RadrootsTagContract] = &[
+const KNOWLEDGE_CLAIM_TAGS: &[TagContract] = &[
     TAG_CONTRACT_REQUIRED,
     TAG_TOPIC_MANY,
     TAG_SOURCE_MANY,
     TAG_CITATION_MANY,
 ];
-const KNOWLEDGE_RELATION_TAGS: &[RadrootsTagContract] =
+const KNOWLEDGE_RELATION_TAGS: &[TagContract] =
     &[TAG_CONTRACT_REQUIRED, TAG_TOPIC_MANY, TAG_SOURCE_MANY];
-const KNOWLEDGE_REVIEW_TAGS: &[RadrootsTagContract] = &[
+const KNOWLEDGE_REVIEW_TAGS: &[TagContract] = &[
     TAG_CONTRACT_REQUIRED,
     TAG_REVIEW_TARGET_REQUIRED,
     TAG_EVIDENCE_MANY,
 ];
-const KNOWLEDGE_FIELD_REPORT_TAGS: &[RadrootsTagContract] = &[
+const KNOWLEDGE_FIELD_REPORT_TAGS: &[TagContract] = &[
     TAG_CONTRACT_REQUIRED,
     TAG_TOPIC_MANY,
     TAG_GEOHASH_OPTIONAL,
     TAG_EVIDENCE_MANY,
 ];
-const KNOWLEDGE_CHANGE_PROPOSAL_TAGS: &[RadrootsTagContract] =
-    &[TAG_CONTRACT_REQUIRED, TAG_EVIDENCE_MANY];
-const KNOWLEDGE_CONTRIBUTION_TAGS: &[RadrootsTagContract] =
-    &[TAG_CONTRACT_REQUIRED, TAG_EVIDENCE_MANY];
-const EVIDENCE_BOUNTY_TAGS: &[RadrootsTagContract] = &[
+const KNOWLEDGE_CHANGE_PROPOSAL_TAGS: &[TagContract] = &[TAG_CONTRACT_REQUIRED, TAG_EVIDENCE_MANY];
+const KNOWLEDGE_CONTRIBUTION_TAGS: &[TagContract] = &[TAG_CONTRACT_REQUIRED, TAG_EVIDENCE_MANY];
+const EVIDENCE_BOUNTY_TAGS: &[TagContract] = &[
     TAG_D,
     TAG_CONTRACT_REQUIRED,
     TAG_TOPIC_MANY,
     TAG_EVIDENCE_MANY,
 ];
 
-const SOCIAL_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::SocialProjection];
-const PHOTO_UPDATE_TAGS: &[RadrootsTagContract] = &[TAG_IMETA_REQUIRED_MANY];
-const ASK_TAGS: &[RadrootsTagContract] = &[TAG_ASK_MARKER, TAG_IMETA_OPTIONAL_MANY];
-const NIP10_REPLY_TAGS: &[RadrootsTagContract] = &[TAG_NIP10_E_REQUIRED, TAG_NIP10_P_OPTIONAL];
-const PROFILE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::ProfileProjection];
-const FARM_OPS_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::FarmOpsProjection];
-const GROUP_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::GroupProjection];
-const CALENDAR_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::CalendarProjection];
-const OPERATIONAL_LISTING_REDUCERS: &[RadrootsReducer] = &[
-    RadrootsReducer::OperationalListingProjection,
-    RadrootsReducer::MarketProjection,
-    RadrootsReducer::OperationalListingInventoryAccounting,
+const SOCIAL_REDUCERS: &[Reducer] = &[Reducer::SocialProjection];
+const PHOTO_UPDATE_TAGS: &[TagContract] = &[TAG_IMETA_REQUIRED_MANY];
+const ASK_TAGS: &[TagContract] = &[TAG_ASK_MARKER, TAG_IMETA_OPTIONAL_MANY];
+const NIP10_REPLY_TAGS: &[TagContract] = &[TAG_NIP10_E_REQUIRED, TAG_NIP10_P_OPTIONAL];
+const PROFILE_REDUCERS: &[Reducer] = &[Reducer::ProfileProjection];
+const FARM_OPS_REDUCERS: &[Reducer] = &[Reducer::FarmOpsProjection];
+const GROUP_REDUCERS: &[Reducer] = &[Reducer::GroupProjection];
+const CALENDAR_REDUCERS: &[Reducer] = &[Reducer::CalendarProjection];
+const OPERATIONAL_LISTING_REDUCERS: &[Reducer] = &[
+    Reducer::OperationalListingProjection,
+    Reducer::MarketProjection,
+    Reducer::OperationalListingInventoryAccounting,
 ];
-const FOOD_AVAILABILITY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::MarketProjection];
-const TRADE_MUTATION_REDUCERS: &[RadrootsReducer] = &[
-    RadrootsReducer::TradeProjection,
-    RadrootsReducer::OperationalListingInventoryAccounting,
+const FOOD_AVAILABILITY_REDUCERS: &[Reducer] = &[Reducer::MarketProjection];
+const TRADE_MUTATION_REDUCERS: &[Reducer] = &[
+    Reducer::TradeProjection,
+    Reducer::OperationalListingInventoryAccounting,
 ];
-const TRADE_VALIDATION_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::TradeValidation];
-const RELAY_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::NostrRelayPolicyProjection];
-const KNOWLEDGE_REDUCERS: &[RadrootsReducer] = &[RadrootsReducer::KnowledgeProjection];
+const TRADE_VALIDATION_REDUCERS: &[Reducer] = &[Reducer::TradeValidation];
+const RELAY_REDUCERS: &[Reducer] = &[Reducer::NostrRelayPolicyProjection];
+const KNOWLEDGE_REDUCERS: &[Reducer] = &[Reducer::KnowledgeProjection];
 
-const FARM_MEMBERS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[
-    RadrootsEventDiscriminator::DTagPrefix("farm:"),
-    RadrootsEventDiscriminator::DTagSuffix(":members"),
+const FARM_MEMBERS_LIST_DISCRIMINATOR: &[EventDiscriminator] = &[
+    EventDiscriminator::DTagPrefix("farm:"),
+    EventDiscriminator::DTagSuffix(":members"),
 ];
-const FARM_OWNERS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[
-    RadrootsEventDiscriminator::DTagPrefix("farm:"),
-    RadrootsEventDiscriminator::DTagSuffix(":members.owners"),
+const FARM_OWNERS_LIST_DISCRIMINATOR: &[EventDiscriminator] = &[
+    EventDiscriminator::DTagPrefix("farm:"),
+    EventDiscriminator::DTagSuffix(":members.owners"),
 ];
-const FARM_WORKERS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[
-    RadrootsEventDiscriminator::DTagPrefix("farm:"),
-    RadrootsEventDiscriminator::DTagSuffix(":members.workers"),
+const FARM_WORKERS_LIST_DISCRIMINATOR: &[EventDiscriminator] = &[
+    EventDiscriminator::DTagPrefix("farm:"),
+    EventDiscriminator::DTagSuffix(":members.workers"),
 ];
-const FARM_PLOTS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[
-    RadrootsEventDiscriminator::DTagPrefix("farm:"),
-    RadrootsEventDiscriminator::DTagSuffix(":plots"),
+const FARM_PLOTS_LIST_DISCRIMINATOR: &[EventDiscriminator] = &[
+    EventDiscriminator::DTagPrefix("farm:"),
+    EventDiscriminator::DTagSuffix(":plots"),
 ];
-const FARM_LISTINGS_LIST_DISCRIMINATOR: &[RadrootsEventDiscriminator] = &[
-    RadrootsEventDiscriminator::DTagPrefix("farm:"),
-    RadrootsEventDiscriminator::DTagSuffix(":listings"),
+const FARM_LISTINGS_LIST_DISCRIMINATOR: &[EventDiscriminator] = &[
+    EventDiscriminator::DTagPrefix("farm:"),
+    EventDiscriminator::DTagSuffix(":listings"),
 ];
 
 macro_rules! kind_contract {
     ($kind:expr, $constant:literal, $name:literal, $class:expr, $standard:expr, [$($contract:literal),+ $(,)?]) => {
-        RadrootsKindContract {
+        KindContract {
             kind: $kind,
             canonical_constant: $constant,
             name: $name,
@@ -1424,7 +1421,7 @@ macro_rules! event_contract_with_stability {
         $reducers:expr,
         $stability:expr $(,)?
     ) => {
-        RadrootsEventContract {
+        EventContract {
             id: $id,
             kind: $kind,
             name: $name,
@@ -1434,7 +1431,7 @@ macro_rules! event_contract_with_stability {
             privacy: $standard_privacy,
             required_author_role: $required_author_role,
             content_schema: $content_schema,
-            authoring_policy: RadrootsEventAuthoringPolicy::GenericDraft,
+            authoring_policy: EventAuthoringPolicy::GenericDraft,
             discriminator: $discriminator,
             tags: $tags,
             reducers: $reducers,
@@ -1457,7 +1454,7 @@ macro_rules! event_contract_with_authoring_policy {
         $tags:expr,
         $reducers:expr $(,)?
     ) => {
-        RadrootsEventContract {
+        EventContract {
             authoring_policy: $authoring_policy,
             ..event_contract!(
                 $id,
@@ -1502,7 +1499,7 @@ macro_rules! event_contract {
             $discriminator,
             $tags,
             $reducers,
-            RadrootsEventStability::Stable
+            EventStability::Stable
         )
     };
 }
@@ -1533,26 +1530,26 @@ macro_rules! experimental_event_contract {
             $discriminator,
             $tags,
             $reducers,
-            RadrootsEventStability::Experimental
+            EventStability::Experimental
         )
     };
 }
 
-static KIND_CONTRACTS_REGISTRY_V7: &[RadrootsKindContract] = &[
+static KIND_CONTRACTS_REGISTRY_V7: &[KindContract] = &[
     kind_contract!(
         KIND_PROFILE,
         "KIND_PROFILE",
         "Profile Metadata",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip01,
+        EventClass::Replaceable,
+        NostrStandard::Nip01,
         ["radroots.profile.metadata.v1"]
     ),
     kind_contract!(
         KIND_POST,
         "KIND_POST",
         "Short Text Note",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip01,
+        EventClass::Regular,
+        NostrStandard::Nip01,
         [
             "radroots.social.post.v1",
             "radroots.social.update.v1",
@@ -1565,344 +1562,344 @@ static KIND_CONTRACTS_REGISTRY_V7: &[RadrootsKindContract] = &[
         KIND_FOLLOW,
         "KIND_FOLLOW",
         "Contact List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip01,
+        EventClass::Replaceable,
+        NostrStandard::Nip01,
         ["radroots.social.follow_list.v1"]
     ),
     kind_contract!(
         KIND_DELETION_REQUEST,
         "KIND_DELETION_REQUEST",
         "Deletion Request",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip09,
+        EventClass::Regular,
+        NostrStandard::Nip09,
         ["radroots.social.deletion_request.v1"]
     ),
     kind_contract!(
         KIND_REPOST,
         "KIND_REPOST",
         "Repost",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip18,
+        EventClass::Regular,
+        NostrStandard::Nip18,
         ["radroots.social.repost.v1"]
     ),
     kind_contract!(
         KIND_REACTION,
         "KIND_REACTION",
         "Reaction",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip25,
+        EventClass::Regular,
+        NostrStandard::Nip25,
         ["radroots.social.reaction.v1"]
     ),
     kind_contract!(
         KIND_SEAL,
         "KIND_SEAL",
         "Seal",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip17,
+        EventClass::Regular,
+        NostrStandard::Nip17,
         ["radroots.message.seal.v1"]
     ),
     kind_contract!(
         KIND_MESSAGE,
         "KIND_MESSAGE",
         "Direct Message",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip17,
+        EventClass::Regular,
+        NostrStandard::Nip17,
         ["radroots.message.private.v1"]
     ),
     kind_contract!(
         KIND_MESSAGE_FILE,
         "KIND_MESSAGE_FILE",
         "Direct Message File",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip17,
+        EventClass::Regular,
+        NostrStandard::Nip17,
         ["radroots.message.file.v1"]
     ),
     kind_contract!(
         KIND_GENERIC_REPOST,
         "KIND_GENERIC_REPOST",
         "Generic Repost",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip18,
+        EventClass::Regular,
+        NostrStandard::Nip18,
         ["radroots.social.generic_repost.v1"]
     ),
     kind_contract!(
         KIND_FARM_CRDT_CHANGE,
         "KIND_FARM_CRDT_CHANGE",
         "Farm CRDT Change",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.farm.crdt_change.v1"]
     ),
     kind_contract!(
         KIND_GIFT_WRAP,
         "KIND_GIFT_WRAP",
         "Gift Wrap",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip17,
+        EventClass::Regular,
+        NostrStandard::Nip17,
         ["radroots.message.gift_wrap.v1"]
     ),
     kind_contract!(
         KIND_FILE_METADATA,
         "KIND_FILE_METADATA",
         "File Metadata",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip94,
+        EventClass::Regular,
+        NostrStandard::Nip94,
         ["radroots.file.metadata.v1"]
     ),
     kind_contract!(
         KIND_COMMENT,
         "KIND_COMMENT",
         "Comment",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip22,
+        EventClass::Regular,
+        NostrStandard::Nip22,
         ["radroots.social.comment.v1"]
     ),
     kind_contract!(
         KIND_REPORT,
         "KIND_REPORT",
         "Report",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip56,
+        EventClass::Regular,
+        NostrStandard::Nip56,
         ["radroots.social.report.v1"]
     ),
     kind_contract!(
         KIND_GROUP_PUT_USER,
         "KIND_GROUP_PUT_USER",
         "Group Put User",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.put_user.v1"]
     ),
     kind_contract!(
         KIND_GROUP_REMOVE_USER,
         "KIND_GROUP_REMOVE_USER",
         "Group Remove User",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.remove_user.v1"]
     ),
     kind_contract!(
         KIND_GROUP_EDIT_METADATA,
         "KIND_GROUP_EDIT_METADATA",
         "Group Edit Metadata",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.edit_metadata.v1"]
     ),
     kind_contract!(
         KIND_GROUP_DELETE_EVENT,
         "KIND_GROUP_DELETE_EVENT",
         "Group Delete Event",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.delete_event.v1"]
     ),
     kind_contract!(
         KIND_GROUP_CREATE_GROUP,
         "KIND_GROUP_CREATE_GROUP",
         "Group Create Group",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.create_group.v1"]
     ),
     kind_contract!(
         KIND_GROUP_DELETE_GROUP,
         "KIND_GROUP_DELETE_GROUP",
         "Group Delete Group",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.delete_group.v1"]
     ),
     kind_contract!(
         KIND_GROUP_CREATE_INVITE,
         "KIND_GROUP_CREATE_INVITE",
         "Group Create Invite",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.create_invite.v1"]
     ),
     kind_contract!(
         KIND_GROUP_JOIN_REQUEST,
         "KIND_GROUP_JOIN_REQUEST",
         "Group Join Request",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.join_request.v1"]
     ),
     kind_contract!(
         KIND_GROUP_LEAVE_REQUEST,
         "KIND_GROUP_LEAVE_REQUEST",
         "Group Leave Request",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Regular,
+        NostrStandard::Nip29,
         ["radroots.group.leave_request.v1"]
     ),
     kind_contract!(
         KIND_GEOCHAT,
         "KIND_GEOCHAT",
         "Geochat",
-        RadrootsEventClass::Ephemeral,
-        RadrootsNostrStandard::Nip28,
+        EventClass::Ephemeral,
+        NostrStandard::Nip28,
         ["radroots.social.geochat.v1"]
     ),
     kind_contract!(
         KIND_RELAY_AUTH,
         "KIND_RELAY_AUTH",
         "Relay Auth",
-        RadrootsEventClass::Ephemeral,
-        RadrootsNostrStandard::Nip42,
+        EventClass::Ephemeral,
+        NostrStandard::Nip42,
         ["radroots.relay.auth.v1"]
     ),
     kind_contract!(
         KIND_HTTP_AUTH,
         "KIND_HTTP_AUTH",
         "HTTP Auth",
-        RadrootsEventClass::Ephemeral,
-        RadrootsNostrStandard::Nip98,
+        EventClass::Ephemeral,
+        NostrStandard::Nip98,
         ["radroots.http.auth.v1"]
     ),
     kind_contract!(
         KIND_LIST_MUTE,
         "KIND_LIST_MUTE",
         "Mute List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.mute.v1"]
     ),
     kind_contract!(
         KIND_LIST_PINNED_NOTES,
         "KIND_LIST_PINNED_NOTES",
         "Pinned Notes List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.pinned_notes.v1"]
     ),
     kind_contract!(
         KIND_LIST_READ_WRITE_RELAYS,
         "KIND_LIST_READ_WRITE_RELAYS",
         "Read Write Relays List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.read_write_relays.v1"]
     ),
     kind_contract!(
         KIND_LIST_BOOKMARKS,
         "KIND_LIST_BOOKMARKS",
         "Bookmarks List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.bookmarks.v1"]
     ),
     kind_contract!(
         KIND_LIST_COMMUNITIES,
         "KIND_LIST_COMMUNITIES",
         "Communities List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.communities.v1"]
     ),
     kind_contract!(
         KIND_LIST_PUBLIC_CHATS,
         "KIND_LIST_PUBLIC_CHATS",
         "Public Chats List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.public_chats.v1"]
     ),
     kind_contract!(
         KIND_LIST_BLOCKED_RELAYS,
         "KIND_LIST_BLOCKED_RELAYS",
         "Blocked Relays List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.blocked_relays.v1"]
     ),
     kind_contract!(
         KIND_LIST_SEARCH_RELAYS,
         "KIND_LIST_SEARCH_RELAYS",
         "Search Relays List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.search_relays.v1"]
     ),
     kind_contract!(
         KIND_LIST_SIMPLE_GROUPS,
         "KIND_LIST_SIMPLE_GROUPS",
         "Simple Groups List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.simple_groups.v1"]
     ),
     kind_contract!(
         KIND_LIST_RELAY_FEEDS,
         "KIND_LIST_RELAY_FEEDS",
         "Relay Feeds List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.relay_feeds.v1"]
     ),
     kind_contract!(
         KIND_LIST_INTERESTS,
         "KIND_LIST_INTERESTS",
         "Interests List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.interests.v1"]
     ),
     kind_contract!(
         KIND_LIST_MEDIA_FOLLOWS,
         "KIND_LIST_MEDIA_FOLLOWS",
         "Media Follows List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.media_follows.v1"]
     ),
     kind_contract!(
         KIND_LIST_EMOJIS,
         "KIND_LIST_EMOJIS",
         "Emojis List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.emojis.v1"]
     ),
     kind_contract!(
         KIND_LIST_DM_RELAYS,
         "KIND_LIST_DM_RELAYS",
         "DM Relays List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.dm_relays.v1"]
     ),
     kind_contract!(
         KIND_LIST_GOOD_WIKI_AUTHORS,
         "KIND_LIST_GOOD_WIKI_AUTHORS",
         "Good Wiki Authors List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.good_wiki_authors.v1"]
     ),
     kind_contract!(
         KIND_LIST_GOOD_WIKI_RELAYS,
         "KIND_LIST_GOOD_WIKI_RELAYS",
         "Good Wiki Relays List",
-        RadrootsEventClass::Replaceable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Replaceable,
+        NostrStandard::Nip51,
         ["radroots.list.good_wiki_relays.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_FOLLOW,
         "KIND_LIST_SET_FOLLOW",
         "Follow Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.follow.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_GENERIC,
         "KIND_LIST_SET_GENERIC",
         "Generic List Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         [
             "radroots.list_set.farm.members.v1",
             "radroots.list_set.farm.members.owners.v1",
@@ -1916,232 +1913,232 @@ static KIND_CONTRACTS_REGISTRY_V7: &[RadrootsKindContract] = &[
         KIND_LIST_SET_RELAY,
         "KIND_LIST_SET_RELAY",
         "Relay Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.relay.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_BOOKMARK,
         "KIND_LIST_SET_BOOKMARK",
         "Bookmark Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.bookmark.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_CURATION,
         "KIND_LIST_SET_CURATION",
         "Curation Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.curation.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_VIDEO,
         "KIND_LIST_SET_VIDEO",
         "Video Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.video.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_PICTURE,
         "KIND_LIST_SET_PICTURE",
         "Picture Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.picture.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_KIND_MUTE,
         "KIND_LIST_SET_KIND_MUTE",
         "Kind Mute Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.kind_mute.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_INTEREST,
         "KIND_LIST_SET_INTEREST",
         "Interest Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.interest.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_EMOJI,
         "KIND_LIST_SET_EMOJI",
         "Emoji Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.emoji.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_RELEASE_ARTIFACT,
         "KIND_LIST_SET_RELEASE_ARTIFACT",
         "Release Artifact Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.release_artifact.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_APP_CURATION,
         "KIND_LIST_SET_APP_CURATION",
         "App Curation Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.app_curation.v1"]
     ),
     kind_contract!(
         KIND_ARTICLE,
         "KIND_ARTICLE",
         "Long Form Article",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip23,
+        EventClass::Addressable,
+        NostrStandard::Nip23,
         ["radroots.social.article.v1"]
     ),
     kind_contract!(
         KIND_WIKI_MERGE_REQUEST,
         "KIND_WIKI_MERGE_REQUEST",
         "Wiki Merge Request",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Nip54,
+        EventClass::Regular,
+        NostrStandard::Nip54,
         ["radroots.wiki.merge_request.v1"]
     ),
     kind_contract!(
         KIND_WIKI_ARTICLE,
         "KIND_WIKI_ARTICLE",
         "Wiki Article",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip54,
+        EventClass::Addressable,
+        NostrStandard::Nip54,
         ["radroots.wiki.article.v1"]
     ),
     kind_contract!(
         KIND_WIKI_REDIRECT,
         "KIND_WIKI_REDIRECT",
         "Wiki Redirect",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip54,
+        EventClass::Addressable,
+        NostrStandard::Nip54,
         ["radroots.wiki.redirect.v1"]
     ),
     kind_contract!(
         KIND_CALENDAR_DATE_EVENT,
         "KIND_CALENDAR_DATE_EVENT",
         "Calendar Date Event",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip52,
+        EventClass::Addressable,
+        NostrStandard::Nip52,
         ["radroots.calendar.date_event.v1"]
     ),
     kind_contract!(
         KIND_CALENDAR_TIME_EVENT,
         "KIND_CALENDAR_TIME_EVENT",
         "Calendar Time Event",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip52,
+        EventClass::Addressable,
+        NostrStandard::Nip52,
         ["radroots.calendar.time_event.v1"]
     ),
     kind_contract!(
         KIND_CALENDAR,
         "KIND_CALENDAR",
         "Calendar Collection",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip52,
+        EventClass::Addressable,
+        NostrStandard::Nip52,
         ["radroots.calendar.collection.v1"]
     ),
     kind_contract!(
         KIND_CALENDAR_EVENT_RSVP,
         "KIND_CALENDAR_EVENT_RSVP",
         "Calendar RSVP",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip52,
+        EventClass::Addressable,
+        NostrStandard::Nip52,
         ["radroots.calendar.rsvp.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_STARTER_PACK,
         "KIND_LIST_SET_STARTER_PACK",
         "Starter Pack Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.starter_pack.v1"]
     ),
     kind_contract!(
         KIND_LIST_SET_MEDIA_STARTER_PACK,
         "KIND_LIST_SET_MEDIA_STARTER_PACK",
         "Media Starter Pack Set",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip51,
+        EventClass::Addressable,
+        NostrStandard::Nip51,
         ["radroots.list_set.media_starter_pack.v1"]
     ),
     kind_contract!(
         KIND_FARM,
         "KIND_FARM",
         "Farm",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.farm.profile.v1"]
     ),
     kind_contract!(
         KIND_PLOT,
         "KIND_PLOT",
         "Plot",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.farm.plot.v1"]
     ),
     kind_contract!(
         KIND_COOP,
         "KIND_COOP",
         "Coop",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.farm.coop.v1"]
     ),
     kind_contract!(
         KIND_DOCUMENT,
         "KIND_DOCUMENT",
         "Document",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.farm.document.v1"]
     ),
     kind_contract!(
         KIND_RESOURCE_AREA,
         "KIND_RESOURCE_AREA",
         "Resource Area",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.farm.resource_area.v1"]
     ),
     kind_contract!(
         KIND_RESOURCE_HARVEST_CAP,
         "KIND_RESOURCE_HARVEST_CAP",
         "Resource Harvest Capacity",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.farm.resource_harvest_cap.v1"]
     ),
     kind_contract!(
         KIND_ACCOUNT_CLAIM,
         "KIND_ACCOUNT_CLAIM",
         "Account Claim",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.account.claim.v1"]
     ),
     kind_contract!(
         KIND_FARM_WORKSPACE_MANIFEST,
         "KIND_FARM_WORKSPACE_MANIFEST",
         "Farm Workspace Manifest",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip78,
+        EventClass::Addressable,
+        NostrStandard::Nip78,
         ["radroots.farm.workspace_manifest.v1"]
     ),
     kind_contract!(
         KIND_CLASSIFIED_LISTING,
         "KIND_CLASSIFIED_LISTING",
         "Classified Listing",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip99,
+        EventClass::Addressable,
+        NostrStandard::Nip99,
         [
             "radroots.operational_listing.published.v1",
             "radroots.food.availability.v1"
@@ -2151,168 +2148,168 @@ static KIND_CONTRACTS_REGISTRY_V7: &[RadrootsKindContract] = &[
         KIND_KNOWLEDGE_SOURCE,
         "KIND_KNOWLEDGE_SOURCE",
         "Knowledge Source",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.knowledge.source.v1"]
     ),
     kind_contract!(
         KIND_EVIDENCE_BOUNTY,
         "KIND_EVIDENCE_BOUNTY",
         "Evidence Bounty",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.knowledge.evidence_bounty.v1"]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_CLAIM,
         "KIND_KNOWLEDGE_CLAIM",
         "Knowledge Claim",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.knowledge.claim.v1"]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_RELATION,
         "KIND_KNOWLEDGE_RELATION",
         "Knowledge Relation",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.knowledge.relation.v1"]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_REVIEW,
         "KIND_KNOWLEDGE_REVIEW",
         "Knowledge Review",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.knowledge.review.v1"]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_FIELD_REPORT,
         "KIND_KNOWLEDGE_FIELD_REPORT",
         "Knowledge Field Report",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.knowledge.field_report.v1"]
     ),
     kind_contract!(
         KIND_KNOWLEDGE_CHANGE_PROPOSAL,
         "KIND_KNOWLEDGE_CHANGE_PROPOSAL",
         "Knowledge Change Proposal",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.knowledge.change_proposal.v1"]
     ),
     kind_contract!(
         KIND_CONTRIBUTION_ATTESTATION,
         "KIND_CONTRIBUTION_ATTESTATION",
         "Contribution Attestation",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.knowledge.contribution_attestation.v1"]
     ),
     kind_contract!(
         KIND_APPLICATION_HANDLER,
         "KIND_APPLICATION_HANDLER",
         "Application Handler",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Addressable,
+        NostrStandard::Radroots,
         ["radroots.application.handler.v1"]
     ),
     kind_contract!(
         KIND_GROUP_METADATA,
         "KIND_GROUP_METADATA",
         "Group Metadata",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Addressable,
+        NostrStandard::Nip29,
         ["radroots.group.metadata.v1"]
     ),
     kind_contract!(
         KIND_GROUP_ADMINS,
         "KIND_GROUP_ADMINS",
         "Group Admins",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Addressable,
+        NostrStandard::Nip29,
         ["radroots.group.admins.v1"]
     ),
     kind_contract!(
         KIND_GROUP_MEMBERS,
         "KIND_GROUP_MEMBERS",
         "Group Members",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Addressable,
+        NostrStandard::Nip29,
         ["radroots.group.members.v1"]
     ),
     kind_contract!(
         KIND_GROUP_ROLES,
         "KIND_GROUP_ROLES",
         "Group Roles",
-        RadrootsEventClass::Addressable,
-        RadrootsNostrStandard::Nip29,
+        EventClass::Addressable,
+        NostrStandard::Nip29,
         ["radroots.group.roles.v1"]
     ),
     kind_contract!(
         KIND_TRADE_PROPOSAL,
         "KIND_TRADE_PROPOSAL",
         "Trade Proposal",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.trade.proposal.v1"]
     ),
     kind_contract!(
         KIND_TRADE_DECISION,
         "KIND_TRADE_DECISION",
         "Trade Decision",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.trade.decision.v1"]
     ),
     kind_contract!(
         KIND_TRADE_REVISION_PROPOSAL,
         "KIND_TRADE_REVISION_PROPOSAL",
         "Trade Revision Proposal",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.trade.revision_proposal.v1"]
     ),
     kind_contract!(
         KIND_TRADE_REVISION_DECISION,
         "KIND_TRADE_REVISION_DECISION",
         "Trade Revision Decision",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.trade.revision_decision.v1"]
     ),
     kind_contract!(
         KIND_TRADE_CANCELLATION,
         "KIND_TRADE_CANCELLATION",
         "Trade Cancellation",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.trade.cancellation.v1"]
     ),
     kind_contract!(
         KIND_TRADE_VALIDATION_RECEIPT,
         "KIND_TRADE_VALIDATION_RECEIPT",
         "Trade Validation Receipt",
-        RadrootsEventClass::Regular,
-        RadrootsNostrStandard::Radroots,
+        EventClass::Regular,
+        NostrStandard::Radroots,
         ["radroots.trade.validation_receipt.v1"]
     ),
 ];
 
-static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
+static EVENT_CONTRACTS_REGISTRY_V7: &[EventContract] = &[
     event_contract_with_authoring_policy!(
         "radroots.profile.metadata.v1",
         KIND_PROFILE,
         "Profile Metadata",
         "RadrootsAuthoredProfile / RadrootsInboundProfileMetadata",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::KindOnly,
         PROFILE_TAGS,
         PROFILE_REDUCERS
     ),
@@ -2321,12 +2318,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_POST,
         "Short Text Note",
         "RadrootsPost",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::ReadOnly,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::ReadOnly,
+        EventDiscriminator::KindOnly,
         NO_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2335,12 +2332,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_POST,
         "Root Text Update",
         "RadrootsAuthoredUpdate / RadrootsInboundPostProjection",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         NO_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2349,12 +2346,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_POST,
         "NIP-92 Photo Update",
         "RadrootsAuthoredPhotoUpdate / RadrootsInboundPostProjection",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         PHOTO_UPDATE_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2363,12 +2360,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_POST,
         "Root Ask",
         "RadrootsAuthoredAsk / RadrootsInboundPostProjection",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         ASK_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2377,12 +2374,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_POST,
         "NIP-10 Reply",
         "RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         NIP10_REPLY_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2391,11 +2388,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_FOLLOW,
         "Contact List",
         "RadrootsFollowList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         P_TAGS,
         PROFILE_REDUCERS
     ),
@@ -2404,12 +2401,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_DELETION_REQUEST,
         "Deletion Request",
         "RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         NIP09_DELETION_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2418,11 +2415,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_REPOST,
         "Repost",
         "RadrootsRepost",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         EVENT_POINTER_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2431,11 +2428,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_REACTION,
         "Reaction",
         "RadrootsReaction",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         EVENT_POINTER_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2444,11 +2441,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_SEAL,
         "Seal",
         "RadrootsSeal",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Encrypted,
+        EventClass::Regular,
+        EventPrivacy::Encrypted,
         AuthorRole::Any,
-        RadrootsContentSchema::Encrypted,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Encrypted,
+        EventDiscriminator::KindOnly,
         NO_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2457,11 +2454,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_MESSAGE,
         "Direct Message",
         "RadrootsMessage",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Encrypted,
+        EventClass::Regular,
+        EventPrivacy::Encrypted,
         AuthorRole::Any,
-        RadrootsContentSchema::Encrypted,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Encrypted,
+        EventDiscriminator::KindOnly,
         P_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2470,11 +2467,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_MESSAGE_FILE,
         "Direct Message File",
         "RadrootsMessageFile",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Encrypted,
+        EventClass::Regular,
+        EventPrivacy::Encrypted,
         AuthorRole::Any,
-        RadrootsContentSchema::Encrypted,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Encrypted,
+        EventDiscriminator::KindOnly,
         P_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2483,11 +2480,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GENERIC_REPOST,
         "Generic Repost",
         "RadrootsGenericRepost",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         EVENT_POINTER_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2496,11 +2493,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_FARM_CRDT_CHANGE,
         "Farm CRDT Change",
         "RadrootsFarmCrdtChange",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Encrypted,
+        EventClass::Regular,
+        EventPrivacy::Encrypted,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         NO_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -2509,11 +2506,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GIFT_WRAP,
         "Gift Wrap",
         "RadrootsGiftWrap",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Encrypted,
+        EventClass::Regular,
+        EventPrivacy::Encrypted,
         AuthorRole::Any,
-        RadrootsContentSchema::Encrypted,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Encrypted,
+        EventDiscriminator::KindOnly,
         P_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2522,11 +2519,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_FILE_METADATA,
         "File Metadata",
         "RadrootsFileMetadata",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         FILE_METADATA_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2535,12 +2532,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_COMMENT,
         "Comment",
         "RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::PlainText,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         NIP22_COMMENT_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2549,11 +2546,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_REPORT,
         "Report",
         "RadrootsReport",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         EVENT_POINTER_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2562,11 +2559,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_PUT_USER,
         "Group Put User",
         "RadrootsGroupPutUser",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2575,11 +2572,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_REMOVE_USER,
         "Group Remove User",
         "RadrootsGroupRemoveUser",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2588,11 +2585,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_EDIT_METADATA,
         "Group Edit Metadata",
         "RadrootsGroupEditMetadata",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2601,11 +2598,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_DELETE_EVENT,
         "Group Delete Event",
         "RadrootsGroupDeleteEvent",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2614,11 +2611,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_CREATE_GROUP,
         "Group Create Group",
         "RadrootsGroupCreateGroup",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2627,11 +2624,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_DELETE_GROUP,
         "Group Delete Group",
         "RadrootsGroupDeleteGroup",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2640,11 +2637,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_CREATE_INVITE,
         "Group Create Invite",
         "RadrootsGroupCreateInvite",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2653,11 +2650,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_JOIN_REQUEST,
         "Group Join Request",
         "RadrootsGroupJoinRequest",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Member,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2666,11 +2663,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_LEAVE_REQUEST,
         "Group Leave Request",
         "RadrootsGroupLeaveRequest",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Member,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_ACTION_TAGS,
         GROUP_REDUCERS
     ),
@@ -2679,11 +2676,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GEOCHAT,
         "Geochat",
         "RadrootsGeochat",
-        RadrootsEventClass::Ephemeral,
-        RadrootsEventPrivacy::Public,
+        EventClass::Ephemeral,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         NO_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2692,11 +2689,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_RELAY_AUTH,
         "Relay Auth",
         "RadrootsRelayAuth",
-        RadrootsEventClass::Ephemeral,
-        RadrootsEventPrivacy::Public,
+        EventClass::Ephemeral,
+        EventPrivacy::Public,
         AuthorRole::Relay,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         NO_TAGS,
         RELAY_REDUCERS
     ),
@@ -2705,11 +2702,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_HTTP_AUTH,
         "HTTP Auth",
         "RadrootsHttpAuth",
-        RadrootsEventClass::Ephemeral,
-        RadrootsEventPrivacy::Public,
+        EventClass::Ephemeral,
+        EventPrivacy::Public,
         AuthorRole::Application,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         NO_TAGS,
         RELAY_REDUCERS
     ),
@@ -2718,11 +2715,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_MUTE,
         "Mute List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2731,11 +2728,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_PINNED_NOTES,
         "Pinned Notes List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2744,11 +2741,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_READ_WRITE_RELAYS,
         "Read Write Relays List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2757,11 +2754,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_BOOKMARKS,
         "Bookmarks List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2770,11 +2767,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_COMMUNITIES,
         "Communities List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2783,11 +2780,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_PUBLIC_CHATS,
         "Public Chats List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2796,11 +2793,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_BLOCKED_RELAYS,
         "Blocked Relays List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2809,11 +2806,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SEARCH_RELAYS,
         "Search Relays List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2822,11 +2819,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SIMPLE_GROUPS,
         "Simple Groups List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2835,11 +2832,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_RELAY_FEEDS,
         "Relay Feeds List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2848,11 +2845,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_INTERESTS,
         "Interests List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2861,11 +2858,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_MEDIA_FOLLOWS,
         "Media Follows List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2874,11 +2871,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_EMOJIS,
         "Emojis List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2887,11 +2884,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_DM_RELAYS,
         "DM Relays List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2900,11 +2897,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_GOOD_WIKI_AUTHORS,
         "Good Wiki Authors List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2913,11 +2910,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_GOOD_WIKI_RELAYS,
         "Good Wiki Relays List",
         "RadrootsList",
-        RadrootsEventClass::Replaceable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Replaceable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2926,11 +2923,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_FOLLOW,
         "Follow Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -2939,11 +2936,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_GENERIC,
         "Farm Members List Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_MEMBERS_LIST_DISCRIMINATOR),
+        ContentSchema::JsonObject,
+        EventDiscriminator::Composite(FARM_MEMBERS_LIST_DISCRIMINATOR),
         LIST_SET_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -2952,11 +2949,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_GENERIC,
         "Farm Owners List Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_OWNERS_LIST_DISCRIMINATOR),
+        ContentSchema::JsonObject,
+        EventDiscriminator::Composite(FARM_OWNERS_LIST_DISCRIMINATOR),
         LIST_SET_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -2965,11 +2962,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_GENERIC,
         "Farm Workers List Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_WORKERS_LIST_DISCRIMINATOR),
+        ContentSchema::JsonObject,
+        EventDiscriminator::Composite(FARM_WORKERS_LIST_DISCRIMINATOR),
         LIST_SET_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -2978,11 +2975,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_GENERIC,
         "Farm Plots List Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_PLOTS_LIST_DISCRIMINATOR),
+        ContentSchema::JsonObject,
+        EventDiscriminator::Composite(FARM_PLOTS_LIST_DISCRIMINATOR),
         LIST_SET_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -2991,11 +2988,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_GENERIC,
         "Farm Listings List Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::Composite(FARM_LISTINGS_LIST_DISCRIMINATOR),
+        ContentSchema::JsonObject,
+        EventDiscriminator::Composite(FARM_LISTINGS_LIST_DISCRIMINATOR),
         LIST_SET_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3004,11 +3001,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_GENERIC,
         "Member Of Farms List Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Member,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::DTagExact("member_of.farms"),
+        ContentSchema::JsonObject,
+        EventDiscriminator::DTagExact("member_of.farms"),
         LIST_SET_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3017,11 +3014,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_RELAY,
         "Relay Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         RELAY_REDUCERS
     ),
@@ -3030,11 +3027,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_BOOKMARK,
         "Bookmark Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3043,11 +3040,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_CURATION,
         "Curation Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3056,11 +3053,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_VIDEO,
         "Video Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3069,11 +3066,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_PICTURE,
         "Picture Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3082,11 +3079,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_KIND_MUTE,
         "Kind Mute Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3095,11 +3092,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_INTEREST,
         "Interest Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3108,11 +3105,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_EMOJI,
         "Emoji Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3121,11 +3118,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_RELEASE_ARTIFACT,
         "Release Artifact Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3134,11 +3131,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_APP_CURATION,
         "App Curation Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3147,11 +3144,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_ARTICLE,
         "Long Form Article",
         "RadrootsArticle",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::Markdown,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Markdown,
+        EventDiscriminator::KindOnly,
         ARTICLE_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3160,11 +3157,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_WIKI_MERGE_REQUEST,
         "Wiki Merge Request",
         "RadrootsWikiMergeRequest",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         WIKI_MERGE_REQUEST_TAGS,
         KNOWLEDGE_REDUCERS
     ),
@@ -3173,11 +3170,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_WIKI_ARTICLE,
         "Wiki Article",
         "RadrootsWikiArticle",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::Djot,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Djot,
+        EventDiscriminator::KindOnly,
         WIKI_ARTICLE_TAGS,
         KNOWLEDGE_REDUCERS
     ),
@@ -3186,11 +3183,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_WIKI_REDIRECT,
         "Wiki Redirect",
         "RadrootsWikiRedirect",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::Empty,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::Empty,
+        EventDiscriminator::KindOnly,
         WIKI_REDIRECT_TAGS,
         KNOWLEDGE_REDUCERS
     ),
@@ -3199,11 +3196,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CALENDAR_DATE_EVENT,
         "Calendar Date Event",
         "RadrootsAdmittedCalendarDateEvent",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         CALENDAR_DATE_EVENT_TAGS,
         CALENDAR_REDUCERS
     ),
@@ -3212,11 +3209,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CALENDAR_TIME_EVENT,
         "Calendar Time Event",
         "RadrootsAdmittedCalendarTimeEvent",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         CALENDAR_TIME_EVENT_TAGS,
         CALENDAR_REDUCERS
     ),
@@ -3225,11 +3222,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CALENDAR,
         "Calendar Collection",
         "RadrootsAdmittedCalendar",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         CALENDAR_COLLECTION_TAGS,
         CALENDAR_REDUCERS
     ),
@@ -3238,11 +3235,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CALENDAR_EVENT_RSVP,
         "Calendar RSVP",
         "RadrootsAdmittedCalendarEventRsvp",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::PlainText,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::PlainText,
+        EventDiscriminator::KindOnly,
         CALENDAR_RSVP_TAGS,
         CALENDAR_REDUCERS
     ),
@@ -3251,11 +3248,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_STARTER_PACK,
         "Starter Pack Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3264,11 +3261,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_LIST_SET_MEDIA_STARTER_PACK,
         "Media Starter Pack Set",
         "RadrootsListSet",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         LIST_SET_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3277,11 +3274,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_FARM,
         "Farm",
         "RadrootsFarm",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         FARM_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3290,11 +3287,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_PLOT,
         "Plot",
         "RadrootsPlot",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         FARM_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3303,11 +3300,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_COOP,
         "Coop",
         "RadrootsCoop",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         FARM_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3316,11 +3313,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_DOCUMENT,
         "Document",
         "RadrootsDocument",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         D_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3329,11 +3326,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_RESOURCE_AREA,
         "Resource Area",
         "RadrootsResourceArea",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         FARM_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3342,11 +3339,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_RESOURCE_HARVEST_CAP,
         "Resource Harvest Capacity",
         "RadrootsResourceHarvestCap",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         FARM_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3355,11 +3352,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_ACCOUNT_CLAIM,
         "Account Claim",
         "RadrootsAccountClaim",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         D_TAGS,
         PROFILE_REDUCERS
     ),
@@ -3368,11 +3365,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_FARM_WORKSPACE_MANIFEST,
         "Farm Workspace Manifest",
         "RadrootsFarmWorkspaceManifest",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Encrypted,
+        EventClass::Addressable,
+        EventPrivacy::Encrypted,
         AuthorRole::Farmer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         D_TAGS,
         FARM_OPS_REDUCERS
     ),
@@ -3381,12 +3378,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CLASSIFIED_LISTING,
         "Operational Listing",
         "RadrootsOperationalListing",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Seller,
-        RadrootsContentSchema::Markdown,
-        RadrootsEventDiscriminator::ClassifiedListingPartition(
-            RadrootsClassifiedListingPartition::OperationalListing,
+        ContentSchema::Markdown,
+        EventDiscriminator::ClassifiedListingPartition(
+            ClassifiedListingPartition::OperationalListing,
         ),
         OPERATIONAL_LISTING_TAGS,
         OPERATIONAL_LISTING_REDUCERS
@@ -3396,12 +3393,12 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CLASSIFIED_LISTING,
         "Food Availability",
         "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Seller,
-        RadrootsContentSchema::Markdown,
-        RadrootsEventAuthoringPolicy::TypedOnly,
-        RadrootsEventDiscriminator::AdmissionOnly,
+        ContentSchema::Markdown,
+        EventAuthoringPolicy::TypedOnly,
+        EventDiscriminator::AdmissionOnly,
         FOOD_AVAILABILITY_TAGS,
         FOOD_AVAILABILITY_REDUCERS
     ),
@@ -3410,11 +3407,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_KNOWLEDGE_SOURCE,
         "Knowledge Source",
         "RadrootsKnowledgeSource",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.source.v1",
         },
@@ -3426,11 +3423,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_EVIDENCE_BOUNTY,
         "Evidence Bounty",
         "RadrootsEvidenceBounty",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.evidence_bounty.v1",
         },
@@ -3442,11 +3439,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_KNOWLEDGE_CLAIM,
         "Knowledge Claim",
         "RadrootsKnowledgeClaim",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.claim.v1",
         },
@@ -3458,11 +3455,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_KNOWLEDGE_RELATION,
         "Knowledge Relation",
         "RadrootsKnowledgeRelation",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.relation.v1",
         },
@@ -3474,11 +3471,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_KNOWLEDGE_REVIEW,
         "Knowledge Review",
         "RadrootsKnowledgeReview",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.review.v1",
         },
@@ -3490,11 +3487,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_KNOWLEDGE_FIELD_REPORT,
         "Knowledge Field Report",
         "RadrootsKnowledgeFieldReport",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.field_report.v1",
         },
@@ -3506,11 +3503,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_KNOWLEDGE_CHANGE_PROPOSAL,
         "Knowledge Change Proposal",
         "RadrootsKnowledgeChangeProposal",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.change_proposal.v1",
         },
@@ -3522,11 +3519,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_CONTRIBUTION_ATTESTATION,
         "Contribution Attestation",
         "RadrootsContributionAttestation",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::TagEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::TagEquals {
             name: "contract",
             value: "radroots.knowledge.contribution_attestation.v1",
         },
@@ -3538,11 +3535,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_APPLICATION_HANDLER,
         "Application Handler",
         "RadrootsApplicationHandler",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Application,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         D_TAGS,
         SOCIAL_REDUCERS
     ),
@@ -3551,11 +3548,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_METADATA,
         "Group Metadata",
         "RadrootsGroupMetadata",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_STATE_TAGS,
         GROUP_REDUCERS
     ),
@@ -3564,11 +3561,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_ADMINS,
         "Group Admins",
         "RadrootsGroupAdmins",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_STATE_TAGS,
         GROUP_REDUCERS
     ),
@@ -3577,11 +3574,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_MEMBERS,
         "Group Members",
         "RadrootsGroupMembers",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_STATE_TAGS,
         GROUP_REDUCERS
     ),
@@ -3590,11 +3587,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_GROUP_ROLES,
         "Group Roles",
         "RadrootsGroupRoles",
-        RadrootsEventClass::Addressable,
-        RadrootsEventPrivacy::Public,
+        EventClass::Addressable,
+        EventPrivacy::Public,
         AuthorRole::Moderator,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         GROUP_STATE_TAGS,
         GROUP_REDUCERS
     ),
@@ -3603,11 +3600,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_TRADE_PROPOSAL,
         "Trade Proposal",
         "RadrootsTradeMutationEnvelopeV1",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Buyer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.proposal.v1",
         },
@@ -3619,11 +3616,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_TRADE_DECISION,
         "Trade Decision",
         "RadrootsTradeMutationEnvelopeV1",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Seller,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.decision.v1",
         },
@@ -3635,11 +3632,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_TRADE_REVISION_PROPOSAL,
         "Trade Revision Proposal",
         "RadrootsTradeMutationEnvelopeV1",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.revision_proposal.v1",
         },
@@ -3651,11 +3648,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_TRADE_REVISION_DECISION,
         "Trade Revision Decision",
         "RadrootsTradeMutationEnvelopeV1",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Any,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.revision_decision.v1",
         },
@@ -3667,11 +3664,11 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_TRADE_CANCELLATION,
         "Trade Cancellation",
         "RadrootsTradeMutationEnvelopeV1",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Buyer,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::ContentJsonFieldEquals {
+        ContentSchema::JsonObject,
+        EventDiscriminator::ContentJsonFieldEquals {
             field: "contract_id",
             value: "radroots.trade.cancellation.v1",
         },
@@ -3683,48 +3680,46 @@ static EVENT_CONTRACTS_REGISTRY_V7: &[RadrootsEventContract] = &[
         KIND_TRADE_VALIDATION_RECEIPT,
         "Trade Validation Receipt",
         "RadrootsTradeValidationReceipt",
-        RadrootsEventClass::Regular,
-        RadrootsEventPrivacy::Public,
+        EventClass::Regular,
+        EventPrivacy::Public,
         AuthorRole::Service,
-        RadrootsContentSchema::JsonObject,
-        RadrootsEventDiscriminator::KindOnly,
+        ContentSchema::JsonObject,
+        EventDiscriminator::KindOnly,
         TRADE_VALIDATION_RECEIPT_TAGS,
         TRADE_VALIDATION_REDUCERS
     ),
 ];
 
-pub fn all_kind_contracts() -> &'static [RadrootsKindContract] {
+pub fn all_kind_contracts() -> &'static [KindContract] {
     all_kind_contracts_registry_v7()
 }
 
 /// Returns the immutable kind-contract inventory for registry v7.
-pub const fn all_kind_contracts_registry_v7() -> &'static [RadrootsKindContract] {
+pub const fn all_kind_contracts_registry_v7() -> &'static [KindContract] {
     KIND_CONTRACTS_REGISTRY_V7
 }
 
-pub fn all_event_contracts() -> &'static [RadrootsEventContract] {
+pub fn all_event_contracts() -> &'static [EventContract] {
     all_event_contracts_registry_v7()
 }
 
 /// Returns the immutable event-contract inventory for registry v7.
-pub const fn all_event_contracts_registry_v7() -> &'static [RadrootsEventContract] {
+pub const fn all_event_contracts_registry_v7() -> &'static [EventContract] {
     EVENT_CONTRACTS_REGISTRY_V7
 }
 
-pub fn contract_families() -> &'static [RadrootsContractFamilyMetadata] {
+pub fn contract_families() -> &'static [ContractFamilyMetadata] {
     CONTRACT_FAMILIES
 }
 
-pub fn event_contract_family(contract: &RadrootsEventContract) -> Option<RadrootsContractFamily> {
+pub fn event_contract_family(contract: &EventContract) -> Option<ContractFamily> {
     contract_family_for_id(contract.id)
 }
 
-pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsContractFamily> {
+pub fn kind_contract_family(contract: &KindContract) -> Option<ContractFamily> {
     Some(match contract.kind {
-        KIND_PROFILE | KIND_FOLLOW | KIND_ACCOUNT_CLAIM => RadrootsContractFamily::Profile,
-        KIND_SEAL | KIND_MESSAGE | KIND_MESSAGE_FILE | KIND_GIFT_WRAP => {
-            RadrootsContractFamily::Message
-        }
+        KIND_PROFILE | KIND_FOLLOW | KIND_ACCOUNT_CLAIM => ContractFamily::Profile,
+        KIND_SEAL | KIND_MESSAGE | KIND_MESSAGE_FILE | KIND_GIFT_WRAP => ContractFamily::Message,
         KIND_COMMENT
         | KIND_DELETION_REQUEST
         | KIND_GEOCHAT
@@ -3733,8 +3728,8 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_REPOST
         | KIND_GENERIC_REPOST
         | KIND_ARTICLE
-        | KIND_FILE_METADATA => RadrootsContractFamily::Social,
-        KIND_RELAY_AUTH | KIND_HTTP_AUTH => RadrootsContractFamily::Relay,
+        | KIND_FILE_METADATA => ContractFamily::Social,
+        KIND_RELAY_AUTH | KIND_HTTP_AUTH => ContractFamily::Relay,
         KIND_GROUP_PUT_USER
         | KIND_GROUP_REMOVE_USER
         | KIND_GROUP_EDIT_METADATA
@@ -3747,7 +3742,7 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_GROUP_METADATA
         | KIND_GROUP_ADMINS
         | KIND_GROUP_MEMBERS
-        | KIND_GROUP_ROLES => RadrootsContractFamily::Group,
+        | KIND_GROUP_ROLES => ContractFamily::Group,
         KIND_LIST_MUTE
         | KIND_LIST_PINNED_NOTES
         | KIND_LIST_READ_WRITE_RELAYS
@@ -3777,11 +3772,11 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_LIST_SET_RELEASE_ARTIFACT
         | KIND_LIST_SET_APP_CURATION
         | KIND_LIST_SET_STARTER_PACK
-        | KIND_LIST_SET_MEDIA_STARTER_PACK => RadrootsContractFamily::List,
+        | KIND_LIST_SET_MEDIA_STARTER_PACK => ContractFamily::List,
         KIND_CALENDAR_DATE_EVENT
         | KIND_CALENDAR_TIME_EVENT
         | KIND_CALENDAR
-        | KIND_CALENDAR_EVENT_RSVP => RadrootsContractFamily::Calendar,
+        | KIND_CALENDAR_EVENT_RSVP => ContractFamily::Calendar,
         KIND_FARM
         | KIND_PLOT
         | KIND_COOP
@@ -3789,14 +3784,14 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_RESOURCE_AREA
         | KIND_RESOURCE_HARVEST_CAP
         | KIND_FARM_WORKSPACE_MANIFEST
-        | KIND_FARM_CRDT_CHANGE => RadrootsContractFamily::Farm,
-        KIND_CLASSIFIED_LISTING => RadrootsContractFamily::Market,
+        | KIND_FARM_CRDT_CHANGE => ContractFamily::Farm,
+        KIND_CLASSIFIED_LISTING => ContractFamily::Market,
         KIND_TRADE_VALIDATION_RECEIPT
         | KIND_TRADE_PROPOSAL
         | KIND_TRADE_DECISION
         | KIND_TRADE_REVISION_PROPOSAL
         | KIND_TRADE_REVISION_DECISION
-        | KIND_TRADE_CANCELLATION => RadrootsContractFamily::Trade,
+        | KIND_TRADE_CANCELLATION => ContractFamily::Trade,
         KIND_WIKI_MERGE_REQUEST
         | KIND_WIKI_ARTICLE
         | KIND_WIKI_REDIRECT
@@ -3807,27 +3802,25 @@ pub fn kind_contract_family(contract: &RadrootsKindContract) -> Option<RadrootsC
         | KIND_KNOWLEDGE_REVIEW
         | KIND_KNOWLEDGE_FIELD_REPORT
         | KIND_KNOWLEDGE_CHANGE_PROPOSAL
-        | KIND_CONTRIBUTION_ATTESTATION => RadrootsContractFamily::Knowledge,
-        KIND_JOB_FEEDBACK => RadrootsContractFamily::Job,
-        _ if is_request_kind(contract.kind) || is_result_kind(contract.kind) => {
-            RadrootsContractFamily::Job
-        }
+        | KIND_CONTRIBUTION_ATTESTATION => ContractFamily::Knowledge,
+        KIND_JOB_FEEDBACK => ContractFamily::Job,
+        _ if is_request_kind(contract.kind) || is_result_kind(contract.kind) => ContractFamily::Job,
         _ => return None,
     })
 }
 
-pub fn kind_contract(kind: u32) -> Option<&'static RadrootsKindContract> {
+pub fn kind_contract(kind: u32) -> Option<&'static KindContract> {
     kind_contract_registry_v7(kind)
 }
 
 /// Resolves a kind contract from the immutable registry-v7 inventory.
-pub fn kind_contract_registry_v7(kind: u32) -> Option<&'static RadrootsKindContract> {
+pub fn kind_contract_registry_v7(kind: u32) -> Option<&'static KindContract> {
     KIND_CONTRACTS_REGISTRY_V7
         .iter()
         .find(|contract| contract.kind == kind)
 }
 
-pub fn event_contract(id: &str) -> Option<&'static RadrootsEventContract> {
+pub fn event_contract(id: &str) -> Option<&'static EventContract> {
     event_contract_registry_v7(id)
 }
 
@@ -3835,13 +3828,13 @@ pub fn event_contract(id: &str) -> Option<&'static RadrootsEventContract> {
 ///
 /// Event-store reconciliation v1 depends on this historical entry point.
 /// Later registries must retain it and add a new versioned lookup.
-pub fn event_contract_registry_v7(id: &str) -> Option<&'static RadrootsEventContract> {
+pub fn event_contract_registry_v7(id: &str) -> Option<&'static EventContract> {
     EVENT_CONTRACTS_REGISTRY_V7
         .iter()
         .find(|contract| contract.id == id)
 }
 
-pub fn event_contracts_for_kind(kind: u32) -> impl Iterator<Item = &'static RadrootsEventContract> {
+pub fn event_contracts_for_kind(kind: u32) -> impl Iterator<Item = &'static EventContract> {
     EVENT_CONTRACTS_REGISTRY_V7
         .iter()
         .filter(move |contract| contract.kind == kind)
@@ -3851,7 +3844,7 @@ pub fn identify_event_contract(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<&'static RadrootsEventContract, RadrootsContractMatchError> {
+) -> Result<&'static EventContract, ContractMatchError> {
     identify_event_contract_in_registry(
         kind,
         tags,
@@ -3865,11 +3858,11 @@ fn identify_event_contract_in_registry(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-    kind_contracts: &'static [RadrootsKindContract],
-    event_contracts: &'static [RadrootsEventContract],
-) -> Result<&'static RadrootsEventContract, RadrootsContractMatchError> {
+    kind_contracts: &'static [KindContract],
+    event_contracts: &'static [EventContract],
+) -> Result<&'static EventContract, ContractMatchError> {
     if !kind_contracts.iter().any(|contract| contract.kind == kind) {
-        return Err(RadrootsContractMatchError::UnsupportedKind(kind));
+        return Err(ContractMatchError::UnsupportedKind(kind));
     }
     identify_from_contracts(
         event_contracts
@@ -3882,8 +3875,8 @@ fn identify_event_contract_in_registry(
 }
 
 pub fn validate_event_contract(
-    event: &RadrootsEventEnvelope,
-) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
+    event: &EventEnvelope,
+) -> Result<&'static EventContract, ContractValidationError> {
     validate_event_contract_in_registry(
         event,
         KIND_CONTRACTS_REGISTRY_V7,
@@ -3896,8 +3889,8 @@ pub fn validate_event_contract(
 /// Event-store migration 0002 depends on this historical entry point. Later
 /// registries must retain it and add a new versioned validator.
 pub fn validate_event_contract_registry_v7(
-    event: &RadrootsEventEnvelope,
-) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
+    event: &EventEnvelope,
+) -> Result<&'static EventContract, ContractValidationError> {
     validate_event_contract_in_registry(
         event,
         KIND_CONTRACTS_REGISTRY_V7,
@@ -3906,10 +3899,10 @@ pub fn validate_event_contract_registry_v7(
 }
 
 fn validate_event_contract_in_registry(
-    event: &RadrootsEventEnvelope,
-    kind_contracts: &'static [RadrootsKindContract],
-    event_contracts: &'static [RadrootsEventContract],
-) -> Result<&'static RadrootsEventContract, RadrootsContractValidationError> {
+    event: &EventEnvelope,
+    kind_contracts: &'static [KindContract],
+    event_contracts: &'static [EventContract],
+) -> Result<&'static EventContract, ContractValidationError> {
     let tags = event.tags_as_vec();
     let contract = identify_event_contract_in_registry(
         event.kind_u32(),
@@ -3918,7 +3911,7 @@ fn validate_event_contract_in_registry(
         kind_contracts,
         event_contracts,
     )
-    .map_err(|error| RadrootsContractValidationError::ContractMatch { error })?;
+    .map_err(|error| ContractValidationError::ContractMatch { error })?;
     validate_event_contract_parts_in_registry(
         event.kind_u32(),
         &tags,
@@ -3930,9 +3923,9 @@ fn validate_event_contract_in_registry(
 }
 
 pub fn validate_event_contract_shape(
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     contract_id: &str,
-) -> Result<(), RadrootsContractValidationError> {
+) -> Result<(), ContractValidationError> {
     let tags = event.tags_as_vec();
     validate_event_contract_parts(event.kind_u32(), &tags, event.content(), contract_id)
 }
@@ -3942,12 +3935,11 @@ pub fn validate_event_contract_parts(
     tags: &[Vec<String>],
     content: &str,
     contract_id: &str,
-) -> Result<(), RadrootsContractValidationError> {
-    let contract = event_contract(contract_id).ok_or_else(|| {
-        RadrootsContractValidationError::UnknownContract {
+) -> Result<(), ContractValidationError> {
+    let contract =
+        event_contract(contract_id).ok_or_else(|| ContractValidationError::UnknownContract {
             contract_id: contract_id.to_owned(),
-        }
-    })?;
+        })?;
     validate_event_contract_parts_in_registry(
         kind,
         tags,
@@ -3961,20 +3953,17 @@ fn validate_event_contract_parts_in_registry(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-    contract: &RadrootsEventContract,
-    event_contracts: &'static [RadrootsEventContract],
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+    event_contracts: &'static [EventContract],
+) -> Result<(), ContractValidationError> {
     if kind != contract.kind {
-        return Err(RadrootsContractValidationError::KindMismatch {
+        return Err(ContractValidationError::KindMismatch {
             expected: contract.kind,
             actual: kind,
         });
     }
-    if matches!(
-        contract.discriminator,
-        RadrootsEventDiscriminator::AdmissionOnly
-    ) {
-        return Err(RadrootsContractValidationError::AdmissionRequired {
+    if matches!(contract.discriminator, EventDiscriminator::AdmissionOnly) {
+        return Err(ContractValidationError::AdmissionRequired {
             contract_id: contract.id,
         });
     }
@@ -3989,24 +3978,23 @@ fn validate_event_contract_parts_in_registry(
 
 fn validate_classified_listing_partition_parts(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
-    let RadrootsEventDiscriminator::ClassifiedListingPartition(expected) = contract.discriminator
-    else {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
+    let EventDiscriminator::ClassifiedListingPartition(expected) = contract.discriminator else {
         return Ok(());
     };
     if classify_classified_listing_raw_tags_registry_v7(tags) == expected {
         Ok(())
     } else {
-        Err(RadrootsContractValidationError::ContractMatch {
-            error: RadrootsContractMatchError::UnsupportedShape(contract.kind),
+        Err(ContractValidationError::ContractMatch {
+            error: ContractMatchError::UnsupportedShape(contract.kind),
         })
     }
 }
 
 fn classify_classified_listing_raw_tags_registry_v7(
     tags: &[Vec<String>],
-) -> RadrootsClassifiedListingPartition {
+) -> ClassifiedListingPartition {
     let mut has_focused_marker = false;
     let mut has_operational_marker = false;
 
@@ -4023,15 +4011,15 @@ fn classify_classified_listing_raw_tags_registry_v7(
         }
 
         if has_focused_marker && has_operational_marker {
-            return RadrootsClassifiedListingPartition::Ambiguous;
+            return ClassifiedListingPartition::Ambiguous;
         }
     }
 
     match (has_focused_marker, has_operational_marker) {
-        (true, false) => RadrootsClassifiedListingPartition::FocusedFoodAvailability,
-        (false, true) => RadrootsClassifiedListingPartition::OperationalListing,
-        (false, false) => RadrootsClassifiedListingPartition::GenericNip99,
-        (true, true) => RadrootsClassifiedListingPartition::Ambiguous,
+        (true, false) => ClassifiedListingPartition::FocusedFoodAvailability,
+        (false, true) => ClassifiedListingPartition::OperationalListing,
+        (false, false) => ClassifiedListingPartition::GenericNip99,
+        (true, true) => ClassifiedListingPartition::Ambiguous,
     }
 }
 
@@ -4040,9 +4028,9 @@ fn identify_from_contracts<'a, I>(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<&'a RadrootsEventContract, RadrootsContractMatchError>
+) -> Result<&'a EventContract, ContractMatchError>
 where
-    I: IntoIterator<Item = &'a RadrootsEventContract>,
+    I: IntoIterator<Item = &'a EventContract>,
 {
     let mut matched = None;
     let mut matched_count = 0;
@@ -4056,42 +4044,42 @@ where
 
     match (matched, matched_count) {
         (Some(contract), 1) => Ok(contract),
-        (None, _) => Err(RadrootsContractMatchError::UnsupportedShape(kind)),
-        (Some(_), _) => Err(RadrootsContractMatchError::AmbiguousShape(kind)),
+        (None, _) => Err(ContractMatchError::UnsupportedShape(kind)),
+        (Some(_), _) => Err(ContractMatchError::AmbiguousShape(kind)),
     }
 }
 
-fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
+fn contract_family_for_id(id: &str) -> Option<ContractFamily> {
     if id.starts_with("radroots.account.") {
-        Some(RadrootsContractFamily::Account)
+        Some(ContractFamily::Account)
     } else if id.starts_with("radroots.application.") {
-        Some(RadrootsContractFamily::Application)
+        Some(ContractFamily::Application)
     } else if id.starts_with("radroots.calendar.") {
-        Some(RadrootsContractFamily::Calendar)
+        Some(ContractFamily::Calendar)
     } else if id.starts_with("radroots.farm.") {
-        Some(RadrootsContractFamily::Farm)
+        Some(ContractFamily::Farm)
     } else if id.starts_with("radroots.group.") {
-        Some(RadrootsContractFamily::Group)
+        Some(ContractFamily::Group)
     } else if id.starts_with("radroots.http.") {
-        Some(RadrootsContractFamily::Http)
+        Some(ContractFamily::Http)
     } else if id.starts_with("radroots.job.") {
-        Some(RadrootsContractFamily::Job)
+        Some(ContractFamily::Job)
     } else if id.starts_with("radroots.knowledge.") || id.starts_with("radroots.wiki.") {
-        Some(RadrootsContractFamily::Knowledge)
+        Some(ContractFamily::Knowledge)
     } else if id.starts_with("radroots.list.") || id.starts_with("radroots.list_set.") {
-        Some(RadrootsContractFamily::List)
+        Some(ContractFamily::List)
     } else if id.starts_with("radroots.operational_listing.") || id.starts_with("radroots.food.") {
-        Some(RadrootsContractFamily::Market)
+        Some(ContractFamily::Market)
     } else if id.starts_with("radroots.message.") {
-        Some(RadrootsContractFamily::Message)
+        Some(ContractFamily::Message)
     } else if id.starts_with("radroots.profile.") {
-        Some(RadrootsContractFamily::Profile)
+        Some(ContractFamily::Profile)
     } else if id.starts_with("radroots.relay.") {
-        Some(RadrootsContractFamily::Relay)
+        Some(ContractFamily::Relay)
     } else if id.starts_with("radroots.social.") {
-        Some(RadrootsContractFamily::Social)
+        Some(ContractFamily::Social)
     } else if id.starts_with("radroots.trade.") {
-        Some(RadrootsContractFamily::Trade)
+        Some(ContractFamily::Trade)
     } else {
         None
     }
@@ -4099,19 +4087,19 @@ fn contract_family_for_id(id: &str) -> Option<RadrootsContractFamily> {
 
 fn validate_content_shape_parts(
     content: &str,
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     match contract.content_schema {
-        RadrootsContentSchema::Empty => {
+        ContentSchema::Empty => {
             if content.is_empty() {
                 Ok(())
             } else {
-                Err(RadrootsContractValidationError::ContentMustBeEmpty {
+                Err(ContractValidationError::ContentMustBeEmpty {
                     contract_id: contract.id,
                 })
             }
         }
-        RadrootsContentSchema::JsonObject => parse_content_object(content, contract.id).map(|_| ()),
+        ContentSchema::JsonObject => parse_content_object(content, contract.id).map(|_| ()),
         _ => Ok(()),
     }
 }
@@ -4119,16 +4107,16 @@ fn validate_content_shape_parts(
 #[cfg(test)]
 fn validate_contract_tags_parts(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     validate_contract_tags_parts_in_registry(tags, contract, EVENT_CONTRACTS_REGISTRY_V7)
 }
 
 fn validate_contract_tags_parts_in_registry(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-    event_contracts: &'static [RadrootsEventContract],
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+    event_contracts: &'static [EventContract],
+) -> Result<(), ContractValidationError> {
     for tag_contract in contract.tags {
         let count = tag_count(tags, tag_contract.name);
         let has_multiple_contracts_for_name = contract
@@ -4138,42 +4126,42 @@ fn validate_contract_tags_parts_in_registry(
             .count()
             > 1;
         match tag_contract.cardinality {
-            RadrootsTagCardinality::RequiredOne => {
+            TagCardinality::RequiredOne => {
                 if count == 0 {
-                    return Err(RadrootsContractValidationError::MissingTag {
+                    return Err(ContractValidationError::MissingTag {
                         contract_id: contract.id,
                         name: tag_contract.name,
                     });
                 }
                 if count != 1 && !has_multiple_contracts_for_name {
-                    return Err(RadrootsContractValidationError::TagCardinalityMismatch {
+                    return Err(ContractValidationError::TagCardinalityMismatch {
                         contract_id: contract.id,
                         name: tag_contract.name,
                     });
                 }
             }
-            RadrootsTagCardinality::RequiredMany => {
+            TagCardinality::RequiredMany => {
                 if count == 0 {
-                    return Err(RadrootsContractValidationError::MissingTag {
+                    return Err(ContractValidationError::MissingTag {
                         contract_id: contract.id,
                         name: tag_contract.name,
                     });
                 }
             }
-            RadrootsTagCardinality::OptionalOne => {
+            TagCardinality::OptionalOne => {
                 if count > 1 && !has_multiple_contracts_for_name {
-                    return Err(RadrootsContractValidationError::TagCardinalityMismatch {
+                    return Err(ContractValidationError::TagCardinalityMismatch {
                         contract_id: contract.id,
                         name: tag_contract.name,
                     });
                 }
             }
-            RadrootsTagCardinality::OptionalMany => {}
+            TagCardinality::OptionalMany => {}
         }
         if tag_contract.name == "contract" {
             let actual = tag_value(tags, "contract").map(ToOwned::to_owned);
             if actual.as_deref() != Some(contract.id) {
-                return Err(RadrootsContractValidationError::TagValueMismatch {
+                return Err(ContractValidationError::TagValueMismatch {
                     contract_id: contract.id,
                     name: "contract",
                     expected: contract.id.to_owned(),
@@ -4188,16 +4176,16 @@ fn validate_contract_tags_parts_in_registry(
 
 fn validate_contract_tag_values_in_registry(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-    tag_contract: &RadrootsTagContract,
-    event_contracts: &'static [RadrootsEventContract],
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+    tag_contract: &TagContract,
+    event_contracts: &'static [EventContract],
+) -> Result<(), ContractValidationError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(|value| value.as_str()) == Some(tag_contract.name))
     {
         if !tag_value_is_valid_in_registry(tag, tag_contract.value_type, event_contracts) {
-            return Err(RadrootsContractValidationError::TagValueMismatch {
+            return Err(ContractValidationError::TagValueMismatch {
                 contract_id: contract.id,
                 name: tag_contract.name,
                 expected: tag_value_type_expectation(tag_contract.value_type).to_owned(),
@@ -4209,51 +4197,45 @@ fn validate_contract_tag_values_in_registry(
 }
 
 #[cfg(test)]
-fn tag_value_is_valid(tag: &[String], value_type: RadrootsTagValueType) -> bool {
+fn tag_value_is_valid(tag: &[String], value_type: TagValueType) -> bool {
     tag_value_is_valid_in_registry(tag, value_type, EVENT_CONTRACTS_REGISTRY_V7)
 }
 
 fn tag_value_is_valid_in_registry(
     tag: &[String],
-    value_type: RadrootsTagValueType,
-    event_contracts: &'static [RadrootsEventContract],
+    value_type: TagValueType,
+    event_contracts: &'static [EventContract],
 ) -> bool {
     let Some(value) = tag.get(1).map(String::as_str) else {
         return false;
     };
     match value_type {
-        RadrootsTagValueType::AddressableCoordinate => {
-            RadrootsAddressableCoordinate::parse(value).is_ok()
-        }
-        RadrootsTagValueType::CalendarDate => RadrootsCalendarDate::parse(value).is_ok(),
-        RadrootsTagValueType::CalendarEventCoordinate => {
+        TagValueType::AddressableCoordinate => AddressableCoordinate::parse(value).is_ok(),
+        TagValueType::CalendarDate => CalendarDate::parse(value).is_ok(),
+        TagValueType::CalendarEventCoordinate => {
             canonical_calendar_event_coordinate_is_valid(value)
         }
-        RadrootsTagValueType::CalendarFreeBusy => matches!(value, "free" | "busy"),
-        RadrootsTagValueType::CalendarRsvpStatus => {
+        TagValueType::CalendarFreeBusy => matches!(value, "free" | "busy"),
+        TagValueType::CalendarRsvpStatus => {
             matches!(value, "accepted" | "declined" | "tentative")
         }
-        RadrootsTagValueType::CalendarUid => RadrootsCalendarUid::parse(value).is_ok(),
-        RadrootsTagValueType::ContractId => {
-            event_contracts.iter().any(|contract| contract.id == value)
-        }
-        RadrootsTagValueType::DTag => RadrootsDTag::parse(value).is_ok(),
-        RadrootsTagValueType::EventId | RadrootsTagValueType::Sha256 => {
-            RadrootsEventId::parse(value).is_ok()
-        }
-        RadrootsTagValueType::EventPointer => event_pointer_tag_is_valid(tag),
-        RadrootsTagValueType::Geohash => geohash_is_valid(value),
-        RadrootsTagValueType::IanaTimeZoneId => RadrootsIanaTimeZoneId::parse(value).is_ok(),
-        RadrootsTagValueType::Kind => value.parse::<u32>().is_ok(),
-        RadrootsTagValueType::Nip01Coordinate => RadrootsNip01Coordinate::parse(value).is_ok(),
-        RadrootsTagValueType::PublicKey => parse_public_key(value).is_ok(),
-        RadrootsTagValueType::RelayUrl => relay_url_is_valid(value),
-        RadrootsTagValueType::Text => visible_text_is_valid(value),
-        RadrootsTagValueType::UnixTimestamp => value.parse::<u64>().is_ok(),
-        RadrootsTagValueType::Uri => RadrootsCalendarUri::parse(value).is_ok(),
-        RadrootsTagValueType::Url => url_is_valid(value),
-        RadrootsTagValueType::UtcDayIndex => canonical_u64(value).is_some(),
-        RadrootsTagValueType::Uuid => uuid_is_valid(value),
+        TagValueType::CalendarUid => CalendarUid::parse(value).is_ok(),
+        TagValueType::ContractId => event_contracts.iter().any(|contract| contract.id == value),
+        TagValueType::DTag => DTag::parse(value).is_ok(),
+        TagValueType::EventId | TagValueType::Sha256 => EventId::parse(value).is_ok(),
+        TagValueType::EventPointer => event_pointer_tag_is_valid(tag),
+        TagValueType::Geohash => geohash_is_valid(value),
+        TagValueType::IanaTimeZoneId => IanaTimeZoneId::parse(value).is_ok(),
+        TagValueType::Kind => value.parse::<u32>().is_ok(),
+        TagValueType::Nip01Coordinate => Nip01Coordinate::parse(value).is_ok(),
+        TagValueType::PublicKey => parse_public_key(value).is_ok(),
+        TagValueType::RelayUrl => relay_url_is_valid(value),
+        TagValueType::Text => visible_text_is_valid(value),
+        TagValueType::UnixTimestamp => value.parse::<u64>().is_ok(),
+        TagValueType::Uri => CalendarUri::parse(value).is_ok(),
+        TagValueType::Url => url_is_valid(value),
+        TagValueType::UtcDayIndex => canonical_u64(value).is_some(),
+        TagValueType::Uuid => uuid_is_valid(value),
     }
 }
 
@@ -4265,10 +4247,10 @@ fn event_pointer_tag_is_valid(tag: &[String]) -> bool {
     let author = tag[2].as_str();
     let kind = tag[3].as_str();
     let d_tag = tag[4].as_str();
-    RadrootsEventId::parse(id).is_ok()
+    EventId::parse(id).is_ok()
         && parse_public_key(author).is_ok()
         && kind.parse::<u32>().is_ok()
-        && (d_tag.is_empty() || RadrootsDTag::parse(d_tag).is_ok())
+        && (d_tag.is_empty() || DTag::parse(d_tag).is_ok())
         && tag
             .iter()
             .skip(5)
@@ -4307,31 +4289,31 @@ fn uuid_is_valid(value: &str) -> bool {
     })
 }
 
-fn tag_value_type_expectation(value_type: RadrootsTagValueType) -> &'static str {
+fn tag_value_type_expectation(value_type: TagValueType) -> &'static str {
     match value_type {
-        RadrootsTagValueType::AddressableCoordinate => "addressable_coordinate",
-        RadrootsTagValueType::CalendarDate => "calendar_date_yyyy_mm_dd",
-        RadrootsTagValueType::CalendarEventCoordinate => "canonical_kind_31922_or_31923_coordinate",
-        RadrootsTagValueType::CalendarFreeBusy => "calendar_free_or_busy",
-        RadrootsTagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
-        RadrootsTagValueType::CalendarUid => "canonical_128_bit_base64url_calendar_uid",
-        RadrootsTagValueType::ContractId => "contract_id",
-        RadrootsTagValueType::DTag => "d_tag",
-        RadrootsTagValueType::EventId => "event_id",
-        RadrootsTagValueType::EventPointer => "event_pointer",
-        RadrootsTagValueType::Geohash => "geohash",
-        RadrootsTagValueType::IanaTimeZoneId => "canonical_iana_time_zone_id",
-        RadrootsTagValueType::Kind => "kind",
-        RadrootsTagValueType::Nip01Coordinate => "nip01_coordinate",
-        RadrootsTagValueType::PublicKey => "public_key",
-        RadrootsTagValueType::RelayUrl => "relay_url",
-        RadrootsTagValueType::Sha256 => "sha256",
-        RadrootsTagValueType::Text => "text",
-        RadrootsTagValueType::UnixTimestamp => "unix_timestamp",
-        RadrootsTagValueType::Uri => "absolute_uri",
-        RadrootsTagValueType::Url => "url",
-        RadrootsTagValueType::UtcDayIndex => "canonical_decimal_utc_day_index",
-        RadrootsTagValueType::Uuid => "uuid",
+        TagValueType::AddressableCoordinate => "addressable_coordinate",
+        TagValueType::CalendarDate => "calendar_date_yyyy_mm_dd",
+        TagValueType::CalendarEventCoordinate => "canonical_kind_31922_or_31923_coordinate",
+        TagValueType::CalendarFreeBusy => "calendar_free_or_busy",
+        TagValueType::CalendarRsvpStatus => "calendar_rsvp_status",
+        TagValueType::CalendarUid => "canonical_128_bit_base64url_calendar_uid",
+        TagValueType::ContractId => "contract_id",
+        TagValueType::DTag => "d_tag",
+        TagValueType::EventId => "event_id",
+        TagValueType::EventPointer => "event_pointer",
+        TagValueType::Geohash => "geohash",
+        TagValueType::IanaTimeZoneId => "canonical_iana_time_zone_id",
+        TagValueType::Kind => "kind",
+        TagValueType::Nip01Coordinate => "nip01_coordinate",
+        TagValueType::PublicKey => "public_key",
+        TagValueType::RelayUrl => "relay_url",
+        TagValueType::Sha256 => "sha256",
+        TagValueType::Text => "text",
+        TagValueType::UnixTimestamp => "unix_timestamp",
+        TagValueType::Uri => "absolute_uri",
+        TagValueType::Url => "url",
+        TagValueType::UtcDayIndex => "canonical_decimal_utc_day_index",
+        TagValueType::Uuid => "uuid",
     }
 }
 
@@ -4347,8 +4329,8 @@ fn canonical_u64(value: &str) -> Option<u64> {
 
 fn validate_custom_calendar_contract_parts(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     match contract.id {
         "radroots.calendar.date_event.v1" => validate_calendar_date_contract(tags, contract),
         "radroots.calendar.time_event.v1" => validate_calendar_time_contract(tags, contract),
@@ -4360,8 +4342,8 @@ fn validate_custom_calendar_contract_parts(
 
 fn validate_calendar_collection_contract(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     validate_exact_calendar_tags(tags, contract, &["d", "title", "description", "image"])?;
     validate_canonical_calendar_text_tags(tags, contract, &["title", "description"])?;
     validate_calendar_event_reference_tags(tags, contract)?;
@@ -4390,8 +4372,8 @@ fn validate_calendar_collection_contract(
 
 fn validate_calendar_rsvp_contract(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     validate_exact_calendar_tags(tags, contract, &["d", "status", "fb"])?;
     validate_calendar_event_reference_tags(tags, contract)?;
     validate_calendar_rsvp_pointer_tag(tags, contract, "e", true)?;
@@ -4401,9 +4383,7 @@ fn validate_calendar_rsvp_contract(
         .iter()
         .find(|tag| tag.first().map(String::as_str) == Some("a"))
         .and_then(|tag| tag.get(1))
-        .and_then(|coordinate| {
-            crate::id::RadrootsAddressableCoordinateParts::parse(coordinate).ok()
-        })
+        .and_then(|coordinate| crate::id::AddressableCoordinateParts::parse(coordinate).ok())
         .map(|parts| parts.pubkey);
     if let Some(author_hint) = tag_value(tags, "p") {
         let hint = parse_public_key(author_hint).ok();
@@ -4423,8 +4403,8 @@ fn validate_calendar_rsvp_contract(
 
 fn validate_calendar_event_reference_tags(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(String::as_str) == Some("a"))
@@ -4449,17 +4429,17 @@ fn validate_calendar_event_reference_tags(
 
 fn validate_calendar_rsvp_pointer_tag(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     name: &'static str,
     event_id: bool,
-) -> Result<(), RadrootsContractValidationError> {
+) -> Result<(), ContractValidationError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(String::as_str) == Some(name))
     {
         let value_is_canonical = tag.get(1).is_some_and(|value| {
             if event_id {
-                RadrootsEventId::parse(value).is_ok_and(|parsed| parsed.to_hex() == *value)
+                EventId::parse(value).is_ok_and(|parsed| parsed.to_hex() == *value)
             } else {
                 parse_public_key(value).is_ok_and(|parsed| parsed.to_hex() == *value)
             }
@@ -4485,9 +4465,9 @@ fn validate_calendar_rsvp_pointer_tag(
 
 fn validate_canonical_calendar_text_tags(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     names: &[&'static str],
-) -> Result<(), RadrootsContractValidationError> {
+) -> Result<(), ContractValidationError> {
     for name in names {
         for tag in tags
             .iter()
@@ -4511,8 +4491,8 @@ fn validate_canonical_calendar_text_tags(
 
 fn validate_calendar_blossom_image(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     if let Some(image) = tag_value(tags, "image")
         && BlobUrl::parse(image).is_err()
     {
@@ -4528,8 +4508,8 @@ fn validate_calendar_blossom_image(
 
 fn validate_calendar_date_contract(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     validate_exact_calendar_tags(
         tags,
         contract,
@@ -4569,8 +4549,8 @@ fn validate_calendar_date_contract(
 
 fn validate_calendar_time_contract(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     validate_exact_calendar_tags(
         tags,
         contract,
@@ -4638,9 +4618,9 @@ fn validate_calendar_time_contract(
 
 fn validate_exact_calendar_tags(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     names: &[&'static str],
-) -> Result<(), RadrootsContractValidationError> {
+) -> Result<(), ContractValidationError> {
     for name in names {
         for tag in tags
             .iter()
@@ -4661,8 +4641,8 @@ fn validate_exact_calendar_tags(
 
 fn validate_calendar_participant_tags(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     if tag_count(tags, "p") > RADROOTS_CALENDAR_MAX_PARTICIPANTS {
         return Err(calendar_tag_mismatch(
             contract,
@@ -4706,8 +4686,8 @@ fn validate_calendar_participant_tags(
 
 fn validate_calendar_inclusion_request_tags(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     for tag in tags
         .iter()
         .filter(|tag| tag.first().map(String::as_str) == Some("a"))
@@ -4737,7 +4717,7 @@ fn canonical_calendar_coordinate_is_valid(value: &str) -> bool {
     let Some((pubkey, d_tag)) = remainder.split_once(':') else {
         return false;
     };
-    let Ok(parts) = crate::id::RadrootsAddressableCoordinateParts::parse(value) else {
+    let Ok(parts) = crate::id::AddressableCoordinateParts::parse(value) else {
         return false;
     };
     kind == "31924" && pubkey == parts.pubkey.to_hex() && d_tag == parts.d_tag.as_str()
@@ -4750,7 +4730,7 @@ fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
     let Some((pubkey, d_tag)) = remainder.split_once(':') else {
         return false;
     };
-    let Ok(parts) = crate::id::RadrootsAddressableCoordinateParts::parse(value) else {
+    let Ok(parts) = crate::id::AddressableCoordinateParts::parse(value) else {
         return false;
     };
     matches!(
@@ -4763,8 +4743,8 @@ fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
 
 fn validate_canonical_calendar_common_tags(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     for name in ["title", "location", "summary", "t", "name"] {
         for tag in tags
             .iter()
@@ -4808,14 +4788,14 @@ fn validate_canonical_calendar_common_tags(
 
 fn calendar_date_tag(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     name: &'static str,
-) -> Result<RadrootsCalendarDate, RadrootsContractValidationError> {
-    let value = tag_value(tags, name).ok_or(RadrootsContractValidationError::MissingTag {
+) -> Result<CalendarDate, ContractValidationError> {
+    let value = tag_value(tags, name).ok_or(ContractValidationError::MissingTag {
         contract_id: contract.id,
         name,
     })?;
-    RadrootsCalendarDate::parse(value).map_err(|_| {
+    CalendarDate::parse(value).map_err(|_| {
         calendar_tag_mismatch(
             contract,
             name,
@@ -4827,9 +4807,9 @@ fn calendar_date_tag(
 
 fn optional_calendar_date_tag(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     name: &'static str,
-) -> Result<Option<RadrootsCalendarDate>, RadrootsContractValidationError> {
+) -> Result<Option<CalendarDate>, ContractValidationError> {
     tag_value(tags, name)
         .map(|_| calendar_date_tag(tags, contract, name))
         .transpose()
@@ -4837,10 +4817,10 @@ fn optional_calendar_date_tag(
 
 fn canonical_calendar_u64_tag(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     name: &'static str,
-) -> Result<u64, RadrootsContractValidationError> {
-    let value = tag_value(tags, name).ok_or(RadrootsContractValidationError::MissingTag {
+) -> Result<u64, ContractValidationError> {
+    let value = tag_value(tags, name).ok_or(ContractValidationError::MissingTag {
         contract_id: contract.id,
         name,
     })?;
@@ -4856,21 +4836,21 @@ fn canonical_calendar_u64_tag(
 
 fn optional_canonical_calendar_u64_tag(
     tags: &[Vec<String>],
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     name: &'static str,
-) -> Result<Option<u64>, RadrootsContractValidationError> {
+) -> Result<Option<u64>, ContractValidationError> {
     tag_value(tags, name)
         .map(|_| canonical_calendar_u64_tag(tags, contract, name))
         .transpose()
 }
 
 fn calendar_tag_mismatch(
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
     name: &'static str,
     expected: &'static str,
     actual: Option<String>,
-) -> RadrootsContractValidationError {
-    RadrootsContractValidationError::TagValueMismatch {
+) -> ContractValidationError {
+    ContractValidationError::TagValueMismatch {
         contract_id: contract.id,
         name,
         expected: expected.to_owned(),
@@ -4880,8 +4860,8 @@ fn calendar_tag_mismatch(
 
 fn validate_custom_knowledge_contract_parts(
     content: &str,
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
     let Some(expected_schema) = custom_knowledge_schema(contract.id) else {
         return Ok(());
     };
@@ -4891,14 +4871,14 @@ fn validate_custom_knowledge_contract_parts(
     match object.get("schema").and_then(|value| value.as_str()) {
         Some(actual) if actual == expected_schema => {}
         Some(_) => {
-            return Err(RadrootsContractValidationError::ContentFieldMismatch {
+            return Err(ContractValidationError::ContentFieldMismatch {
                 contract_id: contract.id,
                 field: "schema",
                 expected: expected_schema.to_owned(),
             });
         }
         None => {
-            return Err(RadrootsContractValidationError::MissingContentField {
+            return Err(ContractValidationError::MissingContentField {
                 contract_id: contract.id,
                 field: "schema",
             });
@@ -4910,12 +4890,12 @@ fn validate_custom_knowledge_contract_parts(
         .and_then(|value| value.as_u64())
     {
         Some(1) => Ok(()),
-        Some(_) => Err(RadrootsContractValidationError::ContentFieldMismatch {
+        Some(_) => Err(ContractValidationError::ContentFieldMismatch {
             contract_id: contract.id,
             field: "schema_version",
             expected: "1".to_owned(),
         }),
-        None => Err(RadrootsContractValidationError::MissingContentField {
+        None => Err(ContractValidationError::MissingContentField {
             contract_id: contract.id,
             field: "schema_version",
         }),
@@ -4924,30 +4904,27 @@ fn validate_custom_knowledge_contract_parts(
 
 fn validate_discriminator_parts(
     content: &str,
-    contract: &RadrootsEventContract,
-) -> Result<(), RadrootsContractValidationError> {
-    if matches!(
-        contract.discriminator,
-        RadrootsEventDiscriminator::AdmissionOnly
-    ) {
-        return Err(RadrootsContractValidationError::AdmissionRequired {
+    contract: &EventContract,
+) -> Result<(), ContractValidationError> {
+    if matches!(contract.discriminator, EventDiscriminator::AdmissionOnly) {
+        return Err(ContractValidationError::AdmissionRequired {
             contract_id: contract.id,
         });
     }
     let (field, value) = match &contract.discriminator {
-        RadrootsEventDiscriminator::ContentJsonFieldEquals { field, value } => (*field, *value),
-        RadrootsEventDiscriminator::EnvelopeType(value) => ("type", *value),
+        EventDiscriminator::ContentJsonFieldEquals { field, value } => (*field, *value),
+        EventDiscriminator::EnvelopeType(value) => ("type", *value),
         _ => return Ok(()),
     };
     let object = parse_content_object(content, contract.id)?;
     match object.get(field).and_then(|actual| actual.as_str()) {
         Some(actual) if actual == value => Ok(()),
-        Some(_) => Err(RadrootsContractValidationError::ContentFieldMismatch {
+        Some(_) => Err(ContractValidationError::ContentFieldMismatch {
             contract_id: contract.id,
             field,
             expected: value.to_owned(),
         }),
-        None => Err(RadrootsContractValidationError::MissingContentField {
+        None => Err(ContractValidationError::MissingContentField {
             contract_id: contract.id,
             field,
         }),
@@ -4957,17 +4934,17 @@ fn validate_discriminator_parts(
 fn parse_content_object(
     content: &str,
     contract_id: &'static str,
-) -> Result<serde_json::Map<String, serde_json::Value>, RadrootsContractValidationError> {
+) -> Result<serde_json::Map<String, serde_json::Value>, ContractValidationError> {
     match serde_json::from_str::<serde_json::Value>(content) {
         Ok(serde_json::Value::Object(object)) => Ok(object),
-        _ => Err(RadrootsContractValidationError::InvalidJsonContent { contract_id }),
+        _ => Err(ContractValidationError::InvalidJsonContent { contract_id }),
     }
 }
 
 fn reject_forbidden_knowledge_fields(
     object: &serde_json::Map<String, serde_json::Value>,
     contract_id: &'static str,
-) -> Result<(), RadrootsContractValidationError> {
+) -> Result<(), ContractValidationError> {
     for field in [
         "review_status",
         "canon_status",
@@ -4977,10 +4954,7 @@ fn reject_forbidden_knowledge_fields(
         "trusted",
     ] {
         if object.contains_key(field) {
-            return Err(RadrootsContractValidationError::ForbiddenContentField {
-                contract_id,
-                field,
-            });
+            return Err(ContractValidationError::ForbiddenContentField { contract_id, field });
         }
     }
     Ok(())
@@ -5003,33 +4977,31 @@ fn custom_knowledge_schema(contract_id: &str) -> Option<&'static str> {
 }
 
 fn discriminator_matches(
-    discriminator: &RadrootsEventDiscriminator,
+    discriminator: &EventDiscriminator,
     tags: &[Vec<String>],
     content: &str,
 ) -> bool {
     match discriminator {
-        RadrootsEventDiscriminator::KindOnly => true,
-        RadrootsEventDiscriminator::AdmissionOnly => false,
-        RadrootsEventDiscriminator::ClassifiedListingPartition(expected) => {
+        EventDiscriminator::KindOnly => true,
+        EventDiscriminator::AdmissionOnly => false,
+        EventDiscriminator::ClassifiedListingPartition(expected) => {
             classify_classified_listing_raw_tags_registry_v7(tags) == *expected
         }
-        RadrootsEventDiscriminator::DTagExact(expected) => tag_value(tags, "d") == Some(*expected),
-        RadrootsEventDiscriminator::DTagPrefix(prefix) => tag_value(tags, "d")
+        EventDiscriminator::DTagExact(expected) => tag_value(tags, "d") == Some(*expected),
+        EventDiscriminator::DTagPrefix(prefix) => tag_value(tags, "d")
             .map(|value| value.starts_with(prefix))
             .unwrap_or(false),
-        RadrootsEventDiscriminator::DTagSuffix(suffix) => tag_value(tags, "d")
+        EventDiscriminator::DTagSuffix(suffix) => tag_value(tags, "d")
             .map(|value| value.ends_with(suffix))
             .unwrap_or(false),
-        RadrootsEventDiscriminator::TagEquals { name, value } => {
-            tag_value(tags, name) == Some(*value)
-        }
-        RadrootsEventDiscriminator::ContentJsonFieldEquals { field, value } => {
+        EventDiscriminator::TagEquals { name, value } => tag_value(tags, name) == Some(*value),
+        EventDiscriminator::ContentJsonFieldEquals { field, value } => {
             content_json_string_field_equals(content, field, value)
         }
-        RadrootsEventDiscriminator::EnvelopeType(expected) => {
+        EventDiscriminator::EnvelopeType(expected) => {
             content_json_string_field_equals(content, "type", expected)
         }
-        RadrootsEventDiscriminator::Composite(parts) => parts
+        EventDiscriminator::Composite(parts) => parts
             .iter()
             .all(|part| discriminator_matches(part, tags, content)),
     }

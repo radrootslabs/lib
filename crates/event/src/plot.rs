@@ -1,4 +1,4 @@
-use crate::{farm::RadrootsFarmRef, farm::change_set::RadrootsGcsLocation};
+use crate::{farm::FarmRef, farm::change_set::GcsLocation};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -10,7 +10,7 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsPlotRef {
+pub struct PlotRef {
     pub pubkey: String,
     pub d_tag: String,
 }
@@ -22,12 +22,12 @@ pub struct RadrootsPlotRef {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsPlot {
+pub struct Plot {
     pub d_tag: String,
-    pub farm: RadrootsFarmRef,
+    pub farm: FarmRef,
     pub name: String,
     pub about: Option<String>,
-    pub location: Option<RadrootsPlotLocation>,
+    pub location: Option<PlotLocation>,
     pub tags: Option<Vec<String>>,
 }
 
@@ -38,10 +38,10 @@ pub struct RadrootsPlot {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsPlotLocation {
+pub struct PlotLocation {
     pub primary: Option<String>,
     pub city: Option<String>,
     pub region: Option<String>,
     pub country: Option<String>,
-    pub gcs: RadrootsGcsLocation,
+    pub gcs: GcsLocation,
 }

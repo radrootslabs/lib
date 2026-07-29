@@ -6,35 +6,35 @@ mod tests {
     use crate::error::EventEncodeError;
     use crate::plot::encode::{plot_address, plot_build_tags};
     use radroots_event::{
-        farm::RadrootsFarmRef,
-        farm::change_set::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
-        farm::plot::{RadrootsPlot, RadrootsPlotLocation},
+        farm::FarmRef,
+        farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon},
+        farm::plot::{Plot, PlotLocation},
     };
 
     #[test]
     fn plot_tags_include_farm_address() {
-        let plot = RadrootsPlot {
+        let plot = Plot {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             name: "Orchard".to_string(),
             about: None,
-            location: Some(RadrootsPlotLocation {
+            location: Some(PlotLocation {
                 primary: None,
                 city: None,
                 region: None,
                 country: None,
-                gcs: RadrootsGcsLocation {
+                gcs: GcsLocation {
                     lat: 37.0,
                     lng: -122.0,
                     geohash: "9q8yy".to_string(),
-                    point: RadrootsGeoJsonPoint {
+                    point: GeoJsonPoint {
                         r#type: "Point".to_string(),
                         coordinates: [-122.0, 37.0],
                     },
-                    polygon: RadrootsGeoJsonPolygon {
+                    polygon: GeoJsonPolygon {
                         r#type: "Polygon".to_string(),
                         coordinates: vec![vec![
                             [-122.0, 37.0],
@@ -75,9 +75,9 @@ mod tests {
 
     #[test]
     fn plot_tags_allow_missing_optional_fields() {
-        let plot = RadrootsPlot {
+        let plot = Plot {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
@@ -114,9 +114,9 @@ mod tests {
 
     #[test]
     fn plot_build_tags_rejects_invalid_plot_and_farm_d_tag() {
-        let mut plot = RadrootsPlot {
+        let mut plot = Plot {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
@@ -138,28 +138,28 @@ mod tests {
 
     #[test]
     fn plot_encode_rejects_empty_required_fields() {
-        let mut plot = RadrootsPlot {
+        let mut plot = Plot {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAQ".to_string(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             },
             name: "Orchard".to_string(),
             about: None,
-            location: Some(RadrootsPlotLocation {
+            location: Some(PlotLocation {
                 primary: None,
                 city: None,
                 region: None,
                 country: None,
-                gcs: RadrootsGcsLocation {
+                gcs: GcsLocation {
                     lat: 37.0,
                     lng: -122.0,
                     geohash: "9q8yy".to_string(),
-                    point: RadrootsGeoJsonPoint {
+                    point: GeoJsonPoint {
                         r#type: "Point".to_string(),
                         coordinates: [-122.0, 37.0],
                     },
-                    polygon: RadrootsGeoJsonPolygon {
+                    polygon: GeoJsonPolygon {
                         r#type: "Polygon".to_string(),
                         coordinates: vec![vec![
                             [-122.0, 37.0],

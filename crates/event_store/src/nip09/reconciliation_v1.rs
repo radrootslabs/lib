@@ -17,14 +17,13 @@ use crate::{
     RADROOTS_EVENT_STORE_RAW_TAG_COUNT_LIMIT_V1, RADROOTS_EVENT_STORE_RAW_TAG_TEXT_BYTES_LIMIT_V1,
     RadrootsEventStoreError, RadrootsEventStoreSourceCapacityResourceV1,
 };
-use radroots_event::contract::registry_v7::RadrootsEventContract;
+use radroots_event::contract::registry_v7::EventContract;
 use radroots_event::envelope::event_head::v1::{
-    RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
-    RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
-    event_head_candidate_for_nip01_event_v1, select_event_head_v1,
+    CurrentEventHead, EventHeadCandidate, EventHeadCandidateResult, EventHeadCoordinate,
+    EventHeadDecision, event_head_candidate_for_nip01_event_v1, select_event_head_v1,
 };
-use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
-use radroots_event::id::RadrootsNip01Coordinate;
+use radroots_event::envelope::{EventEnvelope, EventKindClass};
+use radroots_event::id::Nip01Coordinate;
 use radroots_event_codec::admission::registry_v7::{
     RadrootsRegistryV7AdmissionDecision, admit_verified_event_registry_v7,
 };
@@ -192,7 +191,7 @@ impl SourceGenerationProvider for OsSourceGenerationProvider {
 pub(crate) struct EventAdmission {
     pub(crate) status: RadrootsEventAdmissionStatus,
     pub(crate) code: Option<String>,
-    pub(crate) contract: Option<&'static RadrootsEventContract>,
+    pub(crate) contract: Option<&'static EventContract>,
 }
 
 impl EventAdmission {
@@ -234,9 +233,9 @@ impl EventAdmission {
         })
     }
 
-    pub(crate) fn valid_stream_eligible(&self, kind_class: RadrootsEventKindClass) -> bool {
+    pub(crate) fn valid_stream_eligible(&self, kind_class: EventKindClass) -> bool {
         self.status == RadrootsEventAdmissionStatus::Admitted
-            && kind_class != RadrootsEventKindClass::Ephemeral
+            && kind_class != EventKindClass::Ephemeral
     }
 }
 
@@ -262,7 +261,7 @@ struct ReconciliationSnapshot {
 
 #[derive(Clone)]
 struct RawHeadWinner {
-    candidate: RadrootsEventHeadCandidate,
+    candidate: EventHeadCandidate,
     event_seq: i64,
     updated_at_ms: i64,
 }
@@ -448,7 +447,7 @@ impl<'a> RequestIndex<'a> {
 
     fn matching<'index>(
         &'index self,
-        event: &RadrootsEventEnvelope,
+        event: &EventEnvelope,
     ) -> impl Iterator<Item = &'index RadrootsAdmittedNip09DeletionRequestEventV1> + 'index {
         let event_indices = self
             .event_targets
@@ -1833,13 +1832,13 @@ async fn validate_raw_heads(
     let mut expected = BTreeSet::new();
     for winner in select_raw_head_winners(events).into_values() {
         let (coordinate_type, kind, pubkey, d_tag) = match winner.candidate.coordinate {
-            RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => (
+            EventHeadCoordinate::Replaceable { kind, pubkey } => (
                 "replaceable".to_owned(),
                 i64::from(kind),
                 pubkey.to_string(),
                 None,
             ),
-            RadrootsEventHeadCoordinate::Addressable {
+            EventHeadCoordinate::Addressable {
                 kind,
                 pubkey,
                 d_tag,
@@ -1895,7 +1894,7 @@ async fn rebuild_raw_heads(
         .await?;
     for winner in winners.into_values() {
         match &winner.candidate.coordinate {
-            RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
+            EventHeadCoordinate::Replaceable { kind, pubkey } => {
                 sqlx::query(
                     "INSERT INTO event_envelope_head(coordinate_type, kind, pubkey, d_tag, event_id, created_at, updated_at_ms) VALUES ('replaceable', ?, ?, NULL, ?, ?, ?)",
                 )
@@ -1910,7 +1909,7 @@ async fn rebuild_raw_heads(
                 .execute(&mut *connection)
                 .await?;
             }
-            RadrootsEventHeadCoordinate::Addressable {
+            EventHeadCoordinate::Addressable {
                 kind,
                 pubkey,
                 d_tag,
@@ -1937,7 +1936,7 @@ async fn rebuild_raw_heads(
 
 fn select_raw_head_winners(
     events: &[ReconciledEvent],
-) -> BTreeMap<RadrootsEventHeadCoordinate, RawHeadWinner> {
+) -> BTreeMap<EventHeadCoordinate, RawHeadWinner> {
     let mut winners = BTreeMap::new();
     for event in events {
         apply_raw_head_to_winners(&mut winners, event);
@@ -1946,30 +1945,30 @@ fn select_raw_head_winners(
 }
 
 fn apply_raw_head_to_winners(
-    winners: &mut BTreeMap<RadrootsEventHeadCoordinate, RawHeadWinner>,
+    winners: &mut BTreeMap<EventHeadCoordinate, RawHeadWinner>,
     event: &ReconciledEvent,
 ) -> RadrootsRawHeadDecision {
     let candidate = match event_head_candidate_for_nip01_event_v1(event.verified_event.event()) {
-        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
-        RadrootsEventHeadCandidateResult::NotHeadSelected => {
+        EventHeadCandidateResult::Candidate(candidate) => candidate,
+        EventHeadCandidateResult::NotHeadSelected => {
             return RadrootsRawHeadDecision::NotHeadSelected;
         }
-        RadrootsEventHeadCandidateResult::NotPersisted => {
+        EventHeadCandidateResult::NotPersisted => {
             return RadrootsRawHeadDecision::NotPersisted;
         }
-        RadrootsEventHeadCandidateResult::Malformed(_) => {
+        EventHeadCandidateResult::Malformed(_) => {
             return RadrootsRawHeadDecision::MalformedCoordinate;
         }
     };
     let current = winners
         .get(&candidate.coordinate)
-        .map(|winner| RadrootsCurrentEventHead {
+        .map(|winner| CurrentEventHead {
             coordinate: winner.candidate.coordinate.clone(),
             event_id: winner.candidate.event_id.clone(),
             created_at: winner.candidate.created_at,
         });
     let decision = select_event_head_v1(candidate.clone(), current.as_ref());
-    if matches!(decision, RadrootsEventHeadDecision::Applied(_)) {
+    if matches!(decision, EventHeadDecision::Applied(_)) {
         winners.insert(
             candidate.coordinate.clone(),
             RawHeadWinner {
@@ -2057,30 +2056,29 @@ fn event_coordinate_fact(
 ) -> Result<Option<EventCoordinateFact>, RadrootsEventStoreError> {
     let envelope = event.verified_event.event();
     let kind = envelope.kind_u32();
-    let (coordinate_type, raw_d_tag, nip09_d_tag) = if matches!(kind, 0 | 3)
-        || (10_000..=19_999).contains(&kind)
-    {
-        ("replaceable", String::new(), Some(String::new()))
-    } else if (30_000..=39_999).contains(&kind) {
-        let raw_d_tag_value = envelope
-            .tag_slices()
-            .iter()
-            .find(|tag| tag.as_slice().first().is_some_and(|name| name == "d"))
-            .and_then(|tag| tag.as_slice().get(1))
-            .cloned();
-        let nip09_d_tag = raw_d_tag_value.as_ref().and_then(|d_tag| {
-            RadrootsNip01Coordinate::parse(format!("{kind}:{}:{d_tag}", envelope.author().to_hex()))
-                .ok()
-                .map(|coordinate| coordinate.identifier().to_owned())
-        });
-        (
-            "addressable",
-            raw_d_tag_value.unwrap_or_default(),
-            nip09_d_tag,
-        )
-    } else {
-        return Ok(None);
-    };
+    let (coordinate_type, raw_d_tag, nip09_d_tag) =
+        if matches!(kind, 0 | 3) || (10_000..=19_999).contains(&kind) {
+            ("replaceable", String::new(), Some(String::new()))
+        } else if (30_000..=39_999).contains(&kind) {
+            let raw_d_tag_value = envelope
+                .tag_slices()
+                .iter()
+                .find(|tag| tag.as_slice().first().is_some_and(|name| name == "d"))
+                .and_then(|tag| tag.as_slice().get(1))
+                .cloned();
+            let nip09_d_tag = raw_d_tag_value.as_ref().and_then(|d_tag| {
+                Nip01Coordinate::parse(format!("{kind}:{}:{d_tag}", envelope.author().to_hex()))
+                    .ok()
+                    .map(|coordinate| coordinate.identifier().to_owned())
+            });
+            (
+                "addressable",
+                raw_d_tag_value.unwrap_or_default(),
+                nip09_d_tag,
+            )
+        } else {
+            return Ok(None);
+        };
     Ok(Some(EventCoordinateFact {
         event_id: envelope.id_hex().to_owned(),
         event_seq: event.seq,
@@ -2314,9 +2312,9 @@ async fn synchronize_insert_delta(
     }
 
     if matches!(raw_head_decision, RadrootsRawHeadDecision::Applied)
-        && let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+        && let EventHeadCandidateResult::Candidate(candidate) =
             event_head_candidate_for_nip01_event_v1(ingest.event())
-        && let RadrootsEventHeadCoordinate::Addressable {
+        && let EventHeadCoordinate::Addressable {
             kind,
             pubkey,
             d_tag,
@@ -2611,7 +2609,7 @@ fn desired_addressable_states(
     let request_index = RequestIndex::new(requests);
     let mut desired = BTreeMap::new();
     for (coordinate, winner) in winners {
-        let RadrootsEventHeadCoordinate::Addressable {
+        let EventHeadCoordinate::Addressable {
             kind,
             pubkey,
             d_tag,
@@ -2854,7 +2852,7 @@ fn expected_transition_history(
         {
             let request = admitted_nip09_request(event)?;
             for (coordinate, winner) in &winners {
-                let RadrootsEventHeadCoordinate::Addressable {
+                let EventHeadCoordinate::Addressable {
                     kind,
                     pubkey,
                     d_tag,
@@ -2882,9 +2880,9 @@ fn expected_transition_history(
             requests.push(request);
             requests.sort_by(|left, right| left.event().id().cmp(right.event().id()));
         } else if matches!(raw_head_decision, RadrootsRawHeadDecision::Applied)
-            && let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+            && let EventHeadCandidateResult::Candidate(candidate) =
                 event_head_candidate_for_nip01_event_v1(event.verified_event.event())
-            && let RadrootsEventHeadCoordinate::Addressable {
+            && let EventHeadCoordinate::Addressable {
                 kind,
                 pubkey,
                 d_tag,
@@ -2896,7 +2894,7 @@ fn expected_transition_history(
         let request_index = RequestIndex::new(&requests);
         for (kind, pubkey, d_tag) in affected_coordinates {
             let key = (kind, pubkey.clone(), d_tag.clone());
-            let coordinate = RadrootsEventHeadCoordinate::Addressable {
+            let coordinate = EventHeadCoordinate::Addressable {
                 kind: u32::try_from(kind).map_err(|_| RadrootsEventStoreError::IntegerRange {
                     field: "transition.kind",
                     value: kind,
@@ -2990,7 +2988,7 @@ fn admitted_nip09_request(
 
 fn request_references_event(
     request: &RadrootsAdmittedNip09DeletionRequestEventV1,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
 ) -> bool {
     request
         .projection()
@@ -3451,17 +3449,17 @@ fn raw_head_decision_code(decision: &RadrootsRawHeadDecision) -> &'static str {
     }
 }
 
-fn nip01_coordinate_key(event: &RadrootsEventEnvelope) -> Option<(i64, String, String)> {
-    let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+fn nip01_coordinate_key(event: &EventEnvelope) -> Option<(i64, String, String)> {
+    let EventHeadCandidateResult::Candidate(candidate) =
         event_head_candidate_for_nip01_event_v1(event)
     else {
         return None;
     };
     match candidate.coordinate {
-        RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
+        EventHeadCoordinate::Replaceable { kind, pubkey } => {
             Some((i64::from(kind), pubkey.to_string(), String::new()))
         }
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind,
             pubkey,
             d_tag,
@@ -3470,7 +3468,7 @@ fn nip01_coordinate_key(event: &RadrootsEventEnvelope) -> Option<(i64, String, S
 }
 
 fn request_source_tag_value<'a>(
-    event: &'a RadrootsEventEnvelope,
+    event: &'a EventEnvelope,
     tag_index: usize,
     expected_name: &'static str,
 ) -> Result<&'a str, RadrootsEventStoreError> {
@@ -3599,9 +3597,9 @@ fn text_payload_bytes<const N: usize>(
 mod tests {
     use super::*;
     use nostr::{Keys, SECP256K1, secp256k1::Message};
-    use radroots_event::wire::v1::RadrootsNip01EventWire;
+    use radroots_event::wire::v1::Nip01EventWire;
     use radroots_event::{
-        envelope::RadrootsEventEnvelopeParts,
+        envelope::EventEnvelopeParts,
         envelope::kind::{KIND_DELETION_REQUEST, KIND_LIST_SET_RELAY, KIND_POST},
         post::deletion::RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         wire::compute_canonical_nip01_event_id,
@@ -4258,11 +4256,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         transaction.commit().await.expect("rotation commit");
     }
 
-    async fn seed_v1_raw_event(
-        pool: &SqlitePool,
-        envelope: RadrootsEventEnvelope,
-        observed_at_ms: i64,
-    ) {
+    async fn seed_v1_raw_event(pool: &SqlitePool, envelope: EventEnvelope, observed_at_ms: i64) {
         let ingest = ingest_for_test(envelope, observed_at_ms);
         let event = ingest.event();
         let admission = EventAdmission::for_profile(
@@ -4326,11 +4320,8 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         }
     }
 
-    fn ingest_for_test(
-        envelope: RadrootsEventEnvelope,
-        observed_at_ms: i64,
-    ) -> RadrootsEventIngest {
-        let wire = RadrootsNip01EventWire {
+    fn ingest_for_test(envelope: EventEnvelope, observed_at_ms: i64) -> RadrootsEventIngest {
+        let wire = Nip01EventWire {
             id: envelope.id_hex().to_owned(),
             pubkey: envelope.author().to_hex().to_owned(),
             created_at: envelope.created_at_u64(),
@@ -4534,7 +4525,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         admit_verified_nip09_deletion_request_event_v1(verified).expect("admitted request")
     }
 
-    fn unsigned_addressable_target(author: &str, index: usize) -> RadrootsEventEnvelope {
+    fn unsigned_addressable_target(author: &str, index: usize) -> EventEnvelope {
         let tags = vec![vec!["d".to_owned(), fanout_identifier(index)]];
         let id = compute_canonical_nip01_event_id(
             author,
@@ -4544,7 +4535,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
             "{}",
         )
         .expect("target id");
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        EventEnvelope::new(EventEnvelopeParts {
             id: id.into_string(),
             author: author.to_owned(),
             created_at: TARGET_CREATED_AT,
@@ -4561,7 +4552,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         kind: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsEventEnvelope {
+    ) -> EventEnvelope {
         let keys = Keys::parse(FIXTURE_SECRET_KEY_HEX).expect("fixture key");
         let author = keys.public_key().to_string();
         let id =
@@ -4570,7 +4561,7 @@ INSERT INTO caller_child(id, parent_id) VALUES (1, 999);",
         let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
         let message = Message::from_digest(nostr_id.to_bytes());
         let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        EventEnvelope::new(EventEnvelopeParts {
             id: id.into_string(),
             author,
             created_at,

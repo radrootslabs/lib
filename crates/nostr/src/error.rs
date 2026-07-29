@@ -46,11 +46,11 @@ pub enum RadrootsNostrError {
 
     #[cfg(feature = "events")]
     #[error("Draft error: {0}")]
-    DraftError(#[from] radroots_event::draft::RadrootsDraftError),
+    DraftError(#[from] radroots_event::draft::DraftError),
 
     #[cfg(feature = "events")]
     #[error("Event wire error: {0}")]
-    EventWire(#[from] radroots_event::wire::RadrootsEventWireError),
+    EventWire(#[from] radroots_event::wire::EventWireError),
 
     #[cfg(feature = "events")]
     #[error("FoodAvailability encoding error: {0}")]
@@ -67,7 +67,7 @@ pub enum RadrootsNostrError {
 
     #[cfg(feature = "events")]
     #[error("Signed event error: {0}")]
-    SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
+    SignedEvent(#[from] radroots_event::draft::SignedEventError),
 
     #[cfg(feature = "events")]
     #[error(

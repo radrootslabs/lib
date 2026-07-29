@@ -6,18 +6,15 @@ use alloc::{
 
 use radroots_event::{
     calendar::{
-        RADROOTS_CALENDAR_SECONDS_PER_DAY, RadrootsAdmittedCalendar,
-        RadrootsAdmittedCalendarDateEvent, RadrootsAdmittedCalendarEventRsvp,
-        RadrootsAdmittedCalendarTimeEvent, RadrootsCalendarDate,
-        RadrootsCalendarEventAuthorReference, RadrootsCalendarEventFreeBusy,
-        RadrootsCalendarEventReference, RadrootsCalendarEventRevisionReference,
-        RadrootsCalendarEventRsvpStatus, RadrootsCalendarParticipant, RadrootsCalendarRequest,
-        RadrootsCalendarUri, RadrootsIanaTimeZoneId, RadrootsObservedUtcDay,
-        RadrootsParsedNip52Calendar, RadrootsParsedNip52CalendarCommon,
-        RadrootsParsedNip52CalendarCommonParts, RadrootsParsedNip52CalendarDateEvent,
-        RadrootsParsedNip52CalendarEventRsvp, RadrootsParsedNip52CalendarEventRsvpParts,
-        RadrootsParsedNip52CalendarParts, RadrootsParsedNip52CalendarTimeEvent,
-        calendar_geohash_is_valid, calendar_relay_url_is_valid, calendar_tag_text_is_valid,
+        AdmittedCalendar, AdmittedCalendarDateEvent, AdmittedCalendarEventRsvp,
+        AdmittedCalendarTimeEvent, CalendarDate, CalendarEventAuthorReference,
+        CalendarEventFreeBusy, CalendarEventReference, CalendarEventRevisionReference,
+        CalendarEventRsvpStatus, CalendarParticipant, CalendarRequest, CalendarUri, IanaTimeZoneId,
+        ObservedUtcDay, ParsedNip52Calendar, ParsedNip52CalendarCommon,
+        ParsedNip52CalendarCommonParts, ParsedNip52CalendarDateEvent, ParsedNip52CalendarEventRsvp,
+        ParsedNip52CalendarEventRsvpParts, ParsedNip52CalendarParts, ParsedNip52CalendarTimeEvent,
+        RADROOTS_CALENDAR_SECONDS_PER_DAY, calendar_geohash_is_valid, calendar_relay_url_is_valid,
+        calendar_tag_text_is_valid,
     },
     envelope::kind::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP, KIND_CALENDAR_TIME_EVENT,
@@ -46,7 +43,7 @@ pub fn parse_nip52_calendar_date_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsParsedNip52CalendarDateEvent, EventParseError> {
+) -> Result<ParsedNip52CalendarDateEvent, EventParseError> {
     validate_bounded_calendar_parts(tags, content)?;
     if kind != KIND_CALENDAR_DATE_EVENT {
         return Err(EventParseError::InvalidKind {
@@ -64,7 +61,7 @@ pub fn parse_nip52_calendar_date_event(
         .filter(|tag| tag.first().map(String::as_str) == Some(TAG_D_DAY))
         .cloned()
         .collect();
-    RadrootsParsedNip52CalendarDateEvent::try_new(common, start, end, extension_day_tags)
+    ParsedNip52CalendarDateEvent::try_new(common, start, end, extension_day_tags)
         .map_err(|_| EventParseError::InvalidTag(TAG_END))
 }
 
@@ -72,7 +69,7 @@ pub fn parse_nip52_calendar_time_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsParsedNip52CalendarTimeEvent, EventParseError> {
+) -> Result<ParsedNip52CalendarTimeEvent, EventParseError> {
     validate_bounded_calendar_parts(tags, content)?;
     if kind != KIND_CALENDAR_TIME_EVENT {
         return Err(EventParseError::InvalidKind {
@@ -91,7 +88,7 @@ pub fn parse_nip52_calendar_time_event(
     let observed_day_indices = repeated_exact_tag_values(tags, TAG_D_DAY)?
         .into_iter()
         .map(|value| {
-            RadrootsObservedUtcDay::parse(value).map_err(|_| EventParseError::InvalidTag(TAG_D_DAY))
+            ObservedUtcDay::parse(value).map_err(|_| EventParseError::InvalidTag(TAG_D_DAY))
         })
         .collect::<Result<Vec<_>, _>>()?;
     if end.is_some_and(|end| end <= start) {
@@ -112,7 +109,7 @@ pub fn parse_nip52_calendar_time_event(
     }
     let start_tzid = optional_iana_tzid(tags, TAG_START_TZID)?;
     let end_tzid = optional_iana_tzid(tags, TAG_END_TZID)?;
-    RadrootsParsedNip52CalendarTimeEvent::try_new(
+    ParsedNip52CalendarTimeEvent::try_new(
         common,
         start_wire,
         start,
@@ -126,28 +123,22 @@ pub fn parse_nip52_calendar_time_event(
 }
 
 pub fn admit_radroots_calendar_date_event(
-    parsed: RadrootsParsedNip52CalendarDateEvent,
-) -> Result<
-    RadrootsAdmittedCalendarDateEvent,
-    radroots_event::calendar::RadrootsCalendarAdmissionError,
-> {
-    RadrootsAdmittedCalendarDateEvent::try_from_parsed(parsed)
+    parsed: ParsedNip52CalendarDateEvent,
+) -> Result<AdmittedCalendarDateEvent, radroots_event::calendar::CalendarAdmissionError> {
+    AdmittedCalendarDateEvent::try_from_parsed(parsed)
 }
 
 pub fn admit_radroots_calendar_time_event(
-    parsed: RadrootsParsedNip52CalendarTimeEvent,
-) -> Result<
-    RadrootsAdmittedCalendarTimeEvent,
-    radroots_event::calendar::RadrootsCalendarAdmissionError,
-> {
-    RadrootsAdmittedCalendarTimeEvent::try_from_parsed(parsed)
+    parsed: ParsedNip52CalendarTimeEvent,
+) -> Result<AdmittedCalendarTimeEvent, radroots_event::calendar::CalendarAdmissionError> {
+    AdmittedCalendarTimeEvent::try_from_parsed(parsed)
 }
 
 pub fn parse_nip52_calendar(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsParsedNip52Calendar, EventParseError> {
+) -> Result<ParsedNip52Calendar, EventParseError> {
     validate_bounded_calendar_parts(tags, content)?;
     if kind != KIND_CALENDAR {
         return Err(EventParseError::InvalidKind {
@@ -162,7 +153,7 @@ pub fn parse_nip52_calendar(
     let event_references = calendar_event_references_from_tags(tags)?;
     let list_description = optional_calendar_text_tag(tags, TAG_DESCRIPTION)?;
     let image = optional_calendar_uri_tag(tags, TAG_IMAGE)?;
-    RadrootsParsedNip52Calendar::try_new(RadrootsParsedNip52CalendarParts {
+    ParsedNip52Calendar::try_new(ParsedNip52CalendarParts {
         d_tag,
         title,
         content: content.to_string(),
@@ -174,16 +165,16 @@ pub fn parse_nip52_calendar(
 }
 
 pub fn admit_radroots_calendar(
-    parsed: RadrootsParsedNip52Calendar,
-) -> Result<RadrootsAdmittedCalendar, radroots_event::calendar::RadrootsCalendarAdmissionError> {
-    RadrootsAdmittedCalendar::try_from_parsed(parsed)
+    parsed: ParsedNip52Calendar,
+) -> Result<AdmittedCalendar, radroots_event::calendar::CalendarAdmissionError> {
+    AdmittedCalendar::try_from_parsed(parsed)
 }
 
 pub fn parse_nip52_calendar_event_rsvp(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsParsedNip52CalendarEventRsvp, EventParseError> {
+) -> Result<ParsedNip52CalendarEventRsvp, EventParseError> {
     validate_bounded_calendar_parts(tags, content)?;
     if kind != KIND_CALENDAR_EVENT_RSVP {
         return Err(EventParseError::InvalidKind {
@@ -196,7 +187,7 @@ pub fn parse_nip52_calendar_event_rsvp(
     let event_reference = calendar_event_reference_from_required_tag(tags)?;
     let revision_reference = optional_reference_tag(tags, TAG_E)?
         .map(|tag| {
-            RadrootsCalendarEventRevisionReference::parse(&tag[1], tag.get(2).map(String::as_str))
+            CalendarEventRevisionReference::parse(&tag[1], tag.get(2).map(String::as_str))
                 .map_err(|_| EventParseError::InvalidTag(TAG_E))
         })
         .transpose()?;
@@ -206,11 +197,11 @@ pub fn parse_nip52_calendar_event_rsvp(
         .transpose()?;
     let author_hint = optional_reference_tag(tags, TAG_P)?
         .map(|tag| {
-            RadrootsCalendarEventAuthorReference::parse(&tag[1], tag.get(2).map(String::as_str))
+            CalendarEventAuthorReference::parse(&tag[1], tag.get(2).map(String::as_str))
                 .map_err(|_| EventParseError::InvalidTag(TAG_P))
         })
         .transpose()?;
-    RadrootsParsedNip52CalendarEventRsvp::try_new(RadrootsParsedNip52CalendarEventRsvpParts {
+    ParsedNip52CalendarEventRsvp::try_new(ParsedNip52CalendarEventRsvpParts {
         d_tag,
         event_reference,
         revision_reference,
@@ -223,12 +214,9 @@ pub fn parse_nip52_calendar_event_rsvp(
 }
 
 pub fn admit_radroots_calendar_event_rsvp(
-    parsed: RadrootsParsedNip52CalendarEventRsvp,
-) -> Result<
-    RadrootsAdmittedCalendarEventRsvp,
-    radroots_event::calendar::RadrootsCalendarAdmissionError,
-> {
-    RadrootsAdmittedCalendarEventRsvp::try_from_parsed(parsed)
+    parsed: ParsedNip52CalendarEventRsvp,
+) -> Result<AdmittedCalendarEventRsvp, radroots_event::calendar::CalendarAdmissionError> {
+    AdmittedCalendarEventRsvp::try_from_parsed(parsed)
 }
 
 pub fn nip52_date_data_from_event(
@@ -238,7 +226,7 @@ pub fn nip52_date_data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsParsedNip52CalendarDateEvent>, EventParseError> {
+) -> Result<RadrootsParsedData<ParsedNip52CalendarDateEvent>, EventParseError> {
     let event = parse_nip52_calendar_date_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -256,7 +244,7 @@ pub fn nip52_time_data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsParsedNip52CalendarTimeEvent>, EventParseError> {
+) -> Result<RadrootsParsedData<ParsedNip52CalendarTimeEvent>, EventParseError> {
     let event = parse_nip52_calendar_time_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -274,7 +262,7 @@ pub fn nip52_calendar_data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsParsedNip52Calendar>, EventParseError> {
+) -> Result<RadrootsParsedData<ParsedNip52Calendar>, EventParseError> {
     let calendar = parse_nip52_calendar(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -292,7 +280,7 @@ pub fn nip52_calendar_event_rsvp_data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsParsedNip52CalendarEventRsvp>, EventParseError> {
+) -> Result<RadrootsParsedData<ParsedNip52CalendarEventRsvp>, EventParseError> {
     let rsvp = parse_nip52_calendar_event_rsvp(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -311,7 +299,7 @@ pub fn nip52_date_parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsParsedNip52CalendarDateEvent>, EventParseError> {
+) -> Result<RadrootsParsedEvent<ParsedNip52CalendarDateEvent>, EventParseError> {
     let data = nip52_date_data_from_event(
         id.clone(),
         author.clone(),
@@ -331,7 +319,7 @@ pub fn nip52_time_parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsParsedNip52CalendarTimeEvent>, EventParseError> {
+) -> Result<RadrootsParsedEvent<ParsedNip52CalendarTimeEvent>, EventParseError> {
     let data = nip52_time_data_from_event(
         id.clone(),
         author.clone(),
@@ -351,7 +339,7 @@ pub fn nip52_calendar_parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsParsedNip52Calendar>, EventParseError> {
+) -> Result<RadrootsParsedEvent<ParsedNip52Calendar>, EventParseError> {
     let data = nip52_calendar_data_from_event(
         id.clone(),
         author.clone(),
@@ -371,7 +359,7 @@ pub fn nip52_calendar_event_rsvp_parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsParsedNip52CalendarEventRsvp>, EventParseError> {
+) -> Result<RadrootsParsedEvent<ParsedNip52CalendarEventRsvp>, EventParseError> {
     let data = nip52_calendar_event_rsvp_data_from_event(
         id.clone(),
         author.clone(),
@@ -386,7 +374,7 @@ pub fn nip52_calendar_event_rsvp_parsed_from_event(
 fn parse_nip52_calendar_common(
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsParsedNip52CalendarCommon, EventParseError> {
+) -> Result<ParsedNip52CalendarCommon, EventParseError> {
     let d_tag = required_exact_tag_value(tags, TAG_D)?;
     validate_calendar_text_tag(&d_tag, TAG_D)?;
     let title = required_exact_tag_value(tags, TAG_TITLE)?;
@@ -405,13 +393,11 @@ fn parse_nip52_calendar_common(
     let categories = repeated_calendar_text_values(tags, TAG_T)?;
     let references = repeated_exact_tag_values(tags, TAG_R)?
         .into_iter()
-        .map(|value| {
-            RadrootsCalendarUri::parse(value).map_err(|_| EventParseError::InvalidTag(TAG_R))
-        })
+        .map(|value| CalendarUri::parse(value).map_err(|_| EventParseError::InvalidTag(TAG_R)))
         .collect::<Result<Vec<_>, _>>()?;
     let calendar_requests = calendar_requests_from_tags(tags)?;
     let legacy_name = optional_calendar_text_tag(tags, "name")?;
-    RadrootsParsedNip52CalendarCommon::try_new(RadrootsParsedNip52CalendarCommonParts {
+    ParsedNip52CalendarCommon::try_new(ParsedNip52CalendarCommonParts {
         d_tag,
         title,
         description: optional_content(content),
@@ -505,11 +491,8 @@ fn optional_exact_tag_value(
     Ok(Some(value))
 }
 
-fn parse_calendar_date(
-    value: &str,
-    key: &'static str,
-) -> Result<RadrootsCalendarDate, EventParseError> {
-    RadrootsCalendarDate::parse(value).map_err(|_| EventParseError::InvalidTag(key))
+fn parse_calendar_date(value: &str, key: &'static str) -> Result<CalendarDate, EventParseError> {
+    CalendarDate::parse(value).map_err(|_| EventParseError::InvalidTag(key))
 }
 
 fn parse_standard_u64(value: &str, key: &'static str) -> Result<u64, EventParseError> {
@@ -524,11 +507,9 @@ fn parse_standard_u64(value: &str, key: &'static str) -> Result<u64, EventParseE
 fn optional_iana_tzid(
     tags: &[Vec<String>],
     key: &'static str,
-) -> Result<Option<RadrootsIanaTimeZoneId>, EventParseError> {
+) -> Result<Option<IanaTimeZoneId>, EventParseError> {
     optional_exact_tag_value(tags, key)?
-        .map(|value| {
-            RadrootsIanaTimeZoneId::parse(value).map_err(|_| EventParseError::InvalidTag(key))
-        })
+        .map(|value| IanaTimeZoneId::parse(value).map_err(|_| EventParseError::InvalidTag(key)))
         .transpose()
 }
 
@@ -565,17 +546,15 @@ fn repeated_calendar_text_values(
 fn optional_calendar_uri_tag(
     tags: &[Vec<String>],
     key: &'static str,
-) -> Result<Option<RadrootsCalendarUri>, EventParseError> {
+) -> Result<Option<CalendarUri>, EventParseError> {
     optional_exact_tag_value(tags, key)?
-        .map(|value| {
-            RadrootsCalendarUri::parse(value).map_err(|_| EventParseError::InvalidTag(key))
-        })
+        .map(|value| CalendarUri::parse(value).map_err(|_| EventParseError::InvalidTag(key)))
         .transpose()
 }
 
 fn calendar_participants_from_tags(
     tags: &[Vec<String>],
-) -> Result<Vec<RadrootsCalendarParticipant>, EventParseError> {
+) -> Result<Vec<CalendarParticipant>, EventParseError> {
     let mut participants = Vec::new();
     for tag in tags
         .iter()
@@ -599,7 +578,7 @@ fn calendar_participants_from_tags(
         if let Some(role) = role.as_deref() {
             validate_calendar_text_tag(role, TAG_P)?;
         }
-        participants.push(RadrootsCalendarParticipant {
+        participants.push(CalendarParticipant {
             pubkey: tag[1].clone(),
             relay,
             role,
@@ -610,7 +589,7 @@ fn calendar_participants_from_tags(
 
 fn calendar_requests_from_tags(
     tags: &[Vec<String>],
-) -> Result<Vec<RadrootsCalendarRequest>, EventParseError> {
+) -> Result<Vec<CalendarRequest>, EventParseError> {
     tags.iter()
         .filter(|tag| tag.first().map(String::as_str) == Some(TAG_A))
         .map(|tag| {
@@ -620,7 +599,7 @@ fn calendar_requests_from_tags(
             {
                 return Err(EventParseError::InvalidTag(TAG_A));
             }
-            RadrootsCalendarRequest::new(&tag[1], tag.get(2).map(String::as_str))
+            CalendarRequest::new(&tag[1], tag.get(2).map(String::as_str))
                 .map_err(|_| EventParseError::InvalidTag(TAG_A))
         })
         .collect()
@@ -636,7 +615,7 @@ fn optional_content(content: &str) -> Option<String> {
 
 fn calendar_event_references_from_tags(
     tags: &[Vec<String>],
-) -> Result<Vec<RadrootsCalendarEventReference>, EventParseError> {
+) -> Result<Vec<CalendarEventReference>, EventParseError> {
     tags.iter()
         .filter(|tag| tag.first().map(String::as_str) == Some(TAG_A))
         .map(|tag| parse_calendar_event_reference_tag(tag))
@@ -645,16 +624,16 @@ fn calendar_event_references_from_tags(
 
 fn calendar_event_reference_from_required_tag(
     tags: &[Vec<String>],
-) -> Result<RadrootsCalendarEventReference, EventParseError> {
+) -> Result<CalendarEventReference, EventParseError> {
     let tag = optional_reference_tag(tags, TAG_A)?.ok_or(EventParseError::MissingTag(TAG_A))?;
     parse_calendar_event_reference_tag(tag)
 }
 
 fn parse_calendar_event_reference_tag(
     tag: &[String],
-) -> Result<RadrootsCalendarEventReference, EventParseError> {
+) -> Result<CalendarEventReference, EventParseError> {
     validate_reference_tag_shape(tag, TAG_A)?;
-    RadrootsCalendarEventReference::parse(&tag[1], tag.get(2).map(String::as_str))
+    CalendarEventReference::parse(&tag[1], tag.get(2).map(String::as_str))
         .map_err(|_| EventParseError::InvalidTag(TAG_A))
 }
 
@@ -685,19 +664,19 @@ fn validate_reference_tag_shape(tag: &[String], key: &'static str) -> Result<(),
     Ok(())
 }
 
-fn parse_rsvp_status(value: &str) -> Result<RadrootsCalendarEventRsvpStatus, EventParseError> {
+fn parse_rsvp_status(value: &str) -> Result<CalendarEventRsvpStatus, EventParseError> {
     match value {
-        "accepted" => Ok(RadrootsCalendarEventRsvpStatus::Accepted),
-        "declined" => Ok(RadrootsCalendarEventRsvpStatus::Declined),
-        "tentative" => Ok(RadrootsCalendarEventRsvpStatus::Tentative),
+        "accepted" => Ok(CalendarEventRsvpStatus::Accepted),
+        "declined" => Ok(CalendarEventRsvpStatus::Declined),
+        "tentative" => Ok(CalendarEventRsvpStatus::Tentative),
         _ => Err(EventParseError::InvalidTag(TAG_STATUS)),
     }
 }
 
-fn parse_free_busy(value: &str) -> Result<RadrootsCalendarEventFreeBusy, EventParseError> {
+fn parse_free_busy(value: &str) -> Result<CalendarEventFreeBusy, EventParseError> {
     match value {
-        "free" => Ok(RadrootsCalendarEventFreeBusy::Free),
-        "busy" => Ok(RadrootsCalendarEventFreeBusy::Busy),
+        "free" => Ok(CalendarEventFreeBusy::Free),
+        "busy" => Ok(CalendarEventFreeBusy::Busy),
         _ => Err(EventParseError::InvalidTag(TAG_FREE_BUSY)),
     }
 }

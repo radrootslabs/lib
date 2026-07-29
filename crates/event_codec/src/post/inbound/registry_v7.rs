@@ -14,9 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use radroots_event::{
     envelope::kind::KIND_POST,
     post::{
-        RADROOTS_ASK_MARKER_TAG_VALUE, RADROOTS_POST_ALT_MAX_BYTES,
+        PostImageDimensions, RADROOTS_ASK_MARKER_TAG_VALUE, RADROOTS_POST_ALT_MAX_BYTES,
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_IMETA_MAX_COUNT,
-        RadrootsPostImageDimensions, post_image_media_type_is_valid, post_media_http_url_is_valid,
+        post_image_media_type_is_valid, post_media_http_url_is_valid,
     },
 };
 
@@ -114,7 +114,7 @@ pub struct RadrootsInboundPostImeta {
     url: Option<String>,
     sha256: Option<String>,
     media_type: Option<String>,
-    dimensions: Option<RadrootsPostImageDimensions>,
+    dimensions: Option<PostImageDimensions>,
     size: Option<u64>,
     alt: Option<String>,
     fallbacks: Vec<String>,
@@ -139,7 +139,7 @@ impl RadrootsInboundPostImeta {
         self.media_type.as_deref()
     }
 
-    pub const fn dimensions(&self) -> Option<RadrootsPostImageDimensions> {
+    pub const fn dimensions(&self) -> Option<PostImageDimensions> {
         self.dimensions
     }
 
@@ -478,12 +478,12 @@ fn lower_hex_64(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
-fn parse_dimensions(value: &str) -> Option<RadrootsPostImageDimensions> {
+fn parse_dimensions(value: &str) -> Option<PostImageDimensions> {
     let (width, height) = value.split_once('x')?;
     if !canonical_nonzero_decimal(width) || !canonical_nonzero_decimal(height) {
         return None;
     }
-    RadrootsPostImageDimensions::new(width.parse().ok()?, height.parse().ok()?).ok()
+    PostImageDimensions::new(width.parse().ok()?, height.parse().ok()?).ok()
 }
 
 fn parse_nonzero_u64(value: &str) -> Option<u64> {

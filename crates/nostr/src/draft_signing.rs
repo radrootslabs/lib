@@ -4,13 +4,13 @@ use crate::error::RadrootsNostrError;
 use crate::events::radroots_nostr_build_event_unchecked;
 use crate::types::{RadrootsNostrKeys, RadrootsNostrTimestamp};
 use nostr::JsonUtil;
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event::draft::{EventDraft, SignedEvent};
+use radroots_event::wire::Nip01EventWire;
 
 pub fn radroots_nostr_sign_frozen_draft(
     keys: &RadrootsNostrKeys,
-    draft: &RadrootsEventDraft,
-) -> Result<RadrootsSignedEvent, RadrootsNostrError> {
+    draft: &EventDraft,
+) -> Result<SignedEvent, RadrootsNostrError> {
     draft.validate_for_signing()?;
     let actual_pubkey = keys.public_key().to_hex();
     if actual_pubkey != draft.expected_pubkey().to_hex() {
@@ -37,8 +37,8 @@ pub fn radroots_nostr_sign_frozen_draft(
     }
 
     let raw_json = event.as_json();
-    let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
-    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(Into::into)
+    let wire = Nip01EventWire::parse_json(raw_json.as_str())?;
+    SignedEvent::from_wire_verified_id(wire, raw_json).map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -48,7 +48,7 @@ mod tests {
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
     use nostr::JsonUtil;
-    use radroots_event::draft::RadrootsEventDraft;
+    use radroots_event::draft::EventDraft;
     use radroots_event::envelope::kind::KIND_GEOCHAT;
 
     fn fixture_keys(secret_key_hex: &str) -> RadrootsNostrKeys {
@@ -56,8 +56,8 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn generic_draft(expected_pubkey: &str) -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn generic_draft(expected_pubkey: &str) -> EventDraft {
+        EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1_700_000_000,
@@ -104,7 +104,7 @@ mod tests {
         let draft = generic_draft(FIXTURE_ALICE.public_key_hex);
         let mut raw = serde_json::to_value(&draft).expect("draft json");
         raw["expected_event_id"] = serde_json::Value::String("f".repeat(64));
-        serde_json::from_value::<RadrootsEventDraft>(raw)
+        serde_json::from_value::<EventDraft>(raw)
             .expect_err("tampered draft must fail before signing");
     }
 }

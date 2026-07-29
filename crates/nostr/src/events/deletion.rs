@@ -5,9 +5,7 @@ use crate::{
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{
-    post::deletion::RadrootsAuthoredNip09DeletionRequest, wire::RadrootsNip01EventWireParts,
-};
+use radroots_event::{post::deletion::AuthoredNip09DeletionRequest, wire::Nip01EventWireParts};
 use radroots_event_codec::deletion::authored::authored_nip09_deletion_request_to_wire_parts;
 
 /// A sealed builder for a validated NIP-09 deletion request.
@@ -61,13 +59,13 @@ impl RadrootsNostrNip09DeletionRequestEventBuilder {
 }
 
 pub fn radroots_nostr_build_nip09_deletion_request_event(
-    request: &RadrootsAuthoredNip09DeletionRequest,
+    request: &AuthoredNip09DeletionRequest,
 ) -> Result<RadrootsNostrNip09DeletionRequestEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_nip09_deletion_request_to_wire_parts(request))
 }
 
 fn builder_from_wire_parts(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
 ) -> Result<RadrootsNostrNip09DeletionRequestEventBuilder, RadrootsNostrError> {
     let inner =
         crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;

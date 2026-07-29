@@ -5,12 +5,11 @@ pub mod encode;
 mod tests {
     use radroots_event::{
         envelope::kind::KIND_POST,
-        farm::crdt::RadrootsFarmCrdtDocumentKind,
+        farm::crdt::FarmCrdtDocumentKind,
         farm::file::{
-            KIND_FARM_FILE_METADATA, RadrootsFarmFileDimensions, RadrootsFarmFileMetadata,
-            RadrootsFarmFileSource,
+            FarmFileDimensions, FarmFileMetadata, FarmFileSource, KIND_FARM_FILE_METADATA,
         },
-        farm::workspace::RadrootsFarmWorkspaceRef,
+        farm::workspace::FarmWorkspaceRef,
     };
 
     use crate::error::{EventEncodeError, EventParseError};
@@ -134,10 +133,10 @@ mod tests {
         metadata.dimensions = None;
         metadata.blurhash = None;
         metadata.thumb = None;
-        metadata.image = Some(RadrootsFarmFileSource {
+        metadata.image = Some(FarmFileSource {
             url: "https://media.example.invalid/image/sha256".to_string(),
             mime_type: None,
-            dimensions: Some(RadrootsFarmFileDimensions { w: 640, h: 480 }),
+            dimensions: Some(FarmFileDimensions { w: 640, h: 480 }),
         });
         metadata.alt = None;
         metadata.fallbacks.clear();
@@ -212,16 +211,16 @@ mod tests {
     #[test]
     fn farm_file_metadata_preserves_expanded_owner_document_kinds() {
         for kind in [
-            RadrootsFarmCrdtDocumentKind::FarmMembership,
-            RadrootsFarmCrdtDocumentKind::FarmRolePolicy,
-            RadrootsFarmCrdtDocumentKind::FarmActivity,
-            RadrootsFarmCrdtDocumentKind::FarmLocation,
-            RadrootsFarmCrdtDocumentKind::FarmCrop,
-            RadrootsFarmCrdtDocumentKind::FarmCropVariety,
-            RadrootsFarmCrdtDocumentKind::FarmCropCycle,
-            RadrootsFarmCrdtDocumentKind::FarmAttachment,
-            RadrootsFarmCrdtDocumentKind::FarmPayPeriod,
-            RadrootsFarmCrdtDocumentKind::Other {
+            FarmCrdtDocumentKind::FarmMembership,
+            FarmCrdtDocumentKind::FarmRolePolicy,
+            FarmCrdtDocumentKind::FarmActivity,
+            FarmCrdtDocumentKind::FarmLocation,
+            FarmCrdtDocumentKind::FarmCrop,
+            FarmCrdtDocumentKind::FarmCropVariety,
+            FarmCrdtDocumentKind::FarmCropCycle,
+            FarmCrdtDocumentKind::FarmAttachment,
+            FarmCrdtDocumentKind::FarmPayPeriod,
+            FarmCrdtDocumentKind::Other {
                 value: "FarmSoilTest".to_string(),
             },
         ] {
@@ -336,7 +335,7 @@ mod tests {
         );
         assert_eq!(
             decoded.thumb.and_then(|source| source.dimensions),
-            Some(RadrootsFarmFileDimensions { w: 320, h: 240 })
+            Some(FarmFileDimensions { w: 320, h: 240 })
         );
 
         let tags = replace_tag(
@@ -370,7 +369,7 @@ mod tests {
             },
             {
                 let mut metadata = sample_metadata();
-                metadata.dimensions = Some(RadrootsFarmFileDimensions { w: 0, h: 1200 });
+                metadata.dimensions = Some(FarmFileDimensions { w: 0, h: 1200 });
                 (metadata, EventEncodeError::InvalidField("dimensions"))
             },
             {
@@ -380,7 +379,7 @@ mod tests {
             },
             {
                 let mut metadata = sample_metadata();
-                metadata.thumb = Some(RadrootsFarmFileSource {
+                metadata.thumb = Some(FarmFileSource {
                     url: "".to_string(),
                     mime_type: None,
                     dimensions: None,
@@ -389,7 +388,7 @@ mod tests {
             },
             {
                 let mut metadata = sample_metadata();
-                metadata.thumb = Some(RadrootsFarmFileSource {
+                metadata.thumb = Some(FarmFileSource {
                     url: "https://media.example.invalid/thumb/sha256".to_string(),
                     mime_type: Some("".to_string()),
                     dimensions: None,
@@ -398,10 +397,10 @@ mod tests {
             },
             {
                 let mut metadata = sample_metadata();
-                metadata.thumb = Some(RadrootsFarmFileSource {
+                metadata.thumb = Some(FarmFileSource {
                     url: "https://media.example.invalid/thumb/sha256".to_string(),
                     mime_type: None,
-                    dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 0 }),
+                    dimensions: Some(FarmFileDimensions { w: 320, h: 0 }),
                 });
                 (metadata, EventEncodeError::InvalidField("thumb"))
             },
@@ -421,16 +420,16 @@ mod tests {
         }
     }
 
-    fn sample_metadata() -> RadrootsFarmFileMetadata {
-        RadrootsFarmFileMetadata {
+    fn sample_metadata() -> FarmFileMetadata {
+        FarmFileMetadata {
             d_tag: FILE_D_TAG.to_string(),
-            workspace: RadrootsFarmWorkspaceRef {
+            workspace: FarmWorkspaceRef {
                 pubkey: "workspace_pubkey".to_string(),
                 d_tag: WORKSPACE_D_TAG.to_string(),
             },
             farm_group_id: GROUP_ID.to_string(),
             owner_document_id: OWNER_DOCUMENT_ID.to_string(),
-            owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+            owner_document_kind: FarmCrdtDocumentKind::FarmTask,
             caption: Some("Tomatoes harvested from Patch Y.".to_string()),
             url: "https://media.example.invalid/blob/sha256".to_string(),
             mime_type: "image/jpeg".to_string(),
@@ -439,12 +438,12 @@ mod tests {
                 "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789".to_string(),
             ),
             size_bytes: Some(123_456),
-            dimensions: Some(RadrootsFarmFileDimensions { w: 1600, h: 1200 }),
+            dimensions: Some(FarmFileDimensions { w: 1600, h: 1200 }),
             blurhash: Some("LEHV6nWB2yk8pyo0adR*.7kCMdnj".to_string()),
-            thumb: Some(RadrootsFarmFileSource {
+            thumb: Some(FarmFileSource {
                 url: "https://media.example.invalid/thumb/sha256".to_string(),
                 mime_type: Some("image/jpeg".to_string()),
-                dimensions: Some(RadrootsFarmFileDimensions { w: 320, h: 240 }),
+                dimensions: Some(FarmFileDimensions { w: 320, h: 240 }),
             }),
             image: None,
             alt: Some("Harvested tomatoes in a crate".to_string()),

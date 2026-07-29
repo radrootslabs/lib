@@ -4,7 +4,7 @@ use alloc::{string::String, vec::Vec};
 use radroots_event::{
     envelope::kind::KIND_FARM,
     farm::workspace::{
-        KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_TAG, RadrootsFarmWorkspaceManifest,
+        FarmWorkspaceManifest, KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_TAG,
     },
     tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
@@ -23,7 +23,7 @@ pub fn farm_workspace_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsFarmWorkspaceManifest, EventParseError> {
+) -> Result<FarmWorkspaceManifest, EventParseError> {
     if kind != KIND_FARM_WORKSPACE_MANIFEST {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -36,7 +36,7 @@ pub fn farm_workspace_from_event(
     let d_tag = required_tag_value(tags, TAG_D)?;
     validate_d_tag_tag(&d_tag, TAG_D)?;
     let farm_group_id = required_tag_value(tags, TAG_H)?;
-    let manifest: RadrootsFarmWorkspaceManifest =
+    let manifest: FarmWorkspaceManifest =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
     validate_manifest(&manifest).map_err(encode_error_to_parse_error)?;
 
@@ -78,7 +78,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsFarmWorkspaceManifest>, EventParseError> {
+) -> Result<RadrootsParsedData<FarmWorkspaceManifest>, EventParseError> {
     let manifest = farm_workspace_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -97,7 +97,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsFarmWorkspaceManifest>, EventParseError> {
+) -> Result<RadrootsParsedEvent<FarmWorkspaceManifest>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

@@ -1,6 +1,6 @@
 #![cfg(feature = "serde_json")]
 
-use radroots_event::social::list::RadrootsListEntry;
+use radroots_event::social::list::ListEntry;
 use radroots_event_codec::list::decode::list_private_entries_from_json;
 use radroots_event_codec::list::encode::list_private_entries_json;
 use radroots_event_codec::list_set::decode::list_set_private_entries_from_json;
@@ -9,11 +9,11 @@ use radroots_event_codec::list_set::encode::list_set_private_entries_json;
 #[test]
 fn list_private_entries_roundtrip() {
     let entries = vec![
-        RadrootsListEntry {
+        ListEntry {
             tag: "p".to_string(),
             values: vec!["pubkey".to_string()],
         },
-        RadrootsListEntry {
+        ListEntry {
             tag: "a".to_string(),
             values: vec!["30340:pubkey:AAAAAAAAAAAAAAAAAAAAAA".to_string()],
         },
@@ -29,11 +29,11 @@ fn list_private_entries_roundtrip() {
 #[test]
 fn list_set_private_entries_roundtrip() {
     let entries = vec![
-        RadrootsListEntry {
+        ListEntry {
             tag: "p".to_string(),
             values: vec!["member".to_string()],
         },
-        RadrootsListEntry {
+        ListEntry {
             tag: "t".to_string(),
             values: vec!["orchard".to_string()],
         },

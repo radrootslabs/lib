@@ -4,10 +4,8 @@ use alloc::boxed::Box;
 use core::fmt;
 
 use radroots_event::{
-    contract::{
-        RadrootsContractMatchError, RadrootsContractValidationError, RadrootsEventContract,
-    },
-    envelope::RadrootsEventEnvelope,
+    contract::{ContractMatchError, ContractValidationError, EventContract},
+    envelope::EventEnvelope,
     envelope::kind::{
         KIND_CLASSIFIED_LISTING, KIND_COMMENT, KIND_DELETION_REQUEST, KIND_POST, KIND_PROFILE,
     },
@@ -72,11 +70,11 @@ impl RadrootsAdmittedEvent {
         }
     }
 
-    pub fn event(&self) -> &RadrootsEventEnvelope {
+    pub fn event(&self) -> &EventEnvelope {
         self.verified_event().event()
     }
 
-    pub fn contract(&self) -> &'static RadrootsEventContract {
+    pub fn contract(&self) -> &'static EventContract {
         match self {
             Self::Profile(event) => event.contract(),
             Self::RootPost(event) => event.contract(),
@@ -108,8 +106,8 @@ impl RadrootsAdmittedEvent {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsEventAdmissionError {
-    ContractMatch(RadrootsContractMatchError),
-    ContractValidation(RadrootsContractValidationError),
+    ContractMatch(ContractMatchError),
+    ContractValidation(ContractValidationError),
     Profile(RadrootsProfileAdmissionError),
     Post(RadrootsPostAdmissionError),
     Reply(RadrootsNip10ReplyAdmissionError),
@@ -121,13 +119,9 @@ pub enum RadrootsEventAdmissionError {
 impl RadrootsEventAdmissionError {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::ContractMatch(RadrootsContractMatchError::UnsupportedKind(_)) => {
-                "unsupported_kind"
-            }
-            Self::ContractMatch(RadrootsContractMatchError::UnsupportedShape(_)) => {
-                "unsupported_shape"
-            }
-            Self::ContractMatch(RadrootsContractMatchError::AmbiguousShape(_)) => "ambiguous_shape",
+            Self::ContractMatch(ContractMatchError::UnsupportedKind(_)) => "unsupported_kind",
+            Self::ContractMatch(ContractMatchError::UnsupportedShape(_)) => "unsupported_shape",
+            Self::ContractMatch(ContractMatchError::AmbiguousShape(_)) => "ambiguous_shape",
             Self::ContractValidation(error) => error.code(),
             Self::Profile(error) => error.code(),
             Self::Post(error) => error.code(),
@@ -142,16 +136,16 @@ impl RadrootsEventAdmissionError {
 impl fmt::Display for RadrootsEventAdmissionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ContractMatch(RadrootsContractMatchError::UnsupportedKind(kind)) => {
+            Self::ContractMatch(ContractMatchError::UnsupportedKind(kind)) => {
                 write!(formatter, "event kind {kind} has no registered contract")
             }
-            Self::ContractMatch(RadrootsContractMatchError::UnsupportedShape(kind)) => {
+            Self::ContractMatch(ContractMatchError::UnsupportedShape(kind)) => {
                 write!(
                     formatter,
                     "event kind {kind} has no supported contract shape"
                 )
             }
-            Self::ContractMatch(RadrootsContractMatchError::AmbiguousShape(kind)) => {
+            Self::ContractMatch(ContractMatchError::AmbiguousShape(kind)) => {
                 write!(
                     formatter,
                     "event kind {kind} matches multiple contract shapes"
@@ -251,9 +245,9 @@ fn admit_registry_contract(
         .map_err(map_contract_validation)
 }
 
-fn map_contract_validation(error: RadrootsContractValidationError) -> RadrootsEventAdmissionError {
+fn map_contract_validation(error: ContractValidationError) -> RadrootsEventAdmissionError {
     match error {
-        RadrootsContractValidationError::ContractMatch { error } => {
+        ContractValidationError::ContractMatch { error } => {
             RadrootsEventAdmissionError::ContractMatch(error)
         }
         error => RadrootsEventAdmissionError::ContractValidation(error),
@@ -263,18 +257,13 @@ fn map_contract_validation(error: RadrootsContractValidationError) -> RadrootsEv
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::contract::{RadrootsEventDiscriminator, all_event_contracts};
+    use radroots_event::contract::{EventDiscriminator, all_event_contracts};
 
     #[test]
     fn covers_the_exact_admission_only_registry_inventory() {
         let mut actual = all_event_contracts()
             .iter()
-            .filter(|contract| {
-                matches!(
-                    contract.discriminator,
-                    RadrootsEventDiscriminator::AdmissionOnly
-                )
-            })
+            .filter(|contract| matches!(contract.discriminator, EventDiscriminator::AdmissionOnly))
             .map(|contract| contract.id);
 
         for expected in [
@@ -295,15 +284,15 @@ mod tests {
     fn contract_match_error_codes_are_stable_and_distinct() {
         for (error, code) in [
             (
-                RadrootsContractMatchError::UnsupportedKind(65_535),
+                ContractMatchError::UnsupportedKind(65_535),
                 "unsupported_kind",
             ),
             (
-                RadrootsContractMatchError::UnsupportedShape(KIND_CLASSIFIED_LISTING),
+                ContractMatchError::UnsupportedShape(KIND_CLASSIFIED_LISTING),
                 "unsupported_shape",
             ),
             (
-                RadrootsContractMatchError::AmbiguousShape(KIND_CLASSIFIED_LISTING),
+                ContractMatchError::AmbiguousShape(KIND_CLASSIFIED_LISTING),
                 "ambiguous_shape",
             ),
         ] {
@@ -323,7 +312,7 @@ mod tests {
         use nostr::secp256k1::Message;
         use nostr::{Keys, SECP256K1};
         use radroots_event::{
-            envelope::RadrootsEventEnvelopeParts, envelope::kind::KIND_FOLLOW,
+            envelope::EventEnvelopeParts, envelope::kind::KIND_FOLLOW,
             wire::compute_canonical_nip01_event_id,
         };
 
@@ -390,9 +379,7 @@ mod tests {
                 .expect_err("unregistered kind must remain unsupported");
             assert!(matches!(
                 unsupported,
-                RadrootsEventAdmissionError::ContractMatch(
-                    RadrootsContractMatchError::UnsupportedKind(_)
-                )
+                RadrootsEventAdmissionError::ContractMatch(ContractMatchError::UnsupportedKind(_))
             ));
 
             let unsupported_listing =
@@ -400,9 +387,9 @@ mod tests {
                     .expect_err("generic NIP-99 shape must remain unsupported");
             assert!(matches!(
                 unsupported_listing,
-                RadrootsEventAdmissionError::ContractMatch(
-                    RadrootsContractMatchError::UnsupportedShape(KIND_CLASSIFIED_LISTING)
-                )
+                RadrootsEventAdmissionError::ContractMatch(ContractMatchError::UnsupportedShape(
+                    KIND_CLASSIFIED_LISTING
+                ))
             ));
 
             let tolerant_profile = admitted(
@@ -484,7 +471,7 @@ mod tests {
             kind: u32,
             tags: Vec<Vec<String>>,
             content: &str,
-        ) -> RadrootsEventEnvelope {
+        ) -> EventEnvelope {
             let keys = Keys::parse(FIXTURE_ALICE_SECRET_KEY_HEX)
                 .expect("fixed fixture secret key must parse");
             let author = keys.public_key().to_string();
@@ -494,7 +481,7 @@ mod tests {
             let message = Message::from_digest(nostr_id.to_bytes());
             let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
 
-            RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            EventEnvelope::new(EventEnvelopeParts {
                 id: id.into_string(),
                 author,
                 created_at,

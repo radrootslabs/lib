@@ -5,21 +5,19 @@ use std::str::FromStr;
 
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
-    farm::change_set::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon},
-    farm::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef},
-    farm::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef},
-    farm::resource_area::{
-        RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
-    },
-    farm::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct},
-    farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef},
-    id::{RadrootsDTag, RadrootsInventoryBinId},
+    farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon},
+    farm::coop::{Coop, CoopLocation, CoopRef},
+    farm::plot::{Plot, PlotLocation, PlotRef},
+    farm::resource_area::{ResourceArea, ResourceAreaLocation, ResourceAreaRef},
+    farm::resource_cap::{ResourceHarvestCap, ResourceHarvestProduct},
+    farm::{Farm, FarmPublicLocation, FarmRef},
+    id::{DTag, InventoryBinId},
     listing::operational::{
-        RadrootsOperationalListing, RadrootsOperationalListingAvailability,
-        RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
-        RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
+        OperationalListing, OperationalListingAvailability, OperationalListingBin,
+        OperationalListingDeliveryMethod, OperationalListingProduct,
+        OperationalListingPublicLocation,
     },
-    post::document::{RadrootsDocument, RadrootsDocumentSubject},
+    post::document::{Document, DocumentSubject},
 };
 use radroots_event_codec::coop::encode::{coop_build_tags, coop_ref_tags};
 use radroots_event_codec::coop::list_sets::{coop_members_farms_list_set, coop_members_list_set};
@@ -69,24 +67,24 @@ fn quantity_price(amount: Money, quantity: Quantity) -> QuantityPrice {
     QuantityPrice::try_new(amount, quantity).unwrap()
 }
 
-fn listing_d_tag(raw: &str) -> RadrootsDTag {
+fn listing_d_tag(raw: &str) -> DTag {
     raw.parse().unwrap()
 }
 
-fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+fn bin_id(raw: &str) -> InventoryBinId {
     raw.parse().unwrap()
 }
 
-fn sample_gcs(geohash: &str) -> RadrootsGcsLocation {
-    RadrootsGcsLocation {
+fn sample_gcs(geohash: &str) -> GcsLocation {
+    GcsLocation {
         lat: 37.0,
         lng: -122.0,
         geohash: geohash.to_string(),
-        point: RadrootsGeoJsonPoint {
+        point: GeoJsonPoint {
             r#type: "Point".to_string(),
             coordinates: [-122.0, 37.0],
         },
-        polygon: RadrootsGeoJsonPolygon {
+        polygon: GeoJsonPolygon {
             r#type: "Polygon".to_string(),
             coordinates: vec![vec![
                 [-122.0, 37.0],
@@ -112,15 +110,15 @@ fn sample_gcs(geohash: &str) -> RadrootsGcsLocation {
     }
 }
 
-fn sample_coop() -> RadrootsCoop {
-    RadrootsCoop {
+fn sample_coop() -> Coop {
+    Coop {
         d_tag: VALID_COOP_D_TAG.to_string(),
         name: "Test Coop".to_string(),
         about: None,
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsCoopLocation {
+        location: Some(CoopLocation {
             primary: None,
             city: None,
             region: None,
@@ -131,15 +129,15 @@ fn sample_coop() -> RadrootsCoop {
     }
 }
 
-fn sample_farm() -> RadrootsFarm {
-    RadrootsFarm {
+fn sample_farm() -> Farm {
+    Farm {
         d_tag: VALID_FARM_D_TAG.to_string(),
         name: "Test Farm".to_string(),
         about: None,
         website: None,
         picture: None,
         banner: None,
-        location: Some(RadrootsFarmPublicLocation {
+        location: Some(FarmPublicLocation {
             primary: "Test Farm".to_string(),
             city: Some("Santa Cruz".to_string()),
             region: Some("California".to_string()),
@@ -150,16 +148,16 @@ fn sample_farm() -> RadrootsFarm {
     }
 }
 
-fn sample_plot() -> RadrootsPlot {
-    RadrootsPlot {
+fn sample_plot() -> Plot {
+    Plot {
         d_tag: VALID_PLOT_D_TAG.to_string(),
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         },
         name: "Plot 1".to_string(),
         about: None,
-        location: Some(RadrootsPlotLocation {
+        location: Some(PlotLocation {
             primary: None,
             city: None,
             region: None,
@@ -170,19 +168,19 @@ fn sample_plot() -> RadrootsPlot {
     }
 }
 
-fn sample_listing() -> RadrootsOperationalListing {
+fn sample_listing() -> OperationalListing {
     let quantity = quantity(Decimal::from(1u32), Unit::Each);
     let price_per_canonical_unit =
         quantity_price(money(Decimal::from(10u32), Currency::USD), quantity.clone());
 
-    RadrootsOperationalListing {
+    OperationalListing {
         d_tag: listing_d_tag(VALID_DOC_D_TAG),
         published_at: None,
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         },
-        product: RadrootsOperationalListingProduct {
+        product: OperationalListingProduct {
             key: "nutmeg".to_string(),
             title: "Nutmeg".to_string(),
             category: "spice".to_string(),
@@ -194,7 +192,7 @@ fn sample_listing() -> RadrootsOperationalListing {
             year: None,
         },
         primary_bin_id: bin_id("bin-1"),
-        bins: vec![RadrootsOperationalListingBin {
+        bins: vec![OperationalListingBin {
             bin_id: bin_id("bin-1"),
             quantity,
             price_per_canonical_unit,
@@ -208,22 +206,22 @@ fn sample_listing() -> RadrootsOperationalListing {
         plot: None,
         discounts: None,
         inventory_available: Some(decimal("12")),
-        availability: Some(RadrootsOperationalListingAvailability::Window {
+        availability: Some(OperationalListingAvailability::Window {
             start: Some(1),
             end: Some(2),
         }),
-        delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Shipping),
+        delivery_method: Some(OperationalListingDeliveryMethod::Shipping),
         location: None,
         images: None,
     }
 }
 
-fn sample_resource_area() -> RadrootsResourceArea {
-    RadrootsResourceArea {
+fn sample_resource_area() -> ResourceArea {
+    ResourceArea {
         d_tag: VALID_AREA_D_TAG.to_string(),
         name: "Banda Grove".to_string(),
         about: None,
-        location: RadrootsResourceAreaLocation {
+        location: ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
@@ -234,14 +232,14 @@ fn sample_resource_area() -> RadrootsResourceArea {
     }
 }
 
-fn sample_resource_cap() -> RadrootsResourceHarvestCap {
-    RadrootsResourceHarvestCap {
+fn sample_resource_cap() -> ResourceHarvestCap {
+    ResourceHarvestCap {
         d_tag: VALID_CAP_D_TAG.to_string(),
-        resource_area: RadrootsResourceAreaRef {
+        resource_area: ResourceAreaRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_AREA_D_TAG.to_string(),
         },
-        product: RadrootsResourceHarvestProduct {
+        product: ResourceHarvestProduct {
             key: "nutmeg".to_string(),
             category: Some("spice".to_string()),
         },
@@ -255,8 +253,8 @@ fn sample_resource_cap() -> RadrootsResourceHarvestCap {
     }
 }
 
-fn sample_document() -> RadrootsDocument {
-    RadrootsDocument {
+fn sample_document() -> Document {
+    Document {
         d_tag: VALID_DOC_D_TAG.to_string(),
         doc_type: "charter".to_string(),
         title: "Charter".to_string(),
@@ -264,7 +262,7 @@ fn sample_document() -> RadrootsDocument {
         summary: None,
         effective_at: None,
         body_markdown: None,
-        subject: RadrootsDocumentSubject {
+        subject: DocumentSubject {
             pubkey: VALID_PUBKEY.to_string(),
             address: Some(format!("30340:{VALID_PUBKEY}:{VALID_FARM_D_TAG}")),
         },
@@ -326,14 +324,14 @@ fn coop_encode_and_list_set_paths() {
     let err = coop_build_tags(&coop).expect_err("invalid d_tag");
     assert!(matches!(err, EventEncodeError::InvalidField("d_tag")));
 
-    let tags = coop_ref_tags(&RadrootsCoopRef {
+    let tags = coop_ref_tags(&CoopRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: VALID_COOP_D_TAG.to_string(),
     })
     .expect("coop ref tags");
     assert_eq!(tags.len(), 2);
 
-    let err = coop_ref_tags(&RadrootsCoopRef {
+    let err = coop_ref_tags(&CoopRef {
         pubkey: " ".to_string(),
         d_tag: VALID_COOP_D_TAG.to_string(),
     })
@@ -343,7 +341,7 @@ fn coop_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("coop.pubkey")
     ));
 
-    let err = coop_ref_tags(&RadrootsCoopRef {
+    let err = coop_ref_tags(&CoopRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: " ".to_string(),
     })
@@ -353,7 +351,7 @@ fn coop_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("coop.d_tag")
     ));
 
-    let err = coop_ref_tags(&RadrootsCoopRef {
+    let err = coop_ref_tags(&CoopRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: "invalid".to_string(),
     })
@@ -381,7 +379,7 @@ fn coop_encode_and_list_set_paths() {
 
     let member_farms = coop_members_farms_list_set(
         VALID_COOP_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         }],
@@ -393,7 +391,7 @@ fn coop_encode_and_list_set_paths() {
 
     let member_farms_from_array = coop_members_farms_list_set(
         VALID_COOP_D_TAG,
-        [RadrootsFarmRef {
+        [FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         }],
@@ -405,7 +403,7 @@ fn coop_encode_and_list_set_paths() {
 
     let err = coop_members_farms_list_set(
         VALID_COOP_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: " ".to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         }],
@@ -418,7 +416,7 @@ fn coop_encode_and_list_set_paths() {
 
     let err = coop_members_farms_list_set(
         VALID_COOP_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: " ".to_string(),
         }],
@@ -431,7 +429,7 @@ fn coop_encode_and_list_set_paths() {
 
     let err = coop_members_farms_list_set(
         VALID_COOP_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: "invalid".to_string(),
         }],
@@ -497,14 +495,14 @@ fn farm_encode_and_list_set_paths() {
         EventEncodeError::InvalidField("location.geohash")
     ));
 
-    let tags = farm_ref_tags(&RadrootsFarmRef {
+    let tags = farm_ref_tags(&FarmRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: VALID_FARM_D_TAG.to_string(),
     })
     .expect("farm ref tags");
     assert_eq!(tags.len(), 2);
 
-    let err = farm_ref_tags(&RadrootsFarmRef {
+    let err = farm_ref_tags(&FarmRef {
         pubkey: " ".to_string(),
         d_tag: VALID_FARM_D_TAG.to_string(),
     })
@@ -514,7 +512,7 @@ fn farm_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("farm.pubkey")
     ));
 
-    let err = farm_ref_tags(&RadrootsFarmRef {
+    let err = farm_ref_tags(&FarmRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: " ".to_string(),
     })
@@ -524,7 +522,7 @@ fn farm_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("farm.d_tag")
     ));
 
-    let err = farm_ref_tags(&RadrootsFarmRef {
+    let err = farm_ref_tags(&FarmRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: "invalid".to_string(),
     })
@@ -697,7 +695,7 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_with_geohash = sample_listing();
-    listing_with_geohash.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_with_geohash.location = Some(OperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
@@ -719,7 +717,7 @@ fn listing_encode_paths() {
     );
 
     let mut listing_with_shared_geohash = sample_listing();
-    listing_with_shared_geohash.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_with_shared_geohash.location = Some(OperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
@@ -737,7 +735,7 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_without_coordinates = sample_listing();
-    listing_without_coordinates.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_without_coordinates.location = Some(OperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
@@ -765,7 +763,7 @@ fn listing_encode_paths() {
     listing_with_blank_optionals.product.location = Some(" ".to_string());
     listing_with_blank_optionals.product.profile = Some("null".to_string());
     listing_with_blank_optionals.product.year = Some(" ".to_string());
-    listing_with_blank_optionals.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_with_blank_optionals.location = Some(OperationalListingPublicLocation {
         primary: " ".to_string(),
         city: Some(" ".to_string()),
         region: Some("null".to_string()),
@@ -804,7 +802,7 @@ fn listing_encode_paths() {
     );
 
     let mut listing_without_geohash = sample_listing();
-    listing_without_geohash.location = Some(RadrootsOperationalListingPublicLocation {
+    listing_without_geohash.location = Some(OperationalListingPublicLocation {
         primary: "Origin".to_string(),
         city: Some("Town".to_string()),
         region: Some("Region".to_string()),
@@ -837,7 +835,7 @@ fn listing_encode_paths() {
     );
 
     let mut listing_pickup = sample_listing();
-    listing_pickup.delivery_method = Some(RadrootsOperationalListingDeliveryMethod::Pickup);
+    listing_pickup.delivery_method = Some(OperationalListingDeliveryMethod::Pickup);
     let pickup_tags = operational_listing_tags_with_options(&listing_pickup, with_trade_fields())
         .expect("listing tags with pickup delivery");
     assert!(pickup_tags.iter().any(|tag| {
@@ -846,7 +844,7 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_local = sample_listing();
-    listing_local.delivery_method = Some(RadrootsOperationalListingDeliveryMethod::LocalDelivery);
+    listing_local.delivery_method = Some(OperationalListingDeliveryMethod::LocalDelivery);
     let local_tags = operational_listing_tags_with_options(&listing_local, with_trade_fields())
         .expect("listing tags with local delivery");
     assert!(local_tags.iter().any(|tag| {
@@ -855,10 +853,9 @@ fn listing_encode_paths() {
     }));
 
     let mut listing_other_delivery = sample_listing();
-    listing_other_delivery.delivery_method =
-        Some(RadrootsOperationalListingDeliveryMethod::Other {
-            method: "courier".to_string(),
-        });
+    listing_other_delivery.delivery_method = Some(OperationalListingDeliveryMethod::Other {
+        method: "courier".to_string(),
+    });
     let other_delivery_tags =
         operational_listing_tags_with_options(&listing_other_delivery, with_trade_fields())
             .expect("listing tags with other delivery");
@@ -1024,14 +1021,14 @@ fn resource_area_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("location.gcs.geohash")
     ));
 
-    let tags = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let tags = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: VALID_AREA_D_TAG.to_string(),
     })
     .expect("resource area ref tags");
     assert_eq!(tags.len(), 2);
 
-    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let err = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: " ".to_string(),
         d_tag: VALID_AREA_D_TAG.to_string(),
     })
@@ -1041,7 +1038,7 @@ fn resource_area_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("resource_area.pubkey")
     ));
 
-    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let err = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: " ".to_string(),
     })
@@ -1051,7 +1048,7 @@ fn resource_area_encode_and_list_set_paths() {
         EventEncodeError::EmptyRequiredField("resource_area.d_tag")
     ));
 
-    let err = resource_area_ref_tags(&RadrootsResourceAreaRef {
+    let err = resource_area_ref_tags(&ResourceAreaRef {
         pubkey: VALID_PUBKEY.to_string(),
         d_tag: "invalid".to_string(),
     })
@@ -1063,7 +1060,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_farms_list_set(
         "invalid",
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         }],
@@ -1085,7 +1082,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_farms_list_set(
         VALID_AREA_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: " ".to_string(),
             d_tag: VALID_FARM_D_TAG.to_string(),
         }],
@@ -1098,7 +1095,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_farms_list_set(
         VALID_AREA_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: " ".to_string(),
         }],
@@ -1111,7 +1108,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_farms_list_set(
         VALID_AREA_D_TAG,
-        vec![RadrootsFarmRef {
+        vec![FarmRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: "invalid".to_string(),
         }],
@@ -1121,7 +1118,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_plots_list_set(
         VALID_AREA_D_TAG,
-        vec![RadrootsPlotRef {
+        vec![PlotRef {
             pubkey: " ".to_string(),
             d_tag: VALID_PLOT_D_TAG.to_string(),
         }],
@@ -1134,7 +1131,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_plots_list_set(
         VALID_AREA_D_TAG,
-        vec![RadrootsPlotRef {
+        vec![PlotRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: " ".to_string(),
         }],
@@ -1147,7 +1144,7 @@ fn resource_area_encode_and_list_set_paths() {
 
     let err = resource_area_members_plots_list_set(
         VALID_AREA_D_TAG,
-        vec![RadrootsPlotRef {
+        vec![PlotRef {
             pubkey: VALID_PUBKEY.to_string(),
             d_tag: "invalid".to_string(),
         }],

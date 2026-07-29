@@ -6,11 +6,11 @@ pub mod encode;
 #[cfg(test)]
 mod tests {
     use crate::document::encode::document_build_tags;
-    use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
+    use radroots_event::post::document::{Document, DocumentSubject};
 
     #[test]
     fn document_tags_include_required_fields() {
-        let document = RadrootsDocument {
+        let document = Document {
             d_tag: "EAAAAAAAAAAAAAAAAAAAAA".to_string(),
             doc_type: "charter".to_string(),
             title: "Sierra Co-op Charter".to_string(),
@@ -18,7 +18,7 @@ mod tests {
             summary: None,
             effective_at: None,
             body_markdown: None,
-            subject: RadrootsDocumentSubject {
+            subject: DocumentSubject {
                 pubkey: "coop_pubkey".to_string(),
                 address: Some("30360:coop_pubkey:BAAAAAAAAAAAAAAAAAAAAA".to_string()),
             },

@@ -3,203 +3,152 @@
 
 pub fn dto_bindgen_roots() -> ::std::vec::Vec<::dto_bindgen::export::RootDescriptor> {
     ::std::vec![
-        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::RadrootsNip01EventWireDto>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::RadrootsSignedEventDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::Nip01EventWireDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::SignedEventDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::SignedEventVerificationStateDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::VerifiedSignedEventDto>(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::dto::RadrootsSignedEventVerificationStateDto,
+            crate::dto::VerifiedSignedEventVerificationStateDto,
         >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::dto::RadrootsVerifiedSignedEventDto>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::envelope::EventEnvelope>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::Farm>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::FarmPublicLocation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::FarmRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::change_set::GcsLocation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::change_set::GeoJsonPoint>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::change_set::GeoJsonPolygon>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::coop::Coop>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::coop::CoopLocation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::coop::CoopRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::plot::Plot>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::plot::PlotLocation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::plot::PlotRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::resource_area::ResourceArea>(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::dto::RadrootsVerifiedSignedEventVerificationStateDto,
+            crate::farm::resource_area::ResourceAreaLocation,
         >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::envelope::RadrootsEventEnvelope>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::RadrootsFarm>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::RadrootsFarmPublicLocation>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::RadrootsFarmRef>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::change_set::RadrootsGcsLocation>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::change_set::RadrootsGeoJsonPoint>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::change_set::RadrootsGeoJsonPolygon>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::coop::RadrootsCoop>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::coop::RadrootsCoopLocation>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::coop::RadrootsCoopRef>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::plot::RadrootsPlot>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::plot::RadrootsPlotLocation>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::plot::RadrootsPlotRef>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::farm::resource_area::RadrootsResourceArea,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::farm::resource_area::RadrootsResourceAreaLocation,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::farm::resource_area::RadrootsResourceAreaRef,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::farm::resource_cap::RadrootsResourceHarvestCap,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::farm::resource_cap::RadrootsResourceHarvestProduct,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsAddressableRef>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::knowledge::RadrootsContributionAttestation,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsEvidenceBounty>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::knowledge::RadrootsKnowledgeChangeProposal,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeCitationSpan>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeClaim>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeFieldContext>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeFieldReport>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeLocation>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::knowledge::RadrootsKnowledgeLocationPrecision,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeNodeRef>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeObservation>(
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::resource_area::ResourceAreaRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::farm::resource_cap::ResourceHarvestCap>(
         ),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::knowledge::RadrootsKnowledgeObservationValue,
+            crate::farm::resource_cap::ResourceHarvestProduct,
         >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeRelation>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReview>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReviewScope>(
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::AddressableRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::ContributionAttestation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::EvidenceBounty>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeChangeProposal>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeCitationSpan>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeClaim>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeFieldContext>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeFieldReport>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeLocation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeLocationPrecision>(
         ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReviewScore>(
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeNodeRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeObservation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeObservationValue>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeRelation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeReview>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeReviewScope>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeReviewScore>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeReviewTarget>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::KnowledgeSource>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RightsAssertion>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::WikiArticle>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::WikiArticleVersionRef>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::WikiMergeRequest>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::WikiRedirect>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::listing::operational::OperationalListing>(
         ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeReviewTarget>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsKnowledgeSource>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsRightsAssertion>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiArticle>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiArticleVersionRef>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiMergeRequest>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::knowledge::RadrootsWikiRedirect>(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListing,
+            crate::listing::operational::OperationalListingAvailability,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingAvailability,
+            crate::listing::operational::OperationalListingBin,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingBin,
+            crate::listing::operational::OperationalListingDeliveryMethod,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingDeliveryMethod,
+            crate::listing::operational::OperationalListingImage,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingImage,
+            crate::listing::operational::OperationalListingParseError,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingParseError,
+            crate::listing::operational::OperationalListingProduct,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingProduct,
+            crate::listing::operational::OperationalListingPublicLocation,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingPublicLocation,
+            crate::listing::operational::OperationalListingStatus,
         >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::listing::operational::RadrootsOperationalListingStatus,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::post::RadrootsPost>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::post::document::RadrootsDocument>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::post::document::RadrootsDocumentSubject>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::post::reaction::RadrootsReaction>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::profile::RadrootsProfileType>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::profile::account::RadrootsAccountClaim>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::app_data::RadrootsAppData>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::follow::RadrootsFollow>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::follow::RadrootsFollowProfile>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::geochat::RadrootsGeoChat>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::gift_wrap::RadrootsGiftWrap>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::social::gift_wrap::RadrootsGiftWrapRecipient,
-        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::post::document::Document>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::post::document::DocumentSubject>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::post::reaction::Reaction>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::profile::ProfileType>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::profile::account::AccountClaim>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::app_data::AppData>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::follow::Follow>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::follow::FollowProfile>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::geochat::GeoChat>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::gift_wrap::GiftWrap>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::gift_wrap::GiftWrapRecipient>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::social::job::JobFeedbackStatus>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::social::job::JobInputType>(),
         ::dto_bindgen::export::RootDescriptor::new::<crate::social::job::JobPaymentRequest>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_feedback::JobFeedback>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_request::JobInput>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_request::JobParam>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_request::JobRequest>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_result::JobResult>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::list::List>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::list::ListEntry>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::list_set::ListSet>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::message::Message>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::message::MessageRecipient>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::message_file::MessageFile>(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::social::job_feedback::RadrootsJobFeedback,
+            crate::social::message_file::MessageFileDimensions,
         >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_request::RadrootsJobInput>(
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::relay_document::RelayDocument>(
         ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_request::RadrootsJobParam>(
+        ::dto_bindgen::export::RootDescriptor::new::<crate::social::seal::Seal>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::CommercialDomain>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::OrderCancellation>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::OrderDecision>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::OrderDecisionOutcome>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::OrderEventType>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::OrderInventoryCommitment>(
         ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_request::RadrootsJobRequest>(
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::OrderRequest>(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::trade::order_economics::OrderEconomicActor,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::trade::order_economics::OrderEconomicEffect,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::trade::order_economics::OrderEconomicItem,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::trade::order_economics::OrderEconomicLine,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::trade::order_economics::OrderEconomicLineKind,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<
+            crate::trade::order_economics::OrderEconomicTotals,
+        >(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order_economics::OrderEconomics>(
         ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::job_result::RadrootsJobResult>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::list::RadrootsList>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::list::RadrootsListEntry>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::list_set::RadrootsListSet>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::message::RadrootsMessage>(),
+        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order_economics::OrderItem>(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::social::message::RadrootsMessageRecipient,
+            crate::trade::order_economics::OrderPricingBasis,
         >(),
         ::dto_bindgen::export::RootDescriptor::new::<
-            crate::social::message_file::RadrootsMessageFile,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::social::message_file::RadrootsMessageFileDimensions,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::social::relay_document::RadrootsRelayDocument,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::social::seal::RadrootsSeal>(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::RadrootsCommercialDomain>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::RadrootsOrderCancellation>(
-        ),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::RadrootsOrderDecision>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order::RadrootsOrderDecisionOutcome,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::RadrootsOrderEventType>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order::RadrootsOrderInventoryCommitment,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<crate::trade::order::RadrootsOrderRequest>(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomicActor,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomicEffect,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomicItem,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomicLine,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomicLineKind,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomicTotals,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderEconomics,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderItem,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::order_economics::RadrootsOrderPricingBasis,
-        >(),
-        ::dto_bindgen::export::RootDescriptor::new::<
-            crate::trade::validation::RadrootsOperationalListingValidationError,
+            crate::trade::validation::OperationalListingValidationError,
         >(),
     ]
 }

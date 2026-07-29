@@ -350,12 +350,12 @@ fn error_codes_and_messages_are_stable() {
         RadrootsNip09DeletionProjectionError::EventTargetShape { tag_index: 0 },
         RadrootsNip09DeletionProjectionError::EventTargetInvalid {
             tag_index: 0,
-            error: RadrootsIdParseError::InvalidFormat,
+            error: ParseError::InvalidFormat,
         },
         RadrootsNip09DeletionProjectionError::AddressTargetShape { tag_index: 0 },
         RadrootsNip09DeletionProjectionError::AddressTargetInvalid {
             tag_index: 0,
-            error: RadrootsNip01CoordinateParseError::InvalidFormat,
+            error: Nip01CoordinateParseError::InvalidFormat,
         },
         RadrootsNip09DeletionProjectionError::TargetMissing,
     ];

@@ -7,7 +7,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    envelope::kind::KIND_RESOURCE_HARVEST_CAP, farm::resource_cap::RadrootsResourceHarvestCap,
+    envelope::kind::KIND_RESOURCE_HARVEST_CAP, farm::resource_cap::ResourceHarvestCap,
     tag::name::TAG_D,
 };
 
@@ -37,7 +37,7 @@ pub fn resource_harvest_cap_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsResourceHarvestCap, EventParseError> {
+) -> Result<ResourceHarvestCap, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "30371",
@@ -48,7 +48,7 @@ pub fn resource_harvest_cap_from_event(
         return Err(EventParseError::InvalidJson("content"));
     }
     let d_tag = parse_d_tag(tags)?;
-    let mut cap: RadrootsResourceHarvestCap =
+    let mut cap: ResourceHarvestCap =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
     if cap.d_tag.trim().is_empty() {
@@ -67,7 +67,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsResourceHarvestCap>, EventParseError> {
+) -> Result<RadrootsParsedData<ResourceHarvestCap>, EventParseError> {
     let cap = resource_harvest_cap_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(id, author, published_at, kind, cap))
 }
@@ -80,7 +80,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsResourceHarvestCap>, EventParseError> {
+) -> Result<RadrootsParsedEvent<ResourceHarvestCap>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

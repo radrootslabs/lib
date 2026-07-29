@@ -8,20 +8,20 @@ use alloc::{
 
 use crate::envelope::kind::*;
 #[cfg(test)]
-use crate::id::RadrootsOrderQuoteId;
-use crate::id::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId, RadrootsOrderId};
+use crate::id::OrderQuoteId;
+use crate::id::{ClassifiedListingAddress, InventoryBinId, OrderId};
 #[cfg(test)]
-use crate::listing::operational::RadrootsOperationalListingParseError;
+use crate::listing::operational::OperationalListingParseError;
 pub use crate::trade::order_economics::*;
 #[cfg(test)]
-use crate::trade::validation::RadrootsOperationalListingValidationError;
+use crate::trade::validation::OperationalListingValidationError;
 use radroots_core::{Currency, Decimal, Money};
 use radroots_identity::PublicKey;
 
 pub const RADROOTS_COMMERCIAL_LISTING_DOMAIN: &str = "trade:listing";
 pub const RADROOTS_ORDER_ENVELOPE_VERSION: u16 = 1;
 
-impl RadrootsOrderEconomics {
+impl OrderEconomics {
     pub fn canonicalize(&mut self) {
         self.items
             .sort_by(|left, right| left.bin_id.cmp(&right.bin_id));
@@ -42,9 +42,9 @@ impl RadrootsOrderEconomics {
         economics
     }
 
-    pub fn derived_totals(&self) -> Result<RadrootsOrderEconomicTotals, RadrootsOrderPayloadError> {
+    pub fn derived_totals(&self) -> Result<OrderEconomicTotals, OrderPayloadError> {
         if self.items.is_empty() {
-            return Err(RadrootsOrderPayloadError::MissingEconomicItems);
+            return Err(OrderPayloadError::MissingEconomicItems);
         }
 
         let mut subtotal = Money::zero(self.currency);
@@ -56,14 +56,14 @@ impl RadrootsOrderEconomics {
         let mut discount_total = Money::zero(self.currency);
         for (index, line) in self.discounts.iter().enumerate() {
             validate_economic_line(line, self.currency, "discounts", index)?;
-            if line.kind != RadrootsOrderEconomicLineKind::ListingDiscount {
-                return Err(RadrootsOrderPayloadError::InvalidEconomicLineKind {
+            if line.kind != OrderEconomicLineKind::ListingDiscount {
+                return Err(OrderPayloadError::InvalidEconomicLineKind {
                     field: "discounts",
                     index,
                 });
             }
-            if line.effect != RadrootsOrderEconomicEffect::Decrease {
-                return Err(RadrootsOrderPayloadError::InvalidEconomicLineEffect {
+            if line.effect != OrderEconomicEffect::Decrease {
+                return Err(OrderPayloadError::InvalidEconomicLineEffect {
                     field: "discounts",
                     index,
                 });
@@ -75,8 +75,8 @@ impl RadrootsOrderEconomics {
         let mut total = checked_money_sub_non_negative(&subtotal, &discount_total, "total")?;
         for (index, line) in self.adjustments.iter().enumerate() {
             validate_economic_line(line, self.currency, "adjustments", index)?;
-            if line.kind == RadrootsOrderEconomicLineKind::ListingDiscount {
-                return Err(RadrootsOrderPayloadError::InvalidEconomicLineKind {
+            if line.kind == OrderEconomicLineKind::ListingDiscount {
+                return Err(OrderPayloadError::InvalidEconomicLineKind {
                     field: "adjustments",
                     index,
                 });
@@ -84,16 +84,14 @@ impl RadrootsOrderEconomics {
             adjustment_total =
                 checked_money_add(&adjustment_total, &line.amount, "adjustment_total")?;
             total = match line.effect {
-                RadrootsOrderEconomicEffect::Increase => {
-                    checked_money_add(&total, &line.amount, "total")?
-                }
-                RadrootsOrderEconomicEffect::Decrease => {
+                OrderEconomicEffect::Increase => checked_money_add(&total, &line.amount, "total")?,
+                OrderEconomicEffect::Decrease => {
                     checked_money_sub_non_negative(&total, &line.amount, "total")?
                 }
             };
         }
 
-        Ok(RadrootsOrderEconomicTotals {
+        Ok(OrderEconomicTotals {
             subtotal,
             discount_total,
             adjustment_total,
@@ -101,10 +99,10 @@ impl RadrootsOrderEconomics {
         })
     }
 
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
+    pub fn validate(&self) -> Result<(), OrderPayloadError> {
         validate_required_field(self.quote_id.as_str(), "quote_id")?;
         if self.quote_version == 0 {
-            return Err(RadrootsOrderPayloadError::InvalidQuoteVersion);
+            return Err(OrderPayloadError::InvalidQuoteVersion);
         }
 
         let totals = self.derived_totals()?;
@@ -132,25 +130,25 @@ impl RadrootsOrderEconomics {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderRequest")))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderRequest")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderRequest {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsClassifiedListingAddress,
+pub struct OrderRequest {
+    pub order_id: OrderId,
+    pub listing_addr: ClassifiedListingAddress,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub seller_pubkey: PublicKey,
-    pub items: Vec<RadrootsOrderItem>,
-    pub economics: RadrootsOrderEconomics,
+    pub items: Vec<OrderItem>,
+    pub economics: OrderEconomics,
 }
 
-impl RadrootsOrderRequest {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
+impl OrderRequest {
+    pub fn validate(&self) -> Result<(), OrderPayloadError> {
         validate_required_field(self.order_id.as_str(), "order_id")?;
         validate_required_field(self.listing_addr.as_str(), "listing_addr")?;
         validate_order_items(&self.items)?;
@@ -161,26 +159,20 @@ impl RadrootsOrderRequest {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderInventoryCommitment"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderInventoryCommitment")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderInventoryCommitment {
-    pub bin_id: RadrootsInventoryBinId,
+pub struct OrderInventoryCommitment {
+    pub bin_id: InventoryBinId,
     pub bin_count: u32,
 }
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderDecisionOutcome"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderDecisionOutcome")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -190,17 +182,17 @@ pub struct RadrootsOrderInventoryCommitment {
     serde(rename_all = "snake_case", tag = "decision")
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderDecisionOutcome {
+pub enum OrderDecisionOutcome {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "accepted"))]
     Accepted {
-        inventory_commitments: Vec<RadrootsOrderInventoryCommitment>,
+        inventory_commitments: Vec<OrderInventoryCommitment>,
     },
     #[cfg_attr(any(feature = "serde", test), serde(rename = "declined"))]
     Declined { reason: String },
 }
 
-impl RadrootsOrderDecisionOutcome {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
+impl OrderDecisionOutcome {
+    pub fn validate(&self) -> Result<(), OrderPayloadError> {
         match self {
             Self::Accepted {
                 inventory_commitments,
@@ -212,24 +204,24 @@ impl RadrootsOrderDecisionOutcome {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderDecision")))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderDecision")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderDecision {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsClassifiedListingAddress,
+pub struct OrderDecision {
+    pub order_id: OrderId,
+    pub listing_addr: ClassifiedListingAddress,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub seller_pubkey: PublicKey,
-    pub decision: RadrootsOrderDecisionOutcome,
+    pub decision: OrderDecisionOutcome,
 }
 
-impl RadrootsOrderDecision {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
+impl OrderDecision {
+    pub fn validate(&self) -> Result<(), OrderPayloadError> {
         validate_required_field(self.order_id.as_str(), "order_id")?;
         validate_required_field(self.listing_addr.as_str(), "listing_addr")?;
         self.decision.validate()
@@ -238,18 +230,15 @@ impl RadrootsOrderDecision {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderCancellation"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderCancellation")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderCancellation {
-    pub order_id: RadrootsOrderId,
-    pub listing_addr: RadrootsClassifiedListingAddress,
+pub struct OrderCancellation {
+    pub order_id: OrderId,
+    pub listing_addr: ClassifiedListingAddress,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
     #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
@@ -257,8 +246,8 @@ pub struct RadrootsOrderCancellation {
     pub reason: String,
 }
 
-impl RadrootsOrderCancellation {
-    pub fn validate(&self) -> Result<(), RadrootsOrderPayloadError> {
+impl OrderCancellation {
+    pub fn validate(&self) -> Result<(), OrderPayloadError> {
         validate_required_field(self.order_id.as_str(), "order_id")?;
         validate_required_field(self.listing_addr.as_str(), "listing_addr")?;
         validate_required_field(&self.reason, "reason")
@@ -267,27 +256,27 @@ impl RadrootsOrderCancellation {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsCommercialDomain")))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "CommercialDomain")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsCommercialDomain {
+pub enum CommercialDomain {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "trade:listing"))]
     Listing,
 }
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderEventType")))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderEventType")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderEventType {
+pub enum OrderEventType {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "TradeOrderRequested"))]
     OrderRequested,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "TradeOrderDecision"))]
@@ -296,7 +285,7 @@ pub enum RadrootsOrderEventType {
     OrderCancelled,
 }
 
-impl RadrootsOrderEventType {
+impl OrderEventType {
     #[inline]
     pub const fn from_kind(kind: u32) -> Option<Self> {
         match kind {
@@ -341,27 +330,27 @@ impl RadrootsOrderEventType {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderEnvelope<T> {
+pub struct OrderEnvelope<T> {
     pub version: u16,
-    pub domain: RadrootsCommercialDomain,
+    pub domain: CommercialDomain,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "type"))]
-    pub message_type: RadrootsOrderEventType,
+    pub message_type: OrderEventType,
     pub order_id: String,
     pub listing_addr: String,
     pub payload: T,
 }
 
-impl<T> RadrootsOrderEnvelope<T> {
+impl<T> OrderEnvelope<T> {
     #[inline]
     pub fn new(
-        message_type: RadrootsOrderEventType,
+        message_type: OrderEventType,
         listing_addr: impl Into<String>,
         order_id: impl Into<String>,
         payload: T,
     ) -> Self {
         Self {
             version: RADROOTS_ORDER_ENVELOPE_VERSION,
-            domain: RadrootsCommercialDomain::Listing,
+            domain: CommercialDomain::Listing,
             message_type,
             order_id: order_id.into(),
             listing_addr: listing_addr.into(),
@@ -369,31 +358,31 @@ impl<T> RadrootsOrderEnvelope<T> {
         }
     }
 
-    pub fn validate(&self) -> Result<(), RadrootsOrderEnvelopeError> {
+    pub fn validate(&self) -> Result<(), OrderEnvelopeError> {
         if self.version != RADROOTS_ORDER_ENVELOPE_VERSION {
-            return Err(RadrootsOrderEnvelopeError::InvalidVersion {
+            return Err(OrderEnvelopeError::InvalidVersion {
                 expected: RADROOTS_ORDER_ENVELOPE_VERSION,
                 got: self.version,
             });
         }
         if self.order_id.trim().is_empty() {
-            return Err(RadrootsOrderEnvelopeError::MissingOrderId);
+            return Err(OrderEnvelopeError::MissingOrderId);
         }
         if self.listing_addr.trim().is_empty() {
-            return Err(RadrootsOrderEnvelopeError::MissingListingAddr);
+            return Err(OrderEnvelopeError::MissingListingAddr);
         }
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RadrootsOrderEnvelopeError {
+pub enum OrderEnvelopeError {
     InvalidVersion { expected: u16, got: u16 },
     MissingOrderId,
     MissingListingAddr,
 }
 
-impl core::fmt::Display for RadrootsOrderEnvelopeError {
+impl core::fmt::Display for OrderEnvelopeError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidVersion { expected, got } => {
@@ -409,10 +398,10 @@ impl core::fmt::Display for RadrootsOrderEnvelopeError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsOrderEnvelopeError {}
+impl std::error::Error for OrderEnvelopeError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RadrootsOrderPayloadError {
+pub enum OrderPayloadError {
     EmptyField(&'static str),
     MissingItems,
     InvalidItemBinCount { index: usize },
@@ -433,7 +422,7 @@ pub enum RadrootsOrderPayloadError {
     InvalidInventoryCommitmentCount { index: usize },
 }
 
-impl core::fmt::Display for RadrootsOrderPayloadError {
+impl core::fmt::Display for OrderPayloadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::EmptyField(field) => write!(f, "{field} cannot be empty"),
@@ -501,49 +490,46 @@ impl core::fmt::Display for RadrootsOrderPayloadError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsOrderPayloadError {}
+impl std::error::Error for OrderPayloadError {}
 
-fn validate_required_field(
-    value: &str,
-    field: &'static str,
-) -> Result<(), RadrootsOrderPayloadError> {
+fn validate_required_field(value: &str, field: &'static str) -> Result<(), OrderPayloadError> {
     if value.trim().is_empty() {
-        Err(RadrootsOrderPayloadError::EmptyField(field))
+        Err(OrderPayloadError::EmptyField(field))
     } else {
         Ok(())
     }
 }
 
-fn validate_order_items(items: &[RadrootsOrderItem]) -> Result<(), RadrootsOrderPayloadError> {
+fn validate_order_items(items: &[OrderItem]) -> Result<(), OrderPayloadError> {
     if items.is_empty() {
-        return Err(RadrootsOrderPayloadError::MissingItems);
+        return Err(OrderPayloadError::MissingItems);
     }
     for (index, item) in items.iter().enumerate() {
         validate_required_field(item.bin_id.as_str(), "bin_id")?;
         if item.bin_count == 0 {
-            return Err(RadrootsOrderPayloadError::InvalidItemBinCount { index });
+            return Err(OrderPayloadError::InvalidItemBinCount { index });
         }
     }
     Ok(())
 }
 
 fn validate_economic_item(
-    item: &RadrootsOrderEconomicItem,
+    item: &OrderEconomicItem,
     expected_currency: Currency,
     index: usize,
-) -> Result<Money, RadrootsOrderPayloadError> {
+) -> Result<Money, OrderPayloadError> {
     validate_required_field(item.bin_id.as_str(), "economics.items.bin_id")?;
     if item.bin_count == 0 {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicItemBinCount { index });
+        return Err(OrderPayloadError::InvalidEconomicItemBinCount { index });
     }
     if item.quantity_amount.is_zero() || item.quantity_amount.is_sign_negative() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicItemQuantity { index });
+        return Err(OrderPayloadError::InvalidEconomicItemQuantity { index });
     }
     if item.unit_price_amount.is_sign_negative() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicItemPrice { index });
+        return Err(OrderPayloadError::InvalidEconomicItemPrice { index });
     }
     if item.unit_price_currency != expected_currency {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency {
+        return Err(OrderPayloadError::InvalidEconomicCurrency {
             field: "items.unit_price_currency",
         });
     }
@@ -554,35 +540,35 @@ fn validate_economic_item(
     )?;
 
     let quantity_total = checked_decimal_mul(item.quantity_amount, Decimal::from(item.bin_count))
-        .ok_or(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index })?;
+        .ok_or(OrderPayloadError::InvalidEconomicItemSubtotal { index })?;
     let expected_subtotal = checked_decimal_mul(item.unit_price_amount, quantity_total)
-        .ok_or(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index })?;
+        .ok_or(OrderPayloadError::InvalidEconomicItemSubtotal { index })?;
     if item.line_subtotal.amount() != expected_subtotal {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index });
+        return Err(OrderPayloadError::InvalidEconomicItemSubtotal { index });
     }
     Ok(item.line_subtotal.clone())
 }
 
 fn validate_order_economics_binding(
-    items: &[RadrootsOrderItem],
-    economics: &RadrootsOrderEconomics,
-) -> Result<(), RadrootsOrderPayloadError> {
+    items: &[OrderItem],
+    economics: &OrderEconomics,
+) -> Result<(), OrderPayloadError> {
     let order_items = normalized_order_item_counts(items).ok_or(
-        RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
+        OrderPayloadError::InvalidOrderEconomicsBinding {
             field: "items.bin_count",
         },
     )?;
     if order_items.len() != economics.items.len() {
-        return Err(RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field: "items" });
+        return Err(OrderPayloadError::InvalidOrderEconomicsBinding { field: "items" });
     }
     for (item, economic_item) in order_items.iter().zip(economics.items.iter()) {
         if item.bin_id != economic_item.bin_id.as_str() {
-            return Err(RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
+            return Err(OrderPayloadError::InvalidOrderEconomicsBinding {
                 field: "items.bin_id",
             });
         }
         if item.bin_count != u64::from(economic_item.bin_count) {
-            return Err(RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
+            return Err(OrderPayloadError::InvalidOrderEconomicsBinding {
                 field: "items.bin_count",
             });
         }
@@ -596,9 +582,7 @@ struct NormalizedOrderItemCount {
     bin_count: u64,
 }
 
-fn normalized_order_item_counts(
-    items: &[RadrootsOrderItem],
-) -> Option<Vec<NormalizedOrderItemCount>> {
+fn normalized_order_item_counts(items: &[OrderItem]) -> Option<Vec<NormalizedOrderItemCount>> {
     let mut counts: Vec<NormalizedOrderItemCount> = Vec::new();
     for item in items {
         let bin_id = item.bin_id.as_str();
@@ -619,28 +603,26 @@ fn normalized_order_item_counts(
 }
 
 fn validate_economic_line(
-    line: &RadrootsOrderEconomicLine,
+    line: &OrderEconomicLine,
     expected_currency: Currency,
     field: &'static str,
     index: usize,
-) -> Result<(), RadrootsOrderPayloadError> {
+) -> Result<(), OrderPayloadError> {
     validate_required_field(&line.id, "economics.line.id")?;
     validate_required_field(&line.reason, "economics.line.reason")?;
     if line.amount.currency() != expected_currency {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
+        return Err(OrderPayloadError::InvalidEconomicCurrency { field });
     }
     if line.amount.amount().is_zero() || line.amount.amount().is_sign_negative() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicLineAmount { field, index });
+        return Err(OrderPayloadError::InvalidEconomicLineAmount { field, index });
     }
     Ok(())
 }
 
-fn validate_economic_item_order(
-    items: &[RadrootsOrderEconomicItem],
-) -> Result<(), RadrootsOrderPayloadError> {
+fn validate_economic_item_order(items: &[OrderEconomicItem]) -> Result<(), OrderPayloadError> {
     for pair in items.windows(2) {
         if pair[0].bin_id >= pair[1].bin_id {
-            return Err(RadrootsOrderPayloadError::InvalidEconomicOrdering {
+            return Err(OrderPayloadError::InvalidEconomicOrdering {
                 field: "items.bin_id",
             });
         }
@@ -649,12 +631,12 @@ fn validate_economic_item_order(
 }
 
 fn validate_economic_line_order(
-    lines: &[RadrootsOrderEconomicLine],
+    lines: &[OrderEconomicLine],
     field: &'static str,
-) -> Result<(), RadrootsOrderPayloadError> {
+) -> Result<(), OrderPayloadError> {
     for pair in lines.windows(2) {
         if pair[0].id >= pair[1].id {
-            return Err(RadrootsOrderPayloadError::InvalidEconomicOrdering { field });
+            return Err(OrderPayloadError::InvalidEconomicOrdering { field });
         }
     }
     Ok(())
@@ -664,12 +646,12 @@ fn validate_total_money(
     money: &Money,
     expected_currency: Currency,
     field: &'static str,
-) -> Result<(), RadrootsOrderPayloadError> {
+) -> Result<(), OrderPayloadError> {
     if money.currency() != expected_currency {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
+        return Err(OrderPayloadError::InvalidEconomicCurrency { field });
     }
     if money.amount().is_sign_negative() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicTotal { field });
+        return Err(OrderPayloadError::InvalidEconomicTotal { field });
     }
     Ok(())
 }
@@ -678,12 +660,12 @@ fn validate_total_matches(
     actual: &Money,
     expected: &Money,
     field: &'static str,
-) -> Result<(), RadrootsOrderPayloadError> {
+) -> Result<(), OrderPayloadError> {
     if actual.currency() != expected.currency() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
+        return Err(OrderPayloadError::InvalidEconomicCurrency { field });
     }
     if actual.amount() != expected.amount() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicTotal { field });
+        return Err(OrderPayloadError::InvalidEconomicTotal { field });
     }
     Ok(())
 }
@@ -704,43 +686,43 @@ fn checked_money_add(
     left: &Money,
     right: &Money,
     field: &'static str,
-) -> Result<Money, RadrootsOrderPayloadError> {
+) -> Result<Money, OrderPayloadError> {
     if left.currency() != right.currency() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
+        return Err(OrderPayloadError::InvalidEconomicCurrency { field });
     }
     let amount = checked_decimal_add(left.amount(), right.amount())
-        .ok_or(RadrootsOrderPayloadError::InvalidEconomicTotal { field })?;
+        .ok_or(OrderPayloadError::InvalidEconomicTotal { field })?;
     Money::try_new(amount, left.currency())
-        .map_err(|_| RadrootsOrderPayloadError::InvalidEconomicTotal { field })
+        .map_err(|_| OrderPayloadError::InvalidEconomicTotal { field })
 }
 
 fn checked_money_sub_non_negative(
     left: &Money,
     right: &Money,
     field: &'static str,
-) -> Result<Money, RadrootsOrderPayloadError> {
+) -> Result<Money, OrderPayloadError> {
     if left.currency() != right.currency() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicCurrency { field });
+        return Err(OrderPayloadError::InvalidEconomicCurrency { field });
     }
     let amount = checked_decimal_sub(left.amount(), right.amount())
-        .ok_or(RadrootsOrderPayloadError::InvalidEconomicTotal { field })?;
+        .ok_or(OrderPayloadError::InvalidEconomicTotal { field })?;
     if amount.is_sign_negative() {
-        return Err(RadrootsOrderPayloadError::InvalidEconomicTotal { field });
+        return Err(OrderPayloadError::InvalidEconomicTotal { field });
     }
     Money::try_new(amount, left.currency())
-        .map_err(|_| RadrootsOrderPayloadError::InvalidEconomicTotal { field })
+        .map_err(|_| OrderPayloadError::InvalidEconomicTotal { field })
 }
 
 fn validate_inventory_commitments(
-    commitments: &[RadrootsOrderInventoryCommitment],
-) -> Result<(), RadrootsOrderPayloadError> {
+    commitments: &[OrderInventoryCommitment],
+) -> Result<(), OrderPayloadError> {
     if commitments.is_empty() {
-        return Err(RadrootsOrderPayloadError::MissingInventoryCommitments);
+        return Err(OrderPayloadError::MissingInventoryCommitments);
     }
     for (index, commitment) in commitments.iter().enumerate() {
         validate_required_field(commitment.bin_id.as_str(), "bin_id")?;
         if commitment.bin_count == 0 {
-            return Err(RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { index });
+            return Err(OrderPayloadError::InvalidInventoryCommitmentCount { index });
         }
     }
     Ok(())
@@ -763,31 +745,31 @@ mod tests {
         pubkey('a')
     }
 
-    fn sample_listing_addr() -> RadrootsClassifiedListingAddress {
+    fn sample_listing_addr() -> ClassifiedListingAddress {
         format!("30402:{}:AAAAAAAAAAAAAAAAAAAAAg", seller_pubkey())
             .parse()
             .unwrap()
     }
 
-    fn order_id(raw: &str) -> RadrootsOrderId {
+    fn order_id(raw: &str) -> OrderId {
         raw.parse().unwrap()
     }
 
-    fn quote_id(raw: &str) -> RadrootsOrderQuoteId {
+    fn quote_id(raw: &str) -> OrderQuoteId {
         raw.parse().unwrap()
     }
 
-    fn bin_id(raw: &str) -> RadrootsInventoryBinId {
+    fn bin_id(raw: &str) -> InventoryBinId {
         raw.parse().unwrap()
     }
 
-    fn sample_order_request() -> RadrootsOrderRequest {
-        RadrootsOrderRequest {
+    fn sample_order_request() -> OrderRequest {
+        OrderRequest {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: buyer_pubkey(),
             seller_pubkey: seller_pubkey(),
-            items: vec![RadrootsOrderItem {
+            items: vec![OrderItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 2,
             }],
@@ -807,14 +789,14 @@ mod tests {
         Money::try_new(decimal(raw), currency).unwrap()
     }
 
-    fn sample_order_economics() -> RadrootsOrderEconomics {
-        RadrootsOrderEconomics {
+    fn sample_order_economics() -> OrderEconomics {
+        OrderEconomics {
             quote_id: quote_id("quote-1"),
             quote_version: 1,
-            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
+            pricing_basis: OrderPricingBasis::ListingEvent,
             currency: Currency::USD,
             items: vec![
-                RadrootsOrderEconomicItem {
+                OrderEconomicItem {
                     bin_id: bin_id("bin-a"),
                     bin_count: 2,
                     quantity_amount: decimal("1.5"),
@@ -823,7 +805,7 @@ mod tests {
                     unit_price_currency: Currency::USD,
                     line_subtotal: usd("12"),
                 },
-                RadrootsOrderEconomicItem {
+                OrderEconomicItem {
                     bin_id: bin_id("bin-b"),
                     bin_count: 1,
                     quantity_amount: decimal("2"),
@@ -833,28 +815,28 @@ mod tests {
                     line_subtotal: usd("6"),
                 },
             ],
-            discounts: vec![RadrootsOrderEconomicLine {
+            discounts: vec![OrderEconomicLine {
                 id: "discount-a".into(),
-                kind: RadrootsOrderEconomicLineKind::ListingDiscount,
-                actor: RadrootsOrderEconomicActor::Seller,
-                effect: RadrootsOrderEconomicEffect::Decrease,
+                kind: OrderEconomicLineKind::ListingDiscount,
+                actor: OrderEconomicActor::Seller,
+                effect: OrderEconomicEffect::Decrease,
                 amount: usd("3"),
                 reason: "farmstand pickup".into(),
             }],
             adjustments: vec![
-                RadrootsOrderEconomicLine {
+                OrderEconomicLine {
                     id: "adjustment-a".into(),
-                    kind: RadrootsOrderEconomicLineKind::BasketAdjustment,
-                    actor: RadrootsOrderEconomicActor::Buyer,
-                    effect: RadrootsOrderEconomicEffect::Increase,
+                    kind: OrderEconomicLineKind::BasketAdjustment,
+                    actor: OrderEconomicActor::Buyer,
+                    effect: OrderEconomicEffect::Increase,
                     amount: usd("2"),
                     reason: "special handling".into(),
                 },
-                RadrootsOrderEconomicLine {
+                OrderEconomicLine {
                     id: "adjustment-b".into(),
-                    kind: RadrootsOrderEconomicLineKind::BasketAdjustment,
-                    actor: RadrootsOrderEconomicActor::Buyer,
-                    effect: RadrootsOrderEconomicEffect::Decrease,
+                    kind: OrderEconomicLineKind::BasketAdjustment,
+                    actor: OrderEconomicActor::Buyer,
+                    effect: OrderEconomicEffect::Decrease,
                     amount: usd("1"),
                     reason: "local pickup credit".into(),
                 },
@@ -866,13 +848,13 @@ mod tests {
         }
     }
 
-    fn sample_bound_order_economics() -> RadrootsOrderEconomics {
-        RadrootsOrderEconomics {
+    fn sample_bound_order_economics() -> OrderEconomics {
+        OrderEconomics {
             quote_id: quote_id("quote-bound-1"),
             quote_version: 1,
-            pricing_basis: RadrootsOrderPricingBasis::ListingEvent,
+            pricing_basis: OrderPricingBasis::ListingEvent,
             currency: Currency::USD,
-            items: vec![RadrootsOrderEconomicItem {
+            items: vec![OrderEconomicItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 2,
                 quantity_amount: decimal("1"),
@@ -890,27 +872,27 @@ mod tests {
         }
     }
 
-    fn sample_inventory_commitment() -> RadrootsOrderInventoryCommitment {
-        RadrootsOrderInventoryCommitment {
+    fn sample_inventory_commitment() -> OrderInventoryCommitment {
+        OrderInventoryCommitment {
             bin_id: bin_id("bin-1"),
             bin_count: 2,
         }
     }
 
-    fn sample_order_decision() -> RadrootsOrderDecision {
-        RadrootsOrderDecision {
+    fn sample_order_decision() -> OrderDecision {
+        OrderDecision {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: buyer_pubkey(),
             seller_pubkey: seller_pubkey(),
-            decision: RadrootsOrderDecisionOutcome::Accepted {
+            decision: OrderDecisionOutcome::Accepted {
                 inventory_commitments: vec![sample_inventory_commitment()],
             },
         }
     }
 
-    fn sample_order_cancellation() -> RadrootsOrderCancellation {
-        RadrootsOrderCancellation {
+    fn sample_order_cancellation() -> OrderCancellation {
+        OrderCancellation {
             order_id: order_id("order-1"),
             listing_addr: sample_listing_addr(),
             buyer_pubkey: buyer_pubkey(),
@@ -922,57 +904,41 @@ mod tests {
     #[test]
     fn order_message_type_uses_canonical_names_and_kinds() {
         assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_REQUEST),
-            Some(RadrootsOrderEventType::OrderRequested)
+            OrderEventType::from_kind(KIND_ORDER_REQUEST),
+            Some(OrderEventType::OrderRequested)
         );
         assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_DECISION),
-            Some(RadrootsOrderEventType::OrderDecision)
+            OrderEventType::from_kind(KIND_ORDER_DECISION),
+            Some(OrderEventType::OrderDecision)
         );
-        assert_eq!(RadrootsOrderEventType::from_kind(3424), None);
-        assert_eq!(RadrootsOrderEventType::from_kind(3425), None);
+        assert_eq!(OrderEventType::from_kind(3424), None);
+        assert_eq!(OrderEventType::from_kind(3425), None);
         assert_eq!(
-            RadrootsOrderEventType::from_kind(KIND_ORDER_CANCELLATION),
-            Some(RadrootsOrderEventType::OrderCancelled)
+            OrderEventType::from_kind(KIND_ORDER_CANCELLATION),
+            Some(OrderEventType::OrderCancelled)
         );
-        assert_eq!(RadrootsOrderEventType::from_kind(3433), None);
-        assert_eq!(RadrootsOrderEventType::from_kind(3434), None);
-        assert_eq!(RadrootsOrderEventType::from_kind(3435), None);
-        assert_eq!(RadrootsOrderEventType::from_kind(3436), None);
-        assert_eq!(RadrootsOrderEventType::from_kind(3431), None);
+        assert_eq!(OrderEventType::from_kind(3433), None);
+        assert_eq!(OrderEventType::from_kind(3434), None);
+        assert_eq!(OrderEventType::from_kind(3435), None);
+        assert_eq!(OrderEventType::from_kind(3436), None);
+        assert_eq!(OrderEventType::from_kind(3431), None);
+        assert_eq!(OrderEventType::OrderRequested.kind(), KIND_ORDER_REQUEST);
+        assert_eq!(OrderEventType::OrderDecision.kind(), KIND_ORDER_DECISION);
         assert_eq!(
-            RadrootsOrderEventType::OrderRequested.kind(),
-            KIND_ORDER_REQUEST
-        );
-        assert_eq!(
-            RadrootsOrderEventType::OrderDecision.kind(),
-            KIND_ORDER_DECISION
-        );
-        assert_eq!(
-            RadrootsOrderEventType::OrderCancelled.kind(),
+            OrderEventType::OrderCancelled.kind(),
             KIND_ORDER_CANCELLATION
         );
-        assert_eq!(
-            RadrootsOrderEventType::OrderRequested.name(),
-            "TradeOrderRequested"
-        );
-        assert_eq!(
-            RadrootsOrderEventType::OrderDecision.name(),
-            "TradeOrderDecision"
-        );
-        assert_eq!(
-            RadrootsOrderEventType::OrderCancelled.name(),
-            "TradeOrderCancelled"
-        );
-        assert!(RadrootsOrderEventType::OrderRequested.requires_listing_snapshot());
-        assert!(RadrootsOrderEventType::OrderDecision.requires_order_chain());
-        assert!(RadrootsOrderEventType::OrderCancelled.requires_order_chain());
-        assert!(!RadrootsOrderEventType::OrderRequested.requires_order_chain());
+        assert_eq!(OrderEventType::OrderRequested.name(), "TradeOrderRequested");
+        assert_eq!(OrderEventType::OrderDecision.name(), "TradeOrderDecision");
+        assert_eq!(OrderEventType::OrderCancelled.name(), "TradeOrderCancelled");
+        assert!(OrderEventType::OrderRequested.requires_listing_snapshot());
+        assert!(OrderEventType::OrderDecision.requires_order_chain());
+        assert!(OrderEventType::OrderCancelled.requires_order_chain());
+        assert!(!OrderEventType::OrderRequested.requires_order_chain());
 
-        let request_name = serde_json::to_value(RadrootsOrderEventType::OrderRequested).unwrap();
-        let decision_name = serde_json::to_value(RadrootsOrderEventType::OrderDecision).unwrap();
-        let cancellation_name =
-            serde_json::to_value(RadrootsOrderEventType::OrderCancelled).unwrap();
+        let request_name = serde_json::to_value(OrderEventType::OrderRequested).unwrap();
+        let decision_name = serde_json::to_value(OrderEventType::OrderDecision).unwrap();
+        let cancellation_name = serde_json::to_value(OrderEventType::OrderCancelled).unwrap();
         assert_eq!(request_name, serde_json::json!("TradeOrderRequested"));
         assert_eq!(decision_name, serde_json::json!("TradeOrderDecision"));
         assert_eq!(cancellation_name, serde_json::json!("TradeOrderCancelled"));
@@ -986,21 +952,21 @@ mod tests {
         missing_items.items.clear();
         assert_eq!(
             missing_items.validate().unwrap_err(),
-            RadrootsOrderPayloadError::MissingItems
+            OrderPayloadError::MissingItems
         );
 
         let mut invalid_count = sample_order_request();
         invalid_count.items[0].bin_count = 0;
         assert_eq!(
             invalid_count.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidItemBinCount { index: 0 }
+            OrderPayloadError::InvalidItemBinCount { index: 0 }
         );
 
         let mut mismatched_economic_item = sample_order_request();
         mismatched_economic_item.economics.items[0].bin_id = bin_id("bin-other");
         assert_eq!(
             mismatched_economic_item.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
+            OrderPayloadError::InvalidOrderEconomicsBinding {
                 field: "items.bin_id"
             }
         );
@@ -1012,7 +978,7 @@ mod tests {
         mismatched_economic_count.economics.total = usd("15");
         assert_eq!(
             mismatched_economic_count.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
+            OrderPayloadError::InvalidOrderEconomicsBinding {
                 field: "items.bin_count"
             }
         );
@@ -1022,35 +988,29 @@ mod tests {
     fn order_payload_json_rejects_invalid_protocol_identifiers() {
         let mut request = serde_json::to_value(sample_order_request()).unwrap();
         request["buyer_pubkey"] = serde_json::json!("not-a-pubkey");
-        assert!(serde_json::from_value::<RadrootsOrderRequest>(request).is_err());
+        assert!(serde_json::from_value::<OrderRequest>(request).is_err());
     }
 
     #[test]
     fn listing_parse_error_json_preserves_external_tagged_shape() {
         assert_eq!(
-            serde_json::to_value(RadrootsOperationalListingParseError::InvalidKind(
-                KIND_PROFILE
-            ))
-            .unwrap(),
+            serde_json::to_value(OperationalListingParseError::InvalidKind(KIND_PROFILE)).unwrap(),
             serde_json::json!({ "InvalidKind": KIND_PROFILE })
         );
         assert_eq!(
-            serde_json::to_value(RadrootsOperationalListingParseError::MissingTag(
-                "price".into()
-            ))
-            .unwrap(),
+            serde_json::to_value(OperationalListingParseError::MissingTag("price".into())).unwrap(),
             serde_json::json!({ "MissingTag": "price" })
         );
         assert_eq!(
-            serde_json::to_value(RadrootsOperationalListingParseError::InvalidUnit).unwrap(),
+            serde_json::to_value(OperationalListingParseError::InvalidUnit).unwrap(),
             serde_json::json!("InvalidUnit")
         );
         assert_eq!(
-            serde_json::from_value::<RadrootsOperationalListingParseError>(serde_json::json!({
+            serde_json::from_value::<OperationalListingParseError>(serde_json::json!({
                 "InvalidJson": "bins"
             }))
             .unwrap(),
-            RadrootsOperationalListingParseError::InvalidJson("bins".into())
+            OperationalListingParseError::InvalidJson("bins".into())
         );
     }
 
@@ -1082,11 +1042,11 @@ mod tests {
         let mut economics = sample_order_economics();
         economics.items.reverse();
         economics.adjustments.reverse();
-        economics.discounts.push(RadrootsOrderEconomicLine {
+        economics.discounts.push(OrderEconomicLine {
             id: "discount-b".into(),
-            kind: RadrootsOrderEconomicLineKind::ListingDiscount,
-            actor: RadrootsOrderEconomicActor::Seller,
-            effect: RadrootsOrderEconomicEffect::Decrease,
+            kind: OrderEconomicLineKind::ListingDiscount,
+            actor: OrderEconomicActor::Seller,
+            effect: OrderEconomicEffect::Decrease,
             amount: usd("1"),
             reason: "market credit".into(),
         });
@@ -1095,7 +1055,7 @@ mod tests {
         economics.total = usd("17");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicOrdering {
+            OrderPayloadError::InvalidEconomicOrdering {
                 field: "items.bin_id"
             }
         );
@@ -1122,7 +1082,7 @@ mod tests {
         economics.items[0].unit_price_currency = Currency::EUR;
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency {
+            OrderPayloadError::InvalidEconomicCurrency {
                 field: "items.unit_price_currency"
             }
         );
@@ -1131,7 +1091,7 @@ mod tests {
         economics.adjustments[0].amount = money("2", Currency::EUR);
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency {
+            OrderPayloadError::InvalidEconomicCurrency {
                 field: "adjustments"
             }
         );
@@ -1143,21 +1103,21 @@ mod tests {
         economics.items[0].bin_count = 0;
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicItemBinCount { index: 0 }
+            OrderPayloadError::InvalidEconomicItemBinCount { index: 0 }
         );
 
         let mut economics = sample_order_economics();
         economics.items[0].line_subtotal = usd("11.99");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index: 0 }
+            OrderPayloadError::InvalidEconomicItemSubtotal { index: 0 }
         );
 
         let mut economics = sample_order_economics();
         economics.items[0].line_subtotal = money("12", Currency::EUR);
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency {
+            OrderPayloadError::InvalidEconomicCurrency {
                 field: "items.line_subtotal"
             }
         );
@@ -1169,42 +1129,42 @@ mod tests {
         economics.items.clear();
         assert_eq!(
             economics.derived_totals().unwrap_err(),
-            RadrootsOrderPayloadError::MissingEconomicItems
+            OrderPayloadError::MissingEconomicItems
         );
 
         let mut economics = sample_order_economics();
         economics.quote_version = 0;
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidQuoteVersion
+            OrderPayloadError::InvalidQuoteVersion
         );
 
         let mut economics = sample_order_economics();
         economics.items[0].quantity_amount = decimal("0");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicItemQuantity { index: 0 }
+            OrderPayloadError::InvalidEconomicItemQuantity { index: 0 }
         );
 
         let mut economics = sample_order_economics();
         economics.items[0].quantity_amount = decimal("-1");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicItemQuantity { index: 0 }
+            OrderPayloadError::InvalidEconomicItemQuantity { index: 0 }
         );
 
         let mut economics = sample_order_economics();
         economics.items[0].unit_price_amount = decimal("-1");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicItemPrice { index: 0 }
+            OrderPayloadError::InvalidEconomicItemPrice { index: 0 }
         );
 
         let mut economics = sample_order_economics();
-        economics.discounts[0].kind = RadrootsOrderEconomicLineKind::BasketAdjustment;
+        economics.discounts[0].kind = OrderEconomicLineKind::BasketAdjustment;
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicLineKind {
+            OrderPayloadError::InvalidEconomicLineKind {
                 field: "discounts",
                 index: 0
             }
@@ -1214,14 +1174,14 @@ mod tests {
         economics.subtotal = money("18", Currency::EUR);
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "subtotal" }
+            OrderPayloadError::InvalidEconomicCurrency { field: "subtotal" }
         );
 
         let mut economics = sample_order_economics();
         economics.discount_total = usd("4");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicTotal {
+            OrderPayloadError::InvalidEconomicTotal {
                 field: "discount_total"
             }
         );
@@ -1230,7 +1190,7 @@ mod tests {
         economics.adjustment_total = usd("4");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicTotal {
+            OrderPayloadError::InvalidEconomicTotal {
                 field: "adjustment_total"
             }
         );
@@ -1238,26 +1198,26 @@ mod tests {
         let economics = sample_bound_order_economics();
         assert_eq!(
             validate_order_economics_binding(&[], &economics).unwrap_err(),
-            RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field: "items" }
+            OrderPayloadError::InvalidOrderEconomicsBinding { field: "items" }
         );
 
-        let invalid_order_items = [RadrootsOrderItem {
+        let invalid_order_items = [OrderItem {
             bin_id: bin_id("bin-1"),
             bin_count: 0,
         }];
         assert_eq!(
             validate_order_economics_binding(&invalid_order_items, &economics).unwrap_err(),
-            RadrootsOrderPayloadError::InvalidOrderEconomicsBinding {
+            OrderPayloadError::InvalidOrderEconomicsBinding {
                 field: "items.bin_count"
             }
         );
 
         let duplicate_counts = normalized_order_item_counts(&[
-            RadrootsOrderItem {
+            OrderItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 1,
             },
-            RadrootsOrderItem {
+            OrderItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 2,
             },
@@ -1266,18 +1226,18 @@ mod tests {
         assert_eq!(duplicate_counts[0].bin_count, 3);
 
         assert!(
-            normalized_order_item_counts(&[RadrootsOrderItem {
+            normalized_order_item_counts(&[OrderItem {
                 bin_id: bin_id("bin-1"),
                 bin_count: 0,
             }])
             .is_none()
         );
         let sorted_counts = normalized_order_item_counts(&[
-            RadrootsOrderItem {
+            OrderItem {
                 bin_id: bin_id("bin-b"),
                 bin_count: 1,
             },
-            RadrootsOrderItem {
+            OrderItem {
                 bin_id: bin_id("bin-a"),
                 bin_count: 1,
             },
@@ -1289,20 +1249,20 @@ mod tests {
     #[test]
     fn order_economics_validation_rejects_bad_line_semantics() {
         let mut economics = sample_order_economics();
-        economics.discounts[0].effect = RadrootsOrderEconomicEffect::Increase;
+        economics.discounts[0].effect = OrderEconomicEffect::Increase;
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicLineEffect {
+            OrderPayloadError::InvalidEconomicLineEffect {
                 field: "discounts",
                 index: 0
             }
         );
 
         let mut economics = sample_order_economics();
-        economics.adjustments[0].kind = RadrootsOrderEconomicLineKind::ListingDiscount;
+        economics.adjustments[0].kind = OrderEconomicLineKind::ListingDiscount;
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicLineKind {
+            OrderPayloadError::InvalidEconomicLineKind {
                 field: "adjustments",
                 index: 0
             }
@@ -1312,7 +1272,7 @@ mod tests {
         economics.adjustments[0].amount = usd("0");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicLineAmount {
+            OrderPayloadError::InvalidEconomicLineAmount {
                 field: "adjustments",
                 index: 0
             }
@@ -1323,16 +1283,16 @@ mod tests {
     fn order_economics_helpers_cover_currency_error_paths() {
         assert_eq!(
             validate_total_matches(&usd("1"), &money("1", Currency::EUR), "total").unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "total" }
+            OrderPayloadError::InvalidEconomicCurrency { field: "total" }
         );
         assert_eq!(
             checked_money_add(&usd("1"), &money("1", Currency::EUR), "subtotal").unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "subtotal" }
+            OrderPayloadError::InvalidEconomicCurrency { field: "subtotal" }
         );
         assert_eq!(
             checked_money_sub_non_negative(&usd("1"), &money("1", Currency::EUR), "total")
                 .unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "total" }
+            OrderPayloadError::InvalidEconomicCurrency { field: "total" }
         );
     }
 
@@ -1342,7 +1302,7 @@ mod tests {
         economics.adjustments[1].id = "adjustment-a".into();
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicOrdering {
+            OrderPayloadError::InvalidEconomicOrdering {
                 field: "adjustments"
             }
         );
@@ -1356,7 +1316,7 @@ mod tests {
         economics.total = usd("0");
         assert_eq!(
             economics.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidEconomicTotal { field: "total" }
+            OrderPayloadError::InvalidEconomicTotal { field: "total" }
         );
     }
 
@@ -1364,28 +1324,28 @@ mod tests {
     fn order_decision_validation_enforces_commitment_invariants() {
         assert_eq!(sample_order_decision().validate(), Ok(()));
 
-        let declined = RadrootsOrderDecision {
-            decision: RadrootsOrderDecisionOutcome::Declined {
+        let declined = OrderDecision {
+            decision: OrderDecisionOutcome::Declined {
                 reason: "out_of_stock".into(),
             },
             ..sample_order_decision()
         };
         assert_eq!(declined.validate(), Ok(()));
 
-        let accepted_without_commitments = RadrootsOrderDecision {
-            decision: RadrootsOrderDecisionOutcome::Accepted {
+        let accepted_without_commitments = OrderDecision {
+            decision: OrderDecisionOutcome::Accepted {
                 inventory_commitments: Vec::new(),
             },
             ..sample_order_decision()
         };
         assert_eq!(
             accepted_without_commitments.validate().unwrap_err(),
-            RadrootsOrderPayloadError::MissingInventoryCommitments
+            OrderPayloadError::MissingInventoryCommitments
         );
 
-        let accepted_with_zero_count = RadrootsOrderDecision {
-            decision: RadrootsOrderDecisionOutcome::Accepted {
-                inventory_commitments: vec![RadrootsOrderInventoryCommitment {
+        let accepted_with_zero_count = OrderDecision {
+            decision: OrderDecisionOutcome::Accepted {
+                inventory_commitments: vec![OrderInventoryCommitment {
                     bin_id: bin_id("bin-1"),
                     bin_count: 0,
                 }],
@@ -1394,16 +1354,16 @@ mod tests {
         };
         assert_eq!(
             accepted_with_zero_count.validate().unwrap_err(),
-            RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { index: 0 }
+            OrderPayloadError::InvalidInventoryCommitmentCount { index: 0 }
         );
 
-        let declined_without_reason = RadrootsOrderDecision {
-            decision: RadrootsOrderDecisionOutcome::Declined { reason: " ".into() },
+        let declined_without_reason = OrderDecision {
+            decision: OrderDecisionOutcome::Declined { reason: " ".into() },
             ..sample_order_decision()
         };
         assert_eq!(
             declined_without_reason.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("reason")
+            OrderPayloadError::EmptyField("reason")
         );
     }
 
@@ -1411,20 +1371,20 @@ mod tests {
     fn order_cancellation_validation_requires_buyer_bindings_and_reason() {
         assert_eq!(sample_order_cancellation().validate(), Ok(()));
 
-        let missing_reason = RadrootsOrderCancellation {
+        let missing_reason = OrderCancellation {
             reason: " ".into(),
             ..sample_order_cancellation()
         };
         assert_eq!(
             missing_reason.validate().unwrap_err(),
-            RadrootsOrderPayloadError::EmptyField("reason")
+            OrderPayloadError::EmptyField("reason")
         );
     }
 
     #[test]
     fn order_envelope_serializes_canonical_type_name() {
-        let envelope = RadrootsOrderEnvelope::new(
-            RadrootsOrderEventType::OrderRequested,
+        let envelope = OrderEnvelope::new(
+            OrderEventType::OrderRequested,
             sample_listing_addr(),
             "order-1",
             sample_order_request(),
@@ -1443,10 +1403,10 @@ mod tests {
 
     #[test]
     fn order_envelope_validation_and_display_cover_error_paths() {
-        let invalid_version = RadrootsOrderEnvelope {
+        let invalid_version = OrderEnvelope {
             version: RADROOTS_ORDER_ENVELOPE_VERSION + 1,
-            domain: RadrootsCommercialDomain::Listing,
-            message_type: RadrootsOrderEventType::OrderRequested,
+            domain: CommercialDomain::Listing,
+            message_type: OrderEventType::OrderRequested,
             order_id: "order-1".into(),
             listing_addr: sample_listing_addr().into_string(),
             payload: sample_order_request(),
@@ -1454,7 +1414,7 @@ mod tests {
         let invalid_version_err = invalid_version.validate().unwrap_err();
         assert_eq!(
             invalid_version_err,
-            RadrootsOrderEnvelopeError::InvalidVersion {
+            OrderEnvelopeError::InvalidVersion {
                 expected: RADROOTS_ORDER_ENVELOPE_VERSION,
                 got: RADROOTS_ORDER_ENVELOPE_VERSION + 1,
             }
@@ -1464,68 +1424,62 @@ mod tests {
             "invalid order envelope version: expected 1, got 2"
         );
 
-        let missing_order = RadrootsOrderEnvelope::new(
-            RadrootsOrderEventType::OrderRequested,
+        let missing_order = OrderEnvelope::new(
+            OrderEventType::OrderRequested,
             sample_listing_addr(),
             " ",
             sample_order_request(),
         );
         let missing_order_err = missing_order.validate().unwrap_err();
-        assert_eq!(
-            missing_order_err,
-            RadrootsOrderEnvelopeError::MissingOrderId
-        );
+        assert_eq!(missing_order_err, OrderEnvelopeError::MissingOrderId);
         assert_eq!(
             missing_order_err.to_string(),
             "missing order_id for order message"
         );
 
-        let missing_listing = RadrootsOrderEnvelope::new(
-            RadrootsOrderEventType::OrderRequested,
+        let missing_listing = OrderEnvelope::new(
+            OrderEventType::OrderRequested,
             " ",
             "order-1",
             sample_order_request(),
         );
         let missing_listing_err = missing_listing.validate().unwrap_err();
-        assert_eq!(
-            missing_listing_err,
-            RadrootsOrderEnvelopeError::MissingListingAddr
-        );
+        assert_eq!(missing_listing_err, OrderEnvelopeError::MissingListingAddr);
         assert_eq!(missing_listing_err.to_string(), "missing listing_addr");
     }
 
     #[test]
     fn listing_parse_error_display_variants() {
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidKind(KIND_PROFILE).to_string(),
+            OperationalListingParseError::InvalidKind(KIND_PROFILE).to_string(),
             "invalid operational listing kind: 0"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::MissingTag("price".into()).to_string(),
+            OperationalListingParseError::MissingTag("price".into()).to_string(),
             "missing required tag: price"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidTag("farm".into()).to_string(),
+            OperationalListingParseError::InvalidTag("farm".into()).to_string(),
             "invalid tag: farm"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidNumber("inventory".into()).to_string(),
+            OperationalListingParseError::InvalidNumber("inventory".into()).to_string(),
             "invalid number: inventory"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidUnit.to_string(),
+            OperationalListingParseError::InvalidUnit.to_string(),
             "invalid unit"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidCurrency.to_string(),
+            OperationalListingParseError::InvalidCurrency.to_string(),
             "invalid currency"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidJson("bins".into()).to_string(),
+            OperationalListingParseError::InvalidJson("bins".into()).to_string(),
             "invalid json: bins"
         );
         assert_eq!(
-            RadrootsOperationalListingParseError::InvalidDiscount("offer".into()).to_string(),
+            OperationalListingParseError::InvalidDiscount("offer".into()).to_string(),
             "invalid discount data for offer"
         );
     }
@@ -1533,101 +1487,100 @@ mod tests {
     #[test]
     fn listing_validation_error_display_variants() {
         assert_eq!(
-            (RadrootsOperationalListingValidationError::InvalidKind { kind: KIND_PROFILE })
-                .to_string(),
+            (OperationalListingValidationError::InvalidKind { kind: KIND_PROFILE }).to_string(),
             "invalid listing kind: 0"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidProfile.to_string(),
+            OperationalListingValidationError::InvalidProfile.to_string(),
             "classified listing is not an Operational Listing profile"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingListingId.to_string(),
+            OperationalListingValidationError::MissingListingId.to_string(),
             "missing listing id"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::ListingEventNotFound {
+            OperationalListingValidationError::ListingEventNotFound {
                 listing_addr: "listing-1".into(),
             }
             .to_string(),
             "listing event not found: listing-1"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::ListingEventFetchFailed {
+            OperationalListingValidationError::ListingEventFetchFailed {
                 listing_addr: "listing-2".into(),
             }
             .to_string(),
             "listing event fetch failed: listing-2"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::ParseError {
-                error: RadrootsOperationalListingParseError::InvalidJson("payload".into()),
+            OperationalListingValidationError::ParseError {
+                error: OperationalListingParseError::InvalidJson("payload".into()),
             }
             .to_string(),
             "invalid listing data: invalid json: payload"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidSeller.to_string(),
+            OperationalListingValidationError::InvalidSeller.to_string(),
             "listing author does not match farm pubkey"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingFarmProfile.to_string(),
+            OperationalListingValidationError::MissingFarmProfile.to_string(),
             "missing farm profile"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingFarmRecord.to_string(),
+            OperationalListingValidationError::MissingFarmRecord.to_string(),
             "missing farm record"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingTitle.to_string(),
+            OperationalListingValidationError::MissingTitle.to_string(),
             "missing listing title"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingDescription.to_string(),
+            OperationalListingValidationError::MissingDescription.to_string(),
             "missing listing description"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingProductType.to_string(),
+            OperationalListingValidationError::MissingProductType.to_string(),
             "missing listing product type"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingBins.to_string(),
+            OperationalListingValidationError::MissingBins.to_string(),
             "missing listing bins"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingPrimaryBin.to_string(),
+            OperationalListingValidationError::MissingPrimaryBin.to_string(),
             "missing primary listing bin"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidBin.to_string(),
+            OperationalListingValidationError::InvalidBin.to_string(),
             "invalid listing bin"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingPrice.to_string(),
+            OperationalListingValidationError::MissingPrice.to_string(),
             "missing listing price"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidPrice.to_string(),
+            OperationalListingValidationError::InvalidPrice.to_string(),
             "invalid listing price"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingInventory.to_string(),
+            OperationalListingValidationError::MissingInventory.to_string(),
             "missing listing inventory"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::InvalidInventory.to_string(),
+            OperationalListingValidationError::InvalidInventory.to_string(),
             "invalid listing inventory"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingAvailability.to_string(),
+            OperationalListingValidationError::MissingAvailability.to_string(),
             "missing listing availability"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingLocation.to_string(),
+            OperationalListingValidationError::MissingLocation.to_string(),
             "missing listing location"
         );
         assert_eq!(
-            RadrootsOperationalListingValidationError::MissingDeliveryMethod.to_string(),
+            OperationalListingValidationError::MissingDeliveryMethod.to_string(),
             "missing listing delivery method"
         );
     }
@@ -1636,84 +1589,84 @@ mod tests {
     fn order_payload_error_display_variants_cover_all_messages() {
         let cases = [
             (
-                RadrootsOrderPayloadError::EmptyField("field"),
+                OrderPayloadError::EmptyField("field"),
                 "field cannot be empty",
             ),
             (
-                RadrootsOrderPayloadError::MissingItems,
+                OrderPayloadError::MissingItems,
                 "items must contain at least one item",
             ),
             (
-                RadrootsOrderPayloadError::InvalidItemBinCount { index: 2 },
+                OrderPayloadError::InvalidItemBinCount { index: 2 },
                 "items[2].bin_count must be greater than zero",
             ),
             (
-                RadrootsOrderPayloadError::MissingEconomicItems,
+                OrderPayloadError::MissingEconomicItems,
                 "economics.items must contain at least one item",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicItemBinCount { index: 3 },
+                OrderPayloadError::InvalidEconomicItemBinCount { index: 3 },
                 "economics.items[3].bin_count must be greater than zero",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicItemQuantity { index: 4 },
+                OrderPayloadError::InvalidEconomicItemQuantity { index: 4 },
                 "economics.items[4].quantity_amount must be greater than zero",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicItemPrice { index: 5 },
+                OrderPayloadError::InvalidEconomicItemPrice { index: 5 },
                 "economics.items[5].unit_price_amount must not be negative",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { index: 6 },
+                OrderPayloadError::InvalidEconomicItemSubtotal { index: 6 },
                 "economics.items[6].line_subtotal is invalid",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicLineAmount {
+                OrderPayloadError::InvalidEconomicLineAmount {
                     field: "adjustments",
                     index: 7,
                 },
                 "economics.adjustments[7].amount must be greater than zero",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicLineKind {
+                OrderPayloadError::InvalidEconomicLineKind {
                     field: "discounts",
                     index: 8,
                 },
                 "economics.discounts[8].kind is invalid",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicLineEffect {
+                OrderPayloadError::InvalidEconomicLineEffect {
                     field: "discounts",
                     index: 9,
                 },
                 "economics.discounts[9].effect is invalid",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicCurrency { field: "total" },
+                OrderPayloadError::InvalidEconomicCurrency { field: "total" },
                 "economics.total currency is invalid",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicOrdering { field: "items" },
+                OrderPayloadError::InvalidEconomicOrdering { field: "items" },
                 "economics.items is not in canonical order",
             ),
             (
-                RadrootsOrderPayloadError::InvalidEconomicTotal { field: "subtotal" },
+                OrderPayloadError::InvalidEconomicTotal { field: "subtotal" },
                 "economics.subtotal total is invalid",
             ),
             (
-                RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field: "items" },
+                OrderPayloadError::InvalidOrderEconomicsBinding { field: "items" },
                 "order items does not match economics",
             ),
             (
-                RadrootsOrderPayloadError::InvalidQuoteVersion,
+                OrderPayloadError::InvalidQuoteVersion,
                 "economics.quote_version must be greater than zero",
             ),
             (
-                RadrootsOrderPayloadError::MissingInventoryCommitments,
+                OrderPayloadError::MissingInventoryCommitments,
                 "accepted decisions must contain at least one inventory commitment",
             ),
             (
-                RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { index: 1 },
+                OrderPayloadError::InvalidInventoryCommitmentCount { index: 1 },
                 "inventory_commitments[1].bin_count must be greater than zero",
             ),
         ];

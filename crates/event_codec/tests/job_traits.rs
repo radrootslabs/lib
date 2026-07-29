@@ -5,10 +5,10 @@ use radroots_event::envelope::kind::{
     KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
 };
 use radroots_event::social::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
-use radroots_event::social::job_feedback::RadrootsJobFeedback;
-use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
-use radroots_event::social::job_result::RadrootsJobResult;
-use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
+use radroots_event::social::job_feedback::JobFeedback;
+use radroots_event::social::job_request::{JobInput, JobParam, JobRequest};
+use radroots_event::social::job_result::JobResult;
+use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 use radroots_event_codec::job::feedback::encode::to_wire_parts as to_feedback_wire_parts;
 use radroots_event_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
 use radroots_event_codec::job::result::encode::to_wire_parts as to_result_wire_parts;
@@ -22,8 +22,8 @@ const EVENT_SIG: &str = concat!(
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 );
 
-fn event_envelope(kind: u32, tags: Vec<Vec<String>>, content: &str) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+fn event_envelope(kind: u32, tags: Vec<Vec<String>>, content: &str) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: EVENT_ID.to_string(),
         author: AUTHOR.to_string(),
         created_at: 42,
@@ -35,17 +35,17 @@ fn event_envelope(kind: u32, tags: Vec<Vec<String>>, content: &str) -> RadrootsE
     .unwrap()
 }
 
-fn sample_request() -> RadrootsJobRequest {
-    RadrootsJobRequest {
+fn sample_request() -> JobRequest {
+    JobRequest {
         kind: u16::try_from(KIND_JOB_REQUEST_MIN + 1).expect("request kind must fit NIP-01"),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
             relay: None,
             marker: None,
         }],
         output: None,
-        params: vec![RadrootsJobParam {
+        params: vec![JobParam {
             key: "foo".to_string(),
             value: "bar".to_string(),
         }],
@@ -76,15 +76,15 @@ fn borrowed_event_adapter_builds_request_metadata() {
     assert_eq!(metadata.data, req);
 }
 
-fn sample_result() -> RadrootsJobResult {
-    RadrootsJobResult {
+fn sample_result() -> JobResult {
+    JobResult {
         kind: u16::try_from(KIND_JOB_RESULT_MIN + 1).expect("result kind must fit NIP-01"),
-        request_event: radroots_event::tag::RadrootsEventPtr {
+        request_event: radroots_event::tag::EventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
         request_json: Some("{\"foo\":\"bar\"}".to_string()),
-        inputs: vec![RadrootsJobInput {
+        inputs: vec![JobInput {
             data: "hello".to_string(),
             input_type: JobInputType::Text,
             relay: None,
@@ -100,12 +100,12 @@ fn sample_result() -> RadrootsJobResult {
     }
 }
 
-fn sample_feedback() -> RadrootsJobFeedback {
-    RadrootsJobFeedback {
+fn sample_feedback() -> JobFeedback {
+    JobFeedback {
         kind: u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01"),
         status: JobFeedbackStatus::Processing,
         extra_info: Some("processing".to_string()),
-        request_event: radroots_event::tag::RadrootsEventPtr {
+        request_event: radroots_event::tag::EventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },

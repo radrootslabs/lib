@@ -11,7 +11,7 @@ use crate::model::reconciliation_v1::{
     tag_value_type_name,
 };
 use radroots_event::envelope::kind::KIND_LIST_SET_FOLLOW;
-use radroots_event::wire::v1::RadrootsNip01EventWire;
+use radroots_event::wire::v1::Nip01EventWire;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqliteConnection, SqlitePool};
@@ -170,7 +170,7 @@ async fn seed_v1_raw_event(
     case_id: &str,
     input: &Nip09ReconciliationVectorInput,
 ) {
-    let wire = RadrootsNip01EventWire {
+    let wire = Nip01EventWire {
         id: input.event.id.clone(),
         pubkey: input.event.pubkey.clone(),
         created_at: input.event.created_at,

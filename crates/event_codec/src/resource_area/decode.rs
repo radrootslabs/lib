@@ -7,7 +7,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    envelope::kind::KIND_RESOURCE_AREA, farm::resource_area::RadrootsResourceArea, tag::name::TAG_D,
+    envelope::kind::KIND_RESOURCE_AREA, farm::resource_area::ResourceArea, tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;
@@ -36,7 +36,7 @@ pub fn resource_area_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsResourceArea, EventParseError> {
+) -> Result<ResourceArea, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "30370",
@@ -47,7 +47,7 @@ pub fn resource_area_from_event(
         return Err(EventParseError::InvalidJson("content"));
     }
     let d_tag = parse_d_tag(tags)?;
-    let mut area: RadrootsResourceArea =
+    let mut area: ResourceArea =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
     if area.d_tag.trim().is_empty() {
@@ -66,7 +66,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsResourceArea>, EventParseError> {
+) -> Result<RadrootsParsedData<ResourceArea>, EventParseError> {
     let area = resource_area_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -85,7 +85,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsResourceArea>, EventParseError> {
+) -> Result<RadrootsParsedEvent<ResourceArea>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

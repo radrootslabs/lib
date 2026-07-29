@@ -9,7 +9,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_COOP,
-    farm::coop::{RadrootsCoop, RadrootsCoopRef},
+    farm::coop::{Coop, CoopRef},
     tag::name::TAG_D,
 };
 
@@ -17,7 +17,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_G: &str = "g";
@@ -26,7 +26,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-pub fn coop_build_tags(coop: &RadrootsCoop) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn coop_build_tags(coop: &Coop) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if coop.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -51,7 +51,7 @@ pub fn coop_build_tags(coop: &RadrootsCoop) -> Result<Vec<Vec<String>>, EventEnc
     Ok(tags)
 }
 
-pub fn coop_ref_tags(coop: &RadrootsCoopRef) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn coop_ref_tags(coop: &CoopRef) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if coop.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("coop.pubkey"));
     }
@@ -72,21 +72,21 @@ pub fn coop_ref_tags(coop: &RadrootsCoopRef) -> Result<Vec<Vec<String>>, EventEn
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(coop: &RadrootsCoop) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(coop: &Coop) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(coop, KIND_COOP)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    coop: &RadrootsCoop,
+    coop: &Coop,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_COOP {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = coop_build_tags(coop)?;
     let content = serde_json::to_string(coop).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,

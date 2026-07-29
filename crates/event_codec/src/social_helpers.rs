@@ -7,11 +7,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    calendar::RadrootsCalendarParticipant,
-    social::{
-        RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaDimensions,
-        RadrootsSocialMediaThumbnail,
-    },
+    calendar::CalendarParticipant,
+    social::{SocialFarmAnchor, SocialLocation, SocialMediaDimensions, SocialMediaThumbnail},
 };
 
 use crate::error::{EventEncodeError, EventParseError};
@@ -25,7 +22,7 @@ pub(crate) fn validate_http_url(value: &str, field: &'static str) -> Result<(), 
     }
 }
 
-pub(crate) fn push_location_tags(tags: &mut Vec<Vec<String>>, location: &RadrootsSocialLocation) {
+pub(crate) fn push_location_tags(tags: &mut Vec<Vec<String>>, location: &SocialLocation) {
     if let Some(name) = location
         .name
         .as_deref()
@@ -42,17 +39,17 @@ pub(crate) fn push_location_tags(tags: &mut Vec<Vec<String>>, location: &Radroot
     }
 }
 
-pub(crate) fn location_from_tags(tags: &[Vec<String>]) -> Option<RadrootsSocialLocation> {
+pub(crate) fn location_from_tags(tags: &[Vec<String>]) -> Option<SocialLocation> {
     let name = first_tag_value(tags, "location");
     let geohash = first_tag_value(tags, "g");
     if name.is_none() && geohash.is_none() {
         None
     } else {
-        Some(RadrootsSocialLocation { name, geohash })
+        Some(SocialLocation { name, geohash })
     }
 }
 
-pub(crate) fn push_farm_anchor(tags: &mut Vec<Vec<String>>, farm: &RadrootsSocialFarmAnchor) {
+pub(crate) fn push_farm_anchor(tags: &mut Vec<Vec<String>>, farm: &SocialFarmAnchor) {
     if farm.farm.pubkey.trim().is_empty() || farm.farm.d_tag.trim().is_empty() {
         return;
     }
@@ -62,7 +59,7 @@ pub(crate) fn push_farm_anchor(tags: &mut Vec<Vec<String>>, farm: &RadrootsSocia
 
 pub(crate) fn push_participants(
     tags: &mut Vec<Vec<String>>,
-    participants: Option<&Vec<RadrootsCalendarParticipant>>,
+    participants: Option<&Vec<CalendarParticipant>>,
 ) {
     let Some(participants) = participants else {
         return;
@@ -93,14 +90,14 @@ pub(crate) fn first_tag_value(tags: &[Vec<String>], key: &str) -> Option<String>
         .cloned()
 }
 
-pub(crate) fn dimensions_tag(dimensions: &RadrootsSocialMediaDimensions) -> String {
+pub(crate) fn dimensions_tag(dimensions: &SocialMediaDimensions) -> String {
     format!("{}x{}", dimensions.width, dimensions.height)
 }
 
 pub(crate) fn parse_dimensions_tag(
     value: &str,
     tag: &'static str,
-) -> Result<RadrootsSocialMediaDimensions, EventParseError> {
+) -> Result<SocialMediaDimensions, EventParseError> {
     let Some((width, height)) = value.split_once('x') else {
         return Err(EventParseError::InvalidTag(tag));
     };
@@ -113,13 +110,10 @@ pub(crate) fn parse_dimensions_tag(
     if width == 0 || height == 0 {
         return Err(EventParseError::InvalidTag(tag));
     }
-    Ok(RadrootsSocialMediaDimensions { width, height })
+    Ok(SocialMediaDimensions { width, height })
 }
 
-pub(crate) fn push_thumbnail(
-    tags: &mut Vec<Vec<String>>,
-    thumbnail: &RadrootsSocialMediaThumbnail,
-) {
+pub(crate) fn push_thumbnail(tags: &mut Vec<Vec<String>>, thumbnail: &SocialMediaThumbnail) {
     if thumbnail.url.trim().is_empty() {
         return;
     }
@@ -153,14 +147,14 @@ mod tests {
         let mut tags = Vec::new();
         push_location_tags(
             &mut tags,
-            &RadrootsSocialLocation {
+            &SocialLocation {
                 name: Some("Pack shed".to_string()),
                 geohash: Some("c23nb62w20st".to_string()),
             },
         );
         push_participants(
             &mut tags,
-            Some(&vec![RadrootsCalendarParticipant {
+            Some(&vec![CalendarParticipant {
                 pubkey: "crew_pubkey".to_string(),
                 relay: None,
                 role: Some("participant".to_string()),
@@ -183,7 +177,7 @@ mod tests {
         let mut empty_tags = Vec::new();
         push_location_tags(
             &mut empty_tags,
-            &RadrootsSocialLocation {
+            &SocialLocation {
                 name: Some(" ".to_string()),
                 geohash: Some(" ".to_string()),
             },
@@ -202,8 +196,8 @@ mod tests {
         let mut anchor_tags = Vec::new();
         push_farm_anchor(
             &mut anchor_tags,
-            &RadrootsSocialFarmAnchor {
-                farm: radroots_event::farm::RadrootsFarmRef {
+            &SocialFarmAnchor {
+                farm: radroots_event::farm::FarmRef {
                     pubkey: " ".to_string(),
                     d_tag: "farm-d-tag".to_string(),
                 },
@@ -212,8 +206,8 @@ mod tests {
         );
         push_farm_anchor(
             &mut anchor_tags,
-            &RadrootsSocialFarmAnchor {
-                farm: radroots_event::farm::RadrootsFarmRef {
+            &SocialFarmAnchor {
+                farm: radroots_event::farm::FarmRef {
                     pubkey: "farm_pubkey".to_string(),
                     d_tag: " ".to_string(),
                 },
@@ -222,8 +216,8 @@ mod tests {
         );
         push_farm_anchor(
             &mut anchor_tags,
-            &RadrootsSocialFarmAnchor {
-                farm: radroots_event::farm::RadrootsFarmRef {
+            &SocialFarmAnchor {
+                farm: radroots_event::farm::FarmRef {
                     pubkey: "farm_pubkey".to_string(),
                     d_tag: "farm-d-tag".to_string(),
                 },
@@ -243,17 +237,17 @@ mod tests {
         push_participants(
             &mut participant_tags,
             Some(&vec![
-                RadrootsCalendarParticipant {
+                CalendarParticipant {
                     pubkey: " ".to_string(),
                     relay: None,
                     role: None,
                 },
-                RadrootsCalendarParticipant {
+                CalendarParticipant {
                     pubkey: "crew_pubkey".to_string(),
                     relay: Some("wss://relay.example.test".to_string()),
                     role: Some("host".to_string()),
                 },
-                RadrootsCalendarParticipant {
+                CalendarParticipant {
                     pubkey: "relay_only_pubkey".to_string(),
                     relay: Some("wss://relay.example.test".to_string()),
                     role: None,
@@ -299,23 +293,23 @@ mod tests {
         let mut thumbnail_tags = Vec::new();
         push_thumbnail(
             &mut thumbnail_tags,
-            &RadrootsSocialMediaThumbnail {
+            &SocialMediaThumbnail {
                 url: " ".to_string(),
                 dimensions: None,
             },
         );
         push_thumbnail(
             &mut thumbnail_tags,
-            &RadrootsSocialMediaThumbnail {
+            &SocialMediaThumbnail {
                 url: "https://media.example.test/thumb.jpg".to_string(),
                 dimensions: None,
             },
         );
         push_thumbnail(
             &mut thumbnail_tags,
-            &RadrootsSocialMediaThumbnail {
+            &SocialMediaThumbnail {
                 url: "https://media.example.test/thumb-large.jpg".to_string(),
-                dimensions: Some(RadrootsSocialMediaDimensions {
+                dimensions: Some(SocialMediaDimensions {
                     width: 320,
                     height: 240,
                 }),

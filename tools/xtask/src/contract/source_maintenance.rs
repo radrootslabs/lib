@@ -386,6 +386,34 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event/src/deletion.rs",
     },
     SourceSpec {
+        role: "event_dto_authority",
+        path: "crates/event/src/dto.rs",
+    },
+    SourceSpec {
+        role: "event_farm_crdt_authority",
+        path: "crates/event/src/farm_crdt.rs",
+    },
+    SourceSpec {
+        role: "event_knowledge_authority",
+        path: "crates/event/src/knowledge.rs",
+    },
+    SourceSpec {
+        role: "event_operational_listing_authority",
+        path: "crates/event/src/operational_listing.rs",
+    },
+    SourceSpec {
+        role: "event_order_authority",
+        path: "crates/event/src/order.rs",
+    },
+    SourceSpec {
+        role: "event_reply_authority",
+        path: "crates/event/src/reply.rs",
+    },
+    SourceSpec {
+        role: "event_trade_validation_authority",
+        path: "crates/event/src/trade_validation.rs",
+    },
+    SourceSpec {
         role: "event_relay_hint_authority",
         path: "crates/event/src/relay_hint.rs",
     },
@@ -416,6 +444,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
     SourceSpec {
         role: "event_codec_registry_v7_admission_authority",
         path: "crates/event_codec/src/admission/registry_v7.rs",
+    },
+    SourceSpec {
+        role: "event_codec_admission_facade",
+        path: "crates/event_codec/src/admission.rs",
     },
     SourceSpec {
         role: "event_codec_profile_inbound_facade",
@@ -466,6 +498,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_codec/src/food_availability/admission.rs",
     },
     SourceSpec {
+        role: "event_codec_food_authored_authority",
+        path: "crates/event_codec/src/food_availability/authored.rs",
+    },
+    SourceSpec {
         role: "event_codec_food_inbound_facade",
         path: "crates/event_codec/src/food_availability/inbound.rs",
     },
@@ -476,6 +512,18 @@ const SOURCE_SPECS: &[SourceSpec] = &[
     SourceSpec {
         role: "event_codec_job_traits_authority",
         path: "crates/event_codec/src/job/traits.rs",
+    },
+    SourceSpec {
+        role: "event_codec_knowledge_verification_authority",
+        path: "crates/event_codec/src/knowledge/verification.rs",
+    },
+    SourceSpec {
+        role: "event_codec_tag_builders_authority",
+        path: "crates/event_codec/src/tag_builders.rs",
+    },
+    SourceSpec {
+        role: "event_codec_trade_facade",
+        path: "crates/event_codec/src/trade/mod.rs",
     },
     SourceSpec {
         role: "event_store_dependency_authority",
@@ -630,22 +678,30 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event/src/contract.rs",
     "crates/event/src/contract/registry_v7.rs",
     "crates/event/src/deletion.rs",
+    "crates/event/src/dto.rs",
     "crates/event/src/draft.rs",
     "crates/event/src/envelope.rs",
     "crates/event/src/event_head.rs",
     "crates/event/src/event_head/v1.rs",
+    "crates/event/src/farm_crdt.rs",
     "crates/event/src/food_availability.rs",
     "crates/event/src/ids.rs",
+    "crates/event/src/knowledge.rs",
     "crates/event/src/kinds.rs",
     "crates/event/src/media.rs",
+    "crates/event/src/operational_listing.rs",
+    "crates/event/src/order.rs",
     "crates/event/src/post.rs",
     "crates/event/src/profile.rs",
     "crates/event/src/relay_hint.rs",
+    "crates/event/src/reply.rs",
     "crates/event/src/social.rs",
     "crates/event/src/tags.rs",
     "crates/event/src/trade.rs",
+    "crates/event/src/trade_validation.rs",
     "crates/event/src/wire.rs",
     "crates/event/src/wire/v1.rs",
+    "crates/event_codec/src/admission.rs",
     "crates/event_codec/src/admission/registry_v7.rs",
     "crates/event_codec/src/comment/inbound.rs",
     "crates/event_codec/src/comment/inbound/registry_v7.rs",
@@ -653,15 +709,19 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_codec/src/deletion/reconciliation_v1.rs",
     "crates/event_codec/src/error.rs",
     "crates/event_codec/src/food_availability/admission.rs",
+    "crates/event_codec/src/food_availability/authored.rs",
     "crates/event_codec/src/food_availability/inbound.rs",
     "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
     "crates/event_codec/src/job/traits.rs",
+    "crates/event_codec/src/knowledge/verification.rs",
     "crates/event_codec/src/post/inbound.rs",
     "crates/event_codec/src/post/inbound/registry_v7.rs",
     "crates/event_codec/src/profile/inbound.rs",
     "crates/event_codec/src/profile/inbound/registry_v7.rs",
     "crates/event_codec/src/reply/inbound.rs",
     "crates/event_codec/src/reply/inbound/registry_v7.rs",
+    "crates/event_codec/src/tag_builders.rs",
+    "crates/event_codec/src/trade/mod.rs",
     "crates/event_codec/src/verification.rs",
     "crates/event_codec/src/verification/v1.rs",
     "crates/event_store/Cargo.toml",
@@ -1996,7 +2056,7 @@ fn validate_ingest_capacity_authority(workspace_root: &Path) -> Result<(), Strin
             "acquire_event_store_write_lock(tx).await?",
             "validate_source_raw_authority(tx).await?",
             "validate_source_capacity_authority_fast_v1(tx).await?",
-            "ifkind_class==RadrootsEventKindClass::Ephemeral",
+            "ifkind_class==EventKindClass::Ephemeral",
             "SELECTEXISTS(SELECT1FROMevent_envelopesWHEREevent_id=?)",
             "raw_source_capacity_delta_v1(ingest,tags_json.as_str())?",
             "preflight_unique_raw_source_append_v1(tx,delta).await?",
@@ -3641,9 +3701,9 @@ struct DelegatedAuthoritySpec {
 }
 
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
-    "da4ba88c3cabe0e5ed6df4ca0115645c8a65d43cdea7d2dbf5e78d99256e8e15";
+    "730fe3bf7d8a1eed342ea58ca1ab6cdad9065cb6fdb1695244ebaeb17168cef2";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "b61fd74737d24230a64e4b4e215e2b270e03947ef60481c7e6f301bf3ca05fe5";
+    "174bf7141407d2259bd277b2d9d093ba664480ec2bd8cd37ca5edf5a32f594d8";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {

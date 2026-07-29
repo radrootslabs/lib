@@ -8,28 +8,25 @@ use alloc::{
 use radroots_event::{
     envelope::kind::KIND_COMMENT,
     post::comment::{
-        RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference,
-        RadrootsNip22CommentParentReference, RadrootsNip22CommentPosition,
-        RadrootsNip22CommentRoot, RadrootsNip22EventRootReference,
+        AuthoredNip22Comment, Nip22AddressRootReference, Nip22CommentParentReference,
+        Nip22CommentPosition, Nip22CommentRoot, Nip22EventRootReference,
     },
-    tag::relay_hint::RadrootsNostrRelayHint,
-    wire::RadrootsNip01EventWireParts,
+    tag::relay_hint::NostrRelayHint,
+    wire::Nip01EventWireParts,
 };
 use radroots_identity::PublicKey;
 
 /// Builds deterministic unsigned kind-1111 wire parts for a strict NIP-22
 /// comment.
-pub fn authored_nip22_comment_to_wire_parts(
-    comment: &RadrootsAuthoredNip22Comment,
-) -> RadrootsNip01EventWireParts {
+pub fn authored_nip22_comment_to_wire_parts(comment: &AuthoredNip22Comment) -> Nip01EventWireParts {
     let root = comment.root();
     let position = comment.position();
     let mut tags = Vec::with_capacity(6);
     match root {
-        RadrootsNip22CommentRoot::Event(reference) => {
+        Nip22CommentRoot::Event(reference) => {
             tags.push(event_reference_tag("E", reference));
         }
-        RadrootsNip22CommentRoot::Address(reference) => {
+        Nip22CommentRoot::Address(reference) => {
             tags.push(address_reference_tag("A", reference));
         }
     }
@@ -37,17 +34,14 @@ pub fn authored_nip22_comment_to_wire_parts(
     tags.push(participant_tag("P", root.author(), root.relay()));
 
     match (root, position) {
-        (
-            RadrootsNip22CommentRoot::Event(reference),
-            RadrootsNip22CommentPosition::TopLevelEvent,
-        ) => {
+        (Nip22CommentRoot::Event(reference), Nip22CommentPosition::TopLevelEvent) => {
             tags.push(event_reference_tag("e", reference));
             tags.push(vec!["k".to_string(), root.kind().as_u32().to_string()]);
             tags.push(participant_tag("p", reference.author(), reference.relay()));
         }
         (
-            RadrootsNip22CommentRoot::Address(reference),
-            RadrootsNip22CommentPosition::TopLevelAddress { current_revision },
+            Nip22CommentRoot::Address(reference),
+            Nip22CommentPosition::TopLevelAddress { current_revision },
         ) => {
             tags.push(address_reference_tag("a", reference));
             tags.push(optional_relay_tag(
@@ -58,7 +52,7 @@ pub fn authored_nip22_comment_to_wire_parts(
             tags.push(vec!["k".to_string(), root.kind().as_u32().to_string()]);
             tags.push(participant_tag("p", reference.author(), reference.relay()));
         }
-        (_, RadrootsNip22CommentPosition::Nested { parent }) => {
+        (_, Nip22CommentPosition::Nested { parent }) => {
             tags.push(parent_reference_tag(parent));
             tags.push(vec!["k".to_string(), KIND_COMMENT.to_string()]);
             tags.push(participant_tag("p", parent.author(), parent.relay()));
@@ -66,14 +60,14 @@ pub fn authored_nip22_comment_to_wire_parts(
         _ => unreachable!("authored Comment constructors preserve root and position compatibility"),
     }
 
-    RadrootsNip01EventWireParts {
+    Nip01EventWireParts {
         kind: KIND_COMMENT,
         content: comment.content().to_string(),
         tags,
     }
 }
 
-fn event_reference_tag(name: &str, reference: &RadrootsNip22EventRootReference) -> Vec<String> {
+fn event_reference_tag(name: &str, reference: &Nip22EventRootReference) -> Vec<String> {
     vec![
         name.to_string(),
         reference.event_id().to_hex(),
@@ -82,11 +76,11 @@ fn event_reference_tag(name: &str, reference: &RadrootsNip22EventRootReference) 
     ]
 }
 
-fn address_reference_tag(name: &str, reference: &RadrootsNip22AddressRootReference) -> Vec<String> {
+fn address_reference_tag(name: &str, reference: &Nip22AddressRootReference) -> Vec<String> {
     optional_relay_tag(name, reference.coordinate().as_str(), reference.relay())
 }
 
-fn parent_reference_tag(reference: &RadrootsNip22CommentParentReference) -> Vec<String> {
+fn parent_reference_tag(reference: &Nip22CommentParentReference) -> Vec<String> {
     vec![
         "e".to_string(),
         reference.event_id().to_hex(),
@@ -95,19 +89,11 @@ fn parent_reference_tag(reference: &RadrootsNip22CommentParentReference) -> Vec<
     ]
 }
 
-fn participant_tag(
-    name: &str,
-    author: &PublicKey,
-    relay: Option<&RadrootsNostrRelayHint>,
-) -> Vec<String> {
+fn participant_tag(name: &str, author: &PublicKey, relay: Option<&NostrRelayHint>) -> Vec<String> {
     optional_relay_tag(name, &author.to_hex(), relay)
 }
 
-fn optional_relay_tag(
-    name: &str,
-    value: &str,
-    relay: Option<&RadrootsNostrRelayHint>,
-) -> Vec<String> {
+fn optional_relay_tag(name: &str, value: &str, relay: Option<&NostrRelayHint>) -> Vec<String> {
     let mut tag = vec![name.to_string(), value.to_string()];
     if let Some(relay) = relay {
         tag.push(relay.as_str().to_string());
@@ -123,9 +109,9 @@ mod tests {
             KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING,
         },
         post::comment::{
-            RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES, RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
-            RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
-            RadrootsNip22CommentParentReference, RadrootsNip22EventRootReference,
+            Nip22AddressRootReference, Nip22CommentError, Nip22CommentParentReference,
+            Nip22EventRootReference, RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES,
+            RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
         },
     };
 
@@ -133,18 +119,18 @@ mod tests {
         crate::test_fixtures::fixture_public_key_hex(character)
     }
 
-    fn event_root(relay: Option<&str>) -> RadrootsNip22EventRootReference {
-        RadrootsNip22EventRootReference::parse(h('a'), h('b'), KIND_CLASSIFIED_LISTING, relay)
+    fn event_root(relay: Option<&str>) -> Nip22EventRootReference {
+        Nip22EventRootReference::parse(h('a'), h('b'), KIND_CLASSIFIED_LISTING, relay)
             .expect("event root")
     }
 
-    fn address_root(relay: Option<&str>) -> RadrootsNip22AddressRootReference {
-        RadrootsNip22AddressRootReference::parse(format!("31922:{}:market-day", h('b')), relay)
+    fn address_root(relay: Option<&str>) -> Nip22AddressRootReference {
+        Nip22AddressRootReference::parse(format!("31922:{}:market-day", h('b')), relay)
             .expect("address root")
     }
 
-    fn parent(relay: Option<&str>) -> RadrootsNip22CommentParentReference {
-        RadrootsNip22CommentParentReference::parse(h('c'), h('d'), relay).expect("parent")
+    fn parent(relay: Option<&str>) -> Nip22CommentParentReference {
+        Nip22CommentParentReference::parse(h('c'), h('d'), relay).expect("parent")
     }
 
     #[derive(Clone, Copy)]
@@ -158,29 +144,27 @@ mod tests {
     fn authored_shape(
         shape: AuthoredShape,
         content: String,
-    ) -> Result<RadrootsAuthoredNip22Comment, RadrootsNip22CommentError> {
+    ) -> Result<AuthoredNip22Comment, Nip22CommentError> {
         match shape {
             AuthoredShape::TopEvent => {
-                RadrootsAuthoredNip22Comment::top_level_event(content, event_root(None))
+                AuthoredNip22Comment::top_level_event(content, event_root(None))
             }
-            AuthoredShape::TopAddress => RadrootsAuthoredNip22Comment::parse_top_level_address(
-                content,
-                address_root(None),
-                h('e'),
-            ),
+            AuthoredShape::TopAddress => {
+                AuthoredNip22Comment::parse_top_level_address(content, address_root(None), h('e'))
+            }
             AuthoredShape::NestedEvent => {
-                RadrootsAuthoredNip22Comment::nested(content, event_root(None), parent(None))
+                AuthoredNip22Comment::nested(content, event_root(None), parent(None))
             }
             AuthoredShape::NestedAddress => {
-                RadrootsAuthoredNip22Comment::nested(content, address_root(None), parent(None))
+                AuthoredNip22Comment::nested(content, address_root(None), parent(None))
             }
         }
     }
 
     #[test]
     fn emits_exact_top_level_event_tags_with_empty_relay_slot() {
-        let comment = RadrootsAuthoredNip22Comment::top_level_event("Comment", event_root(None))
-            .expect("comment");
+        let comment =
+            AuthoredNip22Comment::top_level_event("Comment", event_root(None)).expect("comment");
         assert_eq!(
             authored_nip22_comment_to_wire_parts(&comment).tags,
             vec![
@@ -196,7 +180,7 @@ mod tests {
 
     #[test]
     fn emits_exact_top_level_address_tags_with_revision_without_author() {
-        let comment = RadrootsAuthoredNip22Comment::parse_top_level_address(
+        let comment = AuthoredNip22Comment::parse_top_level_address(
             "Comment",
             address_root(Some("wss://relay.example")),
             h('e'),
@@ -217,8 +201,8 @@ mod tests {
     #[test]
     fn emits_exact_nested_event_and_address_shapes() {
         for root in [
-            RadrootsNip22CommentRoot::from(
-                RadrootsNip22EventRootReference::parse(
+            Nip22CommentRoot::from(
+                Nip22EventRootReference::parse(
                     h('a'),
                     h('b'),
                     KIND_CALENDAR_TIME_EVENT,
@@ -226,20 +210,17 @@ mod tests {
                 )
                 .expect("event root"),
             ),
-            RadrootsNip22CommentRoot::from(
-                RadrootsNip22AddressRootReference::parse(
+            Nip22CommentRoot::from(
+                Nip22AddressRootReference::parse(
                     format!("31922:{}:market", h('b')),
                     Some("wss://root.example"),
                 )
                 .expect("address root"),
             ),
         ] {
-            let comment = RadrootsAuthoredNip22Comment::nested(
-                "Reply",
-                root,
-                parent(Some("wss://parent.example")),
-            )
-            .expect("comment");
+            let comment =
+                AuthoredNip22Comment::nested("Reply", root, parent(Some("wss://parent.example")))
+                    .expect("comment");
             let tags = authored_nip22_comment_to_wire_parts(&comment).tags;
             assert_eq!(tags.len(), 6);
             assert_eq!(tags[4], vec!["k".to_string(), KIND_COMMENT.to_string()]);
@@ -301,7 +282,7 @@ mod tests {
             .to_string();
             assert!(matches!(
                 error,
-                RadrootsNip22CommentError::EventWireTooLarge { max, actual }
+                Nip22CommentError::EventWireTooLarge { max, actual }
                     if max == RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES
                         && actual == overflow_json.len()
             ));

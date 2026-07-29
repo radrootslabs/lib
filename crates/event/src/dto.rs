@@ -1,10 +1,10 @@
 #![allow(dead_code, unused_imports)]
 
-use crate::envelope::RadrootsEventEnvelope;
+use crate::envelope::EventEnvelope;
 
 #[derive(dto_bindgen::Dto)]
 #[dto(export)]
-pub struct RadrootsNip01EventWireDto {
+pub struct Nip01EventWireDto {
     pub id: String,
     pub pubkey: String,
     #[dto(int = "json_number")]
@@ -13,13 +13,13 @@ pub struct RadrootsNip01EventWireDto {
     pub tags: Vec<Vec<String>>,
     pub content: String,
     pub sig: String,
-    pub extra: RadrootsNip01EventExtraDto,
+    pub extra: Nip01EventExtraDto,
 }
 
 #[derive(dto_bindgen::Dto)]
 #[dto(export)]
 #[dto(as = "string_enum")]
-pub enum RadrootsSignedEventVerificationStateDto {
+pub enum SignedEventVerificationStateDto {
     #[dto(rename = "id_verified")]
     IdVerified,
 }
@@ -27,30 +27,30 @@ pub enum RadrootsSignedEventVerificationStateDto {
 #[derive(dto_bindgen::Dto)]
 #[dto(export)]
 #[dto(as = "string_enum")]
-pub enum RadrootsVerifiedSignedEventVerificationStateDto {
+pub enum VerifiedSignedEventVerificationStateDto {
     #[dto(rename = "signature_verified")]
     SignatureVerified,
 }
 
 #[derive(dto_bindgen::Dto)]
 #[dto(export)]
-pub struct RadrootsSignedEventDto {
-    pub state: RadrootsSignedEventVerificationStateDto,
-    pub envelope: RadrootsEventEnvelope,
-    pub wire: RadrootsNip01EventWireDto,
+pub struct SignedEventDto {
+    pub state: SignedEventVerificationStateDto,
+    pub envelope: EventEnvelope,
+    pub wire: Nip01EventWireDto,
     pub raw_json: String,
 }
 
 #[derive(dto_bindgen::Dto)]
 #[dto(export)]
-pub struct RadrootsVerifiedSignedEventDto {
-    pub state: RadrootsVerifiedSignedEventVerificationStateDto,
-    pub signed_event: RadrootsSignedEventDto,
+pub struct VerifiedSignedEventDto {
+    pub state: VerifiedSignedEventVerificationStateDto,
+    pub signed_event: SignedEventDto,
 }
 
-pub struct RadrootsNip01EventExtraDto;
+pub struct Nip01EventExtraDto;
 
-impl dto_bindgen::Dto for RadrootsNip01EventExtraDto {
+impl dto_bindgen::Dto for Nip01EventExtraDto {
     fn describe(_ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         dto_bindgen::__private::TypeRef::Override(dto_bindgen::__private::TargetOverride::new(
             dto_bindgen::__private::BackendId::TypeScript,
@@ -80,11 +80,11 @@ mod tests {
         assert_eq!(registry.roots.len(), dto_roots().len());
         let export_names = registry_export_names(&registry);
 
-        assert!(export_names.contains("RadrootsEventEnvelope"));
-        assert!(export_names.contains("RadrootsNip01EventWireDto"));
-        assert!(export_names.contains("RadrootsSignedEventDto"));
-        assert!(export_names.contains("RadrootsVerifiedSignedEventDto"));
-        assert!(export_names.contains("RadrootsOperationalListingImageSize"));
+        assert!(export_names.contains("EventEnvelope"));
+        assert!(export_names.contains("Nip01EventWireDto"));
+        assert!(export_names.contains("SignedEventDto"));
+        assert!(export_names.contains("VerifiedSignedEventDto"));
+        assert!(export_names.contains("OperationalListingImageSize"));
     }
 
     #[test]
@@ -92,13 +92,13 @@ mod tests {
         let registry = build_registry(dto_roots());
 
         let summary = registry
-            .struct_field_presence("RadrootsOperationalListingProduct", "summary")
+            .struct_field_presence("OperationalListingProduct", "summary")
             .expect("summary field exists");
         assert!(!summary.required_on_deserialize);
         assert!(summary.nullable);
 
         let d_tag = registry
-            .struct_field_presence("RadrootsEventRef", "d_tag")
+            .struct_field_presence("EventRef", "d_tag")
             .expect("d_tag field exists");
         assert!(!d_tag.required_on_deserialize);
         assert!(d_tag.nullable);
@@ -111,7 +111,7 @@ mod tests {
         let rust_names = registry_rust_names(&registry);
 
         for obsolete_export in [
-            "RadrootsOrderEnvelope",
+            "OrderEnvelope",
             "RadrootsCommercialEnvelope",
             "RadrootsCommercialMessagePayload",
             "RadrootsCommercialMessageType",
@@ -141,13 +141,13 @@ mod tests {
         }
 
         for source_root in [
-            "RadrootsCommercialDomain",
-            "RadrootsOrderEventType",
-            "RadrootsOrderRequest",
-            "RadrootsOrderDecision",
-            "RadrootsOrderDecisionOutcome",
-            "RadrootsOrderCancellation",
-            "RadrootsOperationalListingParseError",
+            "CommercialDomain",
+            "OrderEventType",
+            "OrderRequest",
+            "OrderDecision",
+            "OrderDecisionOutcome",
+            "OrderCancellation",
+            "OperationalListingParseError",
         ] {
             assert!(
                 rust_names.contains(source_root),

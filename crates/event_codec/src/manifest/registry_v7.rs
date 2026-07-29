@@ -7,13 +7,12 @@ use alloc::{
 
 use radroots_event::{
     contract::{
-        AuthorRole, RadrootsContentSchema, RadrootsEventAuthoringPolicy, RadrootsEventClass,
-        RadrootsEventContract, RadrootsEventDiscriminator, RadrootsEventPrivacy,
-        RadrootsEventStability, RadrootsKindContract, RadrootsNostrStandard, RadrootsReducer,
-        RadrootsTagCardinality, RadrootsTagContract, RadrootsTagSemantic, RadrootsTagValueType,
-        all_event_contracts_registry_v7, all_kind_contracts_registry_v7,
+        AuthorRole, ContentSchema, EventAuthoringPolicy, EventClass, EventContract,
+        EventDiscriminator, EventPrivacy, EventStability, KindContract, NostrStandard, Reducer,
+        TagCardinality, TagContract, TagSemantic, TagValueType, all_event_contracts_registry_v7,
+        all_kind_contracts_registry_v7,
     },
-    listing::classified::RadrootsClassifiedListingPartition,
+    listing::classified::ClassifiedListingPartition,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -349,7 +348,7 @@ pub fn parse_event_contract_registry_v7_inventory_json(
 
 fn kind_inventory_entry(
     ordinal: usize,
-    contract: &RadrootsKindContract,
+    contract: &KindContract,
 ) -> RadrootsKindContractRegistryV7InventoryEntry {
     RadrootsKindContractRegistryV7InventoryEntry {
         ordinal,
@@ -368,7 +367,7 @@ fn kind_inventory_entry(
 
 fn event_inventory_entry(
     ordinal: usize,
-    contract: &RadrootsEventContract,
+    contract: &EventContract,
 ) -> RadrootsEventContractRegistryV7InventoryEntry {
     RadrootsEventContractRegistryV7InventoryEntry {
         ordinal,
@@ -393,57 +392,55 @@ fn event_inventory_entry(
     }
 }
 
-fn class_inventory(value: RadrootsEventClass) -> RadrootsEventContractRegistryV7Class {
+fn class_inventory(value: EventClass) -> RadrootsEventContractRegistryV7Class {
     match value {
-        RadrootsEventClass::Regular => RadrootsEventContractRegistryV7Class::Regular,
-        RadrootsEventClass::Replaceable => RadrootsEventContractRegistryV7Class::Replaceable,
-        RadrootsEventClass::Addressable => RadrootsEventContractRegistryV7Class::Addressable,
-        RadrootsEventClass::Ephemeral => RadrootsEventContractRegistryV7Class::Ephemeral,
+        EventClass::Regular => RadrootsEventContractRegistryV7Class::Regular,
+        EventClass::Replaceable => RadrootsEventContractRegistryV7Class::Replaceable,
+        EventClass::Addressable => RadrootsEventContractRegistryV7Class::Addressable,
+        EventClass::Ephemeral => RadrootsEventContractRegistryV7Class::Ephemeral,
     }
 }
 
-fn standard_inventory(value: RadrootsNostrStandard) -> RadrootsEventContractRegistryV7Standard {
+fn standard_inventory(value: NostrStandard) -> RadrootsEventContractRegistryV7Standard {
     match value {
-        RadrootsNostrStandard::Nip01 => RadrootsEventContractRegistryV7Standard::Nip01,
-        RadrootsNostrStandard::Nip09 => RadrootsEventContractRegistryV7Standard::Nip09,
-        RadrootsNostrStandard::Nip17 => RadrootsEventContractRegistryV7Standard::Nip17,
-        RadrootsNostrStandard::Nip18 => RadrootsEventContractRegistryV7Standard::Nip18,
-        RadrootsNostrStandard::Nip22 => RadrootsEventContractRegistryV7Standard::Nip22,
-        RadrootsNostrStandard::Nip23 => RadrootsEventContractRegistryV7Standard::Nip23,
-        RadrootsNostrStandard::Nip25 => RadrootsEventContractRegistryV7Standard::Nip25,
-        RadrootsNostrStandard::Nip28 => RadrootsEventContractRegistryV7Standard::Nip28,
-        RadrootsNostrStandard::Nip29 => RadrootsEventContractRegistryV7Standard::Nip29,
-        RadrootsNostrStandard::Nip42 => RadrootsEventContractRegistryV7Standard::Nip42,
-        RadrootsNostrStandard::Nip51 => RadrootsEventContractRegistryV7Standard::Nip51,
-        RadrootsNostrStandard::Nip52 => RadrootsEventContractRegistryV7Standard::Nip52,
-        RadrootsNostrStandard::Nip53 => RadrootsEventContractRegistryV7Standard::Nip53,
-        RadrootsNostrStandard::Nip54 => RadrootsEventContractRegistryV7Standard::Nip54,
-        RadrootsNostrStandard::Nip56 => RadrootsEventContractRegistryV7Standard::Nip56,
-        RadrootsNostrStandard::Nip57 => RadrootsEventContractRegistryV7Standard::Nip57,
-        RadrootsNostrStandard::Nip78 => RadrootsEventContractRegistryV7Standard::Nip78,
-        RadrootsNostrStandard::Nip90 => RadrootsEventContractRegistryV7Standard::Nip90,
-        RadrootsNostrStandard::Nip94 => RadrootsEventContractRegistryV7Standard::Nip94,
-        RadrootsNostrStandard::Nip98 => RadrootsEventContractRegistryV7Standard::Nip98,
-        RadrootsNostrStandard::Nip99 => RadrootsEventContractRegistryV7Standard::Nip99,
-        RadrootsNostrStandard::Radroots => RadrootsEventContractRegistryV7Standard::Radroots,
+        NostrStandard::Nip01 => RadrootsEventContractRegistryV7Standard::Nip01,
+        NostrStandard::Nip09 => RadrootsEventContractRegistryV7Standard::Nip09,
+        NostrStandard::Nip17 => RadrootsEventContractRegistryV7Standard::Nip17,
+        NostrStandard::Nip18 => RadrootsEventContractRegistryV7Standard::Nip18,
+        NostrStandard::Nip22 => RadrootsEventContractRegistryV7Standard::Nip22,
+        NostrStandard::Nip23 => RadrootsEventContractRegistryV7Standard::Nip23,
+        NostrStandard::Nip25 => RadrootsEventContractRegistryV7Standard::Nip25,
+        NostrStandard::Nip28 => RadrootsEventContractRegistryV7Standard::Nip28,
+        NostrStandard::Nip29 => RadrootsEventContractRegistryV7Standard::Nip29,
+        NostrStandard::Nip42 => RadrootsEventContractRegistryV7Standard::Nip42,
+        NostrStandard::Nip51 => RadrootsEventContractRegistryV7Standard::Nip51,
+        NostrStandard::Nip52 => RadrootsEventContractRegistryV7Standard::Nip52,
+        NostrStandard::Nip53 => RadrootsEventContractRegistryV7Standard::Nip53,
+        NostrStandard::Nip54 => RadrootsEventContractRegistryV7Standard::Nip54,
+        NostrStandard::Nip56 => RadrootsEventContractRegistryV7Standard::Nip56,
+        NostrStandard::Nip57 => RadrootsEventContractRegistryV7Standard::Nip57,
+        NostrStandard::Nip78 => RadrootsEventContractRegistryV7Standard::Nip78,
+        NostrStandard::Nip90 => RadrootsEventContractRegistryV7Standard::Nip90,
+        NostrStandard::Nip94 => RadrootsEventContractRegistryV7Standard::Nip94,
+        NostrStandard::Nip98 => RadrootsEventContractRegistryV7Standard::Nip98,
+        NostrStandard::Nip99 => RadrootsEventContractRegistryV7Standard::Nip99,
+        NostrStandard::Radroots => RadrootsEventContractRegistryV7Standard::Radroots,
     }
 }
 
-fn stability_inventory(value: RadrootsEventStability) -> RadrootsEventContractRegistryV7Stability {
+fn stability_inventory(value: EventStability) -> RadrootsEventContractRegistryV7Stability {
     match value {
-        RadrootsEventStability::Stable => RadrootsEventContractRegistryV7Stability::Stable,
-        RadrootsEventStability::Experimental => {
-            RadrootsEventContractRegistryV7Stability::Experimental
-        }
+        EventStability::Stable => RadrootsEventContractRegistryV7Stability::Stable,
+        EventStability::Experimental => RadrootsEventContractRegistryV7Stability::Experimental,
     }
 }
 
-fn privacy_inventory(value: RadrootsEventPrivacy) -> RadrootsEventContractRegistryV7Privacy {
+fn privacy_inventory(value: EventPrivacy) -> RadrootsEventContractRegistryV7Privacy {
     match value {
-        RadrootsEventPrivacy::Public => RadrootsEventContractRegistryV7Privacy::Public,
-        RadrootsEventPrivacy::Encrypted => RadrootsEventContractRegistryV7Privacy::Encrypted,
-        RadrootsEventPrivacy::LocalOnly => RadrootsEventContractRegistryV7Privacy::LocalOnly,
-        RadrootsEventPrivacy::Secret => RadrootsEventContractRegistryV7Privacy::Secret,
+        EventPrivacy::Public => RadrootsEventContractRegistryV7Privacy::Public,
+        EventPrivacy::Encrypted => RadrootsEventContractRegistryV7Privacy::Encrypted,
+        EventPrivacy::LocalOnly => RadrootsEventContractRegistryV7Privacy::LocalOnly,
+        EventPrivacy::Secret => RadrootsEventContractRegistryV7Privacy::Secret,
     }
 }
 
@@ -461,88 +458,80 @@ fn author_role_inventory(value: AuthorRole) -> RadrootsEventContractRegistryV7Ac
     }
 }
 
-fn content_schema_inventory(
-    value: RadrootsContentSchema,
-) -> RadrootsEventContractRegistryV7ContentSchema {
+fn content_schema_inventory(value: ContentSchema) -> RadrootsEventContractRegistryV7ContentSchema {
     match value {
-        RadrootsContentSchema::Empty => RadrootsEventContractRegistryV7ContentSchema::Empty,
-        RadrootsContentSchema::JsonObject => {
-            RadrootsEventContractRegistryV7ContentSchema::JsonObject
-        }
-        RadrootsContentSchema::PlainText => RadrootsEventContractRegistryV7ContentSchema::PlainText,
-        RadrootsContentSchema::Markdown => RadrootsEventContractRegistryV7ContentSchema::Markdown,
-        RadrootsContentSchema::Djot => RadrootsEventContractRegistryV7ContentSchema::Djot,
-        RadrootsContentSchema::Encrypted => RadrootsEventContractRegistryV7ContentSchema::Encrypted,
-        RadrootsContentSchema::BinaryReference => {
+        ContentSchema::Empty => RadrootsEventContractRegistryV7ContentSchema::Empty,
+        ContentSchema::JsonObject => RadrootsEventContractRegistryV7ContentSchema::JsonObject,
+        ContentSchema::PlainText => RadrootsEventContractRegistryV7ContentSchema::PlainText,
+        ContentSchema::Markdown => RadrootsEventContractRegistryV7ContentSchema::Markdown,
+        ContentSchema::Djot => RadrootsEventContractRegistryV7ContentSchema::Djot,
+        ContentSchema::Encrypted => RadrootsEventContractRegistryV7ContentSchema::Encrypted,
+        ContentSchema::BinaryReference => {
             RadrootsEventContractRegistryV7ContentSchema::BinaryReference
         }
     }
 }
 
 fn authoring_policy_inventory(
-    value: RadrootsEventAuthoringPolicy,
+    value: EventAuthoringPolicy,
 ) -> RadrootsEventContractRegistryV7AuthoringPolicy {
     match value {
-        RadrootsEventAuthoringPolicy::GenericDraft => {
+        EventAuthoringPolicy::GenericDraft => {
             RadrootsEventContractRegistryV7AuthoringPolicy::GenericDraft
         }
-        RadrootsEventAuthoringPolicy::TypedOnly => {
+        EventAuthoringPolicy::TypedOnly => {
             RadrootsEventContractRegistryV7AuthoringPolicy::TypedOnly
         }
-        RadrootsEventAuthoringPolicy::ReadOnly => {
-            RadrootsEventContractRegistryV7AuthoringPolicy::ReadOnly
-        }
+        EventAuthoringPolicy::ReadOnly => RadrootsEventContractRegistryV7AuthoringPolicy::ReadOnly,
     }
 }
 
 fn discriminator_inventory(
-    value: &RadrootsEventDiscriminator,
+    value: &EventDiscriminator,
 ) -> RadrootsEventContractRegistryV7Discriminator {
     match value {
-        RadrootsEventDiscriminator::KindOnly => {
-            RadrootsEventContractRegistryV7Discriminator::KindOnly
-        }
-        RadrootsEventDiscriminator::AdmissionOnly => {
+        EventDiscriminator::KindOnly => RadrootsEventContractRegistryV7Discriminator::KindOnly,
+        EventDiscriminator::AdmissionOnly => {
             RadrootsEventContractRegistryV7Discriminator::AdmissionOnly
         }
-        RadrootsEventDiscriminator::ClassifiedListingPartition(value) => {
+        EventDiscriminator::ClassifiedListingPartition(value) => {
             RadrootsEventContractRegistryV7Discriminator::ClassifiedListingPartition {
                 value: classified_listing_partition_inventory(*value),
             }
         }
-        RadrootsEventDiscriminator::DTagExact(value) => {
+        EventDiscriminator::DTagExact(value) => {
             RadrootsEventContractRegistryV7Discriminator::DTagExact {
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::DTagPrefix(prefix) => {
+        EventDiscriminator::DTagPrefix(prefix) => {
             RadrootsEventContractRegistryV7Discriminator::DTagPrefix {
                 prefix: (*prefix).to_string(),
             }
         }
-        RadrootsEventDiscriminator::DTagSuffix(suffix) => {
+        EventDiscriminator::DTagSuffix(suffix) => {
             RadrootsEventContractRegistryV7Discriminator::DTagSuffix {
                 suffix: (*suffix).to_string(),
             }
         }
-        RadrootsEventDiscriminator::TagEquals { name, value } => {
+        EventDiscriminator::TagEquals { name, value } => {
             RadrootsEventContractRegistryV7Discriminator::TagEquals {
                 name: (*name).to_string(),
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::ContentJsonFieldEquals { field, value } => {
+        EventDiscriminator::ContentJsonFieldEquals { field, value } => {
             RadrootsEventContractRegistryV7Discriminator::ContentJsonFieldEquals {
                 field: (*field).to_string(),
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::EnvelopeType(value) => {
+        EventDiscriminator::EnvelopeType(value) => {
             RadrootsEventContractRegistryV7Discriminator::EnvelopeType {
                 value: (*value).to_string(),
             }
         }
-        RadrootsEventDiscriminator::Composite(parts) => {
+        EventDiscriminator::Composite(parts) => {
             RadrootsEventContractRegistryV7Discriminator::Composite {
                 parts: parts.iter().map(discriminator_inventory).collect(),
             }
@@ -666,25 +655,25 @@ fn discriminator_string_field(
 }
 
 fn classified_listing_partition_inventory(
-    value: RadrootsClassifiedListingPartition,
+    value: ClassifiedListingPartition,
 ) -> RadrootsEventContractRegistryV7ClassifiedListingPartition {
     match value {
-        RadrootsClassifiedListingPartition::FocusedFoodAvailability => {
+        ClassifiedListingPartition::FocusedFoodAvailability => {
             RadrootsEventContractRegistryV7ClassifiedListingPartition::FocusedFoodAvailability
         }
-        RadrootsClassifiedListingPartition::OperationalListing => {
+        ClassifiedListingPartition::OperationalListing => {
             RadrootsEventContractRegistryV7ClassifiedListingPartition::OperationalListing
         }
-        RadrootsClassifiedListingPartition::GenericNip99 => {
+        ClassifiedListingPartition::GenericNip99 => {
             RadrootsEventContractRegistryV7ClassifiedListingPartition::GenericNip99
         }
-        RadrootsClassifiedListingPartition::Ambiguous => {
+        ClassifiedListingPartition::Ambiguous => {
             RadrootsEventContractRegistryV7ClassifiedListingPartition::Ambiguous
         }
     }
 }
 
-fn tag_inventory(contract: &RadrootsTagContract) -> RadrootsEventContractRegistryV7Tag {
+fn tag_inventory(contract: &TagContract) -> RadrootsEventContractRegistryV7Tag {
     RadrootsEventContractRegistryV7Tag {
         name: contract.name.to_string(),
         cardinality: tag_cardinality_inventory(contract.cardinality),
@@ -695,192 +684,136 @@ fn tag_inventory(contract: &RadrootsTagContract) -> RadrootsEventContractRegistr
 }
 
 fn tag_cardinality_inventory(
-    value: RadrootsTagCardinality,
+    value: TagCardinality,
 ) -> RadrootsEventContractRegistryV7TagCardinality {
     match value {
-        RadrootsTagCardinality::RequiredOne => {
-            RadrootsEventContractRegistryV7TagCardinality::RequiredOne
-        }
-        RadrootsTagCardinality::OptionalOne => {
-            RadrootsEventContractRegistryV7TagCardinality::OptionalOne
-        }
-        RadrootsTagCardinality::OptionalMany => {
-            RadrootsEventContractRegistryV7TagCardinality::OptionalMany
-        }
-        RadrootsTagCardinality::RequiredMany => {
-            RadrootsEventContractRegistryV7TagCardinality::RequiredMany
-        }
+        TagCardinality::RequiredOne => RadrootsEventContractRegistryV7TagCardinality::RequiredOne,
+        TagCardinality::OptionalOne => RadrootsEventContractRegistryV7TagCardinality::OptionalOne,
+        TagCardinality::OptionalMany => RadrootsEventContractRegistryV7TagCardinality::OptionalMany,
+        TagCardinality::RequiredMany => RadrootsEventContractRegistryV7TagCardinality::RequiredMany,
     }
 }
 
-fn tag_semantic_inventory(
-    value: RadrootsTagSemantic,
-) -> RadrootsEventContractRegistryV7TagSemantic {
+fn tag_semantic_inventory(value: TagSemantic) -> RadrootsEventContractRegistryV7TagSemantic {
     match value {
-        RadrootsTagSemantic::AddressableCoordinate => {
+        TagSemantic::AddressableCoordinate => {
             RadrootsEventContractRegistryV7TagSemantic::AddressableCoordinate
         }
-        RadrootsTagSemantic::CalendarEventAuthor => {
+        TagSemantic::CalendarEventAuthor => {
             RadrootsEventContractRegistryV7TagSemantic::CalendarEventAuthor
         }
-        RadrootsTagSemantic::CalendarEventReference => {
+        TagSemantic::CalendarEventReference => {
             RadrootsEventContractRegistryV7TagSemantic::CalendarEventReference
         }
-        RadrootsTagSemantic::CalendarEventRevision => {
+        TagSemantic::CalendarEventRevision => {
             RadrootsEventContractRegistryV7TagSemantic::CalendarEventRevision
         }
-        RadrootsTagSemantic::CalendarInclusionRequest => {
+        TagSemantic::CalendarInclusionRequest => {
             RadrootsEventContractRegistryV7TagSemantic::CalendarInclusionRequest
         }
-        RadrootsTagSemantic::CalendarEnd => RadrootsEventContractRegistryV7TagSemantic::CalendarEnd,
-        RadrootsTagSemantic::CalendarStart => {
-            RadrootsEventContractRegistryV7TagSemantic::CalendarStart
-        }
-        RadrootsTagSemantic::Category => RadrootsEventContractRegistryV7TagSemantic::Category,
-        RadrootsTagSemantic::Citation => RadrootsEventContractRegistryV7TagSemantic::Citation,
-        RadrootsTagSemantic::Contract => RadrootsEventContractRegistryV7TagSemantic::Contract,
-        RadrootsTagSemantic::Counterparty => {
-            RadrootsEventContractRegistryV7TagSemantic::Counterparty
-        }
-        RadrootsTagSemantic::Evidence => RadrootsEventContractRegistryV7TagSemantic::Evidence,
-        RadrootsTagSemantic::EventPointer => {
-            RadrootsEventContractRegistryV7TagSemantic::EventPointer
-        }
-        RadrootsTagSemantic::FreeBusy => RadrootsEventContractRegistryV7TagSemantic::FreeBusy,
-        RadrootsTagSemantic::Geohash => RadrootsEventContractRegistryV7TagSemantic::Geohash,
-        RadrootsTagSemantic::GroupId => RadrootsEventContractRegistryV7TagSemantic::GroupId,
-        RadrootsTagSemantic::Identifier => RadrootsEventContractRegistryV7TagSemantic::Identifier,
-        RadrootsTagSemantic::Image => RadrootsEventContractRegistryV7TagSemantic::Image,
-        RadrootsTagSemantic::Kind => RadrootsEventContractRegistryV7TagSemantic::Kind,
-        RadrootsTagSemantic::ClassifiedListingAddress => {
+        TagSemantic::CalendarEnd => RadrootsEventContractRegistryV7TagSemantic::CalendarEnd,
+        TagSemantic::CalendarStart => RadrootsEventContractRegistryV7TagSemantic::CalendarStart,
+        TagSemantic::Category => RadrootsEventContractRegistryV7TagSemantic::Category,
+        TagSemantic::Citation => RadrootsEventContractRegistryV7TagSemantic::Citation,
+        TagSemantic::Contract => RadrootsEventContractRegistryV7TagSemantic::Contract,
+        TagSemantic::Counterparty => RadrootsEventContractRegistryV7TagSemantic::Counterparty,
+        TagSemantic::Evidence => RadrootsEventContractRegistryV7TagSemantic::Evidence,
+        TagSemantic::EventPointer => RadrootsEventContractRegistryV7TagSemantic::EventPointer,
+        TagSemantic::FreeBusy => RadrootsEventContractRegistryV7TagSemantic::FreeBusy,
+        TagSemantic::Geohash => RadrootsEventContractRegistryV7TagSemantic::Geohash,
+        TagSemantic::GroupId => RadrootsEventContractRegistryV7TagSemantic::GroupId,
+        TagSemantic::Identifier => RadrootsEventContractRegistryV7TagSemantic::Identifier,
+        TagSemantic::Image => RadrootsEventContractRegistryV7TagSemantic::Image,
+        TagSemantic::Kind => RadrootsEventContractRegistryV7TagSemantic::Kind,
+        TagSemantic::ClassifiedListingAddress => {
             RadrootsEventContractRegistryV7TagSemantic::ClassifiedListingAddress
         }
-        RadrootsTagSemantic::OperationalListingSnapshot => {
+        TagSemantic::OperationalListingSnapshot => {
             RadrootsEventContractRegistryV7TagSemantic::OperationalListingSnapshot
         }
-        RadrootsTagSemantic::ListDescription => {
-            RadrootsEventContractRegistryV7TagSemantic::ListDescription
-        }
-        RadrootsTagSemantic::Location => RadrootsEventContractRegistryV7TagSemantic::Location,
-        RadrootsTagSemantic::Nip01Coordinate => {
-            RadrootsEventContractRegistryV7TagSemantic::Nip01Coordinate
-        }
-        RadrootsTagSemantic::Participant => RadrootsEventContractRegistryV7TagSemantic::Participant,
-        RadrootsTagSemantic::PreviousEvent => {
-            RadrootsEventContractRegistryV7TagSemantic::PreviousEvent
-        }
-        RadrootsTagSemantic::Price => RadrootsEventContractRegistryV7TagSemantic::Price,
-        RadrootsTagSemantic::PublishedAt => RadrootsEventContractRegistryV7TagSemantic::PublishedAt,
-        RadrootsTagSemantic::Relay => RadrootsEventContractRegistryV7TagSemantic::Relay,
-        RadrootsTagSemantic::Reference => RadrootsEventContractRegistryV7TagSemantic::Reference,
-        RadrootsTagSemantic::ReviewTarget => {
-            RadrootsEventContractRegistryV7TagSemantic::ReviewTarget
-        }
-        RadrootsTagSemantic::RootEvent => RadrootsEventContractRegistryV7TagSemantic::RootEvent,
-        RadrootsTagSemantic::ServiceInput => {
-            RadrootsEventContractRegistryV7TagSemantic::ServiceInput
-        }
-        RadrootsTagSemantic::ServiceOutput => {
-            RadrootsEventContractRegistryV7TagSemantic::ServiceOutput
-        }
-        RadrootsTagSemantic::Source => RadrootsEventContractRegistryV7TagSemantic::Source,
-        RadrootsTagSemantic::Status => RadrootsEventContractRegistryV7TagSemantic::Status,
-        RadrootsTagSemantic::Summary => RadrootsEventContractRegistryV7TagSemantic::Summary,
-        RadrootsTagSemantic::Title => RadrootsEventContractRegistryV7TagSemantic::Title,
-        RadrootsTagSemantic::Topic => RadrootsEventContractRegistryV7TagSemantic::Topic,
-        RadrootsTagSemantic::TimeZone => RadrootsEventContractRegistryV7TagSemantic::TimeZone,
-        RadrootsTagSemantic::Url => RadrootsEventContractRegistryV7TagSemantic::Url,
-        RadrootsTagSemantic::UtcDayCoverage => {
-            RadrootsEventContractRegistryV7TagSemantic::UtcDayCoverage
-        }
+        TagSemantic::ListDescription => RadrootsEventContractRegistryV7TagSemantic::ListDescription,
+        TagSemantic::Location => RadrootsEventContractRegistryV7TagSemantic::Location,
+        TagSemantic::Nip01Coordinate => RadrootsEventContractRegistryV7TagSemantic::Nip01Coordinate,
+        TagSemantic::Participant => RadrootsEventContractRegistryV7TagSemantic::Participant,
+        TagSemantic::PreviousEvent => RadrootsEventContractRegistryV7TagSemantic::PreviousEvent,
+        TagSemantic::Price => RadrootsEventContractRegistryV7TagSemantic::Price,
+        TagSemantic::PublishedAt => RadrootsEventContractRegistryV7TagSemantic::PublishedAt,
+        TagSemantic::Relay => RadrootsEventContractRegistryV7TagSemantic::Relay,
+        TagSemantic::Reference => RadrootsEventContractRegistryV7TagSemantic::Reference,
+        TagSemantic::ReviewTarget => RadrootsEventContractRegistryV7TagSemantic::ReviewTarget,
+        TagSemantic::RootEvent => RadrootsEventContractRegistryV7TagSemantic::RootEvent,
+        TagSemantic::ServiceInput => RadrootsEventContractRegistryV7TagSemantic::ServiceInput,
+        TagSemantic::ServiceOutput => RadrootsEventContractRegistryV7TagSemantic::ServiceOutput,
+        TagSemantic::Source => RadrootsEventContractRegistryV7TagSemantic::Source,
+        TagSemantic::Status => RadrootsEventContractRegistryV7TagSemantic::Status,
+        TagSemantic::Summary => RadrootsEventContractRegistryV7TagSemantic::Summary,
+        TagSemantic::Title => RadrootsEventContractRegistryV7TagSemantic::Title,
+        TagSemantic::Topic => RadrootsEventContractRegistryV7TagSemantic::Topic,
+        TagSemantic::TimeZone => RadrootsEventContractRegistryV7TagSemantic::TimeZone,
+        TagSemantic::Url => RadrootsEventContractRegistryV7TagSemantic::Url,
+        TagSemantic::UtcDayCoverage => RadrootsEventContractRegistryV7TagSemantic::UtcDayCoverage,
     }
 }
 
-fn tag_value_type_inventory(
-    value: RadrootsTagValueType,
-) -> RadrootsEventContractRegistryV7TagValueType {
+fn tag_value_type_inventory(value: TagValueType) -> RadrootsEventContractRegistryV7TagValueType {
     match value {
-        RadrootsTagValueType::AddressableCoordinate => {
+        TagValueType::AddressableCoordinate => {
             RadrootsEventContractRegistryV7TagValueType::AddressableCoordinate
         }
-        RadrootsTagValueType::CalendarDate => {
-            RadrootsEventContractRegistryV7TagValueType::CalendarDate
-        }
-        RadrootsTagValueType::CalendarEventCoordinate => {
+        TagValueType::CalendarDate => RadrootsEventContractRegistryV7TagValueType::CalendarDate,
+        TagValueType::CalendarEventCoordinate => {
             RadrootsEventContractRegistryV7TagValueType::CalendarEventCoordinate
         }
-        RadrootsTagValueType::CalendarFreeBusy => {
+        TagValueType::CalendarFreeBusy => {
             RadrootsEventContractRegistryV7TagValueType::CalendarFreeBusy
         }
-        RadrootsTagValueType::CalendarRsvpStatus => {
+        TagValueType::CalendarRsvpStatus => {
             RadrootsEventContractRegistryV7TagValueType::CalendarRsvpStatus
         }
-        RadrootsTagValueType::CalendarUid => {
-            RadrootsEventContractRegistryV7TagValueType::CalendarUid
-        }
-        RadrootsTagValueType::ContractId => RadrootsEventContractRegistryV7TagValueType::ContractId,
-        RadrootsTagValueType::DTag => RadrootsEventContractRegistryV7TagValueType::DTag,
-        RadrootsTagValueType::EventId => RadrootsEventContractRegistryV7TagValueType::EventId,
-        RadrootsTagValueType::EventPointer => {
-            RadrootsEventContractRegistryV7TagValueType::EventPointer
-        }
-        RadrootsTagValueType::Geohash => RadrootsEventContractRegistryV7TagValueType::Geohash,
-        RadrootsTagValueType::IanaTimeZoneId => {
-            RadrootsEventContractRegistryV7TagValueType::IanaTimeZoneId
-        }
-        RadrootsTagValueType::Kind => RadrootsEventContractRegistryV7TagValueType::Kind,
-        RadrootsTagValueType::Nip01Coordinate => {
+        TagValueType::CalendarUid => RadrootsEventContractRegistryV7TagValueType::CalendarUid,
+        TagValueType::ContractId => RadrootsEventContractRegistryV7TagValueType::ContractId,
+        TagValueType::DTag => RadrootsEventContractRegistryV7TagValueType::DTag,
+        TagValueType::EventId => RadrootsEventContractRegistryV7TagValueType::EventId,
+        TagValueType::EventPointer => RadrootsEventContractRegistryV7TagValueType::EventPointer,
+        TagValueType::Geohash => RadrootsEventContractRegistryV7TagValueType::Geohash,
+        TagValueType::IanaTimeZoneId => RadrootsEventContractRegistryV7TagValueType::IanaTimeZoneId,
+        TagValueType::Kind => RadrootsEventContractRegistryV7TagValueType::Kind,
+        TagValueType::Nip01Coordinate => {
             RadrootsEventContractRegistryV7TagValueType::Nip01Coordinate
         }
-        RadrootsTagValueType::PublicKey => RadrootsEventContractRegistryV7TagValueType::PublicKey,
-        RadrootsTagValueType::RelayUrl => RadrootsEventContractRegistryV7TagValueType::RelayUrl,
-        RadrootsTagValueType::Sha256 => RadrootsEventContractRegistryV7TagValueType::Sha256,
-        RadrootsTagValueType::Text => RadrootsEventContractRegistryV7TagValueType::Text,
-        RadrootsTagValueType::UnixTimestamp => {
-            RadrootsEventContractRegistryV7TagValueType::UnixTimestamp
-        }
-        RadrootsTagValueType::Uri => RadrootsEventContractRegistryV7TagValueType::Uri,
-        RadrootsTagValueType::Url => RadrootsEventContractRegistryV7TagValueType::Url,
-        RadrootsTagValueType::UtcDayIndex => {
-            RadrootsEventContractRegistryV7TagValueType::UtcDayIndex
-        }
-        RadrootsTagValueType::Uuid => RadrootsEventContractRegistryV7TagValueType::Uuid,
+        TagValueType::PublicKey => RadrootsEventContractRegistryV7TagValueType::PublicKey,
+        TagValueType::RelayUrl => RadrootsEventContractRegistryV7TagValueType::RelayUrl,
+        TagValueType::Sha256 => RadrootsEventContractRegistryV7TagValueType::Sha256,
+        TagValueType::Text => RadrootsEventContractRegistryV7TagValueType::Text,
+        TagValueType::UnixTimestamp => RadrootsEventContractRegistryV7TagValueType::UnixTimestamp,
+        TagValueType::Uri => RadrootsEventContractRegistryV7TagValueType::Uri,
+        TagValueType::Url => RadrootsEventContractRegistryV7TagValueType::Url,
+        TagValueType::UtcDayIndex => RadrootsEventContractRegistryV7TagValueType::UtcDayIndex,
+        TagValueType::Uuid => RadrootsEventContractRegistryV7TagValueType::Uuid,
     }
 }
 
-fn reducer_inventory(value: RadrootsReducer) -> RadrootsEventContractRegistryV7Reducer {
+fn reducer_inventory(value: Reducer) -> RadrootsEventContractRegistryV7Reducer {
     match value {
-        RadrootsReducer::CalendarProjection => {
-            RadrootsEventContractRegistryV7Reducer::CalendarProjection
-        }
-        RadrootsReducer::FarmOpsProjection => {
-            RadrootsEventContractRegistryV7Reducer::FarmOpsProjection
-        }
-        RadrootsReducer::GroupProjection => RadrootsEventContractRegistryV7Reducer::GroupProjection,
-        RadrootsReducer::KnowledgeProjection => {
-            RadrootsEventContractRegistryV7Reducer::KnowledgeProjection
-        }
-        RadrootsReducer::OperationalListingInventoryAccounting => {
+        Reducer::CalendarProjection => RadrootsEventContractRegistryV7Reducer::CalendarProjection,
+        Reducer::FarmOpsProjection => RadrootsEventContractRegistryV7Reducer::FarmOpsProjection,
+        Reducer::GroupProjection => RadrootsEventContractRegistryV7Reducer::GroupProjection,
+        Reducer::KnowledgeProjection => RadrootsEventContractRegistryV7Reducer::KnowledgeProjection,
+        Reducer::OperationalListingInventoryAccounting => {
             RadrootsEventContractRegistryV7Reducer::OperationalListingInventoryAccounting
         }
-        RadrootsReducer::OperationalListingProjection => {
+        Reducer::OperationalListingProjection => {
             RadrootsEventContractRegistryV7Reducer::OperationalListingProjection
         }
-        RadrootsReducer::MarketProjection => {
-            RadrootsEventContractRegistryV7Reducer::MarketProjection
-        }
-        RadrootsReducer::OrderProjection => RadrootsEventContractRegistryV7Reducer::OrderProjection,
-        RadrootsReducer::ProfileProjection => {
-            RadrootsEventContractRegistryV7Reducer::ProfileProjection
-        }
-        RadrootsReducer::NostrRelayPolicyProjection => {
+        Reducer::MarketProjection => RadrootsEventContractRegistryV7Reducer::MarketProjection,
+        Reducer::OrderProjection => RadrootsEventContractRegistryV7Reducer::OrderProjection,
+        Reducer::ProfileProjection => RadrootsEventContractRegistryV7Reducer::ProfileProjection,
+        Reducer::NostrRelayPolicyProjection => {
             RadrootsEventContractRegistryV7Reducer::NostrRelayPolicyProjection
         }
-        RadrootsReducer::SocialProjection => {
-            RadrootsEventContractRegistryV7Reducer::SocialProjection
-        }
-        RadrootsReducer::TradeProjection => RadrootsEventContractRegistryV7Reducer::TradeProjection,
-        RadrootsReducer::TradeValidation => RadrootsEventContractRegistryV7Reducer::TradeValidation,
+        Reducer::SocialProjection => RadrootsEventContractRegistryV7Reducer::SocialProjection,
+        Reducer::TradeProjection => RadrootsEventContractRegistryV7Reducer::TradeProjection,
+        Reducer::TradeValidation => RadrootsEventContractRegistryV7Reducer::TradeValidation,
     }
 }
 

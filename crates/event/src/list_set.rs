@@ -1,4 +1,4 @@
-use crate::social::list::RadrootsListEntry;
+use crate::social::list::ListEntry;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -10,10 +10,10 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsListSet {
+pub struct ListSet {
     pub d_tag: String,
     pub content: String,
-    pub entries: Vec<RadrootsListEntry>,
+    pub entries: Vec<ListEntry>,
     pub title: Option<String>,
     pub description: Option<String>,
     pub image: Option<String>,

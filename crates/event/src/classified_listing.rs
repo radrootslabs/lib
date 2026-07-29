@@ -3,7 +3,7 @@ use alloc::string::String;
 #[cfg(feature = "std")]
 use std::string::String;
 
-use crate::envelope::{RadrootsEventTag, RadrootsEventTags};
+use crate::envelope::{EventTag, EventTags};
 
 pub const TAG_RADROOTS_PRICE_UNIT: &str = "radroots:price_unit";
 pub const TAG_RADROOTS_QUANTITY: &str = "radroots:quantity";
@@ -13,7 +13,7 @@ pub const TAG_RADROOTS_PRICE: &str = "radroots:price";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// The marker-selected profile partition for a NIP-99 classified listing.
-pub enum RadrootsClassifiedListingPartition {
+pub enum ClassifiedListingPartition {
     FocusedFoodAvailability,
     OperationalListing,
     GenericNip99,
@@ -25,9 +25,7 @@ pub enum RadrootsClassifiedListingPartition {
 ///
 /// The caller owns kind checks and profile validation. Tag values and arity do
 /// not affect this partition, so malformed one-element marker tags still count.
-pub fn classify_classified_listing_tags(
-    tags: &RadrootsEventTags,
-) -> RadrootsClassifiedListingPartition {
+pub fn classify_classified_listing_tags(tags: &EventTags) -> ClassifiedListingPartition {
     classify_classified_listing_tag_slice(tags.as_slice())
 }
 
@@ -35,9 +33,7 @@ pub fn classify_classified_listing_tags(
 ///
 /// The caller owns kind checks and profile validation. Tag values and arity do
 /// not affect this partition, so malformed one-element marker tags still count.
-pub fn classify_classified_listing_tag_slice(
-    tags: &[RadrootsEventTag],
-) -> RadrootsClassifiedListingPartition {
+pub fn classify_classified_listing_tag_slice(tags: &[EventTag]) -> ClassifiedListingPartition {
     classify_classified_listing_marker_names(
         tags.iter()
             .map(|tag| tag.as_slice().first().map(String::as_str)),
@@ -47,7 +43,7 @@ pub fn classify_classified_listing_tag_slice(
 /// Partitions borrowed raw tag names without allocating or validating tag arity.
 pub fn classify_classified_listing_marker_names<'a>(
     names: impl IntoIterator<Item = Option<&'a str>>,
-) -> RadrootsClassifiedListingPartition {
+) -> ClassifiedListingPartition {
     let mut has_focused_marker = false;
     let mut has_operational_marker = false;
 
@@ -65,15 +61,15 @@ pub fn classify_classified_listing_marker_names<'a>(
         }
 
         if has_focused_marker && has_operational_marker {
-            return RadrootsClassifiedListingPartition::Ambiguous;
+            return ClassifiedListingPartition::Ambiguous;
         }
     }
 
     match (has_focused_marker, has_operational_marker) {
-        (true, false) => RadrootsClassifiedListingPartition::FocusedFoodAvailability,
-        (false, true) => RadrootsClassifiedListingPartition::OperationalListing,
-        (false, false) => RadrootsClassifiedListingPartition::GenericNip99,
-        (true, true) => RadrootsClassifiedListingPartition::Ambiguous,
+        (true, false) => ClassifiedListingPartition::FocusedFoodAvailability,
+        (false, true) => ClassifiedListingPartition::OperationalListing,
+        (false, false) => ClassifiedListingPartition::GenericNip99,
+        (true, true) => ClassifiedListingPartition::Ambiguous,
     }
 }
 
@@ -88,8 +84,8 @@ mod tests {
         TAG_RADROOTS_PRICE,
     ];
 
-    fn tags(values: &[&[&str]]) -> RadrootsEventTags {
-        RadrootsEventTags::new(
+    fn tags(values: &[&[&str]]) -> EventTags {
+        EventTags::new(
             values
                 .iter()
                 .map(|tag| tag.iter().map(|value| (*value).to_owned()).collect())
@@ -98,7 +94,7 @@ mod tests {
         .expect("valid test tags")
     }
 
-    fn classify(values: &[&[&str]]) -> RadrootsClassifiedListingPartition {
+    fn classify(values: &[&[&str]]) -> ClassifiedListingPartition {
         classify_classified_listing_tags(&tags(values))
     }
 
@@ -116,7 +112,7 @@ mod tests {
         for marker in FOCUSED_MARKERS {
             assert_eq!(
                 classify(&[&[marker, "value"]]),
-                RadrootsClassifiedListingPartition::FocusedFoodAvailability,
+                ClassifiedListingPartition::FocusedFoodAvailability,
                 "focused marker {marker}"
             );
         }
@@ -127,7 +123,7 @@ mod tests {
         for marker in OPERATIONAL_MARKERS {
             assert_eq!(
                 classify(&[&[marker, "value"]]),
-                RadrootsClassifiedListingPartition::OperationalListing,
+                ClassifiedListingPartition::OperationalListing,
                 "operational marker {marker}"
             );
         }
@@ -138,7 +134,7 @@ mod tests {
         for marker in FOCUSED_MARKERS {
             assert_eq!(
                 classify(&[&[marker]]),
-                RadrootsClassifiedListingPartition::FocusedFoodAvailability,
+                ClassifiedListingPartition::FocusedFoodAvailability,
                 "malformed focused marker {marker}"
             );
         }
@@ -146,7 +142,7 @@ mod tests {
         for marker in OPERATIONAL_MARKERS {
             assert_eq!(
                 classify(&[&[marker]]),
-                RadrootsClassifiedListingPartition::OperationalListing,
+                ClassifiedListingPartition::OperationalListing,
                 "malformed operational marker {marker}"
             );
         }
@@ -158,12 +154,12 @@ mod tests {
             for operational in OPERATIONAL_MARKERS {
                 assert_eq!(
                     classify(&[&[focused], &[operational]]),
-                    RadrootsClassifiedListingPartition::Ambiguous,
+                    ClassifiedListingPartition::Ambiguous,
                     "focused {focused} before operational {operational}"
                 );
                 assert_eq!(
                     classify(&[&[operational], &[focused]]),
-                    RadrootsClassifiedListingPartition::Ambiguous,
+                    ClassifiedListingPartition::Ambiguous,
                     "operational {operational} before focused {focused}"
                 );
             }
@@ -178,7 +174,7 @@ mod tests {
                 &[TAG_RADROOTS_PRICE_UNIT, "lb"],
                 &[TAG_RADROOTS_QUANTITY, "20", "lb"],
             ]),
-            RadrootsClassifiedListingPartition::FocusedFoodAvailability
+            ClassifiedListingPartition::FocusedFoodAvailability
         );
         assert_eq!(
             classify(&[
@@ -186,7 +182,7 @@ mod tests {
                 &[TAG_RADROOTS_BIN, "bin-1"],
                 &[TAG_RADROOTS_PRICE, "bin-1", "3", "CAD", "1", "lb"],
             ]),
-            RadrootsClassifiedListingPartition::OperationalListing
+            ClassifiedListingPartition::OperationalListing
         );
     }
 
@@ -207,7 +203,7 @@ mod tests {
         ] {
             assert_eq!(
                 classify(&[&[near_match, "value"]]),
-                RadrootsClassifiedListingPartition::GenericNip99,
+                ClassifiedListingPartition::GenericNip99,
                 "near match {near_match}"
             );
         }
@@ -223,23 +219,20 @@ mod tests {
             &["alt", TAG_RADROOTS_PRICE][..],
         ];
 
-        assert_eq!(
-            classify(&values),
-            RadrootsClassifiedListingPartition::GenericNip99
-        );
+        assert_eq!(classify(&values), ClassifiedListingPartition::GenericNip99);
     }
 
     #[test]
     fn empty_tags_are_generic_nip99() {
-        let tags = RadrootsEventTags::new(Vec::new()).expect("empty tag list is valid");
+        let tags = EventTags::new(Vec::new()).expect("empty tag list is valid");
 
         assert_eq!(
             classify_classified_listing_tags(&tags),
-            RadrootsClassifiedListingPartition::GenericNip99
+            ClassifiedListingPartition::GenericNip99
         );
         assert_eq!(
             classify_classified_listing_tag_slice(tags.as_slice()),
-            RadrootsClassifiedListingPartition::GenericNip99
+            ClassifiedListingPartition::GenericNip99
         );
     }
 }

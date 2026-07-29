@@ -4,8 +4,8 @@ use alloc::{string::String, vec::Vec};
 use radroots_event::{
     envelope::kind::{KIND_FARM, KIND_FARM_CRDT_CHANGE, KIND_FARM_FILE_METADATA},
     farm::workspace::{
-        KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_SCHEMA, RADROOTS_FARM_WORKSPACE_TAG,
-        RadrootsFarmWorkspaceManifest,
+        FarmWorkspaceManifest, KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_SCHEMA,
+        RADROOTS_FARM_WORKSPACE_TAG,
     },
     tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
@@ -14,10 +14,10 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{address_string, push_tag, validate_non_empty_field};
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 pub fn farm_workspace_build_tags(
-    manifest: &RadrootsFarmWorkspaceManifest,
+    manifest: &FarmWorkspaceManifest,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_manifest(manifest)?;
     let mut tags = Vec::new();
@@ -34,31 +34,29 @@ pub fn farm_workspace_build_tags(
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts(
-    manifest: &RadrootsFarmWorkspaceManifest,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    manifest: &FarmWorkspaceManifest,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(manifest, KIND_FARM_WORKSPACE_MANIFEST)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    manifest: &RadrootsFarmWorkspaceManifest,
+    manifest: &FarmWorkspaceManifest,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_FARM_WORKSPACE_MANIFEST {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = farm_workspace_build_tags(manifest)?;
     let content = serde_json::to_string(manifest).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,
     })
 }
 
-pub(crate) fn validate_manifest(
-    manifest: &RadrootsFarmWorkspaceManifest,
-) -> Result<(), EventEncodeError> {
+pub(crate) fn validate_manifest(manifest: &FarmWorkspaceManifest) -> Result<(), EventEncodeError> {
     validate_d_tag(&manifest.d_tag, "d_tag")?;
     validate_non_empty_field(&manifest.farm_group_id, "farm_group_id")?;
     validate_non_empty_field(&manifest.name, "name")?;

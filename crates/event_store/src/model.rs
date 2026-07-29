@@ -34,12 +34,9 @@ pub use food_availability_projection_v1::{
 };
 
 use crate::RadrootsEventStoreError;
-use radroots_event::envelope::RadrootsEventKind;
-use radroots_event::id::{
-    RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsTradeCandidateId,
-    RadrootsTradeId, RadrootsTradeMutationId,
-};
-use radroots_event::trade::RadrootsTradeMutationKindV1;
+use radroots_event::envelope::EventKind;
+use radroots_event::id::{CandidateId, DTag, EventId, InventoryBinId, MutationId, TradeId};
+use radroots_event::trade::TradeMutationKindV1;
 use radroots_identity::PublicKey;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
@@ -299,7 +296,7 @@ impl RadrootsStoredValidEvent {
         raw_event: RadrootsStoredRawEvent,
     ) -> Result<Self, RadrootsEventStoreError> {
         let expected_class =
-            StoredEventClass::from_event_kind_class(RadrootsEventKind::new(raw_event.kind).class());
+            StoredEventClass::from_event_kind_class(EventKind::new(raw_event.kind).class());
         if raw_event.admission_status != RadrootsEventAdmissionStatus::Admitted
             || raw_event.event_class != expected_class
             || raw_event.event_class == StoredEventClass::Ephemeral
@@ -387,8 +384,8 @@ pub enum RadrootsEventVisibility {
     },
     Suppressed {
         reason: RadrootsNip09SuppressionReason,
-        event_reference_request_id: Option<RadrootsEventId>,
-        address_reference_request_id: Option<RadrootsEventId>,
+        event_reference_request_id: Option<EventId>,
+        address_reference_request_id: Option<EventId>,
         address_reference_cutoff: Option<u64>,
     },
 }
@@ -502,49 +499,49 @@ impl RadrootsProjectionRebuildTicket {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredTradeMutation {
-    pub mutation_id: RadrootsTradeMutationId,
-    pub trade_id: RadrootsTradeId,
-    pub root_mutation_id: Option<RadrootsTradeMutationId>,
+    pub mutation_id: MutationId,
+    pub trade_id: TradeId,
+    pub root_mutation_id: Option<MutationId>,
     pub contract_id: String,
-    pub mutation_kind: RadrootsTradeMutationKindV1,
+    pub mutation_kind: TradeMutationKindV1,
     pub schema_version: u16,
-    pub candidate_id: Option<RadrootsTradeCandidateId>,
-    pub proposal_mutation_id: Option<RadrootsTradeMutationId>,
-    pub target_claim_mutation_id: Option<RadrootsTradeMutationId>,
+    pub candidate_id: Option<CandidateId>,
+    pub proposal_mutation_id: Option<MutationId>,
+    pub target_claim_mutation_id: Option<MutationId>,
     pub author_pubkey: PublicKey,
     pub counterparty_pubkey: PublicKey,
     pub buyer_pubkey: PublicKey,
     pub seller_pubkey: PublicKey,
-    pub farm_id: RadrootsDTag,
+    pub farm_id: DTag,
     pub authored_at_unix_s: u64,
     pub canonical_payload_bytes: Vec<u8>,
     pub payload_sha256: String,
     pub first_event_seq: i64,
-    pub first_transport_event_id: RadrootsEventId,
+    pub first_transport_event_id: EventId,
     pub inserted_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredTradeMutationParent {
-    pub mutation_id: RadrootsTradeMutationId,
-    pub parent_mutation_id: RadrootsTradeMutationId,
+    pub mutation_id: MutationId,
+    pub parent_mutation_id: MutationId,
     pub parent_index: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredTradeMissingParent {
-    pub trade_id: RadrootsTradeId,
-    pub mutation_id: RadrootsTradeMutationId,
-    pub missing_parent_mutation_id: RadrootsTradeMutationId,
-    pub first_transport_event_id: RadrootsEventId,
+    pub trade_id: TradeId,
+    pub mutation_id: MutationId,
+    pub missing_parent_mutation_id: MutationId,
+    pub first_transport_event_id: EventId,
     pub first_seen_at_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredTradeTransportEnvelope {
-    pub transport_event_id: RadrootsEventId,
-    pub mutation_id: RadrootsTradeMutationId,
-    pub trade_id: RadrootsTradeId,
+    pub transport_event_id: EventId,
+    pub mutation_id: MutationId,
+    pub trade_id: TradeId,
     pub transport_kind: String,
     pub pubkey: PublicKey,
     pub created_at: u64,
@@ -555,10 +552,10 @@ pub struct RadrootsStoredTradeTransportEnvelope {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredSellerReservation {
-    pub reservation_id: RadrootsDTag,
-    pub trade_id: RadrootsTradeId,
-    pub candidate_id: RadrootsTradeCandidateId,
-    pub claim_mutation_id: RadrootsTradeMutationId,
+    pub reservation_id: DTag,
+    pub trade_id: TradeId,
+    pub candidate_id: CandidateId,
+    pub claim_mutation_id: MutationId,
     pub inventory_authority_pubkey: PublicKey,
     pub inventory_epoch: u64,
     pub assertion_commitment: String,
@@ -569,9 +566,9 @@ pub struct RadrootsStoredSellerReservation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoredSellerReservationLine {
-    pub reservation_id: RadrootsDTag,
-    pub line_id: RadrootsDTag,
-    pub bin_id: RadrootsInventoryBinId,
+    pub reservation_id: DTag,
+    pub line_id: DTag,
+    pub bin_id: InventoryBinId,
     pub quantity_mantissa: String,
     pub quantity_scale: u8,
     pub unit_code: String,
@@ -580,11 +577,11 @@ pub struct RadrootsStoredSellerReservationLine {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeProjectionCheckpoint {
-    pub trade_id: RadrootsTradeId,
+    pub trade_id: TradeId,
     pub reducer_contract_id: String,
     pub reducer_version: u16,
     pub projection_digest: String,
-    pub root_mutation_id: Option<RadrootsTradeMutationId>,
+    pub root_mutation_id: Option<MutationId>,
     pub negotiation_state: String,
     pub agreement_state: String,
     pub evidence_state: String,
@@ -594,7 +591,7 @@ pub struct RadrootsTradeProjectionCheckpoint {
     pub fulfillment_state: String,
     pub payment_state: String,
     pub projection_json: String,
-    pub last_mutation_id: Option<RadrootsTradeMutationId>,
+    pub last_mutation_id: Option<MutationId>,
     pub last_transport_event_seq: Option<i64>,
     pub updated_at_ms: i64,
 }
@@ -603,12 +600,12 @@ pub struct RadrootsTradeProjectionCheckpoint {
 mod tests {
     use super::*;
     use crate::model::reconciliation_v1::{tag_semantic_name, tag_value_type_name};
-    use radroots_event::contract::{RadrootsTagSemantic, RadrootsTagValueType};
-    use radroots_event::envelope::RadrootsEventKindClass;
+    use radroots_event::contract::{TagSemantic, TagValueType};
+    use radroots_event::envelope::EventKindClass;
     use radroots_event::envelope::event_head::{
-        RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
+        CurrentEventHead, EventHeadCoordinate, EventHeadDecision,
     };
-    use radroots_event::id::RadrootsEventId;
+    use radroots_event::id::EventId;
     use radroots_identity::PublicKey;
 
     #[test]
@@ -646,19 +643,19 @@ mod tests {
             );
         }
         assert_eq!(
-            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Regular),
+            StoredEventClass::from_event_kind_class(EventKindClass::Regular),
             StoredEventClass::Regular
         );
         assert_eq!(
-            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Replaceable),
+            StoredEventClass::from_event_kind_class(EventKindClass::Replaceable),
             StoredEventClass::Replaceable
         );
         assert_eq!(
-            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Addressable),
+            StoredEventClass::from_event_kind_class(EventKindClass::Addressable),
             StoredEventClass::Addressable
         );
         assert_eq!(
-            StoredEventClass::from_event_kind_class(RadrootsEventKindClass::Ephemeral),
+            StoredEventClass::from_event_kind_class(EventKindClass::Ephemeral),
             StoredEventClass::Ephemeral
         );
         assert!(StoredEventClass::parse("bad").is_err());
@@ -798,7 +795,7 @@ mod tests {
 
     #[test]
     fn head_decisions_and_tag_metadata_names_cover_all_variants() {
-        let coordinate = RadrootsEventHeadCoordinate::Addressable {
+        let coordinate = EventHeadCoordinate::Addressable {
             kind: 30_023,
             pubkey: PublicKey::from_hex(
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -806,9 +803,9 @@ mod tests {
             .expect("pubkey"),
             d_tag: "opaque d value".to_owned(),
         };
-        let current = RadrootsCurrentEventHead {
+        let current = CurrentEventHead {
             coordinate,
-            event_id: RadrootsEventId::parse(
+            event_id: EventId::parse(
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             )
             .expect("event id"),
@@ -816,129 +813,114 @@ mod tests {
         };
 
         assert_eq!(
-            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::Applied(current)),
+            RadrootsRawHeadDecision::from_protocol(&EventHeadDecision::Applied(current)),
             RadrootsRawHeadDecision::Applied
         );
         assert_eq!(
-            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::SkippedDuplicate),
+            RadrootsRawHeadDecision::from_protocol(&EventHeadDecision::SkippedDuplicate),
             RadrootsRawHeadDecision::SkippedDuplicate
         );
         assert_eq!(
-            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::SkippedOlder),
+            RadrootsRawHeadDecision::from_protocol(&EventHeadDecision::SkippedOlder),
             RadrootsRawHeadDecision::SkippedOlder
         );
         assert_eq!(
             RadrootsRawHeadDecision::from_protocol(
-                &RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId
+                &EventHeadDecision::SkippedSameTimestampHigherEventId
             ),
             RadrootsRawHeadDecision::SkippedSameTimestampHigherEventId
         );
         assert_eq!(
-            RadrootsRawHeadDecision::from_protocol(&RadrootsEventHeadDecision::CoordinateMismatch),
+            RadrootsRawHeadDecision::from_protocol(&EventHeadDecision::CoordinateMismatch),
             RadrootsRawHeadDecision::MalformedCoordinate
         );
 
         for (semantic, expected) in [
+            (TagSemantic::AddressableCoordinate, "addressable_coordinate"),
+            (TagSemantic::CalendarEventAuthor, "calendar_event_author"),
             (
-                RadrootsTagSemantic::AddressableCoordinate,
-                "addressable_coordinate",
-            ),
-            (
-                RadrootsTagSemantic::CalendarEventAuthor,
-                "calendar_event_author",
-            ),
-            (
-                RadrootsTagSemantic::CalendarEventReference,
+                TagSemantic::CalendarEventReference,
                 "calendar_event_reference",
             ),
             (
-                RadrootsTagSemantic::CalendarEventRevision,
+                TagSemantic::CalendarEventRevision,
                 "calendar_event_revision",
             ),
             (
-                RadrootsTagSemantic::CalendarInclusionRequest,
+                TagSemantic::CalendarInclusionRequest,
                 "calendar_inclusion_request",
             ),
-            (RadrootsTagSemantic::CalendarEnd, "calendar_end"),
-            (RadrootsTagSemantic::CalendarStart, "calendar_start"),
-            (RadrootsTagSemantic::Category, "category"),
-            (RadrootsTagSemantic::Citation, "citation"),
-            (RadrootsTagSemantic::Contract, "contract"),
-            (RadrootsTagSemantic::Counterparty, "counterparty"),
-            (RadrootsTagSemantic::Evidence, "evidence"),
-            (RadrootsTagSemantic::EventPointer, "event_pointer"),
-            (RadrootsTagSemantic::FreeBusy, "free_busy"),
-            (RadrootsTagSemantic::Geohash, "geohash"),
-            (RadrootsTagSemantic::GroupId, "group_id"),
-            (RadrootsTagSemantic::Identifier, "identifier"),
-            (RadrootsTagSemantic::Image, "image"),
-            (RadrootsTagSemantic::Kind, "kind"),
-            (
-                RadrootsTagSemantic::ClassifiedListingAddress,
-                "listing_address",
-            ),
-            (
-                RadrootsTagSemantic::OperationalListingSnapshot,
-                "listing_snapshot",
-            ),
-            (RadrootsTagSemantic::ListDescription, "list_description"),
-            (RadrootsTagSemantic::Location, "location"),
-            (RadrootsTagSemantic::Nip01Coordinate, "nip01_coordinate"),
-            (RadrootsTagSemantic::Participant, "participant"),
-            (RadrootsTagSemantic::PreviousEvent, "previous_event"),
-            (RadrootsTagSemantic::Price, "price"),
-            (RadrootsTagSemantic::PublishedAt, "published_at"),
-            (RadrootsTagSemantic::Relay, "relay"),
-            (RadrootsTagSemantic::Reference, "reference"),
-            (RadrootsTagSemantic::ReviewTarget, "review_target"),
-            (RadrootsTagSemantic::RootEvent, "root_event"),
-            (RadrootsTagSemantic::ServiceInput, "service_input"),
-            (RadrootsTagSemantic::ServiceOutput, "service_output"),
-            (RadrootsTagSemantic::Source, "source"),
-            (RadrootsTagSemantic::Status, "status"),
-            (RadrootsTagSemantic::Summary, "summary"),
-            (RadrootsTagSemantic::Title, "title"),
-            (RadrootsTagSemantic::Topic, "topic"),
-            (RadrootsTagSemantic::TimeZone, "time_zone"),
-            (RadrootsTagSemantic::Url, "url"),
-            (RadrootsTagSemantic::UtcDayCoverage, "utc_day_coverage"),
+            (TagSemantic::CalendarEnd, "calendar_end"),
+            (TagSemantic::CalendarStart, "calendar_start"),
+            (TagSemantic::Category, "category"),
+            (TagSemantic::Citation, "citation"),
+            (TagSemantic::Contract, "contract"),
+            (TagSemantic::Counterparty, "counterparty"),
+            (TagSemantic::Evidence, "evidence"),
+            (TagSemantic::EventPointer, "event_pointer"),
+            (TagSemantic::FreeBusy, "free_busy"),
+            (TagSemantic::Geohash, "geohash"),
+            (TagSemantic::GroupId, "group_id"),
+            (TagSemantic::Identifier, "identifier"),
+            (TagSemantic::Image, "image"),
+            (TagSemantic::Kind, "kind"),
+            (TagSemantic::ClassifiedListingAddress, "listing_address"),
+            (TagSemantic::OperationalListingSnapshot, "listing_snapshot"),
+            (TagSemantic::ListDescription, "list_description"),
+            (TagSemantic::Location, "location"),
+            (TagSemantic::Nip01Coordinate, "nip01_coordinate"),
+            (TagSemantic::Participant, "participant"),
+            (TagSemantic::PreviousEvent, "previous_event"),
+            (TagSemantic::Price, "price"),
+            (TagSemantic::PublishedAt, "published_at"),
+            (TagSemantic::Relay, "relay"),
+            (TagSemantic::Reference, "reference"),
+            (TagSemantic::ReviewTarget, "review_target"),
+            (TagSemantic::RootEvent, "root_event"),
+            (TagSemantic::ServiceInput, "service_input"),
+            (TagSemantic::ServiceOutput, "service_output"),
+            (TagSemantic::Source, "source"),
+            (TagSemantic::Status, "status"),
+            (TagSemantic::Summary, "summary"),
+            (TagSemantic::Title, "title"),
+            (TagSemantic::Topic, "topic"),
+            (TagSemantic::TimeZone, "time_zone"),
+            (TagSemantic::Url, "url"),
+            (TagSemantic::UtcDayCoverage, "utc_day_coverage"),
         ] {
             assert_eq!(tag_semantic_name(semantic), expected);
         }
 
         for (value_type, expected) in [
             (
-                RadrootsTagValueType::AddressableCoordinate,
+                TagValueType::AddressableCoordinate,
                 "addressable_coordinate",
             ),
-            (RadrootsTagValueType::CalendarDate, "calendar_date"),
+            (TagValueType::CalendarDate, "calendar_date"),
             (
-                RadrootsTagValueType::CalendarEventCoordinate,
+                TagValueType::CalendarEventCoordinate,
                 "calendar_event_coordinate",
             ),
-            (RadrootsTagValueType::CalendarFreeBusy, "calendar_free_busy"),
-            (
-                RadrootsTagValueType::CalendarRsvpStatus,
-                "calendar_rsvp_status",
-            ),
-            (RadrootsTagValueType::CalendarUid, "calendar_uid"),
-            (RadrootsTagValueType::ContractId, "contract_id"),
-            (RadrootsTagValueType::DTag, "d_tag"),
-            (RadrootsTagValueType::EventId, "event_id"),
-            (RadrootsTagValueType::EventPointer, "event_pointer"),
-            (RadrootsTagValueType::Geohash, "geohash"),
-            (RadrootsTagValueType::IanaTimeZoneId, "iana_time_zone_id"),
-            (RadrootsTagValueType::Kind, "kind"),
-            (RadrootsTagValueType::Nip01Coordinate, "nip01_coordinate"),
-            (RadrootsTagValueType::PublicKey, "public_key"),
-            (RadrootsTagValueType::RelayUrl, "relay_url"),
-            (RadrootsTagValueType::Sha256, "sha256"),
-            (RadrootsTagValueType::Text, "text"),
-            (RadrootsTagValueType::UnixTimestamp, "unix_timestamp"),
-            (RadrootsTagValueType::Uri, "uri"),
-            (RadrootsTagValueType::Url, "url"),
-            (RadrootsTagValueType::UtcDayIndex, "utc_day_index"),
-            (RadrootsTagValueType::Uuid, "uuid"),
+            (TagValueType::CalendarFreeBusy, "calendar_free_busy"),
+            (TagValueType::CalendarRsvpStatus, "calendar_rsvp_status"),
+            (TagValueType::CalendarUid, "calendar_uid"),
+            (TagValueType::ContractId, "contract_id"),
+            (TagValueType::DTag, "d_tag"),
+            (TagValueType::EventId, "event_id"),
+            (TagValueType::EventPointer, "event_pointer"),
+            (TagValueType::Geohash, "geohash"),
+            (TagValueType::IanaTimeZoneId, "iana_time_zone_id"),
+            (TagValueType::Kind, "kind"),
+            (TagValueType::Nip01Coordinate, "nip01_coordinate"),
+            (TagValueType::PublicKey, "public_key"),
+            (TagValueType::RelayUrl, "relay_url"),
+            (TagValueType::Sha256, "sha256"),
+            (TagValueType::Text, "text"),
+            (TagValueType::UnixTimestamp, "unix_timestamp"),
+            (TagValueType::Uri, "uri"),
+            (TagValueType::Url, "url"),
+            (TagValueType::UtcDayIndex, "utc_day_index"),
+            (TagValueType::Uuid, "uuid"),
         ] {
             assert_eq!(tag_value_type_name(value_type), expected);
         }

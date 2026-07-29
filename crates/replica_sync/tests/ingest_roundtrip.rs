@@ -1,17 +1,15 @@
 use radroots_event::envelope::kind::{
     KIND_FARM, KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC, KIND_PLOT, KIND_PROFILE,
 };
-use radroots_event::farm::change_set::{
-    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-};
-use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotLocation};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+use radroots_event::farm::plot::{Plot, PlotLocation};
+use radroots_event::farm::{Farm, FarmPublicLocation, FarmRef};
 use radroots_event::profile::{
-    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfileType, radroots_profile_type_tag_value,
+    ProfileType, RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_tag_value,
 };
-use radroots_event::social::list::RadrootsListEntry;
-use radroots_event::social::list_set::RadrootsListSet;
-use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
+use radroots_event::social::list::ListEntry;
+use radroots_event::social::list_set::ListSet;
+use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
@@ -180,7 +178,7 @@ fn unwrap_sql_panics_on_error() {
     assert!(result.is_err());
 }
 
-fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> RadrootsEventEnvelope {
+fn draft_to_event(draft: &RadrootsReplicaEventDraft, index: u32) -> EventEnvelope {
     event_with_parts(
         u64::from(index) + 1,
         draft.author.as_str(),
@@ -218,11 +216,11 @@ fn seed_source(
     };
     let farm_row = unwrap_sql(farm::create(exec, &farm_fields), "farm").result;
 
-    let point = radroots_event::farm::change_set::RadrootsGeoJsonPoint {
+    let point = radroots_event::farm::change_set::GeoJsonPoint {
         r#type: "Point".to_string(),
         coordinates: [-122.4, 37.7],
     };
-    let polygon = radroots_event::farm::change_set::RadrootsGeoJsonPolygon {
+    let polygon = radroots_event::farm::change_set::GeoJsonPolygon {
         r#type: "Polygon".to_string(),
         coordinates: vec![vec![
             [-122.4, 37.7],
@@ -567,7 +565,7 @@ fn ingest_reports_transaction_boundary_errors() {
         9_001,
         &author,
         10,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "tx-errors",
     );
 
@@ -626,7 +624,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         9_201,
         &profile_pubkey,
         10,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "profile-ok",
     );
     let profile_parse_error = event_with_parts(
@@ -670,7 +668,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         &farm_pubkey,
         14,
         "AAAAAAAAAAAAAAAAAAAAAQ",
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_seed_d_tag.to_string(),
         },
@@ -727,7 +725,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         9_209,
         &"c".repeat(64),
         18,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "profile-state-insert",
     );
     assert!(
@@ -750,7 +748,7 @@ fn ingest_reports_parse_and_state_error_paths_for_all_kinds() {
         &farm_pubkey,
         20,
         "AAAAAAAAAAAAAAAAAAAAAg",
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_seed_d_tag.to_string(),
         },
@@ -767,7 +765,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
     let exec = SqlxSqliteExecutor::open_memory().expect("db");
     migrations::run_all_up(&exec).expect("migrations");
 
-    let assert_query_fail = |needle: &'static str, event: &RadrootsEventEnvelope| {
+    let assert_query_fail = |needle: &'static str, event: &EventEnvelope| {
         let fail = QueryFailExecutor {
             inner: &exec,
             needle,
@@ -784,7 +782,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         9_301,
         &profile_pubkey,
         10,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "profile-query",
     );
     assert_query_fail("select * from nostr_profile", &profile_create);
@@ -797,7 +795,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         9_302,
         &profile_pubkey,
         11,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "profile-query-updated",
     );
     assert_query_fail("update nostr_profile", &profile_update);
@@ -810,7 +808,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         12,
         farm_d_tag,
         "farm-query",
-        Some(RadrootsFarmPublicLocation {
+        Some(FarmPublicLocation {
             primary: "farm".to_string(),
             city: Some("city".to_string()),
             region: None,
@@ -843,12 +841,12 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         &farm_pubkey,
         14,
         plot_d_tag,
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_d_tag.to_string(),
         },
         "plot-query",
-        Some(RadrootsPlotLocation {
+        Some(PlotLocation {
             primary: Some("plot".to_string()),
             city: None,
             region: None,
@@ -870,7 +868,7 @@ fn ingest_reports_query_fail_paths_for_profile_farm_plot_and_list_sets() {
         &farm_pubkey,
         15,
         plot_d_tag,
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_d_tag.to_string(),
         },
@@ -916,8 +914,8 @@ fn event_with_parts(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+) -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
         id: format!("{id:064x}"),
         author: author.to_string(),
         created_at: u64::from(created_at),
@@ -929,15 +927,15 @@ fn event_with_parts(
     .expect("test event envelope")
 }
 
-fn sample_point(lat: f64, lng: f64) -> RadrootsGeoJsonPoint {
-    RadrootsGeoJsonPoint {
+fn sample_point(lat: f64, lng: f64) -> GeoJsonPoint {
+    GeoJsonPoint {
         r#type: "Point".to_string(),
         coordinates: [lng, lat],
     }
 }
 
-fn sample_polygon(lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
-    RadrootsGeoJsonPolygon {
+fn sample_polygon(lat: f64, lng: f64) -> GeoJsonPolygon {
+    GeoJsonPolygon {
         r#type: "Polygon".to_string(),
         coordinates: vec![vec![
             [lng, lat],
@@ -948,8 +946,8 @@ fn sample_polygon(lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
     }
 }
 
-fn sample_gcs(lat: f64, lng: f64, geohash: &str) -> RadrootsGcsLocation {
-    RadrootsGcsLocation {
+fn sample_gcs(lat: f64, lng: f64, geohash: &str) -> GcsLocation {
+    GcsLocation {
         lat,
         lng,
         geohash: geohash.to_string(),
@@ -976,9 +974,9 @@ fn profile_event(
     id: u64,
     author: &str,
     created_at: u32,
-    profile_type: Option<RadrootsProfileType>,
+    profile_type: Option<ProfileType>,
     name: &str,
-) -> RadrootsEventEnvelope {
+) -> EventEnvelope {
     let profile = serde_json::json!({
         "name": name,
         "display_name": format!("{name}_display"),
@@ -1013,10 +1011,10 @@ fn farm_event(
     created_at: u32,
     d_tag: &str,
     name: &str,
-    location: Option<RadrootsFarmPublicLocation>,
+    location: Option<FarmPublicLocation>,
     tags: Option<Vec<String>>,
-) -> RadrootsEventEnvelope {
-    let farm = RadrootsFarm {
+) -> EventEnvelope {
+    let farm = Farm {
         d_tag: d_tag.to_string(),
         name: name.to_string(),
         about: Some(format!("{name} about")),
@@ -1043,12 +1041,12 @@ fn plot_event(
     author: &str,
     created_at: u32,
     d_tag: &str,
-    farm_ref: RadrootsFarmRef,
+    farm_ref: FarmRef,
     name: &str,
-    location: Option<RadrootsPlotLocation>,
+    location: Option<PlotLocation>,
     tags: Option<Vec<String>>,
-) -> RadrootsEventEnvelope {
-    let plot = RadrootsPlot {
+) -> EventEnvelope {
+    let plot = Plot {
         d_tag: d_tag.to_string(),
         farm: farm_ref,
         name: name.to_string(),
@@ -1072,8 +1070,8 @@ fn list_set_event(
     author: &str,
     created_at: u32,
     kind: u32,
-    list_set: &RadrootsListSet,
-) -> RadrootsEventEnvelope {
+    list_set: &ListSet,
+) -> EventEnvelope {
     let parts = list_set_encode::to_wire_parts_with_kind(list_set, kind).expect("list set parts");
     event_with_parts(id, author, created_at, kind, parts.content, parts.tags)
 }
@@ -1088,7 +1086,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         101,
         &profile_pubkey,
         10,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "alice",
     );
     assert_eq!(
@@ -1103,7 +1101,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         102,
         &profile_pubkey,
         9,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "alice-older",
     );
     assert_eq!(
@@ -1114,7 +1112,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         103,
         &profile_pubkey,
         10,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "alice-updated",
     );
     assert_eq!(
@@ -1126,7 +1124,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         100,
         &profile_pubkey,
         10,
-        Some(RadrootsProfileType::Individual),
+        Some(ProfileType::Individual),
         "alice-lower-id",
     );
     assert_eq!(
@@ -1140,14 +1138,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     assert!(err.to_string().contains("profile_type required"));
 
     let profile_types = [
-        (RadrootsProfileType::Farm, "f".repeat(64), "farm-profile"),
-        (RadrootsProfileType::Coop, "c".repeat(64), "coop-profile"),
-        (RadrootsProfileType::Any, "a".repeat(64), "any-profile"),
-        (
-            RadrootsProfileType::Radrootsd,
-            "d".repeat(64),
-            "radrootsd-profile",
-        ),
+        (ProfileType::Farm, "f".repeat(64), "farm-profile"),
+        (ProfileType::Coop, "c".repeat(64), "coop-profile"),
+        (ProfileType::Any, "a".repeat(64), "any-profile"),
+        (ProfileType::Radrootsd, "d".repeat(64), "radrootsd-profile"),
     ];
     for (index, (profile_type, pubkey, name)) in profile_types.iter().enumerate() {
         let event = profile_event(
@@ -1165,7 +1159,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
 
     let farm_pubkey = "e".repeat(64);
     let farm_d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
-    let farm_location = RadrootsFarmPublicLocation {
+    let farm_location = FarmPublicLocation {
         primary: "farm-primary".to_string(),
         city: Some("city".to_string()),
         region: Some("region".to_string()),
@@ -1284,7 +1278,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     assert_eq!(farm_tags[0].tag, "market");
 
     let plot_d_tag = "AAAAAAAAAAAAAAAAAAAAAQ";
-    let plot_location = RadrootsPlotLocation {
+    let plot_location = PlotLocation {
         primary: Some("plot-primary".to_string()),
         city: Some("plot-city".to_string()),
         region: Some("plot-region".to_string()),
@@ -1296,7 +1290,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         &farm_pubkey,
         200,
         plot_d_tag,
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_d_tag.to_string(),
         },
@@ -1322,7 +1316,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         &farm_pubkey,
         199,
         plot_d_tag,
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_d_tag.to_string(),
         },
@@ -1339,7 +1333,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         &farm_pubkey,
         200,
         plot_d_tag,
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_d_tag.to_string(),
         },
@@ -1357,7 +1351,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         &farm_pubkey,
         200,
         plot_d_tag,
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: farm_pubkey.clone(),
             d_tag: farm_d_tag.to_string(),
         },
@@ -1375,7 +1369,7 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         &farm_pubkey,
         201,
         "AAAAAAAAAAAAAAAAAAAAAg",
-        RadrootsFarmRef {
+        FarmRef {
             pubkey: "3".repeat(64),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
@@ -1416,10 +1410,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     assert_eq!(plot_tags.len(), 1);
     assert_eq!(plot_tags[0].tag, "updated");
 
-    let non_generic_list_set = RadrootsListSet {
+    let non_generic_list_set = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![farm_pubkey.clone()],
         }],
@@ -1439,10 +1433,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         RadrootsReplicaIngestOutcome::Skipped
     );
 
-    let metadata_list_set = RadrootsListSet {
+    let metadata_list_set = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![farm_pubkey.clone()],
         }],
@@ -1461,10 +1455,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         .expect_err("metadata must be rejected");
     assert!(metadata_err.to_string().contains("must omit metadata"));
 
-    let description_list_set = RadrootsListSet {
+    let description_list_set = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![farm_pubkey.clone()],
         }],
@@ -1483,10 +1477,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         .expect_err("description metadata must be rejected");
     assert!(description_err.to_string().contains("must omit metadata"));
 
-    let image_list_set = RadrootsListSet {
+    let image_list_set = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![farm_pubkey.clone()],
         }],
@@ -1505,10 +1499,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         .expect_err("image metadata must be rejected");
     assert!(image_err.to_string().contains("must omit metadata"));
 
-    let content_list_set = RadrootsListSet {
+    let content_list_set = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: "not-empty".to_string(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![farm_pubkey.clone()],
         }],
@@ -1527,10 +1521,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         radroots_replica_ingest_event(&exec, &content_event).expect_err("content must be rejected");
     assert!(content_err.to_string().contains("must not include content"));
 
-    let invalid_member_of = RadrootsListSet {
+    let invalid_member_of = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "a".to_string(),
             values: vec![farm_pubkey.clone()],
         }],
@@ -1553,15 +1547,15 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
             .contains("must only include p tags")
     );
 
-    let member_of_valid = RadrootsListSet {
+    let member_of_valid = ListSet {
         d_tag: "member_of.farms".to_string(),
         content: String::new(),
         entries: vec![
-            RadrootsListEntry {
+            ListEntry {
                 tag: "p".to_string(),
                 values: vec![farm_pubkey.clone()],
             },
-            RadrootsListEntry {
+            ListEntry {
                 tag: "p".to_string(),
                 values: vec![farm_pubkey.clone()],
             },
@@ -1624,10 +1618,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     assert_eq!(claims.len(), 1);
     assert_eq!(claims[0].farm_pubkey, farm_pubkey);
 
-    let invalid_members = RadrootsListSet {
+    let invalid_members = ListSet {
         d_tag: format!("farm:{farm_d_tag}:members"),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "a".to_string(),
             values: vec!["x".to_string()],
         }],
@@ -1723,10 +1717,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     .results;
     assert_eq!(members.len(), 3);
 
-    let invalid_plots = RadrootsListSet {
+    let invalid_plots = ListSet {
         d_tag: format!("farm:{farm_d_tag}:plots"),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec!["x".to_string()],
         }],
@@ -1750,10 +1744,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
     );
 
     let plot_address = plot_encode::plot_address(&farm_pubkey, plot_d_tag).expect("plot address");
-    let plots_valid = RadrootsListSet {
+    let plots_valid = ListSet {
         d_tag: format!("farm:{farm_d_tag}:plots"),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "a".to_string(),
             values: vec![plot_address],
         }],
@@ -1767,10 +1761,10 @@ fn ingest_event_paths_cover_profile_farm_plot_and_list_set_variants() {
         RadrootsReplicaIngestOutcome::Applied
     );
 
-    let unsupported_list_set = RadrootsListSet {
+    let unsupported_list_set = ListSet {
         d_tag: "unsupported.list".to_string(),
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![farm_pubkey.clone()],
         }],

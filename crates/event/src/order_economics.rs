@@ -5,51 +5,45 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_core::{Currency, Decimal, Money, Unit};
 
-use crate::id::{RadrootsInventoryBinId, RadrootsOrderQuoteId};
+use crate::id::{InventoryBinId, OrderQuoteId};
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderItem")))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderItem")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderItem {
-    pub bin_id: RadrootsInventoryBinId,
+pub struct OrderItem {
+    pub bin_id: InventoryBinId,
     pub bin_count: u32,
 }
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderPricingBasis"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderPricingBasis")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderPricingBasis {
+pub enum OrderPricingBasis {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "listing_event"))]
     ListingEvent,
 }
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderEconomicLineKind"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderEconomicLineKind")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderEconomicLineKind {
+pub enum OrderEconomicLineKind {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "listing_discount"))]
     ListingDiscount,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "basket_adjustment"))]
@@ -60,17 +54,14 @@ pub enum RadrootsOrderEconomicLineKind {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderEconomicActor"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderEconomicActor")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderEconomicActor {
+pub enum OrderEconomicActor {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "buyer"))]
     Buyer,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "seller"))]
@@ -79,17 +70,14 @@ pub enum RadrootsOrderEconomicActor {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderEconomicEffect"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderEconomicEffect")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsOrderEconomicEffect {
+pub enum OrderEconomicEffect {
     #[cfg_attr(any(feature = "serde", test), serde(rename = "increase"))]
     Increase,
     #[cfg_attr(any(feature = "serde", test), serde(rename = "decrease"))]
@@ -103,8 +91,8 @@ pub enum RadrootsOrderEconomicEffect {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderEconomicItem {
-    pub bin_id: RadrootsInventoryBinId,
+pub struct OrderEconomicItem {
+    pub bin_id: InventoryBinId,
     pub bin_count: u32,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Decimal")))]
     pub quantity_amount: Decimal,
@@ -120,20 +108,17 @@ pub struct RadrootsOrderEconomicItem {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderEconomicLine"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderEconomicLine")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderEconomicLine {
+pub struct OrderEconomicLine {
     pub id: String,
-    pub kind: RadrootsOrderEconomicLineKind,
-    pub actor: RadrootsOrderEconomicActor,
-    pub effect: RadrootsOrderEconomicEffect,
+    pub kind: OrderEconomicLineKind,
+    pub actor: OrderEconomicActor,
+    pub effect: OrderEconomicEffect,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Money")))]
     pub amount: Money,
     pub reason: String,
@@ -141,16 +126,13 @@ pub struct RadrootsOrderEconomicLine {
 
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
-#[cfg_attr(
-    all(test, feature = "std"),
-    dto(ts(name = "RadrootsOrderEconomicTotals"))
-)]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "OrderEconomicTotals")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderEconomicTotals {
+pub struct OrderEconomicTotals {
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Money")))]
     pub subtotal: Money,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Money")))]
@@ -168,15 +150,15 @@ pub struct RadrootsOrderEconomicTotals {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsOrderEconomics {
-    pub quote_id: RadrootsOrderQuoteId,
+pub struct OrderEconomics {
+    pub quote_id: OrderQuoteId,
     pub quote_version: u32,
-    pub pricing_basis: RadrootsOrderPricingBasis,
+    pub pricing_basis: OrderPricingBasis,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Currency")))]
     pub currency: Currency,
-    pub items: Vec<RadrootsOrderEconomicItem>,
-    pub discounts: Vec<RadrootsOrderEconomicLine>,
-    pub adjustments: Vec<RadrootsOrderEconomicLine>,
+    pub items: Vec<OrderEconomicItem>,
+    pub discounts: Vec<OrderEconomicLine>,
+    pub adjustments: Vec<OrderEconomicLine>,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Money")))]
     pub subtotal: Money,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Money")))]

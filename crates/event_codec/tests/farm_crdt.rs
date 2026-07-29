@@ -2,10 +2,10 @@
 
 use radroots_event::{
     farm::crdt::{
-        RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtChange,
-        RadrootsFarmCrdtDocumentKind, RadrootsFarmSemanticKind,
+        CrdtBackend, FarmCrdtChange, FarmCrdtDocumentKind, FarmSemanticKind,
+        RADROOTS_FARM_CRDT_CHANGE_SCHEMA,
     },
-    farm::workspace::RadrootsFarmWorkspaceRef,
+    farm::workspace::FarmWorkspaceRef,
 };
 use radroots_event_codec::farm_crdt::encode::to_wire_parts;
 
@@ -14,22 +14,22 @@ const DOCUMENT_ID: &str = "AAAAAAAAAAAAAAAAAAAAAg";
 
 #[test]
 fn farm_crdt_change_encodes_without_optional_metadata() {
-    let change = RadrootsFarmCrdtChange {
+    let change = FarmCrdtChange {
         schema: RADROOTS_FARM_CRDT_CHANGE_SCHEMA.to_string(),
-        workspace: RadrootsFarmWorkspaceRef {
+        workspace: FarmWorkspaceRef {
             pubkey: "workspace_pubkey".to_string(),
             d_tag: WORKSPACE_D_TAG.to_string(),
         },
         farm_group_id: "field-group".to_string(),
         document_id: DOCUMENT_ID.to_string(),
-        document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
-        crdt_backend: RadrootsCrdtBackend::Automerge,
+        document_kind: FarmCrdtDocumentKind::FarmTask,
+        crdt_backend: CrdtBackend::Automerge,
         crdt_backend_version: None,
         actor_id: "actor_abc".to_string(),
         change_hash: "crdt_hash_abc".to_string(),
         dependencies: Vec::new(),
         encoded_change: "abc-DEF_012".to_string(),
-        semantic_kind: RadrootsFarmSemanticKind::FarmTaskCreate,
+        semantic_kind: FarmSemanticKind::FarmTaskCreate,
         business_time_ms: 1_780_000_000_000,
         author_member_id: None,
         app_version: None,

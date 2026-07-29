@@ -8,7 +8,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_FARM,
-    farm::RadrootsFarm,
+    farm::Farm,
     farm::location::{has_textual_locality, is_public_geohash5},
     tag::name::TAG_D,
 };
@@ -40,7 +40,7 @@ pub fn farm_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsFarm, EventParseError> {
+) -> Result<Farm, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "30340",
@@ -53,7 +53,7 @@ pub fn farm_from_event(
     let d_tag = parse_d_tag(tags)?;
     reject_private_farm_location_tags(tags)?;
     reject_private_farm_ops_content(content)?;
-    let mut farm: RadrootsFarm =
+    let mut farm: Farm =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
     if farm.d_tag.trim().is_empty() {
@@ -155,7 +155,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsFarm>, EventParseError> {
+) -> Result<RadrootsParsedData<Farm>, EventParseError> {
     let farm = farm_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -174,7 +174,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsFarm>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Farm>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

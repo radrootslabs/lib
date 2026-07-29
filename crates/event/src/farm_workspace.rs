@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::envelope::kind::KIND_FARM_WORKSPACE_MANIFEST as KIND_FARM_WORKSPACE_MANIFEST_EVENT;
-use crate::farm::RadrootsFarmRef;
+use crate::farm::FarmRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -16,15 +16,15 @@ pub const RADROOTS_FARM_WORKSPACE_TAG: &str = "radroots:farm:workspace";
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsFarmWorkspaceManifest {
+pub struct FarmWorkspaceManifest {
     pub d_tag: String,
     pub schema: String,
     pub farm_group_id: String,
     pub name: String,
     pub owner_pubkey: String,
-    pub farm: Option<RadrootsFarmRef>,
-    pub relays: Vec<RadrootsFarmWorkspaceRelay>,
-    pub media_servers: Vec<RadrootsFarmWorkspaceMediaServer>,
+    pub farm: Option<FarmRef>,
+    pub relays: Vec<FarmWorkspaceRelay>,
+    pub media_servers: Vec<FarmWorkspaceMediaServer>,
     pub supported_kinds: Vec<u32>,
     pub protocol_version: String,
     pub created_at_ms: u64,
@@ -36,7 +36,7 @@ pub struct RadrootsFarmWorkspaceManifest {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RadrootsFarmWorkspaceRef {
+pub struct FarmWorkspaceRef {
     pub pubkey: String,
     pub d_tag: String,
 }
@@ -46,9 +46,9 @@ pub struct RadrootsFarmWorkspaceRef {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsFarmWorkspaceRelay {
+pub struct FarmWorkspaceRelay {
     pub url: String,
-    pub mode: RadrootsFarmWorkspaceRelayMode,
+    pub mode: FarmWorkspaceRelayMode,
 }
 
 #[cfg_attr(
@@ -56,7 +56,7 @@ pub struct RadrootsFarmWorkspaceRelay {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsFarmWorkspaceRelayMode {
+pub enum FarmWorkspaceRelayMode {
     Read,
     Write,
     ReadWrite,
@@ -67,7 +67,7 @@ pub enum RadrootsFarmWorkspaceRelayMode {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsFarmWorkspaceMediaServer {
+pub struct FarmWorkspaceMediaServer {
     pub url: String,
     pub service: String,
 }
@@ -122,22 +122,22 @@ mod tests {
         assert_eq!(value["supported_kinds"][1], KIND_FARM_WORKSPACE_MANIFEST);
     }
 
-    fn sample_manifest() -> RadrootsFarmWorkspaceManifest {
-        RadrootsFarmWorkspaceManifest {
+    fn sample_manifest() -> FarmWorkspaceManifest {
+        FarmWorkspaceManifest {
             d_tag: "ABCDEFGHIJKLMNOPQRSTUV".to_string(),
             schema: RADROOTS_FARM_WORKSPACE_SCHEMA.to_string(),
             farm_group_id: "BCDEFGHIJKLMNOPQRSTUVW".to_string(),
             name: "Small Regen Farm".to_string(),
             owner_pubkey: "owner_pubkey".to_string(),
-            farm: Some(RadrootsFarmRef {
+            farm: Some(FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "CDEFGHIJKLMNOPQRSTUVWX".to_string(),
             }),
-            relays: vec![RadrootsFarmWorkspaceRelay {
+            relays: vec![FarmWorkspaceRelay {
                 url: "wss://relay.example.invalid/farm/ABCDEFGHIJKLMNOPQRSTUV".to_string(),
-                mode: RadrootsFarmWorkspaceRelayMode::ReadWrite,
+                mode: FarmWorkspaceRelayMode::ReadWrite,
             }],
-            media_servers: vec![RadrootsFarmWorkspaceMediaServer {
+            media_servers: vec![FarmWorkspaceMediaServer {
                 url: "https://media.example.invalid/farm/ABCDEFGHIJKLMNOPQRSTUV".to_string(),
                 service: "RadrootsPrivateMedia".to_string(),
             }],

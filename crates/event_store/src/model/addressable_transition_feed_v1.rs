@@ -3,7 +3,7 @@ use super::{
     RadrootsNip09SuppressionEvidenceV1,
 };
 use crate::RadrootsEventStoreError;
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -283,7 +283,7 @@ impl RadrootsAddressableTransitionRawHeadDecisionV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsAddressableTransitionEventReferenceV1 {
-    pub(crate) event_id: RadrootsEventId,
+    pub(crate) event_id: EventId,
     pub(crate) event_seq: i64,
 }
 
@@ -330,7 +330,7 @@ impl RadrootsAddressableTransitionCauseV1 {
 
 /// The exact addressable head identity retained by the event store.
 ///
-/// This is intentionally not a [`radroots_event::id::RadrootsNip01Coordinate`]:
+/// This is intentionally not a [`radroots_event::id::Nip01Coordinate`]:
 /// an individually valid maximum-size `d` tag can make the combined NIP-01
 /// coordinate too large for a wire tag element while still remaining valid raw
 /// head identity.
@@ -356,7 +356,7 @@ impl RadrootsAddressableTransitionCoordinateV1 {
 }
 
 impl RadrootsAddressableTransitionEventReferenceV1 {
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -373,7 +373,7 @@ impl RadrootsAddressableTransitionEventReferenceV1 {
 /// is not proof that the event remains current when a historical page is read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsStoreProducedCanonicalEventV1 {
-    pub(crate) event_id: RadrootsEventId,
+    pub(crate) event_id: EventId,
     pub(crate) pubkey: PublicKey,
     pub(crate) created_at: u64,
     pub(crate) kind: u32,
@@ -381,7 +381,7 @@ pub struct RadrootsStoreProducedCanonicalEventV1 {
 }
 
 impl RadrootsStoreProducedCanonicalEventV1 {
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 

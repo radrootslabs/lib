@@ -117,28 +117,28 @@ impl Dto for RadrootsOperationalListingTradeProjection {
         .with_field(field(
             "availability",
             "availability",
-            ts_ref("RadrootsOperationalListingAvailability"),
+            ts_ref("OperationalListingAvailability"),
             "crates/trade/src/operational_listing/validation.rs",
             37,
         ))
         .with_field(field(
             "location",
             "location",
-            ts_ref("RadrootsOperationalListingPublicLocation"),
+            ts_ref("OperationalListingPublicLocation"),
             "crates/trade/src/operational_listing/validation.rs",
             38,
         ))
         .with_field(field(
             "delivery_method",
             "delivery_method",
-            ts_ref("RadrootsOperationalListingDeliveryMethod"),
+            ts_ref("OperationalListingDeliveryMethod"),
             "crates/trade/src/operational_listing/validation.rs",
             39,
         ))
         .with_field(field(
             "listing",
             "listing",
-            ts_ref("RadrootsOperationalListing"),
+            ts_ref("OperationalListing"),
             "crates/trade/src/operational_listing/validation.rs",
             40,
         ));
@@ -289,7 +289,7 @@ mod tests {
         );
         assert_eq!(
             typescript_override_target(field_ty(listing, "listing")),
-            Some("RadrootsOperationalListing")
+            Some("OperationalListing")
         );
         assert_eq!(
             typescript_override_target(field_ty(subtotal, "price_currency")),

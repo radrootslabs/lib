@@ -11,9 +11,9 @@ use nostr::{
 use thiserror::Error;
 
 use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_MESSAGE_FILE};
-use radroots_event::social::message::RadrootsMessage;
-use radroots_event::social::message_file::RadrootsMessageFile;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::social::message::Message;
+use radroots_event::social::message_file::MessageFile;
+use radroots_event::wire::Nip01EventWireParts;
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message::decode as message_decode;
 use radroots_event_codec::message::encode as message_encode;
@@ -41,8 +41,8 @@ pub enum RadrootsNip17Error {
 
 #[derive(Clone, Debug)]
 pub enum RadrootsNip17Rumor {
-    Message(RadrootsParsedData<RadrootsMessage>),
-    MessageFile(Box<RadrootsParsedData<RadrootsMessageFile>>),
+    Message(RadrootsParsedData<Message>),
+    MessageFile(Box<RadrootsParsedData<MessageFile>>),
 }
 
 #[derive(Clone, Debug)]
@@ -76,7 +76,7 @@ fn tags_from_slices(tag_slices: &[Vec<String>]) -> Vec<Tag> {
 }
 
 fn rumor_from_parts(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
     author: PublicKey,
     created_at: Option<u64>,
 ) -> Result<UnsignedEvent, RadrootsNip17Error> {
@@ -93,7 +93,7 @@ fn rumor_from_parts(
 }
 
 fn parse_recipients(
-    recipients: &[radroots_event::social::message::RadrootsMessageRecipient],
+    recipients: &[radroots_event::social::message::MessageRecipient],
 ) -> Result<Vec<PublicKey>, RadrootsNip17Error> {
     let mut out = Vec::with_capacity(recipients.len());
     for recipient in recipients {
@@ -135,7 +135,7 @@ where
 
 pub async fn radroots_nostr_wrap_message<T>(
     signer: &T,
-    message: &RadrootsMessage,
+    message: &Message,
     options: RadrootsNip17WrapOptions,
 ) -> Result<Vec<Event>, RadrootsNip17Error>
 where
@@ -150,7 +150,7 @@ where
 
 pub async fn radroots_nostr_wrap_message_file<T>(
     signer: &T,
-    message: &RadrootsMessageFile,
+    message: &MessageFile,
     options: RadrootsNip17WrapOptions,
 ) -> Result<Vec<Event>, RadrootsNip17Error>
 where
@@ -210,10 +210,8 @@ mod tests {
     use super::*;
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use nostr::{Keys, SecretKey};
-    use radroots_event::social::message::{RadrootsMessage, RadrootsMessageRecipient};
-    use radroots_event::social::message_file::{
-        RadrootsMessageFile, RadrootsMessageFileDimensions,
-    };
+    use radroots_event::social::message::{Message, MessageRecipient};
+    use radroots_event::social::message_file::{MessageFile, MessageFileDimensions};
 
     fn sender_keys() -> Keys {
         Keys::new(SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).unwrap())
@@ -227,7 +225,7 @@ mod tests {
     fn rumor_kind_conversion_is_range_checked() {
         let author = sender_keys().public_key();
         let max = rumor_from_parts(
-            RadrootsNip01EventWireParts {
+            Nip01EventWireParts {
                 kind: u32::from(u16::MAX),
                 content: String::new(),
                 tags: Vec::new(),
@@ -241,7 +239,7 @@ mod tests {
         let overflow = u32::from(u16::MAX) + 1;
         assert!(matches!(
             rumor_from_parts(
-                RadrootsNip01EventWireParts {
+                Nip01EventWireParts {
                     kind: overflow,
                     content: String::new(),
                     tags: Vec::new(),
@@ -257,8 +255,8 @@ mod tests {
     async fn wrap_and_unwrap_message() {
         let sender = sender_keys();
         let receiver = receiver_keys();
-        let message = RadrootsMessage {
-            recipients: vec![RadrootsMessageRecipient {
+        let message = Message {
+            recipients: vec![MessageRecipient {
                 public_key: receiver.public_key().to_string(),
                 relay_url: None,
             }],
@@ -293,8 +291,8 @@ mod tests {
     async fn wrap_and_unwrap_message_file() {
         let sender = sender_keys();
         let receiver = receiver_keys();
-        let message = RadrootsMessageFile {
-            recipients: vec![RadrootsMessageRecipient {
+        let message = MessageFile {
+            recipients: vec![MessageRecipient {
                 public_key: receiver.public_key().to_string(),
                 relay_url: None,
             }],
@@ -308,7 +306,7 @@ mod tests {
             encrypted_hash: "hash".to_string(),
             original_hash: None,
             size: Some(1200),
-            dimensions: Some(RadrootsMessageFileDimensions { w: 1200, h: 800 }),
+            dimensions: Some(MessageFileDimensions { w: 1200, h: 800 }),
             blurhash: None,
             thumb: None,
             fallbacks: Vec::new(),

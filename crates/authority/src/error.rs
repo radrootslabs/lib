@@ -48,7 +48,7 @@ pub enum RadrootsAuthorityError {
         signer_pubkey: String,
     },
 
-    DraftValidation(radroots_event::draft::RadrootsDraftError),
+    DraftValidation(radroots_event::draft::DraftError),
 
     SignedEventPubkeyMismatch {
         expected_pubkey: String,
@@ -443,7 +443,7 @@ mod tests {
 
         for (actual, expected_authority, expected_source) in cases {
             let authority_error = RadrootsAuthorityError::DraftValidation(
-                radroots_event::draft::RadrootsDraftError::ContractRegistryVersionMismatch {
+                radroots_event::draft::DraftError::ContractRegistryVersionMismatch {
                     expected: 7,
                     actual,
                 },

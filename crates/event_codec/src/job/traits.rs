@@ -5,8 +5,8 @@ use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use radroots_event::{
-    social::job_feedback::RadrootsJobFeedback, social::job_request::RadrootsJobRequest,
-    social::job_result::RadrootsJobResult,
+    social::job_feedback::JobFeedback, social::job_request::JobRequest,
+    social::job_result::JobResult,
 };
 
 use crate::job::{
@@ -33,9 +33,7 @@ pub trait JobEventLike {
     fn raw_tags(&self) -> Vec<Vec<String>>;
     fn raw_sig(&self) -> String;
 
-    fn to_job_request_metadata(
-        &self,
-    ) -> Result<RadrootsParsedData<RadrootsJobRequest>, JobParseError> {
+    fn to_job_request_metadata(&self) -> Result<RadrootsParsedData<JobRequest>, JobParseError> {
         request_metadata_from_event(
             self.raw_id(),
             self.raw_author(),
@@ -45,9 +43,7 @@ pub trait JobEventLike {
         )
     }
 
-    fn to_job_request_event_index(
-        &self,
-    ) -> Result<RadrootsParsedEvent<RadrootsJobRequest>, JobParseError> {
+    fn to_job_request_event_index(&self) -> Result<RadrootsParsedEvent<JobRequest>, JobParseError> {
         request_index_from_event(
             self.raw_id(),
             self.raw_author(),
@@ -59,9 +55,7 @@ pub trait JobEventLike {
         )
     }
 
-    fn to_job_result_metadata(
-        &self,
-    ) -> Result<RadrootsParsedData<RadrootsJobResult>, JobParseError> {
+    fn to_job_result_metadata(&self) -> Result<RadrootsParsedData<JobResult>, JobParseError> {
         result_metadata_from_event(
             self.raw_id(),
             self.raw_author(),
@@ -72,9 +66,7 @@ pub trait JobEventLike {
         )
     }
 
-    fn to_job_result_event_index(
-        &self,
-    ) -> Result<RadrootsParsedEvent<RadrootsJobResult>, JobParseError> {
+    fn to_job_result_event_index(&self) -> Result<RadrootsParsedEvent<JobResult>, JobParseError> {
         result_index_from_event(
             self.raw_id(),
             self.raw_author(),
@@ -86,9 +78,7 @@ pub trait JobEventLike {
         )
     }
 
-    fn to_job_feedback_metadata(
-        &self,
-    ) -> Result<RadrootsParsedData<RadrootsJobFeedback>, JobParseError> {
+    fn to_job_feedback_metadata(&self) -> Result<RadrootsParsedData<JobFeedback>, JobParseError> {
         feedback_metadata_from_event(
             self.raw_id(),
             self.raw_author(),
@@ -101,7 +91,7 @@ pub trait JobEventLike {
 
     fn to_job_feedback_event_index(
         &self,
-    ) -> Result<RadrootsParsedEvent<RadrootsJobFeedback>, JobParseError> {
+    ) -> Result<RadrootsParsedEvent<JobFeedback>, JobParseError> {
         feedback_index_from_event(
             self.raw_id(),
             self.raw_author(),
@@ -176,7 +166,7 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
     }
 }
 
-impl<'a> JobEventBorrow<'a> for radroots_event::envelope::RadrootsEventEnvelope {
+impl<'a> JobEventBorrow<'a> for radroots_event::envelope::EventEnvelope {
     #[inline]
     fn raw_id(&'a self) -> String {
         self.id_hex()

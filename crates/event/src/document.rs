@@ -10,7 +10,7 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsDocumentSubject {
+pub struct DocumentSubject {
     pub pubkey: String,
     pub address: Option<String>,
 }
@@ -22,7 +22,7 @@ pub struct RadrootsDocumentSubject {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsDocument {
+pub struct Document {
     pub d_tag: String,
     pub doc_type: String,
     pub title: String,
@@ -30,6 +30,6 @@ pub struct RadrootsDocument {
     pub summary: Option<String>,
     pub effective_at: Option<u32>,
     pub body_markdown: Option<String>,
-    pub subject: RadrootsDocumentSubject,
+    pub subject: DocumentSubject,
     pub tags: Option<Vec<String>>,
 }

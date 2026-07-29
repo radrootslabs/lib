@@ -8,8 +8,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::{KIND_FARM, KIND_PLOT},
-    farm::RadrootsFarmRef,
-    farm::plot::RadrootsPlot,
+    farm::FarmRef,
+    farm::plot::Plot,
     tag::name::TAG_D,
 };
 
@@ -37,7 +37,7 @@ fn parse_d_tag(tags: &[Vec<String>]) -> Result<String, EventParseError> {
     Ok(value)
 }
 
-fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, EventParseError> {
+fn parse_farm_ref(tags: &[Vec<String>]) -> Result<FarmRef, EventParseError> {
     let tag = tags
         .iter()
         .find(|t| t.first().map(|s| s.as_str()) == Some(TAG_A))
@@ -66,7 +66,7 @@ fn parse_farm_ref(tags: &[Vec<String>]) -> Result<RadrootsFarmRef, EventParseErr
         return Err(EventParseError::InvalidTag(TAG_A));
     }
     validate_d_tag_tag(&d_tag, TAG_A)?;
-    Ok(RadrootsFarmRef { pubkey, d_tag })
+    Ok(FarmRef { pubkey, d_tag })
 }
 
 fn parse_farm_pubkey(tags: &[Vec<String>]) -> Result<String, EventParseError> {
@@ -88,7 +88,7 @@ pub fn plot_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsPlot, EventParseError> {
+) -> Result<Plot, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "30350",
@@ -101,7 +101,7 @@ pub fn plot_from_event(
     let d_tag = parse_d_tag(tags)?;
     let farm_ref = parse_farm_ref(tags)?;
     let farm_pubkey = parse_farm_pubkey(tags)?;
-    let mut plot: RadrootsPlot =
+    let mut plot: Plot =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;
 
     if plot.d_tag.trim().is_empty() {
@@ -129,7 +129,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsPlot>, EventParseError> {
+) -> Result<RadrootsParsedData<Plot>, EventParseError> {
     let plot = plot_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -148,7 +148,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsPlot>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Plot>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

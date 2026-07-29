@@ -22,14 +22,8 @@ use crate::envelope::kind::{
     KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION, KIND_TRADE_PROPOSAL,
     KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
 };
-use crate::id::{
-    RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
-    RadrootsInventoryBinId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
-};
-pub use crate::id::{
-    RadrootsTradeCandidateId as CandidateId, RadrootsTradeId as TradeId,
-    RadrootsTradeMutationId as MutationId,
-};
+pub use crate::id::{CandidateId, MutationId, TradeId};
+use crate::id::{ClassifiedListingAddress, DTag, EventId, InventoryBinId, ParseError};
 use radroots_identity::PublicKey;
 #[cfg(feature = "serde")]
 use serde::{
@@ -67,7 +61,7 @@ pub const RADROOTS_TRADE_MAX_PARENT_MUTATIONS: usize = 4;
 pub const RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsTradeMutationKindV1 {
+pub enum TradeMutationKindV1 {
     Proposal,
     Decision,
     RevisionProposal,
@@ -75,7 +69,7 @@ pub enum RadrootsTradeMutationKindV1 {
     Cancellation,
 }
 
-impl RadrootsTradeMutationKindV1 {
+impl TradeMutationKindV1 {
     pub const fn contract_id(self) -> &'static str {
         match self {
             Self::Proposal => RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
@@ -99,51 +93,51 @@ impl RadrootsTradeMutationKindV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeMutationEnvelopeV1 {
-    pub mutation_id: Option<RadrootsTradeMutationId>,
+pub struct TradeMutationEnvelopeV1 {
+    pub mutation_id: Option<MutationId>,
     pub contract_id: String,
     pub schema_version: u16,
-    pub trade_id: RadrootsTradeId,
-    pub root_mutation_id: Option<RadrootsTradeMutationId>,
+    pub trade_id: TradeId,
+    pub root_mutation_id: Option<MutationId>,
     pub buyer_pubkey: PublicKey,
     pub seller_pubkey: PublicKey,
-    pub farm_id: RadrootsDTag,
-    pub parent_mutation_ids: Vec<RadrootsTradeMutationId>,
+    pub farm_id: DTag,
+    pub parent_mutation_ids: Vec<MutationId>,
     pub author_pubkey: PublicKey,
     pub counterparty_pubkey: PublicKey,
     pub authored_at_unix_s: u64,
-    pub body: RadrootsTradeMutationBodyV1,
+    pub body: TradeMutationBodyV1,
 }
 
-impl RadrootsTradeMutationEnvelopeV1 {
-    pub fn mutation_kind(&self) -> RadrootsTradeMutationKindV1 {
+impl TradeMutationEnvelopeV1 {
+    pub fn mutation_kind(&self) -> TradeMutationKindV1 {
         self.body.mutation_kind()
     }
 
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         if self.schema_version != RADROOTS_TRADE_SCHEMA_VERSION {
-            return Err(RadrootsTradeProtocolError::InvalidSchemaVersion {
+            return Err(TradeProtocolError::InvalidSchemaVersion {
                 expected: RADROOTS_TRADE_SCHEMA_VERSION,
                 actual: self.schema_version,
             });
         }
         let expected = self.mutation_kind().contract_id();
         if self.contract_id != expected {
-            return Err(RadrootsTradeProtocolError::ContractMismatch {
+            return Err(TradeProtocolError::ContractMismatch {
                 expected,
                 actual: self.contract_id.clone(),
             });
         }
         validate_parent_mutation_ids(self.mutation_id.as_ref(), &self.parent_mutation_ids)?;
         match self.mutation_kind() {
-            RadrootsTradeMutationKindV1::Proposal => {
+            TradeMutationKindV1::Proposal => {
                 if self.root_mutation_id.is_some() || !self.parent_mutation_ids.is_empty() {
-                    return Err(RadrootsTradeProtocolError::InvalidInitialParents);
+                    return Err(TradeProtocolError::InvalidInitialParents);
                 }
             }
             _ => {
                 if self.root_mutation_id.is_none() || self.parent_mutation_ids.is_empty() {
-                    return Err(RadrootsTradeProtocolError::MissingParentMutation);
+                    return Err(TradeProtocolError::MissingParentMutation);
                 }
             }
         }
@@ -157,42 +151,42 @@ impl RadrootsTradeMutationEnvelopeV1 {
     feature = "serde",
     serde(rename_all = "snake_case", tag = "mutation_type")
 )]
-pub enum RadrootsTradeMutationBodyV1 {
+pub enum TradeMutationBodyV1 {
     Proposal {
-        candidate: RadrootsTradeCandidateTermsV1,
+        candidate: TradeCandidateTermsV1,
     },
     Decision {
-        proposal_mutation_id: RadrootsTradeMutationId,
-        candidate_id: RadrootsTradeCandidateId,
-        decision: RadrootsTradeDecisionV1,
+        proposal_mutation_id: MutationId,
+        candidate_id: CandidateId,
+        decision: TradeDecisionV1,
     },
     RevisionProposal {
-        candidate: RadrootsTradeCandidateTermsV1,
+        candidate: TradeCandidateTermsV1,
     },
     RevisionDecision {
-        proposal_mutation_id: RadrootsTradeMutationId,
-        candidate_id: RadrootsTradeCandidateId,
-        decision: RadrootsTradeDecisionV1,
+        proposal_mutation_id: MutationId,
+        candidate_id: CandidateId,
+        decision: TradeDecisionV1,
     },
     Cancellation {
-        target_candidate_id: Option<RadrootsTradeCandidateId>,
-        target_claim_mutation_id: Option<RadrootsTradeMutationId>,
+        target_candidate_id: Option<CandidateId>,
+        target_claim_mutation_id: Option<MutationId>,
         reason: String,
     },
 }
 
-impl RadrootsTradeMutationBodyV1 {
-    pub const fn mutation_kind(&self) -> RadrootsTradeMutationKindV1 {
+impl TradeMutationBodyV1 {
+    pub const fn mutation_kind(&self) -> TradeMutationKindV1 {
         match self {
-            Self::Proposal { .. } => RadrootsTradeMutationKindV1::Proposal,
-            Self::Decision { .. } => RadrootsTradeMutationKindV1::Decision,
-            Self::RevisionProposal { .. } => RadrootsTradeMutationKindV1::RevisionProposal,
-            Self::RevisionDecision { .. } => RadrootsTradeMutationKindV1::RevisionDecision,
-            Self::Cancellation { .. } => RadrootsTradeMutationKindV1::Cancellation,
+            Self::Proposal { .. } => TradeMutationKindV1::Proposal,
+            Self::Decision { .. } => TradeMutationKindV1::Decision,
+            Self::RevisionProposal { .. } => TradeMutationKindV1::RevisionProposal,
+            Self::RevisionDecision { .. } => TradeMutationKindV1::RevisionDecision,
+            Self::Cancellation { .. } => TradeMutationKindV1::Cancellation,
         }
     }
 
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         match self {
             Self::Proposal { candidate } | Self::RevisionProposal { candidate } => {
                 candidate.validate()
@@ -213,7 +207,7 @@ impl RadrootsTradeMutationBodyV1 {
                 reason,
             } => {
                 if target_candidate_id.is_none() && target_claim_mutation_id.is_none() {
-                    return Err(RadrootsTradeProtocolError::MissingCancellationTarget);
+                    return Err(TradeProtocolError::MissingCancellationTarget);
                 }
                 validate_non_empty(reason, "reason")
             }
@@ -223,36 +217,36 @@ impl RadrootsTradeMutationBodyV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeCandidateTermsV1 {
-    pub candidate_id: Option<RadrootsTradeCandidateId>,
+pub struct TradeCandidateTermsV1 {
+    pub candidate_id: Option<CandidateId>,
     pub schema_version: u16,
-    pub base_candidate_id: Option<RadrootsTradeCandidateId>,
+    pub base_candidate_id: Option<CandidateId>,
     pub supersession_intent: Option<String>,
     pub buyer_pubkey: PublicKey,
     pub seller_pubkey: PublicKey,
-    pub farm_id: RadrootsDTag,
-    pub lines: Vec<RadrootsTradeCandidateLineV1>,
-    pub line_tombstones: Vec<RadrootsTradeLineTombstoneV1>,
-    pub economics: RadrootsTradeEconomicsProfileV1,
-    pub fulfillment: RadrootsFulfillmentProfileV1,
-    pub cancellation: RadrootsTradeCancellationProfileV1,
-    pub private_terms: Option<RadrootsTradePrivateTermsRefV1>,
+    pub farm_id: DTag,
+    pub lines: Vec<TradeCandidateLineV1>,
+    pub line_tombstones: Vec<TradeLineTombstoneV1>,
+    pub economics: TradeEconomicsProfileV1,
+    pub fulfillment: FulfillmentProfileV1,
+    pub cancellation: TradeCancellationProfileV1,
+    pub private_terms: Option<TradePrivateTermsRefV1>,
     pub proposal_expires_at_unix_s: u64,
 }
 
-impl RadrootsTradeCandidateTermsV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeCandidateTermsV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         if self.schema_version != RADROOTS_TRADE_SCHEMA_VERSION {
-            return Err(RadrootsTradeProtocolError::InvalidSchemaVersion {
+            return Err(TradeProtocolError::InvalidSchemaVersion {
                 expected: RADROOTS_TRADE_SCHEMA_VERSION,
                 actual: self.schema_version,
             });
         }
         if self.lines.is_empty() {
-            return Err(RadrootsTradeProtocolError::MissingLines);
+            return Err(TradeProtocolError::MissingLines);
         }
         if self.lines.len() > RADROOTS_TRADE_MAX_ACTIVE_LINES {
-            return Err(RadrootsTradeProtocolError::TooManyLines {
+            return Err(TradeProtocolError::TooManyLines {
                 max: RADROOTS_TRADE_MAX_ACTIVE_LINES,
                 actual: self.lines.len(),
             });
@@ -281,14 +275,14 @@ impl RadrootsTradeCandidateTermsV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeCandidateLineV1 {
-    pub line_id: RadrootsDTag,
-    pub listing_addr: RadrootsClassifiedListingAddress,
-    pub listing_event_id: RadrootsEventId,
+pub struct TradeCandidateLineV1 {
+    pub line_id: DTag,
+    pub listing_addr: ClassifiedListingAddress,
+    pub listing_event_id: EventId,
     pub listing_snapshot_sha256: String,
     pub product_id: String,
     pub option_id: Option<String>,
-    pub bin_id: RadrootsInventoryBinId,
+    pub bin_id: InventoryBinId,
     pub quantity_mantissa: String,
     pub quantity_scale: u8,
     pub unit_code: String,
@@ -296,11 +290,11 @@ pub struct RadrootsTradeCandidateLineV1 {
     pub unit_price_mantissa: String,
     pub currency_code: String,
     pub line_subtotal_mantissa: String,
-    pub replaces_line_id: Option<RadrootsDTag>,
+    pub replaces_line_id: Option<DTag>,
 }
 
-impl RadrootsTradeCandidateLineV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeCandidateLineV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_sha256_hex(&self.listing_snapshot_sha256, "listing_snapshot_sha256")?;
         validate_non_empty(&self.product_id, "product_id")?;
         if let Some(option_id) = &self.option_id {
@@ -317,20 +311,20 @@ impl RadrootsTradeCandidateLineV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeLineTombstoneV1 {
-    pub line_id: RadrootsDTag,
+pub struct TradeLineTombstoneV1 {
+    pub line_id: DTag,
     pub reason: String,
 }
 
-impl RadrootsTradeLineTombstoneV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeLineTombstoneV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_non_empty(&self.reason, "line_tombstone.reason")
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeEconomicsProfileV1 {
+pub struct TradeEconomicsProfileV1 {
     pub profile_id: String,
     pub currency_code: String,
     pub currency_exponent: u8,
@@ -339,11 +333,11 @@ pub struct RadrootsTradeEconomicsProfileV1 {
     pub discount_total_mantissa: String,
     pub adjustment_total_mantissa: String,
     pub total_mantissa: String,
-    pub adjustments: Vec<RadrootsTradeEconomicAdjustmentV1>,
+    pub adjustments: Vec<TradeEconomicAdjustmentV1>,
 }
 
-impl RadrootsTradeEconomicsProfileV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeEconomicsProfileV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_non_empty(&self.profile_id, "economics.profile_id")?;
         validate_non_empty(&self.currency_code, "economics.currency_code")?;
         validate_non_empty(&self.rounding_profile, "economics.rounding_profile")?;
@@ -358,7 +352,7 @@ impl RadrootsTradeEconomicsProfileV1 {
         )?;
         validate_decimal_string(&self.total_mantissa, "economics.total_mantissa")?;
         if self.adjustments.len() > RADROOTS_TRADE_MAX_ADJUSTMENTS {
-            return Err(RadrootsTradeProtocolError::TooManyAdjustments {
+            return Err(TradeProtocolError::TooManyAdjustments {
                 max: RADROOTS_TRADE_MAX_ADJUSTMENTS,
                 actual: self.adjustments.len(),
             });
@@ -377,16 +371,16 @@ impl RadrootsTradeEconomicsProfileV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeEconomicAdjustmentV1 {
-    pub adjustment_id: RadrootsDTag,
+pub struct TradeEconomicAdjustmentV1 {
+    pub adjustment_id: DTag,
     pub actor: String,
     pub effect: String,
     pub amount_mantissa: String,
     pub reason: String,
 }
 
-impl RadrootsTradeEconomicAdjustmentV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeEconomicAdjustmentV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_non_empty(&self.actor, "adjustment.actor")?;
         validate_non_empty(&self.effect, "adjustment.effect")?;
         validate_decimal_string(&self.amount_mantissa, "adjustment.amount_mantissa")?;
@@ -396,7 +390,7 @@ impl RadrootsTradeEconomicAdjustmentV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsFulfillmentProfileV1 {
+pub struct FulfillmentProfileV1 {
     pub profile_id: String,
     pub method: String,
     pub starts_at_unix_s: u64,
@@ -408,17 +402,17 @@ pub struct RadrootsFulfillmentProfileV1 {
     pub requires_private_terms: bool,
 }
 
-impl RadrootsFulfillmentProfileV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl FulfillmentProfileV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_non_empty(&self.profile_id, "fulfillment.profile_id")?;
         validate_non_empty(&self.method, "fulfillment.method")?;
         validate_non_empty(&self.timezone, "fulfillment.timezone")?;
         validate_non_empty(&self.location_class, "fulfillment.location_class")?;
         if self.ends_at_unix_s <= self.starts_at_unix_s {
-            return Err(RadrootsTradeProtocolError::InvalidTimeRange);
+            return Err(TradeProtocolError::InvalidTimeRange);
         }
         if self.fold > 1 {
-            return Err(RadrootsTradeProtocolError::InvalidField("fulfillment.fold"));
+            return Err(TradeProtocolError::InvalidField("fulfillment.fold"));
         }
         Ok(())
     }
@@ -426,29 +420,29 @@ impl RadrootsFulfillmentProfileV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradeCancellationProfileV1 {
+pub struct TradeCancellationProfileV1 {
     pub profile_id: String,
     pub buyer_pre_agreement: bool,
     pub post_agreement_cutoff_unix_s: Option<u64>,
 }
 
-impl RadrootsTradeCancellationProfileV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeCancellationProfileV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_non_empty(&self.profile_id, "cancellation.profile_id")
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsTradePrivateTermsRefV1 {
+pub struct TradePrivateTermsRefV1 {
     pub artifact_id: String,
     pub schema_id: String,
     pub ciphertext_commitment: String,
     pub required_acknowledgement: bool,
 }
 
-impl RadrootsTradePrivateTermsRefV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradePrivateTermsRefV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_non_empty(&self.artifact_id, "private_terms.artifact_id")?;
         validate_non_empty(&self.schema_id, "private_terms.schema_id")?;
         validate_sha256_hex(
@@ -460,20 +454,20 @@ impl RadrootsTradePrivateTermsRefV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsSellerReservationAssertionV1 {
-    pub reservation_id: RadrootsDTag,
+pub struct SellerReservationAssertionV1 {
+    pub reservation_id: DTag,
     pub inventory_authority_id: PublicKey,
     pub inventory_epoch: u64,
-    pub candidate_id: RadrootsTradeCandidateId,
-    pub commitments: Vec<RadrootsSellerReservationLineV1>,
+    pub candidate_id: CandidateId,
+    pub commitments: Vec<SellerReservationLineV1>,
     pub reservation_expires_at_unix_s: u64,
     pub assertion_commitment: String,
 }
 
-impl RadrootsSellerReservationAssertionV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl SellerReservationAssertionV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         if self.commitments.is_empty() {
-            return Err(RadrootsTradeProtocolError::MissingReservationCommitments);
+            return Err(TradeProtocolError::MissingReservationCommitments);
         }
         validate_sorted_unique_by(
             &self.commitments,
@@ -492,16 +486,16 @@ impl RadrootsSellerReservationAssertionV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct RadrootsSellerReservationLineV1 {
-    pub line_id: RadrootsDTag,
-    pub bin_id: RadrootsInventoryBinId,
+pub struct SellerReservationLineV1 {
+    pub line_id: DTag,
+    pub bin_id: InventoryBinId,
     pub quantity_mantissa: String,
     pub quantity_scale: u8,
     pub unit_code: String,
 }
 
-impl RadrootsSellerReservationLineV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl SellerReservationLineV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         validate_decimal_string(
             &self.quantity_mantissa,
             "reservation.line.quantity_mantissa",
@@ -513,17 +507,17 @@ impl RadrootsSellerReservationLineV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case", tag = "decision"))]
-pub enum RadrootsTradeDecisionV1 {
+pub enum TradeDecisionV1 {
     Accepted {
-        reservation_assertion: Option<RadrootsSellerReservationAssertionV1>,
+        reservation_assertion: Option<SellerReservationAssertionV1>,
     },
     Declined {
         reason: String,
     },
 }
 
-impl RadrootsTradeDecisionV1 {
-    pub fn validate(&self) -> Result<(), RadrootsTradeProtocolError> {
+impl TradeDecisionV1 {
+    pub fn validate(&self) -> Result<(), TradeProtocolError> {
         match self {
             Self::Accepted {
                 reservation_assertion,
@@ -539,14 +533,14 @@ impl RadrootsTradeDecisionV1 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTradeCanonicalMutationV1 {
-    pub mutation_id: RadrootsTradeMutationId,
-    pub envelope: RadrootsTradeMutationEnvelopeV1,
+pub struct TradeCanonicalMutationV1 {
+    pub mutation_id: MutationId,
+    pub envelope: TradeMutationEnvelopeV1,
     pub content: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsTradeProtocolError {
+pub enum TradeProtocolError {
     InvalidSchemaVersion {
         expected: u16,
         actual: u16,
@@ -585,7 +579,7 @@ pub enum RadrootsTradeProtocolError {
     InvalidField(&'static str),
     InvalidIdentifier {
         field: &'static str,
-        error: RadrootsIdParseError,
+        error: ParseError,
     },
     InvalidTimeRange,
     MissingReservationCommitments,
@@ -600,7 +594,7 @@ pub enum RadrootsTradeProtocolError {
     },
 }
 
-impl fmt::Display for RadrootsTradeProtocolError {
+impl fmt::Display for TradeProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidSchemaVersion { expected, actual } => {
@@ -656,12 +650,12 @@ impl fmt::Display for RadrootsTradeProtocolError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsTradeProtocolError {}
+impl std::error::Error for TradeProtocolError {}
 
 #[cfg(feature = "serde")]
 pub fn canonical_trade_candidate_id(
-    candidate: &RadrootsTradeCandidateTermsV1,
-) -> Result<RadrootsTradeCandidateId, RadrootsTradeProtocolError> {
+    candidate: &TradeCandidateTermsV1,
+) -> Result<CandidateId, TradeProtocolError> {
     let mut value = serialize_trade_value(candidate);
     remove_object_field(&mut value, "candidate_id")?;
     let canonical = canonical_jcs_value(&value)?;
@@ -670,8 +664,8 @@ pub fn canonical_trade_candidate_id(
 
 #[cfg(feature = "serde")]
 pub fn canonical_trade_mutation_id(
-    envelope: &RadrootsTradeMutationEnvelopeV1,
-) -> Result<RadrootsTradeMutationId, RadrootsTradeProtocolError> {
+    envelope: &TradeMutationEnvelopeV1,
+) -> Result<MutationId, TradeProtocolError> {
     let mut value = serialize_trade_value(envelope);
     remove_object_field(&mut value, "mutation_id")?;
     let canonical = canonical_jcs_value(&value)?;
@@ -680,8 +674,8 @@ pub fn canonical_trade_mutation_id(
 
 #[cfg(feature = "serde")]
 pub fn canonical_trade_mutation_content(
-    mut envelope: RadrootsTradeMutationEnvelopeV1,
-) -> Result<RadrootsTradeCanonicalMutationV1, RadrootsTradeProtocolError> {
+    mut envelope: TradeMutationEnvelopeV1,
+) -> Result<TradeCanonicalMutationV1, TradeProtocolError> {
     finalize_body_candidate_ids(&mut envelope.body)?;
     envelope.validate()?;
     let mutation_id = canonical_trade_mutation_id(&envelope)?;
@@ -689,12 +683,12 @@ pub fn canonical_trade_mutation_content(
     let value = serialize_trade_value(&envelope);
     let content = canonical_jcs_value(&value)?;
     if content.len() > RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES {
-        return Err(RadrootsTradeProtocolError::ContentTooLarge {
+        return Err(TradeProtocolError::ContentTooLarge {
             max: RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES,
             actual: content.len(),
         });
     }
-    Ok(RadrootsTradeCanonicalMutationV1 {
+    Ok(TradeCanonicalMutationV1 {
         mutation_id,
         envelope,
         content,
@@ -704,25 +698,25 @@ pub fn canonical_trade_mutation_content(
 #[cfg(feature = "serde")]
 pub fn trade_mutation_from_canonical_content(
     content: &str,
-) -> Result<RadrootsTradeMutationEnvelopeV1, RadrootsTradeProtocolError> {
+) -> Result<TradeMutationEnvelopeV1, TradeProtocolError> {
     if content.len() > RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES {
-        return Err(RadrootsTradeProtocolError::ContentTooLarge {
+        return Err(TradeProtocolError::ContentTooLarge {
             max: RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES,
             actual: content.len(),
         });
     }
     let value = parse_json_without_duplicate_keys(content)?;
     if canonical_jcs_value(&value)? != content {
-        return Err(RadrootsTradeProtocolError::NonCanonicalJson);
+        return Err(TradeProtocolError::NonCanonicalJson);
     }
-    let envelope: RadrootsTradeMutationEnvelopeV1 = serde_json::from_value(value)
-        .map_err(|error| RadrootsTradeProtocolError::InvalidJson(error.to_string()))?;
+    let envelope: TradeMutationEnvelopeV1 = serde_json::from_value(value)
+        .map_err(|error| TradeProtocolError::InvalidJson(error.to_string()))?;
     envelope.validate()?;
     verify_candidate_ids(&envelope.body)?;
     if let Some(declared) = &envelope.mutation_id {
         let computed = canonical_trade_mutation_id(&envelope)?;
         if declared != &computed {
-            return Err(RadrootsTradeProtocolError::MutationIdMismatch {
+            return Err(TradeProtocolError::MutationIdMismatch {
                 declared: declared.to_string(),
                 computed: computed.to_string(),
             });
@@ -732,20 +726,20 @@ pub fn trade_mutation_from_canonical_content(
 }
 
 #[cfg(feature = "serde")]
-pub fn canonical_jcs_from_str(content: &str) -> Result<String, RadrootsTradeProtocolError> {
+pub fn canonical_jcs_from_str(content: &str) -> Result<String, TradeProtocolError> {
     let value = parse_json_without_duplicate_keys(content)?;
     canonical_jcs_value(&value)
 }
 
 #[cfg(feature = "serde")]
-pub fn canonical_jcs_value(value: &Value) -> Result<String, RadrootsTradeProtocolError> {
+pub fn canonical_jcs_value(value: &Value) -> Result<String, TradeProtocolError> {
     let mut output = String::new();
     write_canonical_jcs(value, &mut output)?;
     Ok(output)
 }
 
 #[cfg(feature = "serde")]
-fn parse_json_without_duplicate_keys(content: &str) -> Result<Value, RadrootsTradeProtocolError> {
+fn parse_json_without_duplicate_keys(content: &str) -> Result<Value, TradeProtocolError> {
     let mut deserializer = serde_json::Deserializer::from_str(content);
     let value = NoDuplicateJsonValue::deserialize(&mut deserializer).map_err(map_json_error)?;
     deserializer.end().map_err(map_json_error)?;
@@ -753,20 +747,17 @@ fn parse_json_without_duplicate_keys(content: &str) -> Result<Value, RadrootsTra
 }
 
 #[cfg(feature = "serde")]
-fn map_json_error(error: serde_json::Error) -> RadrootsTradeProtocolError {
+fn map_json_error(error: serde_json::Error) -> TradeProtocolError {
     let message = error.to_string();
     if let Some(key) = message.strip_prefix("duplicate key: ") {
         let key = key.split(" at line ").next().unwrap_or(key).to_string();
-        return RadrootsTradeProtocolError::DuplicateKey(key);
+        return TradeProtocolError::DuplicateKey(key);
     }
-    RadrootsTradeProtocolError::InvalidJson(message)
+    TradeProtocolError::InvalidJson(message)
 }
 
 #[cfg(feature = "serde")]
-fn write_canonical_jcs(
-    value: &Value,
-    output: &mut String,
-) -> Result<(), RadrootsTradeProtocolError> {
+fn write_canonical_jcs(value: &Value, output: &mut String) -> Result<(), TradeProtocolError> {
     match value {
         Value::Null => output.push_str("null"),
         Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
@@ -804,11 +795,11 @@ fn write_canonical_jcs(
 }
 
 #[cfg(feature = "serde")]
-fn canonical_number(number: &Number) -> Result<String, RadrootsTradeProtocolError> {
+fn canonical_number(number: &Number) -> Result<String, TradeProtocolError> {
     if number.is_i64() || number.is_u64() {
         Ok(number.to_string())
     } else {
-        Err(RadrootsTradeProtocolError::UnsupportedNumber)
+        Err(TradeProtocolError::UnsupportedNumber)
     }
 }
 
@@ -834,25 +825,22 @@ fn canonical_json_string(value: &str) -> String {
 
 #[cfg(feature = "serde")]
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn trade_candidate_id_from_canonical(canonical: &[u8]) -> RadrootsTradeCandidateId {
-    RadrootsTradeCandidateId::parse(digest_prefixed(RADROOTS_TRADE_CANDIDATE_DOMAIN, canonical))
+fn trade_candidate_id_from_canonical(canonical: &[u8]) -> CandidateId {
+    CandidateId::parse(digest_prefixed(RADROOTS_TRADE_CANDIDATE_DOMAIN, canonical))
         .expect("SHA-256 always produces a canonical 64-character identifier")
 }
 
 #[cfg(feature = "serde")]
 #[cfg_attr(coverage_nightly, coverage(off))]
-fn trade_mutation_id_from_canonical(canonical: &[u8]) -> RadrootsTradeMutationId {
-    RadrootsTradeMutationId::parse(digest_prefixed(RADROOTS_TRADE_MUTATION_DOMAIN, canonical))
+fn trade_mutation_id_from_canonical(canonical: &[u8]) -> MutationId {
+    MutationId::parse(digest_prefixed(RADROOTS_TRADE_MUTATION_DOMAIN, canonical))
         .expect("SHA-256 always produces a canonical 64-character identifier")
 }
 
 #[cfg(feature = "serde")]
-fn remove_object_field(
-    value: &mut Value,
-    field: &'static str,
-) -> Result<(), RadrootsTradeProtocolError> {
+fn remove_object_field(value: &mut Value, field: &'static str) -> Result<(), TradeProtocolError> {
     let Value::Object(map) = value else {
-        return Err(RadrootsTradeProtocolError::InvalidJson(
+        return Err(TradeProtocolError::InvalidJson(
             "root must be object".to_string(),
         ));
     };
@@ -861,12 +849,10 @@ fn remove_object_field(
 }
 
 #[cfg(feature = "serde")]
-fn finalize_body_candidate_ids(
-    body: &mut RadrootsTradeMutationBodyV1,
-) -> Result<(), RadrootsTradeProtocolError> {
+fn finalize_body_candidate_ids(body: &mut TradeMutationBodyV1) -> Result<(), TradeProtocolError> {
     match body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate }
-        | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => {
+        TradeMutationBodyV1::Proposal { candidate }
+        | TradeMutationBodyV1::RevisionProposal { candidate } => {
             let candidate_id = canonical_trade_candidate_id(candidate)?;
             candidate.candidate_id = Some(candidate_id);
         }
@@ -876,16 +862,14 @@ fn finalize_body_candidate_ids(
 }
 
 #[cfg(feature = "serde")]
-fn verify_candidate_ids(
-    body: &RadrootsTradeMutationBodyV1,
-) -> Result<(), RadrootsTradeProtocolError> {
+fn verify_candidate_ids(body: &TradeMutationBodyV1) -> Result<(), TradeProtocolError> {
     match body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate }
-        | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => {
+        TradeMutationBodyV1::Proposal { candidate }
+        | TradeMutationBodyV1::RevisionProposal { candidate } => {
             if let Some(declared) = &candidate.candidate_id {
                 let computed = canonical_trade_candidate_id(candidate)?;
                 if declared != &computed {
-                    return Err(RadrootsTradeProtocolError::CandidateIdMismatch {
+                    return Err(TradeProtocolError::CandidateIdMismatch {
                         declared: declared.to_string(),
                         computed: computed.to_string(),
                     });
@@ -898,27 +882,27 @@ fn verify_candidate_ids(
 }
 
 fn validate_parent_mutation_ids(
-    mutation_id: Option<&RadrootsTradeMutationId>,
-    parents: &[RadrootsTradeMutationId],
-) -> Result<(), RadrootsTradeProtocolError> {
+    mutation_id: Option<&MutationId>,
+    parents: &[MutationId],
+) -> Result<(), TradeProtocolError> {
     if parents.len() > RADROOTS_TRADE_MAX_PARENT_MUTATIONS {
-        return Err(RadrootsTradeProtocolError::TooManyParents {
+        return Err(TradeProtocolError::TooManyParents {
             max: RADROOTS_TRADE_MAX_PARENT_MUTATIONS,
             actual: parents.len(),
         });
     }
-    let mut previous: Option<&RadrootsTradeMutationId> = None;
+    let mut previous: Option<&MutationId> = None;
     for parent in parents {
         if Some(parent) == mutation_id {
-            return Err(RadrootsTradeProtocolError::SelfParent);
+            return Err(TradeProtocolError::SelfParent);
         }
         if let Some(previous) = previous {
             match previous.cmp(parent) {
                 core::cmp::Ordering::Greater => {
-                    return Err(RadrootsTradeProtocolError::UnsortedParents);
+                    return Err(TradeProtocolError::UnsortedParents);
                 }
                 core::cmp::Ordering::Equal => {
-                    return Err(RadrootsTradeProtocolError::DuplicateParent);
+                    return Err(TradeProtocolError::DuplicateParent);
                 }
                 core::cmp::Ordering::Less => {}
             }
@@ -932,7 +916,7 @@ fn validate_sorted_unique_by<T, F>(
     items: &[T],
     mut key: F,
     field: &'static str,
-) -> Result<(), RadrootsTradeProtocolError>
+) -> Result<(), TradeProtocolError>
 where
     F: FnMut(&T) -> &str,
 {
@@ -943,25 +927,22 @@ where
         if let Some(previous) = previous
             && previous >= item_key
         {
-            return Err(RadrootsTradeProtocolError::InvalidField(field));
+            return Err(TradeProtocolError::InvalidField(field));
         }
         previous = Some(item_key);
     }
     Ok(())
 }
 
-fn validate_non_empty(value: &str, field: &'static str) -> Result<(), RadrootsTradeProtocolError> {
+fn validate_non_empty(value: &str, field: &'static str) -> Result<(), TradeProtocolError> {
     if value.trim().is_empty() {
-        Err(RadrootsTradeProtocolError::EmptyField(field))
+        Err(TradeProtocolError::EmptyField(field))
     } else {
         Ok(())
     }
 }
 
-fn validate_decimal_string(
-    value: &str,
-    field: &'static str,
-) -> Result<(), RadrootsTradeProtocolError> {
+fn validate_decimal_string(value: &str, field: &'static str) -> Result<(), TradeProtocolError> {
     validate_non_empty(value, field)?;
     let mut chars = value.chars();
     if matches!(chars.clone().next(), Some('-')) {
@@ -971,20 +952,20 @@ fn validate_decimal_string(
     for character in chars {
         match character {
             '0'..='9' => saw_digit = true,
-            _ => return Err(RadrootsTradeProtocolError::InvalidField(field)),
+            _ => return Err(TradeProtocolError::InvalidField(field)),
         }
     }
     if saw_digit {
         Ok(())
     } else {
-        Err(RadrootsTradeProtocolError::InvalidField(field))
+        Err(TradeProtocolError::InvalidField(field))
     }
 }
 
-fn validate_sha256_hex(value: &str, field: &'static str) -> Result<(), RadrootsTradeProtocolError> {
-    RadrootsTradeMutationId::parse(value)
+fn validate_sha256_hex(value: &str, field: &'static str) -> Result<(), TradeProtocolError> {
+    MutationId::parse(value)
         .map(|_| ())
-        .map_err(|error| RadrootsTradeProtocolError::InvalidIdentifier { field, error })
+        .map_err(|error| TradeProtocolError::InvalidIdentifier { field, error })
 }
 
 #[cfg(feature = "serde")]
@@ -1101,34 +1082,34 @@ mod tests {
         parse_public_key(crate::test_valid_hex_64(character)).unwrap()
     }
 
-    fn event_id(character: char) -> RadrootsEventId {
-        RadrootsEventId::parse(hex_64(character)).unwrap()
+    fn event_id(character: char) -> EventId {
+        EventId::parse(hex_64(character)).unwrap()
     }
 
-    fn trade_id() -> RadrootsTradeId {
-        RadrootsTradeId::parse(hex_32('1')).unwrap()
+    fn trade_id() -> TradeId {
+        TradeId::parse(hex_32('1')).unwrap()
     }
 
-    fn mutation_id(character: char) -> RadrootsTradeMutationId {
-        RadrootsTradeMutationId::parse(hex_64(character)).unwrap()
+    fn mutation_id(character: char) -> MutationId {
+        MutationId::parse(hex_64(character)).unwrap()
     }
 
-    fn candidate_id(character: char) -> RadrootsTradeCandidateId {
-        RadrootsTradeCandidateId::parse(hex_64(character)).unwrap()
+    fn candidate_id(character: char) -> CandidateId {
+        CandidateId::parse(hex_64(character)).unwrap()
     }
 
-    fn candidate() -> RadrootsTradeCandidateTermsV1 {
-        RadrootsTradeCandidateTermsV1 {
+    fn candidate() -> TradeCandidateTermsV1 {
+        TradeCandidateTermsV1 {
             candidate_id: None,
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
             base_candidate_id: None,
             supersession_intent: None,
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
-            farm_id: RadrootsDTag::parse("farm-1").unwrap(),
-            lines: vec![RadrootsTradeCandidateLineV1 {
-                line_id: RadrootsDTag::parse("line-1").unwrap(),
-                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+            farm_id: DTag::parse("farm-1").unwrap(),
+            lines: vec![TradeCandidateLineV1 {
+                line_id: DTag::parse("line-1").unwrap(),
+                listing_addr: ClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-1",
                     crate::test_valid_hex_64('b')
                 ))
@@ -1137,7 +1118,7 @@ mod tests {
                 listing_snapshot_sha256: hex_64('d'),
                 product_id: "carrots".to_string(),
                 option_id: None,
-                bin_id: RadrootsInventoryBinId::parse("bin-1").unwrap(),
+                bin_id: InventoryBinId::parse("bin-1").unwrap(),
                 quantity_mantissa: "2".to_string(),
                 quantity_scale: 0,
                 unit_code: "count".to_string(),
@@ -1148,7 +1129,7 @@ mod tests {
                 replaces_line_id: None,
             }],
             line_tombstones: Vec::new(),
-            economics: RadrootsTradeEconomicsProfileV1 {
+            economics: TradeEconomicsProfileV1 {
                 profile_id: "mvp-fixed".to_string(),
                 currency_code: "USD".to_string(),
                 currency_exponent: 2,
@@ -1159,7 +1140,7 @@ mod tests {
                 total_mantissa: "1000".to_string(),
                 adjustments: Vec::new(),
             },
-            fulfillment: RadrootsFulfillmentProfileV1 {
+            fulfillment: FulfillmentProfileV1 {
                 profile_id: "market-pickup".to_string(),
                 method: "pickup".to_string(),
                 starts_at_unix_s: 1_800_000_000,
@@ -1170,7 +1151,7 @@ mod tests {
                 location_class: "farmstand".to_string(),
                 requires_private_terms: false,
             },
-            cancellation: RadrootsTradeCancellationProfileV1 {
+            cancellation: TradeCancellationProfileV1 {
                 profile_id: "buyer-pre-agreement".to_string(),
                 buyer_pre_agreement: true,
                 post_agreement_cutoff_unix_s: None,
@@ -1180,8 +1161,8 @@ mod tests {
         }
     }
 
-    fn proposal() -> RadrootsTradeMutationEnvelopeV1 {
-        RadrootsTradeMutationEnvelopeV1 {
+    fn proposal() -> TradeMutationEnvelopeV1 {
+        TradeMutationEnvelopeV1 {
             mutation_id: None,
             contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_string(),
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
@@ -1189,20 +1170,20 @@ mod tests {
             root_mutation_id: None,
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
-            farm_id: RadrootsDTag::parse("farm-1").unwrap(),
+            farm_id: DTag::parse("farm-1").unwrap(),
             parent_mutation_ids: Vec::new(),
             author_pubkey: pubkey('a'),
             counterparty_pubkey: pubkey('b'),
             authored_at_unix_s: 1_799_000_000,
-            body: RadrootsTradeMutationBodyV1::Proposal {
+            body: TradeMutationBodyV1::Proposal {
                 candidate: candidate(),
             },
         }
     }
 
-    fn adjustment(id: &str) -> RadrootsTradeEconomicAdjustmentV1 {
-        RadrootsTradeEconomicAdjustmentV1 {
-            adjustment_id: RadrootsDTag::parse(id).unwrap(),
+    fn adjustment(id: &str) -> TradeEconomicAdjustmentV1 {
+        TradeEconomicAdjustmentV1 {
+            adjustment_id: DTag::parse(id).unwrap(),
             actor: "seller".to_owned(),
             effect: "charge".to_owned(),
             amount_mantissa: "10".to_owned(),
@@ -1210,15 +1191,15 @@ mod tests {
         }
     }
 
-    fn reservation_assertion() -> RadrootsSellerReservationAssertionV1 {
-        RadrootsSellerReservationAssertionV1 {
-            reservation_id: RadrootsDTag::parse("reservation-1").unwrap(),
+    fn reservation_assertion() -> SellerReservationAssertionV1 {
+        SellerReservationAssertionV1 {
+            reservation_id: DTag::parse("reservation-1").unwrap(),
             inventory_authority_id: pubkey('c'),
             inventory_epoch: 1,
             candidate_id: candidate_id('d'),
-            commitments: vec![RadrootsSellerReservationLineV1 {
-                line_id: RadrootsDTag::parse("line-1").unwrap(),
-                bin_id: RadrootsInventoryBinId::parse("bin-1").unwrap(),
+            commitments: vec![SellerReservationLineV1 {
+                line_id: DTag::parse("line-1").unwrap(),
+                bin_id: InventoryBinId::parse("bin-1").unwrap(),
                 quantity_mantissa: "2".to_owned(),
                 quantity_scale: 0,
                 unit_code: "count".to_owned(),
@@ -1228,7 +1209,7 @@ mod tests {
         }
     }
 
-    fn child_envelope(body: RadrootsTradeMutationBodyV1) -> RadrootsTradeMutationEnvelopeV1 {
+    fn child_envelope(body: TradeMutationBodyV1) -> TradeMutationEnvelopeV1 {
         let mut envelope = proposal();
         envelope.contract_id = body.mutation_kind().contract_id().to_owned();
         envelope.root_mutation_id = Some(mutation_id('a'));
@@ -1245,7 +1226,7 @@ mod tests {
         );
         assert!(matches!(
             canonical_jcs_from_str(r#"{"a":1,"a":2}"#),
-            Err(RadrootsTradeProtocolError::DuplicateKey(_))
+            Err(TradeProtocolError::DuplicateKey(_))
         ));
     }
 
@@ -1265,17 +1246,17 @@ mod tests {
     fn canonical_trade_mutation_rejects_parent_ordering() {
         let mut envelope = proposal();
         envelope.contract_id = RADROOTS_TRADE_REVISION_PROPOSAL_CONTRACT_ID.to_string();
-        envelope.root_mutation_id = Some(RadrootsTradeMutationId::parse(hex_64('a')).unwrap());
+        envelope.root_mutation_id = Some(MutationId::parse(hex_64('a')).unwrap());
         envelope.parent_mutation_ids = vec![
-            RadrootsTradeMutationId::parse(hex_64('b')).unwrap(),
-            RadrootsTradeMutationId::parse(hex_64('a')).unwrap(),
+            MutationId::parse(hex_64('b')).unwrap(),
+            MutationId::parse(hex_64('a')).unwrap(),
         ];
-        envelope.body = RadrootsTradeMutationBodyV1::RevisionProposal {
+        envelope.body = TradeMutationBodyV1::RevisionProposal {
             candidate: candidate(),
         };
         assert!(matches!(
             canonical_trade_mutation_content(envelope),
-            Err(RadrootsTradeProtocolError::UnsortedParents)
+            Err(TradeProtocolError::UnsortedParents)
         ));
     }
 
@@ -1283,11 +1264,11 @@ mod tests {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn trade_validation_contract_covers_every_mutation_and_parent_rule() {
         let kinds = [
-            RadrootsTradeMutationKindV1::Proposal,
-            RadrootsTradeMutationKindV1::Decision,
-            RadrootsTradeMutationKindV1::RevisionProposal,
-            RadrootsTradeMutationKindV1::RevisionDecision,
-            RadrootsTradeMutationKindV1::Cancellation,
+            TradeMutationKindV1::Proposal,
+            TradeMutationKindV1::Decision,
+            TradeMutationKindV1::RevisionProposal,
+            TradeMutationKindV1::RevisionDecision,
+            TradeMutationKindV1::Cancellation,
         ];
         for kind in kinds {
             assert!(!kind.contract_id().is_empty());
@@ -1298,31 +1279,31 @@ mod tests {
         envelope.schema_version += 1;
         assert!(matches!(
             envelope.validate(),
-            Err(RadrootsTradeProtocolError::InvalidSchemaVersion { .. })
+            Err(TradeProtocolError::InvalidSchemaVersion { .. })
         ));
         let mut envelope = proposal();
         envelope.contract_id = "wrong".to_owned();
         assert!(matches!(
             envelope.validate(),
-            Err(RadrootsTradeProtocolError::ContractMismatch { .. })
+            Err(TradeProtocolError::ContractMismatch { .. })
         ));
         let mut envelope = proposal();
         envelope.root_mutation_id = Some(mutation_id('a'));
         assert_eq!(
             envelope.validate(),
-            Err(RadrootsTradeProtocolError::InvalidInitialParents)
+            Err(TradeProtocolError::InvalidInitialParents)
         );
         let mut envelope = proposal();
         envelope.parent_mutation_ids = vec![mutation_id('a')];
         assert_eq!(
             envelope.validate(),
-            Err(RadrootsTradeProtocolError::InvalidInitialParents)
+            Err(TradeProtocolError::InvalidInitialParents)
         );
 
-        let mut envelope = child_envelope(RadrootsTradeMutationBodyV1::Decision {
+        let mut envelope = child_envelope(TradeMutationBodyV1::Decision {
             proposal_mutation_id: mutation_id('a'),
             candidate_id: candidate_id('a'),
-            decision: RadrootsTradeDecisionV1::Accepted {
+            decision: TradeDecisionV1::Accepted {
                 reservation_assertion: None,
             },
         });
@@ -1330,41 +1311,41 @@ mod tests {
         envelope.root_mutation_id = None;
         assert_eq!(
             envelope.validate(),
-            Err(RadrootsTradeProtocolError::MissingParentMutation)
+            Err(TradeProtocolError::MissingParentMutation)
         );
-        let mut envelope = child_envelope(RadrootsTradeMutationBodyV1::Decision {
+        let mut envelope = child_envelope(TradeMutationBodyV1::Decision {
             proposal_mutation_id: mutation_id('a'),
             candidate_id: candidate_id('a'),
-            decision: RadrootsTradeDecisionV1::Accepted {
+            decision: TradeDecisionV1::Accepted {
                 reservation_assertion: None,
             },
         });
         envelope.parent_mutation_ids.clear();
         assert_eq!(
             envelope.validate(),
-            Err(RadrootsTradeProtocolError::MissingParentMutation)
+            Err(TradeProtocolError::MissingParentMutation)
         );
 
-        let revision_decision = child_envelope(RadrootsTradeMutationBodyV1::RevisionDecision {
+        let revision_decision = child_envelope(TradeMutationBodyV1::RevisionDecision {
             proposal_mutation_id: mutation_id('a'),
             candidate_id: candidate_id('a'),
-            decision: RadrootsTradeDecisionV1::Declined {
+            decision: TradeDecisionV1::Declined {
                 reason: "inventory unavailable".to_owned(),
             },
         });
         assert!(revision_decision.validate().is_ok());
-        let revision = child_envelope(RadrootsTradeMutationBodyV1::RevisionProposal {
+        let revision = child_envelope(TradeMutationBodyV1::RevisionProposal {
             candidate: candidate(),
         });
         assert!(revision.validate().is_ok());
 
         for body in [
-            RadrootsTradeMutationBodyV1::Cancellation {
+            TradeMutationBodyV1::Cancellation {
                 target_candidate_id: Some(candidate_id('a')),
                 target_claim_mutation_id: None,
                 reason: "cancelled".to_owned(),
             },
-            RadrootsTradeMutationBodyV1::Cancellation {
+            TradeMutationBodyV1::Cancellation {
                 target_candidate_id: None,
                 target_claim_mutation_id: Some(mutation_id('a')),
                 reason: "cancelled".to_owned(),
@@ -1373,16 +1354,16 @@ mod tests {
             assert!(child_envelope(body).validate().is_ok());
         }
         assert_eq!(
-            RadrootsTradeMutationBodyV1::Cancellation {
+            TradeMutationBodyV1::Cancellation {
                 target_candidate_id: None,
                 target_claim_mutation_id: None,
                 reason: "cancelled".to_owned(),
             }
             .validate(),
-            Err(RadrootsTradeProtocolError::MissingCancellationTarget)
+            Err(TradeProtocolError::MissingCancellationTarget)
         );
         assert!(
-            RadrootsTradeMutationBodyV1::Cancellation {
+            TradeMutationBodyV1::Cancellation {
                 target_candidate_id: Some(candidate_id('a')),
                 target_claim_mutation_id: None,
                 reason: " ".to_owned(),
@@ -1402,18 +1383,18 @@ mod tests {
                     mutation_id('e'),
                 ],
             ),
-            Err(RadrootsTradeProtocolError::TooManyParents {
+            Err(TradeProtocolError::TooManyParents {
                 max: RADROOTS_TRADE_MAX_PARENT_MUTATIONS,
                 actual: 5,
             })
         );
         assert_eq!(
             validate_parent_mutation_ids(None, &[mutation_id('a'), mutation_id('a')]),
-            Err(RadrootsTradeProtocolError::DuplicateParent)
+            Err(TradeProtocolError::DuplicateParent)
         );
         assert_eq!(
             validate_parent_mutation_ids(Some(&mutation_id('a')), &[mutation_id('a')]),
-            Err(RadrootsTradeProtocolError::SelfParent)
+            Err(TradeProtocolError::SelfParent)
         );
         assert!(validate_parent_mutation_ids(None, &[mutation_id('a'), mutation_id('b')]).is_ok());
         assert!(validate_sorted_unique_by(&["a", "b"], |value| *value, "values").is_ok());
@@ -1430,25 +1411,22 @@ mod tests {
         assert!(invalid.validate().is_err());
         let mut invalid = base.clone();
         invalid.lines.clear();
-        assert_eq!(
-            invalid.validate(),
-            Err(RadrootsTradeProtocolError::MissingLines)
-        );
+        assert_eq!(invalid.validate(), Err(TradeProtocolError::MissingLines));
         let mut invalid = base.clone();
         invalid.lines = vec![base.lines[0].clone(); RADROOTS_TRADE_MAX_ACTIVE_LINES + 1];
         assert!(matches!(
             invalid.validate(),
-            Err(RadrootsTradeProtocolError::TooManyLines { .. })
+            Err(TradeProtocolError::TooManyLines { .. })
         ));
         let mut invalid = base.clone();
         invalid.lines.push(base.lines[0].clone());
         assert!(matches!(
             invalid.validate(),
-            Err(RadrootsTradeProtocolError::InvalidField("lines"))
+            Err(TradeProtocolError::InvalidField("lines"))
         ));
 
-        let tombstone = RadrootsTradeLineTombstoneV1 {
-            line_id: RadrootsDTag::parse("line-2").unwrap(),
+        let tombstone = TradeLineTombstoneV1 {
+            line_id: DTag::parse("line-2").unwrap(),
             reason: "removed".to_owned(),
         };
         let mut with_tombstone = base.clone();
@@ -1465,17 +1443,15 @@ mod tests {
         line.option_id = Some("option-1".to_owned());
         assert!(line.validate().is_ok());
         for mutate in [
-            |line: &mut RadrootsTradeCandidateLineV1| {
-                line.listing_snapshot_sha256 = "bad".to_owned()
-            },
-            |line: &mut RadrootsTradeCandidateLineV1| line.product_id = " ".to_owned(),
-            |line: &mut RadrootsTradeCandidateLineV1| line.option_id = Some(" ".to_owned()),
-            |line: &mut RadrootsTradeCandidateLineV1| line.quantity_mantissa = "1.5".to_owned(),
-            |line: &mut RadrootsTradeCandidateLineV1| line.unit_code = " ".to_owned(),
-            |line: &mut RadrootsTradeCandidateLineV1| line.unit_profile = " ".to_owned(),
-            |line: &mut RadrootsTradeCandidateLineV1| line.unit_price_mantissa = "-".to_owned(),
-            |line: &mut RadrootsTradeCandidateLineV1| line.currency_code = " ".to_owned(),
-            |line: &mut RadrootsTradeCandidateLineV1| line.line_subtotal_mantissa = "x".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.listing_snapshot_sha256 = "bad".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.product_id = " ".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.option_id = Some(" ".to_owned()),
+            |line: &mut TradeCandidateLineV1| line.quantity_mantissa = "1.5".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.unit_code = " ".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.unit_profile = " ".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.unit_price_mantissa = "-".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.currency_code = " ".to_owned(),
+            |line: &mut TradeCandidateLineV1| line.line_subtotal_mantissa = "x".to_owned(),
         ] {
             let mut line = base.lines[0].clone();
             mutate(&mut line);
@@ -1487,17 +1463,13 @@ mod tests {
 
         let economics = base.economics.clone();
         for mutate in [
-            |value: &mut RadrootsTradeEconomicsProfileV1| value.profile_id = " ".to_owned(),
-            |value: &mut RadrootsTradeEconomicsProfileV1| value.currency_code = " ".to_owned(),
-            |value: &mut RadrootsTradeEconomicsProfileV1| value.rounding_profile = " ".to_owned(),
-            |value: &mut RadrootsTradeEconomicsProfileV1| value.subtotal_mantissa = "x".to_owned(),
-            |value: &mut RadrootsTradeEconomicsProfileV1| {
-                value.discount_total_mantissa = "x".to_owned()
-            },
-            |value: &mut RadrootsTradeEconomicsProfileV1| {
-                value.adjustment_total_mantissa = "x".to_owned()
-            },
-            |value: &mut RadrootsTradeEconomicsProfileV1| value.total_mantissa = "x".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.profile_id = " ".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.currency_code = " ".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.rounding_profile = " ".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.subtotal_mantissa = "x".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.discount_total_mantissa = "x".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.adjustment_total_mantissa = "x".to_owned(),
+            |value: &mut TradeEconomicsProfileV1| value.total_mantissa = "x".to_owned(),
         ] {
             let mut value = economics.clone();
             mutate(&mut value);
@@ -1507,7 +1479,7 @@ mod tests {
         value.adjustments = vec![adjustment("adjustment-1"); RADROOTS_TRADE_MAX_ADJUSTMENTS + 1];
         assert!(matches!(
             value.validate(),
-            Err(RadrootsTradeProtocolError::TooManyAdjustments { .. })
+            Err(TradeProtocolError::TooManyAdjustments { .. })
         ));
         let mut value = economics.clone();
         value.adjustments = vec![adjustment("adjustment-1"), adjustment("adjustment-1")];
@@ -1516,10 +1488,10 @@ mod tests {
         value.adjustments = vec![adjustment("adjustment-1")];
         assert!(value.validate().is_ok());
         for mutate in [
-            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.actor = " ".to_owned(),
-            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.effect = " ".to_owned(),
-            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.amount_mantissa = "x".to_owned(),
-            |value: &mut RadrootsTradeEconomicAdjustmentV1| value.reason = " ".to_owned(),
+            |value: &mut TradeEconomicAdjustmentV1| value.actor = " ".to_owned(),
+            |value: &mut TradeEconomicAdjustmentV1| value.effect = " ".to_owned(),
+            |value: &mut TradeEconomicAdjustmentV1| value.amount_mantissa = "x".to_owned(),
+            |value: &mut TradeEconomicAdjustmentV1| value.reason = " ".to_owned(),
         ] {
             let mut value = adjustment("adjustment-1");
             mutate(&mut value);
@@ -1528,14 +1500,12 @@ mod tests {
 
         let fulfillment = base.fulfillment.clone();
         for mutate in [
-            |value: &mut RadrootsFulfillmentProfileV1| value.profile_id = " ".to_owned(),
-            |value: &mut RadrootsFulfillmentProfileV1| value.method = " ".to_owned(),
-            |value: &mut RadrootsFulfillmentProfileV1| value.timezone = " ".to_owned(),
-            |value: &mut RadrootsFulfillmentProfileV1| value.location_class = " ".to_owned(),
-            |value: &mut RadrootsFulfillmentProfileV1| {
-                value.ends_at_unix_s = value.starts_at_unix_s
-            },
-            |value: &mut RadrootsFulfillmentProfileV1| value.fold = 2,
+            |value: &mut FulfillmentProfileV1| value.profile_id = " ".to_owned(),
+            |value: &mut FulfillmentProfileV1| value.method = " ".to_owned(),
+            |value: &mut FulfillmentProfileV1| value.timezone = " ".to_owned(),
+            |value: &mut FulfillmentProfileV1| value.location_class = " ".to_owned(),
+            |value: &mut FulfillmentProfileV1| value.ends_at_unix_s = value.starts_at_unix_s,
+            |value: &mut FulfillmentProfileV1| value.fold = 2,
         ] {
             let mut value = fulfillment.clone();
             mutate(&mut value);
@@ -1545,7 +1515,7 @@ mod tests {
         cancellation.profile_id = " ".to_owned();
         assert!(cancellation.validate().is_err());
 
-        let private_terms = RadrootsTradePrivateTermsRefV1 {
+        let private_terms = TradePrivateTermsRefV1 {
             artifact_id: "artifact-1".to_owned(),
             schema_id: "schema-1".to_owned(),
             ciphertext_commitment: hex_64('a'),
@@ -1555,11 +1525,9 @@ mod tests {
         with_private.private_terms = Some(private_terms.clone());
         assert!(with_private.validate().is_ok());
         for mutate in [
-            |value: &mut RadrootsTradePrivateTermsRefV1| value.artifact_id = " ".to_owned(),
-            |value: &mut RadrootsTradePrivateTermsRefV1| value.schema_id = " ".to_owned(),
-            |value: &mut RadrootsTradePrivateTermsRefV1| {
-                value.ciphertext_commitment = "bad".to_owned()
-            },
+            |value: &mut TradePrivateTermsRefV1| value.artifact_id = " ".to_owned(),
+            |value: &mut TradePrivateTermsRefV1| value.schema_id = " ".to_owned(),
+            |value: &mut TradePrivateTermsRefV1| value.ciphertext_commitment = "bad".to_owned(),
         ] {
             let mut value = private_terms.clone();
             mutate(&mut value);
@@ -1573,7 +1541,7 @@ mod tests {
         value["lines"][0]["listing_addr"] =
             serde_json::json!(format!("30023:{}:listing-1", crate::test_valid_hex_64('b')));
 
-        assert!(serde_json::from_value::<RadrootsTradeCandidateTermsV1>(value).is_err());
+        assert!(serde_json::from_value::<TradeCandidateTermsV1>(value).is_err());
     }
 
     #[test]
@@ -1582,28 +1550,28 @@ mod tests {
         let assertion = reservation_assertion();
         assert!(assertion.validate().is_ok());
         assert!(
-            RadrootsTradeDecisionV1::Accepted {
+            TradeDecisionV1::Accepted {
                 reservation_assertion: None,
             }
             .validate()
             .is_ok()
         );
         assert!(
-            RadrootsTradeDecisionV1::Accepted {
+            TradeDecisionV1::Accepted {
                 reservation_assertion: Some(assertion.clone()),
             }
             .validate()
             .is_ok()
         );
         assert!(
-            RadrootsTradeDecisionV1::Declined {
+            TradeDecisionV1::Declined {
                 reason: "declined".to_owned(),
             }
             .validate()
             .is_ok()
         );
         assert!(
-            RadrootsTradeDecisionV1::Declined {
+            TradeDecisionV1::Declined {
                 reason: " ".to_owned(),
             }
             .validate()
@@ -1614,7 +1582,7 @@ mod tests {
         invalid.commitments.clear();
         assert_eq!(
             invalid.validate(),
-            Err(RadrootsTradeProtocolError::MissingReservationCommitments)
+            Err(TradeProtocolError::MissingReservationCommitments)
         );
         let mut invalid = assertion.clone();
         invalid.commitments.push(invalid.commitments[0].clone());
@@ -1638,12 +1606,12 @@ mod tests {
         let canonical = canonical_trade_mutation_content(proposal()).expect("canonical proposal");
         assert_eq!(
             canonical_trade_candidate_id(match &canonical.envelope.body {
-                RadrootsTradeMutationBodyV1::Proposal { candidate } => candidate,
+                TradeMutationBodyV1::Proposal { candidate } => candidate,
                 _ => unreachable!("proposal"),
             })
             .expect("candidate id"),
             match &canonical.envelope.body {
-                RadrootsTradeMutationBodyV1::Proposal { candidate } => {
+                TradeMutationBodyV1::Proposal { candidate } => {
                     candidate.candidate_id.expect("candidate id")
                 }
                 _ => unreachable!("proposal"),
@@ -1658,27 +1626,27 @@ mod tests {
             trade_mutation_from_canonical_content(
                 &"x".repeat(RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES + 1)
             ),
-            Err(RadrootsTradeProtocolError::ContentTooLarge { .. })
+            Err(TradeProtocolError::ContentTooLarge { .. })
         ));
         assert_eq!(
             trade_mutation_from_canonical_content(" {} "),
-            Err(RadrootsTradeProtocolError::NonCanonicalJson)
+            Err(TradeProtocolError::NonCanonicalJson)
         );
         assert!(matches!(
             trade_mutation_from_canonical_content("{}"),
-            Err(RadrootsTradeProtocolError::InvalidJson(_))
+            Err(TradeProtocolError::InvalidJson(_))
         ));
         assert!(matches!(
             canonical_jcs_from_str("{"),
-            Err(RadrootsTradeProtocolError::InvalidJson(_))
+            Err(TradeProtocolError::InvalidJson(_))
         ));
         assert!(matches!(
             canonical_jcs_from_str("1.5"),
-            Err(RadrootsTradeProtocolError::InvalidJson(_))
+            Err(TradeProtocolError::InvalidJson(_))
         ));
         assert_eq!(
             canonical_jcs_value(&serde_json::json!(1.5)),
-            Err(RadrootsTradeProtocolError::UnsupportedNumber)
+            Err(TradeProtocolError::UnsupportedNumber)
         );
         assert_eq!(
             canonical_jcs_value(&Value::Number(Number::from(u64::MAX))).expect("large integer"),
@@ -1691,7 +1659,7 @@ mod tests {
         let wrong_candidate = canonical_jcs_value(&value).expect("wrong candidate json");
         assert!(matches!(
             trade_mutation_from_canonical_content(&wrong_candidate),
-            Err(RadrootsTradeProtocolError::CandidateIdMismatch { .. })
+            Err(TradeProtocolError::CandidateIdMismatch { .. })
         ));
 
         let mut value: Value = serde_json::from_str(&canonical.content).expect("canonical json");
@@ -1699,7 +1667,7 @@ mod tests {
         let wrong_mutation = canonical_jcs_value(&value).expect("wrong mutation json");
         assert!(matches!(
             trade_mutation_from_canonical_content(&wrong_mutation),
-            Err(RadrootsTradeProtocolError::MutationIdMismatch { .. })
+            Err(TradeProtocolError::MutationIdMismatch { .. })
         ));
 
         let mut value: Value = serde_json::from_str(&canonical.content).expect("canonical json");
@@ -1708,29 +1676,29 @@ mod tests {
         let undeclared_ids = canonical_jcs_value(&value).expect("undeclared ids json");
         assert!(trade_mutation_from_canonical_content(&undeclared_ids).is_ok());
 
-        let decision = child_envelope(RadrootsTradeMutationBodyV1::Decision {
+        let decision = child_envelope(TradeMutationBodyV1::Decision {
             proposal_mutation_id: mutation_id('a'),
             candidate_id: candidate_id('a'),
-            decision: RadrootsTradeDecisionV1::Accepted {
+            decision: TradeDecisionV1::Accepted {
                 reservation_assertion: None,
             },
         });
         let decision = canonical_trade_mutation_content(decision).expect("canonical decision");
         assert!(trade_mutation_from_canonical_content(&decision.content).is_ok());
 
-        let revision = child_envelope(RadrootsTradeMutationBodyV1::RevisionProposal {
+        let revision = child_envelope(TradeMutationBodyV1::RevisionProposal {
             candidate: candidate(),
         });
         let revision = canonical_trade_mutation_content(revision).expect("canonical revision");
         assert!(trade_mutation_from_canonical_content(&revision.content).is_ok());
 
         let mut oversized = proposal();
-        if let RadrootsTradeMutationBodyV1::Proposal { candidate } = &mut oversized.body {
+        if let TradeMutationBodyV1::Proposal { candidate } = &mut oversized.body {
             candidate.lines[0].product_id = "x".repeat(RADROOTS_TRADE_MAX_PUBLIC_CONTENT_BYTES + 1);
         }
         assert!(matches!(
             canonical_trade_mutation_content(oversized),
-            Err(RadrootsTradeProtocolError::ContentTooLarge { .. })
+            Err(TradeProtocolError::ContentTooLarge { .. })
         ));
 
         let string_value: Result<NoDuplicateJsonValue, serde_json::Error> =
@@ -1754,44 +1722,44 @@ mod tests {
         );
         assert!(expected.to_string().contains("JSON value"));
 
-        let parse_error = RadrootsTradeMutationId::parse("bad").expect_err("invalid id");
+        let parse_error = MutationId::parse("bad").expect_err("invalid id");
         let errors = [
-            RadrootsTradeProtocolError::InvalidSchemaVersion {
+            TradeProtocolError::InvalidSchemaVersion {
                 expected: 1,
                 actual: 2,
             },
-            RadrootsTradeProtocolError::ContractMismatch {
+            TradeProtocolError::ContractMismatch {
                 expected: "expected",
                 actual: "actual".to_owned(),
             },
-            RadrootsTradeProtocolError::InvalidInitialParents,
-            RadrootsTradeProtocolError::MissingParentMutation,
-            RadrootsTradeProtocolError::TooManyParents { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::UnsortedParents,
-            RadrootsTradeProtocolError::DuplicateParent,
-            RadrootsTradeProtocolError::SelfParent,
-            RadrootsTradeProtocolError::MissingLines,
-            RadrootsTradeProtocolError::TooManyLines { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::DuplicateKey("key".to_owned()),
-            RadrootsTradeProtocolError::InvalidJson("json".to_owned()),
-            RadrootsTradeProtocolError::NonCanonicalJson,
-            RadrootsTradeProtocolError::UnsupportedNumber,
-            RadrootsTradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::EmptyField("field"),
-            RadrootsTradeProtocolError::InvalidField("field"),
-            RadrootsTradeProtocolError::InvalidIdentifier {
+            TradeProtocolError::InvalidInitialParents,
+            TradeProtocolError::MissingParentMutation,
+            TradeProtocolError::TooManyParents { max: 1, actual: 2 },
+            TradeProtocolError::UnsortedParents,
+            TradeProtocolError::DuplicateParent,
+            TradeProtocolError::SelfParent,
+            TradeProtocolError::MissingLines,
+            TradeProtocolError::TooManyLines { max: 1, actual: 2 },
+            TradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
+            TradeProtocolError::DuplicateKey("key".to_owned()),
+            TradeProtocolError::InvalidJson("json".to_owned()),
+            TradeProtocolError::NonCanonicalJson,
+            TradeProtocolError::UnsupportedNumber,
+            TradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
+            TradeProtocolError::EmptyField("field"),
+            TradeProtocolError::InvalidField("field"),
+            TradeProtocolError::InvalidIdentifier {
                 field: "field",
                 error: parse_error,
             },
-            RadrootsTradeProtocolError::InvalidTimeRange,
-            RadrootsTradeProtocolError::MissingReservationCommitments,
-            RadrootsTradeProtocolError::MissingCancellationTarget,
-            RadrootsTradeProtocolError::CandidateIdMismatch {
+            TradeProtocolError::InvalidTimeRange,
+            TradeProtocolError::MissingReservationCommitments,
+            TradeProtocolError::MissingCancellationTarget,
+            TradeProtocolError::CandidateIdMismatch {
                 declared: "a".to_owned(),
                 computed: "b".to_owned(),
             },
-            RadrootsTradeProtocolError::MutationIdMismatch {
+            TradeProtocolError::MutationIdMismatch {
                 declared: "a".to_owned(),
                 computed: "b".to_owned(),
             },

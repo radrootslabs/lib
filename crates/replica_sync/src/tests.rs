@@ -3,7 +3,7 @@ use crate::{
     radroots_replica_sync_all,
 };
 use radroots_event::envelope::kind::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
-use radroots_event::farm::change_set::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
+use radroots_event::farm::change_set::{GeoJsonPoint, GeoJsonPolygon};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::IFarmFields;
 use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;
@@ -51,11 +51,11 @@ fn sync_all_emits_expected_order_without_lossy_profiles() {
     };
     let farm_row = unwrap_sql(farm::create(&exec, &farm_fields), "farm").result;
 
-    let gcs_point = RadrootsGeoJsonPoint {
+    let gcs_point = GeoJsonPoint {
         r#type: "Point".to_string(),
         coordinates: [-122.4, 37.7],
     };
-    let gcs_polygon = RadrootsGeoJsonPolygon {
+    let gcs_polygon = GeoJsonPolygon {
         r#type: "Polygon".to_string(),
         coordinates: vec![vec![
             [-122.4, 37.7],

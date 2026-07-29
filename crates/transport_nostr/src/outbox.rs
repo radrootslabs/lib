@@ -7,7 +7,7 @@ use crate::{
     RadrootsRelayTransportError, RadrootsRelayUrlPolicy, publish_signed_event,
     verified_signed_event_payload,
 };
-use radroots_event::draft::RadrootsSignedEvent;
+use radroots_event::draft::SignedEvent;
 use radroots_event_store::{
     RadrootsEventIngest, RadrootsEventStore, RadrootsTransportObservation,
     RadrootsTransportObservationType,
@@ -1031,7 +1031,7 @@ fn satisfaction_policy_for_remaining_count(
 
 async fn ingest_publish_observation(
     event_store: &RadrootsEventStore,
-    signed_event: &RadrootsSignedEvent,
+    signed_event: &SignedEvent,
     relay_url: &str,
     observed_at_ms: i64,
 ) -> Result<(), RadrootsRelayTransportError> {

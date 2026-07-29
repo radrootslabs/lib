@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::envelope::kind::KIND_FARM_CRDT_CHANGE as KIND_FARM_CRDT_CHANGE_EVENT;
-use crate::farm::workspace::RadrootsFarmWorkspaceRef;
+use crate::farm::workspace::FarmWorkspaceRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -18,19 +18,19 @@ pub const RADROOTS_FARM_CRDT_TAG: &str = "radroots:farm:crdt";
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsFarmCrdtChange {
+pub struct FarmCrdtChange {
     pub schema: String,
-    pub workspace: RadrootsFarmWorkspaceRef,
+    pub workspace: FarmWorkspaceRef,
     pub farm_group_id: String,
     pub document_id: String,
-    pub document_kind: RadrootsFarmCrdtDocumentKind,
-    pub crdt_backend: RadrootsCrdtBackend,
+    pub document_kind: FarmCrdtDocumentKind,
+    pub crdt_backend: CrdtBackend,
     pub crdt_backend_version: Option<String>,
     pub actor_id: String,
     pub change_hash: String,
     pub dependencies: Vec<String>,
     pub encoded_change: String,
-    pub semantic_kind: RadrootsFarmSemanticKind,
+    pub semantic_kind: FarmSemanticKind,
     pub business_time_ms: u64,
     pub author_member_id: Option<String>,
     pub app_version: Option<String>,
@@ -42,7 +42,7 @@ pub struct RadrootsFarmCrdtChange {
 )]
 #[cfg_attr(any(feature = "serde", test), serde(from = "String", into = "String"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsFarmCrdtDocumentKind {
+pub enum FarmCrdtDocumentKind {
     FarmMembership,
     FarmRolePolicy,
     FarmTask,
@@ -66,7 +66,7 @@ pub enum RadrootsFarmCrdtDocumentKind {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RadrootsCrdtBackend {
+pub enum CrdtBackend {
     Automerge,
     Yjs,
     Loro,
@@ -78,7 +78,7 @@ pub enum RadrootsCrdtBackend {
 )]
 #[cfg_attr(any(feature = "serde", test), serde(from = "String", into = "String"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsFarmSemanticKind {
+pub enum FarmSemanticKind {
     FarmTaskCreate,
     FarmTaskAssign,
     FarmTaskJoin,
@@ -124,7 +124,7 @@ pub enum RadrootsFarmSemanticKind {
     Other { value: String },
 }
 
-impl RadrootsFarmCrdtDocumentKind {
+impl FarmCrdtDocumentKind {
     pub fn as_str(&self) -> &str {
         match self {
             Self::FarmMembership => "FarmMembership",
@@ -147,7 +147,7 @@ impl RadrootsFarmCrdtDocumentKind {
     }
 }
 
-impl From<String> for RadrootsFarmCrdtDocumentKind {
+impl From<String> for FarmCrdtDocumentKind {
     fn from(value: String) -> Self {
         match value.as_str() {
             "FarmMembership" => Self::FarmMembership,
@@ -170,16 +170,16 @@ impl From<String> for RadrootsFarmCrdtDocumentKind {
     }
 }
 
-impl From<RadrootsFarmCrdtDocumentKind> for String {
-    fn from(value: RadrootsFarmCrdtDocumentKind) -> Self {
+impl From<FarmCrdtDocumentKind> for String {
+    fn from(value: FarmCrdtDocumentKind) -> Self {
         match value {
-            RadrootsFarmCrdtDocumentKind::Other { value } => value,
+            FarmCrdtDocumentKind::Other { value } => value,
             value => value.as_str().to_string(),
         }
     }
 }
 
-impl RadrootsFarmSemanticKind {
+impl FarmSemanticKind {
     pub fn as_str(&self) -> &str {
         match self {
             Self::FarmTaskCreate => "FarmTaskCreate",
@@ -229,7 +229,7 @@ impl RadrootsFarmSemanticKind {
     }
 }
 
-impl From<String> for RadrootsFarmSemanticKind {
+impl From<String> for FarmSemanticKind {
     fn from(value: String) -> Self {
         match value.as_str() {
             "FarmTaskCreate" => Self::FarmTaskCreate,
@@ -279,10 +279,10 @@ impl From<String> for RadrootsFarmSemanticKind {
     }
 }
 
-impl From<RadrootsFarmSemanticKind> for String {
-    fn from(value: RadrootsFarmSemanticKind) -> Self {
+impl From<FarmSemanticKind> for String {
+    fn from(value: FarmSemanticKind) -> Self {
         match value {
-            RadrootsFarmSemanticKind::Other { value } => value,
+            FarmSemanticKind::Other { value } => value,
             value => value.as_str().to_string(),
         }
     }
@@ -305,13 +305,10 @@ mod tests {
         assert_eq!(change.workspace.pubkey, "workspace_pubkey");
         assert_eq!(change.farm_group_id, "BCDEFGHIJKLMNOPQRSTUVW");
         assert_eq!(change.document_id, "DEFGHIJKLMNOPQRSTUVWXY");
-        assert_eq!(change.document_kind, RadrootsFarmCrdtDocumentKind::FarmTask);
-        assert_eq!(change.crdt_backend, RadrootsCrdtBackend::Automerge);
+        assert_eq!(change.document_kind, FarmCrdtDocumentKind::FarmTask);
+        assert_eq!(change.crdt_backend, CrdtBackend::Automerge);
         assert_eq!(change.dependencies, Vec::<String>::new());
-        assert_eq!(
-            change.semantic_kind,
-            RadrootsFarmSemanticKind::FarmTaskCreate
-        );
+        assert_eq!(change.semantic_kind, FarmSemanticKind::FarmTaskCreate);
         assert_eq!(change.business_time_ms, 1_780_000_000_000);
         assert_eq!(change.author_member_id.as_deref(), Some("member_abc"));
         assert_eq!(change.app_version.as_deref(), Some("0.1.0"));
@@ -332,52 +329,25 @@ mod tests {
     #[test]
     fn document_kinds_serialize_as_stable_strings() {
         for (kind, expected) in [
-            (
-                RadrootsFarmCrdtDocumentKind::FarmMembership,
-                "FarmMembership",
-            ),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmRolePolicy,
-                "FarmRolePolicy",
-            ),
-            (RadrootsFarmCrdtDocumentKind::FarmTask, "FarmTask"),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmWorkSession,
-                "FarmWorkSession",
-            ),
-            (RadrootsFarmCrdtDocumentKind::FarmActivity, "FarmActivity"),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmHarvestRecord,
-                "FarmHarvestRecord",
-            ),
-            (RadrootsFarmCrdtDocumentKind::FarmLocation, "FarmLocation"),
-            (RadrootsFarmCrdtDocumentKind::FarmCrop, "FarmCrop"),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmCropVariety,
-                "FarmCropVariety",
-            ),
-            (RadrootsFarmCrdtDocumentKind::FarmCropCycle, "FarmCropCycle"),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmAttachment,
-                "FarmAttachment",
-            ),
-            (RadrootsFarmCrdtDocumentKind::FarmPayPeriod, "FarmPayPeriod"),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmInventoryItem,
-                "FarmInventoryItem",
-            ),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmMediaAsset,
-                "FarmMediaAsset",
-            ),
-            (
-                RadrootsFarmCrdtDocumentKind::FarmObservation,
-                "FarmObservation",
-            ),
+            (FarmCrdtDocumentKind::FarmMembership, "FarmMembership"),
+            (FarmCrdtDocumentKind::FarmRolePolicy, "FarmRolePolicy"),
+            (FarmCrdtDocumentKind::FarmTask, "FarmTask"),
+            (FarmCrdtDocumentKind::FarmWorkSession, "FarmWorkSession"),
+            (FarmCrdtDocumentKind::FarmActivity, "FarmActivity"),
+            (FarmCrdtDocumentKind::FarmHarvestRecord, "FarmHarvestRecord"),
+            (FarmCrdtDocumentKind::FarmLocation, "FarmLocation"),
+            (FarmCrdtDocumentKind::FarmCrop, "FarmCrop"),
+            (FarmCrdtDocumentKind::FarmCropVariety, "FarmCropVariety"),
+            (FarmCrdtDocumentKind::FarmCropCycle, "FarmCropCycle"),
+            (FarmCrdtDocumentKind::FarmAttachment, "FarmAttachment"),
+            (FarmCrdtDocumentKind::FarmPayPeriod, "FarmPayPeriod"),
+            (FarmCrdtDocumentKind::FarmInventoryItem, "FarmInventoryItem"),
+            (FarmCrdtDocumentKind::FarmMediaAsset, "FarmMediaAsset"),
+            (FarmCrdtDocumentKind::FarmObservation, "FarmObservation"),
         ] {
             let encoded = serde_json::to_string(&kind).unwrap();
             assert_eq!(encoded, format!("\"{expected}\""));
-            let decoded: RadrootsFarmCrdtDocumentKind = serde_json::from_str(&encoded).unwrap();
+            let decoded: FarmCrdtDocumentKind = serde_json::from_str(&encoded).unwrap();
             assert_eq!(decoded, kind);
         }
     }
@@ -385,180 +355,134 @@ mod tests {
     #[test]
     fn semantic_kinds_serialize_as_stable_strings() {
         for (kind, expected) in [
-            (RadrootsFarmSemanticKind::FarmTaskCreate, "FarmTaskCreate"),
-            (RadrootsFarmSemanticKind::FarmTaskAssign, "FarmTaskAssign"),
-            (RadrootsFarmSemanticKind::FarmTaskJoin, "FarmTaskJoin"),
+            (FarmSemanticKind::FarmTaskCreate, "FarmTaskCreate"),
+            (FarmSemanticKind::FarmTaskAssign, "FarmTaskAssign"),
+            (FarmSemanticKind::FarmTaskJoin, "FarmTaskJoin"),
+            (FarmSemanticKind::FarmTaskStatusSet, "FarmTaskStatusSet"),
             (
-                RadrootsFarmSemanticKind::FarmTaskStatusSet,
-                "FarmTaskStatusSet",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmTaskChecklistItemAdd,
+                FarmSemanticKind::FarmTaskChecklistItemAdd,
                 "FarmTaskChecklistItemAdd",
             ),
+            (FarmSemanticKind::FarmTaskCommentAdd, "FarmTaskCommentAdd"),
             (
-                RadrootsFarmSemanticKind::FarmTaskCommentAdd,
-                "FarmTaskCommentAdd",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmTaskAttachmentAttach,
+                FarmSemanticKind::FarmTaskAttachmentAttach,
                 "FarmTaskAttachmentAttach",
             ),
             (
-                RadrootsFarmSemanticKind::FarmTaskFollowUpCreate,
+                FarmSemanticKind::FarmTaskFollowUpCreate,
                 "FarmTaskFollowUpCreate",
             ),
-            (RadrootsFarmSemanticKind::FarmTaskUpdate, "FarmTaskUpdate"),
+            (FarmSemanticKind::FarmTaskUpdate, "FarmTaskUpdate"),
+            (FarmSemanticKind::FarmTaskComplete, "FarmTaskComplete"),
             (
-                RadrootsFarmSemanticKind::FarmTaskComplete,
-                "FarmTaskComplete",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmWorkSessionStart,
+                FarmSemanticKind::FarmWorkSessionStart,
                 "FarmWorkSessionStart",
             ),
+            (FarmSemanticKind::FarmWorkSessionStop, "FarmWorkSessionStop"),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionStop,
-                "FarmWorkSessionStop",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmWorkSessionSubmit,
+                FarmSemanticKind::FarmWorkSessionSubmit,
                 "FarmWorkSessionSubmit",
             ),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionManualEntryCreate,
+                FarmSemanticKind::FarmWorkSessionManualEntryCreate,
                 "FarmWorkSessionManualEntryCreate",
             ),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionApprove,
+                FarmSemanticKind::FarmWorkSessionApprove,
                 "FarmWorkSessionApprove",
             ),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionReject,
+                FarmSemanticKind::FarmWorkSessionReject,
                 "FarmWorkSessionReject",
             ),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionCorrect,
+                FarmSemanticKind::FarmWorkSessionCorrect,
                 "FarmWorkSessionCorrect",
             ),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionUpdate,
+                FarmSemanticKind::FarmWorkSessionUpdate,
                 "FarmWorkSessionUpdate",
             ),
+            (FarmSemanticKind::FarmWorkSessionEnd, "FarmWorkSessionEnd"),
             (
-                RadrootsFarmSemanticKind::FarmWorkSessionEnd,
-                "FarmWorkSessionEnd",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmHarvestRecordCreate,
+                FarmSemanticKind::FarmHarvestRecordCreate,
                 "FarmHarvestRecordCreate",
             ),
+            (FarmSemanticKind::FarmHarvestLineAdd, "FarmHarvestLineAdd"),
             (
-                RadrootsFarmSemanticKind::FarmHarvestLineAdd,
-                "FarmHarvestLineAdd",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmHarvestLineCorrect,
+                FarmSemanticKind::FarmHarvestLineCorrect,
                 "FarmHarvestLineCorrect",
             ),
+            (FarmSemanticKind::FarmHarvestLineVoid, "FarmHarvestLineVoid"),
             (
-                RadrootsFarmSemanticKind::FarmHarvestLineVoid,
-                "FarmHarvestLineVoid",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmHarvestAttachmentAttach,
+                FarmSemanticKind::FarmHarvestAttachmentAttach,
                 "FarmHarvestAttachmentAttach",
             ),
             (
-                RadrootsFarmSemanticKind::FarmHarvestRecordUpdate,
+                FarmSemanticKind::FarmHarvestRecordUpdate,
                 "FarmHarvestRecordUpdate",
             ),
+            (FarmSemanticKind::FarmActivityCreate, "FarmActivityCreate"),
+            (FarmSemanticKind::FarmNoteCreate, "FarmNoteCreate"),
+            (FarmSemanticKind::FarmLocationCreate, "FarmLocationCreate"),
+            (FarmSemanticKind::FarmCropCreate, "FarmCropCreate"),
             (
-                RadrootsFarmSemanticKind::FarmActivityCreate,
-                "FarmActivityCreate",
-            ),
-            (RadrootsFarmSemanticKind::FarmNoteCreate, "FarmNoteCreate"),
-            (
-                RadrootsFarmSemanticKind::FarmLocationCreate,
-                "FarmLocationCreate",
-            ),
-            (RadrootsFarmSemanticKind::FarmCropCreate, "FarmCropCreate"),
-            (
-                RadrootsFarmSemanticKind::FarmCropVarietyCreate,
+                FarmSemanticKind::FarmCropVarietyCreate,
                 "FarmCropVarietyCreate",
             ),
+            (FarmSemanticKind::FarmCropCycleCreate, "FarmCropCycleCreate"),
             (
-                RadrootsFarmSemanticKind::FarmCropCycleCreate,
-                "FarmCropCycleCreate",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmMemberInviteCreate,
+                FarmSemanticKind::FarmMemberInviteCreate,
                 "FarmMemberInviteCreate",
             ),
+            (FarmSemanticKind::FarmMemberApprove, "FarmMemberApprove"),
+            (FarmSemanticKind::FarmMemberRoleSet, "FarmMemberRoleSet"),
             (
-                RadrootsFarmSemanticKind::FarmMemberApprove,
-                "FarmMemberApprove",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmMemberRoleSet,
-                "FarmMemberRoleSet",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmMemberDeactivate,
+                FarmSemanticKind::FarmMemberDeactivate,
                 "FarmMemberDeactivate",
             ),
+            (FarmSemanticKind::FarmPayPeriodOpen, "FarmPayPeriodOpen"),
+            (FarmSemanticKind::FarmPayPeriodClose, "FarmPayPeriodClose"),
             (
-                RadrootsFarmSemanticKind::FarmPayPeriodOpen,
-                "FarmPayPeriodOpen",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmPayPeriodClose,
-                "FarmPayPeriodClose",
-            ),
-            (
-                RadrootsFarmSemanticKind::FarmReportExportMark,
+                FarmSemanticKind::FarmReportExportMark,
                 "FarmReportExportMark",
             ),
             (
-                RadrootsFarmSemanticKind::FarmInventoryItemUpdate,
+                FarmSemanticKind::FarmInventoryItemUpdate,
                 "FarmInventoryItemUpdate",
             ),
             (
-                RadrootsFarmSemanticKind::FarmMediaAssetAttach,
+                FarmSemanticKind::FarmMediaAssetAttach,
                 "FarmMediaAssetAttach",
             ),
             (
-                RadrootsFarmSemanticKind::FarmObservationCreate,
+                FarmSemanticKind::FarmObservationCreate,
                 "FarmObservationCreate",
             ),
-            (
-                RadrootsFarmSemanticKind::FarmWorkspaceUpdate,
-                "FarmWorkspaceUpdate",
-            ),
+            (FarmSemanticKind::FarmWorkspaceUpdate, "FarmWorkspaceUpdate"),
         ] {
             let encoded = serde_json::to_string(&kind).unwrap();
             assert_eq!(encoded, format!("\"{expected}\""));
-            let decoded: RadrootsFarmSemanticKind = serde_json::from_str(&encoded).unwrap();
+            let decoded: FarmSemanticKind = serde_json::from_str(&encoded).unwrap();
             assert_eq!(decoded, kind);
         }
     }
 
     #[test]
     fn unknown_crdt_kinds_roundtrip_as_other_strings() {
-        let document_kind: RadrootsFarmCrdtDocumentKind =
-            serde_json::from_str("\"FarmSoilTest\"").unwrap();
-        let semantic_kind: RadrootsFarmSemanticKind =
+        let document_kind: FarmCrdtDocumentKind = serde_json::from_str("\"FarmSoilTest\"").unwrap();
+        let semantic_kind: FarmSemanticKind =
             serde_json::from_str("\"FarmSoilTestCreate\"").unwrap();
 
         assert_eq!(
             document_kind,
-            RadrootsFarmCrdtDocumentKind::Other {
+            FarmCrdtDocumentKind::Other {
                 value: "FarmSoilTest".to_string()
             }
         );
         assert_eq!(
             semantic_kind,
-            RadrootsFarmSemanticKind::Other {
+            FarmSemanticKind::Other {
                 value: "FarmSoilTestCreate".to_string()
             }
         );
@@ -574,23 +498,23 @@ mod tests {
         );
     }
 
-    fn sample_change() -> RadrootsFarmCrdtChange {
-        RadrootsFarmCrdtChange {
+    fn sample_change() -> FarmCrdtChange {
+        FarmCrdtChange {
             schema: RADROOTS_FARM_CRDT_CHANGE_SCHEMA.to_string(),
-            workspace: RadrootsFarmWorkspaceRef {
+            workspace: FarmWorkspaceRef {
                 pubkey: "workspace_pubkey".to_string(),
                 d_tag: "ABCDEFGHIJKLMNOPQRSTUV".to_string(),
             },
             farm_group_id: "BCDEFGHIJKLMNOPQRSTUVW".to_string(),
             document_id: "DEFGHIJKLMNOPQRSTUVWXY".to_string(),
-            document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
-            crdt_backend: RadrootsCrdtBackend::Automerge,
+            document_kind: FarmCrdtDocumentKind::FarmTask,
+            crdt_backend: CrdtBackend::Automerge,
             crdt_backend_version: Some("0.x".to_string()),
             actor_id: "actor_abc".to_string(),
             change_hash: "crdt_hash_abc".to_string(),
             dependencies: Vec::new(),
             encoded_change: "base64url-encoded-change".to_string(),
-            semantic_kind: RadrootsFarmSemanticKind::FarmTaskCreate,
+            semantic_kind: FarmSemanticKind::FarmTaskCreate,
             business_time_ms: 1_780_000_000_000,
             author_member_id: Some("member_abc".to_string()),
             app_version: Some("0.1.0".to_string()),

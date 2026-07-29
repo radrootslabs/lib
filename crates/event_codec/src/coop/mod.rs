@@ -16,35 +16,33 @@ mod tests {
     use crate::error::EventEncodeError;
     #[cfg(feature = "serde_json")]
     use radroots_event::envelope::kind::KIND_COOP;
-    use radroots_event::farm::RadrootsFarmRef;
-    use radroots_event::farm::change_set::{
-        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-    };
-    use radroots_event::farm::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
+    use radroots_event::farm::FarmRef;
+    use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+    use radroots_event::farm::coop::{Coop, CoopLocation, CoopRef};
 
     #[test]
     fn coop_tags_include_required_fields() {
-        let coop = RadrootsCoop {
+        let coop = Coop {
             d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Coop".to_string(),
             about: None,
             website: None,
             picture: None,
             banner: None,
-            location: Some(RadrootsCoopLocation {
+            location: Some(CoopLocation {
                 primary: None,
                 city: None,
                 region: None,
                 country: None,
-                gcs: RadrootsGcsLocation {
+                gcs: GcsLocation {
                     lat: 37.0,
                     lng: -122.0,
                     geohash: "9q8yy".to_string(),
-                    point: RadrootsGeoJsonPoint {
+                    point: GeoJsonPoint {
                         r#type: "Point".to_string(),
                         coordinates: [-122.0, 37.0],
                     },
-                    polygon: RadrootsGeoJsonPolygon {
+                    polygon: GeoJsonPolygon {
                         r#type: "Polygon".to_string(),
                         coordinates: vec![vec![
                             [-122.0, 37.0],
@@ -80,7 +78,7 @@ mod tests {
 
     #[test]
     fn coop_ref_tags_include_p_and_a() {
-        let coop = RadrootsCoopRef {
+        let coop = CoopRef {
             pubkey: "coop_pubkey".to_string(),
             d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),
         };
@@ -95,7 +93,7 @@ mod tests {
         assert!(has_a);
         assert!(has_p);
 
-        let err = coop_ref_tags(&RadrootsCoopRef {
+        let err = coop_ref_tags(&CoopRef {
             pubkey: "coop_pubkey".to_string(),
             d_tag: "invalid".to_string(),
         })
@@ -105,7 +103,7 @@ mod tests {
 
     #[test]
     fn coop_build_tags_rejects_invalid_d_tag() {
-        let coop = RadrootsCoop {
+        let coop = Coop {
             d_tag: "invalid".to_string(),
             name: "Test Coop".to_string(),
             about: None,
@@ -123,7 +121,7 @@ mod tests {
     #[test]
     #[cfg(feature = "serde_json")]
     fn coop_decode_rejects_empty_d_tag_and_content() {
-        let coop = RadrootsCoop {
+        let coop = Coop {
             d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),
             name: "Test Coop".to_string(),
             about: None,
@@ -175,7 +173,7 @@ mod tests {
 
         let farm_members = coop_members_farms_list_set(
             "BAAAAAAAAAAAAAAAAAAAAA",
-            [RadrootsFarmRef {
+            [FarmRef {
                 pubkey: "farm_pubkey".to_string(),
                 d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
             }],

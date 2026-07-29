@@ -1,13 +1,14 @@
 #[cfg(feature = "events")]
-use radroots_event::post::RadrootsPost;
-#[cfg(feature = "events")]
 use radroots_event::profile::{
-    RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfile, radroots_profile_type_from_tag_value,
+    RADROOTS_PROFILE_TYPE_TAG_KEY, radroots_profile_type_from_tag_value,
 };
 #[cfg(feature = "events")]
 use radroots_event_codec::parsed::RadrootsParsedData;
 #[cfg(feature = "events")]
-use radroots_event_codec::profile::RadrootsProfileData;
+use radroots_event_codec::{
+    post::decode::LegacyPost,
+    profile::{LegacyProfile, RadrootsProfileData},
+};
 
 #[cfg(feature = "events")]
 use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
@@ -19,13 +20,13 @@ use crate::types::{RadrootsNostrEvent, RadrootsNostrMetadata};
 /// Use `verify_and_admit_post_event` over `radroots_event_from_nostr` whenever
 /// the caller needs root Update, PhotoUpdate, or Ask admission. Its explicit
 /// thread-excluded outcome makes no Reply claim.
-pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<RadrootsPost> {
+pub fn to_post_event_metadata(e: &RadrootsNostrEvent) -> RadrootsParsedData<LegacyPost> {
     RadrootsParsedData::new(
         e.id.to_string(),
         e.pubkey.to_string(),
         e.created_at.as_secs(),
         e.kind.as_u16() as u32,
-        RadrootsPost {
+        LegacyPost {
             content: e.content.clone(),
             farm: None,
             address_refs: None,
@@ -59,7 +60,7 @@ pub fn to_profile_event_metadata(
         })
         .next();
 
-    if let Ok(p) = serde_json::from_str::<RadrootsProfile>(&e.content) {
+    if let Ok(p) = serde_json::from_str::<LegacyProfile>(&e.content) {
         return Some(RadrootsParsedData::new(
             e.id.to_string(),
             e.pubkey.to_string(),
@@ -73,7 +74,7 @@ pub fn to_profile_event_metadata(
     }
 
     if let Ok(md) = serde_json::from_str::<RadrootsNostrMetadata>(&e.content) {
-        let p = RadrootsProfile {
+        let p = LegacyProfile {
             name: md.name.unwrap_or_default(),
             display_name: md.display_name,
             nip05: md.nip05,

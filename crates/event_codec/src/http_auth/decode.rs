@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    social::http_auth::{KIND_HTTP_AUTH, RadrootsHttpAuth},
+    social::http_auth::{HttpAuth, KIND_HTTP_AUTH},
     tag::name::{TAG_METHOD, TAG_PAYLOAD, TAG_URL_AUTH},
 };
 
@@ -19,7 +19,7 @@ pub fn http_auth_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsHttpAuth, EventParseError> {
+) -> Result<HttpAuth, EventParseError> {
     if kind != KIND_HTTP_AUTH {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -31,7 +31,7 @@ pub fn http_auth_from_event(
     if let Some(payload) = payload_sha256.as_deref() {
         validate_lowercase_hex_64_tag(payload, TAG_PAYLOAD)?;
     }
-    Ok(RadrootsHttpAuth {
+    Ok(HttpAuth {
         url: required_unique_tag_value(tags, TAG_URL_AUTH)?,
         method: required_unique_tag_value(tags, TAG_METHOD)?,
         payload_sha256,
@@ -45,7 +45,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsHttpAuth>, EventParseError> {
+) -> Result<RadrootsParsedData<HttpAuth>, EventParseError> {
     let auth = http_auth_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -64,7 +64,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsHttpAuth>, EventParseError> {
+) -> Result<RadrootsParsedEvent<HttpAuth>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

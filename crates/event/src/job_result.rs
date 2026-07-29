@@ -1,6 +1,6 @@
 use crate::{
-    social::{job::JobPaymentRequest, job_request::RadrootsJobInput},
-    tag::RadrootsEventPtr,
+    social::{job::JobPaymentRequest, job_request::JobInput},
+    tag::EventPtr,
 };
 
 #[cfg(not(feature = "std"))]
@@ -13,11 +13,11 @@ use alloc::{string::String, vec::Vec};
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsJobResult {
+pub struct JobResult {
     pub kind: u16,
-    pub request_event: RadrootsEventPtr,
+    pub request_event: EventPtr,
     pub request_json: Option<String>,
-    pub inputs: Vec<RadrootsJobInput>,
+    pub inputs: Vec<JobInput>,
     pub customer_pubkey: Option<String>,
     pub payment: Option<JobPaymentRequest>,
     pub content: Option<String>,

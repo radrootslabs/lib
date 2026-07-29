@@ -7,15 +7,15 @@ use alloc::{
 
 #[cfg(feature = "serde_json")]
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
+    envelope::EventEnvelope,
     envelope::kind::is_trade_mutation_event_kind,
-    id::RadrootsTradeMutationId,
+    id::MutationId,
     tag::name::{TAG_D, TAG_E},
     trade::{
-        RadrootsTradeMutationEnvelopeV1, RadrootsTradeProtocolError,
-        canonical_trade_mutation_content, trade_mutation_from_canonical_content,
+        TradeMutationEnvelopeV1, TradeProtocolError, canonical_trade_mutation_content,
+        trade_mutation_from_canonical_content,
     },
-    wire::RadrootsNip01EventWireParts,
+    wire::Nip01EventWireParts,
 };
 
 #[cfg(feature = "serde_json")]
@@ -32,7 +32,7 @@ pub enum RadrootsTradeMutationParseError {
     CounterpartyTagMismatch,
     ParentTagsMismatch,
     KindContractMismatch,
-    Canonical(RadrootsTradeProtocolError),
+    Canonical(TradeProtocolError),
 }
 
 #[cfg(feature = "serde_json")]
@@ -56,20 +56,20 @@ impl core::fmt::Display for RadrootsTradeMutationParseError {
 impl std::error::Error for RadrootsTradeMutationParseError {}
 
 #[cfg(feature = "serde_json")]
-impl From<RadrootsTradeProtocolError> for RadrootsTradeMutationParseError {
-    fn from(value: RadrootsTradeProtocolError) -> Self {
+impl From<TradeProtocolError> for RadrootsTradeMutationParseError {
+    fn from(value: TradeProtocolError) -> Self {
         Self::Canonical(value)
     }
 }
 
 #[cfg(feature = "serde_json")]
 pub fn trade_mutation_event_build(
-    envelope: RadrootsTradeMutationEnvelopeV1,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    envelope: TradeMutationEnvelopeV1,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     let canonical = canonical_trade_mutation_content(envelope)
         .map_err(map_trade_protocol_error_to_encode_error)?;
     let tags = trade_mutation_tags(&canonical.envelope)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind: canonical.envelope.mutation_kind().nostr_kind(),
         content: canonical.content,
         tags,
@@ -78,8 +78,8 @@ pub fn trade_mutation_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn trade_mutation_from_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsTradeMutationEnvelopeV1, RadrootsTradeMutationParseError> {
+    event: &EventEnvelope,
+) -> Result<TradeMutationEnvelopeV1, RadrootsTradeMutationParseError> {
     if !is_trade_mutation_event_kind(event.kind_u32()) {
         return Err(RadrootsTradeMutationParseError::InvalidKind(
             event.kind_u32(),
@@ -95,7 +95,7 @@ pub fn trade_mutation_from_event(
 
 #[cfg(feature = "serde_json")]
 pub fn trade_mutation_tags(
-    envelope: &RadrootsTradeMutationEnvelopeV1,
+    envelope: &TradeMutationEnvelopeV1,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::with_capacity(3 + envelope.parent_mutation_ids.len());
     push_tag(&mut tags, "contract", envelope.contract_id.clone())?;
@@ -109,7 +109,7 @@ pub fn trade_mutation_tags(
 
 #[cfg(feature = "serde_json")]
 fn validate_trade_mutation_tags(
-    envelope: &RadrootsTradeMutationEnvelopeV1,
+    envelope: &TradeMutationEnvelopeV1,
     tags: &[Vec<String>],
 ) -> Result<(), RadrootsTradeMutationParseError> {
     let contract = required_tag_value(tags, "contract")?;
@@ -133,7 +133,7 @@ fn validate_trade_mutation_tags(
             .get(1)
             .map(String::as_str)
             .ok_or(RadrootsTradeMutationParseError::InvalidTag(TAG_E))?;
-        let parent = RadrootsTradeMutationId::parse(value)
+        let parent = MutationId::parse(value)
             .map_err(|_| RadrootsTradeMutationParseError::InvalidTag(TAG_E))?;
         parents.push(parent);
     }
@@ -176,36 +176,34 @@ fn push_tag(
 }
 
 #[cfg(feature = "serde_json")]
-fn map_trade_protocol_error_to_encode_error(error: RadrootsTradeProtocolError) -> EventEncodeError {
+fn map_trade_protocol_error_to_encode_error(error: TradeProtocolError) -> EventEncodeError {
     match error {
-        RadrootsTradeProtocolError::EmptyField(field) => {
-            EventEncodeError::EmptyRequiredField(field)
-        }
-        RadrootsTradeProtocolError::ContractMismatch { .. }
-        | RadrootsTradeProtocolError::InvalidField(_)
-        | RadrootsTradeProtocolError::InvalidIdentifier { .. }
-        | RadrootsTradeProtocolError::InvalidInitialParents
-        | RadrootsTradeProtocolError::MissingParentMutation
-        | RadrootsTradeProtocolError::TooManyParents { .. }
-        | RadrootsTradeProtocolError::UnsortedParents
-        | RadrootsTradeProtocolError::DuplicateParent
-        | RadrootsTradeProtocolError::SelfParent
-        | RadrootsTradeProtocolError::MissingLines
-        | RadrootsTradeProtocolError::TooManyLines { .. }
-        | RadrootsTradeProtocolError::TooManyAdjustments { .. }
-        | RadrootsTradeProtocolError::UnsupportedNumber
-        | RadrootsTradeProtocolError::ContentTooLarge { .. }
-        | RadrootsTradeProtocolError::InvalidTimeRange
-        | RadrootsTradeProtocolError::MissingReservationCommitments
-        | RadrootsTradeProtocolError::MissingCancellationTarget
-        | RadrootsTradeProtocolError::CandidateIdMismatch { .. }
-        | RadrootsTradeProtocolError::MutationIdMismatch { .. }
-        | RadrootsTradeProtocolError::InvalidSchemaVersion { .. } => {
+        TradeProtocolError::EmptyField(field) => EventEncodeError::EmptyRequiredField(field),
+        TradeProtocolError::ContractMismatch { .. }
+        | TradeProtocolError::InvalidField(_)
+        | TradeProtocolError::InvalidIdentifier { .. }
+        | TradeProtocolError::InvalidInitialParents
+        | TradeProtocolError::MissingParentMutation
+        | TradeProtocolError::TooManyParents { .. }
+        | TradeProtocolError::UnsortedParents
+        | TradeProtocolError::DuplicateParent
+        | TradeProtocolError::SelfParent
+        | TradeProtocolError::MissingLines
+        | TradeProtocolError::TooManyLines { .. }
+        | TradeProtocolError::TooManyAdjustments { .. }
+        | TradeProtocolError::UnsupportedNumber
+        | TradeProtocolError::ContentTooLarge { .. }
+        | TradeProtocolError::InvalidTimeRange
+        | TradeProtocolError::MissingReservationCommitments
+        | TradeProtocolError::MissingCancellationTarget
+        | TradeProtocolError::CandidateIdMismatch { .. }
+        | TradeProtocolError::MutationIdMismatch { .. }
+        | TradeProtocolError::InvalidSchemaVersion { .. } => {
             EventEncodeError::InvalidField("trade_mutation")
         }
-        RadrootsTradeProtocolError::DuplicateKey(_)
-        | RadrootsTradeProtocolError::InvalidJson(_)
-        | RadrootsTradeProtocolError::NonCanonicalJson => EventEncodeError::Json,
+        TradeProtocolError::DuplicateKey(_)
+        | TradeProtocolError::InvalidJson(_)
+        | TradeProtocolError::NonCanonicalJson => EventEncodeError::Json,
     }
 }
 
@@ -213,18 +211,14 @@ fn map_trade_protocol_error_to_encode_error(error: RadrootsTradeProtocolError) -
 mod tests {
     use super::*;
     use radroots_event::{
-        envelope::RadrootsEventEnvelope,
-        envelope::RadrootsEventEnvelopeParts,
-        id::{
-            RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId,
-            RadrootsInventoryBinId, RadrootsTradeId,
-        },
+        envelope::EventEnvelope,
+        envelope::EventEnvelopeParts,
+        id::{ClassifiedListingAddress, DTag, EventId, InventoryBinId, TradeId},
         trade::{
-            RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
-            RadrootsFulfillmentProfileV1, RadrootsTradeCancellationProfileV1,
-            RadrootsTradeCandidateLineV1, RadrootsTradeCandidateTermsV1,
-            RadrootsTradeEconomicAdjustmentV1, RadrootsTradeEconomicsProfileV1,
-            RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1,
+            FulfillmentProfileV1, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
+            RADROOTS_TRADE_SCHEMA_VERSION, TradeCancellationProfileV1, TradeCandidateLineV1,
+            TradeCandidateTermsV1, TradeEconomicAdjustmentV1, TradeEconomicsProfileV1,
+            TradeMutationBodyV1, TradeMutationEnvelopeV1,
         },
     };
     use radroots_identity::PublicKey;
@@ -241,42 +235,42 @@ mod tests {
         PublicKey::from_hex(&crate::test_fixtures::fixture_public_key_hex(character)).unwrap()
     }
 
-    fn event_id(character: char) -> RadrootsEventId {
-        RadrootsEventId::parse(hex_64(character)).unwrap()
+    fn event_id(character: char) -> EventId {
+        EventId::parse(hex_64(character)).unwrap()
     }
 
-    fn proposal() -> RadrootsTradeMutationEnvelopeV1 {
-        RadrootsTradeMutationEnvelopeV1 {
+    fn proposal() -> TradeMutationEnvelopeV1 {
+        TradeMutationEnvelopeV1 {
             mutation_id: None,
             contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_string(),
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
-            trade_id: RadrootsTradeId::parse(hex_32('1')).unwrap(),
+            trade_id: TradeId::parse(hex_32('1')).unwrap(),
             root_mutation_id: None,
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
-            farm_id: RadrootsDTag::parse("farm-1").unwrap(),
+            farm_id: DTag::parse("farm-1").unwrap(),
             parent_mutation_ids: Vec::new(),
             author_pubkey: pubkey('a'),
             counterparty_pubkey: pubkey('b'),
             authored_at_unix_s: 1_799_000_000,
-            body: RadrootsTradeMutationBodyV1::Proposal {
+            body: TradeMutationBodyV1::Proposal {
                 candidate: candidate(),
             },
         }
     }
 
-    fn candidate() -> RadrootsTradeCandidateTermsV1 {
-        RadrootsTradeCandidateTermsV1 {
+    fn candidate() -> TradeCandidateTermsV1 {
+        TradeCandidateTermsV1 {
             candidate_id: None,
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
             base_candidate_id: None,
             supersession_intent: None,
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
-            farm_id: RadrootsDTag::parse("farm-1").unwrap(),
-            lines: vec![RadrootsTradeCandidateLineV1 {
-                line_id: RadrootsDTag::parse("line-1").unwrap(),
-                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+            farm_id: DTag::parse("farm-1").unwrap(),
+            lines: vec![TradeCandidateLineV1 {
+                line_id: DTag::parse("line-1").unwrap(),
+                listing_addr: ClassifiedListingAddress::parse(format!(
                     "30402:{}:listing-1",
                     pubkey('b').to_hex()
                 ))
@@ -285,7 +279,7 @@ mod tests {
                 listing_snapshot_sha256: hex_64('d'),
                 product_id: "carrots".to_string(),
                 option_id: None,
-                bin_id: RadrootsInventoryBinId::parse("bin-1").unwrap(),
+                bin_id: InventoryBinId::parse("bin-1").unwrap(),
                 quantity_mantissa: "2".to_string(),
                 quantity_scale: 0,
                 unit_code: "count".to_string(),
@@ -296,7 +290,7 @@ mod tests {
                 replaces_line_id: None,
             }],
             line_tombstones: Vec::new(),
-            economics: RadrootsTradeEconomicsProfileV1 {
+            economics: TradeEconomicsProfileV1 {
                 profile_id: "mvp-fixed".to_string(),
                 currency_code: "USD".to_string(),
                 currency_exponent: 2,
@@ -305,9 +299,9 @@ mod tests {
                 discount_total_mantissa: "0".to_string(),
                 adjustment_total_mantissa: "0".to_string(),
                 total_mantissa: "1000".to_string(),
-                adjustments: Vec::<RadrootsTradeEconomicAdjustmentV1>::new(),
+                adjustments: Vec::<TradeEconomicAdjustmentV1>::new(),
             },
-            fulfillment: RadrootsFulfillmentProfileV1 {
+            fulfillment: FulfillmentProfileV1 {
                 profile_id: "market-pickup".to_string(),
                 method: "pickup".to_string(),
                 starts_at_unix_s: 1_800_000_000,
@@ -318,7 +312,7 @@ mod tests {
                 location_class: "farmstand".to_string(),
                 requires_private_terms: false,
             },
-            cancellation: RadrootsTradeCancellationProfileV1 {
+            cancellation: TradeCancellationProfileV1 {
                 profile_id: "buyer-pre-agreement".to_string(),
                 buyer_pre_agreement: true,
                 post_agreement_cutoff_unix_s: None,
@@ -343,7 +337,7 @@ mod tests {
             ]
         );
         let envelope = trade_mutation_from_event(
-            &RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+            &EventEnvelope::new(EventEnvelopeParts {
                 id: hex_64('e'),
                 author: pubkey('a').to_hex(),
                 created_at: 1_799_000_000,
@@ -370,13 +364,13 @@ mod tests {
             RadrootsTradeMutationParseError::CounterpartyTagMismatch,
             RadrootsTradeMutationParseError::ParentTagsMismatch,
             RadrootsTradeMutationParseError::KindContractMismatch,
-            RadrootsTradeMutationParseError::Canonical(RadrootsTradeProtocolError::MissingLines),
+            RadrootsTradeMutationParseError::Canonical(TradeProtocolError::MissingLines),
         ];
         for error in parse_errors {
             assert!(!error.to_string().is_empty());
         }
         let canonical_error =
-            RadrootsTradeMutationParseError::from(RadrootsTradeProtocolError::MissingLines);
+            RadrootsTradeMutationParseError::from(TradeProtocolError::MissingLines);
         assert!(matches!(
             canonical_error,
             RadrootsTradeMutationParseError::Canonical(_)
@@ -426,7 +420,7 @@ mod tests {
             RadrootsTradeMutationParseError::InvalidTag(TAG_E)
         );
 
-        let parent = RadrootsTradeMutationId::parse(hex_64('9')).unwrap();
+        let parent = MutationId::parse(hex_64('9')).unwrap();
         let mut parent_envelope = proposal();
         parent_envelope.parent_mutation_ids.push(parent);
         let parent_tags = trade_mutation_tags(&parent_envelope).unwrap();
@@ -457,7 +451,7 @@ mod tests {
         ));
 
         let built = trade_mutation_event_build(proposal()).unwrap();
-        let invalid_kind = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let invalid_kind = EventEnvelope::new(EventEnvelopeParts {
             id: hex_64('e'),
             author: pubkey('a').to_hex(),
             created_at: 1_799_000_000,
@@ -472,7 +466,7 @@ mod tests {
             RadrootsTradeMutationParseError::InvalidKind(1)
         );
 
-        let kind_contract_mismatch = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let kind_contract_mismatch = EventEnvelope::new(EventEnvelopeParts {
             id: hex_64('e'),
             author: pubkey('a').to_hex(),
             created_at: 1_799_000_000,
@@ -491,40 +485,40 @@ mod tests {
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn trade_protocol_errors_map_to_stable_encode_categories() {
-        let id_error = RadrootsTradeMutationId::parse("invalid").unwrap_err();
+        let id_error = MutationId::parse("invalid").unwrap_err();
         let invalid_field_errors = [
-            RadrootsTradeProtocolError::ContractMismatch {
+            TradeProtocolError::ContractMismatch {
                 expected: "expected",
                 actual: "actual".into(),
             },
-            RadrootsTradeProtocolError::InvalidField("field"),
-            RadrootsTradeProtocolError::InvalidIdentifier {
+            TradeProtocolError::InvalidField("field"),
+            TradeProtocolError::InvalidIdentifier {
                 field: "id",
                 error: id_error,
             },
-            RadrootsTradeProtocolError::InvalidInitialParents,
-            RadrootsTradeProtocolError::MissingParentMutation,
-            RadrootsTradeProtocolError::TooManyParents { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::UnsortedParents,
-            RadrootsTradeProtocolError::DuplicateParent,
-            RadrootsTradeProtocolError::SelfParent,
-            RadrootsTradeProtocolError::MissingLines,
-            RadrootsTradeProtocolError::TooManyLines { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::UnsupportedNumber,
-            RadrootsTradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
-            RadrootsTradeProtocolError::InvalidTimeRange,
-            RadrootsTradeProtocolError::MissingReservationCommitments,
-            RadrootsTradeProtocolError::MissingCancellationTarget,
-            RadrootsTradeProtocolError::CandidateIdMismatch {
+            TradeProtocolError::InvalidInitialParents,
+            TradeProtocolError::MissingParentMutation,
+            TradeProtocolError::TooManyParents { max: 1, actual: 2 },
+            TradeProtocolError::UnsortedParents,
+            TradeProtocolError::DuplicateParent,
+            TradeProtocolError::SelfParent,
+            TradeProtocolError::MissingLines,
+            TradeProtocolError::TooManyLines { max: 1, actual: 2 },
+            TradeProtocolError::TooManyAdjustments { max: 1, actual: 2 },
+            TradeProtocolError::UnsupportedNumber,
+            TradeProtocolError::ContentTooLarge { max: 1, actual: 2 },
+            TradeProtocolError::InvalidTimeRange,
+            TradeProtocolError::MissingReservationCommitments,
+            TradeProtocolError::MissingCancellationTarget,
+            TradeProtocolError::CandidateIdMismatch {
                 declared: "declared".into(),
                 computed: "computed".into(),
             },
-            RadrootsTradeProtocolError::MutationIdMismatch {
+            TradeProtocolError::MutationIdMismatch {
                 declared: "declared".into(),
                 computed: "computed".into(),
             },
-            RadrootsTradeProtocolError::InvalidSchemaVersion {
+            TradeProtocolError::InvalidSchemaVersion {
                 expected: 1,
                 actual: 2,
             },
@@ -537,15 +531,13 @@ mod tests {
         }
 
         assert!(matches!(
-            map_trade_protocol_error_to_encode_error(RadrootsTradeProtocolError::EmptyField(
-                "field"
-            )),
+            map_trade_protocol_error_to_encode_error(TradeProtocolError::EmptyField("field")),
             EventEncodeError::EmptyRequiredField("field")
         ));
         for error in [
-            RadrootsTradeProtocolError::DuplicateKey("key".into()),
-            RadrootsTradeProtocolError::InvalidJson("json".into()),
-            RadrootsTradeProtocolError::NonCanonicalJson,
+            TradeProtocolError::DuplicateKey("key".into()),
+            TradeProtocolError::InvalidJson("json".into()),
+            TradeProtocolError::NonCanonicalJson,
         ] {
             assert!(matches!(
                 map_trade_protocol_error_to_encode_error(error),

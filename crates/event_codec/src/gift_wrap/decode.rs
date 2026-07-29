@@ -6,7 +6,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_GIFT_WRAP,
-    social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
+    social::gift_wrap::{GiftWrap, GiftWrapRecipient},
 };
 
 use crate::error::EventParseError;
@@ -14,7 +14,7 @@ use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
 const DEFAULT_KIND: u32 = KIND_GIFT_WRAP;
 
-fn parse_recipient(tags: &[Vec<String>]) -> Result<RadrootsGiftWrapRecipient, EventParseError> {
+fn parse_recipient(tags: &[Vec<String>]) -> Result<GiftWrapRecipient, EventParseError> {
     let tag = tags
         .iter()
         .find(|t| t.first().map(|s| s.as_str()) == Some("p"))
@@ -28,7 +28,7 @@ fn parse_recipient(tags: &[Vec<String>]) -> Result<RadrootsGiftWrapRecipient, Ev
         Some(value) => Some(value.clone()),
         None => None,
     };
-    Ok(RadrootsGiftWrapRecipient {
+    Ok(GiftWrapRecipient {
         public_key: public_key.clone(),
         relay_url,
     })
@@ -55,7 +55,7 @@ pub fn gift_wrap_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGiftWrap, EventParseError> {
+) -> Result<GiftWrap, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "1059",
@@ -67,7 +67,7 @@ pub fn gift_wrap_from_tags(
     }
     let recipient = parse_recipient(tags)?;
     let expiration = parse_expiration(tags)?;
-    Ok(RadrootsGiftWrap {
+    Ok(GiftWrap {
         recipient,
         content: content.to_string(),
         expiration,
@@ -81,7 +81,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsGiftWrap>, EventParseError> {
+) -> Result<RadrootsParsedData<GiftWrap>, EventParseError> {
     let gift_wrap = gift_wrap_from_tags(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -100,7 +100,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsGiftWrap>, EventParseError> {
+) -> Result<RadrootsParsedEvent<GiftWrap>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

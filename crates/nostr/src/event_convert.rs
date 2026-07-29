@@ -2,14 +2,14 @@
 
 use crate::types::RadrootsNostrEvent as RadrootsNostrRawEvent;
 use radroots_event::{
-    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeError,
-    envelope::RadrootsEventEnvelopeParts, tag::RadrootsEventPtr,
+    envelope::EventEnvelope, envelope::EventEnvelopeError, envelope::EventEnvelopeParts,
+    tag::EventPtr,
 };
 
 pub fn radroots_event_from_nostr(
     event: &RadrootsNostrRawEvent,
-) -> Result<RadrootsEventEnvelope, RadrootsEventEnvelopeError> {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+) -> Result<EventEnvelope, EventEnvelopeError> {
+    EventEnvelope::new(EventEnvelopeParts {
         id: event.id.to_string(),
         author: event.pubkey.to_string(),
         created_at: event.created_at.as_secs(),
@@ -20,8 +20,8 @@ pub fn radroots_event_from_nostr(
     })
 }
 
-pub fn radroots_event_ptr_from_nostr(event: &RadrootsNostrRawEvent) -> RadrootsEventPtr {
-    RadrootsEventPtr {
+pub fn radroots_event_ptr_from_nostr(event: &RadrootsNostrRawEvent) -> EventPtr {
+    EventPtr {
         id: event.id.to_string(),
         relays: None,
     }
@@ -56,7 +56,7 @@ mod tests {
 
         assert_eq!(
             radroots_event_from_nostr(&event),
-            Err(RadrootsEventEnvelopeError::ContentTooLarge {
+            Err(EventEnvelopeError::ContentTooLarge {
                 max: DEFAULT_CONTENT_MAX_BYTES,
                 actual: DEFAULT_CONTENT_MAX_BYTES + 1,
             })
@@ -72,7 +72,7 @@ mod tests {
 
         assert_eq!(
             radroots_event_from_nostr(&event),
-            Err(RadrootsEventEnvelopeError::TooManyTagElements {
+            Err(EventEnvelopeError::TooManyTagElements {
                 max: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
                 actual: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT + 1,
             })

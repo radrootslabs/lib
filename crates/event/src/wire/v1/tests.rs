@@ -45,12 +45,12 @@ fn tag_with_total_elements(element_count: usize) -> Vec<Vec<String>> {
     vec![tag]
 }
 
-fn valid_envelope_parts(content: &str, tags: Vec<Vec<String>>) -> RadrootsEventEnvelopeParts {
+fn valid_envelope_parts(content: &str, tags: Vec<Vec<String>>) -> EventEnvelopeParts {
     let pubkey = hex_64('a');
     let id = compute_canonical_nip01_event_id(pubkey.as_str(), 1_700_000_000, 1, &tags, content)
         .expect("event id")
         .into_string();
-    RadrootsEventEnvelopeParts {
+    EventEnvelopeParts {
         id,
         author: pubkey,
         created_at: 1_700_000_000,
@@ -85,7 +85,7 @@ fn parses_wire_json_preserves_extra_and_verifies_id() {
         .as_object_mut()
         .expect("object")
         .insert("client".to_owned(), json!({"name":"radroots-test"}));
-    let wire = RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
+    let wire = Nip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
 
     assert_eq!(wire.pubkey, hex_64('a'));
     assert_eq!(wire.created_at, 1_700_000_000);
@@ -105,9 +105,8 @@ fn parses_wire_json_preserves_extra_and_verifies_id() {
 
 #[test]
 fn into_envelope_verifies_id_before_domain_conversion() {
-    let wire =
-        RadrootsNip01EventWire::parse_json(valid_event_json("hello", default_tags()).as_str())
-            .expect("wire");
+    let wire = Nip01EventWire::parse_json(valid_event_json("hello", default_tags()).as_str())
+        .expect("wire");
 
     let envelope = wire.clone().into_envelope().expect("envelope");
     assert_eq!(envelope.id_hex(), wire.id);
@@ -117,14 +116,14 @@ fn into_envelope_verifies_id_before_domain_conversion() {
     tampered_id.id = hex_64('f');
     assert!(matches!(
         tampered_id.into_envelope(),
-        Err(RadrootsEventWireError::EventIdMismatch { .. })
+        Err(EventWireError::EventIdMismatch { .. })
     ));
 
     let mut tampered_content = wire;
     tampered_content.content = "tampered".to_owned();
     assert!(matches!(
         tampered_content.into_envelope(),
-        Err(RadrootsEventWireError::EventIdMismatch { .. })
+        Err(EventWireError::EventIdMismatch { .. })
     ));
 }
 
@@ -135,7 +134,7 @@ fn into_envelope_ignores_extra_for_id_and_propagates_domain_limits() {
         .as_object_mut()
         .expect("object")
         .insert("client".to_owned(), json!("radroots-test"));
-    let wire = RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
+    let wire = Nip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
     let envelope = wire.into_envelope().expect("envelope");
     assert_eq!(envelope.content(), "hello");
 
@@ -151,7 +150,7 @@ fn into_envelope_ignores_extra_for_id_and_propagates_domain_limits() {
     )
     .expect("event id")
     .into_string();
-    let wire = RadrootsNip01EventWire {
+    let wire = Nip01EventWire {
         id,
         pubkey,
         created_at: 1_700_000_000,
@@ -164,8 +163,8 @@ fn into_envelope_ignores_extra_for_id_and_propagates_domain_limits() {
 
     assert!(matches!(
         wire.into_envelope(),
-        Err(RadrootsEventWireError::Envelope(
-            RadrootsEventEnvelopeError::ContentTooLarge { .. }
+        Err(EventWireError::Envelope(
+            EventEnvelopeError::ContentTooLarge { .. }
         ))
     ));
 }
@@ -178,7 +177,7 @@ fn serde_flatten_preserves_extra_fields() {
         .as_object_mut()
         .expect("object")
         .insert("client".to_owned(), json!("radroots-test"));
-    let wire = RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
+    let wire = Nip01EventWire::parse_json(raw_json(&value).as_str()).expect("wire");
     let encoded = serde_json::to_value(&wire).expect("encoded");
 
     assert_eq!(encoded.get("client"), Some(&json!("radroots-test")));
@@ -190,8 +189,8 @@ fn parse_json_rejects_required_field_errors_and_id_mismatch() {
     let mut value = valid_event_value("hello", default_tags());
     value.as_object_mut().expect("object").remove("id");
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::MissingField("id"))
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::MissingField("id"))
     ));
 
     let mut value = valid_event_value("hello", default_tags());
@@ -200,8 +199,8 @@ fn parse_json_rejects_required_field_errors_and_id_mismatch() {
         .expect("object")
         .insert("pubkey".to_owned(), json!("not-hex"));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::InvalidIdentifier {
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::InvalidIdentifier {
             field: "pubkey",
             ..
         })
@@ -213,8 +212,8 @@ fn parse_json_rejects_required_field_errors_and_id_mismatch() {
         .expect("object")
         .insert("sig".to_owned(), json!(hex_64('b')));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::InvalidIdentifier { field: "sig", .. })
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::InvalidIdentifier { field: "sig", .. })
     ));
 
     let mut value = valid_event_value("hello", default_tags());
@@ -223,8 +222,8 @@ fn parse_json_rejects_required_field_errors_and_id_mismatch() {
         .expect("object")
         .insert("id".to_owned(), json!(hex_64('f')));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::EventIdMismatch { .. })
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::EventIdMismatch { .. })
     ));
 
     let mut value = valid_event_value("hello", default_tags());
@@ -233,8 +232,8 @@ fn parse_json_rejects_required_field_errors_and_id_mismatch() {
         .expect("object")
         .insert("id".to_owned(), json!(hex_64('A')));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::NonCanonicalIdentifier { field: "id" })
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::NonCanonicalIdentifier { field: "id" })
     ));
 }
 
@@ -246,8 +245,8 @@ fn parse_json_rejects_tag_shape_errors() {
         .expect("object")
         .insert("tags".to_owned(), json!([[]]));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::EmptyTag { index: 0 })
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::EmptyTag { index: 0 })
     ));
 
     let mut value = valid_event_value("hello", default_tags());
@@ -256,8 +255,8 @@ fn parse_json_rejects_tag_shape_errors() {
         .expect("object")
         .insert("tags".to_owned(), json!([["", "soil"]]));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::EmptyTagKey { index: 0 })
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::EmptyTagKey { index: 0 })
     ));
 
     let mut value = valid_event_value("hello", default_tags());
@@ -266,8 +265,8 @@ fn parse_json_rejects_tag_shape_errors() {
         .expect("object")
         .insert("tags".to_owned(), json!([["t\n", "soil"]]));
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()),
-        Err(RadrootsEventWireError::ControlCharacterTagKey { index: 0 })
+        Nip01EventWire::parse_json(raw_json(&value).as_str()),
+        Err(EventWireError::ControlCharacterTagKey { index: 0 })
     ));
 }
 
@@ -275,74 +274,74 @@ fn parse_json_rejects_tag_shape_errors() {
 fn parse_json_rejects_resource_budget_violations() {
     let raw = valid_event_json("hello", default_tags());
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_raw_json_bytes: 1,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::RawJsonTooLarge { .. })
+        Err(EventWireError::RawJsonTooLarge { .. })
     ));
 
     let raw = valid_event_json("hello", default_tags());
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_content_bytes: 1,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::ContentTooLarge { .. })
+        Err(EventWireError::ContentTooLarge { .. })
     ));
 
     let raw = valid_event_json("hello", default_tags());
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_tag_count: 0,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::TooManyTags { .. })
+        Err(EventWireError::TooManyTags { .. })
     ));
 
     let raw = valid_event_json("hello", default_tags());
     assert_eq!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_total_tag_elements: 1,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::TooManyTagElements { max: 1, actual: 2 })
+        Err(EventWireError::TooManyTagElements { max: 1, actual: 2 })
     );
 
     let raw = valid_event_json("hello", vec![vec!["t".to_owned(), "soil".to_owned()]]);
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_tag_element_bytes: 1,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::TagElementTooLarge { .. })
+        Err(EventWireError::TagElementTooLarge { .. })
     ));
 
     let raw = valid_event_json("hello", default_tags());
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_total_tag_bytes: 1,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::TagsTooLarge { .. })
+        Err(EventWireError::TagsTooLarge { .. })
     ));
 
     let mut value = valid_event_value("hello", default_tags());
@@ -352,36 +351,36 @@ fn parse_json_rejects_resource_budget_violations() {
         .insert("client".to_owned(), json!("radroots-test"));
     let raw = raw_json(&value);
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_extra_fields: 0,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::TooManyExtraFields { .. })
+        Err(EventWireError::TooManyExtraFields { .. })
     ));
 
     assert!(matches!(
-        RadrootsNip01EventWire::parse_json_with_limits(
+        Nip01EventWire::parse_json_with_limits(
             raw.as_str(),
-            RadrootsEventWireLimits {
+            EventWireLimits {
                 max_total_extra_json_bytes: 1,
-                ..RadrootsEventWireLimits::default()
+                ..EventWireLimits::default()
             }
         ),
-        Err(RadrootsEventWireError::ExtraJsonTooLarge { .. })
+        Err(EventWireError::ExtraJsonTooLarge { .. })
     ));
 }
 
 #[test]
 fn wire_accepts_exact_total_tag_element_boundary() {
     let raw = valid_event_json("hello", default_tags());
-    let wire = RadrootsNip01EventWire::parse_json_with_limits(
+    let wire = Nip01EventWire::parse_json_with_limits(
         raw.as_str(),
-        RadrootsEventWireLimits {
+        EventWireLimits {
             max_total_tag_elements: 2,
-            ..RadrootsEventWireLimits::default()
+            ..EventWireLimits::default()
         },
     )
     .expect("wire at exact tag element boundary");
@@ -392,23 +391,23 @@ fn wire_accepts_exact_total_tag_element_boundary() {
 #[test]
 fn wire_and_envelope_share_default_total_tag_element_boundary() {
     let exact_tags = tag_with_total_elements(DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT);
-    RadrootsNip01EventWire::parse_json(valid_event_json("", exact_tags.clone()).as_str())
+    Nip01EventWire::parse_json(valid_event_json("", exact_tags.clone()).as_str())
         .expect("wire at default tag element boundary");
-    RadrootsEventEnvelope::new(valid_envelope_parts("", exact_tags))
+    EventEnvelope::new(valid_envelope_parts("", exact_tags))
         .expect("envelope at default tag element boundary");
 
     let overflow_elements = DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT + 1;
     let overflow_tags = tag_with_total_elements(overflow_elements);
     assert_eq!(
-        RadrootsNip01EventWire::parse_json(valid_event_json("", overflow_tags.clone()).as_str()),
-        Err(RadrootsEventWireError::TooManyTagElements {
+        Nip01EventWire::parse_json(valid_event_json("", overflow_tags.clone()).as_str()),
+        Err(EventWireError::TooManyTagElements {
             max: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
             actual: overflow_elements,
         })
     );
     assert_eq!(
-        RadrootsEventEnvelope::new(valid_envelope_parts("", overflow_tags)),
-        Err(RadrootsEventEnvelopeError::TooManyTagElements {
+        EventEnvelope::new(valid_envelope_parts("", overflow_tags)),
+        Err(EventEnvelopeError::TooManyTagElements {
             max: DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT,
             actual: overflow_elements,
         })
@@ -418,38 +417,36 @@ fn wire_and_envelope_share_default_total_tag_element_boundary() {
 #[test]
 #[cfg_attr(coverage_nightly, coverage(off))]
 fn wire_parser_and_error_contracts_cover_all_typed_failures() {
-    let parse_error = RadrootsEventId::parse("bad").expect_err("invalid id");
+    let parse_error = EventId::parse("bad").expect_err("invalid id");
     for error in [
-        RadrootsEventWireError::Json("bad json".to_owned()),
-        RadrootsEventWireError::RootNotObject,
-        RadrootsEventWireError::MissingField("id"),
-        RadrootsEventWireError::InvalidField("kind"),
-        RadrootsEventWireError::InvalidIdentifier {
+        EventWireError::Json("bad json".to_owned()),
+        EventWireError::RootNotObject,
+        EventWireError::MissingField("id"),
+        EventWireError::InvalidField("kind"),
+        EventWireError::InvalidIdentifier {
             field: "id",
             error: parse_error.clone(),
         },
-        RadrootsEventWireError::NonCanonicalIdentifier { field: "id" },
-        RadrootsEventWireError::RawJsonTooLarge { max: 1, actual: 2 },
-        RadrootsEventWireError::ContentTooLarge { max: 1, actual: 2 },
-        RadrootsEventWireError::TooManyTags { max: 1, actual: 2 },
-        RadrootsEventWireError::TooManyTagElements { max: 1, actual: 2 },
-        RadrootsEventWireError::EmptyTag { index: 1 },
-        RadrootsEventWireError::EmptyTagKey { index: 1 },
-        RadrootsEventWireError::ControlCharacterTagKey { index: 1 },
-        RadrootsEventWireError::TagElementTooLarge {
+        EventWireError::NonCanonicalIdentifier { field: "id" },
+        EventWireError::RawJsonTooLarge { max: 1, actual: 2 },
+        EventWireError::ContentTooLarge { max: 1, actual: 2 },
+        EventWireError::TooManyTags { max: 1, actual: 2 },
+        EventWireError::TooManyTagElements { max: 1, actual: 2 },
+        EventWireError::EmptyTag { index: 1 },
+        EventWireError::EmptyTagKey { index: 1 },
+        EventWireError::ControlCharacterTagKey { index: 1 },
+        EventWireError::TagElementTooLarge {
             tag_index: 1,
             element_index: 2,
             max: 3,
             actual: 4,
         },
-        RadrootsEventWireError::TagsTooLarge { max: 1, actual: 2 },
-        RadrootsEventWireError::TooManyExtraFields { max: 1, actual: 2 },
-        RadrootsEventWireError::ExtraJsonTooLarge { max: 1, actual: 2 },
-        RadrootsEventWireError::from(RadrootsCanonicalEventIdError::InvalidPubkey(
-            parse_error.clone(),
-        )),
-        RadrootsEventWireError::from(RadrootsEventEnvelopeError::NonCanonicalId),
-        RadrootsEventWireError::EventIdMismatch {
+        EventWireError::TagsTooLarge { max: 1, actual: 2 },
+        EventWireError::TooManyExtraFields { max: 1, actual: 2 },
+        EventWireError::ExtraJsonTooLarge { max: 1, actual: 2 },
+        EventWireError::from(CanonicalEventIdError::InvalidPubkey(parse_error.clone())),
+        EventWireError::from(EventEnvelopeError::NonCanonicalId),
+        EventWireError::EventIdMismatch {
             declared: "a".to_owned(),
             computed: "b".to_owned(),
         },
@@ -458,7 +455,7 @@ fn wire_parser_and_error_contracts_cover_all_typed_failures() {
     }
 
     for raw in ["{", "[]", "null"] {
-        assert!(RadrootsNip01EventWire::parse_json(raw).is_err());
+        assert!(Nip01EventWire::parse_json(raw).is_err());
     }
 
     for (field, replacement) in [
@@ -483,13 +480,13 @@ fn wire_parser_and_error_contracts_cover_all_typed_failures() {
             .as_object_mut()
             .expect("object")
             .insert(field.to_owned(), replacement);
-        assert!(RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).is_err());
+        assert!(Nip01EventWire::parse_json(raw_json(&value).as_str()).is_err());
     }
 
     for field in ["pubkey", "created_at", "kind", "tags", "content", "sig"] {
         let mut value = valid_event_value("hello", default_tags());
         value.as_object_mut().expect("object").remove(field);
-        assert!(RadrootsNip01EventWire::parse_json(raw_json(&value).as_str()).is_err());
+        assert!(Nip01EventWire::parse_json(raw_json(&value).as_str()).is_err());
     }
 }
 
@@ -513,7 +510,7 @@ fn checked_in_conformance_vectors_match_wire_behavior() {
                     .and_then(Value::as_str)
                     .expect("raw json");
                 let expected = entry.get("expected").expect("expected");
-                let wire = RadrootsNip01EventWire::parse_json(raw).expect("wire");
+                let wire = Nip01EventWire::parse_json(raw).expect("wire");
                 assert_eq!(
                     wire.canonical_id_preimage().expect("preimage"),
                     expected
@@ -535,7 +532,7 @@ fn checked_in_conformance_vectors_match_wire_behavior() {
                     .and_then(|input| input.get("raw_json"))
                     .and_then(Value::as_str)
                     .expect("raw json");
-                assert!(RadrootsNip01EventWire::parse_json(raw).is_err());
+                assert!(Nip01EventWire::parse_json(raw).is_err());
             }
             other => panic!("unknown event wire vector kind {other}"),
         }

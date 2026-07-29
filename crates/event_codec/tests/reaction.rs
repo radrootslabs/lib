@@ -3,8 +3,8 @@ mod common;
 use common::{AUTHOR as ENVELOPE_AUTHOR, EVENT_ID as ENVELOPE_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::{KIND_ARTICLE, KIND_COMMENT, KIND_POST, KIND_REACTION},
-    post::reaction::RadrootsReaction,
-    social::RadrootsSocialTarget,
+    post::reaction::Reaction,
+    social::SocialTarget,
     tag::name::TAG_E_ROOT,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
@@ -19,8 +19,8 @@ const EVENT_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef01234567
 const AUTHOR: &str = "author_pubkey";
 const D_TAG: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 
-fn event_target() -> RadrootsSocialTarget {
-    RadrootsSocialTarget::Event {
+fn event_target() -> SocialTarget {
+    SocialTarget::Event {
         id: EVENT_ID.to_string(),
         author: Some(AUTHOR.to_string()),
         event_kind: Some(KIND_ARTICLE),
@@ -28,8 +28,8 @@ fn event_target() -> RadrootsSocialTarget {
     }
 }
 
-fn address_target() -> RadrootsSocialTarget {
-    RadrootsSocialTarget::Address {
+fn address_target() -> SocialTarget {
+    SocialTarget::Address {
         address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
         author: Some(AUTHOR.to_string()),
         event_kind: Some(KIND_ARTICLE),
@@ -37,9 +37,9 @@ fn address_target() -> RadrootsSocialTarget {
     }
 }
 
-fn assert_event_target(target: &RadrootsSocialTarget) {
+fn assert_event_target(target: &SocialTarget) {
     match target {
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             id,
             author,
             event_kind,
@@ -54,9 +54,9 @@ fn assert_event_target(target: &RadrootsSocialTarget) {
     }
 }
 
-fn assert_address_target(target: &RadrootsSocialTarget) {
+fn assert_address_target(target: &SocialTarget) {
     match target {
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address,
             author,
             event_kind,
@@ -73,8 +73,8 @@ fn assert_address_target(target: &RadrootsSocialTarget) {
 
 #[test]
 fn reaction_build_tags_requires_valid_event_or_address_target() {
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Event {
+    let reaction = Reaction {
+        target: SocialTarget::Event {
             id: "not-hex".to_string(),
             author: Some(AUTHOR.to_string()),
             event_kind: Some(KIND_ARTICLE),
@@ -87,8 +87,8 @@ fn reaction_build_tags_requires_valid_event_or_address_target() {
         Err(EventEncodeError::InvalidField("target.id"))
     ));
 
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::External {
+    let reaction = Reaction {
+        target: SocialTarget::External {
             id: "https://example.test".to_string(),
             external_kind: "web".to_string(),
             hint: None,
@@ -100,8 +100,8 @@ fn reaction_build_tags_requires_valid_event_or_address_target() {
         Err(EventEncodeError::InvalidField("target"))
     ));
 
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Event {
+    let reaction = Reaction {
+        target: SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: Some(" ".to_string()),
             event_kind: Some(KIND_ARTICLE),
@@ -114,8 +114,8 @@ fn reaction_build_tags_requires_valid_event_or_address_target() {
         Err(EventEncodeError::EmptyRequiredField("target.author"))
     ));
 
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Address {
+    let reaction = Reaction {
+        target: SocialTarget::Address {
             address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
             author: Some(AUTHOR.to_string()),
             event_kind: Some(KIND_COMMENT),
@@ -128,8 +128,8 @@ fn reaction_build_tags_requires_valid_event_or_address_target() {
         Err(EventEncodeError::InvalidField("target.kind"))
     ));
 
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Address {
+    let reaction = Reaction {
+        target: SocialTarget::Address {
             address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
             author: Some("other_author".to_string()),
             event_kind: Some(KIND_ARTICLE),
@@ -146,7 +146,7 @@ fn reaction_build_tags_requires_valid_event_or_address_target() {
 #[test]
 fn reaction_to_wire_parts_accepts_empty_plus_minus_emoji_and_custom_content() {
     for content in ["", "+", "-", "🔥", "harvest"] {
-        let reaction = RadrootsReaction {
+        let reaction = Reaction {
             target: event_target(),
             content: content.to_string(),
         };
@@ -159,8 +159,8 @@ fn reaction_to_wire_parts_accepts_empty_plus_minus_emoji_and_custom_content() {
 
 #[test]
 fn reaction_build_tags_covers_optional_target_branches() {
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Event {
+    let reaction = Reaction {
+        target: SocialTarget::Event {
             id: EVENT_ID.to_string(),
             author: None,
             event_kind: None,
@@ -178,8 +178,8 @@ fn reaction_build_tags_covers_optional_target_branches() {
     assert!(!tags.iter().any(|tag| tag[0] == "p"));
     assert!(!tags.iter().any(|tag| tag[0] == "k"));
 
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Address {
+    let reaction = Reaction {
+        target: SocialTarget::Address {
             address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
             author: None,
             event_kind: None,
@@ -195,8 +195,8 @@ fn reaction_build_tags_covers_optional_target_branches() {
                 .any(|value| value == "wss://address-relay.example.test")
     }));
 
-    let reaction = RadrootsReaction {
-        target: RadrootsSocialTarget::Address {
+    let reaction = Reaction {
+        target: SocialTarget::Address {
             address: format!("{}:{AUTHOR}:{D_TAG}", KIND_ARTICLE),
             author: None,
             event_kind: None,
@@ -214,7 +214,7 @@ fn reaction_build_tags_covers_optional_target_branches() {
 
 #[test]
 fn reaction_to_wire_parts_with_kind_rejects_non_reaction_kind() {
-    let reaction = RadrootsReaction {
+    let reaction = Reaction {
         target: event_target(),
         content: "+".to_string(),
     };
@@ -226,7 +226,7 @@ fn reaction_to_wire_parts_with_kind_rejects_non_reaction_kind() {
 
 #[test]
 fn reaction_roundtrips_event_target() {
-    let reaction = RadrootsReaction {
+    let reaction = Reaction {
         target: event_target(),
         content: "+".to_string(),
     };
@@ -239,7 +239,7 @@ fn reaction_roundtrips_event_target() {
 
 #[test]
 fn reaction_roundtrips_address_target() {
-    let reaction = RadrootsReaction {
+    let reaction = Reaction {
         target: address_target(),
         content: "".to_string(),
     };
@@ -311,7 +311,7 @@ fn reaction_from_tags_covers_optional_decode_branches() {
     .unwrap();
     assert_eq!(event.content, "+");
     match event.target {
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             id,
             author,
             event_kind,
@@ -334,7 +334,7 @@ fn reaction_from_tags_covers_optional_decode_branches() {
     .unwrap();
     assert_eq!(reaction.content, "-");
     match reaction.target {
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address: parsed,
             author,
             event_kind,
@@ -388,7 +388,7 @@ fn reaction_from_tags_covers_optional_decode_branches() {
 
 #[test]
 fn reaction_from_tags_rejects_invalid_kind() {
-    let tags = reaction_build_tags(&RadrootsReaction {
+    let tags = reaction_build_tags(&Reaction {
         target: event_target(),
         content: "+".to_string(),
     })
@@ -405,7 +405,7 @@ fn reaction_from_tags_rejects_invalid_kind() {
 
 #[test]
 fn reaction_metadata_and_index_from_event_roundtrip() {
-    let parts = to_wire_parts(&RadrootsReaction {
+    let parts = to_wire_parts(&Reaction {
         target: event_target(),
         content: "".to_string(),
     })

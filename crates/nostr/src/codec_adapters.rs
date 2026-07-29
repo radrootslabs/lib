@@ -4,8 +4,8 @@ use alloc::{string::String, vec::Vec};
 use crate::types::RadrootsNostrEvent;
 
 use radroots_event::{
-    social::job_feedback::RadrootsJobFeedback, social::job_request::RadrootsJobRequest,
-    social::job_result::RadrootsJobResult,
+    social::job_feedback::JobFeedback, social::job_request::JobRequest,
+    social::job_result::JobResult,
 };
 use radroots_event_codec::job::{
     error::JobParseError, feedback::decode as fb_decode, request::decode as req_decode,
@@ -43,7 +43,7 @@ fn sig_hex(e: &RadrootsNostrEvent) -> String {
 
 pub fn to_job_request_metadata(
     e: &RadrootsNostrEvent,
-) -> Result<RadrootsParsedData<RadrootsJobRequest>, JobParseError> {
+) -> Result<RadrootsParsedData<JobRequest>, JobParseError> {
     req_decode::data_from_event(
         event_id(e),
         author(e),
@@ -55,7 +55,7 @@ pub fn to_job_request_metadata(
 
 pub fn to_job_result_metadata(
     e: &RadrootsNostrEvent,
-) -> Result<RadrootsParsedData<RadrootsJobResult>, JobParseError> {
+) -> Result<RadrootsParsedData<JobResult>, JobParseError> {
     res_decode::data_from_event(
         event_id(e),
         author(e),
@@ -68,7 +68,7 @@ pub fn to_job_result_metadata(
 
 pub fn to_job_feedback_metadata(
     e: &RadrootsNostrEvent,
-) -> Result<RadrootsParsedData<RadrootsJobFeedback>, JobParseError> {
+) -> Result<RadrootsParsedData<JobFeedback>, JobParseError> {
     fb_decode::data_from_event(
         event_id(e),
         author(e),
@@ -81,7 +81,7 @@ pub fn to_job_feedback_metadata(
 
 pub fn to_job_request_index(
     e: &RadrootsNostrEvent,
-) -> Result<RadrootsParsedEvent<RadrootsJobRequest>, JobParseError> {
+) -> Result<RadrootsParsedEvent<JobRequest>, JobParseError> {
     req_decode::parsed_from_event(
         event_id(e),
         author(e),
@@ -95,7 +95,7 @@ pub fn to_job_request_index(
 
 pub fn to_job_result_index(
     e: &RadrootsNostrEvent,
-) -> Result<RadrootsParsedEvent<RadrootsJobResult>, JobParseError> {
+) -> Result<RadrootsParsedEvent<JobResult>, JobParseError> {
     res_decode::parsed_from_event(
         event_id(e),
         author(e),
@@ -109,7 +109,7 @@ pub fn to_job_result_index(
 
 pub fn to_job_feedback_index(
     e: &RadrootsNostrEvent,
-) -> Result<RadrootsParsedEvent<RadrootsJobFeedback>, JobParseError> {
+) -> Result<RadrootsParsedEvent<JobFeedback>, JobParseError> {
     fb_decode::parsed_from_event(
         event_id(e),
         author(e),

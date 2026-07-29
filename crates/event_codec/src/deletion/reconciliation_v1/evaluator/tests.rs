@@ -2,8 +2,7 @@ use super::*;
 
 use nostr::{Keys, SECP256K1, secp256k1::Message};
 use radroots_event::{
-    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
-    wire::compute_canonical_nip01_event_id,
+    envelope::EventEnvelope, envelope::EventEnvelopeParts, wire::compute_canonical_nip01_event_id,
 };
 
 use crate::{
@@ -489,11 +488,8 @@ fn normalize_event_id(value: &str) -> String {
     }
 }
 
-fn coordinate_for(
-    target: &RadrootsSignatureVerifiedEvent,
-    identifier: &str,
-) -> RadrootsNip01Coordinate {
-    RadrootsNip01Coordinate::parse(format!(
+fn coordinate_for(target: &RadrootsSignatureVerifiedEvent, identifier: &str) -> Nip01Coordinate {
+    Nip01Coordinate::parse(format!(
         "{}:{}:{identifier}",
         target.event().kind_u32(),
         target.event().author().to_hex()
@@ -540,7 +536,7 @@ fn signed_event(
     kind: u32,
     tags: Vec<Vec<String>>,
     content: &str,
-) -> RadrootsEventEnvelope {
+) -> EventEnvelope {
     let keys = Keys::parse(secret_key_hex).expect("fixed fixture secret key must parse");
     let author = keys.public_key().to_string();
     let id = compute_canonical_nip01_event_id(author.as_str(), created_at, kind, &tags, content)
@@ -549,7 +545,7 @@ fn signed_event(
     let message = Message::from_digest(nostr_id.to_bytes());
     let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
 
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: id.into_string(),
         author,
         created_at,

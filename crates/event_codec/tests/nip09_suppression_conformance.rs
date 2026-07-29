@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
+use radroots_event::{envelope::EventEnvelope, envelope::EventEnvelopeParts};
 use radroots_event_codec::{
     deletion::{
         admission::{
@@ -396,7 +396,7 @@ fn verified_event(event_json: &str, vector_id: &str) -> RadrootsSignatureVerifie
         .unwrap_or_else(|error| panic!("{vector_id} signature verification failed: {error}"))
 }
 
-fn event_envelope(event_json: &str, vector_id: &str) -> RadrootsEventEnvelope {
+fn event_envelope(event_json: &str, vector_id: &str) -> EventEnvelope {
     let raw: RawEvent = serde_json::from_str(event_json)
         .unwrap_or_else(|error| panic!("{vector_id} signed event JSON is invalid: {error}"));
     assert_eq!(
@@ -404,7 +404,7 @@ fn event_envelope(event_json: &str, vector_id: &str) -> RadrootsEventEnvelope {
         event_json,
         "{vector_id} signed event JSON must be canonical and compact"
     );
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    EventEnvelope::new(EventEnvelopeParts {
         id: raw.id,
         author: raw.pubkey,
         created_at: raw.created_at,

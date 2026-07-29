@@ -1,5 +1,5 @@
 use super::*;
-use radroots_event::envelope::RadrootsEventTags;
+use radroots_event::envelope::EventTags;
 
 const HASH: &str = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
 
@@ -23,7 +23,7 @@ fn partitions_raw_markers_before_shape_or_capability_validation() {
     assert_eq!(
         project(&operational).unwrap(),
         RadrootsFoodAvailabilityProjectionOutcome::Excluded(
-            RadrootsClassifiedListingPartition::OperationalListing
+            ClassifiedListingPartition::OperationalListing
         )
     );
 
@@ -132,7 +132,7 @@ fn accepts_optional_standard_tags_but_bounds_raw_decimal_digits() {
 }
 
 fn project(
-    tags: &RadrootsEventTags,
+    tags: &EventTags,
 ) -> Result<RadrootsFoodAvailabilityProjectionOutcome, RadrootsFoodAvailabilityProjectionError> {
     project_inbound_food_availability_parts(
         KIND_CLASSIFIED_LISTING,
@@ -153,7 +153,7 @@ fn focused(
     }
 }
 
-fn focused_tags(mut additional: Vec<Vec<String>>) -> RadrootsEventTags {
+fn focused_tags(mut additional: Vec<Vec<String>>) -> EventTags {
     let mut values = base_tags();
     if !additional
         .iter()
@@ -183,8 +183,8 @@ fn base_tags() -> Vec<Vec<String>> {
     ]
 }
 
-fn tags(values: Vec<Vec<String>>) -> RadrootsEventTags {
-    RadrootsEventTags::new(values).unwrap()
+fn tags(values: Vec<Vec<String>>) -> EventTags {
+    EventTags::new(values).unwrap()
 }
 
 fn tag(values: &[&str]) -> Vec<String> {

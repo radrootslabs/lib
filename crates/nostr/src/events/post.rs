@@ -7,11 +7,9 @@ use crate::types::{RadrootsNostrEvent, RadrootsNostrKeys};
 use crate::types::{RadrootsNostrFilter, RadrootsNostrKind, RadrootsNostrTimestamp};
 
 #[cfg(feature = "events")]
-use radroots_event::post::{
-    RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredUpdate,
-};
+use radroots_event::post::{AuthoredAsk, AuthoredPhotoUpdate, AuthoredUpdate};
 #[cfg(feature = "events")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 #[cfg(feature = "events")]
 use radroots_event_codec::post::authored::{
     authored_ask_to_wire_parts, authored_photo_update_to_wire_parts, authored_update_to_wire_parts,
@@ -56,21 +54,21 @@ impl RadrootsNostrPostEventBuilder {
 
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_update_event(
-    update: &RadrootsAuthoredUpdate,
+    update: &AuthoredUpdate,
 ) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_update_to_wire_parts(update))
 }
 
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_photo_update_event(
-    photo: &RadrootsAuthoredPhotoUpdate,
+    photo: &AuthoredPhotoUpdate,
 ) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_photo_update_to_wire_parts(photo))
 }
 
 #[cfg(feature = "events")]
 pub fn radroots_nostr_build_ask_event(
-    ask: &RadrootsAuthoredAsk,
+    ask: &AuthoredAsk,
 ) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     builder_from_wire_parts(authored_ask_to_wire_parts(ask))
 }
@@ -91,7 +89,7 @@ pub fn radroots_nostr_post_events_filter(
 
 #[cfg(feature = "events")]
 fn builder_from_wire_parts(
-    parts: RadrootsNip01EventWireParts,
+    parts: Nip01EventWireParts,
 ) -> Result<RadrootsNostrPostEventBuilder, RadrootsNostrError> {
     let inner =
         crate::events::radroots_nostr_build_event_unchecked(parts.kind, parts.content, parts.tags)?;
@@ -109,7 +107,11 @@ pub async fn radroots_nostr_fetch_post_events(
     limit: u16,
     since_unix: Option<u64>,
 ) -> Result<
-    Vec<radroots_event_codec::parsed::RadrootsParsedData<radroots_event::post::RadrootsPost>>,
+    Vec<
+        radroots_event_codec::parsed::RadrootsParsedData<
+            radroots_event_codec::post::decode::LegacyPost,
+        >,
+    >,
     RadrootsNostrError,
 > {
     let filter = radroots_nostr_post_events_filter(Some(limit), since_unix);

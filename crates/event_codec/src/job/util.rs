@@ -7,7 +7,7 @@ use alloc::{
 
 use radroots_event::{
     social::job::{JobFeedbackStatus, JobInputType},
-    social::job_request::{RadrootsJobInput, RadrootsJobParam},
+    social::job_request::{JobInput, JobParam},
 };
 
 use crate::job::error::JobParseError;
@@ -86,7 +86,7 @@ pub fn feedback_status_from_tag(s: &str) -> Option<JobFeedbackStatus> {
     }
 }
 
-pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<RadrootsJobInput> {
+pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<JobInput> {
     let mut out = Vec::new();
     for t in tags
         .iter()
@@ -149,7 +149,7 @@ pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<RadrootsJobInput> {
             }
         }
 
-        out.push(RadrootsJobInput {
+        out.push(JobInput {
             data,
             input_type,
             relay,
@@ -159,14 +159,14 @@ pub fn parse_i_tags(tags: &[Vec<String>]) -> Vec<RadrootsJobInput> {
     out
 }
 
-pub fn parse_params(tags: &[Vec<String>]) -> Vec<RadrootsJobParam> {
+pub fn parse_params(tags: &[Vec<String>]) -> Vec<JobParam> {
     let mut params = Vec::new();
     for t in tags
         .iter()
         .filter(|t| t.first().map(|s| s.as_str()) == Some("param"))
     {
         if t.len() >= 3 {
-            params.push(RadrootsJobParam {
+            params.push(JobParam {
                 key: t[1].clone(),
                 value: t[2].clone(),
             });

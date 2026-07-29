@@ -8,11 +8,11 @@ use alloc::{
 };
 
 use radroots_event::envelope::kind::KIND_MESSAGE_FILE;
-use radroots_event::social::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+use radroots_event::social::message_file::{MessageFile, MessageFileDimensions};
 
 use crate::error::EventEncodeError;
 use crate::message::tags::{build_recipient_tags, build_reply_tag, build_subject_tag};
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_MESSAGE_FILE;
 
@@ -40,10 +40,7 @@ fn push_optional_tag(tags: &mut Vec<Vec<String>>, key: &'static str, value: &Opt
     }
 }
 
-fn push_dimensions_tag(
-    tags: &mut Vec<Vec<String>>,
-    dimensions: &Option<RadrootsMessageFileDimensions>,
-) {
+fn push_dimensions_tag(tags: &mut Vec<Vec<String>>, dimensions: &Option<MessageFileDimensions>) {
     if let Some(dimensions) = dimensions {
         tags.push(vec![
             "dim".to_string(),
@@ -53,7 +50,7 @@ fn push_dimensions_tag(
 }
 
 pub fn message_file_build_tags(
-    message: &RadrootsMessageFile,
+    message: &MessageFile,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = build_recipient_tags(&message.recipients)?;
     if let Some(tag) = build_reply_tag(&message.reply_to)? {
@@ -99,12 +96,10 @@ pub fn message_file_build_tags(
     Ok(tags)
 }
 
-pub fn to_wire_parts(
-    message: &RadrootsMessageFile,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(message: &MessageFile) -> Result<Nip01EventWireParts, EventEncodeError> {
     validate_required(&message.file_url, "file_url")?;
     let tags = message_file_build_tags(message)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind: DEFAULT_KIND,
         content: message.file_url.clone(),
         tags,
@@ -112,9 +107,9 @@ pub fn to_wire_parts(
 }
 
 pub fn to_wire_parts_with_kind(
-    message: &RadrootsMessageFile,
+    message: &MessageFile,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != DEFAULT_KIND {
         return Err(EventEncodeError::InvalidKind(kind));
     }

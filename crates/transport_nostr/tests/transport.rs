@@ -1,6 +1,6 @@
 use futures::future::BoxFuture;
 use nostr::{EventBuilder, JsonUtil};
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_event::envelope::kind::{
     KIND_DELETION_REQUEST, KIND_FOLLOW, KIND_GEOCHAT, KIND_POST, KIND_PROFILE,
 };
@@ -37,7 +37,7 @@ use radroots_transport_nostr::{
     RadrootsRelayFetchOutcomeKind, RadrootsRelayFetchRequest, RadrootsRelayOutcome,
     RadrootsRelayOutcomeKind, RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt,
     RadrootsRelayPublishRequest, RadrootsRelayTargetSet, RadrootsRelayTransportError,
-    RadrootsRelayUrl, RadrootsRelayUrlPolicy, fetch_and_ingest_relay_events, fetch_relay_events,
+    RadrootsRelayUrlPolicy, RelayUrl, fetch_and_ingest_relay_events, fetch_relay_events,
     fetch_relay_events_blocking, publish_claimed_outbox_event,
     publish_claimed_outbox_event_with_transport, publish_signed_event,
     verified_signed_event_payload,
@@ -405,22 +405,22 @@ fn test_event_builder(
     .allow_self_tagging()
 }
 
-fn signed_post(content: &str) -> RadrootsSignedEvent {
+fn signed_post(content: &str) -> SignedEvent {
     signed_event_with_kind_and_hashtag(content, KIND_POST, "soil")
 }
 
-fn signed_ephemeral(content: &str) -> RadrootsSignedEvent {
+fn signed_ephemeral(content: &str) -> SignedEvent {
     let raw_event = test_event_builder(KIND_GEOCHAT, content, Vec::new())
         .custom_created_at(RadrootsNostrTimestamp::from_secs(1_700_000_000))
         .sign_with_keys(&fixture_keys())
         .expect("signed ephemeral event");
     let raw_json = raw_event.as_json();
-    let wire = radroots_event::wire::RadrootsNip01EventWire::parse_json(&raw_json).expect("wire");
-    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    let wire = radroots_event::wire::Nip01EventWire::parse_json(&raw_json).expect("wire");
+    SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
-fn generic_draft(content: &str) -> RadrootsEventDraft {
-    RadrootsEventDraft::new(
+fn generic_draft(content: &str) -> EventDraft {
+    EventDraft::new(
         "radroots.social.follow_list.v1",
         KIND_FOLLOW,
         1_700_000_000,
@@ -455,15 +455,11 @@ fn assert_outbox_publish_observations(
     );
 }
 
-fn signed_event_with_kind_and_hashtag(
-    content: &str,
-    kind: u32,
-    hashtag: &str,
-) -> RadrootsSignedEvent {
+fn signed_event_with_kind_and_hashtag(content: &str, kind: u32, hashtag: &str) -> SignedEvent {
     let raw_event = signed_raw_event_with_kind_and_hashtag(content, kind, hashtag);
     let raw_json = raw_event.as_json();
-    let wire = radroots_event::wire::RadrootsNip01EventWire::parse_json(&raw_json).expect("wire");
-    RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    let wire = radroots_event::wire::Nip01EventWire::parse_json(&raw_json).expect("wire");
+    SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
 }
 
 fn signed_raw_event_with_kind_and_hashtag(content: &str, kind: u32, hashtag: &str) -> nostr::Event {
@@ -481,7 +477,7 @@ async fn complete_claimed_signing(
     outbox: &RadrootsOutbox,
     claimed: &RadrootsOutboxClaimedEvent,
     now_ms: i64,
-) -> RadrootsSignedEvent {
+) -> SignedEvent {
     if let Some(signed_event) = claimed.signed_event.clone() {
         return signed_event;
     }
@@ -512,7 +508,7 @@ fn scoped_nostr_target(relay_url: &str, scope: &str, label: &str) -> RadrootsTra
 }
 
 fn outbox_operation_input<I, S>(
-    draft: RadrootsEventDraft,
+    draft: EventDraft,
     relays: I,
     satisfaction_policy: RadrootsTransportSatisfactionPolicy,
 ) -> RadrootsOutboxOperationInput
@@ -538,7 +534,7 @@ where
 }
 
 fn all_accepted_outbox_operation_input<I, S>(
-    draft: RadrootsEventDraft,
+    draft: EventDraft,
     relays: I,
 ) -> RadrootsOutboxOperationInput
 where
@@ -647,59 +643,46 @@ fn tampered_raw_event() -> String {
 
 #[test]
 fn relay_url_validation_and_target_normalization() {
-    let relay = RadrootsRelayUrl::parse("wss://Relay.Example.com", RadrootsRelayUrlPolicy::Public)
-        .expect("relay");
+    let relay =
+        RelayUrl::parse("wss://Relay.Example.com", RadrootsRelayUrlPolicy::Public).expect("relay");
     assert_eq!(relay.as_str(), RELAY_PRIMARY_WSS);
     assert_eq!(relay.clone().into_string(), RELAY_PRIMARY_WSS);
-    let relay_path = RadrootsRelayUrl::parse(
+    let relay_path = RelayUrl::parse(
         "wss://Relay.Example.com/nostr",
         RadrootsRelayUrlPolicy::Public,
     )
     .expect("relay path");
     assert_eq!(relay_path.as_str(), "wss://relay.example.com/nostr");
 
-    assert!(
-        RadrootsRelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::Public).is_err()
-    );
-    let local = RadrootsRelayUrl::parse("ws://localhost:7777", RadrootsRelayUrlPolicy::Localhost)
+    assert!(RelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::Public).is_err());
+    let local = RelayUrl::parse("ws://localhost:7777", RadrootsRelayUrlPolicy::Localhost)
         .expect("local relay");
     assert_eq!(local.as_str(), "ws://localhost:7777");
-    let local_ipv4 =
-        RadrootsRelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::Localhost)
-            .expect("local ipv4 relay");
+    let local_ipv4 = RelayUrl::parse("ws://127.0.0.1:7777", RadrootsRelayUrlPolicy::Localhost)
+        .expect("local ipv4 relay");
     assert_eq!(local_ipv4.as_str(), "ws://127.0.0.1:7777");
-    let local_ipv6 = RadrootsRelayUrl::parse("ws://[::1]:7777", RadrootsRelayUrlPolicy::Localhost)
+    let local_ipv6 = RelayUrl::parse("ws://[::1]:7777", RadrootsRelayUrlPolicy::Localhost)
         .expect("local ipv6 relay");
     assert_eq!(local_ipv6.as_str(), "ws://[::1]:7777");
-    assert!(
-        RadrootsRelayUrl::parse("ws://example.com", RadrootsRelayUrlPolicy::Localhost).is_err()
-    );
-    assert!(
-        RadrootsRelayUrl::parse("ws://192.168.1.10:7777", RadrootsRelayUrlPolicy::Localhost)
-            .is_err()
-    );
-    assert!(
-        RadrootsRelayUrl::parse("wss://192.168.1.10", RadrootsRelayUrlPolicy::Localhost).is_err()
-    );
-    assert!(
-        RadrootsRelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Localhost)
-            .is_err()
-    );
-    assert!(RadrootsRelayUrl::parse("wss://localhost", RadrootsRelayUrlPolicy::Localhost).is_ok());
+    assert!(RelayUrl::parse("ws://example.com", RadrootsRelayUrlPolicy::Localhost).is_err());
+    assert!(RelayUrl::parse("ws://192.168.1.10:7777", RadrootsRelayUrlPolicy::Localhost).is_err());
+    assert!(RelayUrl::parse("wss://192.168.1.10", RadrootsRelayUrlPolicy::Localhost).is_err());
+    assert!(RelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Localhost).is_err());
+    assert!(RelayUrl::parse("wss://localhost", RadrootsRelayUrlPolicy::Localhost).is_ok());
     assert!(matches!(
-        RadrootsRelayUrl::parse("wss://127.0.0.1", RadrootsRelayUrlPolicy::Public),
+        RelayUrl::parse("wss://127.0.0.1", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
     ));
     assert!(matches!(
-        RadrootsRelayUrl::parse("wss://10.1.2.3", RadrootsRelayUrlPolicy::Public),
+        RelayUrl::parse("wss://10.1.2.3", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
     ));
     assert!(matches!(
-        RadrootsRelayUrl::parse("wss://[::1]", RadrootsRelayUrlPolicy::Public),
+        RelayUrl::parse("wss://[::1]", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
     ));
     assert!(matches!(
-        RadrootsRelayUrl::parse("wss://[fd00::1]", RadrootsRelayUrlPolicy::Public),
+        RelayUrl::parse("wss://[fd00::1]", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
     ));
     for relay_url in [
@@ -733,13 +716,12 @@ fn relay_url_validation_and_target_normalization() {
         "wss://relay",
     ] {
         assert!(matches!(
-            RadrootsRelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::Public),
+            RelayUrl::parse(relay_url, RadrootsRelayUrlPolicy::Public),
             Err(RadrootsRelayTransportError::RelayUrlForbiddenDestination { .. })
         ));
     }
-    let public_relay =
-        RadrootsRelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Public)
-            .expect("public relay");
+    let public_relay = RelayUrl::parse("wss://relay.example.com", RadrootsRelayUrlPolicy::Public)
+        .expect("public relay");
     public_relay
         .validate_public_resolved_ip_addrs([IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))])
         .expect("public resolved ip");
@@ -776,56 +758,53 @@ fn relay_url_validation_and_target_normalization() {
         Err(RadrootsRelayTransportError::RelayUrlResolvedNoAddresses { .. })
     ));
 
+    assert!(RelayUrl::parse("https://relay.example.com", RadrootsRelayUrlPolicy::Public).is_err());
     assert!(
-        RadrootsRelayUrl::parse("https://relay.example.com", RadrootsRelayUrlPolicy::Public)
-            .is_err()
-    );
-    assert!(
-        RadrootsRelayUrl::parse(
+        RelayUrl::parse(
             "wss://user@relay.example.com",
             RadrootsRelayUrlPolicy::Public
         )
         .is_err()
     );
     assert!(matches!(
-        RadrootsRelayUrl::parse(
+        RelayUrl::parse(
             "wss://user:password@relay.example.com",
             RadrootsRelayUrlPolicy::Public
         ),
         Err(RadrootsRelayTransportError::RelayUrlUserinfo { .. })
     ));
     assert!(matches!(
-        RadrootsRelayUrl::parse(
+        RelayUrl::parse(
             "wss://:password@relay.example.com",
             RadrootsRelayUrlPolicy::Public
         ),
         Err(RadrootsRelayTransportError::RelayUrlUserinfo { .. })
     ));
     assert!(
-        RadrootsRelayUrl::parse(
+        RelayUrl::parse(
             "wss://relay.example.com:bad",
             RadrootsRelayUrlPolicy::Public
         )
         .is_err()
     );
-    assert!(RadrootsRelayUrl::parse("wss://", RadrootsRelayUrlPolicy::Public).is_err());
+    assert!(RelayUrl::parse("wss://", RadrootsRelayUrlPolicy::Public).is_err());
     assert!(matches!(
-        RadrootsRelayUrl::parse("radroots:relay", RadrootsRelayUrlPolicy::Public),
+        RelayUrl::parse("radroots:relay", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::EmptyRelayHost { .. })
     ));
     assert!(matches!(
-        RadrootsRelayUrl::parse("relay.example.com", RadrootsRelayUrlPolicy::Public),
+        RelayUrl::parse("relay.example.com", RadrootsRelayUrlPolicy::Public),
         Err(RadrootsRelayTransportError::RelayUrlParse { .. })
     ));
     assert!(
-        RadrootsRelayUrl::parse(
+        RelayUrl::parse(
             "wss://relay.example.com?subscription=1",
             RadrootsRelayUrlPolicy::Public
         )
         .is_err()
     );
     assert!(
-        RadrootsRelayUrl::parse(
+        RelayUrl::parse(
             "wss://relay.example.com#fragment",
             RadrootsRelayUrlPolicy::Public
         )
@@ -848,8 +827,7 @@ fn relay_url_validation_and_target_normalization() {
 
     let from_urls = RadrootsRelayTargetSet::from_urls(vec![
         relay_path.clone(),
-        RadrootsRelayUrl::parse(RELAY_SECONDARY_WSS, RadrootsRelayUrlPolicy::Public)
-            .expect("secondary"),
+        RelayUrl::parse(RELAY_SECONDARY_WSS, RadrootsRelayUrlPolicy::Public).expect("secondary"),
     ])
     .expect("from urls");
     assert_eq!(from_urls.len(), 2);
@@ -902,7 +880,7 @@ fn transport_target_and_relay_adapter_share_canonical_url_identity() {
         ),
     ] {
         let target = RadrootsTransportTarget::nostr_relay(raw).expect("transport target");
-        let relay = RadrootsRelayUrl::parse(raw, policy).expect("relay URL");
+        let relay = RelayUrl::parse(raw, policy).expect("relay URL");
         assert_eq!(target.uri().as_str(), relay.as_str(), "{raw}");
     }
 
@@ -927,7 +905,7 @@ fn transport_target_and_relay_adapter_share_canonical_url_identity() {
             "transport target accepted {raw}"
         );
         assert!(
-            RadrootsRelayUrl::parse(raw, RadrootsRelayUrlPolicy::Public).is_err(),
+            RelayUrl::parse(raw, RadrootsRelayUrlPolicy::Public).is_err(),
             "relay adapter accepted {raw}"
         );
     }

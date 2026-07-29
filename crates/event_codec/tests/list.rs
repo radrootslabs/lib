@@ -5,7 +5,7 @@ use radroots_event::{
     envelope::kind::{
         KIND_CALENDAR, KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_LIST_SET_FOLLOW, KIND_POST,
     },
-    social::list::{RadrootsList, RadrootsListEntry},
+    social::list::{List, ListEntry},
     tag::name::TAG_R,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
@@ -14,15 +14,15 @@ use radroots_event_codec::list::decode::{
 };
 use radroots_event_codec::list::encode::{list_build_tags, to_wire_parts_with_kind};
 
-fn sample_list() -> RadrootsList {
-    RadrootsList {
+fn sample_list() -> List {
+    List {
         content: "private".to_string(),
         entries: vec![
-            RadrootsListEntry {
+            ListEntry {
                 tag: "p".to_string(),
                 values: vec!["pubkey".to_string()],
             },
-            RadrootsListEntry {
+            ListEntry {
                 tag: "t".to_string(),
                 values: vec!["orchard".to_string()],
             },
@@ -45,9 +45,9 @@ fn list_build_tags_and_decode_roundtrip() {
 
 #[test]
 fn list_encode_and_decode_reject_invalid_inputs() {
-    let invalid = RadrootsList {
+    let invalid = List {
         content: "".to_string(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: " ".to_string(),
             values: vec!["pubkey".to_string()],
         }],
@@ -58,9 +58,9 @@ fn list_encode_and_decode_reject_invalid_inputs() {
         EventEncodeError::EmptyRequiredField("entry.tag")
     ));
 
-    let invalid = RadrootsList {
+    let invalid = List {
         content: "".to_string(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec![" ".to_string()],
         }],
@@ -71,9 +71,9 @@ fn list_encode_and_decode_reject_invalid_inputs() {
         EventEncodeError::EmptyRequiredField("entry.values")
     ));
 
-    let invalid = RadrootsList {
+    let invalid = List {
         content: "".to_string(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: Vec::new(),
         }],
@@ -212,22 +212,22 @@ fn list_index_from_event_propagates_parse_errors() {
 
 #[test]
 fn relay_list_kind_roundtrips_nip65_r_tags() {
-    let list = RadrootsList {
+    let list = List {
         content: String::new(),
         entries: vec![
-            RadrootsListEntry {
+            ListEntry {
                 tag: TAG_R.to_string(),
                 values: vec!["wss://read.example.test".to_string(), "read".to_string()],
             },
-            RadrootsListEntry {
+            ListEntry {
                 tag: TAG_R.to_string(),
                 values: vec!["wss://write.example.test".to_string(), "write".to_string()],
             },
-            RadrootsListEntry {
+            ListEntry {
                 tag: TAG_R.to_string(),
                 values: vec!["wss://both.example.test".to_string()],
             },
-            RadrootsListEntry {
+            ListEntry {
                 tag: TAG_R.to_string(),
                 values: vec!["ws://local-relay.example.test".to_string()],
             },
@@ -252,9 +252,9 @@ fn relay_list_kind_roundtrips_nip65_r_tags() {
 
 #[test]
 fn relay_list_kind_validates_url_shape_and_markers() {
-    let invalid_tag = RadrootsList {
+    let invalid_tag = List {
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: "p".to_string(),
             values: vec!["wss://relay.example.test".to_string()],
         }],
@@ -275,9 +275,9 @@ fn relay_list_kind_validates_url_shape_and_markers() {
         Err(EventParseError::InvalidTag(TAG_R))
     ));
 
-    let missing_url = RadrootsList {
+    let missing_url = List {
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: TAG_R.to_string(),
             values: Vec::new(),
         }],
@@ -295,9 +295,9 @@ fn relay_list_kind_validates_url_shape_and_markers() {
         Err(EventParseError::InvalidTag(TAG_R))
     ));
 
-    let invalid_url = RadrootsList {
+    let invalid_url = List {
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: TAG_R.to_string(),
             values: vec!["https://relay.example.test".to_string()],
         }],
@@ -319,9 +319,9 @@ fn relay_list_kind_validates_url_shape_and_markers() {
     ));
 
     for invalid_empty_relay in ["wss://", "ws://"] {
-        let invalid_empty_url = RadrootsList {
+        let invalid_empty_url = List {
             content: String::new(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: TAG_R.to_string(),
                 values: vec![invalid_empty_relay.to_string()],
             }],
@@ -340,9 +340,9 @@ fn relay_list_kind_validates_url_shape_and_markers() {
         ));
     }
 
-    let invalid_marker = RadrootsList {
+    let invalid_marker = List {
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: TAG_R.to_string(),
             values: vec!["wss://relay.example.test".to_string(), "both".to_string()],
         }],
@@ -364,9 +364,9 @@ fn relay_list_kind_validates_url_shape_and_markers() {
         Err(EventParseError::InvalidTag(TAG_R))
     ));
 
-    let extra_marker = RadrootsList {
+    let extra_marker = List {
         content: String::new(),
-        entries: vec![RadrootsListEntry {
+        entries: vec![ListEntry {
             tag: TAG_R.to_string(),
             values: vec![
                 "wss://relay.example.test".to_string(),
@@ -393,7 +393,7 @@ fn relay_list_kind_validates_url_shape_and_markers() {
         Err(EventParseError::InvalidTag(TAG_R))
     ));
 
-    let empty = RadrootsList {
+    let empty = List {
         content: String::new(),
         entries: Vec::new(),
     };

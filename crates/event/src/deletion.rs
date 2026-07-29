@@ -11,10 +11,7 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::{
-    id::{
-        RadrootsEventId, RadrootsIdParseError, RadrootsNip01Coordinate,
-        RadrootsNip01CoordinateParseError,
-    },
+    id::{EventId, Nip01Coordinate, Nip01CoordinateParseError, ParseError},
     wire::{
         DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES,
         DEFAULT_TAG_MAX_COUNT, DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES,
@@ -44,10 +41,10 @@ const RADROOTS_NIP09_DELETION_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\""
 
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsNip09DeletionError {
+pub enum Nip09DeletionError {
     ContentTooLarge { max: usize, actual: usize },
-    EventIdInvalid(RadrootsIdParseError),
-    CoordinateInvalid(RadrootsNip01CoordinateParseError),
+    EventIdInvalid(ParseError),
+    CoordinateInvalid(Nip01CoordinateParseError),
     TargetKindOutOfRange { max: u32, actual: u32 },
     DuplicateEventTarget { event_id: String },
     DuplicateAddressTarget { coordinate: String },
@@ -58,7 +55,7 @@ pub enum RadrootsNip09DeletionError {
     EventWireTooLarge { max: usize, actual: usize },
 }
 
-impl RadrootsNip09DeletionError {
+impl Nip09DeletionError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::ContentTooLarge { .. } => "deletion_content_too_large",
@@ -77,7 +74,7 @@ impl RadrootsNip09DeletionError {
     }
 }
 
-impl fmt::Display for RadrootsNip09DeletionError {
+impl fmt::Display for Nip09DeletionError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ContentTooLarge { max, actual } => write!(
@@ -132,7 +129,7 @@ impl fmt::Display for RadrootsNip09DeletionError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsNip09DeletionError {
+impl std::error::Error for Nip09DeletionError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::EventIdInvalid(error) => Some(error),
@@ -147,18 +144,15 @@ impl std::error::Error for RadrootsNip09DeletionError {
 /// The kind hint is required for canonical authored `k` tags. This type does
 /// not prove that the target exists or actually has the asserted kind.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip09DeletionEventTarget {
-    event_id: RadrootsEventId,
+pub struct Nip09DeletionEventTarget {
+    event_id: EventId,
     kind_hint: u32,
 }
 
-impl RadrootsNip09DeletionEventTarget {
-    pub fn new(
-        event_id: RadrootsEventId,
-        kind_hint: u32,
-    ) -> Result<Self, RadrootsNip09DeletionError> {
+impl Nip09DeletionEventTarget {
+    pub fn new(event_id: EventId, kind_hint: u32) -> Result<Self, Nip09DeletionError> {
         if kind_hint > RADROOTS_NIP09_DELETION_TARGET_KIND_MAX {
-            return Err(RadrootsNip09DeletionError::TargetKindOutOfRange {
+            return Err(Nip09DeletionError::TargetKindOutOfRange {
                 max: RADROOTS_NIP09_DELETION_TARGET_KIND_MAX,
                 actual: kind_hint,
             });
@@ -169,18 +163,15 @@ impl RadrootsNip09DeletionEventTarget {
         })
     }
 
-    pub fn parse(
-        event_id: impl AsRef<str>,
-        kind_hint: u32,
-    ) -> Result<Self, RadrootsNip09DeletionError> {
+    pub fn parse(event_id: impl AsRef<str>, kind_hint: u32) -> Result<Self, Nip09DeletionError> {
         Self::new(
-            RadrootsEventId::parse(event_id).map_err(RadrootsNip09DeletionError::EventIdInvalid)?,
+            EventId::parse(event_id).map_err(Nip09DeletionError::EventIdInvalid)?,
             kind_hint,
         )
     }
 
     #[inline]
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -192,30 +183,30 @@ impl RadrootsNip09DeletionEventTarget {
 
 /// One NIP-01 replaceable or addressable coordinate target.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsNip09DeletionAddressTarget {
-    coordinate: RadrootsNip01Coordinate,
+pub struct Nip09DeletionAddressTarget {
+    coordinate: Nip01Coordinate,
 }
 
-impl RadrootsNip09DeletionAddressTarget {
-    pub const fn new(coordinate: RadrootsNip01Coordinate) -> Self {
+impl Nip09DeletionAddressTarget {
+    pub const fn new(coordinate: Nip01Coordinate) -> Self {
         Self { coordinate }
     }
 
-    pub fn parse(coordinate: impl AsRef<str>) -> Result<Self, RadrootsNip09DeletionError> {
+    pub fn parse(coordinate: impl AsRef<str>) -> Result<Self, Nip09DeletionError> {
         let coordinate = coordinate.as_ref();
         if coordinate.len() > RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES {
-            return Err(RadrootsNip09DeletionError::TagElementTooLarge {
+            return Err(Nip09DeletionError::TagElementTooLarge {
                 max: RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES,
                 actual: coordinate.len(),
             });
         }
-        RadrootsNip01Coordinate::parse(coordinate)
+        Nip01Coordinate::parse(coordinate)
             .map(Self::new)
-            .map_err(RadrootsNip09DeletionError::CoordinateInvalid)
+            .map_err(Nip09DeletionError::CoordinateInvalid)
     }
 
     #[inline]
-    pub const fn coordinate(&self) -> &RadrootsNip01Coordinate {
+    pub const fn coordinate(&self) -> &Nip01Coordinate {
         &self.coordinate
     }
 
@@ -235,35 +226,35 @@ impl RadrootsNip09DeletionAddressTarget {
 /// This type is opaque and has no Serde construction path.
 ///
 /// ```compile_fail
-/// let _: radroots_event::post::deletion::RadrootsAuthoredNip09DeletionRequest =
+/// let _: radroots_event::post::deletion::AuthoredNip09DeletionRequest =
 ///     serde_json::from_str(
 ///         r#"{"content":"","event_targets":[],"address_targets":[]}"#
 ///     ).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsAuthoredNip09DeletionRequest {
+pub struct AuthoredNip09DeletionRequest {
     content: String,
-    event_targets: Vec<RadrootsNip09DeletionEventTarget>,
-    address_targets: Vec<RadrootsNip09DeletionAddressTarget>,
+    event_targets: Vec<Nip09DeletionEventTarget>,
+    address_targets: Vec<Nip09DeletionAddressTarget>,
     kind_hints: Vec<u32>,
     maximum_signed_event_wire_bytes: usize,
 }
 
-impl RadrootsAuthoredNip09DeletionRequest {
+impl AuthoredNip09DeletionRequest {
     pub fn new(
         content: impl Into<String>,
-        mut event_targets: Vec<RadrootsNip09DeletionEventTarget>,
-        mut address_targets: Vec<RadrootsNip09DeletionAddressTarget>,
-    ) -> Result<Self, RadrootsNip09DeletionError> {
+        mut event_targets: Vec<Nip09DeletionEventTarget>,
+        mut address_targets: Vec<Nip09DeletionAddressTarget>,
+    ) -> Result<Self, Nip09DeletionError> {
         let content = content.into();
         if content.len() > RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES {
-            return Err(RadrootsNip09DeletionError::ContentTooLarge {
+            return Err(Nip09DeletionError::ContentTooLarge {
                 max: RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
                 actual: content.len(),
             });
         }
         if event_targets.is_empty() && address_targets.is_empty() {
-            return Err(RadrootsNip09DeletionError::TargetMissing);
+            return Err(Nip09DeletionError::TargetMissing);
         }
 
         let kind_hints = collect_authored_deletion_kind_hints(&event_targets, &address_targets)?;
@@ -280,7 +271,7 @@ impl RadrootsAuthoredNip09DeletionRequest {
             .windows(2)
             .find(|targets| targets[0].event_id == targets[1].event_id)
         {
-            return Err(RadrootsNip09DeletionError::DuplicateEventTarget {
+            return Err(Nip09DeletionError::DuplicateEventTarget {
                 event_id: duplicates[0].event_id.to_string(),
             });
         }
@@ -290,7 +281,7 @@ impl RadrootsAuthoredNip09DeletionRequest {
             .windows(2)
             .find(|targets| targets[0].coordinate == targets[1].coordinate)
         {
-            return Err(RadrootsNip09DeletionError::DuplicateAddressTarget {
+            return Err(Nip09DeletionError::DuplicateAddressTarget {
                 coordinate: duplicates[0].coordinate.to_string(),
             });
         }
@@ -310,12 +301,12 @@ impl RadrootsAuthoredNip09DeletionRequest {
     }
 
     #[inline]
-    pub fn event_targets(&self) -> &[RadrootsNip09DeletionEventTarget] {
+    pub fn event_targets(&self) -> &[Nip09DeletionEventTarget] {
         self.event_targets.as_slice()
     }
 
     #[inline]
-    pub fn address_targets(&self) -> &[RadrootsNip09DeletionAddressTarget] {
+    pub fn address_targets(&self) -> &[Nip09DeletionAddressTarget] {
         self.address_targets.as_slice()
     }
 
@@ -339,9 +330,9 @@ impl RadrootsAuthoredNip09DeletionRequest {
 }
 
 fn collect_authored_deletion_kind_hints(
-    event_targets: &[RadrootsNip09DeletionEventTarget],
-    address_targets: &[RadrootsNip09DeletionAddressTarget],
-) -> Result<Vec<u32>, RadrootsNip09DeletionError> {
+    event_targets: &[Nip09DeletionEventTarget],
+    address_targets: &[Nip09DeletionAddressTarget],
+) -> Result<Vec<u32>, Nip09DeletionError> {
     const WORD_BITS: usize = u64::BITS as usize;
     const WORD_COUNT: usize = (RADROOTS_NIP09_DELETION_TARGET_KIND_MAX as usize + 1) / WORD_BITS;
 
@@ -364,7 +355,7 @@ fn collect_authored_deletion_kind_hints(
     let target_count = event_targets.len().saturating_add(address_targets.len());
     let tag_count = target_count.saturating_add(unique_kind_count);
     if tag_count > RADROOTS_NIP09_DELETION_TAG_MAX_COUNT {
-        return Err(RadrootsNip09DeletionError::TagCountExceeded {
+        return Err(Nip09DeletionError::TagCountExceeded {
             max: RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
             actual: tag_count,
         });
@@ -384,16 +375,16 @@ fn collect_authored_deletion_kind_hints(
 
 fn validate_authored_deletion_wire_size(
     content: &str,
-    event_targets: &[RadrootsNip09DeletionEventTarget],
-    address_targets: &[RadrootsNip09DeletionAddressTarget],
+    event_targets: &[Nip09DeletionEventTarget],
+    address_targets: &[Nip09DeletionAddressTarget],
     kind_hints: &[u32],
-) -> Result<usize, RadrootsNip09DeletionError> {
+) -> Result<usize, Nip09DeletionError> {
     let tag_count = event_targets
         .len()
         .saturating_add(address_targets.len())
         .saturating_add(kind_hints.len());
     if tag_count > RADROOTS_NIP09_DELETION_TAG_MAX_COUNT {
-        return Err(RadrootsNip09DeletionError::TagCountExceeded {
+        return Err(Nip09DeletionError::TagCountExceeded {
             max: RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
             actual: tag_count,
         });
@@ -433,7 +424,7 @@ fn validate_authored_deletion_wire_size(
     }
 
     if tag_bytes > RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES {
-        return Err(RadrootsNip09DeletionError::TagBytesExceeded {
+        return Err(Nip09DeletionError::TagBytesExceeded {
             max: RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES,
             actual: tag_bytes,
         });
@@ -443,7 +434,7 @@ fn validate_authored_deletion_wire_size(
         .saturating_add(tags_json_bytes)
         .saturating_add(canonical_json_string_bytes(content));
     if actual > RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES {
-        return Err(RadrootsNip09DeletionError::EventWireTooLarge {
+        return Err(Nip09DeletionError::EventWireTooLarge {
             max: RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
             actual,
         });
@@ -457,10 +448,10 @@ fn add_tag_size(
     tag_count: &mut usize,
     name: &str,
     value: &str,
-) -> Result<(), RadrootsNip09DeletionError> {
+) -> Result<(), Nip09DeletionError> {
     for element in [name, value] {
         if element.len() > RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES {
-            return Err(RadrootsNip09DeletionError::TagElementTooLarge {
+            return Err(Nip09DeletionError::TagElementTooLarge {
                 max: RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES,
                 actual: element.len(),
             });
@@ -494,22 +485,18 @@ mod tests {
     use super::*;
     use crate::id::RADROOTS_NIP01_COORDINATE_MAX_BYTES;
 
-    fn event_target(character: char, kind: u32) -> RadrootsNip09DeletionEventTarget {
-        RadrootsNip09DeletionEventTarget::parse(character.to_string().repeat(64), kind)
+    fn event_target(character: char, kind: u32) -> Nip09DeletionEventTarget {
+        Nip09DeletionEventTarget::parse(character.to_string().repeat(64), kind)
             .expect("event target")
     }
 
-    fn numeric_event_target(index: usize, kind: u32) -> RadrootsNip09DeletionEventTarget {
-        RadrootsNip09DeletionEventTarget::parse(format!("{index:064x}"), kind)
+    fn numeric_event_target(index: usize, kind: u32) -> Nip09DeletionEventTarget {
+        Nip09DeletionEventTarget::parse(format!("{index:064x}"), kind)
             .expect("numeric event target")
     }
 
-    fn address_target(
-        kind: u32,
-        character: char,
-        identifier: &str,
-    ) -> RadrootsNip09DeletionAddressTarget {
-        RadrootsNip09DeletionAddressTarget::parse(format!(
+    fn address_target(kind: u32, character: char, identifier: &str) -> Nip09DeletionAddressTarget {
+        Nip09DeletionAddressTarget::parse(format!(
             "{kind}:{}:{identifier}",
             crate::test_valid_hex_64(character)
         ))
@@ -519,11 +506,11 @@ mod tests {
     fn address_target_with_total_bytes(
         total_bytes: usize,
         index: usize,
-    ) -> RadrootsNip09DeletionAddressTarget {
+    ) -> Nip09DeletionAddressTarget {
         let prefix = format!("30000:{}:", crate::test_valid_hex_64('a'));
         let suffix = format!("{index:04x}");
         assert!(prefix.len() + suffix.len() <= total_bytes);
-        RadrootsNip09DeletionAddressTarget::parse(format!(
+        Nip09DeletionAddressTarget::parse(format!(
             "{prefix}{}{suffix}",
             "x".repeat(total_bytes - prefix.len() - suffix.len())
         ))
@@ -532,39 +519,36 @@ mod tests {
 
     #[test]
     fn target_constructors_validate_identity_and_kind_hint() {
-        let target = RadrootsNip09DeletionEventTarget::parse("A".repeat(64), u16::MAX as u32)
-            .expect("event target");
+        let target =
+            Nip09DeletionEventTarget::parse("A".repeat(64), u16::MAX as u32).expect("event target");
         assert_eq!(target.event_id().to_hex(), "a".repeat(64));
         assert_eq!(target.kind_hint(), u16::MAX as u32);
         assert_eq!(
-            RadrootsNip09DeletionEventTarget::parse("5".repeat(64), 5)
+            Nip09DeletionEventTarget::parse("5".repeat(64), 5)
                 .expect("kind-5 target")
                 .kind_hint(),
             5
         );
         assert!(matches!(
-            RadrootsNip09DeletionEventTarget::parse("not-an-id", 1),
-            Err(RadrootsNip09DeletionError::EventIdInvalid(
-                RadrootsIdParseError::InvalidLength {
+            Nip09DeletionEventTarget::parse("not-an-id", 1),
+            Err(Nip09DeletionError::EventIdInvalid(
+                ParseError::InvalidLength {
                     expected: 64,
                     actual: 9
                 }
             ))
         ));
         assert_eq!(
-            RadrootsNip09DeletionEventTarget::parse("a".repeat(64), u16::MAX as u32 + 1)
-                .unwrap_err(),
-            RadrootsNip09DeletionError::TargetKindOutOfRange {
+            Nip09DeletionEventTarget::parse("a".repeat(64), u16::MAX as u32 + 1).unwrap_err(),
+            Nip09DeletionError::TargetKindOutOfRange {
                 max: u16::MAX as u32,
                 actual: u16::MAX as u32 + 1,
             }
         );
 
-        let address = RadrootsNip09DeletionAddressTarget::parse(format!(
-            "30000:{}:",
-            crate::test_valid_hex_64('B')
-        ))
-        .expect("address target");
+        let address =
+            Nip09DeletionAddressTarget::parse(format!("30000:{}:", crate::test_valid_hex_64('B')))
+                .expect("address target");
         assert_eq!(
             address.coordinate().as_str(),
             format!("30000:{}:", crate::test_valid_hex_64('b'))
@@ -577,8 +561,8 @@ mod tests {
             "x".repeat(RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES + 1 - coordinate_prefix.len())
         );
         assert_eq!(
-            RadrootsNip09DeletionAddressTarget::parse(oversized_coordinate),
-            Err(RadrootsNip09DeletionError::TagElementTooLarge {
+            Nip09DeletionAddressTarget::parse(oversized_coordinate),
+            Err(Nip09DeletionError::TagElementTooLarge {
                 max: RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES,
                 actual: RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES + 1,
             })
@@ -588,12 +572,12 @@ mod tests {
     #[test]
     fn authored_request_allows_event_address_and_mixed_batches() {
         let event_only =
-            RadrootsAuthoredNip09DeletionRequest::new("", vec![event_target('a', 1)], Vec::new())
+            AuthoredNip09DeletionRequest::new("", vec![event_target('a', 1)], Vec::new())
                 .expect("event-only request");
         assert_eq!(event_only.target_count(), 1);
         assert_eq!(event_only.kind_hints(), &[1]);
 
-        let address_only = RadrootsAuthoredNip09DeletionRequest::new(
+        let address_only = AuthoredNip09DeletionRequest::new(
             "withdrawn",
             Vec::new(),
             vec![address_target(30_402, 'b', "victoria-kale")],
@@ -602,7 +586,7 @@ mod tests {
         assert_eq!(address_only.target_count(), 1);
         assert_eq!(address_only.kind_hints(), &[30_402]);
 
-        let mixed = RadrootsAuthoredNip09DeletionRequest::new(
+        let mixed = AuthoredNip09DeletionRequest::new(
             "\t撤回 🌱\n",
             vec![event_target('c', 31_922)],
             vec![address_target(30_402, 'd', "victoria-carrots")],
@@ -615,7 +599,7 @@ mod tests {
 
     #[test]
     fn authored_request_sorts_targets_and_deduplicates_kind_hints() {
-        let request = RadrootsAuthoredNip09DeletionRequest::new(
+        let request = AuthoredNip09DeletionRequest::new(
             "duplicate crop listing",
             vec![event_target('f', 30_402), event_target('a', 1)],
             vec![
@@ -647,30 +631,30 @@ mod tests {
     #[test]
     fn authored_request_rejects_canonical_duplicate_targets() {
         let uppercase =
-            RadrootsNip09DeletionEventTarget::parse("A".repeat(64), 1).expect("uppercase event");
-        let lowercase = RadrootsNip09DeletionEventTarget::parse("a".repeat(64), 31_922)
-            .expect("lowercase event");
+            Nip09DeletionEventTarget::parse("A".repeat(64), 1).expect("uppercase event");
+        let lowercase =
+            Nip09DeletionEventTarget::parse("a".repeat(64), 31_922).expect("lowercase event");
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new("", vec![uppercase, lowercase], Vec::new(),)
+            AuthoredNip09DeletionRequest::new("", vec![uppercase, lowercase], Vec::new(),)
                 .unwrap_err(),
-            RadrootsNip09DeletionError::DuplicateEventTarget {
+            Nip09DeletionError::DuplicateEventTarget {
                 event_id: "a".repeat(64)
             }
         );
 
-        let uppercase_address = RadrootsNip09DeletionAddressTarget::parse(format!(
+        let uppercase_address = Nip09DeletionAddressTarget::parse(format!(
             "030402:{}:produce",
             crate::test_valid_hex_64('A')
         ))
         .expect("uppercase address");
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new(
+            AuthoredNip09DeletionRequest::new(
                 "",
                 Vec::new(),
                 vec![uppercase_address, address_target(30_402, 'a', "produce"),],
             )
             .unwrap_err(),
-            RadrootsNip09DeletionError::DuplicateAddressTarget {
+            Nip09DeletionError::DuplicateAddressTarget {
                 coordinate: format!("30402:{}:produce", crate::test_valid_hex_64('a'))
             }
         );
@@ -679,23 +663,23 @@ mod tests {
     #[test]
     fn authored_request_requires_target_union_and_caps_content() {
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new("", Vec::new(), Vec::new()).unwrap_err(),
-            RadrootsNip09DeletionError::TargetMissing
+            AuthoredNip09DeletionRequest::new("", Vec::new(), Vec::new()).unwrap_err(),
+            Nip09DeletionError::TargetMissing
         );
-        RadrootsAuthoredNip09DeletionRequest::new(
+        AuthoredNip09DeletionRequest::new(
             "x".repeat(RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES),
             vec![event_target('a', 1)],
             Vec::new(),
         )
         .expect("exact content byte limit");
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new(
+            AuthoredNip09DeletionRequest::new(
                 "x".repeat(RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES + 1),
                 vec![event_target('a', 1)],
                 Vec::new(),
             )
             .unwrap_err(),
-            RadrootsNip09DeletionError::ContentTooLarge {
+            Nip09DeletionError::ContentTooLarge {
                 max: RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
                 actual: RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES + 1,
             }
@@ -707,16 +691,15 @@ mod tests {
         let exact_targets = (0..RADROOTS_NIP09_DELETION_TAG_MAX_COUNT - 1)
             .map(|index| numeric_event_target(index, 1))
             .collect();
-        RadrootsAuthoredNip09DeletionRequest::new("", exact_targets, Vec::new())
+        AuthoredNip09DeletionRequest::new("", exact_targets, Vec::new())
             .expect("1023 targets plus one kind tag");
 
         let overflow_targets = (0..RADROOTS_NIP09_DELETION_TAG_MAX_COUNT)
             .map(|index| numeric_event_target(index, 1))
             .collect();
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new("", overflow_targets, Vec::new())
-                .unwrap_err(),
-            RadrootsNip09DeletionError::TagCountExceeded {
+            AuthoredNip09DeletionRequest::new("", overflow_targets, Vec::new()).unwrap_err(),
+            Nip09DeletionError::TagCountExceeded {
                 max: RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
                 actual: RADROOTS_NIP09_DELETION_TAG_MAX_COUNT + 1,
             }
@@ -724,9 +707,8 @@ mod tests {
 
         let duplicate_overflow = vec![event_target('a', 1); RADROOTS_NIP09_DELETION_TAG_MAX_COUNT];
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new("", duplicate_overflow, Vec::new())
-                .unwrap_err(),
-            RadrootsNip09DeletionError::TagCountExceeded {
+            AuthoredNip09DeletionRequest::new("", duplicate_overflow, Vec::new()).unwrap_err(),
+            Nip09DeletionError::TagCountExceeded {
                 max: RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
                 actual: RADROOTS_NIP09_DELETION_TAG_MAX_COUNT + 1,
             }
@@ -736,9 +718,8 @@ mod tests {
     #[test]
     fn duplicate_address_error_escapes_opaque_identifier_controls() {
         let target = address_target(30_000, 'b', "line\nbreak");
-        let error =
-            RadrootsAuthoredNip09DeletionRequest::new("", Vec::new(), vec![target.clone(), target])
-                .unwrap_err();
+        let error = AuthoredNip09DeletionRequest::new("", Vec::new(), vec![target.clone(), target])
+            .unwrap_err();
         let rendered = error.to_string();
         assert!(rendered.contains("\\n"));
         assert!(!rendered.contains('\n'));
@@ -759,7 +740,7 @@ mod tests {
             + "k".len()
             + "30000".len();
         assert_eq!(exact_tag_bytes, RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES);
-        RadrootsAuthoredNip09DeletionRequest::new("", Vec::new(), exact_targets)
+        AuthoredNip09DeletionRequest::new("", Vec::new(), exact_targets)
             .expect("exact aggregate tag byte limit");
 
         let mut overflow_targets = (0..31)
@@ -769,9 +750,8 @@ mod tests {
             .collect::<Vec<_>>();
         overflow_targets.push(address_target_with_total_bytes(4_059, 31));
         assert_eq!(
-            RadrootsAuthoredNip09DeletionRequest::new("", Vec::new(), overflow_targets)
-                .unwrap_err(),
-            RadrootsNip09DeletionError::TagBytesExceeded {
+            AuthoredNip09DeletionRequest::new("", Vec::new(), overflow_targets).unwrap_err(),
+            Nip09DeletionError::TagBytesExceeded {
                 max: RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES,
                 actual: RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES + 1,
             }
@@ -784,7 +764,7 @@ mod tests {
         let mut upper = RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES;
         while lower < upper {
             let candidate = lower + (upper - lower).div_ceil(2);
-            if RadrootsAuthoredNip09DeletionRequest::new(
+            if AuthoredNip09DeletionRequest::new(
                 "\u{0001}".repeat(candidate),
                 vec![event_target('a', 1)],
                 Vec::new(),
@@ -796,19 +776,19 @@ mod tests {
                 upper = candidate - 1;
             }
         }
-        RadrootsAuthoredNip09DeletionRequest::new(
+        AuthoredNip09DeletionRequest::new(
             "\u{0001}".repeat(lower),
             vec![event_target('a', 1)],
             Vec::new(),
         )
         .expect("largest escaped content fitting the wire budget");
         assert!(matches!(
-            RadrootsAuthoredNip09DeletionRequest::new(
+            AuthoredNip09DeletionRequest::new(
                 "\u{0001}".repeat(lower + 1),
                 vec![event_target('a', 1)],
                 Vec::new(),
             ),
-            Err(RadrootsNip09DeletionError::EventWireTooLarge { max, .. })
+            Err(Nip09DeletionError::EventWireTooLarge { max, .. })
                 if max == RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES
         ));
     }
@@ -816,23 +796,21 @@ mod tests {
     #[test]
     fn deletion_errors_expose_stable_codes_and_messages() {
         let errors = [
-            RadrootsNip09DeletionError::ContentTooLarge { max: 1, actual: 2 },
-            RadrootsNip09DeletionError::EventIdInvalid(RadrootsIdParseError::InvalidFormat),
-            RadrootsNip09DeletionError::TargetKindOutOfRange { max: 1, actual: 2 },
-            RadrootsNip09DeletionError::CoordinateInvalid(
-                RadrootsNip01CoordinateParseError::InvalidFormat,
-            ),
-            RadrootsNip09DeletionError::DuplicateEventTarget {
+            Nip09DeletionError::ContentTooLarge { max: 1, actual: 2 },
+            Nip09DeletionError::EventIdInvalid(ParseError::InvalidFormat),
+            Nip09DeletionError::TargetKindOutOfRange { max: 1, actual: 2 },
+            Nip09DeletionError::CoordinateInvalid(Nip01CoordinateParseError::InvalidFormat),
+            Nip09DeletionError::DuplicateEventTarget {
                 event_id: "a".repeat(64),
             },
-            RadrootsNip09DeletionError::DuplicateAddressTarget {
+            Nip09DeletionError::DuplicateAddressTarget {
                 coordinate: format!("30000:{}:", "a".repeat(64)),
             },
-            RadrootsNip09DeletionError::TargetMissing,
-            RadrootsNip09DeletionError::TagCountExceeded { max: 1, actual: 2 },
-            RadrootsNip09DeletionError::TagElementTooLarge { max: 1, actual: 2 },
-            RadrootsNip09DeletionError::TagBytesExceeded { max: 1, actual: 2 },
-            RadrootsNip09DeletionError::EventWireTooLarge { max: 1, actual: 2 },
+            Nip09DeletionError::TargetMissing,
+            Nip09DeletionError::TagCountExceeded { max: 1, actual: 2 },
+            Nip09DeletionError::TagElementTooLarge { max: 1, actual: 2 },
+            Nip09DeletionError::TagBytesExceeded { max: 1, actual: 2 },
+            Nip09DeletionError::EventWireTooLarge { max: 1, actual: 2 },
         ];
         let expected = [
             "deletion_content_too_large",

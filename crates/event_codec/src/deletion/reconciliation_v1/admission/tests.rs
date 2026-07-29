@@ -6,7 +6,7 @@ fn admitted_contract_resolves_registry_entry() {
     use nostr::secp256k1::Message;
     use nostr::{Keys, SECP256K1};
     use radroots_event::{
-        envelope::RadrootsEventEnvelopeParts, envelope::kind::KIND_DELETION_REQUEST,
+        envelope::EventEnvelopeParts, envelope::kind::KIND_DELETION_REQUEST,
         wire::compute_canonical_nip01_event_id,
     };
     use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;
@@ -28,7 +28,7 @@ fn admitted_contract_resolves_registry_entry() {
     let nostr_id = nostr::EventId::from_hex(&id.to_hex()).expect("Nostr event id");
     let message = Message::from_digest(nostr_id.to_bytes());
     let signature = SECP256K1.sign_schnorr_no_aux_rand(&message, keys.key_pair(SECP256K1));
-    let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    let event = EventEnvelope::new(EventEnvelopeParts {
         id: id.into_string(),
         author,
         created_at,

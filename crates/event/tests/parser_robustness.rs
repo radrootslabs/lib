@@ -1,9 +1,9 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use radroots_event::envelope::{RadrootsEventTag, RadrootsEventTags};
+use radroots_event::envelope::{EventTag, EventTags};
 use radroots_event::id::{DTag, EventId, EventSignature, Nip01Coordinate};
-use radroots_event::tag::relay_hint::RadrootsNostrRelayHint;
-use radroots_event::wire::v1::RadrootsNip01EventWire;
+use radroots_event::tag::relay_hint::NostrRelayHint;
+use radroots_event::wire::v1::Nip01EventWire;
 
 const VALID_WIRE_VECTOR: &str =
     include_str!("../../../contracts/conformance/vectors/event/nip01_wire.v1.json");
@@ -27,19 +27,19 @@ fn wire_and_tag_parsers_are_total_over_deterministic_mutation_corpus() {
 fn assert_parser_totality(bytes: &[u8], case: u64) {
     let result = catch_unwind(AssertUnwindSafe(|| {
         if let Ok(text) = core::str::from_utf8(bytes) {
-            let _ = RadrootsNip01EventWire::parse_json(text);
+            let _ = Nip01EventWire::parse_json(text);
             let _ = DTag::parse(text);
             let _ = EventId::parse(text);
             let _ = EventSignature::parse(text);
             let _ = Nip01Coordinate::parse(text);
-            let _ = RadrootsNostrRelayHint::parse(text);
+            let _ = NostrRelayHint::parse(text);
         }
 
         let tags = tags_from_bytes(bytes);
         for (index, tag) in tags.iter().cloned().enumerate() {
-            let _ = RadrootsEventTag::new(index, tag);
+            let _ = EventTag::new(index, tag);
         }
-        let _ = RadrootsEventTags::new(tags);
+        let _ = EventTags::new(tags);
     }));
 
     assert!(result.is_ok(), "parser mutation case {case} panicked");

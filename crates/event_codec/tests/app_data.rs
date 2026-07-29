@@ -3,7 +3,7 @@ mod common;
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
     envelope::kind::KIND_POST,
-    social::app_data::{KIND_APP_DATA, RadrootsAppData},
+    social::app_data::{AppData, KIND_APP_DATA},
 };
 use radroots_event_codec::app_data::decode::{
     app_data_from_tags, data_from_event, parsed_from_event,
@@ -15,7 +15,7 @@ use radroots_event_codec::error::{EventEncodeError, EventParseError};
 
 #[test]
 fn app_data_build_tags_requires_d_tag() {
-    let app_data = RadrootsAppData {
+    let app_data = AppData {
         d_tag: "  ".to_string(),
         content: "payload".to_string(),
     };
@@ -26,7 +26,7 @@ fn app_data_build_tags_requires_d_tag() {
 
 #[test]
 fn app_data_to_wire_parts_sets_kind_tags_content() {
-    let app_data = RadrootsAppData {
+    let app_data = AppData {
         d_tag: "radroots.app".to_string(),
         content: "payload".to_string(),
     };
@@ -42,7 +42,7 @@ fn app_data_to_wire_parts_sets_kind_tags_content() {
 
 #[test]
 fn app_data_to_wire_parts_propagates_tag_build_errors() {
-    let app_data = RadrootsAppData {
+    let app_data = AppData {
         d_tag: "  ".to_string(),
         content: "payload".to_string(),
     };
@@ -52,7 +52,7 @@ fn app_data_to_wire_parts_propagates_tag_build_errors() {
 
 #[test]
 fn app_data_to_wire_parts_with_kind_rejects_wrong_kind() {
-    let app_data = RadrootsAppData {
+    let app_data = AppData {
         d_tag: "radroots.app".to_string(),
         content: "payload".to_string(),
     };

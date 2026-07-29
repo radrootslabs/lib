@@ -6,8 +6,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::{KIND_GENERIC_REPOST, KIND_POST, KIND_REPOST},
-    post::repost::{RadrootsGenericRepost, RadrootsRepost},
-    social::RadrootsSocialTarget,
+    post::repost::{GenericRepost, Repost},
+    social::SocialTarget,
     tag::name::{TAG_A, TAG_E, TAG_K, TAG_P},
 };
 
@@ -20,7 +20,7 @@ pub fn repost_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsRepost, EventParseError> {
+) -> Result<Repost, EventParseError> {
     if kind != KIND_REPOST {
         return Err(EventParseError::InvalidKind {
             expected: "6",
@@ -33,8 +33,8 @@ pub fn repost_from_event(
         .cloned()
         .ok_or(EventParseError::InvalidTag(TAG_E))?;
     validate_lowercase_hex_64_tag(&id, TAG_E)?;
-    Ok(RadrootsRepost {
-        target: RadrootsSocialTarget::Event {
+    Ok(Repost {
+        target: SocialTarget::Event {
             id,
             author: first_tag_value(tags, TAG_P),
             event_kind: Some(KIND_POST),
@@ -48,7 +48,7 @@ pub fn generic_repost_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGenericRepost, EventParseError> {
+) -> Result<GenericRepost, EventParseError> {
     if kind != KIND_GENERIC_REPOST {
         return Err(EventParseError::InvalidKind {
             expected: "16",
@@ -70,7 +70,7 @@ pub fn generic_repost_from_event(
         if address.kind != target_kind {
             return Err(EventParseError::InvalidTag(TAG_A));
         }
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address: value,
             author: Some(address.pubkey),
             event_kind: Some(target_kind),
@@ -82,7 +82,7 @@ pub fn generic_repost_from_event(
             .cloned()
             .ok_or(EventParseError::InvalidTag(TAG_E))?;
         validate_lowercase_hex_64_tag(&id, TAG_E)?;
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             id,
             author: first_tag_value(tags, TAG_P),
             event_kind: Some(target_kind),
@@ -91,7 +91,7 @@ pub fn generic_repost_from_event(
     } else {
         return Err(EventParseError::MissingTag(TAG_E));
     };
-    Ok(RadrootsGenericRepost {
+    Ok(GenericRepost {
         target,
         target_kind,
         content: optional_content(content),
@@ -105,7 +105,7 @@ pub fn repost_data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsRepost>, EventParseError> {
+) -> Result<RadrootsParsedData<Repost>, EventParseError> {
     let repost = repost_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -123,7 +123,7 @@ pub fn generic_repost_data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsGenericRepost>, EventParseError> {
+) -> Result<RadrootsParsedData<GenericRepost>, EventParseError> {
     let repost = generic_repost_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -142,7 +142,7 @@ pub fn repost_parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsRepost>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Repost>, EventParseError> {
     let data = repost_data_from_event(
         id.clone(),
         author.clone(),
@@ -162,7 +162,7 @@ pub fn generic_repost_parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsGenericRepost>, EventParseError> {
+) -> Result<RadrootsParsedEvent<GenericRepost>, EventParseError> {
     let data = generic_repost_data_from_event(
         id.clone(),
         author.clone(),

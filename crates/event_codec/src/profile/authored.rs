@@ -4,8 +4,8 @@ use core::fmt;
 
 use radroots_event::{
     envelope::kind::KIND_PROFILE,
-    profile::{RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES, RadrootsAuthoredProfile},
-    wire::RadrootsNip01EventWireParts,
+    profile::{AuthoredProfile, RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES},
+    wire::Nip01EventWireParts,
 };
 use serde::Serialize;
 
@@ -66,8 +66,8 @@ struct AuthoredProfileMetadata<'a> {
 /// The caller must separately prove successful BUD-02 upload completion before
 /// passing media-bearing output to a signing boundary.
 pub fn authored_profile_to_wire_parts(
-    profile: &RadrootsAuthoredProfile,
-) -> Result<RadrootsNip01EventWireParts, RadrootsAuthoredProfileEncodeError> {
+    profile: &AuthoredProfile,
+) -> Result<Nip01EventWireParts, RadrootsAuthoredProfileEncodeError> {
     let metadata = AuthoredProfileMetadata {
         name: profile.name(),
         display_name: profile.display_name(),
@@ -90,7 +90,7 @@ pub fn authored_profile_to_wire_parts(
     }
     let content = serde_json::to_string(&metadata)
         .expect("authored Profile metadata contains only infallible JSON scalar types");
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind: KIND_PROFILE,
         content,
         tags: Vec::new(),
@@ -150,7 +150,7 @@ fn json_string_encoded_len(value: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::profile::RadrootsNip05Identifier;
+    use radroots_event::profile::Nip05Identifier;
 
     #[test]
     fn preflight_length_matches_compact_json_escaping() {
@@ -160,11 +160,11 @@ mod tests {
             serde_json::to_string(escaped).unwrap().len()
         );
 
-        let profile = RadrootsAuthoredProfile::new("farm \\\"one\\\"")
+        let profile = AuthoredProfile::new("farm \\\"one\\\"")
             .unwrap()
             .with_display_name(escaped)
             .with_about("Victoria \u{e9}")
-            .with_nip05(RadrootsNip05Identifier::parse("farm@example.com").unwrap())
+            .with_nip05(Nip05Identifier::parse("farm@example.com").unwrap())
             .with_bot(true);
         let wire = authored_profile_to_wire_parts(&profile).unwrap();
         let metadata = AuthoredProfileMetadata {

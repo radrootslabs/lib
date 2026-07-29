@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsAuthorityError, RadrootsSignerError};
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{EventDraft, SignedEvent};
 #[cfg(test)]
-use radroots_event::wire::RadrootsNip01EventWire;
+use radroots_event::wire::Nip01EventWire;
 use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,10 +26,7 @@ impl RadrootsSignerIdentity {
 pub trait RadrootsEventSigner {
     fn pubkey(&self) -> &PublicKey;
 
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError>;
+    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError>;
 }
 
 #[cfg(test)]
@@ -45,8 +42,8 @@ mod tests {
         std::iter::repeat_n(character, 128).collect()
     }
 
-    fn draft_for(pubkey: &str) -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn draft_for(pubkey: &str) -> EventDraft {
+        EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1_700_000_000,
@@ -96,8 +93,8 @@ mod tests {
 
         fn sign_frozen_draft(
             &self,
-            draft: &RadrootsEventDraft,
-        ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+            draft: &EventDraft,
+        ) -> Result<SignedEvent, RadrootsSignerError> {
             if let Some(failure) = &self.failure {
                 return Err(match failure {
                     RadrootsSignerError::Unavailable => RadrootsSignerError::Unavailable,
@@ -113,7 +110,7 @@ mod tests {
                 .event_id
                 .clone()
                 .unwrap_or_else(|| draft.expected_event_id_hex());
-            let wire = RadrootsNip01EventWire {
+            let wire = Nip01EventWire {
                 id,
                 pubkey: self.pubkey.to_string(),
                 created_at: draft.created_at_u64(),
@@ -124,7 +121,7 @@ mod tests {
                 extra: Default::default(),
             };
             let raw_json = raw_json_for_wire(&wire);
-            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
+            SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| {
                 RadrootsSignerError::SigningFailed {
                     message: error.to_string(),
                 }
@@ -132,7 +129,7 @@ mod tests {
         }
     }
 
-    fn raw_json_for_wire(wire: &RadrootsNip01EventWire) -> String {
+    fn raw_json_for_wire(wire: &Nip01EventWire) -> String {
         serde_json::json!({
             "id": wire.id,
             "pubkey": wire.pubkey,

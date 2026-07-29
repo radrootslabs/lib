@@ -216,59 +216,59 @@ const RETIRED_OPERATION_EVENT_NAMES: [&str; 15] = [
     "RadrootsNip10RelayHint",
 ];
 const REQUIRED_CALENDAR_PUBLIC_TYPES: [&str; 34] = [
-    "RadrootsNip01EventWireParts",
+    "Nip01EventWireParts",
     "BlobUrl",
-    "RadrootsAuthoredImage",
-    "RadrootsAuthoredImageError",
-    "RadrootsIanaTimeZoneId",
-    "RadrootsCalendarUri",
-    "RadrootsCalendarRequest",
-    "RadrootsCalendarParticipant",
-    "RadrootsCalendarEventError",
-    "RadrootsCalendarDate",
-    "RadrootsAuthoredCalendarDateEvent",
-    "RadrootsAuthoredCalendarTimeEvent",
-    "RadrootsParsedNip52CalendarCommon",
-    "RadrootsParsedNip52CalendarCommonParts",
-    "RadrootsParsedNip52CalendarDateEvent",
-    "RadrootsObservedUtcDay",
-    "RadrootsParsedNip52CalendarTimeEvent",
-    "RadrootsCalendarAdmissionError",
-    "RadrootsAdmittedCalendarDateEvent",
-    "RadrootsAdmittedCalendarTimeEvent",
-    "RadrootsCalendarUid",
-    "RadrootsCalendarEventReference",
-    "RadrootsCalendarEventRevisionReference",
-    "RadrootsCalendarEventAuthorReference",
-    "RadrootsAuthoredCalendar",
-    "RadrootsParsedNip52CalendarParts",
-    "RadrootsParsedNip52Calendar",
-    "RadrootsAdmittedCalendar",
-    "RadrootsCalendarEventRsvpStatus",
-    "RadrootsCalendarEventFreeBusy",
-    "RadrootsAuthoredCalendarEventRsvp",
-    "RadrootsParsedNip52CalendarEventRsvpParts",
-    "RadrootsParsedNip52CalendarEventRsvp",
-    "RadrootsAdmittedCalendarEventRsvp",
+    "AuthoredImage",
+    "AuthoredImageError",
+    "IanaTimeZoneId",
+    "CalendarUri",
+    "CalendarRequest",
+    "CalendarParticipant",
+    "CalendarEventError",
+    "CalendarDate",
+    "AuthoredCalendarDateEvent",
+    "AuthoredCalendarTimeEvent",
+    "ParsedNip52CalendarCommon",
+    "ParsedNip52CalendarCommonParts",
+    "ParsedNip52CalendarDateEvent",
+    "ObservedUtcDay",
+    "ParsedNip52CalendarTimeEvent",
+    "CalendarAdmissionError",
+    "AdmittedCalendarDateEvent",
+    "AdmittedCalendarTimeEvent",
+    "CalendarUid",
+    "CalendarEventReference",
+    "CalendarEventRevisionReference",
+    "CalendarEventAuthorReference",
+    "AuthoredCalendar",
+    "ParsedNip52CalendarParts",
+    "ParsedNip52Calendar",
+    "AdmittedCalendar",
+    "CalendarEventRsvpStatus",
+    "CalendarEventFreeBusy",
+    "AuthoredCalendarEventRsvp",
+    "ParsedNip52CalendarEventRsvpParts",
+    "ParsedNip52CalendarEventRsvp",
+    "AdmittedCalendarEventRsvp",
 ];
 const REQUIRED_POST_PUBLIC_TYPES: [&str; 34] = [
     "ApprovedBlobUrl",
     "ByteVerifiedDescriptor",
-    "RadrootsNip01EventWireParts",
-    "RadrootsEventEnvelope",
+    "Nip01EventWireParts",
+    "EventEnvelope",
     "RadrootsSignatureVerifiedEvent",
-    "RadrootsAuthoredImage",
-    "RadrootsPost",
-    "RadrootsAuthoredPostError",
-    "RadrootsPostImageDimensions",
-    "RadrootsAuthoredPostImage",
-    "RadrootsAuthoredUpdate",
-    "RadrootsAuthoredPhotoUpdate",
-    "RadrootsAuthoredAsk",
-    "RadrootsNip10ReplyError",
-    "RadrootsNostrRelayHint",
-    "RadrootsNip10ReplyReference",
-    "RadrootsAuthoredNip10Reply",
+    "AuthoredImage",
+    "Post",
+    "AuthoredPostError",
+    "PostImageDimensions",
+    "AuthoredPostImage",
+    "AuthoredUpdate",
+    "AuthoredPhotoUpdate",
+    "AuthoredAsk",
+    "Nip10ReplyError",
+    "NostrRelayHint",
+    "Nip10ReplyReference",
+    "AuthoredNip10Reply",
     "RadrootsPostDiagnostic",
     "RadrootsPostClassification",
     "RadrootsInboundPostImeta",
@@ -289,25 +289,25 @@ const REQUIRED_POST_PUBLIC_TYPES: [&str; 34] = [
 ];
 const REQUIRED_FOOD_AVAILABILITY_PUBLIC_TYPES: [&str; 31] = [
     "ByteVerifiedDescriptor",
-    "RadrootsNip01EventWireParts",
-    "RadrootsEventEnvelope",
+    "Nip01EventWireParts",
+    "EventEnvelope",
     "RadrootsSignatureVerifiedEvent",
-    "RadrootsClassifiedListingPartition",
-    "RadrootsAuthoredImage",
-    "RadrootsFoodAvailabilityError",
-    "RadrootsFoodContent",
-    "RadrootsFoodIdentifier",
-    "RadrootsFoodText",
-    "RadrootsFoodPublishedAt",
-    "RadrootsFoodCurrency",
-    "RadrootsFoodUnit",
-    "RadrootsFoodPrice",
-    "RadrootsFoodQuantity",
-    "RadrootsFoodAvailabilityStatus",
-    "RadrootsFoodImageDimensions",
-    "RadrootsFoodAvailabilityImage",
-    "RadrootsFoodAvailabilityDetailsParts",
-    "RadrootsFoodAvailabilityDetails",
+    "ClassifiedListingPartition",
+    "AuthoredImage",
+    "FoodAvailabilityError",
+    "FoodContent",
+    "FoodIdentifier",
+    "FoodText",
+    "FoodPublishedAt",
+    "FoodCurrency",
+    "FoodUnit",
+    "FoodPrice",
+    "FoodQuantity",
+    "FoodAvailabilityStatus",
+    "FoodImageDimensions",
+    "FoodAvailabilityImage",
+    "FoodAvailabilityDetailsParts",
+    "FoodAvailabilityDetails",
     "RadrootsFoodAvailabilityEncodeError",
     "RadrootsFoodAvailabilityImageDiagnostic",
     "RadrootsInboundFoodAvailabilityImage",
@@ -324,8 +324,8 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
         key: "social_calendar_date_event_build_authored_draft",
         id: "social.calendar_date_event.build_authored_draft",
-        inputs: &["RadrootsAuthoredCalendarDateEvent"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredCalendarDateEvent"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
@@ -333,11 +333,11 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
             "crates/event_codec/src/calendar/encode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAuthoredCalendarDateEvent",
-            "radroots_event::calendar::RadrootsCalendarDate",
-            "radroots_event::calendar::RadrootsCalendarEventError",
-            "radroots_event::media::RadrootsAuthoredImage",
-            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event::calendar::AuthoredCalendarDateEvent",
+            "radroots_event::calendar::CalendarDate",
+            "radroots_event::calendar::CalendarEventError",
+            "radroots_event::media::AuthoredImage",
+            "radroots_event::wire::Nip01EventWireParts",
             "radroots_event_codec::error::EventEncodeError",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
@@ -346,19 +346,19 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         key: "social_calendar_date_event_parse_nip52",
         id: "social.calendar_date_event.parse_nip52",
         inputs: &["u32", "NostrTags", "String"],
-        outputs: &["RadrootsParsedNip52CalendarDateEvent"],
+        outputs: &["ParsedNip52CalendarDateEvent"],
         error_class: "parse_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsCalendarDate",
-            "radroots_event::calendar::RadrootsCalendarRequest",
-            "radroots_event::calendar::RadrootsCalendarUri",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarCommon",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarCommonParts",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarDateEvent",
+            "radroots_event::calendar::CalendarDate",
+            "radroots_event::calendar::CalendarRequest",
+            "radroots_event::calendar::CalendarUri",
+            "radroots_event::calendar::ParsedNip52CalendarCommon",
+            "radroots_event::calendar::ParsedNip52CalendarCommonParts",
+            "radroots_event::calendar::ParsedNip52CalendarDateEvent",
             "radroots_event_codec::error::EventParseError",
         ],
         vector: "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
@@ -366,25 +366,25 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
         key: "social_calendar_date_event_admit_radroots_profile",
         id: "social.calendar_date_event.admit_radroots_profile",
-        inputs: &["RadrootsParsedNip52CalendarDateEvent"],
-        outputs: &["RadrootsAdmittedCalendarDateEvent"],
+        inputs: &["ParsedNip52CalendarDateEvent"],
+        outputs: &["AdmittedCalendarDateEvent"],
         error_class: "admission_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAdmittedCalendarDateEvent",
-            "radroots_event::calendar::RadrootsCalendarAdmissionError",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarDateEvent",
+            "radroots_event::calendar::AdmittedCalendarDateEvent",
+            "radroots_event::calendar::CalendarAdmissionError",
+            "radroots_event::calendar::ParsedNip52CalendarDateEvent",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
     CalendarOperationExpectation {
         key: "social_calendar_time_event_build_authored_draft",
         id: "social.calendar_time_event.build_authored_draft",
-        inputs: &["RadrootsAuthoredCalendarTimeEvent"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredCalendarTimeEvent"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
@@ -392,11 +392,11 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
             "crates/event_codec/src/calendar/encode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAuthoredCalendarTimeEvent",
-            "radroots_event::calendar::RadrootsCalendarEventError",
-            "radroots_event::calendar::RadrootsIanaTimeZoneId",
-            "radroots_event::media::RadrootsAuthoredImage",
-            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event::calendar::AuthoredCalendarTimeEvent",
+            "radroots_event::calendar::CalendarEventError",
+            "radroots_event::calendar::IanaTimeZoneId",
+            "radroots_event::media::AuthoredImage",
+            "radroots_event::wire::Nip01EventWireParts",
             "radroots_event_codec::error::EventEncodeError",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
@@ -405,20 +405,20 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         key: "social_calendar_time_event_parse_nip52",
         id: "social.calendar_time_event.parse_nip52",
         inputs: &["u32", "NostrTags", "String"],
-        outputs: &["RadrootsParsedNip52CalendarTimeEvent"],
+        outputs: &["ParsedNip52CalendarTimeEvent"],
         error_class: "parse_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsCalendarRequest",
-            "radroots_event::calendar::RadrootsCalendarUri",
-            "radroots_event::calendar::RadrootsIanaTimeZoneId",
-            "radroots_event::calendar::RadrootsObservedUtcDay",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarCommon",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarCommonParts",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarTimeEvent",
+            "radroots_event::calendar::CalendarRequest",
+            "radroots_event::calendar::CalendarUri",
+            "radroots_event::calendar::IanaTimeZoneId",
+            "radroots_event::calendar::ObservedUtcDay",
+            "radroots_event::calendar::ParsedNip52CalendarCommon",
+            "radroots_event::calendar::ParsedNip52CalendarCommonParts",
+            "radroots_event::calendar::ParsedNip52CalendarTimeEvent",
             "radroots_event_codec::error::EventParseError",
         ],
         vector: "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
@@ -426,25 +426,25 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
         key: "social_calendar_time_event_admit_radroots_profile",
         id: "social.calendar_time_event.admit_radroots_profile",
-        inputs: &["RadrootsParsedNip52CalendarTimeEvent"],
-        outputs: &["RadrootsAdmittedCalendarTimeEvent"],
+        inputs: &["ParsedNip52CalendarTimeEvent"],
+        outputs: &["AdmittedCalendarTimeEvent"],
         error_class: "admission_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAdmittedCalendarTimeEvent",
-            "radroots_event::calendar::RadrootsCalendarAdmissionError",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarTimeEvent",
+            "radroots_event::calendar::AdmittedCalendarTimeEvent",
+            "radroots_event::calendar::CalendarAdmissionError",
+            "radroots_event::calendar::ParsedNip52CalendarTimeEvent",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
     CalendarOperationExpectation {
         key: "social_calendar_build_authored_draft",
         id: "social.calendar.build_authored_draft",
-        inputs: &["RadrootsAuthoredCalendar"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredCalendar"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
@@ -452,12 +452,12 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
             "crates/event_codec/src/calendar/encode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAuthoredCalendar",
-            "radroots_event::calendar::RadrootsCalendarEventError",
-            "radroots_event::calendar::RadrootsCalendarEventReference",
-            "radroots_event::calendar::RadrootsCalendarUid",
-            "radroots_event::media::RadrootsAuthoredImage",
-            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event::calendar::AuthoredCalendar",
+            "radroots_event::calendar::CalendarEventError",
+            "radroots_event::calendar::CalendarEventReference",
+            "radroots_event::calendar::CalendarUid",
+            "radroots_event::media::AuthoredImage",
+            "radroots_event::wire::Nip01EventWireParts",
             "radroots_event_codec::error::EventEncodeError",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
@@ -466,18 +466,18 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         key: "social_calendar_parse_nip52",
         id: "social.calendar.parse_nip52",
         inputs: &["u32", "NostrTags", "String"],
-        outputs: &["RadrootsParsedNip52Calendar"],
+        outputs: &["ParsedNip52Calendar"],
         error_class: "parse_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsCalendarEventError",
-            "radroots_event::calendar::RadrootsCalendarEventReference",
-            "radroots_event::calendar::RadrootsCalendarUri",
-            "radroots_event::calendar::RadrootsParsedNip52Calendar",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarParts",
+            "radroots_event::calendar::CalendarEventError",
+            "radroots_event::calendar::CalendarEventReference",
+            "radroots_event::calendar::CalendarUri",
+            "radroots_event::calendar::ParsedNip52Calendar",
+            "radroots_event::calendar::ParsedNip52CalendarParts",
             "radroots_event_codec::error::EventParseError",
         ],
         vector: "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
@@ -485,8 +485,8 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
         key: "social_calendar_admit_radroots_profile",
         id: "social.calendar.admit_radroots_profile",
-        inputs: &["RadrootsParsedNip52Calendar"],
-        outputs: &["RadrootsAdmittedCalendar"],
+        inputs: &["ParsedNip52Calendar"],
+        outputs: &["AdmittedCalendar"],
         error_class: "admission_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
@@ -494,34 +494,34 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         ],
         rust_types: &[
             "radroots_blossom::BlobUrl",
-            "radroots_event::calendar::RadrootsAdmittedCalendar",
-            "radroots_event::calendar::RadrootsCalendarAdmissionError",
-            "radroots_event::calendar::RadrootsCalendarEventReference",
-            "radroots_event::calendar::RadrootsCalendarUid",
-            "radroots_event::calendar::RadrootsParsedNip52Calendar",
+            "radroots_event::calendar::AdmittedCalendar",
+            "radroots_event::calendar::CalendarAdmissionError",
+            "radroots_event::calendar::CalendarEventReference",
+            "radroots_event::calendar::CalendarUid",
+            "radroots_event::calendar::ParsedNip52Calendar",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
     CalendarOperationExpectation {
         key: "social_calendar_rsvp_build_authored_draft",
         id: "social.calendar_rsvp.build_authored_draft",
-        inputs: &["RadrootsAuthoredCalendarEventRsvp"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredCalendarEventRsvp"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/encode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAuthoredCalendarEventRsvp",
-            "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
-            "radroots_event::calendar::RadrootsCalendarEventError",
-            "radroots_event::calendar::RadrootsCalendarEventReference",
-            "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
-            "radroots_event::calendar::RadrootsCalendarUid",
-            "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
-            "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
-            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event::calendar::AuthoredCalendarEventRsvp",
+            "radroots_event::calendar::CalendarEventAuthorReference",
+            "radroots_event::calendar::CalendarEventError",
+            "radroots_event::calendar::CalendarEventReference",
+            "radroots_event::calendar::CalendarEventRevisionReference",
+            "radroots_event::calendar::CalendarUid",
+            "radroots_event::calendar::CalendarEventFreeBusy",
+            "radroots_event::calendar::CalendarEventRsvpStatus",
+            "radroots_event::wire::Nip01EventWireParts",
             "radroots_event_codec::error::EventEncodeError",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
@@ -530,21 +530,21 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
         key: "social_calendar_rsvp_parse_nip52",
         id: "social.calendar_rsvp.parse_nip52",
         inputs: &["u32", "NostrTags", "String"],
-        outputs: &["RadrootsParsedNip52CalendarEventRsvp"],
+        outputs: &["ParsedNip52CalendarEventRsvp"],
         error_class: "parse_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
-            "radroots_event::calendar::RadrootsCalendarEventError",
-            "radroots_event::calendar::RadrootsCalendarEventReference",
-            "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvp",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvpParts",
-            "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
-            "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+            "radroots_event::calendar::CalendarEventAuthorReference",
+            "radroots_event::calendar::CalendarEventError",
+            "radroots_event::calendar::CalendarEventReference",
+            "radroots_event::calendar::CalendarEventRevisionReference",
+            "radroots_event::calendar::ParsedNip52CalendarEventRsvp",
+            "radroots_event::calendar::ParsedNip52CalendarEventRsvpParts",
+            "radroots_event::calendar::CalendarEventFreeBusy",
+            "radroots_event::calendar::CalendarEventRsvpStatus",
             "radroots_event_codec::error::EventParseError",
         ],
         vector: "contracts/conformance/vectors/calendar/nip52_baseline.v1.json",
@@ -552,23 +552,23 @@ const CALENDAR_OPERATION_EXPECTATIONS: [CalendarOperationExpectation; 12] = [
     CalendarOperationExpectation {
         key: "social_calendar_rsvp_admit_radroots_profile",
         id: "social.calendar_rsvp.admit_radroots_profile",
-        inputs: &["RadrootsParsedNip52CalendarEventRsvp"],
-        outputs: &["RadrootsAdmittedCalendarEventRsvp"],
+        inputs: &["ParsedNip52CalendarEventRsvp"],
+        outputs: &["AdmittedCalendarEventRsvp"],
         error_class: "admission_error",
         rust_modules: &[
             "crates/event/src/calendar.rs",
             "crates/event_codec/src/calendar/decode.rs",
         ],
         rust_types: &[
-            "radroots_event::calendar::RadrootsAdmittedCalendarEventRsvp",
-            "radroots_event::calendar::RadrootsCalendarAdmissionError",
-            "radroots_event::calendar::RadrootsCalendarEventAuthorReference",
-            "radroots_event::calendar::RadrootsCalendarEventReference",
-            "radroots_event::calendar::RadrootsCalendarEventRevisionReference",
-            "radroots_event::calendar::RadrootsCalendarUid",
-            "radroots_event::calendar::RadrootsParsedNip52CalendarEventRsvp",
-            "radroots_event::calendar::RadrootsCalendarEventFreeBusy",
-            "radroots_event::calendar::RadrootsCalendarEventRsvpStatus",
+            "radroots_event::calendar::AdmittedCalendarEventRsvp",
+            "radroots_event::calendar::CalendarAdmissionError",
+            "radroots_event::calendar::CalendarEventAuthorReference",
+            "radroots_event::calendar::CalendarEventReference",
+            "radroots_event::calendar::CalendarEventRevisionReference",
+            "radroots_event::calendar::CalendarUid",
+            "radroots_event::calendar::ParsedNip52CalendarEventRsvp",
+            "radroots_event::calendar::CalendarEventFreeBusy",
+            "radroots_event::calendar::CalendarEventRsvpStatus",
         ],
         vector: "contracts/conformance/vectors/calendar/radroots_profile.v1.json",
     },
@@ -577,8 +577,8 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_update_build_authored_draft",
         id: "social.update.build_authored_draft",
-        inputs: &["RadrootsAuthoredUpdate"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredUpdate"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         signing: "none",
         rust_modules: &[
@@ -586,8 +586,8 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/post/authored.rs",
         ],
         rust_types: &[
-            "radroots_event::post::RadrootsAuthoredPostError",
-            "radroots_event::post::RadrootsAuthoredUpdate",
+            "radroots_event::post::AuthoredPostError",
+            "radroots_event::post::AuthoredUpdate",
         ],
         case_kinds: &[
             "social.update.build_authored_draft.valid",
@@ -597,8 +597,8 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_photo_update_build_authored_draft",
         id: "social.photo_update.build_authored_draft",
-        inputs: &["RadrootsAuthoredPhotoUpdate"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredPhotoUpdate"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         signing: "none",
         rust_modules: &[
@@ -608,11 +608,11 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
         rust_types: &[
             "radroots_blossom::ApprovedBlobUrl",
             "radroots_blossom::ByteVerifiedDescriptor",
-            "radroots_event::media::RadrootsAuthoredImage",
-            "radroots_event::post::RadrootsAuthoredPhotoUpdate",
-            "radroots_event::post::RadrootsAuthoredPostError",
-            "radroots_event::post::RadrootsAuthoredPostImage",
-            "radroots_event::post::RadrootsPostImageDimensions",
+            "radroots_event::media::AuthoredImage",
+            "radroots_event::post::AuthoredPhotoUpdate",
+            "radroots_event::post::AuthoredPostError",
+            "radroots_event::post::AuthoredPostImage",
+            "radroots_event::post::PostImageDimensions",
         ],
         case_kinds: &[
             "social.photo_update.build_authored_draft.valid",
@@ -622,8 +622,8 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_ask_build_authored_draft",
         id: "social.ask.build_authored_draft",
-        inputs: &["RadrootsAuthoredAsk"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredAsk"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         signing: "none",
         rust_modules: &[
@@ -631,9 +631,9 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/post/authored.rs",
         ],
         rust_types: &[
-            "radroots_event::post::RadrootsAuthoredAsk",
-            "radroots_event::post::RadrootsAuthoredPostError",
-            "radroots_event::post::RadrootsAuthoredPostImage",
+            "radroots_event::post::AuthoredAsk",
+            "radroots_event::post::AuthoredPostError",
+            "radroots_event::post::AuthoredPostImage",
         ],
         case_kinds: &[
             "social.ask.build_authored_draft.valid",
@@ -643,8 +643,8 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_reply_build_authored_draft",
         id: "social.reply.build_authored_draft",
-        inputs: &["RadrootsAuthoredNip10Reply"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["AuthoredNip10Reply"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         signing: "none",
         rust_modules: &[
@@ -653,10 +653,10 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/reply/authored.rs",
         ],
         rust_types: &[
-            "radroots_event::post::reply::RadrootsAuthoredNip10Reply",
-            "radroots_event::post::reply::RadrootsNip10ReplyError",
-            "radroots_event::tag::relay_hint::RadrootsNostrRelayHint",
-            "radroots_event::post::reply::RadrootsNip10ReplyReference",
+            "radroots_event::post::reply::AuthoredNip10Reply",
+            "radroots_event::post::reply::Nip10ReplyError",
+            "radroots_event::tag::relay_hint::NostrRelayHint",
+            "radroots_event::post::reply::Nip10ReplyReference",
         ],
         case_kinds: &[
             "social.reply.build_authored_draft.valid",
@@ -675,7 +675,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/reply/inbound.rs",
         ],
         rust_types: &[
-            "radroots_event::tag::relay_hint::RadrootsNostrRelayHint",
+            "radroots_event::tag::relay_hint::NostrRelayHint",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -692,7 +692,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_reply_verify_and_admit_event",
         id: "social.reply.verify_and_admit_event",
-        inputs: &["RadrootsEventEnvelope"],
+        inputs: &["EventEnvelope"],
         outputs: &["RadrootsAdmittedNip10ReplyEvent"],
         error_class: "admission_error",
         signing: "nip01",
@@ -702,7 +702,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/verification.rs",
         ],
         rust_types: &[
-            "radroots_event::envelope::RadrootsEventEnvelope",
+            "radroots_event::envelope::EventEnvelope",
             "radroots_event_codec::reply::admission::RadrootsAdmittedNip10ReplyEvent",
             "radroots_event_codec::reply::admission::RadrootsNip10ReplyAdmissionError",
             "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -737,7 +737,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
     PostOperationExpectation {
         key: "social_post_verify_and_admit_event",
         id: "social.post.verify_and_admit_event",
-        inputs: &["RadrootsEventEnvelope"],
+        inputs: &["EventEnvelope"],
         outputs: &["RadrootsPostAdmissionOutcome"],
         error_class: "admission_error",
         signing: "nip01",
@@ -747,7 +747,7 @@ const POST_OPERATION_EXPECTATIONS: [PostOperationExpectation; 8] = [
             "crates/event_codec/src/verification.rs",
         ],
         rust_types: &[
-            "radroots_event::envelope::RadrootsEventEnvelope",
+            "radroots_event::envelope::EventEnvelope",
             "radroots_event_codec::post::admission::RadrootsAdmittedRootPostEvent",
             "radroots_event_codec::post::admission::RadrootsPostAdmissionError",
             "radroots_event_codec::post::admission::RadrootsPostAdmissionOutcome",
@@ -1034,8 +1034,8 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
     FoodAvailabilityOperationExpectation {
         key: "food_availability_build_authored_draft",
         id: "food_availability.build_authored_draft",
-        inputs: &["RadrootsFoodAvailabilityDetails", "u64"],
-        outputs: &["RadrootsNip01EventWireParts"],
+        inputs: &["FoodAvailabilityDetails", "u64"],
+        outputs: &["Nip01EventWireParts"],
         error_class: "encode_error",
         signing: "none",
         rust_modules: &[
@@ -1044,12 +1044,12 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
         ],
         rust_types: &[
             "radroots_blossom::ByteVerifiedDescriptor",
-            "radroots_event::food::availability::RadrootsFoodAvailabilityDetails",
-            "radroots_event::food::availability::RadrootsFoodAvailabilityDetailsParts",
-            "radroots_event::food::availability::RadrootsFoodAvailabilityError",
-            "radroots_event::food::availability::RadrootsFoodAvailabilityImage",
-            "radroots_event::media::RadrootsAuthoredImage",
-            "radroots_event::wire::RadrootsNip01EventWireParts",
+            "radroots_event::food::availability::FoodAvailabilityDetails",
+            "radroots_event::food::availability::FoodAvailabilityDetailsParts",
+            "radroots_event::food::availability::FoodAvailabilityError",
+            "radroots_event::food::availability::FoodAvailabilityImage",
+            "radroots_event::media::AuthoredImage",
+            "radroots_event::wire::Nip01EventWireParts",
             "radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError",
         ],
         case_kinds: &[
@@ -1070,8 +1070,8 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
             "crates/event_codec/src/food_availability/inbound.rs",
         ],
         rust_types: &[
-            "radroots_event::listing::classified::RadrootsClassifiedListingPartition",
-            "radroots_event::food::availability::RadrootsFoodAvailabilityError",
+            "radroots_event::listing::classified::ClassifiedListingPartition",
+            "radroots_event::food::availability::FoodAvailabilityError",
             "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic",
             "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
             "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionOutcome",
@@ -1087,7 +1087,7 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
     FoodAvailabilityOperationExpectation {
         key: "food_availability_verify_and_admit_event",
         id: "food_availability.verify_and_admit_event",
-        inputs: &["RadrootsEventEnvelope"],
+        inputs: &["EventEnvelope"],
         outputs: &["RadrootsFoodAvailabilityAdmissionOutcome"],
         error_class: "admission_error",
         signing: "nip01",
@@ -1097,7 +1097,7 @@ const FOOD_AVAILABILITY_OPERATION_EXPECTATIONS: [FoodAvailabilityOperationExpect
             "crates/event_codec/src/verification.rs",
         ],
         rust_types: &[
-            "radroots_event::envelope::RadrootsEventEnvelope",
+            "radroots_event::envelope::EventEnvelope",
             "radroots_event_codec::food_availability::admission::RadrootsAdmittedFoodAvailabilityEvent",
             "radroots_event_codec::food_availability::admission::RadrootsExcludedClassifiedListingCandidate",
             "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionError",
@@ -1788,7 +1788,7 @@ struct EventBoundaryExpectation {
 const PROFILE_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/profile.rs",
-        required_fragments: &["pub struct RadrootsAuthoredProfile"],
+        required_fragments: &["pub struct AuthoredProfile"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event_codec/src/profile/inbound/registry_v7.rs",
@@ -1817,7 +1817,7 @@ const PROFILE_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const FOLLOW_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/follow.rs",
-        required_fragments: &["pub struct RadrootsFollow"],
+        required_fragments: &["pub struct Follow"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -1829,10 +1829,10 @@ const POST_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/post.rs",
         required_fragments: &[
-            "pub struct RadrootsPost",
-            "pub struct RadrootsAuthoredUpdate",
-            "pub struct RadrootsAuthoredPhotoUpdate",
-            "pub struct RadrootsAuthoredAsk",
+            "pub struct Post",
+            "pub struct AuthoredUpdate",
+            "pub struct AuthoredPhotoUpdate",
+            "pub struct AuthoredAsk",
         ],
     },
     EventBoundarySourceWitness {
@@ -1868,13 +1868,13 @@ const POST_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const REPLY_WITNESSES: [EventBoundarySourceWitness; 5] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/relay_hint.rs",
-        required_fragments: &["pub struct RadrootsNostrRelayHint"],
+        required_fragments: &["pub struct NostrRelayHint"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/reply.rs",
         required_fragments: &[
-            "pub struct RadrootsNip10ReplyReference",
-            "pub struct RadrootsAuthoredNip10Reply",
+            "pub struct Nip10ReplyReference",
+            "pub struct AuthoredNip10Reply",
         ],
     },
     EventBoundarySourceWitness {
@@ -1903,14 +1903,14 @@ const REPLY_WITNESSES: [EventBoundarySourceWitness; 5] = [
 const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/relay_hint.rs",
-        required_fragments: &["pub struct RadrootsNostrRelayHint"],
+        required_fragments: &["pub struct NostrRelayHint"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/comment.rs",
         required_fragments: &[
-            "pub enum RadrootsNip22CommentRoot",
-            "pub enum RadrootsNip22CommentPosition",
-            "pub struct RadrootsAuthoredNip22Comment",
+            "pub enum Nip22CommentRoot",
+            "pub enum Nip22CommentPosition",
+            "pub struct AuthoredNip22Comment",
         ],
     },
     EventBoundarySourceWitness {
@@ -1951,7 +1951,7 @@ const COMMENT_WITNESSES: [EventBoundarySourceWitness; 8] = [
 const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/deletion.rs",
-        required_fragments: &["pub struct RadrootsAuthoredNip09DeletionRequest"],
+        required_fragments: &["pub struct AuthoredNip09DeletionRequest"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event_codec/src/deletion/authored.rs",
@@ -2002,7 +2002,7 @@ const DELETION_WITNESSES: [EventBoundarySourceWitness; 8] = [
 const REACTION_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/reaction.rs",
-        required_fragments: &["pub struct RadrootsReaction"],
+        required_fragments: &["pub struct Reaction"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2013,7 +2013,7 @@ const REACTION_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/repost.rs",
-        required_fragments: &["pub struct RadrootsRepost"],
+        required_fragments: &["pub struct Repost"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2024,7 +2024,7 @@ const REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const GENERIC_REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/repost.rs",
-        required_fragments: &["pub struct RadrootsGenericRepost"],
+        required_fragments: &["pub struct GenericRepost"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2035,7 +2035,7 @@ const GENERIC_REPOST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const SEAL_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/seal.rs",
-        required_fragments: &["pub struct RadrootsSeal"],
+        required_fragments: &["pub struct Seal"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2046,7 +2046,7 @@ const SEAL_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/message.rs",
-        required_fragments: &["pub struct RadrootsMessage"],
+        required_fragments: &["pub struct Message"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2068,7 +2068,7 @@ const MESSAGE_WITNESSES: [EventBoundarySourceWitness; 4] = [
 const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/message_file.rs",
-        required_fragments: &["pub struct RadrootsMessageFile"],
+        required_fragments: &["pub struct MessageFile"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2090,7 +2090,7 @@ const MESSAGE_FILE_WITNESSES: [EventBoundarySourceWitness; 4] = [
 const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/gift_wrap.rs",
-        required_fragments: &["pub struct RadrootsGiftWrap"],
+        required_fragments: &["pub struct GiftWrap"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2109,7 +2109,7 @@ const GIFT_WRAP_WITNESSES: [EventBoundarySourceWitness; 4] = [
 const PUBLIC_FILE_METADATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/file_metadata.rs",
-        required_fragments: &["pub struct RadrootsFileMetadata"],
+        required_fragments: &["pub struct FileMetadata"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2120,7 +2120,7 @@ const PUBLIC_FILE_METADATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const REPORT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/report.rs",
-        required_fragments: &["pub struct RadrootsReport"],
+        required_fragments: &["pub struct Report"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2131,7 +2131,7 @@ const REPORT_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/list.rs",
-        required_fragments: &["pub struct RadrootsList"],
+        required_fragments: &["pub struct List"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2145,7 +2145,7 @@ const LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const RELAY_LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/list.rs",
-        required_fragments: &["pub struct RadrootsList"],
+        required_fragments: &["pub struct List"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2156,7 +2156,7 @@ const RELAY_LIST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/list_set.rs",
-        required_fragments: &["pub struct RadrootsListSet"],
+        required_fragments: &["pub struct ListSet"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2170,7 +2170,7 @@ const LIST_SET_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const ARTICLE_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/article.rs",
-        required_fragments: &["pub struct RadrootsArticle"],
+        required_fragments: &["pub struct Article"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2182,10 +2182,10 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/knowledge.rs",
         required_fragments: &[
-            "pub struct RadrootsWikiArticle",
-            "pub struct RadrootsKnowledgeClaim",
-            "pub struct RadrootsKnowledgeFieldReport",
-            "pub struct RadrootsEvidenceBounty",
+            "pub struct WikiArticle",
+            "pub struct KnowledgeClaim",
+            "pub struct KnowledgeFieldReport",
+            "pub struct EvidenceBounty",
         ],
     },
     EventBoundarySourceWitness {
@@ -2200,7 +2200,7 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/contract/registry_v7.rs",
         required_fragments: &[
-            "RadrootsReducer::KnowledgeProjection",
+            "Reducer::KnowledgeProjection",
             "\"radroots.wiki.article.v1\"",
             "\"radroots.knowledge.claim.v1\"",
             "pub fn validate_event_contract_shape",
@@ -2211,7 +2211,7 @@ const KNOWLEDGE_WITNESSES: [EventBoundarySourceWitness; 3] = [
 const APP_DATA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/app_data.rs",
-        required_fragments: &["pub struct RadrootsAppData"],
+        required_fragments: &["pub struct AppData"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2234,9 +2234,9 @@ const CALENDAR_DATE_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/calendar.rs",
         required_fragments: &[
-            "pub struct RadrootsAuthoredCalendarDateEvent",
-            "pub struct RadrootsParsedNip52CalendarDateEvent",
-            "pub struct RadrootsAdmittedCalendarDateEvent",
+            "pub struct AuthoredCalendarDateEvent",
+            "pub struct ParsedNip52CalendarDateEvent",
+            "pub struct AdmittedCalendarDateEvent",
         ],
     },
     EventBoundarySourceWitness {
@@ -2260,9 +2260,9 @@ const CALENDAR_TIME_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/calendar.rs",
         required_fragments: &[
-            "pub struct RadrootsAuthoredCalendarTimeEvent",
-            "pub struct RadrootsParsedNip52CalendarTimeEvent",
-            "pub struct RadrootsAdmittedCalendarTimeEvent",
+            "pub struct AuthoredCalendarTimeEvent",
+            "pub struct ParsedNip52CalendarTimeEvent",
+            "pub struct AdmittedCalendarTimeEvent",
         ],
     },
     EventBoundarySourceWitness {
@@ -2286,9 +2286,9 @@ const CALENDAR_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/calendar.rs",
         required_fragments: &[
-            "pub struct RadrootsAuthoredCalendar {",
-            "pub struct RadrootsParsedNip52Calendar {",
-            "pub struct RadrootsAdmittedCalendar {",
+            "pub struct AuthoredCalendar {",
+            "pub struct ParsedNip52Calendar {",
+            "pub struct AdmittedCalendar {",
         ],
     },
     EventBoundarySourceWitness {
@@ -2312,9 +2312,9 @@ const CALENDAR_RSVP_WITNESSES: [EventBoundarySourceWitness; 4] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/calendar.rs",
         required_fragments: &[
-            "pub struct RadrootsAuthoredCalendarEventRsvp {",
-            "pub struct RadrootsParsedNip52CalendarEventRsvp {",
-            "pub struct RadrootsAdmittedCalendarEventRsvp {",
+            "pub struct AuthoredCalendarEventRsvp {",
+            "pub struct ParsedNip52CalendarEventRsvp {",
+            "pub struct AdmittedCalendarEventRsvp {",
         ],
     },
     EventBoundarySourceWitness {
@@ -2337,7 +2337,7 @@ const CALENDAR_RSVP_WITNESSES: [EventBoundarySourceWitness; 4] = [
 const FARM_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/farm.rs",
-        required_fragments: &["pub struct RadrootsFarm"],
+        required_fragments: &["pub struct Farm"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2348,7 +2348,7 @@ const FARM_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const PLOT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/plot.rs",
-        required_fragments: &["pub struct RadrootsPlot"],
+        required_fragments: &["pub struct Plot"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2359,7 +2359,7 @@ const PLOT_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const COOP_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/coop.rs",
-        required_fragments: &["pub struct RadrootsCoop"],
+        required_fragments: &["pub struct Coop"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2370,7 +2370,7 @@ const COOP_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const DOCUMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/document.rs",
-        required_fragments: &["pub struct RadrootsDocument"],
+        required_fragments: &["pub struct Document"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2381,7 +2381,7 @@ const DOCUMENT_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const RESOURCE_AREA_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/resource_area.rs",
-        required_fragments: &["pub struct RadrootsResourceArea"],
+        required_fragments: &["pub struct ResourceArea"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2392,7 +2392,7 @@ const RESOURCE_AREA_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const RESOURCE_CAP_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/resource_cap.rs",
-        required_fragments: &["pub struct RadrootsResourceHarvestCap"],
+        required_fragments: &["pub struct ResourceHarvestCap"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2403,7 +2403,7 @@ const RESOURCE_CAP_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const OPERATIONAL_LISTING_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/operational_listing.rs",
-        required_fragments: &["pub struct RadrootsOperationalListing"],
+        required_fragments: &["pub struct OperationalListing"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2416,7 +2416,7 @@ const FOOD_AVAILABILITY_WITNESSES: [EventBoundarySourceWitness; 6] = [
         relative_path: "crates/event/src/food_availability.rs",
         required_fragments: &[
             "pub const RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID: &str",
-            "pub struct RadrootsFoodAvailabilityDetails",
+            "pub struct FoodAvailabilityDetails",
         ],
     },
     EventBoundarySourceWitness {
@@ -2450,7 +2450,7 @@ const FOOD_AVAILABILITY_WITNESSES: [EventBoundarySourceWitness; 6] = [
 const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/job_request.rs",
-        required_fragments: &["pub struct RadrootsJobRequest"],
+        required_fragments: &["pub struct JobRequest"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2464,7 +2464,7 @@ const DVM_REQUEST_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const DVM_RESULT_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/job_result.rs",
-        required_fragments: &["pub struct RadrootsJobResult"],
+        required_fragments: &["pub struct JobResult"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2478,7 +2478,7 @@ const DVM_RESULT_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const DVM_FEEDBACK_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/job_feedback.rs",
-        required_fragments: &["pub struct RadrootsJobFeedback"],
+        required_fragments: &["pub struct JobFeedback"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/kinds.rs",
@@ -2605,13 +2605,11 @@ const TRADE_VALIDATION_RECEIPT_WITNESSES: [EventBoundarySourceWitness; 2] = [
 const RELAY_DOC_WITNESSES: [EventBoundarySourceWitness; 2] = [
     EventBoundarySourceWitness {
         relative_path: "crates/event/src/relay_document.rs",
-        required_fragments: &["pub struct RadrootsRelayDocument"],
+        required_fragments: &["pub struct RelayDocument"],
     },
     EventBoundarySourceWitness {
         relative_path: "crates/nostr/src/nip11.rs",
-        required_fragments: &[
-            "pub async fn fetch_nip11(ws_url: &str) -> Option<RadrootsRelayDocument>",
-        ],
+        required_fragments: &["pub async fn fetch_nip11(ws_url: &str) -> Option<RelayDocument>"],
     },
 ];
 
@@ -2619,7 +2617,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "profile",
         kind: "0",
-        radroots_type: "RadrootsAuthoredProfile / RadrootsInboundProfileMetadata",
+        radroots_type: "AuthoredProfile / RadrootsInboundProfileMetadata",
         rpc_methods: &[
             "events.profile.publish",
             "events.profile.list",
@@ -2630,7 +2628,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "follow",
         kind: "3",
-        radroots_type: "RadrootsFollow",
+        radroots_type: "Follow",
         rpc_methods: &[
             "events.follow.publish",
             "events.follow.list",
@@ -2641,14 +2639,14 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "post",
         kind: "1",
-        radroots_type: "RadrootsAuthoredUpdate / RadrootsAuthoredPhotoUpdate / RadrootsAuthoredAsk / RadrootsInboundPostProjection",
+        radroots_type: "AuthoredUpdate / AuthoredPhotoUpdate / AuthoredAsk / RadrootsInboundPostProjection",
         rpc_methods: &["events.post.publish", "events.post.list", "events.post.get"],
         witnesses: &POST_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "reply",
         kind: "1",
-        radroots_type: "RadrootsAuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder",
+        radroots_type: "AuthoredNip10Reply / RadrootsInboundNip10ReplyProjection / RadrootsAdmittedNip10ReplyEvent / RadrootsNostrNip10ReplyEventBuilder",
         rpc_methods: &[
             "social.reply.build_authored_draft",
             "social.reply.project_verified_event",
@@ -2659,7 +2657,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "comment",
         kind: "1111",
-        radroots_type: "RadrootsAuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder",
+        radroots_type: "AuthoredNip22Comment / RadrootsInboundNip22CommentProjection / RadrootsAdmittedNip22CommentEvent / RadrootsNostrNip22CommentEventBuilder",
         rpc_methods: &[
             "social.comment.build_authored_draft",
             "social.comment.project_verified_event",
@@ -2670,7 +2668,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "deletion_request",
         kind: "5",
-        radroots_type: "RadrootsAuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / RadrootsNostrNip09DeletionRequestEventBuilder",
+        radroots_type: "AuthoredNip09DeletionRequest / RadrootsInboundNip09DeletionProjection / RadrootsAdmittedNip09DeletionRequestEvent / RadrootsNip09SuppressionDecision / RadrootsNostrNip09DeletionRequestEventBuilder",
         rpc_methods: &[
             "social.deletion_request.build_authored_draft",
             "social.deletion_request.project_verified_event",
@@ -2682,7 +2680,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "reaction",
         kind: "7",
-        radroots_type: "RadrootsReaction",
+        radroots_type: "Reaction",
         rpc_methods: &[
             "events.reaction.publish",
             "events.reaction.list",
@@ -2693,7 +2691,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "repost",
         kind: "6",
-        radroots_type: "RadrootsRepost",
+        radroots_type: "Repost",
         rpc_methods: &[
             "events.repost.publish",
             "events.repost.list",
@@ -2704,7 +2702,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "generic_repost",
         kind: "16",
-        radroots_type: "RadrootsGenericRepost",
+        radroots_type: "GenericRepost",
         rpc_methods: &[
             "events.generic_repost.publish",
             "events.generic_repost.list",
@@ -2715,14 +2713,14 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "seal",
         kind: "13",
-        radroots_type: "RadrootsSeal",
+        radroots_type: "Seal",
         rpc_methods: &["events.seal.encode", "events.seal.decode"],
         witnesses: &SEAL_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "message",
         kind: "14",
-        radroots_type: "RadrootsMessage",
+        radroots_type: "Message",
         rpc_methods: &[
             "events.message.publish",
             "events.message.list",
@@ -2733,7 +2731,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "message_file",
         kind: "15",
-        radroots_type: "RadrootsMessageFile",
+        radroots_type: "MessageFile",
         rpc_methods: &[
             "events.message_file.publish",
             "events.message_file.list",
@@ -2744,7 +2742,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "gift_wrap",
         kind: "1059",
-        radroots_type: "RadrootsGiftWrap",
+        radroots_type: "GiftWrap",
         rpc_methods: &[
             "events.gift_wrap.publish",
             "events.gift_wrap.list",
@@ -2755,7 +2753,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "public_file_metadata",
         kind: "1063",
-        radroots_type: "RadrootsFileMetadata",
+        radroots_type: "FileMetadata",
         rpc_methods: &[
             "events.public_file_metadata.publish",
             "events.public_file_metadata.list",
@@ -2766,7 +2764,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "report",
         kind: "1984",
-        radroots_type: "RadrootsReport",
+        radroots_type: "Report",
         rpc_methods: &[
             "events.report.publish",
             "events.report.list",
@@ -2777,14 +2775,14 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "list",
         kind: "10000..10102",
-        radroots_type: "RadrootsList",
+        radroots_type: "List",
         rpc_methods: &["events.list.publish", "events.list.list", "events.list.get"],
         witnesses: &LIST_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "relay_list",
         kind: "10002",
-        radroots_type: "RadrootsList",
+        radroots_type: "List",
         rpc_methods: &[
             "events.relay_list.publish",
             "events.relay_list.list",
@@ -2795,7 +2793,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "list_set",
         kind: "30000..30007, 30015, 30030, 30063, 30267, 39089, 39092",
-        radroots_type: "RadrootsListSet",
+        radroots_type: "ListSet",
         rpc_methods: &[
             "events.list_set.publish",
             "events.list_set.list",
@@ -2806,7 +2804,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "article",
         kind: "30023",
-        radroots_type: "RadrootsArticle",
+        radroots_type: "Article",
         rpc_methods: &[
             "events.article.publish",
             "events.article.list",
@@ -2828,7 +2826,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "app_data",
         kind: "30078",
-        radroots_type: "RadrootsAppData",
+        radroots_type: "AppData",
         rpc_methods: &[
             "events.app_data.publish",
             "events.app_data.list",
@@ -2850,7 +2848,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "calendar_date",
         kind: "31922",
-        radroots_type: "RadrootsAuthoredCalendarDateEvent / RadrootsParsedNip52CalendarDateEvent / RadrootsAdmittedCalendarDateEvent",
+        radroots_type: "AuthoredCalendarDateEvent / ParsedNip52CalendarDateEvent / AdmittedCalendarDateEvent",
         rpc_methods: &[
             "events.calendar_date.publish",
             "events.calendar_date.list",
@@ -2861,7 +2859,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "calendar_time",
         kind: "31923",
-        radroots_type: "RadrootsAuthoredCalendarTimeEvent / RadrootsParsedNip52CalendarTimeEvent / RadrootsAdmittedCalendarTimeEvent",
+        radroots_type: "AuthoredCalendarTimeEvent / ParsedNip52CalendarTimeEvent / AdmittedCalendarTimeEvent",
         rpc_methods: &[
             "events.calendar_time.publish",
             "events.calendar_time.list",
@@ -2872,7 +2870,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "calendar",
         kind: "31924",
-        radroots_type: "RadrootsAuthoredCalendar / RadrootsParsedNip52Calendar / RadrootsAdmittedCalendar",
+        radroots_type: "AuthoredCalendar / ParsedNip52Calendar / AdmittedCalendar",
         rpc_methods: &[
             "events.calendar.publish",
             "events.calendar.list",
@@ -2883,7 +2881,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "calendar_rsvp",
         kind: "31925",
-        radroots_type: "RadrootsAuthoredCalendarEventRsvp / RadrootsParsedNip52CalendarEventRsvp / RadrootsAdmittedCalendarEventRsvp",
+        radroots_type: "AuthoredCalendarEventRsvp / ParsedNip52CalendarEventRsvp / AdmittedCalendarEventRsvp",
         rpc_methods: &[
             "events.calendar_rsvp.publish",
             "events.calendar_rsvp.list",
@@ -2894,28 +2892,28 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "farm",
         kind: "30340",
-        radroots_type: "RadrootsFarm",
+        radroots_type: "Farm",
         rpc_methods: &["events.farm.publish", "events.farm.list", "events.farm.get"],
         witnesses: &FARM_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "plot",
         kind: "30350",
-        radroots_type: "RadrootsPlot",
+        radroots_type: "Plot",
         rpc_methods: &["events.plot.publish", "events.plot.list", "events.plot.get"],
         witnesses: &PLOT_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "coop",
         kind: "30360",
-        radroots_type: "RadrootsCoop",
+        radroots_type: "Coop",
         rpc_methods: &["events.coop.publish", "events.coop.list", "events.coop.get"],
         witnesses: &COOP_WITNESSES,
     },
     EventBoundaryExpectation {
         domain: "document",
         kind: "30361",
-        radroots_type: "RadrootsDocument",
+        radroots_type: "Document",
         rpc_methods: &[
             "events.document.publish",
             "events.document.list",
@@ -2926,7 +2924,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "resource_area",
         kind: "30370",
-        radroots_type: "RadrootsResourceArea",
+        radroots_type: "ResourceArea",
         rpc_methods: &[
             "events.resource_area.publish",
             "events.resource_area.list",
@@ -2937,7 +2935,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "resource_cap",
         kind: "30371",
-        radroots_type: "RadrootsResourceHarvestCap",
+        radroots_type: "ResourceHarvestCap",
         rpc_methods: &[
             "events.resource_cap.publish",
             "events.resource_cap.list",
@@ -2948,7 +2946,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "food_availability",
         kind: "30402",
-        radroots_type: "RadrootsFoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder",
+        radroots_type: "FoodAvailabilityDetails / RadrootsInboundFoodAvailabilityProjection / RadrootsAdmittedFoodAvailabilityEvent / RadrootsNostrFoodAvailabilityEventBuilder",
         rpc_methods: &[
             "food_availability.build_authored_draft",
             "food_availability.project_verified_event",
@@ -2960,7 +2958,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "operational_listing",
         kind: "30402",
-        radroots_type: "RadrootsOperationalListing",
+        radroots_type: "OperationalListing",
         rpc_methods: &[
             "events.operational_listing.publish",
             "events.operational_listing.list",
@@ -2971,7 +2969,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "dvm_request",
         kind: "5000-5999",
-        radroots_type: "RadrootsJobRequest",
+        radroots_type: "JobRequest",
         rpc_methods: &[
             "events.dvm_request.publish",
             "events.dvm_request.list",
@@ -2982,7 +2980,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "dvm_result",
         kind: "6000-6999",
-        radroots_type: "RadrootsJobResult",
+        radroots_type: "JobResult",
         rpc_methods: &[
             "events.dvm_result.publish",
             "events.dvm_result.list",
@@ -2993,7 +2991,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "dvm_feedback",
         kind: "7000",
-        radroots_type: "RadrootsJobFeedback",
+        radroots_type: "JobFeedback",
         rpc_methods: &[
             "events.dvm_feedback.publish",
             "events.dvm_feedback.list",
@@ -3004,7 +3002,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "trade:proposal",
         kind: "3470",
-        radroots_type: "RadrootsTradeMutationEnvelopeV1",
+        radroots_type: "TradeMutationEnvelopeV1",
         rpc_methods: &[
             "trade.get_trade",
             "trade.list_trades",
@@ -3015,7 +3013,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "trade:decision",
         kind: "3471",
-        radroots_type: "RadrootsTradeMutationEnvelopeV1",
+        radroots_type: "TradeMutationEnvelopeV1",
         rpc_methods: &[
             "trade.decide_candidate",
             "trade.get_trade",
@@ -3026,7 +3024,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "trade:revision_proposal",
         kind: "3472",
-        radroots_type: "RadrootsTradeMutationEnvelopeV1",
+        radroots_type: "TradeMutationEnvelopeV1",
         rpc_methods: &[
             "trade.get_trade",
             "trade.list_trades",
@@ -3037,7 +3035,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "trade:revision_decision",
         kind: "3473",
-        radroots_type: "RadrootsTradeMutationEnvelopeV1",
+        radroots_type: "TradeMutationEnvelopeV1",
         rpc_methods: &[
             "trade.decide_candidate",
             "trade.get_trade",
@@ -3048,7 +3046,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "trade:cancellation",
         kind: "3474",
-        radroots_type: "RadrootsTradeMutationEnvelopeV1",
+        radroots_type: "TradeMutationEnvelopeV1",
         rpc_methods: &["trade.cancel_trade", "trade.get_trade", "trade.list_trades"],
         witnesses: &TRADE_CANCELLATION_WITNESSES,
     },
@@ -3066,7 +3064,7 @@ const CANONICAL_EVENT_BOUNDARY_EXPECTATIONS: [EventBoundaryExpectation; 44] = [
     EventBoundaryExpectation {
         domain: "relay_doc",
         kind: "N/A",
-        radroots_type: "RadrootsRelayDocument",
+        radroots_type: "RelayDocument",
         rpc_methods: &["system.relay_doc.get"],
         witnesses: &RELAY_DOC_WITNESSES,
     },
@@ -6421,12 +6419,10 @@ fn validate_deletion_operation_inventory(
         .filter(|name| {
             name.contains("Nip09Deletion")
                 || name.starts_with("RadrootsNip09")
-                || name.starts_with("RadrootsNip01Coordinate")
+                || name.starts_with("Nip01Coordinate")
                 || matches!(
                     *name,
-                    "RadrootsNip01EventWireParts"
-                        | "RadrootsEventEnvelope"
-                        | "RadrootsSignatureVerifiedEvent"
+                    "Nip01EventWireParts" | "EventEnvelope" | "RadrootsSignatureVerifiedEvent"
                 )
         })
         .collect::<BTreeSet<_>>();
@@ -9669,17 +9665,17 @@ domains = ["profile", "farm", "operational_listing", "trade"]
 
 [shared_types]
 public = [
-  "RadrootsNip01EventWireParts",
-  "RadrootsEventDraft",
-  "RadrootsSignedEvent",
-  "RadrootsEventEnvelope",
-  "RadrootsEventRef",
-  "RadrootsEventPtr",
-  "RadrootsClassifiedListingAddress",
-  "RadrootsAuthoredProfile",
+  "Nip01EventWireParts",
+  "EventDraft",
+  "SignedEvent",
+  "EventEnvelope",
+  "EventRef",
+  "EventPtr",
+  "ClassifiedListingAddress",
+  "AuthoredProfile",
   "RadrootsInboundProfileMetadata",
-  "RadrootsFarm",
-  "RadrootsOperationalListing",
+  "Farm",
+  "OperationalListing",
 ]
 
 [errors]
@@ -9693,8 +9689,8 @@ algorithm_crates = ["radroots_b"]
 domain = "profile"
 id = "profile.build_authored_draft"
 stability = "beta"
-inputs = ["RadrootsAuthoredProfile"]
-outputs = ["RadrootsNip01EventWireParts"]
+inputs = ["AuthoredProfile"]
+outputs = ["Nip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -9702,7 +9698,7 @@ transport = "native"
 
 [operations.profile_build_authored_draft.implementation]
 rust_modules = ["crates/core/src/unit.rs"]
-rust_types = ["radroots_event::profile::RadrootsAuthoredProfile"]
+rust_types = ["radroots_event::profile::AuthoredProfile"]
 
 [operations.profile_build_authored_draft.conformance]
 vector = "contracts/conformance/vectors/profile/metadata.v1.json"
@@ -9711,8 +9707,8 @@ vector = "contracts/conformance/vectors/profile/metadata.v1.json"
 domain = "operational_listing"
 id = "operational_listing.build_draft"
 stability = "beta"
-inputs = ["RadrootsOperationalListing"]
-outputs = ["RadrootsNip01EventWireParts"]
+inputs = ["OperationalListing"]
+outputs = ["Nip01EventWireParts"]
 error_class = "encode_error"
 deterministic = true
 signing = "native"
@@ -9720,7 +9716,7 @@ transport = "native"
 
 [operations.operational_listing_build_draft.implementation]
 rust_modules = ["crates/core/src/unit.rs"]
-rust_types = ["radroots_event::listing::operational::RadrootsOperationalListing"]
+rust_types = ["radroots_event::listing::operational::OperationalListing"]
 
 [operations.operational_listing_build_draft.conformance]
 vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
@@ -11280,8 +11276,8 @@ packages = []
             resolve_event_boundary_matrix_path_with_override(&root, None).expect("matrix path");
         let raw = fs::read_to_string(&matrix_path).expect("read matrix");
         let drifted = raw.replacen(
-            "| message | 14 | RadrootsMessage |",
-            "| message | 999 | RadrootsMessage |",
+            "| message | 14 | Message |",
+            "| message | 999 | Message |",
             1,
         );
         let temp = temp_root("event_boundary_drift");

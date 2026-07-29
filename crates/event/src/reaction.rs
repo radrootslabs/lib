@@ -1,4 +1,4 @@
-use crate::social::RadrootsSocialTarget;
+use crate::social::SocialTarget;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
@@ -10,7 +10,7 @@ use alloc::string::String;
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
-pub struct RadrootsReaction {
-    pub target: RadrootsSocialTarget,
+pub struct Reaction {
+    pub target: SocialTarget,
     pub content: String,
 }

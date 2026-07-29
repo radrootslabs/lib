@@ -39,10 +39,10 @@ const RETIRED_PROTOCOL_EVENT_SURFACE_PATTERNS: &[&str] = &[
     "RadrootsListingDraftError",
     "RadrootsClassifiedListingDraftError",
     "RadrootsOperationalListingDraftError",
-    "RadrootsOrderRevision",
+    "OrderRevision",
     "RadrootsOrderRevisionId",
-    "RadrootsTradeValidationListingRequest",
-    "RadrootsTradeValidationListingResult",
+    "TradeValidationListingRequest",
+    "TradeValidationListingResult",
     "ListingValidationRequest",
     "ListingValidationResult",
     "TransitionProof",
@@ -421,7 +421,7 @@ fn is_canonical_event_listing_module_reference(rel: &str, line: &str) -> bool {
 }
 
 fn is_retired_listing_negative_guard(rel: &str, line: &str) -> bool {
-    (rel == "crates/event/src/dto.rs" && line.contains("\"RadrootsListingCancel\""))
+    (rel == "crates/event/src/dto.rs" && line.contains("\"ListingCancel\""))
         || (rel == "crates/event/src/contract/registry_v7/tests.rs"
             && line.contains("event_contract(\"radroots.listing.published.v1\").is_none()"))
 }
@@ -599,7 +599,7 @@ fn is_raw_protocol_field(line: &str) -> bool {
 }
 
 fn is_allowed_raw_boundary(struct_name: &str) -> bool {
-    struct_name == "RadrootsOrderEnvelope"
+    struct_name == "OrderEnvelope"
         || struct_name == "RadrootsValidationReceiptTags"
         || struct_name == "RadrootsOperationalListingTradeProjection"
         || struct_name.ends_with("Projection")
@@ -682,7 +682,7 @@ mod tests {
         write_file(
             &root,
             "crates/trade/src/order.rs",
-            "pub struct RadrootsOrderProjection { pub order_id: RadrootsOrderId, }\npub enum RadrootsTradeFulfillmentStateV1 { NotStarted }\n",
+            "pub struct RadrootsOrderProjection { pub order_id: OrderId, }\npub enum RadrootsTradeFulfillmentStateV1 { NotStarted }\n",
         );
         write_file(
             &root,
@@ -692,7 +692,7 @@ mod tests {
         write_file(
             &root,
             "crates/event/src/dto.rs",
-            "const OBSOLETE: &str = \"RadrootsOrderRevision\";\n",
+            "const OBSOLETE: &str = \"OrderRevision\";\n",
         );
         write_file(
             &root,
@@ -773,7 +773,7 @@ mod tests {
         write_file(
             &clean_root,
             "crates/event/src/operational_listing.rs",
-            "pub struct RadrootsOperationalListing;\n",
+            "pub struct OperationalListing;\n",
         );
         write_file(
             &clean_root,

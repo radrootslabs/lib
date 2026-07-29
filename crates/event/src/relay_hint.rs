@@ -2,20 +2,20 @@
 use alloc::string::{String, ToString};
 use core::{fmt, net::Ipv6Addr, str::FromStr};
 
-use crate::id::RadrootsIdParseError;
+use crate::id::ParseError;
 
 /// One canonical, byte-stable Nostr relay hint.
 ///
 /// This intentionally accepts a conservative subset of WebSocket URLs. It
 /// does not inherit browser URL normalization, legacy IPv4 syntax, Unicode
 /// host processing, user information, or fragments. It is separate from the
-/// generic [`crate::id::RadrootsRelayUrl`] type because protocol-tag
+/// generic [`crate::id::RelayUrl`] type because protocol-tag
 /// validation must be portable across implementations.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsNostrRelayHint(String);
+pub struct NostrRelayHint(String);
 
-impl RadrootsNostrRelayHint {
-    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsIdParseError> {
+impl NostrRelayHint {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, ParseError> {
         validate_nostr_relay_hint(value.as_ref()).map(Self)
     }
 
@@ -30,65 +30,65 @@ impl RadrootsNostrRelayHint {
     }
 }
 
-impl AsRef<str> for RadrootsNostrRelayHint {
+impl AsRef<str> for NostrRelayHint {
     #[inline]
     fn as_ref(&self) -> &str {
         self.as_str()
     }
 }
 
-impl From<RadrootsNostrRelayHint> for String {
+impl From<NostrRelayHint> for String {
     #[inline]
-    fn from(value: RadrootsNostrRelayHint) -> Self {
+    fn from(value: NostrRelayHint) -> Self {
         value.into_string()
     }
 }
 
-impl fmt::Display for RadrootsNostrRelayHint {
+impl fmt::Display for NostrRelayHint {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.as_str())
     }
 }
 
-impl FromStr for RadrootsNostrRelayHint {
-    type Err = RadrootsIdParseError;
+impl FromStr for NostrRelayHint {
+    type Err = ParseError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         Self::parse(value)
     }
 }
 
-impl TryFrom<&str> for RadrootsNostrRelayHint {
-    type Error = RadrootsIdParseError;
+impl TryFrom<&str> for NostrRelayHint {
+    type Error = ParseError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::parse(value)
     }
 }
 
-impl TryFrom<String> for RadrootsNostrRelayHint {
-    type Error = RadrootsIdParseError;
+impl TryFrom<String> for NostrRelayHint {
+    type Error = ParseError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::parse(value)
     }
 }
 
-fn validate_nostr_relay_hint(value: &str) -> Result<String, RadrootsIdParseError> {
+fn validate_nostr_relay_hint(value: &str) -> Result<String, ParseError> {
     if value.is_empty() {
-        return Err(RadrootsIdParseError::Empty);
+        return Err(ParseError::Empty);
     }
     if !value.bytes().all(|byte| matches!(byte, 0x21..=0x7e)) {
-        return Err(RadrootsIdParseError::InvalidCharacter);
+        return Err(ParseError::InvalidCharacter);
     }
     if value.bytes().any(|byte| matches!(byte, b'#' | b'\\')) {
-        return Err(RadrootsIdParseError::InvalidFormat);
+        return Err(ParseError::InvalidFormat);
     }
 
     let remainder = value
         .strip_prefix("wss://")
         .or_else(|| value.strip_prefix("ws://"))
-        .ok_or(RadrootsIdParseError::InvalidFormat)?;
+        .ok_or(ParseError::InvalidFormat)?;
     let authority_end = remainder
         .bytes()
         .position(|byte| matches!(byte, b'/' | b'?'))
@@ -98,12 +98,12 @@ fn validate_nostr_relay_hint(value: &str) -> Result<String, RadrootsIdParseError
         || authority.bytes().any(|byte| byte == b'@')
         || matches!(remainder.as_bytes().first(), Some(b'/' | b'?'))
     {
-        return Err(RadrootsIdParseError::InvalidFormat);
+        return Err(ParseError::InvalidFormat);
     }
     if !relay_authority_is_valid(authority)
         || !relay_path_and_query_are_valid(&remainder[authority_end..])
     {
-        return Err(RadrootsIdParseError::InvalidFormat);
+        return Err(ParseError::InvalidFormat);
     }
     Ok(value.to_string())
 }
@@ -334,7 +334,7 @@ fn upper_hex_digit(byte: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::id::RadrootsRelayUrl;
+    use crate::id::RelayUrl;
 
     #[test]
     fn canonical_relay_hints_accept_portable_hosts_paths_and_queries() {
@@ -348,14 +348,11 @@ mod tests {
             "wss://relay.example:443?",
             "wss://relay.example/a/b:@!$&'()*+,;=~_-?next=/feed??page=1",
         ] {
-            let relay = RadrootsNostrRelayHint::parse(value)
+            let relay = NostrRelayHint::parse(value)
                 .unwrap_or_else(|error| panic!("{value} must be canonical: {error}"));
             assert_eq!(relay.as_str(), value);
             assert_eq!(relay.to_string(), value);
-            assert_eq!(
-                value.parse::<RadrootsNostrRelayHint>().expect("FromStr"),
-                relay
-            );
+            assert_eq!(value.parse::<NostrRelayHint>().expect("FromStr"), relay);
         }
 
         let maximum_host = format!(
@@ -366,15 +363,12 @@ mod tests {
             "d".repeat(61)
         );
         assert_eq!(maximum_host.len(), 253);
-        RadrootsNostrRelayHint::parse(format!("wss://{maximum_host}")).expect("253-byte DNS host");
+        NostrRelayHint::parse(format!("wss://{maximum_host}")).expect("253-byte DNS host");
     }
 
     #[test]
     fn canonical_relay_hints_reject_normalizing_or_ambiguous_forms() {
-        assert_eq!(
-            RadrootsNostrRelayHint::parse("").unwrap_err(),
-            RadrootsIdParseError::Empty
-        );
+        assert_eq!(NostrRelayHint::parse("").unwrap_err(), ParseError::Empty);
         for value in [
             "WSS://relay.example",
             "https://relay.example",
@@ -422,8 +416,8 @@ mod tests {
             "wss://relay.example/%GG",
         ] {
             assert_eq!(
-                RadrootsNostrRelayHint::parse(value).unwrap_err(),
-                RadrootsIdParseError::InvalidFormat,
+                NostrRelayHint::parse(value).unwrap_err(),
+                ParseError::InvalidFormat,
                 "{value}"
             );
         }
@@ -434,16 +428,16 @@ mod tests {
             "wss://relay.example/é",
         ] {
             assert_eq!(
-                RadrootsNostrRelayHint::parse(value).unwrap_err(),
-                RadrootsIdParseError::InvalidCharacter,
+                NostrRelayHint::parse(value).unwrap_err(),
+                ParseError::InvalidCharacter,
                 "{value}"
             );
         }
 
         let label_too_long = "a".repeat(64);
         assert_eq!(
-            RadrootsNostrRelayHint::parse(format!("wss://{label_too_long}.example")).unwrap_err(),
-            RadrootsIdParseError::InvalidFormat
+            NostrRelayHint::parse(format!("wss://{label_too_long}.example")).unwrap_err(),
+            ParseError::InvalidFormat
         );
         let host_too_long = format!(
             "{}.{}.{}.{}",
@@ -454,14 +448,14 @@ mod tests {
         );
         assert_eq!(host_too_long.len(), 254);
         assert_eq!(
-            RadrootsNostrRelayHint::parse(format!("wss://{host_too_long}")).unwrap_err(),
-            RadrootsIdParseError::InvalidFormat
+            NostrRelayHint::parse(format!("wss://{host_too_long}")).unwrap_err(),
+            ParseError::InvalidFormat
         );
     }
 
     #[test]
     fn generic_relay_url_remains_a_distinct_surface() {
-        assert!(RadrootsRelayUrl::parse("wss://Relay.Example").is_ok());
-        assert!(RadrootsNostrRelayHint::parse("wss://Relay.Example").is_err());
+        assert!(RelayUrl::parse("wss://Relay.Example").is_ok());
+        assert!(NostrRelayHint::parse("wss://Relay.Example").is_err());
     }
 }

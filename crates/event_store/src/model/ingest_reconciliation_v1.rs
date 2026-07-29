@@ -1,12 +1,12 @@
 use super::reconciliation_v1::RadrootsEventIngest;
 use crate::RadrootsEventStoreError;
-use radroots_event::draft::RadrootsSignedEvent;
-use radroots_event::wire::v1::RadrootsNip01EventWire;
+use radroots_event::draft::SignedEvent;
+use radroots_event::wire::v1::Nip01EventWire;
 use radroots_event_codec::verification::v1::verify_nip01_event_v1;
 
 impl RadrootsEventIngest {
     pub(crate) fn from_signed_event_reconciliation_v1(
-        signed_event: RadrootsSignedEvent,
+        signed_event: SignedEvent,
         observed_at_ms: i64,
     ) -> Result<Self, RadrootsEventStoreError> {
         ensure_valid_ingest_timestamp(observed_at_ms)?;
@@ -25,7 +25,7 @@ impl RadrootsEventIngest {
     ) -> Result<Self, RadrootsEventStoreError> {
         ensure_valid_ingest_timestamp(observed_at_ms)?;
         let raw_json = raw_json.into();
-        let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str())?;
+        let wire = Nip01EventWire::parse_json(raw_json.as_str())?;
         let verified_event = verify_nip01_event_v1(wire.into_envelope()?)?;
         Ok(Self {
             verified_event,

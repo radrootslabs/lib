@@ -14,7 +14,7 @@ pub const KIND_APP_DATA: u32 = KIND_APP_DATA_EVENT;
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsAppData {
+pub struct AppData {
     pub d_tag: String,
     pub content: String,
 }

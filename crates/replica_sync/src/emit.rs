@@ -18,12 +18,12 @@ use crate::types::{
 };
 use radroots_event::envelope::kind::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
 use radroots_event::farm::change_set::{
-    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+    GcsLocation as EventGcsLocation, GeoJsonPoint, GeoJsonPolygon,
 };
 use radroots_event::farm::location::{has_textual_locality, is_public_geohash5};
-use radroots_event::farm::plot::RadrootsPlot;
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::farm::plot::Plot as EventPlot;
+use radroots_event::farm::{Farm as EventFarm, FarmPublicLocation, FarmRef};
+use radroots_event::wire::Nip01EventWireParts;
 use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
 use radroots_event_codec::list_set::encode as list_set_encode;
@@ -150,7 +150,7 @@ pub fn radroots_replica_farm_event(
 ) -> Result<RadrootsReplicaEventDraft, RadrootsReplicaEventsError> {
     let tags = collect_farm_tags(exec, &farm.id)?;
     let location = load_farm_location(exec, farm)?;
-    let farm_event = RadrootsFarm {
+    let farm_event = EventFarm {
         d_tag: farm.d_tag.clone(),
         name: farm.name.clone(),
         about: farm.about.clone(),
@@ -162,7 +162,7 @@ pub fn radroots_replica_farm_event(
     };
     let tags = farm_encode::farm_build_tags(&farm_event)?;
     let content = canonical_json_string(&farm_event)?;
-    let parts = RadrootsNip01EventWireParts {
+    let parts = Nip01EventWireParts {
         kind: KIND_FARM,
         content,
         tags,
@@ -179,9 +179,9 @@ pub fn radroots_replica_plot_events(
     for plot_row in plots {
         let tags = collect_plot_tags(exec, &plot_row.id)?;
         let location = load_plot_location(exec, &plot_row)?;
-        let plot_event = RadrootsPlot {
+        let plot_event = EventPlot {
             d_tag: plot_row.d_tag.clone(),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: farm.pubkey.clone(),
                 d_tag: farm.d_tag.clone(),
             },
@@ -192,7 +192,7 @@ pub fn radroots_replica_plot_events(
         };
         let tags = plot_encode::plot_build_tags(&plot_event)?;
         let content = canonical_json_string(&plot_event)?;
-        let parts = RadrootsNip01EventWireParts {
+        let parts = Nip01EventWireParts {
             kind: KIND_PLOT,
             content,
             tags,
@@ -457,7 +457,7 @@ fn load_plots(
 fn load_farm_location(
     exec: &dyn SqlExecutor,
     farm: &Farm,
-) -> Result<Option<RadrootsFarmPublicLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<FarmPublicLocation>, RadrootsReplicaEventsError> {
     let Some(gcs) = load_gcs_location_for_farm(exec, &farm.id)? else {
         return Ok(None);
     };
@@ -493,7 +493,7 @@ fn load_farm_location(
     ) {
         return Ok(None);
     }
-    Ok(Some(RadrootsFarmPublicLocation {
+    Ok(Some(FarmPublicLocation {
         primary,
         city,
         region,
@@ -505,10 +505,10 @@ fn load_farm_location(
 fn load_plot_location(
     exec: &dyn SqlExecutor,
     plot: &Plot,
-) -> Result<Option<radroots_event::farm::plot::RadrootsPlotLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<radroots_event::farm::plot::PlotLocation>, RadrootsReplicaEventsError> {
     let location = load_gcs_location_for_plot(exec, &plot.id)?;
     Ok(
-        location.map(|gcs| radroots_event::farm::plot::RadrootsPlotLocation {
+        location.map(|gcs| radroots_event::farm::plot::PlotLocation {
             primary: plot.location_primary.clone(),
             city: plot.location_city.clone(),
             region: plot.location_region.clone(),
@@ -521,7 +521,7 @@ fn load_plot_location(
 fn load_gcs_location_for_farm(
     exec: &dyn SqlExecutor,
     farm_id: &str,
-) -> Result<Option<RadrootsGcsLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<EventGcsLocation>, RadrootsReplicaEventsError> {
     let primary = load_relation_by_role(exec, farm_id, ROLE_PRIMARY, RelationType::Farm)?;
     match primary {
         Some(gcs) => Ok(Some(gcs)),
@@ -532,7 +532,7 @@ fn load_gcs_location_for_farm(
 fn load_gcs_location_for_plot(
     exec: &dyn SqlExecutor,
     plot_id: &str,
-) -> Result<Option<RadrootsGcsLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<EventGcsLocation>, RadrootsReplicaEventsError> {
     let primary = load_relation_by_role(exec, plot_id, ROLE_PRIMARY, RelationType::Plot)?;
     match primary {
         Some(gcs) => Ok(Some(gcs)),
@@ -550,7 +550,7 @@ fn load_relation_by_role(
     id: &str,
     role: &str,
     relation: RelationType,
-) -> Result<Option<RadrootsGcsLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<EventGcsLocation>, RadrootsReplicaEventsError> {
     let mut rels = match relation {
         RelationType::Farm => {
             let filter = IFarmGcsLocationFieldsFilter {
@@ -635,8 +635,8 @@ fn compare_relation_rows(a: &RelationRow, b: &RelationRow) -> core::cmp::Orderin
 }
 
 fn list_set_to_wire_parts(
-    list_set: &radroots_event::social::list_set::RadrootsListSet,
-) -> Result<RadrootsNip01EventWireParts, RadrootsReplicaEventsError> {
+    list_set: &radroots_event::social::list_set::ListSet,
+) -> Result<Nip01EventWireParts, RadrootsReplicaEventsError> {
     #[cfg(test)]
     if failpoints::take_list_set_to_wire_error() {
         return Err(RadrootsReplicaEventsError::InvalidData(
@@ -676,7 +676,7 @@ fn location_role_rank(role: &str) -> u8 {
 
 fn gcs_location_to_event(
     gcs: &GcsLocation,
-) -> Result<RadrootsGcsLocation, RadrootsReplicaEventsError> {
+) -> Result<EventGcsLocation, RadrootsReplicaEventsError> {
     #[cfg(test)]
     if failpoints::take_gcs_location_to_event_error() {
         return Err(RadrootsReplicaEventsError::InvalidData(
@@ -685,7 +685,7 @@ fn gcs_location_to_event(
     }
     let point = parse_point(&gcs.point, gcs.lat, gcs.lng);
     let polygon = parse_polygon(&gcs.polygon, gcs.lat, gcs.lng);
-    Ok(RadrootsGcsLocation {
+    Ok(EventGcsLocation {
         lat: gcs.lat,
         lng: gcs.lng,
         geohash: gcs.geohash.clone(),
@@ -708,18 +708,18 @@ fn gcs_location_to_event(
     })
 }
 
-fn parse_point(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPoint {
+fn parse_point(value: &str, lat: f64, lng: f64) -> GeoJsonPoint {
     if !value.trim().is_empty()
-        && let Ok(parsed) = serde_json::from_str::<RadrootsGeoJsonPoint>(value)
+        && let Ok(parsed) = serde_json::from_str::<GeoJsonPoint>(value)
     {
         return parsed;
     }
     geojson_point_from_lat_lng(lat, lng)
 }
 
-fn parse_polygon(value: &str, lat: f64, lng: f64) -> RadrootsGeoJsonPolygon {
+fn parse_polygon(value: &str, lat: f64, lng: f64) -> GeoJsonPolygon {
     if !value.trim().is_empty()
-        && let Ok(parsed) = serde_json::from_str::<RadrootsGeoJsonPolygon>(value)
+        && let Ok(parsed) = serde_json::from_str::<GeoJsonPolygon>(value)
         && !parsed.coordinates.is_empty()
         && !parsed.coordinates[0].is_empty()
     {
@@ -770,7 +770,7 @@ fn load_member_claims_for_member(
     Ok(result.results)
 }
 
-fn parts_to_draft(author: &str, parts: RadrootsNip01EventWireParts) -> RadrootsReplicaEventDraft {
+fn parts_to_draft(author: &str, parts: Nip01EventWireParts) -> RadrootsReplicaEventDraft {
     RadrootsReplicaEventDraft {
         kind: parts.kind,
         author: author.to_string(),
@@ -1966,7 +1966,7 @@ mod tests {
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&clean_exec, &clean_farm).is_err());
 
-        let invalid_list_set = radroots_event::social::list_set::RadrootsListSet {
+        let invalid_list_set = radroots_event::social::list_set::ListSet {
             d_tag: String::new(),
             content: String::new(),
             entries: Vec::new(),
@@ -2008,7 +2008,7 @@ mod tests {
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&exec, &farm_row).is_err());
 
-        let invalid_list_set = radroots_event::social::list_set::RadrootsListSet {
+        let invalid_list_set = radroots_event::social::list_set::ListSet {
             d_tag: String::new(),
             content: String::new(),
             entries: Vec::new(),

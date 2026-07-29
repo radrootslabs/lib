@@ -2,11 +2,10 @@ use super::post_core_storage_v1::{PostCoreStorageV1, TradeProjectionWrite};
 use super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult;
 use crate::error::RadrootsEventStoreError;
 use crate::model::RadrootsEventIngest;
-use radroots_event::id::{RadrootsTradeCandidateId, RadrootsTradeMutationId};
+use radroots_event::id::{CandidateId, MutationId};
 use radroots_event::trade::{
-    RADROOTS_TRADE_MUTATION_CONTRACT_IDS, RadrootsSellerReservationAssertionV1,
-    RadrootsTradeDecisionV1, RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1,
-    trade_mutation_from_canonical_content,
+    RADROOTS_TRADE_MUTATION_CONTRACT_IDS, SellerReservationAssertionV1, TradeDecisionV1,
+    TradeMutationBodyV1, TradeMutationEnvelopeV1, trade_mutation_from_canonical_content,
 };
 use sha2::{Digest, Sha256};
 
@@ -106,32 +105,26 @@ async fn store_trade_mutation_event(
     storage.persist_trade_projection(write).await
 }
 
-fn candidate_id_for_mutation(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<&RadrootsTradeCandidateId> {
+fn candidate_id_for_mutation(mutation: &TradeMutationEnvelopeV1) -> Option<&CandidateId> {
     match &mutation.body {
-        RadrootsTradeMutationBodyV1::Proposal { candidate }
-        | RadrootsTradeMutationBodyV1::RevisionProposal { candidate } => {
-            candidate.candidate_id.as_ref()
-        }
-        RadrootsTradeMutationBodyV1::Decision { candidate_id, .. }
-        | RadrootsTradeMutationBodyV1::RevisionDecision { candidate_id, .. } => Some(candidate_id),
-        RadrootsTradeMutationBodyV1::Cancellation {
+        TradeMutationBodyV1::Proposal { candidate }
+        | TradeMutationBodyV1::RevisionProposal { candidate } => candidate.candidate_id.as_ref(),
+        TradeMutationBodyV1::Decision { candidate_id, .. }
+        | TradeMutationBodyV1::RevisionDecision { candidate_id, .. } => Some(candidate_id),
+        TradeMutationBodyV1::Cancellation {
             target_candidate_id,
             ..
         } => target_candidate_id.as_ref(),
     }
 }
 
-fn proposal_mutation_id_for_mutation(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<&RadrootsTradeMutationId> {
+fn proposal_mutation_id_for_mutation(mutation: &TradeMutationEnvelopeV1) -> Option<&MutationId> {
     match &mutation.body {
-        RadrootsTradeMutationBodyV1::Decision {
+        TradeMutationBodyV1::Decision {
             proposal_mutation_id,
             ..
         }
-        | RadrootsTradeMutationBodyV1::RevisionDecision {
+        | TradeMutationBodyV1::RevisionDecision {
             proposal_mutation_id,
             ..
         } => Some(proposal_mutation_id),
@@ -140,10 +133,10 @@ fn proposal_mutation_id_for_mutation(
 }
 
 fn target_claim_mutation_id_for_mutation(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<&RadrootsTradeMutationId> {
+    mutation: &TradeMutationEnvelopeV1,
+) -> Option<&MutationId> {
     match &mutation.body {
-        RadrootsTradeMutationBodyV1::Cancellation {
+        TradeMutationBodyV1::Cancellation {
             target_claim_mutation_id,
             ..
         } => target_claim_mutation_id.as_ref(),
@@ -152,19 +145,19 @@ fn target_claim_mutation_id_for_mutation(
 }
 
 fn seller_reservation_for_mutation(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<&RadrootsSellerReservationAssertionV1> {
+    mutation: &TradeMutationEnvelopeV1,
+) -> Option<&SellerReservationAssertionV1> {
     match &mutation.body {
-        RadrootsTradeMutationBodyV1::Decision {
+        TradeMutationBodyV1::Decision {
             decision:
-                RadrootsTradeDecisionV1::Accepted {
+                TradeDecisionV1::Accepted {
                     reservation_assertion: Some(reservation),
                 },
             ..
         }
-        | RadrootsTradeMutationBodyV1::RevisionDecision {
+        | TradeMutationBodyV1::RevisionDecision {
             decision:
-                RadrootsTradeDecisionV1::Accepted {
+                TradeDecisionV1::Accepted {
                     reservation_assertion: Some(reservation),
                 },
             ..
@@ -179,29 +172,29 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 pub(super) fn candidate_id_for_mutation_for_test(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<RadrootsTradeCandidateId> {
+    mutation: &TradeMutationEnvelopeV1,
+) -> Option<CandidateId> {
     candidate_id_for_mutation(mutation).cloned()
 }
 
 #[cfg(test)]
 pub(super) fn proposal_mutation_id_for_mutation_for_test(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<RadrootsTradeMutationId> {
+    mutation: &TradeMutationEnvelopeV1,
+) -> Option<MutationId> {
     proposal_mutation_id_for_mutation(mutation).cloned()
 }
 
 #[cfg(test)]
 pub(super) fn target_claim_mutation_id_for_mutation_for_test(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<RadrootsTradeMutationId> {
+    mutation: &TradeMutationEnvelopeV1,
+) -> Option<MutationId> {
     target_claim_mutation_id_for_mutation(mutation).cloned()
 }
 
 #[cfg(test)]
 pub(super) fn seller_reservation_for_mutation_for_test(
-    mutation: &RadrootsTradeMutationEnvelopeV1,
-) -> Option<&RadrootsSellerReservationAssertionV1> {
+    mutation: &TradeMutationEnvelopeV1,
+) -> Option<&SellerReservationAssertionV1> {
     seller_reservation_for_mutation(mutation)
 }
 

@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{envelope::kind::KIND_GEOCHAT, social::geochat::RadrootsGeoChat};
+use radroots_event::{envelope::kind::KIND_GEOCHAT, social::geochat::GeoChat};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
@@ -62,7 +62,7 @@ pub fn geochat_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsGeoChat, EventParseError> {
+) -> Result<GeoChat, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "20000",
@@ -77,7 +77,7 @@ pub fn geochat_from_tags(
     let nickname = parse_nickname_tag(tags)?;
     let teleported = parse_teleport_tag(tags)?;
 
-    Ok(RadrootsGeoChat {
+    Ok(GeoChat {
         geohash,
         content: content.to_string(),
         nickname,
@@ -92,7 +92,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsGeoChat>, EventParseError> {
+) -> Result<RadrootsParsedData<GeoChat>, EventParseError> {
     let geochat = geochat_from_tags(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -111,7 +111,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsGeoChat>, EventParseError> {
+) -> Result<RadrootsParsedEvent<GeoChat>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

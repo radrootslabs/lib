@@ -6,7 +6,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_MESSAGE_FILE,
-    social::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions},
+    social::message_file::{MessageFile, MessageFileDimensions},
 };
 
 use crate::error::EventParseError;
@@ -42,7 +42,7 @@ fn optional_tag_value(
     }
 }
 
-fn parse_dimensions(value: &str) -> Result<RadrootsMessageFileDimensions, EventParseError> {
+fn parse_dimensions(value: &str) -> Result<MessageFileDimensions, EventParseError> {
     let (w, h) = value
         .split_once('x')
         .ok_or(EventParseError::InvalidTag("dim"))?;
@@ -52,7 +52,7 @@ fn parse_dimensions(value: &str) -> Result<RadrootsMessageFileDimensions, EventP
     let h = h
         .parse::<u32>()
         .map_err(|_| EventParseError::InvalidTag("dim"))?;
-    Ok(RadrootsMessageFileDimensions { w, h })
+    Ok(MessageFileDimensions { w, h })
 }
 
 fn parse_size(tags: &[Vec<String>]) -> Result<Option<u64>, EventParseError> {
@@ -74,7 +74,7 @@ fn parse_size(tags: &[Vec<String>]) -> Result<Option<u64>, EventParseError> {
 
 fn parse_dimensions_tag(
     tags: &[Vec<String>],
-) -> Result<Option<RadrootsMessageFileDimensions>, EventParseError> {
+) -> Result<Option<MessageFileDimensions>, EventParseError> {
     let value = tags
         .iter()
         .find(|t| t.first().map(|s| s.as_str()) == Some("dim"))
@@ -107,7 +107,7 @@ pub fn message_file_from_tags(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsMessageFile, EventParseError> {
+) -> Result<MessageFile, EventParseError> {
     if kind != DEFAULT_KIND {
         return Err(EventParseError::InvalidKind {
             expected: "15",
@@ -133,7 +133,7 @@ pub fn message_file_from_tags(
     let thumb = optional_tag_value(tags, "thumb")?;
     let fallbacks = parse_fallbacks(tags)?;
 
-    Ok(RadrootsMessageFile {
+    Ok(MessageFile {
         recipients,
         file_url: content.to_string(),
         reply_to,
@@ -159,7 +159,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsMessageFile>, EventParseError> {
+) -> Result<RadrootsParsedData<MessageFile>, EventParseError> {
     let message_file = message_file_from_tags(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -178,7 +178,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsMessageFile>, EventParseError> {
+) -> Result<RadrootsParsedEvent<MessageFile>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),

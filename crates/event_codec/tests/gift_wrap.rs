@@ -4,7 +4,7 @@ mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::envelope::kind::{KIND_GIFT_WRAP, KIND_MESSAGE};
-use radroots_event::social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
+use radroots_event::social::gift_wrap::{GiftWrap, GiftWrapRecipient};
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::gift_wrap::decode::{
@@ -15,9 +15,9 @@ use radroots_event_codec::gift_wrap::encode::{
 };
 use test_fixtures::RELAY_PRIMARY_WSS;
 
-fn sample_gift_wrap() -> RadrootsGiftWrap {
-    RadrootsGiftWrap {
-        recipient: RadrootsGiftWrapRecipient {
+fn sample_gift_wrap() -> GiftWrap {
+    GiftWrap {
+        recipient: GiftWrapRecipient {
             public_key: "pubkey".to_string(),
             relay_url: Some(RELAY_PRIMARY_WSS.to_string()),
         },

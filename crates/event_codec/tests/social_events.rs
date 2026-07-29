@@ -7,12 +7,12 @@ use radroots_event::{
         KIND_REPORT, is_home_feed_candidate_kind, is_market_candidate_kind,
         is_private_farm_ops_kind, is_public_social_kind,
     },
-    farm::crdt::RadrootsFarmCrdtDocumentKind,
-    farm::file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata},
-    farm::workspace::RadrootsFarmWorkspaceRef,
-    media::file_metadata::RadrootsFileMetadata,
-    social::RadrootsSocialMediaDimensions,
-    social::group::{RadrootsGroupEditableMetadata, RadrootsGroupMetadata},
+    farm::crdt::FarmCrdtDocumentKind,
+    farm::file::{FarmFileDimensions, FarmFileMetadata},
+    farm::workspace::FarmWorkspaceRef,
+    media::file_metadata::FileMetadata,
+    social::SocialMediaDimensions,
+    social::group::{GroupEditableMetadata, GroupMetadata},
 };
 use radroots_event_codec::{
     article::decode::article_from_event,
@@ -113,9 +113,9 @@ fn social_events_reject_private_farm_ops_semantics_in_public_codecs() {
 
 #[test]
 fn social_events_keep_nip29_groups_out_of_public_social_classification() {
-    let group = RadrootsGroupMetadata {
+    let group = GroupMetadata {
         d_tag: "field-group".to_string(),
-        metadata: RadrootsGroupEditableMetadata {
+        metadata: GroupEditableMetadata {
             name: Some("Field Group".to_string()),
             about: Some("Localhost field coordination".to_string()),
             picture: None,
@@ -140,14 +140,14 @@ fn social_events_keep_nip29_groups_out_of_public_social_classification() {
     );
 }
 
-fn public_file_metadata() -> RadrootsFileMetadata {
-    RadrootsFileMetadata {
+fn public_file_metadata() -> FileMetadata {
+    FileMetadata {
         url: "https://media.example.test/public.jpg".to_string(),
         mime_type: "image/jpeg".to_string(),
         sha256: SHA256.to_string(),
         original_sha256: Some(OTHER_SHA256.to_string()),
         size: Some(4096),
-        dimensions: Some(RadrootsSocialMediaDimensions {
+        dimensions: Some(SocialMediaDimensions {
             width: 1200,
             height: 800,
         }),
@@ -163,23 +163,23 @@ fn public_file_metadata() -> RadrootsFileMetadata {
     }
 }
 
-fn private_farm_file_metadata() -> RadrootsFarmFileMetadata {
-    RadrootsFarmFileMetadata {
+fn private_farm_file_metadata() -> FarmFileMetadata {
+    FarmFileMetadata {
         d_tag: D_TAG.to_string(),
-        workspace: RadrootsFarmWorkspaceRef {
+        workspace: FarmWorkspaceRef {
             pubkey: "workspace_pubkey".to_string(),
             d_tag: D_TAG.to_string(),
         },
         farm_group_id: "field-group".to_string(),
         owner_document_id: D_TAG.to_string(),
-        owner_document_kind: RadrootsFarmCrdtDocumentKind::FarmTask,
+        owner_document_kind: FarmCrdtDocumentKind::FarmTask,
         caption: Some("private caption".to_string()),
         url: "https://media.example.test/private.jpg".to_string(),
         mime_type: "image/jpeg".to_string(),
         sha256: SHA256.to_string(),
         original_sha256: Some(OTHER_SHA256.to_string()),
         size_bytes: Some(4096),
-        dimensions: Some(RadrootsFarmFileDimensions { w: 1200, h: 800 }),
+        dimensions: Some(FarmFileDimensions { w: 1200, h: 800 }),
         blurhash: None,
         thumb: None,
         image: None,

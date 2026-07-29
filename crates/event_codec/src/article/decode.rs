@@ -6,9 +6,9 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::{KIND_ARTICLE, KIND_FARM},
-    farm::RadrootsFarmRef,
-    post::article::RadrootsArticle,
-    social::RadrootsSocialFarmAnchor,
+    farm::FarmRef,
+    post::article::Article,
+    social::SocialFarmAnchor,
     tag::name::{TAG_A, TAG_D, TAG_IMAGE, TAG_PUBLISHED_AT, TAG_SUMMARY, TAG_T, TAG_TITLE},
 };
 
@@ -26,7 +26,7 @@ pub fn article_from_event(
     kind: u32,
     tags: &[Vec<String>],
     content: &str,
-) -> Result<RadrootsArticle, EventParseError> {
+) -> Result<Article, EventParseError> {
     if kind != KIND_ARTICLE {
         return Err(EventParseError::InvalidKind {
             expected: EXPECTED_KIND,
@@ -45,7 +45,7 @@ pub fn article_from_event(
         })
         .transpose()?;
     let farm = parse_farm_anchor(tags)?;
-    Ok(RadrootsArticle {
+    Ok(Article {
         d_tag,
         title,
         content: content.to_string(),
@@ -65,7 +65,7 @@ pub fn data_from_event(
     kind: u32,
     content: String,
     tags: Vec<Vec<String>>,
-) -> Result<RadrootsParsedData<RadrootsArticle>, EventParseError> {
+) -> Result<RadrootsParsedData<Article>, EventParseError> {
     let article = article_from_event(kind, &tags, &content)?;
     Ok(RadrootsParsedData::new(
         id,
@@ -84,7 +84,7 @@ pub fn parsed_from_event(
     content: String,
     tags: Vec<Vec<String>>,
     sig: String,
-) -> Result<RadrootsParsedEvent<RadrootsArticle>, EventParseError> {
+) -> Result<RadrootsParsedEvent<Article>, EventParseError> {
     let data = data_from_event(
         id.clone(),
         author.clone(),
@@ -96,15 +96,13 @@ pub fn parsed_from_event(
     RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
-fn parse_farm_anchor(
-    tags: &[Vec<String>],
-) -> Result<Option<RadrootsSocialFarmAnchor>, EventParseError> {
+fn parse_farm_anchor(tags: &[Vec<String>]) -> Result<Option<SocialFarmAnchor>, EventParseError> {
     let Some(value) = first_tag_value(tags, TAG_A) else {
         return Ok(None);
     };
     let address = parse_address_tag_with_kind(&value, KIND_FARM, TAG_A)?;
-    Ok(Some(RadrootsSocialFarmAnchor {
-        farm: RadrootsFarmRef {
+    Ok(Some(SocialFarmAnchor {
+        farm: FarmRef {
             pubkey: address.pubkey,
             d_tag: address.d_tag,
         },

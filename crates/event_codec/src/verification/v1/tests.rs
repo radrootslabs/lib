@@ -1,5 +1,5 @@
 use super::*;
-use radroots_event::envelope::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::EventEnvelopeParts;
 
 #[test]
 fn id_verification_returns_the_exact_envelope() {
@@ -78,7 +78,7 @@ fn id_verification_rejects_an_out_of_range_kind_before_hashing() {
     )
     .expect("canonical hash remains mechanically computable")
     .into_string();
-    let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    let event = EventEnvelope::new(EventEnvelopeParts {
         id,
         author: original.author().to_hex().to_owned(),
         created_at: original.created_at_u64(),
@@ -95,8 +95,8 @@ fn id_verification_rejects_an_out_of_range_kind_before_hashing() {
     );
 }
 
-fn signed_max_kind_event() -> RadrootsEventEnvelope {
-    RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+fn signed_max_kind_event() -> EventEnvelope {
+    EventEnvelope::new(EventEnvelopeParts {
             id: "a07878757d705d3cd848b9264791d699069068a5f0a575112f351367b0987958"
                 .to_string(),
             author: "1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f"

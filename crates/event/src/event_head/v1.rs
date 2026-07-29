@@ -6,15 +6,15 @@
 use alloc::string::String;
 
 use crate::contract::registry_v7::{
-    RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
+    ContractMatchError, EventClass, EventContract, identify_event_contract,
 };
-use crate::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass, RadrootsEventTag};
-use crate::id::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError};
+use crate::envelope::{EventEnvelope, EventKindClass, EventTag};
+use crate::id::{DTag, EventId, ParseError};
 use crate::tag::name::TAG_D;
 use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RadrootsEventHeadCoordinate {
+pub enum EventHeadCoordinate {
     Replaceable {
         kind: u32,
         pubkey: PublicKey,
@@ -27,21 +27,21 @@ pub enum RadrootsEventHeadCoordinate {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsEventHeadCandidate {
-    pub coordinate: RadrootsEventHeadCoordinate,
-    pub event_id: RadrootsEventId,
+pub struct EventHeadCandidate {
+    pub coordinate: EventHeadCoordinate,
+    pub event_id: EventId,
     pub created_at: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsCurrentEventHead {
-    pub coordinate: RadrootsEventHeadCoordinate,
-    pub event_id: RadrootsEventId,
+pub struct CurrentEventHead {
+    pub coordinate: EventHeadCoordinate,
+    pub event_id: EventId,
     pub created_at: u64,
 }
 
-impl From<RadrootsEventHeadCandidate> for RadrootsCurrentEventHead {
-    fn from(candidate: RadrootsEventHeadCandidate) -> Self {
+impl From<EventHeadCandidate> for CurrentEventHead {
+    fn from(candidate: EventHeadCandidate) -> Self {
         Self {
             coordinate: candidate.coordinate,
             event_id: candidate.event_id,
@@ -51,24 +51,24 @@ impl From<RadrootsEventHeadCandidate> for RadrootsCurrentEventHead {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventHeadMalformed {
-    InvalidEventId(RadrootsIdParseError),
-    InvalidPubkey(RadrootsIdParseError),
+pub enum EventHeadMalformed {
+    InvalidEventId(ParseError),
+    InvalidPubkey(ParseError),
     MissingDTag,
-    InvalidDTag(RadrootsIdParseError),
+    InvalidDTag(ParseError),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventHeadCandidateResult {
-    Candidate(RadrootsEventHeadCandidate),
+pub enum EventHeadCandidateResult {
+    Candidate(EventHeadCandidate),
     NotHeadSelected,
     NotPersisted,
-    Malformed(RadrootsEventHeadMalformed),
+    Malformed(EventHeadMalformed),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsEventHeadDecision {
-    Applied(RadrootsCurrentEventHead),
+pub enum EventHeadDecision {
+    Applied(CurrentEventHead),
     SkippedDuplicate,
     SkippedOlder,
     SkippedSameTimestampHigherEventId,
@@ -76,41 +76,39 @@ pub enum RadrootsEventHeadDecision {
 }
 
 pub fn event_head_candidate_for_class(
-    event: &RadrootsEventEnvelope,
-    class: RadrootsEventClass,
-) -> RadrootsEventHeadCandidateResult {
+    event: &EventEnvelope,
+    class: EventClass,
+) -> EventHeadCandidateResult {
     match class {
-        RadrootsEventClass::Regular => RadrootsEventHeadCandidateResult::NotHeadSelected,
-        RadrootsEventClass::Ephemeral => RadrootsEventHeadCandidateResult::NotPersisted,
-        RadrootsEventClass::Replaceable | RadrootsEventClass::Addressable => {
+        EventClass::Regular => EventHeadCandidateResult::NotHeadSelected,
+        EventClass::Ephemeral => EventHeadCandidateResult::NotPersisted,
+        EventClass::Replaceable | EventClass::Addressable => {
             let event_id = *event.id();
             let pubkey = *event.author();
-            let coordinate = if class == RadrootsEventClass::Replaceable {
-                RadrootsEventHeadCoordinate::Replaceable {
+            let coordinate = if class == EventClass::Replaceable {
+                EventHeadCoordinate::Replaceable {
                     kind: event.kind_u32(),
                     pubkey,
                 }
             } else {
                 let Some(d_tag) = first_tag_value(event.tag_slices(), TAG_D) else {
-                    return RadrootsEventHeadCandidateResult::Malformed(
-                        RadrootsEventHeadMalformed::MissingDTag,
-                    );
+                    return EventHeadCandidateResult::Malformed(EventHeadMalformed::MissingDTag);
                 };
-                let d_tag = match RadrootsDTag::parse(d_tag) {
+                let d_tag = match DTag::parse(d_tag) {
                     Ok(d_tag) => d_tag,
                     Err(error) => {
-                        return RadrootsEventHeadCandidateResult::Malformed(
-                            RadrootsEventHeadMalformed::InvalidDTag(error),
+                        return EventHeadCandidateResult::Malformed(
+                            EventHeadMalformed::InvalidDTag(error),
                         );
                     }
                 };
-                RadrootsEventHeadCoordinate::Addressable {
+                EventHeadCoordinate::Addressable {
                     kind: event.kind_u32(),
                     pubkey,
                     d_tag: d_tag.into_string(),
                 }
             };
-            RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
+            EventHeadCandidateResult::Candidate(EventHeadCandidate {
                 coordinate,
                 event_id,
                 created_at: event.created_at_u64(),
@@ -124,34 +122,30 @@ pub fn event_head_candidate_for_class(
 /// This deliberately does not identify or validate a Radroots product
 /// contract. Raw replacement ordering must include every signature-verified
 /// replaceable or addressable event, including unsupported product shapes.
-pub fn event_head_candidate_for_nip01_event(
-    event: &RadrootsEventEnvelope,
-) -> RadrootsEventHeadCandidateResult {
+pub fn event_head_candidate_for_nip01_event(event: &EventEnvelope) -> EventHeadCandidateResult {
     event_head_candidate_for_nip01_event_v1(event)
 }
 
 /// Derives a raw head candidate with addressable-feed-v1 semantics.
-pub fn event_head_candidate_for_nip01_event_v1(
-    event: &RadrootsEventEnvelope,
-) -> RadrootsEventHeadCandidateResult {
+pub fn event_head_candidate_for_nip01_event_v1(event: &EventEnvelope) -> EventHeadCandidateResult {
     let coordinate = match event.kind_class() {
-        RadrootsEventKindClass::Regular => {
-            return RadrootsEventHeadCandidateResult::NotHeadSelected;
+        EventKindClass::Regular => {
+            return EventHeadCandidateResult::NotHeadSelected;
         }
-        RadrootsEventKindClass::Ephemeral => {
-            return RadrootsEventHeadCandidateResult::NotPersisted;
+        EventKindClass::Ephemeral => {
+            return EventHeadCandidateResult::NotPersisted;
         }
-        RadrootsEventKindClass::Replaceable => RadrootsEventHeadCoordinate::Replaceable {
+        EventKindClass::Replaceable => EventHeadCoordinate::Replaceable {
             kind: event.kind_u32(),
             pubkey: *event.author(),
         },
-        RadrootsEventKindClass::Addressable => RadrootsEventHeadCoordinate::Addressable {
+        EventKindClass::Addressable => EventHeadCoordinate::Addressable {
             kind: event.kind_u32(),
             pubkey: *event.author(),
             d_tag: String::from(first_tag_value(event.tag_slices(), TAG_D).unwrap_or("")),
         },
     };
-    RadrootsEventHeadCandidateResult::Candidate(RadrootsEventHeadCandidate {
+    EventHeadCandidateResult::Candidate(EventHeadCandidate {
         coordinate,
         event_id: *event.id(),
         created_at: event.created_at_u64(),
@@ -159,55 +153,55 @@ pub fn event_head_candidate_for_nip01_event_v1(
 }
 
 pub fn event_head_candidate_for_contract(
-    event: &RadrootsEventEnvelope,
-    contract: &RadrootsEventContract,
-) -> RadrootsEventHeadCandidateResult {
+    event: &EventEnvelope,
+    contract: &EventContract,
+) -> EventHeadCandidateResult {
     event_head_candidate_for_class(event, contract.class)
 }
 
 pub fn event_head_candidate_for_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsEventHeadCandidateResult, RadrootsContractMatchError> {
+    event: &EventEnvelope,
+) -> Result<EventHeadCandidateResult, ContractMatchError> {
     let tags = event.tags_as_vec();
     let contract = identify_event_contract(event.kind_u32(), &tags, event.content())?;
     Ok(event_head_candidate_for_contract(event, contract))
 }
 
 pub fn select_event_head(
-    candidate: RadrootsEventHeadCandidate,
-    current: Option<&RadrootsCurrentEventHead>,
-) -> RadrootsEventHeadDecision {
+    candidate: EventHeadCandidate,
+    current: Option<&CurrentEventHead>,
+) -> EventHeadDecision {
     select_event_head_v1(candidate, current)
 }
 
 /// Selects a raw head with addressable-feed-v1 ordering semantics.
 pub fn select_event_head_v1(
-    candidate: RadrootsEventHeadCandidate,
-    current: Option<&RadrootsCurrentEventHead>,
-) -> RadrootsEventHeadDecision {
+    candidate: EventHeadCandidate,
+    current: Option<&CurrentEventHead>,
+) -> EventHeadDecision {
     let Some(current) = current else {
-        return RadrootsEventHeadDecision::Applied(candidate.into());
+        return EventHeadDecision::Applied(candidate.into());
     };
     if candidate.coordinate != current.coordinate {
-        return RadrootsEventHeadDecision::CoordinateMismatch;
+        return EventHeadDecision::CoordinateMismatch;
     }
     if candidate.event_id == current.event_id {
-        return RadrootsEventHeadDecision::SkippedDuplicate;
+        return EventHeadDecision::SkippedDuplicate;
     }
     if candidate.created_at > current.created_at {
-        return RadrootsEventHeadDecision::Applied(candidate.into());
+        return EventHeadDecision::Applied(candidate.into());
     }
     if candidate.created_at < current.created_at {
-        return RadrootsEventHeadDecision::SkippedOlder;
+        return EventHeadDecision::SkippedOlder;
     }
     if candidate.event_id < current.event_id {
-        RadrootsEventHeadDecision::Applied(candidate.into())
+        EventHeadDecision::Applied(candidate.into())
     } else {
-        RadrootsEventHeadDecision::SkippedSameTimestampHigherEventId
+        EventHeadDecision::SkippedSameTimestampHigherEventId
     }
 }
 
-fn first_tag_value<'a>(tags: &'a [RadrootsEventTag], name: &str) -> Option<&'a str> {
+fn first_tag_value<'a>(tags: &'a [EventTag], name: &str) -> Option<&'a str> {
     tags.iter()
         .find(|tag| tag.as_slice().first().map(String::as_str) == Some(name))
         .and_then(|tag| tag.as_slice().get(1))

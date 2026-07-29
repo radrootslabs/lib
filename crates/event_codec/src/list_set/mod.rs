@@ -31,8 +31,8 @@ mod tests {
     use crate::error::{EventEncodeError, EventParseError};
     use radroots_event::{
         envelope::kind::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
-        social::list::RadrootsListEntry,
-        social::list_set::RadrootsListSet,
+        social::list::ListEntry,
+        social::list_set::ListSet,
     };
 
     #[test]
@@ -45,15 +45,15 @@ mod tests {
 
     #[test]
     fn list_set_tags_round_trip() {
-        let list = RadrootsListSet {
+        let list = ListSet {
             d_tag: "members.owners".to_string(),
             content: "".to_string(),
             entries: vec![
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec!["owner_pubkey".to_string()],
                 },
-                RadrootsListEntry {
+                ListEntry {
                     tag: "p".to_string(),
                     values: vec!["worker_pubkey".to_string(), "wss://relay".to_string()],
                 },
@@ -73,10 +73,10 @@ mod tests {
 
     #[test]
     fn list_set_rejects_invalid_farm_d_tag_on_encode() {
-        let list = RadrootsListSet {
+        let list = ListSet {
             d_tag: "farm:invalid:members".to_string(),
             content: "".to_string(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec!["pubkey".to_string()],
             }],
@@ -101,10 +101,10 @@ mod tests {
 
     #[test]
     fn list_set_accepts_resource_base64_d_tag() {
-        let list = RadrootsListSet {
+        let list = ListSet {
             d_tag: "resource:AAAAAAAAAAAAAAAAAAAAAA:members".to_string(),
             content: "".to_string(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec!["pubkey".to_string()],
             }],
@@ -120,10 +120,10 @@ mod tests {
 
     #[test]
     fn list_set_rejects_empty_prefixed_id_or_suffix() {
-        let list = RadrootsListSet {
+        let list = ListSet {
             d_tag: "farm::members".to_string(),
             content: "".to_string(),
-            entries: vec![RadrootsListEntry {
+            entries: vec![ListEntry {
                 tag: "p".to_string(),
                 values: vec!["pubkey".to_string()],
             }],

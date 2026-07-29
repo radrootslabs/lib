@@ -655,7 +655,7 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
         );
     }
     for forbidden in [
-        "impl<'de> Deserialize<'de> for RadrootsRelayUrl",
+        "impl<'de> Deserialize<'de> for RelayUrl",
         "impl<'de> Deserialize<'de> for RadrootsRelayTargetSet",
     ] {
         assert!(

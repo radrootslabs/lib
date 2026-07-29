@@ -3,8 +3,8 @@
 use std::{borrow::Cow, collections::BTreeSet, fs, path::Path};
 
 use radroots_event::{
-    contract::validate_event_contract_shape, envelope::RadrootsEventEnvelope,
-    envelope::RadrootsEventEnvelopeParts, listing::operational::RadrootsOperationalListing,
+    contract::validate_event_contract_shape, envelope::EventEnvelope, envelope::EventEnvelopeParts,
+    listing::operational::OperationalListing,
 };
 use radroots_event_codec::{
     error::EventEncodeError,
@@ -203,7 +203,7 @@ fn checked_in_operational_listing_full_event_tag_vectors_execute() {
                 let wire = to_wire_parts(&listing)
                     .unwrap_or_else(|error| panic!("{} draft failed: {error}", vector.id));
                 assert_eq!(wire.tags, actual, "{}", vector.id);
-                let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+                let event = EventEnvelope::new(EventEnvelopeParts {
                     id: "b".repeat(64),
                     author: listing.farm.pubkey.clone(),
                     created_at: listing.published_at.unwrap_or_default(),
@@ -289,7 +289,7 @@ fn assert_encode_error(id: &str, actual: &EventEncodeError, expected: &EncodeErr
     }
 }
 
-fn typed_listing(raw: &Value, id: &str) -> RadrootsOperationalListing {
+fn typed_listing(raw: &Value, id: &str) -> OperationalListing {
     validate_listing_fixture_keys(raw)
         .unwrap_or_else(|error| panic!("{id} fixture schema failed: {error}"));
     serde_json::from_value(raw.clone())

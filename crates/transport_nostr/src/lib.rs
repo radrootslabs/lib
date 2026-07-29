@@ -39,4 +39,4 @@ pub use publish::{
     RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest, publish_signed_event,
     verified_signed_event_payload,
 };
-pub use relay::{RadrootsRelayTargetSet, RadrootsRelayUrl, RadrootsRelayUrlPolicy};
+pub use relay::{RadrootsRelayTargetSet, RadrootsRelayUrlPolicy, RelayUrl};

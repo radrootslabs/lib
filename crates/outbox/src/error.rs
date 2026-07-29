@@ -15,13 +15,13 @@ pub enum RadrootsOutboxError {
     EventStore(#[from] radroots_event_store::RadrootsEventStoreError),
 
     #[error("Signed event does not match frozen draft: {0}")]
-    SignedEventDraftMismatch(#[from] radroots_event::draft::RadrootsDraftError),
+    SignedEventDraftMismatch(#[from] radroots_event::draft::DraftError),
 
     #[error("Event wire error: {0}")]
-    EventWire(#[from] radroots_event::wire::RadrootsEventWireError),
+    EventWire(#[from] radroots_event::wire::EventWireError),
 
     #[error("Signed event error: {0}")]
-    SignedEvent(#[from] radroots_event::draft::RadrootsSignedEventError),
+    SignedEvent(#[from] radroots_event::draft::SignedEventError),
 
     #[error("delivery targets cannot be empty")]
     EmptyDeliveryTargets,

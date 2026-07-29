@@ -5,11 +5,11 @@ use crate::RadrootsEventStoreError;
 use radroots_blossom::Sha256;
 use radroots_event::{
     food::availability::{
-        RADROOTS_FOOD_IMAGE_MAX_COUNT, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
-        RadrootsFoodIdentifier, RadrootsFoodImageDimensions, RadrootsFoodPrice,
-        RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText, food_media_blossom_digest,
+        FoodAvailabilityStatus, FoodContent, FoodIdentifier, FoodImageDimensions, FoodPrice,
+        FoodPublishedAt, FoodQuantity, FoodText, RADROOTS_FOOD_IMAGE_MAX_COUNT,
+        food_media_blossom_digest,
     },
-    id::RadrootsEventId,
+    id::EventId,
 };
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsInboundFoodAvailabilityImage,
@@ -129,11 +129,11 @@ pub enum RadrootsFoodAvailabilityStatusFilterV1 {
 }
 
 impl RadrootsFoodAvailabilityStatusFilterV1 {
-    pub const fn status(self) -> Option<RadrootsFoodAvailabilityStatus> {
+    pub const fn status(self) -> Option<FoodAvailabilityStatus> {
         match self {
             Self::Any => None,
-            Self::Active => Some(RadrootsFoodAvailabilityStatus::Active),
-            Self::Sold => Some(RadrootsFoodAvailabilityStatus::Sold),
+            Self::Active => Some(FoodAvailabilityStatus::Active),
+            Self::Sold => Some(FoodAvailabilityStatus::Sold),
         }
     }
 
@@ -145,11 +145,11 @@ impl RadrootsFoodAvailabilityStatusFilterV1 {
     }
 }
 
-impl From<RadrootsFoodAvailabilityStatus> for RadrootsFoodAvailabilityStatusFilterV1 {
-    fn from(value: RadrootsFoodAvailabilityStatus) -> Self {
+impl From<FoodAvailabilityStatus> for RadrootsFoodAvailabilityStatusFilterV1 {
+    fn from(value: FoodAvailabilityStatus) -> Self {
         match value {
-            RadrootsFoodAvailabilityStatus::Active => Self::Active,
-            RadrootsFoodAvailabilityStatus::Sold => Self::Sold,
+            FoodAvailabilityStatus::Active => Self::Active,
+            FoodAvailabilityStatus::Sold => Self::Sold,
         }
     }
 }
@@ -159,7 +159,7 @@ pub struct RadrootsStoredFoodAvailabilityImageV1 {
     image_index: u32,
     raw_tag: Vec<String>,
     url: Option<String>,
-    dimensions: Option<RadrootsFoodImageDimensions>,
+    dimensions: Option<FoodImageDimensions>,
     blossom_sha256: Option<Sha256>,
     diagnostics: Vec<RadrootsFoodAvailabilityImageDiagnostic>,
 }
@@ -196,7 +196,7 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
         self.url.as_deref()
     }
 
-    pub const fn dimensions(&self) -> Option<RadrootsFoodImageDimensions> {
+    pub const fn dimensions(&self) -> Option<FoodImageDimensions> {
         self.dimensions
     }
 
@@ -222,18 +222,18 @@ impl RadrootsStoredFoodAvailabilityImageV1 {
 pub struct RadrootsStoredFoodAvailabilityV1 {
     source_generation: RadrootsEventStoreSourceGeneration,
     pubkey: PublicKey,
-    identifier: RadrootsFoodIdentifier,
-    event_id: RadrootsEventId,
+    identifier: FoodIdentifier,
+    event_id: EventId,
     event_seq: i64,
     created_at: u64,
-    content: RadrootsFoodContent,
-    title: RadrootsFoodText,
-    summary: RadrootsFoodText,
-    published_at: RadrootsFoodPublishedAt,
-    location: RadrootsFoodText,
-    price: RadrootsFoodPrice,
-    quantity: Option<RadrootsFoodQuantity>,
-    status: RadrootsFoodAvailabilityStatus,
+    content: FoodContent,
+    title: FoodText,
+    summary: FoodText,
+    published_at: FoodPublishedAt,
+    location: FoodText,
+    price: FoodPrice,
+    quantity: Option<FoodQuantity>,
+    status: FoodAvailabilityStatus,
     source_transition_seq: i64,
     diagnostics: Vec<RadrootsFoodAvailabilityImageDiagnostic>,
     images: Vec<RadrootsStoredFoodAvailabilityImageV1>,
@@ -244,7 +244,7 @@ impl RadrootsStoredFoodAvailabilityV1 {
     pub(crate) fn from_projection(
         source_generation: RadrootsEventStoreSourceGeneration,
         pubkey: PublicKey,
-        event_id: RadrootsEventId,
+        event_id: EventId,
         event_seq: i64,
         created_at: u64,
         source_transition_seq: i64,
@@ -318,15 +318,15 @@ impl RadrootsStoredFoodAvailabilityV1 {
         &self.pubkey
     }
 
-    pub const fn identifier(&self) -> &RadrootsFoodIdentifier {
+    pub const fn identifier(&self) -> &FoodIdentifier {
         &self.identifier
     }
 
-    pub const fn d_tag(&self) -> &RadrootsFoodIdentifier {
+    pub const fn d_tag(&self) -> &FoodIdentifier {
         self.identifier()
     }
 
-    pub const fn event_id(&self) -> &RadrootsEventId {
+    pub const fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -338,35 +338,35 @@ impl RadrootsStoredFoodAvailabilityV1 {
         self.created_at
     }
 
-    pub const fn content(&self) -> &RadrootsFoodContent {
+    pub const fn content(&self) -> &FoodContent {
         &self.content
     }
 
-    pub const fn title(&self) -> &RadrootsFoodText {
+    pub const fn title(&self) -> &FoodText {
         &self.title
     }
 
-    pub const fn summary(&self) -> &RadrootsFoodText {
+    pub const fn summary(&self) -> &FoodText {
         &self.summary
     }
 
-    pub const fn published_at(&self) -> RadrootsFoodPublishedAt {
+    pub const fn published_at(&self) -> FoodPublishedAt {
         self.published_at
     }
 
-    pub const fn location(&self) -> &RadrootsFoodText {
+    pub const fn location(&self) -> &FoodText {
         &self.location
     }
 
-    pub const fn price(&self) -> &RadrootsFoodPrice {
+    pub const fn price(&self) -> &FoodPrice {
         &self.price
     }
 
-    pub const fn quantity(&self) -> Option<&RadrootsFoodQuantity> {
+    pub const fn quantity(&self) -> Option<&FoodQuantity> {
         self.quantity.as_ref()
     }
 
-    pub const fn status(&self) -> RadrootsFoodAvailabilityStatus {
+    pub const fn status(&self) -> FoodAvailabilityStatus {
         self.status
     }
 
@@ -487,7 +487,7 @@ mod tests {
             Some("active")
         );
         assert_eq!(
-            RadrootsFoodAvailabilityStatusFilterV1::from(RadrootsFoodAvailabilityStatus::Sold)
+            RadrootsFoodAvailabilityStatusFilterV1::from(FoodAvailabilityStatus::Sold)
                 .storage_value(),
             Some("sold")
         );

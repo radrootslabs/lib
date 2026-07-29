@@ -60,9 +60,7 @@ pub mod trade;
 mod verification;
 pub mod wire;
 
-pub use draft::{RadrootsEventDraft as EventDraft, RadrootsSignedEvent as SignedEvent};
-pub use envelope::{
-    RadrootsEventEnvelope as Event, RadrootsEventKind as EventKind, RadrootsEventTag as EventTag,
-};
+pub use draft::{EventDraft, SignedEvent};
+pub use envelope::{EventEnvelope as Event, EventKind, EventTag};
 pub use id::EventId;
 pub use verification::{Error, SignatureVerifiedEvent as VerifiedEvent};

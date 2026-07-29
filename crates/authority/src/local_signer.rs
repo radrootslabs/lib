@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::{RadrootsAuthorityError, RadrootsEventSigner, RadrootsSignerError};
-use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
+use radroots_event::draft::{EventDraft, SignedEvent};
 use radroots_identity::PublicKey;
 use radroots_nostr::prelude::{RadrootsNostrKeys, radroots_nostr_sign_frozen_draft};
 
@@ -23,10 +23,7 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
         &self.pubkey
     }
 
-    fn sign_frozen_draft(
-        &self,
-        draft: &RadrootsEventDraft,
-    ) -> Result<RadrootsSignedEvent, RadrootsSignerError> {
+    fn sign_frozen_draft(&self, draft: &EventDraft) -> Result<SignedEvent, RadrootsSignerError> {
         radroots_nostr_sign_frozen_draft(&self.keys, draft).map_err(|error| {
             RadrootsSignerError::SigningFailed {
                 message: error.to_string(),
@@ -38,7 +35,7 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::envelope::RadrootsEventEnvelope;
+    use radroots_event::envelope::EventEnvelope;
     use radroots_event::envelope::kind::KIND_GEOCHAT;
     use radroots_nostr::prelude::{
         RadrootsNostrEventVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
@@ -55,8 +52,8 @@ mod tests {
         RadrootsNostrKeys::new(secret_key)
     }
 
-    fn generic_draft() -> RadrootsEventDraft {
-        RadrootsEventDraft::new(
+    fn generic_draft() -> EventDraft {
+        EventDraft::new(
             "radroots.social.geochat.v1",
             KIND_GEOCHAT,
             1_700_000_000,
@@ -67,7 +64,7 @@ mod tests {
         .expect("draft")
     }
 
-    fn verification_event(signed: &RadrootsSignedEvent) -> RadrootsEventEnvelope {
+    fn verification_event(signed: &SignedEvent) -> EventEnvelope {
         signed.envelope().clone()
     }
 

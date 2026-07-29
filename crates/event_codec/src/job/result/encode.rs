@@ -1,8 +1,8 @@
-use radroots_event::{envelope::kind::is_result_kind, social::job_result::RadrootsJobResult};
+use radroots_event::{envelope::kind::is_result_kind, social::job_result::JobResult};
 
 use crate::job::encode::{JobEncodeError, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -11,7 +11,7 @@ use alloc::{
     vec::Vec,
 };
 
-pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
+pub fn job_result_build_tags(res: &JobResult) -> Vec<Vec<String>> {
     let mut tags: Vec<Vec<String>> = Vec::with_capacity(
         2 + res.inputs.len()
             + usize::from(res.customer_pubkey.is_some())
@@ -63,9 +63,9 @@ pub fn job_result_build_tags(res: &RadrootsJobResult) -> Vec<Vec<String>> {
 }
 
 pub fn to_wire_parts(
-    res: &RadrootsJobResult,
+    res: &JobResult,
     content: &str,
-) -> Result<RadrootsNip01EventWireParts, JobEncodeError> {
+) -> Result<Nip01EventWireParts, JobEncodeError> {
     let kind = res.kind as u32;
     if !is_result_kind(kind) {
         return Err(JobEncodeError::InvalidKind(kind));
@@ -78,7 +78,7 @@ pub fn to_wire_parts(
 
     canonicalize_tags(&mut tags);
 
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: content.to_string(),
         tags,

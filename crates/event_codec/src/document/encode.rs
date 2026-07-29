@@ -7,7 +7,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{post::document::RadrootsDocument, tag::name::TAG_D};
+use radroots_event::{post::document::Document, tag::name::TAG_D};
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -16,7 +16,7 @@ use crate::error::EventEncodeError;
 use radroots_event::envelope::kind::KIND_DOCUMENT;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_P: &str = "p";
@@ -26,9 +26,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-pub fn document_build_tags(
-    document: &RadrootsDocument,
-) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn document_build_tags(document: &Document) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if document.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -64,23 +62,21 @@ pub fn document_build_tags(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(
-    document: &RadrootsDocument,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(document: &Document) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(document, KIND_DOCUMENT)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    document: &RadrootsDocument,
+    document: &Document,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_DOCUMENT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = document_build_tags(document)?;
     let content = serde_json::to_string(document).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,
@@ -91,14 +87,14 @@ pub fn to_wire_parts_with_kind(
 mod tests {
     use super::*;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
-    use radroots_event::post::document::RadrootsDocumentSubject;
+    use radroots_event::post::document::DocumentSubject;
 
     fn sample_document_address() -> String {
         format!("30340:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")
     }
 
-    fn sample_document() -> RadrootsDocument {
-        RadrootsDocument {
+    fn sample_document() -> Document {
+        Document {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAg".to_string(),
             doc_type: "charter".to_string(),
             title: "Charter".to_string(),
@@ -106,7 +102,7 @@ mod tests {
             summary: None,
             effective_at: None,
             body_markdown: None,
-            subject: RadrootsDocumentSubject {
+            subject: DocumentSubject {
                 pubkey: FIXTURE_ALICE_PUBLIC_KEY_HEX.to_string(),
                 address: Some(sample_document_address()),
             },

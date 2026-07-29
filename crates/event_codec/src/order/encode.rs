@@ -1,75 +1,70 @@
 #[cfg(feature = "serde_json")]
 use radroots_event::{
-    id::RadrootsEventId,
-    tag::RadrootsEventPtr,
+    id::EventId,
+    tag::EventPtr,
     trade::order::{
-        RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
-        RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
-        RadrootsOrderRequest,
+        OrderCancellation, OrderDecision, OrderEnvelope, OrderEnvelopeError, OrderEventType,
+        OrderPayloadError, OrderRequest,
     },
 };
 
 #[cfg(feature = "serde_json")]
 use crate::{error::EventEncodeError, order::tags::order_envelope_tags};
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 #[cfg(feature = "serde_json")]
 use radroots_identity::PublicKey;
 
 #[cfg(feature = "serde_json")]
-fn map_order_envelope_error(error: RadrootsOrderEnvelopeError) -> EventEncodeError {
+fn map_order_envelope_error(error: OrderEnvelopeError) -> EventEncodeError {
     match error {
-        RadrootsOrderEnvelopeError::MissingOrderId => {
-            EventEncodeError::EmptyRequiredField("order_id")
-        }
-        RadrootsOrderEnvelopeError::MissingListingAddr => {
+        OrderEnvelopeError::MissingOrderId => EventEncodeError::EmptyRequiredField("order_id"),
+        OrderEnvelopeError::MissingListingAddr => {
             EventEncodeError::EmptyRequiredField("listing_addr")
         }
-        RadrootsOrderEnvelopeError::InvalidVersion { .. } => {
-            EventEncodeError::InvalidField("version")
-        }
+        OrderEnvelopeError::InvalidVersion { .. } => EventEncodeError::InvalidField("version"),
     }
 }
 
 #[cfg(feature = "serde_json")]
-fn map_order_payload_error(error: RadrootsOrderPayloadError) -> EventEncodeError {
+fn map_order_payload_error(error: OrderPayloadError) -> EventEncodeError {
     match error {
-        RadrootsOrderPayloadError::EmptyField(field) => EventEncodeError::EmptyRequiredField(field),
-        RadrootsOrderPayloadError::MissingItems => EventEncodeError::EmptyRequiredField("items"),
-        RadrootsOrderPayloadError::InvalidItemBinCount { .. } => {
+        OrderPayloadError::EmptyField(field) => EventEncodeError::EmptyRequiredField(field),
+        OrderPayloadError::MissingItems => EventEncodeError::EmptyRequiredField("items"),
+        OrderPayloadError::InvalidItemBinCount { .. } => {
             EventEncodeError::InvalidField("items.bin_count")
         }
-        RadrootsOrderPayloadError::MissingEconomicItems => {
+        OrderPayloadError::MissingEconomicItems => {
             EventEncodeError::EmptyRequiredField("economics.items")
         }
-        RadrootsOrderPayloadError::InvalidEconomicItemBinCount { .. } => {
+        OrderPayloadError::InvalidEconomicItemBinCount { .. } => {
             EventEncodeError::InvalidField("economics.items.bin_count")
         }
-        RadrootsOrderPayloadError::InvalidEconomicItemQuantity { .. } => {
+        OrderPayloadError::InvalidEconomicItemQuantity { .. } => {
             EventEncodeError::InvalidField("economics.items.quantity_amount")
         }
-        RadrootsOrderPayloadError::InvalidEconomicItemPrice { .. } => {
+        OrderPayloadError::InvalidEconomicItemPrice { .. } => {
             EventEncodeError::InvalidField("economics.items.unit_price_amount")
         }
-        RadrootsOrderPayloadError::InvalidEconomicItemSubtotal { .. } => {
+        OrderPayloadError::InvalidEconomicItemSubtotal { .. } => {
             EventEncodeError::InvalidField("economics.items.line_subtotal")
         }
-        RadrootsOrderPayloadError::InvalidEconomicLineAmount { field, .. }
-        | RadrootsOrderPayloadError::InvalidEconomicLineKind { field, .. }
-        | RadrootsOrderPayloadError::InvalidEconomicLineEffect { field, .. }
-        | RadrootsOrderPayloadError::InvalidEconomicCurrency { field }
-        | RadrootsOrderPayloadError::InvalidEconomicOrdering { field }
-        | RadrootsOrderPayloadError::InvalidEconomicTotal { field }
-        | RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field } => {
+        OrderPayloadError::InvalidEconomicLineAmount { field, .. }
+        | OrderPayloadError::InvalidEconomicLineKind { field, .. }
+        | OrderPayloadError::InvalidEconomicLineEffect { field, .. }
+        | OrderPayloadError::InvalidEconomicCurrency { field }
+        | OrderPayloadError::InvalidEconomicOrdering { field }
+        | OrderPayloadError::InvalidEconomicTotal { field }
+        | OrderPayloadError::InvalidOrderEconomicsBinding { field } => {
             EventEncodeError::InvalidField(field)
         }
-        RadrootsOrderPayloadError::InvalidQuoteVersion => {
+        OrderPayloadError::InvalidQuoteVersion => {
             EventEncodeError::InvalidField("economics.quote_version")
         }
-        RadrootsOrderPayloadError::MissingInventoryCommitments => {
+        OrderPayloadError::MissingInventoryCommitments => {
             EventEncodeError::EmptyRequiredField("inventory_commitments")
         }
-        RadrootsOrderPayloadError::InvalidInventoryCommitmentCount { .. } => {
+        OrderPayloadError::InvalidInventoryCommitmentCount { .. } => {
             EventEncodeError::InvalidField("inventory_commitments.bin_count")
         }
     }
@@ -78,19 +73,19 @@ fn map_order_payload_error(error: RadrootsOrderPayloadError) -> EventEncodeError
 #[cfg(feature = "serde_json")]
 struct OrderEnvelopeEventBuildParts<'a, T> {
     recipient_pubkey: &'a PublicKey,
-    message_type: RadrootsOrderEventType,
+    message_type: OrderEventType,
     listing_addr: &'a str,
     order_id: &'a str,
-    listing_event: Option<&'a RadrootsEventPtr>,
-    root_event_id: Option<&'a RadrootsEventId>,
-    prev_event_id: Option<&'a RadrootsEventId>,
+    listing_event: Option<&'a EventPtr>,
+    root_event_id: Option<&'a EventId>,
+    prev_event_id: Option<&'a EventId>,
     payload: &'a T,
 }
 
 #[cfg(feature = "serde_json")]
 fn order_envelope_event_build<T: serde::Serialize>(
     parts: OrderEnvelopeEventBuildParts<'_, T>,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if parts.message_type.requires_listing_snapshot() && parts.listing_event.is_none() {
         return Err(EventEncodeError::EmptyRequiredField("listing_event.id"));
     }
@@ -103,7 +98,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
         }
     }
 
-    let envelope = RadrootsOrderEnvelope::new(
+    let envelope = OrderEnvelope::new(
         parts.message_type,
         parts.listing_addr,
         parts.order_id,
@@ -111,8 +106,8 @@ fn order_envelope_event_build<T: serde::Serialize>(
     );
     envelope.validate().map_err(map_order_envelope_error)?;
     let content = serde_json::to_string(&envelope).map_err(|_| EventEncodeError::Json)?;
-    let root_event_id = parts.root_event_id.map(RadrootsEventId::to_hex);
-    let prev_event_id = parts.prev_event_id.map(RadrootsEventId::to_hex);
+    let root_event_id = parts.root_event_id.map(EventId::to_hex);
+    let prev_event_id = parts.prev_event_id.map(EventId::to_hex);
     let tags = order_envelope_tags(
         parts.recipient_pubkey.to_hex(),
         parts.listing_addr,
@@ -121,7 +116,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
         root_event_id.as_deref(),
         prev_event_id.as_deref(),
     )?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind: parts.message_type.kind(),
         content,
         tags,
@@ -130,13 +125,13 @@ fn order_envelope_event_build<T: serde::Serialize>(
 
 #[cfg(feature = "serde_json")]
 pub fn order_request_event_build(
-    listing_event: &RadrootsEventPtr,
-    payload: &RadrootsOrderRequest,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    listing_event: &EventPtr,
+    payload: &OrderRequest,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,
-        message_type: RadrootsOrderEventType::OrderRequested,
+        message_type: OrderEventType::OrderRequested,
         listing_addr: payload.listing_addr.as_str(),
         order_id: payload.order_id.as_str(),
         listing_event: Some(listing_event),
@@ -148,14 +143,14 @@ pub fn order_request_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_decision_event_build(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderDecision,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    root_event_id: &EventId,
+    prev_event_id: &EventId,
+    payload: &OrderDecision,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.buyer_pubkey,
-        message_type: RadrootsOrderEventType::OrderDecision,
+        message_type: OrderEventType::OrderDecision,
         listing_addr: payload.listing_addr.as_str(),
         order_id: payload.order_id.as_str(),
         listing_event: None,
@@ -167,14 +162,14 @@ pub fn order_decision_event_build(
 
 #[cfg(feature = "serde_json")]
 pub fn order_cancellation_event_build(
-    root_event_id: &RadrootsEventId,
-    prev_event_id: &RadrootsEventId,
-    payload: &RadrootsOrderCancellation,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    root_event_id: &EventId,
+    prev_event_id: &EventId,
+    payload: &OrderCancellation,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     payload.validate().map_err(map_order_payload_error)?;
     order_envelope_event_build(OrderEnvelopeEventBuildParts {
         recipient_pubkey: &payload.seller_pubkey,
-        message_type: RadrootsOrderEventType::OrderCancelled,
+        message_type: OrderEventType::OrderCancelled,
         listing_addr: payload.listing_addr.as_str(),
         order_id: payload.order_id.as_str(),
         listing_event: None,
@@ -192,17 +187,15 @@ mod tests {
     };
     use crate::error::EventEncodeError;
     use radroots_event::{
-        id::RadrootsEventId,
-        tag::RadrootsEventPtr,
-        trade::order::{
-            RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
-        },
+        id::EventId,
+        tag::EventPtr,
+        trade::order::{OrderEnvelopeError, OrderEventType, OrderPayloadError},
     };
     use radroots_identity::PublicKey;
 
     const RECIPIENT: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
 
-    fn event_id(character: char) -> RadrootsEventId {
+    fn event_id(character: char) -> EventId {
         core::iter::repeat_n(character, 64)
             .collect::<String>()
             .parse()
@@ -216,81 +209,73 @@ mod tests {
     #[test]
     fn order_encode_error_mappers_cover_envelope_and_payload_variants() {
         assert_empty_required(
-            map_order_envelope_error(RadrootsOrderEnvelopeError::MissingOrderId),
+            map_order_envelope_error(OrderEnvelopeError::MissingOrderId),
             "order_id",
         );
         assert_empty_required(
-            map_order_envelope_error(RadrootsOrderEnvelopeError::MissingListingAddr),
+            map_order_envelope_error(OrderEnvelopeError::MissingListingAddr),
             "listing_addr",
         );
         assert_invalid_field(
-            map_order_envelope_error(RadrootsOrderEnvelopeError::InvalidVersion {
+            map_order_envelope_error(OrderEnvelopeError::InvalidVersion {
                 expected: 1,
                 got: 2,
             }),
             "version",
         );
         assert_empty_required(
-            map_order_payload_error(RadrootsOrderPayloadError::EmptyField("buyer_pubkey")),
+            map_order_payload_error(OrderPayloadError::EmptyField("buyer_pubkey")),
             "buyer_pubkey",
         );
         assert_empty_required(
-            map_order_payload_error(RadrootsOrderPayloadError::MissingItems),
+            map_order_payload_error(OrderPayloadError::MissingItems),
             "items",
         );
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidItemBinCount { index: 0 }),
+            map_order_payload_error(OrderPayloadError::InvalidItemBinCount { index: 0 }),
             "items.bin_count",
         );
         assert_empty_required(
-            map_order_payload_error(RadrootsOrderPayloadError::MissingEconomicItems),
+            map_order_payload_error(OrderPayloadError::MissingEconomicItems),
             "economics.items",
         );
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemBinCount {
-                index: 0,
-            }),
+            map_order_payload_error(OrderPayloadError::InvalidEconomicItemBinCount { index: 0 }),
             "economics.items.bin_count",
         );
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemQuantity {
-                index: 0,
-            }),
+            map_order_payload_error(OrderPayloadError::InvalidEconomicItemQuantity { index: 0 }),
             "economics.items.quantity_amount",
         );
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemPrice {
-                index: 0,
-            }),
+            map_order_payload_error(OrderPayloadError::InvalidEconomicItemPrice { index: 0 }),
             "economics.items.unit_price_amount",
         );
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidEconomicItemSubtotal {
-                index: 0,
-            }),
+            map_order_payload_error(OrderPayloadError::InvalidEconomicItemSubtotal { index: 0 }),
             "economics.items.line_subtotal",
         );
         for error in [
-            RadrootsOrderPayloadError::InvalidEconomicLineAmount {
+            OrderPayloadError::InvalidEconomicLineAmount {
                 field: "adjustments.amount",
                 index: 0,
             },
-            RadrootsOrderPayloadError::InvalidEconomicLineKind {
+            OrderPayloadError::InvalidEconomicLineKind {
                 field: "discounts.kind",
                 index: 0,
             },
-            RadrootsOrderPayloadError::InvalidEconomicLineEffect {
+            OrderPayloadError::InvalidEconomicLineEffect {
                 field: "discounts.effect",
                 index: 0,
             },
-            RadrootsOrderPayloadError::InvalidEconomicCurrency {
+            OrderPayloadError::InvalidEconomicCurrency {
                 field: "subtotal.currency",
             },
-            RadrootsOrderPayloadError::InvalidEconomicOrdering {
+            OrderPayloadError::InvalidEconomicOrdering {
                 field: "adjustments",
             },
-            RadrootsOrderPayloadError::InvalidEconomicTotal { field: "total" },
-            RadrootsOrderPayloadError::InvalidOrderEconomicsBinding { field: "items" },
+            OrderPayloadError::InvalidEconomicTotal { field: "total" },
+            OrderPayloadError::InvalidOrderEconomicsBinding { field: "items" },
         ] {
             assert!(matches!(
                 map_order_payload_error(error),
@@ -298,15 +283,15 @@ mod tests {
             ));
         }
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidQuoteVersion),
+            map_order_payload_error(OrderPayloadError::InvalidQuoteVersion),
             "economics.quote_version",
         );
         assert_empty_required(
-            map_order_payload_error(RadrootsOrderPayloadError::MissingInventoryCommitments),
+            map_order_payload_error(OrderPayloadError::MissingInventoryCommitments),
             "inventory_commitments",
         );
         assert_invalid_field(
-            map_order_payload_error(RadrootsOrderPayloadError::InvalidInventoryCommitmentCount {
+            map_order_payload_error(OrderPayloadError::InvalidInventoryCommitmentCount {
                 index: 0,
             }),
             "inventory_commitments.bin_count",
@@ -322,7 +307,7 @@ mod tests {
 
         let missing_listing_event = order_envelope_event_build(OrderEnvelopeEventBuildParts {
             recipient_pubkey: &recipient_pubkey,
-            message_type: RadrootsOrderEventType::OrderRequested,
+            message_type: OrderEventType::OrderRequested,
             listing_addr: "listing-address",
             order_id: "order-1",
             listing_event: None,
@@ -335,7 +320,7 @@ mod tests {
 
         let missing_root = order_envelope_event_build(OrderEnvelopeEventBuildParts {
             recipient_pubkey: &recipient_pubkey,
-            message_type: RadrootsOrderEventType::OrderDecision,
+            message_type: OrderEventType::OrderDecision,
             listing_addr: "listing-address",
             order_id: "order-1",
             listing_event: None,
@@ -348,7 +333,7 @@ mod tests {
 
         let missing_prev = order_envelope_event_build(OrderEnvelopeEventBuildParts {
             recipient_pubkey: &recipient_pubkey,
-            message_type: RadrootsOrderEventType::OrderDecision,
+            message_type: OrderEventType::OrderDecision,
             listing_addr: "listing-address",
             order_id: "order-1",
             listing_event: None,
@@ -361,10 +346,10 @@ mod tests {
 
         let invalid_listing_event = order_envelope_event_build(OrderEnvelopeEventBuildParts {
             recipient_pubkey: &recipient_pubkey,
-            message_type: RadrootsOrderEventType::OrderRequested,
+            message_type: OrderEventType::OrderRequested,
             listing_addr: "listing-address",
             order_id: "order-1",
-            listing_event: Some(&RadrootsEventPtr {
+            listing_event: Some(&EventPtr {
                 id: String::new(),
                 relays: None,
             }),

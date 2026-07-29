@@ -7,8 +7,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::{KIND_FARM, KIND_PLOT},
-    farm::RadrootsFarmRef,
-    farm::plot::RadrootsPlot,
+    farm::FarmRef,
+    farm::plot::Plot,
     tag::name::TAG_D,
 };
 
@@ -16,7 +16,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_G: &str = "g";
@@ -27,7 +27,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-fn farm_address(farm: &RadrootsFarmRef) -> String {
+fn farm_address(farm: &FarmRef) -> String {
     let mut value = String::new();
     value.push_str(&KIND_FARM.to_string());
     value.push(':');
@@ -56,7 +56,7 @@ pub fn plot_address(author_pubkey: &str, plot_id: &str) -> Result<String, EventE
     Ok(value)
 }
 
-pub fn plot_build_tags(plot: &RadrootsPlot) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn plot_build_tags(plot: &Plot) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if plot.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -91,21 +91,21 @@ pub fn plot_build_tags(plot: &RadrootsPlot) -> Result<Vec<Vec<String>>, EventEnc
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(plot: &RadrootsPlot) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(plot: &Plot) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(plot, KIND_PLOT)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    plot: &RadrootsPlot,
+    plot: &Plot,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_PLOT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = plot_build_tags(plot)?;
     let content = serde_json::to_string(plot).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,

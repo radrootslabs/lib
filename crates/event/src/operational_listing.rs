@@ -1,10 +1,10 @@
 use radroots_core::pricing::Discount;
 use radroots_core::{Decimal, Money, Quantity, QuantityPrice, Unit};
 
-use crate::farm::RadrootsFarmRef;
-use crate::farm::plot::RadrootsPlotRef;
-use crate::farm::resource_area::RadrootsResourceAreaRef;
-use crate::id::{RadrootsDTag, RadrootsInventoryBinId};
+use crate::farm::FarmRef;
+use crate::farm::plot::PlotRef;
+use crate::farm::resource_area::ResourceAreaRef;
+use crate::id::{DTag, InventoryBinId};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -16,7 +16,7 @@ use alloc::{string::String, vec::Vec};
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsOperationalListingParseError {
+pub enum OperationalListingParseError {
     InvalidKind(u32),
     MissingTag(String),
     InvalidTag(String),
@@ -27,7 +27,7 @@ pub enum RadrootsOperationalListingParseError {
     InvalidDiscount(String),
 }
 
-impl core::fmt::Display for RadrootsOperationalListingParseError {
+impl core::fmt::Display for OperationalListingParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::InvalidKind(kind) => write!(f, "invalid operational listing kind: {kind}"),
@@ -43,7 +43,7 @@ impl core::fmt::Display for RadrootsOperationalListingParseError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for RadrootsOperationalListingParseError {}
+impl std::error::Error for OperationalListingParseError {}
 
 #[cfg_attr(
     any(feature = "serde", test),
@@ -56,7 +56,7 @@ impl std::error::Error for RadrootsOperationalListingParseError {}
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
 )]
 #[derive(Clone, Debug)]
-pub enum RadrootsOperationalListingAvailability {
+pub enum OperationalListingAvailability {
     Window {
         #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
         start: Option<u64>,
@@ -64,7 +64,7 @@ pub enum RadrootsOperationalListingAvailability {
         end: Option<u64>,
     },
     Status {
-        status: RadrootsOperationalListingStatus,
+        status: OperationalListingStatus,
     },
 }
 
@@ -79,7 +79,7 @@ pub enum RadrootsOperationalListingAvailability {
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
 )]
 #[derive(Clone, Debug)]
-pub enum RadrootsOperationalListingStatus {
+pub enum OperationalListingStatus {
     Active,
     Sold,
     Other { value: String },
@@ -96,7 +96,7 @@ pub enum RadrootsOperationalListingStatus {
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
 )]
 #[derive(Clone, Debug)]
-pub enum RadrootsOperationalListingDeliveryMethod {
+pub enum OperationalListingDeliveryMethod {
     Pickup,
     LocalDelivery,
     Shipping,
@@ -110,8 +110,8 @@ pub enum RadrootsOperationalListingDeliveryMethod {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
-pub struct RadrootsOperationalListing {
-    pub d_tag: RadrootsDTag,
+pub struct OperationalListing {
+    pub d_tag: DTag,
     #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     #[cfg_attr(
         feature = "serde",
@@ -119,20 +119,20 @@ pub struct RadrootsOperationalListing {
     )]
     pub published_at: Option<u64>,
     #[cfg_attr(any(feature = "serde", test), serde(default))]
-    pub farm: RadrootsFarmRef,
-    pub product: RadrootsOperationalListingProduct,
-    pub primary_bin_id: RadrootsInventoryBinId,
-    pub bins: Vec<RadrootsOperationalListingBin>,
-    pub resource_area: Option<RadrootsResourceAreaRef>,
-    pub plot: Option<RadrootsPlotRef>,
+    pub farm: FarmRef,
+    pub product: OperationalListingProduct,
+    pub primary_bin_id: InventoryBinId,
+    pub bins: Vec<OperationalListingBin>,
+    pub resource_area: Option<ResourceAreaRef>,
+    pub plot: Option<PlotRef>,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Array<Discount>")))]
     pub discounts: Option<Vec<Discount>>,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Decimal")))]
     pub inventory_available: Option<Decimal>,
-    pub availability: Option<RadrootsOperationalListingAvailability>,
-    pub delivery_method: Option<RadrootsOperationalListingDeliveryMethod>,
-    pub location: Option<RadrootsOperationalListingPublicLocation>,
-    pub images: Option<Vec<RadrootsOperationalListingImage>>,
+    pub availability: Option<OperationalListingAvailability>,
+    pub delivery_method: Option<OperationalListingDeliveryMethod>,
+    pub location: Option<OperationalListingPublicLocation>,
+    pub images: Option<Vec<OperationalListingImage>>,
 }
 
 #[cfg_attr(
@@ -142,7 +142,7 @@ pub struct RadrootsOperationalListing {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
-pub struct RadrootsOperationalListingProduct {
+pub struct OperationalListingProduct {
     pub key: String,
     pub title: String,
     pub category: String,
@@ -158,7 +158,7 @@ pub const RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS: [&str; 9] = [
     "key", "title", "category", "summary", "process", "lot", "location", "profile", "year",
 ];
 
-pub struct RadrootsOperationalListingProductTagKeys;
+pub struct OperationalListingProductTagKeys;
 
 #[cfg_attr(
     any(feature = "serde", test),
@@ -167,8 +167,8 @@ pub struct RadrootsOperationalListingProductTagKeys;
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
-pub struct RadrootsOperationalListingBin {
-    pub bin_id: RadrootsInventoryBinId,
+pub struct OperationalListingBin {
+    pub bin_id: InventoryBinId,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Quantity")))]
     pub quantity: Quantity,
     #[cfg_attr(all(test, feature = "std"), dto(ts(type = "QuantityPrice")))]
@@ -191,7 +191,7 @@ pub struct RadrootsOperationalListingBin {
     derive(serde::Serialize, serde::Deserialize)
 )]
 #[derive(Clone, Debug)]
-pub struct RadrootsOperationalListingPublicLocation {
+pub struct OperationalListingPublicLocation {
     pub primary: String,
     pub city: Option<String>,
     pub region: Option<String>,
@@ -206,9 +206,9 @@ pub struct RadrootsOperationalListingPublicLocation {
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
-pub struct RadrootsOperationalListingImage {
+pub struct OperationalListingImage {
     pub url: String,
-    pub size: Option<RadrootsOperationalListingImageSize>,
+    pub size: Option<OperationalListingImageSize>,
 }
 
 #[cfg_attr(
@@ -217,18 +217,18 @@ pub struct RadrootsOperationalListingImage {
 )]
 #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug)]
-pub struct RadrootsOperationalListingImageSize {
+pub struct OperationalListingImageSize {
     pub w: u32,
     pub h: u32,
 }
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use crate::farm::RadrootsFarmRef;
+    use crate::farm::FarmRef;
 
     #[test]
     fn defaults_listing_farm_ref_to_empty_values() {
-        let farm_ref = RadrootsFarmRef::default();
+        let farm_ref = FarmRef::default();
         assert!(farm_ref.pubkey.is_empty());
         assert!(farm_ref.d_tag.is_empty());
     }
@@ -237,11 +237,11 @@ mod tests {
     fn listing_model_covers_published_metadata() {
         use crate::envelope::kind::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
 
-        let listing = super::RadrootsOperationalListing {
+        let listing = super::OperationalListing {
             d_tag: "listing-draft".parse().unwrap(),
             published_at: Some(1_700_000_000),
-            farm: RadrootsFarmRef::default(),
-            product: super::RadrootsOperationalListingProduct {
+            farm: FarmRef::default(),
+            product: super::OperationalListingProduct {
                 key: "lettuce".to_string(),
                 title: "lettuce".to_string(),
                 category: "produce".to_string(),
@@ -271,14 +271,14 @@ mod tests {
     #[test]
     #[cfg(feature = "serde")]
     fn listing_deserializes_missing_farm_to_default_ref() {
-        let listing = super::RadrootsOperationalListing {
+        let listing = super::OperationalListing {
             d_tag: "listing-draft".parse().unwrap(),
             published_at: Some(1_700_000_000),
-            farm: RadrootsFarmRef {
+            farm: FarmRef {
                 pubkey: "farm-pubkey".to_string(),
                 d_tag: "farm-d-tag".to_string(),
             },
-            product: super::RadrootsOperationalListingProduct {
+            product: super::OperationalListingProduct {
                 key: "lettuce".to_string(),
                 title: "lettuce".to_string(),
                 category: "produce".to_string(),
@@ -303,7 +303,7 @@ mod tests {
         let mut json = serde_json::to_value(&listing).unwrap();
         json.as_object_mut().unwrap().remove("farm");
 
-        let parsed: super::RadrootsOperationalListing = serde_json::from_value(json).unwrap();
+        let parsed: super::OperationalListing = serde_json::from_value(json).unwrap();
 
         assert!(parsed.farm.pubkey.is_empty());
         assert!(parsed.farm.d_tag.is_empty());

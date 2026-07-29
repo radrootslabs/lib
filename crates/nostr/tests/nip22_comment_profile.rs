@@ -3,8 +3,8 @@ use radroots_event::{
         KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
     },
     post::comment::{
-        RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference,
-        RadrootsNip22CommentParentReference, RadrootsNip22EventRootReference,
+        AuthoredNip22Comment, Nip22AddressRootReference, Nip22CommentParentReference,
+        Nip22EventRootReference,
     },
 };
 use radroots_event_codec::comment::{
@@ -36,9 +36,9 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
     let keys = fixture_keys();
     let created_at = RadrootsNostrTimestamp::from_secs(CREATED_AT);
 
-    let top_event = RadrootsAuthoredNip22Comment::top_level_event(
+    let top_event = AuthoredNip22Comment::top_level_event(
         "Are these carrots available Saturday?",
-        RadrootsNip22EventRootReference::parse(
+        Nip22EventRootReference::parse(
             ROOT_EVENT_ID,
             FIXTURE_BOB_PUBLIC_KEY_HEX,
             KIND_CLASSIFIED_LISTING,
@@ -68,9 +68,9 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
 
     let address =
         format!("{KIND_CALENDAR_DATE_EVENT}:{FIXTURE_BOB_PUBLIC_KEY_HEX}:victoria-market");
-    let top_address = RadrootsAuthoredNip22Comment::parse_top_level_address(
+    let top_address = AuthoredNip22Comment::parse_top_level_address(
         "Looking forward to the Victoria market.",
-        RadrootsNip22AddressRootReference::parse(&address, Some(RELAY_SECONDARY_WSS))
+        Nip22AddressRootReference::parse(&address, Some(RELAY_SECONDARY_WSS))
             .expect("address root"),
         ADDRESS_REVISION_ID,
     )
@@ -85,9 +85,9 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
         tag(&["p", FIXTURE_BOB_PUBLIC_KEY_HEX, RELAY_SECONDARY_WSS]),
     ];
 
-    let nested_event = RadrootsAuthoredNip22Comment::nested(
+    let nested_event = AuthoredNip22Comment::nested(
         "Harvest starts Friday morning.",
-        RadrootsNip22EventRootReference::parse(
+        Nip22EventRootReference::parse(
             NESTED_ROOT_EVENT_ID,
             FIXTURE_BOB_PUBLIC_KEY_HEX,
             KIND_CALENDAR_TIME_EVENT,
@@ -113,9 +113,9 @@ fn typed_nip22_comment_builders_sign_and_admit_all_exact_shapes() {
 
     let nested_address_value =
         format!("{KIND_CLASSIFIED_LISTING}:{FIXTURE_BOB_PUBLIC_KEY_HEX}:carrots");
-    let nested_address = RadrootsAuthoredNip22Comment::nested(
+    let nested_address = AuthoredNip22Comment::nested(
         "I can pick up two bunches.",
-        RadrootsNip22AddressRootReference::parse(&nested_address_value, Some(RELAY_PRIMARY_WSS))
+        Nip22AddressRootReference::parse(&nested_address_value, Some(RELAY_PRIMARY_WSS))
             .expect("nested address root"),
         parent(None),
     )
@@ -174,9 +174,9 @@ fn generic_kind_1111_builder_cannot_bypass_typed_comment_authoring() {
 #[tokio::test]
 async fn typed_nip22_comment_builder_reaches_client_publication() {
     let client = RadrootsNostrClient::new(fixture_keys());
-    let comment = RadrootsAuthoredNip22Comment::top_level_event(
+    let comment = AuthoredNip22Comment::top_level_event(
         "Publish Comment",
-        RadrootsNip22EventRootReference::parse(
+        Nip22EventRootReference::parse(
             ROOT_EVENT_ID,
             FIXTURE_BOB_PUBLIC_KEY_HEX,
             KIND_CLASSIFIED_LISTING,
@@ -202,8 +202,8 @@ fn fixture_keys() -> RadrootsNostrKeys {
     )
 }
 
-fn parent(relay: Option<&str>) -> RadrootsNip22CommentParentReference {
-    RadrootsNip22CommentParentReference::parse(PARENT_EVENT_ID, FIXTURE_CAROL_PUBLIC_KEY_HEX, relay)
+fn parent(relay: Option<&str>) -> Nip22CommentParentReference {
+    Nip22CommentParentReference::parse(PARENT_EVENT_ID, FIXTURE_CAROL_PUBLIC_KEY_HEX, relay)
         .expect("Comment parent")
 }
 

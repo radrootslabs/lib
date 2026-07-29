@@ -63,13 +63,13 @@ use crate::schema::{
     destroy_event_store_schema_for_test,
     rollback_event_store_schema_offline_destructive_for_migration_test,
 };
-use radroots_event::envelope::event_head::v1::RadrootsEventHeadCoordinate;
+use radroots_event::envelope::event_head::v1::EventHeadCoordinate;
 #[cfg(test)]
 use radroots_event::envelope::event_head::v1::{
-    RadrootsEventHeadCandidateResult, event_head_candidate_for_nip01_event_v1,
+    EventHeadCandidateResult, event_head_candidate_for_nip01_event_v1,
 };
-use radroots_event::id::{RadrootsDTag, RadrootsEventId, RadrootsTradeId, RadrootsTradeMutationId};
-use radroots_event::trade::RadrootsTradeMutationKindV1;
+use radroots_event::id::{DTag, EventId, MutationId, TradeId};
+use radroots_event::trade::TradeMutationKindV1;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetUri,
@@ -338,7 +338,7 @@ impl RadrootsEventStore {
 
     pub async fn raw_event_head(
         &self,
-        coordinate: &RadrootsEventHeadCoordinate,
+        coordinate: &EventHeadCoordinate,
     ) -> Result<Option<RadrootsStoredRawEventHead>, RadrootsEventStoreError> {
         let mut tx = self.pool.begin().await?;
         let snapshot = raw_head_snapshot_in_transaction(&mut tx, coordinate).await?;
@@ -399,7 +399,7 @@ impl RadrootsEventStore {
         }
         let event_ids = event_ids
             .into_iter()
-            .map(|event_id| RadrootsEventId::parse(event_id.as_ref()))
+            .map(|event_id| EventId::parse(event_id.as_ref()))
             .collect::<Result<Vec<_>, _>>()?;
         let mut unique_event_ids = Vec::new();
         let mut seen_event_ids = BTreeMap::new();
@@ -454,7 +454,7 @@ impl RadrootsEventStore {
 
     pub async fn visible_event_head(
         &self,
-        coordinate: &RadrootsEventHeadCoordinate,
+        coordinate: &EventHeadCoordinate,
     ) -> Result<Option<RadrootsStoredVisibleEventHead>, RadrootsEventStoreError> {
         let mut tx = self.pool.begin().await?;
         let Some(snapshot) = raw_head_snapshot_in_transaction(&mut tx, coordinate).await? else {
@@ -927,7 +927,7 @@ impl RadrootsEventStore {
 
     pub async fn get_trade_mutation(
         &self,
-        mutation_id: &RadrootsTradeMutationId,
+        mutation_id: &MutationId,
     ) -> Result<Option<RadrootsStoredTradeMutation>, RadrootsEventStoreError> {
         let row = sqlx::query(
             "SELECT mutation_id, trade_id, root_mutation_id, contract_id, mutation_kind, schema_version, candidate_id, proposal_mutation_id, target_claim_mutation_id, author_pubkey, counterparty_pubkey, buyer_pubkey, seller_pubkey, farm_id, authored_at_unix_s, canonical_payload_bytes, payload_sha256, first_event_seq, first_transport_event_id, inserted_at_ms FROM trade_mutation WHERE mutation_id = ?",
@@ -940,7 +940,7 @@ impl RadrootsEventStore {
 
     pub async fn trade_mutations_for_trade(
         &self,
-        trade_id: &RadrootsTradeId,
+        trade_id: &TradeId,
         limit: u32,
     ) -> Result<Vec<RadrootsStoredTradeMutation>, RadrootsEventStoreError> {
         validate_trade_query_limit(limit)?;
@@ -956,7 +956,7 @@ impl RadrootsEventStore {
 
     pub async fn trade_mutation_parents(
         &self,
-        mutation_id: &RadrootsTradeMutationId,
+        mutation_id: &MutationId,
     ) -> Result<Vec<RadrootsStoredTradeMutationParent>, RadrootsEventStoreError> {
         let rows = sqlx::query(
             "SELECT mutation_id, parent_mutation_id, parent_index FROM trade_mutation_parent WHERE mutation_id = ? ORDER BY parent_index",
@@ -971,7 +971,7 @@ impl RadrootsEventStore {
 
     pub async fn trade_transport_envelopes_for_mutation(
         &self,
-        mutation_id: &RadrootsTradeMutationId,
+        mutation_id: &MutationId,
     ) -> Result<Vec<RadrootsStoredTradeTransportEnvelope>, RadrootsEventStoreError> {
         let rows = sqlx::query(
             "SELECT transport_event_id, mutation_id, trade_id, transport_kind, pubkey, created_at, event_seq, payload_sha256, observed_at_ms FROM trade_transport_envelope WHERE mutation_id = ? ORDER BY observed_at_ms, transport_event_id",
@@ -986,7 +986,7 @@ impl RadrootsEventStore {
 
     pub async fn missing_trade_parents(
         &self,
-        trade_id: &RadrootsTradeId,
+        trade_id: &TradeId,
     ) -> Result<Vec<RadrootsStoredTradeMissingParent>, RadrootsEventStoreError> {
         let rows = sqlx::query(
             "SELECT trade_id, mutation_id, missing_parent_mutation_id, first_transport_event_id, first_seen_at_ms FROM trade_missing_parent WHERE trade_id = ? ORDER BY first_seen_at_ms, mutation_id, missing_parent_mutation_id",
@@ -1001,7 +1001,7 @@ impl RadrootsEventStore {
 
     pub async fn seller_reservation(
         &self,
-        reservation_id: &RadrootsDTag,
+        reservation_id: &DTag,
     ) -> Result<Option<RadrootsStoredSellerReservation>, RadrootsEventStoreError> {
         let row = sqlx::query(
             "SELECT reservation_id, trade_id, candidate_id, claim_mutation_id, inventory_authority_pubkey, inventory_epoch, assertion_commitment, reservation_expires_at_unix_s, reservation_json, inserted_at_ms FROM seller_inventory_reservation WHERE reservation_id = ?",
@@ -1014,7 +1014,7 @@ impl RadrootsEventStore {
 
     pub async fn seller_reservation_lines(
         &self,
-        reservation_id: &RadrootsDTag,
+        reservation_id: &DTag,
     ) -> Result<Vec<RadrootsStoredSellerReservationLine>, RadrootsEventStoreError> {
         let rows = sqlx::query(
             "SELECT reservation_id, line_id, bin_id, quantity_mantissa, quantity_scale, unit_code, line_index FROM seller_inventory_reservation_line WHERE reservation_id = ? ORDER BY line_index",
@@ -1038,7 +1038,7 @@ impl RadrootsEventStore {
         .bind(checkpoint.reducer_contract_id.as_str())
         .bind(i64::from(checkpoint.reducer_version))
         .bind(checkpoint.projection_digest.as_str())
-        .bind(checkpoint.root_mutation_id.as_ref().map(RadrootsTradeMutationId::to_hex))
+        .bind(checkpoint.root_mutation_id.as_ref().map(MutationId::to_hex))
         .bind(checkpoint.negotiation_state.as_str())
         .bind(checkpoint.agreement_state.as_str())
         .bind(checkpoint.evidence_state.as_str())
@@ -1048,7 +1048,7 @@ impl RadrootsEventStore {
         .bind(checkpoint.fulfillment_state.as_str())
         .bind(checkpoint.payment_state.as_str())
         .bind(checkpoint.projection_json.as_str())
-        .bind(checkpoint.last_mutation_id.as_ref().map(RadrootsTradeMutationId::to_hex))
+        .bind(checkpoint.last_mutation_id.as_ref().map(MutationId::to_hex))
         .bind(checkpoint.last_transport_event_seq)
         .bind(checkpoint.updated_at_ms)
         .execute(&self.pool)
@@ -1058,7 +1058,7 @@ impl RadrootsEventStore {
 
     pub async fn trade_projection_checkpoint(
         &self,
-        trade_id: &RadrootsTradeId,
+        trade_id: &TradeId,
     ) -> Result<Option<RadrootsTradeProjectionCheckpoint>, RadrootsEventStoreError> {
         let row = sqlx::query(
             "SELECT trade_id, reducer_contract_id, reducer_version, projection_digest, root_mutation_id, negotiation_state, agreement_state, evidence_state, conflict_state, private_terms_state, attestation_state, fulfillment_state, payment_state, projection_json, last_mutation_id, last_transport_event_seq, updated_at_ms FROM trade_projection_checkpoint WHERE trade_id = ?",
@@ -1303,15 +1303,13 @@ async fn query_string(
     Ok(row.try_get(0)?)
 }
 
-fn parse_trade_mutation_kind(
-    value: &str,
-) -> Result<RadrootsTradeMutationKindV1, RadrootsEventStoreError> {
+fn parse_trade_mutation_kind(value: &str) -> Result<TradeMutationKindV1, RadrootsEventStoreError> {
     match value {
-        "proposal" => Ok(RadrootsTradeMutationKindV1::Proposal),
-        "decision" => Ok(RadrootsTradeMutationKindV1::Decision),
-        "revision_proposal" => Ok(RadrootsTradeMutationKindV1::RevisionProposal),
-        "revision_decision" => Ok(RadrootsTradeMutationKindV1::RevisionDecision),
-        "cancellation" => Ok(RadrootsTradeMutationKindV1::Cancellation),
+        "proposal" => Ok(TradeMutationKindV1::Proposal),
+        "decision" => Ok(TradeMutationKindV1::Decision),
+        "revision_proposal" => Ok(TradeMutationKindV1::RevisionProposal),
+        "revision_decision" => Ok(TradeMutationKindV1::RevisionDecision),
+        "cancellation" => Ok(TradeMutationKindV1::Cancellation),
         _ => Err(RadrootsEventStoreError::InvalidStoredEnum {
             field: "trade_mutation.mutation_kind",
             value: value.to_owned(),
@@ -1783,27 +1781,23 @@ mod tests {
         SecretKey as RadrootsNostrSecretKey, Tag as RadrootsNostrTag,
         TagKind as RadrootsNostrTagKind, Timestamp as RadrootsNostrTimestamp,
     };
-    use radroots_event::draft::RadrootsSignedEvent;
+    use radroots_event::draft::SignedEvent;
     use radroots_event::envelope::kind::{
         KIND_CALENDAR_DATE_EVENT, KIND_CLASSIFIED_LISTING, KIND_DELETION_REQUEST, KIND_FARM,
         KIND_GEOCHAT, KIND_LIST_SET_RELAY, KIND_POST, KIND_PROFILE, KIND_RELAY_AUTH,
     };
-    use radroots_event::food::availability::{
-        RadrootsFoodAvailabilityStatus, RadrootsFoodIdentifier,
-    };
-    use radroots_event::id::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId};
+    use radroots_event::food::availability::{FoodAvailabilityStatus, FoodIdentifier};
+    use radroots_event::id::{ClassifiedListingAddress, InventoryBinId};
     use radroots_event::trade::{
-        RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
-        RADROOTS_TRADE_SCHEMA_VERSION, RadrootsFulfillmentProfileV1,
-        RadrootsSellerReservationAssertionV1, RadrootsSellerReservationLineV1,
-        RadrootsTradeCancellationProfileV1, RadrootsTradeCandidateLineV1,
-        RadrootsTradeCandidateTermsV1, RadrootsTradeCanonicalMutationV1, RadrootsTradeDecisionV1,
-        RadrootsTradeEconomicAdjustmentV1, RadrootsTradeEconomicsProfileV1,
-        RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1, canonical_jcs_value,
-        canonical_trade_mutation_content,
+        FulfillmentProfileV1, RADROOTS_TRADE_DECISION_CONTRACT_ID,
+        RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,
+        SellerReservationAssertionV1, SellerReservationLineV1, TradeCancellationProfileV1,
+        TradeCandidateLineV1, TradeCandidateTermsV1, TradeCanonicalMutationV1, TradeDecisionV1,
+        TradeEconomicAdjustmentV1, TradeEconomicsProfileV1, TradeMutationBodyV1,
+        TradeMutationEnvelopeV1, canonical_jcs_value, canonical_trade_mutation_content,
     };
     use radroots_event::wire::{
-        DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, RadrootsNip01EventWire,
+        DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, Nip01EventWire,
         compute_canonical_nip01_event_id,
     };
     use radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic;
@@ -1890,8 +1884,8 @@ mod tests {
         core::iter::repeat_n(character, 64).collect()
     }
 
-    fn trade_id() -> RadrootsTradeId {
-        RadrootsTradeId::parse("1".repeat(32)).expect("trade id")
+    fn trade_id() -> TradeId {
+        TradeId::parse("1".repeat(32)).expect("trade id")
     }
 
     fn public_key(character: char) -> PublicKey {
@@ -1903,27 +1897,27 @@ mod tests {
         PublicKey::from_hex(public_key_hex).expect("fixture pubkey")
     }
 
-    fn candidate_terms() -> RadrootsTradeCandidateTermsV1 {
-        RadrootsTradeCandidateTermsV1 {
+    fn candidate_terms() -> TradeCandidateTermsV1 {
+        TradeCandidateTermsV1 {
             candidate_id: None,
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
             base_candidate_id: None,
             supersession_intent: None,
             buyer_pubkey: public_key('a'),
             seller_pubkey: public_key('a'),
-            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
-            lines: vec![RadrootsTradeCandidateLineV1 {
-                line_id: RadrootsDTag::parse("line-1").expect("line id"),
-                listing_addr: RadrootsClassifiedListingAddress::parse(format!(
+            farm_id: DTag::parse("farm-1").expect("farm id"),
+            lines: vec![TradeCandidateLineV1 {
+                line_id: DTag::parse("line-1").expect("line id"),
+                listing_addr: ClassifiedListingAddress::parse(format!(
                     "{KIND_CLASSIFIED_LISTING}:{}:listing-1",
                     FIXTURE_ALICE_PUBLIC_KEY_HEX
                 ))
                 .expect("listing address"),
-                listing_event_id: RadrootsEventId::parse(event_id('c')).expect("listing event id"),
+                listing_event_id: EventId::parse(event_id('c')).expect("listing event id"),
                 listing_snapshot_sha256: event_id('d'),
                 product_id: "carrots".to_owned(),
                 option_id: None,
-                bin_id: RadrootsInventoryBinId::parse("bin-1").expect("bin id"),
+                bin_id: InventoryBinId::parse("bin-1").expect("bin id"),
                 quantity_mantissa: "2".to_owned(),
                 quantity_scale: 0,
                 unit_code: "count".to_owned(),
@@ -1934,7 +1928,7 @@ mod tests {
                 replaces_line_id: None,
             }],
             line_tombstones: Vec::new(),
-            economics: RadrootsTradeEconomicsProfileV1 {
+            economics: TradeEconomicsProfileV1 {
                 profile_id: "mvp-no-payment".to_owned(),
                 currency_code: "USD".to_owned(),
                 currency_exponent: 2,
@@ -1943,9 +1937,9 @@ mod tests {
                 discount_total_mantissa: "0".to_owned(),
                 adjustment_total_mantissa: "0".to_owned(),
                 total_mantissa: "600".to_owned(),
-                adjustments: Vec::<RadrootsTradeEconomicAdjustmentV1>::new(),
+                adjustments: Vec::<TradeEconomicAdjustmentV1>::new(),
             },
-            fulfillment: RadrootsFulfillmentProfileV1 {
+            fulfillment: FulfillmentProfileV1 {
                 profile_id: "market-pickup".to_owned(),
                 method: "pickup".to_owned(),
                 starts_at_unix_s: 1_800_000_000,
@@ -1956,7 +1950,7 @@ mod tests {
                 location_class: "private_after_agreement".to_owned(),
                 requires_private_terms: false,
             },
-            cancellation: RadrootsTradeCancellationProfileV1 {
+            cancellation: TradeCancellationProfileV1 {
                 profile_id: "mvp".to_owned(),
                 buyer_pre_agreement: true,
                 post_agreement_cutoff_unix_s: Some(1_799_999_000),
@@ -1966,8 +1960,8 @@ mod tests {
         }
     }
 
-    fn proposal_envelope() -> RadrootsTradeMutationEnvelopeV1 {
-        RadrootsTradeMutationEnvelopeV1 {
+    fn proposal_envelope() -> TradeMutationEnvelopeV1 {
+        TradeMutationEnvelopeV1 {
             mutation_id: None,
             contract_id: RADROOTS_TRADE_PROPOSAL_CONTRACT_ID.to_owned(),
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
@@ -1975,26 +1969,24 @@ mod tests {
             root_mutation_id: None,
             buyer_pubkey: public_key('a'),
             seller_pubkey: public_key('a'),
-            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+            farm_id: DTag::parse("farm-1").expect("farm id"),
             parent_mutation_ids: Vec::new(),
             author_pubkey: public_key('a'),
             counterparty_pubkey: public_key('a'),
             authored_at_unix_s: 1_799_000_000,
-            body: RadrootsTradeMutationBodyV1::Proposal {
+            body: TradeMutationBodyV1::Proposal {
                 candidate: candidate_terms(),
             },
         }
     }
 
-    fn decision_envelope(
-        proposal: &RadrootsTradeCanonicalMutationV1,
-    ) -> RadrootsTradeMutationEnvelopeV1 {
-        let RadrootsTradeMutationBodyV1::Proposal { candidate } = &proposal.envelope.body else {
+    fn decision_envelope(proposal: &TradeCanonicalMutationV1) -> TradeMutationEnvelopeV1 {
+        let TradeMutationBodyV1::Proposal { candidate } = &proposal.envelope.body else {
             panic!("proposal");
         };
         let candidate_id = candidate.candidate_id.clone().expect("candidate id");
         let line = candidate.lines.first().expect("candidate line");
-        RadrootsTradeMutationEnvelopeV1 {
+        TradeMutationEnvelopeV1 {
             mutation_id: None,
             contract_id: RADROOTS_TRADE_DECISION_CONTRACT_ID.to_owned(),
             schema_version: RADROOTS_TRADE_SCHEMA_VERSION,
@@ -2002,22 +1994,21 @@ mod tests {
             root_mutation_id: Some(proposal.mutation_id.clone()),
             buyer_pubkey: public_key('a'),
             seller_pubkey: public_key('a'),
-            farm_id: RadrootsDTag::parse("farm-1").expect("farm id"),
+            farm_id: DTag::parse("farm-1").expect("farm id"),
             parent_mutation_ids: vec![proposal.mutation_id.clone()],
             author_pubkey: public_key('a'),
             counterparty_pubkey: public_key('a'),
             authored_at_unix_s: 1_799_000_060,
-            body: RadrootsTradeMutationBodyV1::Decision {
+            body: TradeMutationBodyV1::Decision {
                 proposal_mutation_id: proposal.mutation_id.clone(),
                 candidate_id: candidate_id.clone(),
-                decision: RadrootsTradeDecisionV1::Accepted {
-                    reservation_assertion: Some(RadrootsSellerReservationAssertionV1 {
-                        reservation_id: RadrootsDTag::parse("reservation-1")
-                            .expect("reservation id"),
+                decision: TradeDecisionV1::Accepted {
+                    reservation_assertion: Some(SellerReservationAssertionV1 {
+                        reservation_id: DTag::parse("reservation-1").expect("reservation id"),
                         inventory_authority_id: public_key('a'),
                         inventory_epoch: 7,
                         candidate_id,
-                        commitments: vec![RadrootsSellerReservationLineV1 {
+                        commitments: vec![SellerReservationLineV1 {
                             line_id: line.line_id.clone(),
                             bin_id: line.bin_id.clone(),
                             quantity_mantissa: line.quantity_mantissa.clone(),
@@ -2032,15 +2023,15 @@ mod tests {
         }
     }
 
-    fn signed_trade_mutation(canonical: &RadrootsTradeCanonicalMutationV1) -> RadrootsSignedEvent {
+    fn signed_trade_mutation(canonical: &TradeCanonicalMutationV1) -> SignedEvent {
         signed_trade_content_with_keys(canonical, canonical.content.clone(), &fixture_keys())
     }
 
     fn signed_trade_content_with_keys(
-        canonical: &RadrootsTradeCanonicalMutationV1,
+        canonical: &TradeCanonicalMutationV1,
         content: String,
         keys: &RadrootsNostrKeys,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         let counterparty = canonical.envelope.counterparty_pubkey.to_hex();
         let mut tags = vec![
             vec![
@@ -2071,7 +2062,7 @@ mod tests {
         created_at: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         signed_event_with_keys(&fixture_keys(), kind, created_at, tags, content)
     }
 
@@ -2081,7 +2072,7 @@ mod tests {
         created_at: u32,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         let raw_event = test_event_builder(kind, content, tags)
             .custom_created_at(RadrootsNostrTimestamp::from_secs(u64::from(created_at)))
             .sign_with_keys(keys)
@@ -2089,12 +2080,12 @@ mod tests {
         signed_event_from_raw_json(serde_json::to_string(&raw_event).expect("raw json"))
     }
 
-    fn signed_event_from_raw_json(raw_json: String) -> RadrootsSignedEvent {
-        let wire = RadrootsNip01EventWire::parse_json(raw_json.as_str()).expect("wire");
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+    fn signed_event_from_raw_json(raw_json: String) -> SignedEvent {
+        let wire = Nip01EventWire::parse_json(raw_json.as_str()).expect("wire");
+        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn raw_source_text_bytes(event: &RadrootsSignedEvent) -> (u64, u64) {
+    fn raw_source_text_bytes(event: &SignedEvent) -> (u64, u64) {
         let tags = event.tags_as_vec();
         let tags_json = serde_json::to_string(&tags).expect("tags JSON");
         let pubkey = event.pubkey().to_hex();
@@ -2185,7 +2176,7 @@ mod tests {
         created_at: u64,
         tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         let pubkey = FIXTURE_ALICE_PUBLIC_KEY_HEX.to_owned();
         let content = content.to_owned();
         let id = compute_canonical_nip01_event_id(
@@ -2197,7 +2188,7 @@ mod tests {
         )
         .expect("event id")
         .into_string();
-        let wire = RadrootsNip01EventWire {
+        let wire = Nip01EventWire {
             id,
             pubkey,
             created_at,
@@ -2208,18 +2199,18 @@ mod tests {
             extra: Default::default(),
         };
         let raw_json = serde_json::to_string(&wire).expect("raw json");
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn tamper_signature(event: &RadrootsSignedEvent) -> RadrootsSignedEvent {
+    fn tamper_signature(event: &SignedEvent) -> SignedEvent {
         let mut wire = event.wire().clone();
         let replacement = if wire.sig.starts_with('0') { "1" } else { "0" };
         wire.sig.replace_range(0..1, replacement);
         let raw_json = serde_json::to_string(&wire).expect("raw json");
-        RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
+        SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn tampered_content_raw_json(event: &RadrootsSignedEvent, content: &str) -> String {
+    fn tampered_content_raw_json(event: &SignedEvent, content: &str) -> String {
         let mut wire = event.wire().clone();
         wire.content = content.to_owned();
         serde_json::to_string(&wire).expect("raw json")
@@ -2278,8 +2269,8 @@ mod tests {
         ]
     }
 
-    fn head_coordinate_for_event(event: &RadrootsSignedEvent) -> RadrootsEventHeadCoordinate {
-        let RadrootsEventHeadCandidateResult::Candidate(candidate) =
+    fn head_coordinate_for_event(event: &SignedEvent) -> EventHeadCoordinate {
+        let EventHeadCandidateResult::Candidate(candidate) =
             event_head_candidate_for_nip01_event_v1(event.envelope())
         else {
             panic!("event should select a head");
@@ -2287,8 +2278,8 @@ mod tests {
         candidate.coordinate
     }
 
-    fn profile_coordinate() -> RadrootsEventHeadCoordinate {
-        RadrootsEventHeadCoordinate::Replaceable {
+    fn profile_coordinate() -> EventHeadCoordinate {
+        EventHeadCoordinate::Replaceable {
             kind: KIND_PROFILE,
             pubkey: PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("pubkey"),
         }
@@ -2299,7 +2290,7 @@ mod tests {
         created_at: u32,
         d_tags: Vec<Vec<String>>,
         content: &str,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         signed_event_with_keys(keys, KIND_LIST_SET_RELAY, created_at, d_tags, content)
     }
 
@@ -2307,7 +2298,7 @@ mod tests {
         keys: &RadrootsNostrKeys,
         created_at: u32,
         tags: Vec<Vec<String>>,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         signed_event_with_keys(keys, KIND_DELETION_REQUEST, created_at, tags, "")
     }
 
@@ -2318,7 +2309,7 @@ mod tests {
         summary: &str,
         status: &str,
         mut images: Vec<Vec<String>>,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         let mut tags = vec![
             vec!["d".to_owned(), d_tag.to_owned()],
             vec!["title".to_owned(), title.to_owned()],
@@ -2347,7 +2338,7 @@ mod tests {
         created_at: u32,
         d_tag: &str,
         content: impl Into<String>,
-    ) -> RadrootsSignedEvent {
+    ) -> SignedEvent {
         let content = content.into();
         signed_event(
             KIND_CALENDAR_DATE_EVENT,
@@ -2721,7 +2712,7 @@ mod tests {
 
     async fn insert_pending_raw_envelope(
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        signed_event: RadrootsSignedEvent,
+        signed_event: SignedEvent,
         observed_at_ms: i64,
     ) {
         let ingest = RadrootsEventIngest::new(signed_event, observed_at_ms);
@@ -3002,7 +2993,7 @@ mod tests {
         let projected = store
             .food_availability_v1(
                 &PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
-                &RadrootsFoodIdentifier::parse("v4-rebuild-carrots").expect("identifier"),
+                &FoodIdentifier::parse("v4-rebuild-carrots").expect("identifier"),
             )
             .await
             .expect("projection lookup")
@@ -3132,7 +3123,7 @@ mod tests {
         let projected = store
             .food_availability_v1(
                 &PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
-                &RadrootsFoodIdentifier::parse("migration-carrots").expect("identifier"),
+                &FoodIdentifier::parse("migration-carrots").expect("identifier"),
             )
             .await
             .expect("projection lookup")
@@ -3184,7 +3175,7 @@ mod tests {
             let rebuilt = store
                 .food_availability_v1(
                     &PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author"),
-                    &RadrootsFoodIdentifier::parse("migration-carrots").expect("identifier"),
+                    &FoodIdentifier::parse("migration-carrots").expect("identifier"),
                 )
                 .await
                 .expect("rebuilt projection lookup")
@@ -5503,10 +5494,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             stored_decision.first_transport_event_id.to_hex(),
             decision_event.id_hex()
         );
-        assert_eq!(
-            stored_decision.mutation_kind,
-            RadrootsTradeMutationKindV1::Decision
-        );
+        assert_eq!(stored_decision.mutation_kind, TradeMutationKindV1::Decision);
 
         let missing = store
             .missing_trade_parents(&trade_id())
@@ -5516,7 +5504,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(missing[0].mutation_id, decision.mutation_id);
         assert_eq!(missing[0].missing_parent_mutation_id, proposal.mutation_id);
 
-        let reservation_id = RadrootsDTag::parse("reservation-1").expect("reservation id");
+        let reservation_id = DTag::parse("reservation-1").expect("reservation id");
         let reservation = store
             .seller_reservation(&reservation_id)
             .await
@@ -5943,10 +5931,10 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
         let decision =
             canonical_trade_mutation_content(decision_envelope(&proposal)).expect("decision");
-        let RadrootsTradeMutationBodyV1::Proposal { candidate } = &proposal.envelope.body else {
+        let TradeMutationBodyV1::Proposal { candidate } = &proposal.envelope.body else {
             unreachable!("proposal fixture");
         };
-        let RadrootsTradeMutationBodyV1::Decision {
+        let TradeMutationBodyV1::Decision {
             proposal_mutation_id,
             candidate_id,
             decision: decision_value,
@@ -5956,23 +5944,23 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         };
 
         let mut revision_proposal = proposal.envelope.clone();
-        revision_proposal.body = RadrootsTradeMutationBodyV1::RevisionProposal {
+        revision_proposal.body = TradeMutationBodyV1::RevisionProposal {
             candidate: candidate.clone(),
         };
         let mut revision_decision = decision.envelope.clone();
-        revision_decision.body = RadrootsTradeMutationBodyV1::RevisionDecision {
+        revision_decision.body = TradeMutationBodyV1::RevisionDecision {
             proposal_mutation_id: proposal_mutation_id.clone(),
             candidate_id: candidate_id.clone(),
             decision: decision_value.clone(),
         };
         let mut cancellation = proposal.envelope.clone();
-        cancellation.body = RadrootsTradeMutationBodyV1::Cancellation {
+        cancellation.body = TradeMutationBodyV1::Cancellation {
             target_candidate_id: Some(candidate_id.clone()),
             target_claim_mutation_id: Some(decision.mutation_id.clone()),
             reason: "fixture".to_owned(),
         };
         let mut claim_only_cancellation = cancellation.clone();
-        claim_only_cancellation.body = RadrootsTradeMutationBodyV1::Cancellation {
+        claim_only_cancellation.body = TradeMutationBodyV1::Cancellation {
             target_candidate_id: None,
             target_claim_mutation_id: Some(decision.mutation_id.clone()),
             reason: "fixture".to_owned(),
@@ -6004,11 +5992,11 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(public_key('b').to_hex(), FIXTURE_BOB_PUBLIC_KEY_HEX);
 
         for kind in [
-            RadrootsTradeMutationKindV1::Proposal,
-            RadrootsTradeMutationKindV1::Decision,
-            RadrootsTradeMutationKindV1::RevisionProposal,
-            RadrootsTradeMutationKindV1::RevisionDecision,
-            RadrootsTradeMutationKindV1::Cancellation,
+            TradeMutationKindV1::Proposal,
+            TradeMutationKindV1::Decision,
+            TradeMutationKindV1::RevisionProposal,
+            TradeMutationKindV1::RevisionDecision,
+            TradeMutationKindV1::Cancellation,
         ] {
             let stored = trade_mutation_kind_storage_value(kind);
             assert_eq!(
@@ -6027,9 +6015,9 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let proposal = canonical_trade_mutation_content(proposal_envelope()).expect("proposal");
 
         let mut invalid_epoch_envelope = decision_envelope(&proposal);
-        let RadrootsTradeMutationBodyV1::Decision {
+        let TradeMutationBodyV1::Decision {
             decision:
-                RadrootsTradeDecisionV1::Accepted {
+                TradeDecisionV1::Accepted {
                     reservation_assertion: Some(invalid_epoch),
                 },
             ..
@@ -6055,9 +6043,9 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_no_event_or_trade_residue(&store, &source_authority).await;
 
         let mut invalid_expiry_envelope = decision_envelope(&proposal);
-        let RadrootsTradeMutationBodyV1::Decision {
+        let TradeMutationBodyV1::Decision {
             decision:
-                RadrootsTradeDecisionV1::Accepted {
+                TradeDecisionV1::Accepted {
                     reservation_assertion: Some(invalid_expiry),
                 },
             ..
@@ -6459,7 +6447,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         let coordinate = head_coordinate_for_event(&event);
         assert!(matches!(
             &coordinate,
-            RadrootsEventHeadCoordinate::Addressable { d_tag, .. } if d_tag.is_empty()
+            EventHeadCoordinate::Addressable { d_tag, .. } if d_tag.is_empty()
         ));
         assert_eq!(
             store
@@ -6626,7 +6614,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(initial_projection_count, 2);
 
         let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
-        let carrot_id = RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier");
+        let carrot_id = FoodIdentifier::parse("nantes-carrots").expect("identifier");
         let projected = store
             .food_availability_v1(&author, &carrot_id)
             .await
@@ -6639,7 +6627,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         assert_eq!(projected.price().currency().as_str(), "CAD");
         assert_eq!(projected.price().unit().as_str(), "lb");
         assert_eq!(projected.quantity().expect("quantity").amount(), "10");
-        assert_eq!(projected.status(), RadrootsFoodAvailabilityStatus::Active);
+        assert_eq!(projected.status(), FoodAvailabilityStatus::Active);
         assert_eq!(
             projected.diagnostics(),
             &[
@@ -6719,7 +6707,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("replacement lookup")
             .expect("sold projection");
         assert_eq!(replacement.event_id().to_hex(), sold.id_hex());
-        assert_eq!(replacement.status(), RadrootsFoodAvailabilityStatus::Sold);
+        assert_eq!(replacement.status(), FoodAvailabilityStatus::Sold);
         assert_eq!(replacement.published_at().as_u64(), 100);
         assert!(replacement.images().is_empty());
         let replacement_projection_count: i64 = sqlx::query_scalar(
@@ -7266,7 +7254,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             Vec::new(),
         );
         let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
-        let identifier = RadrootsFoodIdentifier::parse("nantes-carrots").expect("identifier");
+        let identifier = FoodIdentifier::parse("nantes-carrots").expect("identifier");
 
         for (observed_at_ms, event) in [(20_000, &active), (20_001, &sold)] {
             store
@@ -7350,7 +7338,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("recovered lookup")
             .expect("recovered projection");
         assert_eq!(projection.event_id().to_hex(), recovered.id_hex());
-        assert_eq!(projection.status(), RadrootsFoodAvailabilityStatus::Active);
+        assert_eq!(projection.status(), FoodAvailabilityStatus::Active);
         let recovered_projection_count: i64 = sqlx::query_scalar(
             "SELECT projected_row_count FROM radroots_event_store_food_availability_cursor WHERE singleton = 1",
         )
@@ -7425,8 +7413,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
     #[tokio::test]
     async fn admitted_operational_listing_retracts_food_until_a_later_food_revision() {
         let store = RadrootsEventStore::open_memory().await.expect("open");
-        let identifier =
-            RadrootsFoodIdentifier::parse("AAAAAAAAAAAAAAAAAAAAAg").expect("identifier");
+        let identifier = FoodIdentifier::parse("AAAAAAAAAAAAAAAAAAAAAg").expect("identifier");
         let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
         let food = food_availability_event(
             200,
@@ -7551,7 +7538,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             Vec::new(),
         );
         let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
-        let identifier = RadrootsFoodIdentifier::parse("rollback-carrots").expect("identifier");
+        let identifier = FoodIdentifier::parse("rollback-carrots").expect("identifier");
 
         let mut transaction = store.begin_write_transaction().await.expect("transaction");
         store
@@ -7647,7 +7634,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             .expect("wrong-author deletion remains a valid event");
 
         let author = PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX).expect("author");
-        let identifier = RadrootsFoodIdentifier::parse("protected-carrots").expect("identifier");
+        let identifier = FoodIdentifier::parse("protected-carrots").expect("identifier");
         let projection = store
             .food_availability_v1(&author, &identifier)
             .await
@@ -8538,7 +8525,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
         );
         assert!(matches!(
             &missing_coordinate,
-            RadrootsEventHeadCoordinate::Addressable { d_tag, .. } if d_tag.is_empty()
+            EventHeadCoordinate::Addressable { d_tag, .. } if d_tag.is_empty()
         ));
         assert_eq!(
             store
@@ -8553,7 +8540,7 @@ CREATE TABLE aux.event_transport_observation (event_id TEXT);",
             let coordinate = head_coordinate_for_event(event);
             assert!(matches!(
                 &coordinate,
-                RadrootsEventHeadCoordinate::Addressable { d_tag, .. } if d_tag == expected_d
+                EventHeadCoordinate::Addressable { d_tag, .. } if d_tag == expected_d
             ));
             let head = store
                 .raw_event_head(&coordinate)

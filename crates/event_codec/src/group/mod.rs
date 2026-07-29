@@ -4,15 +4,13 @@ pub mod encode;
 #[cfg(test)]
 mod tests {
     use radroots_event::social::group::{
-        KIND_GROUP_ADMINS, KIND_GROUP_CREATE_GROUP, KIND_GROUP_CREATE_INVITE,
+        GroupAdmins, GroupCreateGroup, GroupCreateInvite, GroupDeleteEvent, GroupDeleteGroup,
+        GroupEditMetadata, GroupEditableMetadata, GroupJoinRequest, GroupLeaveRequest,
+        GroupMembers, GroupMetadata, GroupPutUser, GroupRemoveUser, GroupRole, GroupRoles,
+        GroupUserRef, KIND_GROUP_ADMINS, KIND_GROUP_CREATE_GROUP, KIND_GROUP_CREATE_INVITE,
         KIND_GROUP_DELETE_EVENT, KIND_GROUP_DELETE_GROUP, KIND_GROUP_EDIT_METADATA,
         KIND_GROUP_JOIN_REQUEST, KIND_GROUP_LEAVE_REQUEST, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
-        KIND_GROUP_PUT_USER, KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES, RadrootsGroupAdmins,
-        RadrootsGroupCreateGroup, RadrootsGroupCreateInvite, RadrootsGroupDeleteEvent,
-        RadrootsGroupDeleteGroup, RadrootsGroupEditMetadata, RadrootsGroupEditableMetadata,
-        RadrootsGroupJoinRequest, RadrootsGroupLeaveRequest, RadrootsGroupMembers,
-        RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser, RadrootsGroupRole,
-        RadrootsGroupRoles, RadrootsGroupUserRef,
+        KIND_GROUP_PUT_USER, KIND_GROUP_REMOVE_USER, KIND_GROUP_ROLES,
     };
 
     use crate::error::{EventEncodeError, EventParseError};
@@ -34,13 +32,13 @@ mod tests {
 
     #[test]
     fn group_user_operations_use_h_group_id_routing() {
-        let put = RadrootsGroupPutUser {
+        let put = GroupPutUser {
             group_id: "field-group".to_string(),
             message: Some("add member".to_string()),
             pubkey: "member_pubkey".to_string(),
             roles: vec!["member".to_string()],
         };
-        let remove = RadrootsGroupRemoveUser {
+        let remove = GroupRemoveUser {
             group_id: "field-group".to_string(),
             message: Some("remove member".to_string()),
             pubkey: "member_pubkey".to_string(),
@@ -78,21 +76,21 @@ mod tests {
 
     #[test]
     fn group_metadata_and_lists_use_d_tag_routing() {
-        let metadata = RadrootsGroupMetadata {
+        let metadata = GroupMetadata {
             d_tag: "field-group".to_string(),
             metadata: sample_metadata(),
         };
-        let admins = RadrootsGroupAdmins {
+        let admins = GroupAdmins {
             d_tag: "field-group".to_string(),
             description: Some("group admins".to_string()),
             admins: vec![sample_user("admin_pubkey", "admin")],
         };
-        let members = RadrootsGroupMembers {
+        let members = GroupMembers {
             d_tag: "field-group".to_string(),
             description: Some("group members".to_string()),
             members: vec![sample_user("member_pubkey", "member")],
         };
-        let roles = RadrootsGroupRoles {
+        let roles = GroupRoles {
             d_tag: "field-group".to_string(),
             description: Some("group roles".to_string()),
             roles: vec![sample_role()],
@@ -156,12 +154,12 @@ mod tests {
 
     #[test]
     fn group_invites_and_join_requests_roundtrip_without_field_authorization() {
-        let invite = RadrootsGroupCreateInvite {
+        let invite = GroupCreateInvite {
             group_id: "field-group".to_string(),
             message: Some("join the field group".to_string()),
             code: "invite-code".to_string(),
         };
-        let join = RadrootsGroupJoinRequest {
+        let join = GroupJoinRequest {
             group_id: "field-group".to_string(),
             message: Some("requesting access".to_string()),
             code: Some("invite-code".to_string()),
@@ -195,31 +193,31 @@ mod tests {
 
     #[test]
     fn group_lifecycle_and_moderation_events_roundtrip() {
-        let metadata = RadrootsGroupEditableMetadata {
+        let metadata = GroupEditableMetadata {
             is_private: true,
             is_hidden: true,
             ..sample_metadata()
         };
-        let create = RadrootsGroupCreateGroup {
+        let create = GroupCreateGroup {
             group_id: "field-group".to_string(),
             message: Some("create group".to_string()),
             metadata: metadata.clone(),
         };
-        let edit = RadrootsGroupEditMetadata {
+        let edit = GroupEditMetadata {
             group_id: "field-group".to_string(),
             message: Some("edit group".to_string()),
             metadata,
         };
-        let delete_group = RadrootsGroupDeleteGroup {
+        let delete_group = GroupDeleteGroup {
             group_id: "field-group".to_string(),
             message: Some("delete group".to_string()),
         };
-        let delete_event = RadrootsGroupDeleteEvent {
+        let delete_event = GroupDeleteEvent {
             group_id: "field-group".to_string(),
             message: Some("delete event".to_string()),
             event_id: "event_id".to_string(),
         };
-        let leave = RadrootsGroupLeaveRequest {
+        let leave = GroupLeaveRequest {
             group_id: "field-group".to_string(),
             message: None,
         };
@@ -286,7 +284,7 @@ mod tests {
 
     #[test]
     fn group_codecs_reject_wrong_routing_tags() {
-        let metadata = RadrootsGroupMetadata {
+        let metadata = GroupMetadata {
             d_tag: "field-group".to_string(),
             metadata: sample_metadata(),
         };
@@ -303,7 +301,7 @@ mod tests {
         .unwrap_err();
         assert!(matches!(metadata_err, EventParseError::MissingTag("d")));
 
-        let put = RadrootsGroupPutUser {
+        let put = GroupPutUser {
             group_id: "field-group".to_string(),
             message: None,
             pubkey: "member_pubkey".to_string(),
@@ -349,7 +347,7 @@ mod tests {
     #[test]
     fn group_encoders_reject_empty_required_fields() {
         assert_empty_required(
-            group_put_user_to_wire_parts(&RadrootsGroupPutUser {
+            group_put_user_to_wire_parts(&GroupPutUser {
                 group_id: "".to_string(),
                 message: None,
                 pubkey: "member_pubkey".to_string(),
@@ -358,7 +356,7 @@ mod tests {
             "group_id",
         );
         assert_empty_required(
-            group_put_user_to_wire_parts(&RadrootsGroupPutUser {
+            group_put_user_to_wire_parts(&GroupPutUser {
                 group_id: "field-group".to_string(),
                 message: None,
                 pubkey: "".to_string(),
@@ -367,7 +365,7 @@ mod tests {
             "pubkey",
         );
         assert_empty_required(
-            group_put_user_to_wire_parts(&RadrootsGroupPutUser {
+            group_put_user_to_wire_parts(&GroupPutUser {
                 group_id: "field-group".to_string(),
                 message: None,
                 pubkey: "member_pubkey".to_string(),
@@ -376,7 +374,7 @@ mod tests {
             "roles",
         );
         assert_empty_required(
-            group_remove_user_to_wire_parts(&RadrootsGroupRemoveUser {
+            group_remove_user_to_wire_parts(&GroupRemoveUser {
                 group_id: "field-group".to_string(),
                 message: None,
                 pubkey: "".to_string(),
@@ -384,7 +382,7 @@ mod tests {
             "pubkey",
         );
         assert_empty_required(
-            group_create_group_to_wire_parts(&RadrootsGroupCreateGroup {
+            group_create_group_to_wire_parts(&GroupCreateGroup {
                 group_id: "field-group".to_string(),
                 message: Some("".to_string()),
                 metadata: sample_metadata(),
@@ -392,10 +390,10 @@ mod tests {
             "message",
         );
         assert_empty_required(
-            group_edit_metadata_to_wire_parts(&RadrootsGroupEditMetadata {
+            group_edit_metadata_to_wire_parts(&GroupEditMetadata {
                 group_id: "field-group".to_string(),
                 message: None,
-                metadata: RadrootsGroupEditableMetadata {
+                metadata: GroupEditableMetadata {
                     name: Some("".to_string()),
                     ..sample_metadata()
                 },
@@ -403,7 +401,7 @@ mod tests {
             "name",
         );
         assert_empty_required(
-            group_delete_event_to_wire_parts(&RadrootsGroupDeleteEvent {
+            group_delete_event_to_wire_parts(&GroupDeleteEvent {
                 group_id: "field-group".to_string(),
                 message: None,
                 event_id: "".to_string(),
@@ -411,7 +409,7 @@ mod tests {
             "event_id",
         );
         assert_empty_required(
-            group_create_invite_to_wire_parts(&RadrootsGroupCreateInvite {
+            group_create_invite_to_wire_parts(&GroupCreateInvite {
                 group_id: "field-group".to_string(),
                 message: None,
                 code: "".to_string(),
@@ -419,7 +417,7 @@ mod tests {
             "code",
         );
         assert_empty_required(
-            group_join_request_to_wire_parts(&RadrootsGroupJoinRequest {
+            group_join_request_to_wire_parts(&GroupJoinRequest {
                 group_id: "field-group".to_string(),
                 message: None,
                 code: Some("".to_string()),
@@ -427,24 +425,24 @@ mod tests {
             "code",
         );
         assert_empty_required(
-            group_leave_request_to_wire_parts(&RadrootsGroupLeaveRequest {
+            group_leave_request_to_wire_parts(&GroupLeaveRequest {
                 group_id: "".to_string(),
                 message: None,
             }),
             "group_id",
         );
         assert_empty_required(
-            group_metadata_to_wire_parts(&RadrootsGroupMetadata {
+            group_metadata_to_wire_parts(&GroupMetadata {
                 d_tag: "".to_string(),
                 metadata: sample_metadata(),
             }),
             "d_tag",
         );
         assert_empty_required(
-            group_admins_to_wire_parts(&RadrootsGroupAdmins {
+            group_admins_to_wire_parts(&GroupAdmins {
                 d_tag: "field-group".to_string(),
                 description: None,
-                admins: vec![RadrootsGroupUserRef {
+                admins: vec![GroupUserRef {
                     pubkey: "".to_string(),
                     roles: vec![],
                 }],
@@ -452,7 +450,7 @@ mod tests {
             "pubkey",
         );
         assert_empty_required(
-            group_members_to_wire_parts(&RadrootsGroupMembers {
+            group_members_to_wire_parts(&GroupMembers {
                 d_tag: "field-group".to_string(),
                 description: Some("".to_string()),
                 members: vec![],
@@ -460,10 +458,10 @@ mod tests {
             "message",
         );
         assert_empty_required(
-            group_members_to_wire_parts(&RadrootsGroupMembers {
+            group_members_to_wire_parts(&GroupMembers {
                 d_tag: "field-group".to_string(),
                 description: None,
-                members: vec![RadrootsGroupUserRef {
+                members: vec![GroupUserRef {
                     pubkey: "member_pubkey".to_string(),
                     roles: vec!["".to_string()],
                 }],
@@ -471,10 +469,10 @@ mod tests {
             "roles",
         );
         assert_empty_required(
-            group_roles_to_wire_parts(&RadrootsGroupRoles {
+            group_roles_to_wire_parts(&GroupRoles {
                 d_tag: "field-group".to_string(),
                 description: None,
-                roles: vec![RadrootsGroupRole {
+                roles: vec![GroupRole {
                     name: "".to_string(),
                     description: None,
                     permissions: vec![],
@@ -483,10 +481,10 @@ mod tests {
             "role.name",
         );
         assert_empty_required(
-            group_roles_to_wire_parts(&RadrootsGroupRoles {
+            group_roles_to_wire_parts(&GroupRoles {
                 d_tag: "field-group".to_string(),
                 description: None,
-                roles: vec![RadrootsGroupRole {
+                roles: vec![GroupRole {
                     name: "member".to_string(),
                     description: Some("".to_string()),
                     permissions: vec![],
@@ -495,10 +493,10 @@ mod tests {
             "role.description",
         );
         assert_empty_required(
-            group_roles_to_wire_parts(&RadrootsGroupRoles {
+            group_roles_to_wire_parts(&GroupRoles {
                 d_tag: "field-group".to_string(),
                 description: None,
-                roles: vec![RadrootsGroupRole {
+                roles: vec![GroupRole {
                     name: "member".to_string(),
                     description: None,
                     permissions: vec!["".to_string()],
@@ -601,8 +599,8 @@ mod tests {
         }
     }
 
-    fn sample_metadata() -> RadrootsGroupEditableMetadata {
-        RadrootsGroupEditableMetadata {
+    fn sample_metadata() -> GroupEditableMetadata {
+        GroupEditableMetadata {
             name: Some("Small Regen Farm".to_string()),
             about: Some("Field app group".to_string()),
             picture: Some("https://media.example.invalid/group.png".to_string()),
@@ -614,15 +612,15 @@ mod tests {
         }
     }
 
-    fn sample_user(pubkey: &str, role: &str) -> RadrootsGroupUserRef {
-        RadrootsGroupUserRef {
+    fn sample_user(pubkey: &str, role: &str) -> GroupUserRef {
+        GroupUserRef {
             pubkey: pubkey.to_string(),
             roles: vec![role.to_string()],
         }
     }
 
-    fn sample_role() -> RadrootsGroupRole {
-        RadrootsGroupRole {
+    fn sample_role() -> GroupRole {
+        GroupRole {
             name: "member".to_string(),
             description: Some("can read and write group events".to_string()),
             permissions: vec!["read".to_string(), "write".to_string()],

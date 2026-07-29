@@ -8,8 +8,8 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::{KIND_GENERIC_REPOST, KIND_POST, KIND_REPOST},
-    post::repost::{RadrootsGenericRepost, RadrootsRepost},
-    social::RadrootsSocialTarget,
+    post::repost::{GenericRepost, Repost},
+    social::SocialTarget,
     tag::name::{TAG_A, TAG_E, TAG_K, TAG_P},
 };
 
@@ -17,16 +17,16 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     parse_address_tag, push_tag, validate_lowercase_hex_64, validate_non_empty_field,
 };
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
-pub fn repost_build_tags(repost: &RadrootsRepost) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn repost_build_tags(repost: &Repost) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::new();
     push_event_target(&mut tags, &repost.target, KIND_POST, "target")?;
     Ok(tags)
 }
 
 pub fn generic_repost_build_tags(
-    repost: &RadrootsGenericRepost,
+    repost: &GenericRepost,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_generic_target_kind(repost.target_kind)?;
     let mut tags = Vec::new();
@@ -35,26 +35,24 @@ pub fn generic_repost_build_tags(
     Ok(tags)
 }
 
-pub fn repost_to_wire_parts(
-    repost: &RadrootsRepost,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn repost_to_wire_parts(repost: &Repost) -> Result<Nip01EventWireParts, EventEncodeError> {
     repost_to_wire_parts_with_kind(repost, KIND_REPOST)
 }
 
 pub fn generic_repost_to_wire_parts(
-    repost: &RadrootsGenericRepost,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    repost: &GenericRepost,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     generic_repost_to_wire_parts_with_kind(repost, KIND_GENERIC_REPOST)
 }
 
 pub fn repost_to_wire_parts_with_kind(
-    repost: &RadrootsRepost,
+    repost: &Repost,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_REPOST {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: repost.content.clone().unwrap_or_default(),
         tags: repost_build_tags(repost)?,
@@ -62,13 +60,13 @@ pub fn repost_to_wire_parts_with_kind(
 }
 
 pub fn generic_repost_to_wire_parts_with_kind(
-    repost: &RadrootsGenericRepost,
+    repost: &GenericRepost,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_GENERIC_REPOST {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: repost.content.clone().unwrap_or_default(),
         tags: generic_repost_build_tags(repost)?,
@@ -77,11 +75,11 @@ pub fn generic_repost_to_wire_parts_with_kind(
 
 fn push_event_target(
     tags: &mut Vec<Vec<String>>,
-    target: &RadrootsSocialTarget,
+    target: &SocialTarget,
     expected_kind: u32,
     field: &'static str,
 ) -> Result<(), EventEncodeError> {
-    let RadrootsSocialTarget::Event {
+    let SocialTarget::Event {
         id,
         author,
         event_kind,
@@ -111,11 +109,11 @@ fn push_event_target(
 
 fn push_generic_target(
     tags: &mut Vec<Vec<String>>,
-    target: &RadrootsSocialTarget,
+    target: &SocialTarget,
     expected_kind: u32,
 ) -> Result<(), EventEncodeError> {
     match target {
-        RadrootsSocialTarget::Event {
+        SocialTarget::Event {
             id,
             author,
             event_kind,
@@ -139,7 +137,7 @@ fn push_generic_target(
             }
             Ok(())
         }
-        RadrootsSocialTarget::Address {
+        SocialTarget::Address {
             address,
             author,
             event_kind,
@@ -169,7 +167,7 @@ fn push_generic_target(
             }
             Ok(())
         }
-        RadrootsSocialTarget::External { .. } => Err(EventEncodeError::InvalidField("target")),
+        SocialTarget::External { .. } => Err(EventEncodeError::InvalidField("target")),
     }
 }
 

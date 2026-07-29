@@ -2,7 +2,7 @@
 
 use crate::error::RadrootsNostrError;
 use radroots_event::listing::classified::{
-    RadrootsClassifiedListingPartition, classify_classified_listing_marker_names,
+    ClassifiedListingPartition, classify_classified_listing_marker_names,
 };
 
 pub type RadrootsNostrCoordinate = nostr::nips::nip01::Coordinate;
@@ -256,8 +256,8 @@ impl RadrootsNostrGenericEventBuilder {
         let is_reserved_focused_listing = matches!(
             classified_listing_partition,
             Some(
-                RadrootsClassifiedListingPartition::FocusedFoodAvailability
-                    | RadrootsClassifiedListingPartition::Ambiguous
+                ClassifiedListingPartition::FocusedFoodAvailability
+                    | ClassifiedListingPartition::Ambiguous
             )
         );
         if is_profile

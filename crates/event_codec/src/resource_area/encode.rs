@@ -7,7 +7,7 @@ use alloc::{
 
 use radroots_event::{
     envelope::kind::KIND_RESOURCE_AREA,
-    farm::resource_area::{RadrootsResourceArea, RadrootsResourceAreaRef},
+    farm::resource_area::{ResourceArea, ResourceAreaRef},
     tag::name::TAG_D,
 };
 
@@ -15,7 +15,7 @@ use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
 const TAG_G: &str = "g";
@@ -26,7 +26,7 @@ fn push_tag(tags: &mut Vec<Vec<String>>, key: &str, value: &str) {
     tags.push(vec![key.to_string(), value.to_string()]);
 }
 
-fn resource_area_address(area: &RadrootsResourceAreaRef) -> Result<String, EventEncodeError> {
+fn resource_area_address(area: &ResourceAreaRef) -> Result<String, EventEncodeError> {
     if area.pubkey.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("resource_area.pubkey"));
     }
@@ -43,9 +43,7 @@ fn resource_area_address(area: &RadrootsResourceAreaRef) -> Result<String, Event
     Ok(addr)
 }
 
-pub fn resource_area_build_tags(
-    area: &RadrootsResourceArea,
-) -> Result<Vec<Vec<String>>, EventEncodeError> {
+pub fn resource_area_build_tags(area: &ResourceArea) -> Result<Vec<Vec<String>>, EventEncodeError> {
     if area.d_tag.trim().is_empty() {
         return Err(EventEncodeError::EmptyRequiredField("d_tag"));
     }
@@ -69,7 +67,7 @@ pub fn resource_area_build_tags(
 }
 
 pub fn resource_area_ref_tags(
-    area: &RadrootsResourceAreaRef,
+    area: &ResourceAreaRef,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let addr = resource_area_address(area)?;
     let mut tags = Vec::with_capacity(2);
@@ -79,23 +77,21 @@ pub fn resource_area_ref_tags(
 }
 
 #[cfg(feature = "serde_json")]
-pub fn to_wire_parts(
-    area: &RadrootsResourceArea,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+pub fn to_wire_parts(area: &ResourceArea) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(area, KIND_RESOURCE_AREA)
 }
 
 #[cfg(feature = "serde_json")]
 pub fn to_wire_parts_with_kind(
-    area: &RadrootsResourceArea,
+    area: &ResourceArea,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_RESOURCE_AREA {
         return Err(EventEncodeError::InvalidKind(kind));
     }
     let tags = resource_area_build_tags(area)?;
     let content = serde_json::to_string(area).map_err(|_| EventEncodeError::Json)?;
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content,
         tags,

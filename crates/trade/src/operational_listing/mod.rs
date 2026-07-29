@@ -5,12 +5,9 @@ pub mod price_ext;
 pub mod validation;
 
 use radroots_event::{
-    envelope::RadrootsEventEnvelope,
-    id::{
-        RadrootsAddressableCoordinateParts, RadrootsClassifiedListingAddress, RadrootsDTag,
-        RadrootsIdParseError,
-    },
-    listing::operational::{RadrootsOperationalListing, RadrootsOperationalListingParseError},
+    envelope::EventEnvelope,
+    id::{AddressableCoordinateParts, ClassifiedListingAddress, DTag, ParseError},
+    listing::operational::{OperationalListing, OperationalListingParseError},
 };
 use radroots_event_codec::operational_listing::decode::operational_listing_from_nostr_event;
 use radroots_identity::PublicKey;
@@ -31,38 +28,38 @@ pub use self::validation::{
 };
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsClassifiedListingAddressParts {
-    pub address: RadrootsClassifiedListingAddress,
+    pub address: ClassifiedListingAddress,
     pub kind: u32,
     pub seller_pubkey: PublicKey,
-    pub listing_id: RadrootsDTag,
+    pub listing_id: DTag,
 }
 
 impl RadrootsClassifiedListingAddressParts {
-    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsIdParseError> {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, ParseError> {
         parse_classified_listing_address(value)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsPublicClassifiedListingAddress {
-    pub address: RadrootsClassifiedListingAddress,
+    pub address: ClassifiedListingAddress,
     pub kind: u32,
     pub seller_pubkey: PublicKey,
-    pub listing_id: RadrootsDTag,
+    pub listing_id: DTag,
 }
 
 impl RadrootsPublicClassifiedListingAddress {
-    pub fn parse(value: impl AsRef<str>) -> Result<Self, RadrootsIdParseError> {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, ParseError> {
         parse_public_classified_listing_address(value)
     }
 }
 
 pub fn parse_classified_listing_address(
     value: impl AsRef<str>,
-) -> Result<RadrootsClassifiedListingAddressParts, RadrootsIdParseError> {
+) -> Result<RadrootsClassifiedListingAddressParts, ParseError> {
     let value = value.as_ref();
-    let address = RadrootsClassifiedListingAddress::parse(value)?;
-    let parts = RadrootsAddressableCoordinateParts::parse(address.as_str())
+    let address = ClassifiedListingAddress::parse(value)?;
+    let parts = AddressableCoordinateParts::parse(address.as_str())
         .expect("typed listing address must contain valid coordinate parts");
     Ok(RadrootsClassifiedListingAddressParts {
         address,
@@ -74,7 +71,7 @@ pub fn parse_classified_listing_address(
 
 pub fn parse_public_classified_listing_address(
     value: impl AsRef<str>,
-) -> Result<RadrootsPublicClassifiedListingAddress, RadrootsIdParseError> {
+) -> Result<RadrootsPublicClassifiedListingAddress, ParseError> {
     let parts = parse_classified_listing_address(value)?;
     Ok(RadrootsPublicClassifiedListingAddress {
         address: parts.address,
@@ -85,8 +82,8 @@ pub fn parse_public_classified_listing_address(
 }
 
 pub fn parse_operational_listing_event(
-    event: &RadrootsEventEnvelope,
-) -> Result<RadrootsOperationalListing, RadrootsOperationalListingParseError> {
+    event: &EventEnvelope,
+) -> Result<OperationalListing, OperationalListingParseError> {
     operational_listing_from_nostr_event(event)
 }
 
@@ -98,17 +95,17 @@ mod tests {
         parse_public_classified_listing_address,
     };
     use radroots_event::{
-        envelope::RadrootsEventEnvelope,
-        envelope::RadrootsEventEnvelopeParts,
+        envelope::EventEnvelope,
+        envelope::EventEnvelopeParts,
         envelope::kind::{KIND_CLASSIFIED_LISTING, KIND_PROFILE},
-        id::RadrootsClassifiedListingAddress,
-        listing::operational::RadrootsOperationalListingParseError,
+        id::ClassifiedListingAddress,
+        listing::operational::OperationalListingParseError,
     };
 
     const SELLER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-    fn listing_event() -> RadrootsEventEnvelope {
-        RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+    fn listing_event() -> EventEnvelope {
+        EventEnvelope::new(EventEnvelopeParts {
             id: "9".repeat(64),
             author: SELLER.to_string(),
             created_at: 1,
@@ -145,7 +142,7 @@ mod tests {
 
     #[test]
     fn parse_operational_listing_event_rejects_non_listing_kind() {
-        let event = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
+        let event = EventEnvelope::new(EventEnvelopeParts {
             id: "8".repeat(64),
             author: SELLER.to_string(),
             created_at: 1,
@@ -158,9 +155,7 @@ mod tests {
 
         assert!(matches!(
             parse_operational_listing_event(&event),
-            Err(RadrootsOperationalListingParseError::InvalidKind(
-                KIND_PROFILE
-            ))
+            Err(OperationalListingParseError::InvalidKind(KIND_PROFILE))
         ));
     }
 
@@ -181,7 +176,7 @@ mod tests {
             RadrootsClassifiedListingAddressParts::parse(raw.clone()).expect("listing address");
         let public = RadrootsPublicClassifiedListingAddress::parse(&raw).expect("public address");
         let typed = parse_public_classified_listing_address(
-            RadrootsClassifiedListingAddress::parse(&raw).expect("typed addr"),
+            ClassifiedListingAddress::parse(&raw).expect("typed addr"),
         )
         .expect("typed public address");
 
@@ -210,14 +205,14 @@ mod tests {
 
         assert!(matches!(
             parse_classified_listing_address(&raw),
-            Err(radroots_event::id::RadrootsIdParseError::UnexpectedKind {
+            Err(radroots_event::id::ParseError::UnexpectedKind {
                 expected: KIND_CLASSIFIED_LISTING,
                 actual: 30403,
             })
         ));
         assert!(matches!(
             parse_public_classified_listing_address(&raw),
-            Err(radroots_event::id::RadrootsIdParseError::UnexpectedKind {
+            Err(radroots_event::id::ParseError::UnexpectedKind {
                 expected: KIND_CLASSIFIED_LISTING,
                 actual: 30403,
             })
@@ -228,18 +223,18 @@ mod tests {
     fn parse_public_classified_listing_address_maps_invalid_listing_addresses() {
         assert!(matches!(
             parse_public_classified_listing_address("not-an-address"),
-            Err(radroots_event::id::RadrootsIdParseError::InvalidFormat)
+            Err(radroots_event::id::ParseError::InvalidFormat)
         ));
 
         let raw = format!("{KIND_PROFILE}:{SELLER}:listing-1");
         assert!(matches!(
             parse_public_classified_listing_address(&raw),
-            Err(radroots_event::id::RadrootsIdParseError::UnexpectedKind {
+            Err(radroots_event::id::ParseError::UnexpectedKind {
                 expected: KIND_CLASSIFIED_LISTING,
                 actual: KIND_PROFILE,
             })
         ));
-        assert!(RadrootsClassifiedListingAddress::parse(&raw).is_err());
+        assert!(ClassifiedListingAddress::parse(&raw).is_err());
     }
 
     #[test]
@@ -248,7 +243,7 @@ mod tests {
 
         assert!(matches!(
             parse_classified_listing_address(&raw),
-            Err(radroots_event::id::RadrootsIdParseError::UnexpectedKind {
+            Err(radroots_event::id::ParseError::UnexpectedKind {
                 expected: KIND_CLASSIFIED_LISTING,
                 actual: KIND_PROFILE,
             })

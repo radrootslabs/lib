@@ -7,12 +7,10 @@ use alloc::{
 
 use radroots_event::{
     calendar::{
-        RadrootsAuthoredCalendar, RadrootsAuthoredCalendarDateEvent,
-        RadrootsAuthoredCalendarEventRsvp, RadrootsAuthoredCalendarTimeEvent,
-        RadrootsCalendarEventAuthorReference, RadrootsCalendarEventFreeBusy,
-        RadrootsCalendarEventReference, RadrootsCalendarEventRevisionReference,
-        RadrootsCalendarEventRsvpStatus, RadrootsCalendarParticipant, RadrootsCalendarRequest,
-        RadrootsCalendarUri, covered_utc_days,
+        AuthoredCalendar, AuthoredCalendarDateEvent, AuthoredCalendarEventRsvp,
+        AuthoredCalendarTimeEvent, CalendarEventAuthorReference, CalendarEventFreeBusy,
+        CalendarEventReference, CalendarEventRevisionReference, CalendarEventRsvpStatus,
+        CalendarParticipant, CalendarRequest, CalendarUri, covered_utc_days,
     },
     envelope::kind::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP, KIND_CALENDAR_TIME_EVENT,
@@ -27,10 +25,10 @@ use radroots_event::{
 use crate::error::EventEncodeError;
 use crate::field_helpers::{push_optional_tag, push_tag};
 use crate::social_helpers::push_participants;
-use radroots_event::wire::RadrootsNip01EventWireParts;
+use radroots_event::wire::Nip01EventWireParts;
 
 pub fn calendar_date_event_build_tags(
-    event: &RadrootsAuthoredCalendarDateEvent,
+    event: &AuthoredCalendarDateEvent,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_authored_date_event(event)?;
     let mut tags = Vec::new();
@@ -53,7 +51,7 @@ pub fn calendar_date_event_build_tags(
 }
 
 pub fn calendar_time_event_build_tags(
-    event: &RadrootsAuthoredCalendarTimeEvent,
+    event: &AuthoredCalendarTimeEvent,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     validate_authored_time_event(event)?;
     let mut tags = Vec::new();
@@ -93,7 +91,7 @@ pub fn calendar_time_event_build_tags(
 }
 
 pub fn calendar_collection_build_tags(
-    calendar: &RadrootsAuthoredCalendar,
+    calendar: &AuthoredCalendar,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::new();
     push_tag(&mut tags, TAG_D, calendar.uid().as_str());
@@ -113,7 +111,7 @@ pub fn calendar_collection_build_tags(
 }
 
 pub fn rsvp_build_tags(
-    rsvp: &RadrootsAuthoredCalendarEventRsvp,
+    rsvp: &AuthoredCalendarEventRsvp,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
     let mut tags = Vec::new();
     push_tag(&mut tags, TAG_D, rsvp.uid().as_str());
@@ -132,37 +130,37 @@ pub fn rsvp_build_tags(
 }
 
 pub fn date_to_wire_parts(
-    event: &RadrootsAuthoredCalendarDateEvent,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    event: &AuthoredCalendarDateEvent,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     date_to_wire_parts_with_kind(event, KIND_CALENDAR_DATE_EVENT)
 }
 
 pub fn time_to_wire_parts(
-    event: &RadrootsAuthoredCalendarTimeEvent,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    event: &AuthoredCalendarTimeEvent,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     time_to_wire_parts_with_kind(event, KIND_CALENDAR_TIME_EVENT)
 }
 
 pub fn calendar_to_wire_parts(
-    calendar: &RadrootsAuthoredCalendar,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    calendar: &AuthoredCalendar,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     calendar_to_wire_parts_with_kind(calendar, KIND_CALENDAR)
 }
 
 pub fn rsvp_to_wire_parts(
-    rsvp: &RadrootsAuthoredCalendarEventRsvp,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+    rsvp: &AuthoredCalendarEventRsvp,
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     rsvp_to_wire_parts_with_kind(rsvp, KIND_CALENDAR_EVENT_RSVP)
 }
 
 pub fn date_to_wire_parts_with_kind(
-    event: &RadrootsAuthoredCalendarDateEvent,
+    event: &AuthoredCalendarDateEvent,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_DATE_EVENT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: event.description().unwrap_or_default().to_string(),
         tags: calendar_date_event_build_tags(event)?,
@@ -170,13 +168,13 @@ pub fn date_to_wire_parts_with_kind(
 }
 
 pub fn time_to_wire_parts_with_kind(
-    event: &RadrootsAuthoredCalendarTimeEvent,
+    event: &AuthoredCalendarTimeEvent,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_TIME_EVENT {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: event.description().unwrap_or_default().to_string(),
         tags: calendar_time_event_build_tags(event)?,
@@ -184,13 +182,13 @@ pub fn time_to_wire_parts_with_kind(
 }
 
 pub fn calendar_to_wire_parts_with_kind(
-    calendar: &RadrootsAuthoredCalendar,
+    calendar: &AuthoredCalendar,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: calendar.content().to_string(),
         tags: calendar_collection_build_tags(calendar)?,
@@ -198,13 +196,13 @@ pub fn calendar_to_wire_parts_with_kind(
 }
 
 pub fn rsvp_to_wire_parts_with_kind(
-    rsvp: &RadrootsAuthoredCalendarEventRsvp,
+    rsvp: &AuthoredCalendarEventRsvp,
     kind: u32,
-) -> Result<RadrootsNip01EventWireParts, EventEncodeError> {
+) -> Result<Nip01EventWireParts, EventEncodeError> {
     if kind != KIND_CALENDAR_EVENT_RSVP {
         return Err(EventEncodeError::InvalidKind(kind));
     }
-    Ok(RadrootsNip01EventWireParts {
+    Ok(Nip01EventWireParts {
         kind,
         content: rsvp.note().unwrap_or_default().to_string(),
         tags: rsvp_build_tags(rsvp)?,
@@ -212,14 +210,12 @@ pub fn rsvp_to_wire_parts_with_kind(
 }
 
 fn validate_authored_date_event(
-    _event: &RadrootsAuthoredCalendarDateEvent,
+    _event: &AuthoredCalendarDateEvent,
 ) -> Result<(), EventEncodeError> {
     Ok(())
 }
 
-fn validate_authored_time_event(
-    event: &RadrootsAuthoredCalendarTimeEvent,
-) -> Result<(), EventEncodeError> {
+fn validate_authored_time_event(event: &AuthoredCalendarTimeEvent) -> Result<(), EventEncodeError> {
     covered_utc_days(event.start(), event.end())
         .map_err(|_| EventEncodeError::InvalidField("end"))?;
     Ok(())
@@ -232,10 +228,10 @@ fn push_authored_calendar_common_tags(
     geohash: Option<&str>,
     summary: Option<&str>,
     image: Option<&str>,
-    participants: Option<&Vec<RadrootsCalendarParticipant>>,
+    participants: Option<&Vec<CalendarParticipant>>,
     categories: &[String],
-    references: &[RadrootsCalendarUri],
-    calendar_requests: &[RadrootsCalendarRequest],
+    references: &[CalendarUri],
+    calendar_requests: &[CalendarRequest],
 ) {
     for location in locations {
         push_tag(tags, TAG_LOCATION, location);
@@ -259,10 +255,7 @@ fn push_authored_calendar_common_tags(
     }
 }
 
-fn push_calendar_event_reference(
-    tags: &mut Vec<Vec<String>>,
-    reference: &RadrootsCalendarEventReference,
-) {
+fn push_calendar_event_reference(tags: &mut Vec<Vec<String>>, reference: &CalendarEventReference) {
     let mut tag = vec![
         TAG_A.to_string(),
         reference.coordinate().as_str().to_string(),
@@ -275,7 +268,7 @@ fn push_calendar_event_reference(
 
 fn push_calendar_revision_reference(
     tags: &mut Vec<Vec<String>>,
-    reference: &RadrootsCalendarEventRevisionReference,
+    reference: &CalendarEventRevisionReference,
 ) {
     let mut tag = vec![TAG_E.to_string(), reference.event_id().to_hex()];
     if let Some(relay) = reference.relay() {
@@ -286,7 +279,7 @@ fn push_calendar_revision_reference(
 
 fn push_calendar_author_reference(
     tags: &mut Vec<Vec<String>>,
-    reference: &RadrootsCalendarEventAuthorReference,
+    reference: &CalendarEventAuthorReference,
 ) {
     let mut tag = vec![TAG_P.to_string(), reference.pubkey().to_hex()];
     if let Some(relay) = reference.relay() {
@@ -295,17 +288,17 @@ fn push_calendar_author_reference(
     tags.push(tag);
 }
 
-fn rsvp_status_as_str(status: &RadrootsCalendarEventRsvpStatus) -> &'static str {
+fn rsvp_status_as_str(status: &CalendarEventRsvpStatus) -> &'static str {
     match status {
-        RadrootsCalendarEventRsvpStatus::Accepted => "accepted",
-        RadrootsCalendarEventRsvpStatus::Declined => "declined",
-        RadrootsCalendarEventRsvpStatus::Tentative => "tentative",
+        CalendarEventRsvpStatus::Accepted => "accepted",
+        CalendarEventRsvpStatus::Declined => "declined",
+        CalendarEventRsvpStatus::Tentative => "tentative",
     }
 }
 
-fn free_busy_as_str(free_busy: &RadrootsCalendarEventFreeBusy) -> &'static str {
+fn free_busy_as_str(free_busy: &CalendarEventFreeBusy) -> &'static str {
     match free_busy {
-        RadrootsCalendarEventFreeBusy::Free => "free",
-        RadrootsCalendarEventFreeBusy::Busy => "busy",
+        CalendarEventFreeBusy::Free => "free",
+        CalendarEventFreeBusy::Busy => "busy",
     }
 }

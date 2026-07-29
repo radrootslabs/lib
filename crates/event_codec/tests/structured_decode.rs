@@ -10,19 +10,13 @@ use radroots_core::{Decimal, Quantity, Unit};
 use radroots_event::envelope::kind::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
 };
-use radroots_event::farm::change_set::{
-    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
-};
-use radroots_event::farm::coop::RadrootsCoop;
-use radroots_event::farm::plot::RadrootsPlot;
-use radroots_event::farm::resource_area::{
-    RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
-};
-use radroots_event::farm::resource_cap::{
-    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
-};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
-use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
+use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
+use radroots_event::farm::coop::Coop;
+use radroots_event::farm::plot::Plot;
+use radroots_event::farm::resource_area::{ResourceArea, ResourceAreaLocation, ResourceAreaRef};
+use radroots_event::farm::resource_cap::{ResourceHarvestCap, ResourceHarvestProduct};
+use radroots_event::farm::{Farm, FarmRef};
+use radroots_event::post::document::{Document, DocumentSubject};
 use radroots_event::tag::name::TAG_D;
 use radroots_event_codec::coop::decode::{
     coop_from_event, data_from_event as coop_metadata_from_event,
@@ -55,16 +49,16 @@ use test_fixtures::{FIXTURE_ALICE_NPUB, FIXTURE_ALICE_PUBLIC_KEY_HEX};
 const TEST_NPUB: &str = FIXTURE_ALICE_NPUB;
 const TEST_PUBKEY_HEX: &str = FIXTURE_ALICE_PUBLIC_KEY_HEX;
 
-fn sample_gcs() -> RadrootsGcsLocation {
-    RadrootsGcsLocation {
+fn sample_gcs() -> GcsLocation {
+    GcsLocation {
         lat: 37.0,
         lng: -122.0,
         geohash: "9q8yy".to_string(),
-        point: RadrootsGeoJsonPoint {
+        point: GeoJsonPoint {
             r#type: "Point".to_string(),
             coordinates: [-122.0, 37.0],
         },
-        polygon: RadrootsGeoJsonPolygon {
+        polygon: GeoJsonPolygon {
             r#type: "Polygon".to_string(),
             coordinates: vec![vec![
                 [-122.0, 37.0],
@@ -90,8 +84,8 @@ fn sample_gcs() -> RadrootsGcsLocation {
     }
 }
 
-fn sample_farm(d_tag: &str) -> RadrootsFarm {
-    RadrootsFarm {
+fn sample_farm(d_tag: &str) -> Farm {
+    Farm {
         d_tag: d_tag.to_string(),
         name: "Farm".to_string(),
         about: None,
@@ -103,8 +97,8 @@ fn sample_farm(d_tag: &str) -> RadrootsFarm {
     }
 }
 
-fn sample_coop(d_tag: &str) -> RadrootsCoop {
-    RadrootsCoop {
+fn sample_coop(d_tag: &str) -> Coop {
+    Coop {
         d_tag: d_tag.to_string(),
         name: "Coop".to_string(),
         about: None,
@@ -116,10 +110,10 @@ fn sample_coop(d_tag: &str) -> RadrootsCoop {
     }
 }
 
-fn sample_plot(d_tag: &str, farm_pubkey: &str, farm_d_tag: &str) -> RadrootsPlot {
-    RadrootsPlot {
+fn sample_plot(d_tag: &str, farm_pubkey: &str, farm_d_tag: &str) -> Plot {
+    Plot {
         d_tag: d_tag.to_string(),
-        farm: RadrootsFarmRef {
+        farm: FarmRef {
             pubkey: farm_pubkey.to_string(),
             d_tag: farm_d_tag.to_string(),
         },
@@ -130,12 +124,8 @@ fn sample_plot(d_tag: &str, farm_pubkey: &str, farm_d_tag: &str) -> RadrootsPlot
     }
 }
 
-fn sample_document(
-    d_tag: &str,
-    subject_pubkey: &str,
-    subject_address: Option<&str>,
-) -> RadrootsDocument {
-    RadrootsDocument {
+fn sample_document(d_tag: &str, subject_pubkey: &str, subject_address: Option<&str>) -> Document {
+    Document {
         d_tag: d_tag.to_string(),
         doc_type: "charter".to_string(),
         title: "Charter".to_string(),
@@ -143,7 +133,7 @@ fn sample_document(
         summary: None,
         effective_at: None,
         body_markdown: None,
-        subject: RadrootsDocumentSubject {
+        subject: DocumentSubject {
             pubkey: subject_pubkey.to_string(),
             address: subject_address.map(str::to_string),
         },
@@ -151,12 +141,12 @@ fn sample_document(
     }
 }
 
-fn sample_resource_area(d_tag: &str) -> RadrootsResourceArea {
-    RadrootsResourceArea {
+fn sample_resource_area(d_tag: &str) -> ResourceArea {
+    ResourceArea {
         d_tag: d_tag.to_string(),
         name: "Area".to_string(),
         about: None,
-        location: RadrootsResourceAreaLocation {
+        location: ResourceAreaLocation {
             primary: None,
             city: None,
             region: None,
@@ -167,14 +157,14 @@ fn sample_resource_area(d_tag: &str) -> RadrootsResourceArea {
     }
 }
 
-fn sample_resource_cap(d_tag: &str) -> RadrootsResourceHarvestCap {
-    RadrootsResourceHarvestCap {
+fn sample_resource_cap(d_tag: &str) -> ResourceHarvestCap {
+    ResourceHarvestCap {
         d_tag: d_tag.to_string(),
-        resource_area: RadrootsResourceAreaRef {
+        resource_area: ResourceAreaRef {
             pubkey: TEST_PUBKEY_HEX.to_string(),
             d_tag: "AAAAAAAAAAAAAAAAAAAAAw".to_string(),
         },
-        product: RadrootsResourceHarvestProduct {
+        product: ResourceHarvestProduct {
             key: "nutmeg".to_string(),
             category: Some("spice".to_string()),
         },
@@ -262,7 +252,7 @@ fn farm_metadata_and_index_decode_roundtrip() {
     let d_tag = "AAAAAAAAAAAAAAAAAAAAAA";
     let content = serde_json::to_string(&sample_farm(d_tag)).expect("farm content");
     let tags = d_tag_tags(d_tag);
-    let metadata: RadrootsParsedData<RadrootsFarm> = farm_metadata_from_event(
+    let metadata: RadrootsParsedData<Farm> = farm_metadata_from_event(
         "id1".to_string(),
         TEST_PUBKEY_HEX.to_string(),
         55,
@@ -274,7 +264,7 @@ fn farm_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.id, "id1");
     assert_eq!(metadata.data.d_tag, d_tag);
 
-    let index: RadrootsParsedEvent<RadrootsFarm> = farm_index_from_event(
+    let index: RadrootsParsedEvent<Farm> = farm_index_from_event(
         EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         55,
@@ -324,7 +314,7 @@ fn coop_metadata_and_index_decode_roundtrip() {
     let d_tag = "BAAAAAAAAAAAAAAAAAAAAA";
     let content = serde_json::to_string(&sample_coop(d_tag)).expect("coop content");
     let tags = d_tag_tags(d_tag);
-    let metadata: RadrootsParsedData<RadrootsCoop> = coop_metadata_from_event(
+    let metadata: RadrootsParsedData<Coop> = coop_metadata_from_event(
         "id2".to_string(),
         TEST_PUBKEY_HEX.to_string(),
         56,
@@ -336,7 +326,7 @@ fn coop_metadata_and_index_decode_roundtrip() {
     assert_eq!(metadata.id, "id2");
     assert_eq!(metadata.data.d_tag, d_tag);
 
-    let index: RadrootsParsedEvent<RadrootsCoop> = coop_index_from_event(
+    let index: RadrootsParsedEvent<Coop> = coop_index_from_event(
         EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         56,
@@ -557,7 +547,7 @@ fn plot_metadata_and_index_decode_roundtrip() {
     let content = serde_json::to_string(&sample_plot(d_tag, TEST_PUBKEY_HEX, farm_d_tag))
         .expect("plot content");
 
-    let metadata: RadrootsParsedData<RadrootsPlot> = plot_metadata_from_event(
+    let metadata: RadrootsParsedData<Plot> = plot_metadata_from_event(
         "id3".to_string(),
         TEST_PUBKEY_HEX.to_string(),
         57,
@@ -568,7 +558,7 @@ fn plot_metadata_and_index_decode_roundtrip() {
     .expect("plot metadata");
     assert_eq!(metadata.data.d_tag, d_tag);
 
-    let index: RadrootsParsedEvent<RadrootsPlot> = plot_index_from_event(
+    let index: RadrootsParsedEvent<Plot> = plot_index_from_event(
         EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         57,
@@ -737,7 +727,7 @@ fn document_metadata_and_index_decode_roundtrip() {
         serde_json::to_string(&sample_document(d_tag, TEST_PUBKEY_HEX, Some(&tag_address)))
             .expect("document content");
 
-    let metadata: RadrootsParsedData<RadrootsDocument> = document_metadata_from_event(
+    let metadata: RadrootsParsedData<Document> = document_metadata_from_event(
         "id4".to_string(),
         TEST_PUBKEY_HEX.to_string(),
         58,
@@ -748,7 +738,7 @@ fn document_metadata_and_index_decode_roundtrip() {
     .expect("document metadata");
     assert_eq!(metadata.data.d_tag, d_tag);
 
-    let index: RadrootsParsedEvent<RadrootsDocument> = document_index_from_event(
+    let index: RadrootsParsedEvent<Document> = document_index_from_event(
         EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         58,
@@ -816,7 +806,7 @@ fn resource_area_metadata_and_index_decode_roundtrip() {
     let d_tag = "AAAAAAAAAAAAAAAAAAAAAw";
     let content = serde_json::to_string(&sample_resource_area(d_tag)).expect("area content");
     let tags = d_tag_tags(d_tag);
-    let metadata: RadrootsParsedData<RadrootsResourceArea> = resource_area_metadata_from_event(
+    let metadata: RadrootsParsedData<ResourceArea> = resource_area_metadata_from_event(
         "id5".to_string(),
         TEST_PUBKEY_HEX.to_string(),
         59,
@@ -827,7 +817,7 @@ fn resource_area_metadata_and_index_decode_roundtrip() {
     .expect("area metadata");
     assert_eq!(metadata.data.d_tag, d_tag);
 
-    let index: RadrootsParsedEvent<RadrootsResourceArea> = resource_area_index_from_event(
+    let index: RadrootsParsedEvent<ResourceArea> = resource_area_index_from_event(
         EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         59,
@@ -898,19 +888,18 @@ fn resource_cap_metadata_and_index_decode_roundtrip() {
     let d_tag = "DAAAAAAAAAAAAAAAAAAAAA";
     let content = serde_json::to_string(&sample_resource_cap(d_tag)).expect("cap content");
     let tags = d_tag_tags(d_tag);
-    let metadata: RadrootsParsedData<RadrootsResourceHarvestCap> =
-        resource_cap_metadata_from_event(
-            "id6".to_string(),
-            TEST_PUBKEY_HEX.to_string(),
-            60,
-            KIND_RESOURCE_HARVEST_CAP,
-            content.clone(),
-            tags.clone(),
-        )
-        .expect("cap metadata");
+    let metadata: RadrootsParsedData<ResourceHarvestCap> = resource_cap_metadata_from_event(
+        "id6".to_string(),
+        TEST_PUBKEY_HEX.to_string(),
+        60,
+        KIND_RESOURCE_HARVEST_CAP,
+        content.clone(),
+        tags.clone(),
+    )
+    .expect("cap metadata");
     assert_eq!(metadata.data.d_tag, d_tag);
 
-    let index: RadrootsParsedEvent<RadrootsResourceHarvestCap> = resource_cap_index_from_event(
+    let index: RadrootsParsedEvent<ResourceHarvestCap> = resource_cap_index_from_event(
         EVENT_ID.to_string(),
         TEST_PUBKEY_HEX.to_string(),
         60,

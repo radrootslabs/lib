@@ -84,7 +84,9 @@ impl NostrClientManager {
     pub fn subscribe_post_events(
         &self,
     ) -> tokio::sync::broadcast::Receiver<
-        radroots_event_codec::parsed::RadrootsParsedData<radroots_event::post::RadrootsPost>,
+        radroots_event_codec::parsed::RadrootsParsedData<
+            radroots_event_codec::post::decode::LegacyPost,
+        >,
     > {
         self.inner.post_events_tx.subscribe()
     }

@@ -13,14 +13,13 @@ use crate::source_maintenance_v1::{
     advance_source_capacity_after_insert_v1, preflight_unique_raw_source_append_v1,
     raw_source_capacity_delta_v1, validate_source_capacity_authority_fast_v1,
 };
-use radroots_event::contract::registry_v7::RadrootsEventContract;
+use radroots_event::contract::registry_v7::EventContract;
 use radroots_event::envelope::event_head::v1::{
-    RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
-    RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
-    event_head_candidate_for_nip01_event_v1, select_event_head_v1,
+    CurrentEventHead, EventHeadCandidate, EventHeadCandidateResult, EventHeadCoordinate,
+    EventHeadDecision, event_head_candidate_for_nip01_event_v1, select_event_head_v1,
 };
-use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
-use radroots_event::id::RadrootsEventId;
+use radroots_event::envelope::{EventEnvelope, EventKindClass};
+use radroots_event::id::EventId;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection, Transaction};
 
@@ -84,7 +83,7 @@ pub(super) async fn ingest_event_protocol_reconciliation_v1(
     let admission = EventAdmission::for_profile(profile, ingest.verified_event())?;
     let kind_class = event.kind_class();
     let valid_stream_eligible = admission.valid_stream_eligible(kind_class);
-    if kind_class == RadrootsEventKindClass::Ephemeral {
+    if kind_class == EventKindClass::Ephemeral {
         let post_extension_authority_seal = read_protocol_post_extension_authority_seal(tx).await?;
         return Ok(ProtocolReconciliationV1IngestResult {
             receipt: RadrootsEventIngestReceipt {
@@ -525,8 +524,8 @@ async fn event_seq(
 #[cfg_attr(coverage_nightly, coverage(off))]
 async fn insert_tags(
     tx: &mut Transaction<'_, Sqlite>,
-    event: &RadrootsEventEnvelope,
-    contract: Option<&'static RadrootsEventContract>,
+    event: &EventEnvelope,
+    contract: Option<&'static EventContract>,
 ) -> Result<(), RadrootsEventStoreError> {
     for (index, tag) in event.tag_slices().iter().enumerate() {
         let tag_values = tag.as_slice();
@@ -565,25 +564,25 @@ async fn insert_tags(
 pub(super) async fn apply_raw_event_head(
     tx: &mut Transaction<'_, Sqlite>,
     profile: ReconciliationProfile,
-    event: &RadrootsEventEnvelope,
+    event: &EventEnvelope,
     updated_at_ms: i64,
 ) -> Result<AppliedHead, RadrootsEventStoreError> {
     let candidate = match profile {
         ReconciliationProfile::Nip09V1RegistryV7 => event_head_candidate_for_nip01_event_v1(event),
     };
     let candidate = match candidate {
-        RadrootsEventHeadCandidateResult::Candidate(candidate) => candidate,
-        RadrootsEventHeadCandidateResult::NotHeadSelected => {
+        EventHeadCandidateResult::Candidate(candidate) => candidate,
+        EventHeadCandidateResult::NotHeadSelected => {
             return Ok(AppliedHead {
                 decision: RadrootsRawHeadDecision::NotHeadSelected,
             });
         }
-        RadrootsEventHeadCandidateResult::NotPersisted => {
+        EventHeadCandidateResult::NotPersisted => {
             return Ok(AppliedHead {
                 decision: RadrootsRawHeadDecision::NotPersisted,
             });
         }
-        RadrootsEventHeadCandidateResult::Malformed(_) => {
+        EventHeadCandidateResult::Malformed(_) => {
             return Ok(AppliedHead {
                 decision: RadrootsRawHeadDecision::MalformedCoordinate,
             });
@@ -595,7 +594,7 @@ pub(super) async fn apply_raw_event_head(
             select_event_head_v1(candidate.clone(), current.as_ref())
         }
     };
-    if let RadrootsEventHeadDecision::Applied(head) = &protocol_decision {
+    if let EventHeadDecision::Applied(head) = &protocol_decision {
         upsert_head(tx, &candidate, head, updated_at_ms).await?;
     }
     Ok(AppliedHead {
@@ -605,14 +604,14 @@ pub(super) async fn apply_raw_event_head(
 
 async fn current_event_head(
     tx: &mut Transaction<'_, Sqlite>,
-    coordinate: &RadrootsEventHeadCoordinate,
-) -> Result<Option<RadrootsCurrentEventHead>, RadrootsEventStoreError> {
+    coordinate: &EventHeadCoordinate,
+) -> Result<Option<CurrentEventHead>, RadrootsEventStoreError> {
     let snapshot = raw_head_snapshot_in_transaction(tx, coordinate).await?;
     snapshot
         .map(|snapshot| {
-            Ok(RadrootsCurrentEventHead {
+            Ok(CurrentEventHead {
                 coordinate: coordinate.clone(),
-                event_id: RadrootsEventId::parse(snapshot.raw_head.event_id)?,
+                event_id: EventId::parse(snapshot.raw_head.event_id)?,
                 created_at: snapshot.raw_head.created_at,
             })
         })
@@ -622,12 +621,12 @@ async fn current_event_head(
 #[cfg_attr(coverage_nightly, coverage(off))]
 async fn upsert_head(
     tx: &mut Transaction<'_, Sqlite>,
-    candidate: &RadrootsEventHeadCandidate,
-    head: &RadrootsCurrentEventHead,
+    candidate: &EventHeadCandidate,
+    head: &CurrentEventHead,
     updated_at_ms: i64,
 ) -> Result<(), RadrootsEventStoreError> {
     match &head.coordinate {
-        RadrootsEventHeadCoordinate::Replaceable { kind, pubkey } => {
+        EventHeadCoordinate::Replaceable { kind, pubkey } => {
             sqlx::query(
                 "DELETE FROM event_envelope_head WHERE coordinate_type = 'replaceable' AND kind = ? AND pubkey = ? AND d_tag IS NULL",
             )
@@ -646,7 +645,7 @@ async fn upsert_head(
             .execute(&mut **tx)
             .await?;
         }
-        RadrootsEventHeadCoordinate::Addressable {
+        EventHeadCoordinate::Addressable {
             kind,
             pubkey,
             d_tag,

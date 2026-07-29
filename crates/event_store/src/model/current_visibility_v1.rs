@@ -1,7 +1,7 @@
 use super::{
     RadrootsEventAdmissionStatus, RadrootsEventStoreSourceGeneration, RadrootsStoredRawEvent,
 };
-use radroots_event::id::RadrootsEventId;
+use radroots_event::id::EventId;
 pub use radroots_event_codec::deletion::reconciliation_v1::evaluator::{
     RadrootsNip09SuppressionOutcome, RadrootsNip09SuppressionReason,
 };
@@ -10,8 +10,8 @@ pub use radroots_event_codec::deletion::reconciliation_v1::evaluator::{
 pub struct RadrootsNip09SuppressionEvidenceV1 {
     pub(crate) outcome: RadrootsNip09SuppressionOutcome,
     pub(crate) reason: RadrootsNip09SuppressionReason,
-    pub(crate) event_reference_request_id: Option<RadrootsEventId>,
-    pub(crate) address_reference_request_id: Option<RadrootsEventId>,
+    pub(crate) event_reference_request_id: Option<EventId>,
+    pub(crate) address_reference_request_id: Option<EventId>,
     pub(crate) address_reference_cutoff: Option<u64>,
 }
 
@@ -24,11 +24,11 @@ impl RadrootsNip09SuppressionEvidenceV1 {
         self.reason
     }
 
-    pub const fn event_reference_request_id(&self) -> Option<&RadrootsEventId> {
+    pub const fn event_reference_request_id(&self) -> Option<&EventId> {
         self.event_reference_request_id.as_ref()
     }
 
-    pub const fn address_reference_request_id(&self) -> Option<&RadrootsEventId> {
+    pub const fn address_reference_request_id(&self) -> Option<&EventId> {
         self.address_reference_request_id.as_ref()
     }
 
@@ -118,7 +118,7 @@ pub struct RadrootsCurrentEventVisibilityV1 {
     pub(crate) source_generation: RadrootsEventStoreSourceGeneration,
     pub(crate) event: RadrootsStoredRawEvent,
     pub(crate) is_raw_head: bool,
-    pub(crate) raw_head_event_id: Option<RadrootsEventId>,
+    pub(crate) raw_head_event_id: Option<EventId>,
     pub(crate) suppression: Option<RadrootsNip09SuppressionEvidenceV1>,
     pub(crate) decision: RadrootsCurrentVisibilityDecisionV1,
 }
@@ -140,7 +140,7 @@ impl RadrootsCurrentEventVisibilityV1 {
         self.is_raw_head
     }
 
-    pub const fn raw_head_event_id(&self) -> Option<&RadrootsEventId> {
+    pub const fn raw_head_event_id(&self) -> Option<&EventId> {
         self.raw_head_event_id.as_ref()
     }
 

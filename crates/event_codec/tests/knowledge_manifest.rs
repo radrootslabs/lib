@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use radroots_event::contract::VERSION;
 use radroots_event::contract::{
-    RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsEventClass, all_event_contracts,
+    EventClass, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, all_event_contracts,
 };
 use radroots_event::envelope::kind::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM,
@@ -224,7 +224,7 @@ fn knowledge_manifest_preserves_regular_immutable_classification() {
             .unwrap();
         assert_eq!(manifest_entry.kind, kind);
         assert_eq!(manifest_entry.class, "regular");
-        assert_eq!(registry_entry.class, RadrootsEventClass::Regular);
+        assert_eq!(registry_entry.class, EventClass::Regular);
     }
 }
 
