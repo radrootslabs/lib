@@ -5216,7 +5216,6 @@ dependencies = [
  "radroots_core",
  "radroots_event",
  "radroots_event_codec",
- "radroots_event_store",
  "radroots_identity",
  "radroots_nostr",
  "radroots_test_fixtures",
