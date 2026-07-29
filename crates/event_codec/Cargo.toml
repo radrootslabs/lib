@@ -22,12 +22,14 @@ std = [
   "radroots_core/std",
   "radroots_event/std",
   "radroots_identity/std",
+  "radroots_protocol/std",
 ]
 serde = [
   "dep:serde",
   "radroots_core/serde",
   "radroots_event/serde",
   "radroots_identity/serde",
+  "radroots_protocol/serde",
 ]
 serde_json = ["serde", "dep:serde_json"]
 nostr = ["dep:nostr", "std"]
@@ -40,6 +42,7 @@ radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }

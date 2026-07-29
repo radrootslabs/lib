@@ -4555,6 +4555,7 @@ dependencies = [
  "radroots_core",
  "radroots_event",
  "radroots_identity",
+ "radroots_protocol",
  "radroots_test_fixtures",
  "serde",
  "serde_json",

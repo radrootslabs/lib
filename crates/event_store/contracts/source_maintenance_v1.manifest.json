@@ -825,7 +825,7 @@
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
       "byte_length": 841956,
-      "sha256": "dec55582169c42fc8f8338a9eb82213616e5969c6af9d986748e6df3622510fc",
+      "sha256": "7b8ee7b5f4257946e02771be356b540ee0473d6f43cd4a732dbb1425ee380e18",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

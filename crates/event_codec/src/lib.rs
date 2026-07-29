@@ -4,7 +4,10 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+pub mod canonical;
 pub mod d_tag;
+pub mod decode;
+pub mod encode;
 pub mod error;
 pub mod event_ref;
 mod field_helpers;
@@ -21,6 +24,7 @@ pub mod repost;
 mod social_helpers;
 pub mod tag_builders;
 pub mod verification;
+pub mod verify;
 pub mod wire;
 
 #[cfg(feature = "serde_json")]
