@@ -726,8 +726,8 @@
     {
       "role": "nip09_successor_result_vector_executor",
       "path": "crates/event_store/tests/support/nip09_reconciliation_v1_result_vector_v2.rs",
-      "byte_length": 17976,
-      "sha256": "f9b17af1b9df22c78b5be76a2a62fb6d55153e0b4173462d6cacc7305aedc967",
+      "byte_length": 18205,
+      "sha256": "c632beee70dc777b8dd2a4f88cadb55296fee7aa5742e6e2c9f6d49f26ae2c78",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

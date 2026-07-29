@@ -106,7 +106,12 @@ where
 async fn nip09_reconciliation_v1_result_vector() {
     assert_eq!(
         RESULT_VECTOR_EXECUTOR_ID,
-        nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_ID
+        "radroots_event_store.nip09_reconciliation_v1.result_vector_executor.v2"
+    );
+    assert_ne!(
+        RESULT_VECTOR_EXECUTOR_ID,
+        nip09_manifest::NIP09_RECONCILIATION_RESULT_VECTOR_EXECUTOR_ID,
+        "the successor executor must remain distinct from the authenticated predecessor"
     );
     assert_eq!(
         sha256_hex(NIP09_RESULT_VECTOR_BYTES),
