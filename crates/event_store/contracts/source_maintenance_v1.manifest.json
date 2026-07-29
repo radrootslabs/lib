@@ -292,8 +292,8 @@
     {
       "role": "event_admission_typestate_authority",
       "path": "crates/event/src/admission.rs",
-      "byte_length": 5975,
-      "sha256": "aaa5fc73146e521cdc0598c91bafa5103cfeef30dc4e66b6d71da3b76d9f8dfa",
+      "byte_length": 7116,
+      "sha256": "65034364bca02a26681261ce8dd88ba05857c20048f2f0ddb0dd43d012a6d87a",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

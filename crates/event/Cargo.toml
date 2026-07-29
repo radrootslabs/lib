@@ -56,6 +56,10 @@ radroots_core = { workspace = true, default-features = false, features = [
   "serde",
   "std",
 ] }
+radroots_identity = { workspace = true, default-features = false, features = [
+  "serde",
+  "std",
+] }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",

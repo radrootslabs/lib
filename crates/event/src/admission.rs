@@ -7,8 +7,15 @@ pub use crate::verification::{
 
 use crate::envelope::RadrootsEventEnvelope;
 
-/// Host policy that authorizes a contract-validated event for admission.
-pub trait AdmissionPolicy {
+/// **Host SPI:** authorizes a contract-validated event for admission.
+///
+/// Downstream implementations are supported. The trait is dyn-compatible when
+/// its `Error` associated type is specified, and native implementations must be
+/// `Send + Sync`. Policy evaluation is synchronous, has no cancellation or
+/// deadline boundary, returns the implementation's error without translation,
+/// and must not durably commit state.
+pub trait AdmissionPolicy: Send + Sync {
+    /// Host-owned rejection type returned unchanged by [`ContractValidatedEvent::admit_with`].
     type Error;
 
     /// Stable identifier for the policy whose decision produced the state.
@@ -18,8 +25,15 @@ pub trait AdmissionPolicy {
     fn admit(&self, event: &ContractValidatedEvent) -> Result<(), Self::Error>;
 }
 
-/// Host policy that authorizes an admitted event to become visible.
-pub trait VisibilityPolicy {
+/// **Host SPI:** authorizes an admitted event to become visible.
+///
+/// Downstream implementations are supported. The trait is dyn-compatible when
+/// its `Error` associated type is specified, and native implementations must be
+/// `Send + Sync`. Policy evaluation is synchronous, has no cancellation or
+/// deadline boundary, returns the implementation's error without translation,
+/// and must not durably commit state.
+pub trait VisibilityPolicy: Send + Sync {
+    /// Host-owned rejection type returned unchanged by [`AdmittedEvent::make_visible_with`].
     type Error;
 
     /// Stable identifier for the policy whose decision produced the state.
@@ -168,6 +182,8 @@ mod tests {
 
     #[test]
     fn positive_vector_traverses_the_complete_transition_graph() {
+        let admission_policy: &dyn AdmissionPolicy<Error = core::convert::Infallible> = &Allow;
+        let visibility_policy: &dyn VisibilityPolicy<Error = core::convert::Infallible> = &Allow;
         let envelope = RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
             id: "762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0"
                 .to_owned(),
@@ -188,9 +204,9 @@ mod tests {
             .expect("verified signature")
             .validate_contract()
             .expect("validated contract")
-            .admit_with(&Allow)
+            .admit_with(admission_policy)
             .expect("admitted")
-            .make_visible_with(&Allow)
+            .make_visible_with(visibility_policy)
             .expect("visible");
 
         assert_eq!(

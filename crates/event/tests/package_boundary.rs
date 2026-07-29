@@ -20,6 +20,8 @@ const IDENTIFIERS: &str = include_str!("../src/id.rs");
 const CONTRACT_REGISTRY: &str = include_str!("../src/contract/registry_v7.rs");
 const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
+const ADMISSION: &str = include_str!("../src/admission.rs");
+const VERIFICATION: &str = include_str!("../src/verification.rs");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -56,6 +58,51 @@ fn manifest_has_final_identity_and_required_radroots_dependencies() {
     }
     assert!(!table_keys(MANIFEST, "[dependencies]").contains("dto_bindgen"));
     assert!(!table_keys(MANIFEST, "[dependencies]").contains("secp256k1"));
+    for forbidden_dependency in [
+        "libsqlite3-sys",
+        "nostr",
+        "nostr-sdk",
+        "reqwest",
+        "sqlx",
+        "tokio",
+    ] {
+        assert!(
+            !table_keys(MANIFEST, "[dependencies]").contains(forbidden_dependency),
+            "forbidden implementation dependency `{forbidden_dependency}`"
+        );
+    }
+}
+
+#[test]
+fn public_traits_are_exact_and_classified_as_host_spis() {
+    let declarations = [ADMISSION, VERIFICATION]
+        .into_iter()
+        .flat_map(|source| source.lines())
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix("pub trait "))
+        .filter_map(|declaration| declaration.split([':', ' ', '{']).next())
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(
+        declarations,
+        BTreeSet::from(["AdmissionPolicy", "SignatureVerifier", "VisibilityPolicy"])
+    );
+    for declaration in [
+        "pub trait AdmissionPolicy: Send + Sync",
+        "pub trait VisibilityPolicy: Send + Sync",
+        "pub trait SignatureVerifier: Send + Sync",
+    ] {
+        assert!(
+            ADMISSION.contains(declaration) || VERIFICATION.contains(declaration),
+            "missing native Host SPI contract `{declaration}`"
+        );
+    }
+    assert_eq!(
+        ADMISSION.matches("/// **Host SPI:**").count()
+            + VERIFICATION.matches("/// **Host SPI:**").count(),
+        3,
+        "every public event trait must carry one explicit Host SPI classification"
+    );
 }
 
 #[test]

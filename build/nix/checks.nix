@@ -101,6 +101,47 @@ let
       installPhaseCommand = "mkdir -p $out";
     }
   );
+  eventConformance = common.craneLib.mkCargoDerivation (
+    common.commonCraneArgs
+    // {
+      inherit (common) cargoArtifacts;
+      pname = "radroots-event-conformance";
+      doCheck = false;
+      buildPhaseCargoCommand = ''
+        cargo check -p radroots_event --all-targets --no-default-features --locked
+        cargo check -p radroots_event --all-targets --no-default-features --features std --locked
+        cargo check -p radroots_event --all-targets --no-default-features --features serde --locked
+        cargo check -p radroots_event --all-targets --no-default-features --features knowledge --locked
+        cargo check -p radroots_event --all-targets --no-default-features --features std,knowledge --locked
+        cargo check -p radroots_event --all-targets --no-default-features --features serde,knowledge --locked
+        cargo check -p radroots_event --all-targets --locked
+        cargo check -p radroots_event --all-targets --all-features --locked
+        cargo clippy -p radroots_event --all-targets --no-default-features --locked -- -D warnings
+        cargo clippy -p radroots_event --all-targets --no-default-features --features std --locked -- -D warnings
+        cargo clippy -p radroots_event --all-targets --no-default-features --features serde --locked -- -D warnings
+        cargo clippy -p radroots_event --all-targets --no-default-features --features knowledge --locked -- -D warnings
+        cargo clippy -p radroots_event --all-targets --no-default-features --features std,knowledge --locked -- -D warnings
+        cargo clippy -p radroots_event --all-targets --no-default-features --features serde,knowledge --locked -- -D warnings
+        cargo clippy -p radroots_event --all-targets --all-features --locked -- -D warnings
+        cargo test -p radroots_event --all-targets --no-default-features --locked
+        cargo test -p radroots_event --all-targets --no-default-features --features std --locked
+        cargo test -p radroots_event --all-targets --no-default-features --features serde --locked
+        cargo test -p radroots_event --all-targets --no-default-features --features knowledge --locked
+        cargo test -p radroots_event --all-targets --no-default-features --features std,knowledge --locked
+        cargo test -p radroots_event --all-targets --no-default-features --features serde,knowledge --locked
+        cargo test -p radroots_event --all-targets --locked
+        cargo test -p radroots_event --all-targets --all-features --locked
+        cargo check -p radroots_event --no-default-features --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_event --no-default-features --features serde --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_event --no-default-features --features knowledge --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_event --no-default-features --features serde,knowledge --target wasm32-unknown-unknown --locked
+        cargo check -p radroots_event --all-features --target wasm32-unknown-unknown --locked
+        RUSTDOCFLAGS="-D warnings" cargo doc -p radroots_event --all-features --no-deps --locked
+        cargo test -p radroots_event --all-features --doc --locked
+      '';
+      installPhaseCommand = "mkdir -p $out";
+    }
+  );
   mkReplicaSyncLane =
     {
       pname,
@@ -140,6 +181,7 @@ in
   core-conformance = coreConformance;
   identity-conformance = identityConformance;
   blossom-conformance = blossomConformance;
+  event-conformance = eventConformance;
   replica-sync-default-check = replicaSyncDefaultCheck;
   replica-sync-default-test = replicaSyncDefaultTest;
   replica-sync-legacy-ingest-check = replicaSyncLegacyCheck;

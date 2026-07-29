@@ -51,13 +51,13 @@ pub const fn radroots_event::admission::VisibleEvent::admitted_event(&self) -> &
 pub const fn radroots_event::admission::VisibleEvent::event(&self) -> &radroots_event::envelope::RadrootsEventEnvelope
 pub fn radroots_event::admission::VisibleEvent::into_admitted_event(self) -> radroots_event::admission::AdmittedEvent
 pub const fn radroots_event::admission::VisibleEvent::policy_id(&self) -> &'static str
-pub trait radroots_event::admission::AdmissionPolicy
+pub trait radroots_event::admission::AdmissionPolicy: core::marker::Send + core::marker::Sync
 pub type radroots_event::admission::AdmissionPolicy::Error
 pub fn radroots_event::admission::AdmissionPolicy::admit(&self, &radroots_event::admission::ContractValidatedEvent) -> core::result::Result<(), Self::Error>
 pub fn radroots_event::admission::AdmissionPolicy::policy_id(&self) -> &'static str
 pub trait radroots_event::admission::SignatureVerifier: core::marker::Send + core::marker::Sync
 pub fn radroots_event::admission::SignatureVerifier::verify_signature(&self, &radroots_event::envelope::RadrootsEventEnvelope) -> core::result::Result<(), radroots_event::Error>
-pub trait radroots_event::admission::VisibilityPolicy
+pub trait radroots_event::admission::VisibilityPolicy: core::marker::Send + core::marker::Sync
 pub type radroots_event::admission::VisibilityPolicy::Error
 pub fn radroots_event::admission::VisibilityPolicy::make_visible(&self, &radroots_event::admission::AdmittedEvent) -> core::result::Result<(), Self::Error>
 pub fn radroots_event::admission::VisibilityPolicy::policy_id(&self) -> &'static str
