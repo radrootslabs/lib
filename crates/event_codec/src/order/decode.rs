@@ -1,7 +1,7 @@
-#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), feature = "json"))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::{
     envelope::EventEnvelope,
     envelope::kind::is_order_event_kind,
@@ -13,18 +13,18 @@ use radroots_event::{
         OrderPayloadError, OrderRequest,
     },
 };
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_identity::PublicKey;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use serde::de::DeserializeOwned;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::order::tags::{
     TAG_LISTING_EVENT, parse_order_counterparty_tag, parse_order_listing_event_tag,
     parse_order_prev_tag, parse_order_root_tag,
 };
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOrderEnvelopeParseError {
     InvalidKind(u32),
@@ -45,7 +45,7 @@ pub enum RadrootsOrderEnvelopeParseError {
     InvalidListingAddr(ParseError),
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 impl core::fmt::Display for RadrootsOrderEnvelopeParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -80,7 +80,7 @@ impl core::fmt::Display for RadrootsOrderEnvelopeParseError {
     }
 }
 
-#[cfg(all(feature = "std", feature = "serde_json"))]
+#[cfg(all(feature = "std", feature = "json"))]
 impl std::error::Error for RadrootsOrderEnvelopeParseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -92,7 +92,7 @@ impl std::error::Error for RadrootsOrderEnvelopeParseError {
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsOrderEventContext {
     pub counterparty_pubkey: PublicKey,
@@ -101,7 +101,7 @@ pub struct RadrootsOrderEventContext {
     pub prev_event_id: Option<EventId>,
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_envelope_from_event<T: DeserializeOwned>(
     event: &EventEnvelope,
 ) -> Result<OrderEnvelope<T>, RadrootsOrderEnvelopeParseError> {
@@ -138,7 +138,7 @@ pub fn order_envelope_from_event<T: DeserializeOwned>(
     Ok(envelope)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_request_from_event(
     event: &EventEnvelope,
 ) -> Result<OrderEnvelope<OrderRequest>, RadrootsOrderEnvelopeParseError> {
@@ -164,7 +164,7 @@ pub fn order_request_from_event(
     Ok(envelope)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_decision_from_event(
     event: &EventEnvelope,
 ) -> Result<OrderEnvelope<OrderDecision>, RadrootsOrderEnvelopeParseError> {
@@ -190,7 +190,7 @@ pub fn order_decision_from_event(
     Ok(envelope)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_cancellation_from_event(
     event: &EventEnvelope,
 ) -> Result<OrderEnvelope<OrderCancellation>, RadrootsOrderEnvelopeParseError> {
@@ -216,7 +216,7 @@ pub fn order_cancellation_from_event(
     Ok(envelope)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_event_context_from_tags(
     message_type: OrderEventType,
     tags: &[Vec<String>],
@@ -264,7 +264,7 @@ pub fn order_event_context_from_tags(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn required_order_tag_value<'a>(
     tags: &'a [Vec<String>],
     key: &'static str,
@@ -283,7 +283,7 @@ fn required_order_tag_value<'a>(
     Ok(value)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn map_tag_parse_error_for_order_envelope(
     error: crate::error::EventParseError,
 ) -> RadrootsOrderEnvelopeParseError {
@@ -308,7 +308,7 @@ fn map_tag_parse_error_for_order_envelope(
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn validate_order_binding<T>(
     event: &EventEnvelope,
     envelope: &OrderEnvelope<T>,
@@ -337,7 +337,7 @@ fn validate_order_binding<T>(
     Ok(())
 }
 
-#[cfg(all(test, feature = "serde_json"))]
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use super::{
         RadrootsOrderEnvelopeParseError, map_tag_parse_error_for_order_envelope,

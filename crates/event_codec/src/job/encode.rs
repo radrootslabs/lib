@@ -27,7 +27,7 @@ impl fmt::Display for JobEncodeError {
 #[cfg(feature = "std")]
 impl std::error::Error for JobEncodeError {}
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn json_content<T: serde::Serialize>(value: &T) -> Result<String, JobEncodeError> {
     serde_json::to_string(value).map_err(|_| JobEncodeError::EmptyRequiredField("content-json"))
 }

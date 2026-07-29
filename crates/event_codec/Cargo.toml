@@ -16,7 +16,7 @@ readme = "README.md"
 name = "radroots_event_codec"
 
 [features]
-default = ["std"]
+default = ["std", "json"]
 std = [
   "radroots_blossom/std",
   "radroots_core/std",
@@ -31,10 +31,9 @@ serde = [
   "radroots_identity/serde",
   "radroots_protocol/serde",
 ]
-serde_json = ["serde", "dep:serde_json"]
-knowledge = ["serde_json", "radroots_event/knowledge"]
-knowledge-nip54 = ["knowledge"]
-contract-manifest = ["knowledge", "dep:hex", "dep:sha2"]
+json = ["serde", "dep:serde_json"]
+knowledge = ["json", "radroots_event/knowledge"]
+manifests = ["knowledge", "dep:hex", "dep:sha2"]
 
 [dependencies]
 radroots_blossom = { workspace = true, default-features = false }

@@ -93,7 +93,7 @@ const EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256: &str =
 const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
     "7fa8fdbea6ce9a84486d238954cdb19d500dccfe727e3dd8434b6711db6330b1";
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
-    "93dd84b65105dd0aa8ad1f9763b7f5937bd77b30498e2b4a29724f342890dc9a";
+    "4d18f9711b1f905b8c7124a2a4005d4b2d0fb5b4386c99667436a91542496023";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
     "5066faee05fad71a94be757767f67bf99a10e5637acc41522cefe7a37eb0b4e4";
 const ROUTE_FACADE_BASELINE_SHA256: &str =
@@ -221,7 +221,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
-        "211f0eedc43bab3fa8f5356effbd9e64b929285b3c4c0b72701aec8e8f7d4b8d",
+        "59b52755d43caa7d9a4c2f549718996cef12a9ffd1a5fbe1a244f5cc65ced6fe",
     ),
     (
         BLOSSOM_CARGO_MANIFEST_RELATIVE,
@@ -229,7 +229,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_STORE_CARGO_MANIFEST_RELATIVE,
-        "dc92a80725866be32cc773e0762ab26c72c07bc14aa6a6940460f8f175aa7237",
+        "abb8fafa1f817bf3f1cb60fdec90f04f0dc685fc8d0281eec9dd47ae5b167586",
     ),
     (
         TRANSPORT_CARGO_MANIFEST_RELATIVE,
@@ -611,8 +611,8 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
         cargo_package_name: "radroots_event_codec",
         manifest_path: EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
-        selected_features: &["serde", "serde_json", "std"],
-        relevant_feature_definitions: &["serde", "serde_json", "std"],
+        selected_features: &["json", "serde", "std"],
+        relevant_feature_definitions: &["json", "serde", "std"],
     },
     CargoPackageFeatureSpec {
         package: "radroots_event",
@@ -5879,8 +5879,8 @@ fn expected_source_module_route_attributes(
 ) -> &'static [&'static str] {
     match (relative, module) {
         ("crates/event/src/lib.rs", "knowledge") => &["#[cfg(feature=\"knowledge\")]"],
-        ("crates/event_codec/src/lib.rs", "admission") => &["#[cfg(feature=\"serde_json\")]"],
-        ("crates/event_codec/src/profile/mod.rs", "inbound") => &["#[cfg(feature=\"serde_json\")]"],
+        ("crates/event_codec/src/lib.rs", "admission") => &["#[cfg(feature=\"json\")]"],
+        ("crates/event_codec/src/profile/mod.rs", "inbound") => &["#[cfg(feature=\"json\")]"],
         (EVENT_STORE_LIB_SOURCE_RELATIVE, _) => &["#[cfg(feature=\"sqlite\")]"],
         _ => &[],
     }
@@ -14854,7 +14854,7 @@ fn validate_required_feature_enables(
         ("radroots_event_codec", "serde") => {
             &["dep:serde", "radroots_core/serde", "radroots_event/serde"]
         }
-        ("radroots_event_codec", "serde_json") => &["dep:serde_json", "serde"],
+        ("radroots_event_codec", "json") => &["dep:serde_json", "serde"],
         ("radroots_event_codec", "std") => &[
             "radroots_blossom/std",
             "radroots_core/std",
@@ -15003,7 +15003,7 @@ fn validate_event_store_dependency_profile(
             name: "radroots_event_codec".to_owned(),
             default_features: false,
             optional: false,
-            features: vec!["serde_json".to_owned(), "std".to_owned()],
+            features: vec!["json".to_owned(), "std".to_owned()],
         },
         CargoDependencyFeatureDescriptor {
             name: "sqlx".to_owned(),
@@ -21529,8 +21529,11 @@ async fn nip09_reconciliation_v1_result_vector() {
             describe_cargo_feature_profile(workspace.path()).expect("current feature profile");
         let cargo_lock =
             read_regular_file(workspace.path(), CARGO_LOCK_RELATIVE).expect("current Cargo.lock");
-        (manifest.runtime_dependency_policy, manifest.runtime_dependencies) =
-            runtime_dependencies_from_lock(&cargo_lock).expect("current runtime dependency profile");
+        (
+            manifest.runtime_dependency_policy,
+            manifest.runtime_dependencies,
+        ) = runtime_dependencies_from_lock(&cargo_lock)
+            .expect("current runtime dependency profile");
         manifest.entry_points = expected_entry_points();
         manifest.frozen_sources[0].path = GENERATED_DESCRIPTOR_RELATIVE.to_owned();
         let error = validate_manifest_shape(workspace.path(), &manifest)

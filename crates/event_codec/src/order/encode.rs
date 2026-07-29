@@ -1,4 +1,4 @@
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::{
     id::EventId,
     tag::EventPtr,
@@ -8,14 +8,14 @@ use radroots_event::{
     },
 };
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::{error::EventEncodeError, order::tags::order_envelope_tags};
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_identity::PublicKey;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn map_order_envelope_error(error: OrderEnvelopeError) -> EventEncodeError {
     match error {
         OrderEnvelopeError::MissingOrderId => EventEncodeError::EmptyRequiredField("order_id"),
@@ -26,7 +26,7 @@ fn map_order_envelope_error(error: OrderEnvelopeError) -> EventEncodeError {
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn map_order_payload_error(error: OrderPayloadError) -> EventEncodeError {
     match error {
         OrderPayloadError::EmptyField(field) => EventEncodeError::EmptyRequiredField(field),
@@ -70,7 +70,7 @@ fn map_order_payload_error(error: OrderPayloadError) -> EventEncodeError {
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 struct OrderEnvelopeEventBuildParts<'a, T> {
     recipient_pubkey: &'a PublicKey,
     message_type: OrderEventType,
@@ -82,7 +82,7 @@ struct OrderEnvelopeEventBuildParts<'a, T> {
     payload: &'a T,
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn order_envelope_event_build<T: serde::Serialize>(
     parts: OrderEnvelopeEventBuildParts<'_, T>,
 ) -> Result<Nip01EventWireParts, EventEncodeError> {
@@ -123,7 +123,7 @@ fn order_envelope_event_build<T: serde::Serialize>(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_request_event_build(
     listing_event: &EventPtr,
     payload: &OrderRequest,
@@ -141,7 +141,7 @@ pub fn order_request_event_build(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_decision_event_build(
     root_event_id: &EventId,
     prev_event_id: &EventId,
@@ -160,7 +160,7 @@ pub fn order_decision_event_build(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn order_cancellation_event_build(
     root_event_id: &EventId,
     prev_event_id: &EventId,
@@ -179,7 +179,7 @@ pub fn order_cancellation_event_build(
     })
 }
 
-#[cfg(all(test, feature = "serde_json"))]
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use super::{
         OrderEnvelopeEventBuildParts, map_order_envelope_error, map_order_payload_error,

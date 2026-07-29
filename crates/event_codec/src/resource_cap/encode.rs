@@ -12,9 +12,9 @@ use radroots_event::{
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::envelope::kind::KIND_RESOURCE_HARVEST_CAP;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_A: &str = "a";
@@ -78,12 +78,12 @@ pub fn resource_harvest_cap_build_tags(
     Ok(tags)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts(cap: &ResourceHarvestCap) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(cap, KIND_RESOURCE_HARVEST_CAP)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind(
     cap: &ResourceHarvestCap,
     kind: u32,

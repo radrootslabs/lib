@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 use radroots_core::pricing::{Discount, DiscountScope, DiscountThreshold, DiscountValue};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};

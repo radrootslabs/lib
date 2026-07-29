@@ -10,27 +10,26 @@ codecs and tag builders for the `radroots` core libraries.
  * tag builder helpers for the same event families exposed by
    `radroots_event`;
  * parsed view and error types for codec-driven validation and routing;
- * optional `serde_json` and `radroots_nostr` integration for JSON and wire
-   interop.
+ * optional `json` adapters for JSON and wire interop.
 
-With the optional `serde_json` feature, the Profile codec exposes separate
+With the optional `json` feature, the Profile codec exposes separate
 strict authored and tolerant inbound operations. Strict authoring emits
 bounded, deterministic kind-`0` metadata with empty tags and image-typed,
 byte-verified Blossom media references. Tolerant inbound parsing retains raw
 and residual fields and never upgrades observed media or NIP-05 syntax into
 network verification. Its content parser accepts only bounded kind-`0` content
 from an event whose identifier and signature the caller has already verified.
-With `serde_json,nostr`, `profile::admission::verify_and_admit_profile_event`
+With `json`, `profile::admission::verify_and_admit_profile_event`
 provides that combined boundary and returns metadata bound to a non-forgeable
 signature-verified envelope. Standard tagless kind-`0` events are accepted; no
 Radroots marker is required.
 
 General NIP-01 identifier and Schnorr verification lives in `verification` and
-is independent of the optional `knowledge` decoder. The `nostr` feature exposes
-`RadrootsSignatureVerifiedEvent` and rejects event kinds above `u16::MAX`
-instead of truncating them.
+is independent of serde, JSON, and the optional `knowledge` decoder. The
+portable verifier exposes `RadrootsSignatureVerifiedEvent` and rejects event
+kinds above `u16::MAX` instead of truncating them.
 
-With `serde_json`, `admission::admit_verified_event` is the current central
+With `json`, `admission::admit_verified_event` is the current central
 contract boundary over an already verified event. It preserves typed admitted
 Profile, root Post, Reply, Comment, DeletionRequest, and FoodAvailability
 values, while other registered events must pass complete registry shape
@@ -218,10 +217,8 @@ non-focused exclusion to that verified envelope. Revision validation accepts
 two independently verified events, requires both to satisfy the exact authored
 wire profile, preserves kind, author, `d`, and `published_at`, and applies the
 NIP-01 newer-event rule: later `created_at`, then lower event id at equal time.
-Successful combined verification and admission uses the optional `nostr`
-feature; without it, signature verification returns the stable unavailable
-error rather than admitting an event. The packaged conformance runner enables
-`serde_json,nostr` for signed JSON event cases.
+Successful combined verification and admission uses the portable verifier;
+the packaged conformance runner enables `json` for signed JSON event cases.
 These codecs do not sign, publish, replicate, upload, retrieve, or provide
 client behavior.
 

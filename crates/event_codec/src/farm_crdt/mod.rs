@@ -1,9 +1,9 @@
 pub mod encode;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod decode;
 
-#[cfg(all(test, feature = "serde_json"))]
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use radroots_event::{
         envelope::kind::KIND_POST,

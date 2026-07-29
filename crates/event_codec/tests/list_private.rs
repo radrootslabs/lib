@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 use radroots_event::social::list::ListEntry;
 use radroots_event_codec::list::decode::list_private_entries_from_json;

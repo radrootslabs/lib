@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{format, string::String, vec::Vec};
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::farm::crdt::KIND_FARM_CRDT_CHANGE;
 use radroots_event::{
     farm::crdt::{FarmCrdtChange, RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG},
@@ -14,7 +14,7 @@ use crate::error::EventEncodeError;
 use crate::field_helpers::{
     push_optional_tag, push_tag, validate_non_empty_base64url, validate_non_empty_field,
 };
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
 
 pub fn farm_crdt_change_build_tags(
@@ -44,12 +44,12 @@ pub fn farm_crdt_change_build_tags_with_author(
     Ok(tags)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts(change: &FarmCrdtChange) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(change, KIND_FARM_CRDT_CHANGE)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_author(
     change: &FarmCrdtChange,
     author_pubkey: &str,
@@ -57,7 +57,7 @@ pub fn to_wire_parts_with_author(
     to_wire_parts_with_kind_and_author(change, KIND_FARM_CRDT_CHANGE, Some(author_pubkey))
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind(
     change: &FarmCrdtChange,
     kind: u32,
@@ -65,7 +65,7 @@ pub fn to_wire_parts_with_kind(
     to_wire_parts_with_kind_and_author(change, kind, None)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind_and_author(
     change: &FarmCrdtChange,
     kind: u32,

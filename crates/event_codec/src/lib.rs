@@ -15,7 +15,7 @@ mod field_helpers;
 pub mod job;
 #[cfg(feature = "knowledge")]
 pub mod knowledge;
-#[cfg(feature = "contract-manifest")]
+#[cfg(feature = "manifests")]
 pub mod manifest;
 pub mod parsed;
 pub mod profile;
@@ -33,7 +33,7 @@ pub use decode::DecodeError;
 pub use encode::EncodeError;
 pub use verify::VerificationError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod admission;
 pub mod app_data;
 pub mod article;
@@ -72,10 +72,10 @@ pub mod trade;
 #[cfg(test)]
 mod test_fixtures;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod relay_document;
 
-#[cfg(feature = "contract-manifest")]
+#[cfg(feature = "manifests")]
 pub use manifest::registry_v7::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_V7_EVENT_COUNT,
     RADROOTS_EVENT_CONTRACT_REGISTRY_V7_INVENTORY_SCHEMA_VERSION,
@@ -84,7 +84,7 @@ pub use manifest::registry_v7::{
     event_contract_registry_v7_inventory_json, event_contract_registry_v7_inventory_sha256,
     parse_event_contract_registry_v7_inventory_json,
 };
-#[cfg(feature = "contract-manifest")]
+#[cfg(feature = "manifests")]
 pub use manifest::{
     RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION, contract_manifest_json,
     contract_manifest_sha256, knowledge_contract_manifest,

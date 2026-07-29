@@ -434,6 +434,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event/src/wire/v1.rs",
     },
     SourceSpec {
+        role: "event_codec_public_surface",
+        path: "crates/event_codec/src/lib.rs",
+    },
+    SourceSpec {
         role: "event_codec_verification_facade",
         path: "crates/event_codec/src/verification.rs",
     },
@@ -514,8 +518,24 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_codec/src/job/traits.rs",
     },
     SourceSpec {
+        role: "event_codec_job_encode_authority",
+        path: "crates/event_codec/src/job/encode.rs",
+    },
+    SourceSpec {
         role: "event_codec_knowledge_verification_authority",
         path: "crates/event_codec/src/knowledge/verification.rs",
+    },
+    SourceSpec {
+        role: "event_codec_operational_listing_tags_authority",
+        path: "crates/event_codec/src/operational_listing/tags.rs",
+    },
+    SourceSpec {
+        role: "event_codec_order_decode_authority",
+        path: "crates/event_codec/src/order/decode.rs",
+    },
+    SourceSpec {
+        role: "event_codec_profile_facade",
+        path: "crates/event_codec/src/profile/mod.rs",
     },
     SourceSpec {
         role: "event_codec_tag_builders_authority",
@@ -712,10 +732,15 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_codec/src/food_availability/authored.rs",
     "crates/event_codec/src/food_availability/inbound.rs",
     "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
+    "crates/event_codec/src/job/encode.rs",
     "crates/event_codec/src/job/traits.rs",
     "crates/event_codec/src/knowledge/verification.rs",
+    "crates/event_codec/src/lib.rs",
+    "crates/event_codec/src/operational_listing/tags.rs",
+    "crates/event_codec/src/order/decode.rs",
     "crates/event_codec/src/post/inbound.rs",
     "crates/event_codec/src/post/inbound/registry_v7.rs",
+    "crates/event_codec/src/profile/mod.rs",
     "crates/event_codec/src/profile/inbound.rs",
     "crates/event_codec/src/profile/inbound/registry_v7.rs",
     "crates/event_codec/src/reply/inbound.rs",

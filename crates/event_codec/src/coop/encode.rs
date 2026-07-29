@@ -16,7 +16,7 @@ use radroots_event::{
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
@@ -71,12 +71,12 @@ pub fn coop_ref_tags(coop: &CoopRef) -> Result<Vec<Vec<String>>, EventEncodeErro
     Ok(tags)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts(coop: &Coop) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(coop, KIND_COOP)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind(
     coop: &Coop,
     kind: u32,

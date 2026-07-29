@@ -90,7 +90,7 @@ fn is_ws_relay_url(value: &str) -> bool {
         || (value.starts_with("ws://") && value.len() > "ws://".len())
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn list_private_entries_json(entries: &[ListEntry]) -> Result<String, EventEncodeError> {
     let tags = list_entries_to_tags(entries)?;
     serde_json::to_string(&tags).map_err(|_| EventEncodeError::Json)

@@ -61,6 +61,32 @@ fn codec_runtime_is_protocol_neutral_and_host_free() {
     assert!(!VERIFICATION.contains("feature = \"nostr\""));
 }
 
+#[test]
+fn serialization_features_are_explicit_additive_and_final() {
+    let features = table_keys(MANIFEST, "[features]");
+    assert_eq!(
+        features,
+        BTreeSet::from(["default", "json", "knowledge", "manifests", "serde", "std"])
+    );
+    assert!(MANIFEST.contains("default = [\"std\", \"json\"]"));
+    assert!(MANIFEST.contains("json = [\"serde\", \"dep:serde_json\"]"));
+    assert!(MANIFEST.contains("knowledge = [\"json\", \"radroots_event/knowledge\"]"));
+    assert!(MANIFEST.contains("manifests = [\"knowledge\", \"dep:hex\", \"dep:sha2\"]"));
+
+    for forbidden in [
+        "serde_json",
+        "contract-manifest",
+        "knowledge-nip54",
+        "dto-bindgen",
+        "codegen",
+    ] {
+        assert!(
+            !features.contains(forbidden),
+            "retired public feature {forbidden} must remain absent"
+        );
+    }
+}
+
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
     let Some((_, table)) = manifest.split_once(heading) else {
         return BTreeSet::new();

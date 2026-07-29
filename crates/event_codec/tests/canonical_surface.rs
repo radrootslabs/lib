@@ -60,7 +60,7 @@ fn module_entrypoints_match_codec_convenience_type() {
     assert_eq!(contract_validated.event(), &profile_event());
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[test]
 fn decode_does_not_hide_identifier_verification() {
     let encoded = Codec::encode_event(&profile_event()).expect("encoded event");
@@ -76,7 +76,7 @@ fn decode_does_not_hide_identifier_verification() {
     assert_eq!(error.code(), "id_mismatch");
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[test]
 fn compact_json_round_trip_is_deterministic() {
     let encoded = Codec::encode_event(&profile_event()).expect("encoded event");
@@ -86,7 +86,7 @@ fn compact_json_round_trip_is_deterministic() {
     assert_eq!(reencoded, encoded);
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[test]
 fn public_errors_expose_stable_concise_codes() {
     let decode = Codec::decode_event("{").expect_err("invalid JSON");

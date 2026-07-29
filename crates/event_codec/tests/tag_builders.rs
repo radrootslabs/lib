@@ -573,7 +573,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
         )
         .unwrap(),
     ]);
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     {
         let tags =
             operational_listing_tags_with_options(&listing_with_discount_payload, trade_options)
@@ -583,7 +583,7 @@ fn listing_and_message_builders_cover_optional_shapes() {
                 .any(|tag| tag.first().map(|v| v.as_str()) == Some("radroots:discount"))
         );
     }
-    #[cfg(not(feature = "serde_json"))]
+    #[cfg(not(feature = "json"))]
     {
         let err =
             operational_listing_tags_with_options(&listing_with_discount_payload, trade_options)

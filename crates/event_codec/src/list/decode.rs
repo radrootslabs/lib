@@ -122,7 +122,7 @@ pub fn parsed_from_event(
     RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn list_private_entries_from_json(content: &str) -> Result<Vec<ListEntry>, EventParseError> {
     let tags: Vec<Vec<String>> =
         serde_json::from_str(content).map_err(|_| EventParseError::InvalidJson("content"))?;

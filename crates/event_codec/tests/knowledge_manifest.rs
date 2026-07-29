@@ -1,4 +1,4 @@
-#![cfg(all(feature = "knowledge", feature = "contract-manifest"))]
+#![cfg(all(feature = "knowledge", feature = "manifests"))]
 
 use std::collections::BTreeSet;
 

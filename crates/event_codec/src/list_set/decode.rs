@@ -4,7 +4,7 @@ use alloc::{string::String, vec::Vec};
 use radroots_event::{social::list::ListEntry, social::list_set::ListSet};
 
 use crate::error::EventParseError;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::list::decode::list_entries_from_tags;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 
@@ -134,7 +134,7 @@ pub fn parsed_from_event(
     RadrootsParsedEvent::from_event_parts(id, author, published_at, kind, content, tags, sig, data)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn list_set_private_entries_from_json(
     content: &str,
 ) -> Result<Vec<ListEntry>, EventParseError> {

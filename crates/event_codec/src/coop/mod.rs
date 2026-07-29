@@ -6,7 +6,7 @@ pub mod list_sets;
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     use crate::coop::decode::coop_from_event;
     use crate::coop::encode::{coop_build_tags, coop_ref_tags};
     use crate::coop::list_sets::{
@@ -14,7 +14,7 @@ mod tests {
         member_of_coops_list_set,
     };
     use crate::error::EventEncodeError;
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     use radroots_event::envelope::kind::KIND_COOP;
     use radroots_event::farm::FarmRef;
     use radroots_event::farm::change_set::{GcsLocation, GeoJsonPoint, GeoJsonPolygon};
@@ -119,7 +119,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     fn coop_decode_rejects_empty_d_tag_and_content() {
         let coop = Coop {
             d_tag: "BAAAAAAAAAAAAAAAAAAAAA".to_string(),

@@ -13,7 +13,7 @@ use radroots_event::{
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 use crate::field_helpers::{address_string, push_tag, validate_non_empty_field};
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
 
 pub fn farm_workspace_build_tags(
@@ -32,14 +32,14 @@ pub fn farm_workspace_build_tags(
     Ok(tags)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts(
     manifest: &FarmWorkspaceManifest,
 ) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(manifest, KIND_FARM_WORKSPACE_MANIFEST)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind(
     manifest: &FarmWorkspaceManifest,
     kind: u32,

@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 use std::{borrow::Cow, collections::BTreeMap, fs, path::Path};
 

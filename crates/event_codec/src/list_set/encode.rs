@@ -8,7 +8,7 @@ use alloc::{
 use radroots_event::social::list_set::ListSet;
 
 use crate::error::EventEncodeError;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::list::encode::list_entries_to_tags;
 use radroots_event::wire::Nip01EventWireParts;
 
@@ -73,7 +73,7 @@ pub fn to_wire_parts_with_kind(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn list_set_private_entries_json(
     entries: &[radroots_event::social::list::ListEntry],
 ) -> Result<String, EventEncodeError> {

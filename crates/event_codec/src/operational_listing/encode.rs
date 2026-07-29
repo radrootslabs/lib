@@ -1,22 +1,22 @@
-#[cfg(all(not(feature = "std"), test, feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), test, feature = "json"))]
 use alloc::vec;
-#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), feature = "json"))]
 use alloc::{format, string::ToString};
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::envelope::kind::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
 use radroots_event::listing::operational::OperationalListing;
 
 use crate::error::EventEncodeError;
 use crate::operational_listing::tags::operational_listing_tags;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::operational_listing::tags::operational_listing_tags_full;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 const DEFAULT_KIND: u32 = KIND_CLASSIFIED_LISTING;
 
 pub fn operational_listing_build_tags(
@@ -25,14 +25,14 @@ pub fn operational_listing_build_tags(
     operational_listing_tags(listing)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts(
     listing: &OperationalListing,
 ) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(listing, DEFAULT_KIND)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind(
     listing: &OperationalListing,
     kind: u32,
@@ -49,7 +49,7 @@ pub fn to_wire_parts_with_kind(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn operational_listing_markdown_content(listing: &OperationalListing) -> String {
     let title = listing.product.title.trim();
     let summary = listing
@@ -67,7 +67,7 @@ fn operational_listing_markdown_content(listing: &OperationalListing) -> String 
     }
 }
 
-#[cfg(all(test, feature = "serde_json"))]
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
     use core::str::FromStr;

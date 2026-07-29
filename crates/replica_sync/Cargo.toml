@@ -35,7 +35,7 @@ radroots_event = { workspace = true, default-features = false, features = [
 ] }
 radroots_core = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false, features = [
-  "serde_json",
+  "json",
 ] }
 radroots_sql_core = { workspace = true }
 radroots_replica_schema = { workspace = true }

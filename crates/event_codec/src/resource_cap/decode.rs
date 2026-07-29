@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 #[cfg(not(feature = "std"))]
 use alloc::{

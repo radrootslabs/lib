@@ -5,9 +5,9 @@ pub mod list_sets;
 #[cfg(test)]
 mod tests {
     use crate::error::EventEncodeError;
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     use crate::error::EventParseError;
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     use crate::farm::decode::{farm_from_event, parsed_from_event};
     use crate::farm::encode::{farm_build_tags, farm_ref_tags};
     use crate::farm::list_sets::{
@@ -15,7 +15,7 @@ mod tests {
         farm_plots_list_set_from_plots, member_of_farms_list_set,
     };
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     use radroots_event::envelope::kind::KIND_FARM;
     use radroots_event::farm::plot::Plot;
     use radroots_event::farm::{Farm, FarmPublicLocation, FarmRef};
@@ -24,11 +24,11 @@ mod tests {
         OperationalListing, OperationalListingBin, OperationalListingProduct,
     };
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     const EVENT_SIG: &str = concat!(
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     fn farm_decode_rejects_empty_d_tag_and_content() {
         let farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     fn farm_decode_rejects_private_location_and_ops_shapes() {
         let farm = Farm {
             d_tag: "AAAAAAAAAAAAAAAAAAAAAA".to_string(),

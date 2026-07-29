@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 use radroots_event::{
     envelope::kind::{KIND_POST, KIND_PROFILE},

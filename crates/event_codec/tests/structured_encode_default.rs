@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;

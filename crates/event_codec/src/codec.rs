@@ -1,11 +1,11 @@
 //! Stateless convenience entrypoints for the canonical codec stages.
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::{DecodeError, EncodeError, decode, encode};
 use crate::{VerificationError, verify};
-#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), feature = "json"))]
 use alloc::string::String;
-#[cfg(all(feature = "std", feature = "serde_json"))]
+#[cfg(all(feature = "std", feature = "json"))]
 use std::string::String;
 
 /// Stateless convenience entrypoints for the canonical codec stages.
@@ -17,13 +17,13 @@ pub struct Codec;
 
 impl Codec {
     /// Decodes compact NIP-01 JSON into an unverified event.
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     pub fn decode_event(raw_json: &str) -> Result<verify::RawEvent, DecodeError> {
         decode::event(raw_json)
     }
 
     /// Encodes a native event envelope as compact NIP-01 JSON.
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     pub fn encode_event(
         event: &radroots_event::envelope::EventEnvelope,
     ) -> Result<String, EncodeError> {

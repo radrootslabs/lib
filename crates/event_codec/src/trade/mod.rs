@@ -1,11 +1,11 @@
-#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), feature = "json"))]
 use alloc::{
     string::{String, ToString},
     vec,
     vec::Vec,
 };
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::{
     envelope::EventEnvelope,
     envelope::kind::is_trade_mutation_event_kind,
@@ -18,10 +18,10 @@ use radroots_event::{
     wire::Nip01EventWireParts,
 };
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use crate::error::EventEncodeError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTradeMutationParseError {
     InvalidKind(u32),
@@ -35,7 +35,7 @@ pub enum RadrootsTradeMutationParseError {
     Canonical(TradeProtocolError),
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 impl core::fmt::Display for RadrootsTradeMutationParseError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -52,17 +52,17 @@ impl core::fmt::Display for RadrootsTradeMutationParseError {
     }
 }
 
-#[cfg(all(feature = "std", feature = "serde_json"))]
+#[cfg(all(feature = "std", feature = "json"))]
 impl std::error::Error for RadrootsTradeMutationParseError {}
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 impl From<TradeProtocolError> for RadrootsTradeMutationParseError {
     fn from(value: TradeProtocolError) -> Self {
         Self::Canonical(value)
     }
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn trade_mutation_event_build(
     envelope: TradeMutationEnvelopeV1,
 ) -> Result<Nip01EventWireParts, EventEncodeError> {
@@ -76,7 +76,7 @@ pub fn trade_mutation_event_build(
     })
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn trade_mutation_from_event(
     event: &EventEnvelope,
 ) -> Result<TradeMutationEnvelopeV1, RadrootsTradeMutationParseError> {
@@ -93,7 +93,7 @@ pub fn trade_mutation_from_event(
     Ok(envelope)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn trade_mutation_tags(
     envelope: &TradeMutationEnvelopeV1,
 ) -> Result<Vec<Vec<String>>, EventEncodeError> {
@@ -107,7 +107,7 @@ pub fn trade_mutation_tags(
     Ok(tags)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn validate_trade_mutation_tags(
     envelope: &TradeMutationEnvelopeV1,
     tags: &[Vec<String>],
@@ -143,7 +143,7 @@ fn validate_trade_mutation_tags(
     Ok(())
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn required_tag_value<'a>(
     tags: &'a [Vec<String>],
     name: &'static str,
@@ -162,7 +162,7 @@ fn required_tag_value<'a>(
     Ok(value)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn push_tag(
     tags: &mut Vec<Vec<String>>,
     name: &'static str,
@@ -175,7 +175,7 @@ fn push_tag(
     Ok(())
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 fn map_trade_protocol_error_to_encode_error(error: TradeProtocolError) -> EventEncodeError {
     match error {
         TradeProtocolError::EmptyField(field) => EventEncodeError::EmptyRequiredField(field),
@@ -207,7 +207,7 @@ fn map_trade_protocol_error_to_encode_error(error: TradeProtocolError) -> EventE
     }
 }
 
-#[cfg(all(test, feature = "serde_json"))]
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
     use radroots_event::{

@@ -8,16 +8,16 @@ type LegacyProfileString = std::string::String;
 #[cfg(not(feature = "std"))]
 type LegacyProfileString = alloc::string::String;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod admission;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod authored;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod decode;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub mod inbound;
 
 /// Temporary lossy compatibility projection for pre-v1 profile consumers.

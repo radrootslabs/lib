@@ -9,9 +9,9 @@ use radroots_event_codec::job::encode::{
     push_status_tag,
 };
 use radroots_event_codec::job::error::JobParseError;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use serde::Serialize;
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use serde::ser::{Error as _, Serializer};
 use test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
@@ -101,7 +101,7 @@ fn job_encode_helpers_cover_status_provider_relay_and_inputs() {
     assert!(!assert_no_inputs_when_encrypted(&tags_with_input));
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 #[test]
 fn job_json_content_covers_success_and_error_paths() {
     #[derive(Clone)]

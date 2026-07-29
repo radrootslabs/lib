@@ -9,7 +9,7 @@ use alloc::{
 };
 
 use radroots_core::Money;
-#[cfg(any(feature = "serde_json", test))]
+#[cfg(any(feature = "json", test))]
 use radroots_core::pricing::Discount;
 use radroots_event::envelope::kind::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_event::farm::FarmRef;
@@ -29,7 +29,7 @@ use crate::error::EventEncodeError;
 const TAG_PRICE: &str = "price";
 const TAG_RADROOTS_BIN: &str = "radroots:bin";
 const TAG_RADROOTS_PRICE: &str = "radroots:price";
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 const TAG_RADROOTS_DISCOUNT: &str = "radroots:discount";
 const TAG_RADROOTS_PRIMARY_BIN: &str = "radroots:primary_bin";
 const TAG_RADROOTS_RESOURCE_AREA: &str = "radroots:resource_area";
@@ -161,14 +161,14 @@ pub fn operational_listing_tags_with_options(
         }
     }
 
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     if let Some(discounts) = &listing.discounts {
         for discount in discounts {
             let payload = discount_tag_payload(discount)?;
             tags.push(vec![TAG_RADROOTS_DISCOUNT.to_string(), payload]);
         }
     }
-    #[cfg(not(feature = "serde_json"))]
+    #[cfg(not(feature = "json"))]
     if listing.discounts.as_ref().is_some() {
         return Err(EventEncodeError::Json);
     }
@@ -423,13 +423,13 @@ fn clean_value(value: &str) -> Option<String> {
     (!trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("null")).then(|| trimmed.to_string())
 }
 
-#[cfg(any(feature = "serde_json", test))]
+#[cfg(any(feature = "json", test))]
 fn discount_tag_payload(discount: &Discount) -> Result<String, EventEncodeError> {
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     {
         serde_json::to_string(discount).map_err(|_| EventEncodeError::Json)
     }
-    #[cfg(not(feature = "serde_json"))]
+    #[cfg(not(feature = "json"))]
     {
         let _ = discount;
         Err(EventEncodeError::Json)
@@ -701,12 +701,12 @@ mod tests {
             DiscountValue::MoneyPerBin(money(decimal("1"), Currency::USD)),
         )
         .unwrap();
-        #[cfg(feature = "serde_json")]
+        #[cfg(feature = "json")]
         {
             let payload = discount_tag_payload(&discount).expect("serde_json payload");
             assert!(payload.contains("\"scope\":\"bin\""));
         }
-        #[cfg(not(feature = "serde_json"))]
+        #[cfg(not(feature = "json"))]
         {
             let _err = discount_tag_payload(&discount).expect_err("missing serde_json");
         }
@@ -957,7 +957,7 @@ mod tests {
             )
             .unwrap(),
         ]);
-        #[cfg(feature = "serde_json")]
+        #[cfg(feature = "json")]
         {
             let tags = operational_listing_tags_with_options(
                 &listing_with_discount,
@@ -966,7 +966,7 @@ mod tests {
             .expect("discount serialization works");
             assert!(find_tag(&tags, "radroots:discount").is_some());
         }
-        #[cfg(not(feature = "serde_json"))]
+        #[cfg(not(feature = "json"))]
         {
             let _err = operational_listing_tags_with_options(
                 &listing_with_discount,

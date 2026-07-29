@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 #![forbid(unsafe_code)]
 
 #[cfg(not(feature = "std"))]

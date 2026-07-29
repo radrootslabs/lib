@@ -7,7 +7,7 @@
 use core::fmt;
 use radroots_event::envelope::EventEnvelopeError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::{
     admission::RawEvent,
     envelope::{EventEnvelope, EventEnvelopeParts},
@@ -67,7 +67,7 @@ impl std::error::Error for DecodeError {
 /// treated as verified or contract-valid.
 ///
 /// ```no_run
-/// # #[cfg(feature = "serde_json")]
+/// # #[cfg(feature = "json")]
 /// # {
 /// let raw_json = r#"{"id":"00","pubkey":"00","created_at":0,"kind":1,"tags":[],"content":"","sig":"00"}"#;
 /// let raw = radroots_event_codec::decode::event(raw_json)?;
@@ -76,7 +76,7 @@ impl std::error::Error for DecodeError {
 /// # }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn event(raw_json: &str) -> Result<RawEvent, DecodeError> {
     let max = EventWireLimits::default().max_raw_json_bytes;
     let actual = raw_json.len();

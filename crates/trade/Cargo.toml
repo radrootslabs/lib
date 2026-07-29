@@ -52,7 +52,7 @@ serde_json = [
   "dep:hex",
   "dep:serde_json",
   "dep:sha2",
-  "radroots_event_codec/serde_json",
+  "radroots_event_codec/json",
 ]
 
 [dependencies]

@@ -59,7 +59,7 @@ enum OperationalListingDecodeError {
     InvalidUnit(&'static str),
     InvalidCurrency(&'static str),
     InvalidJson(&'static str),
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     InvalidDiscount(&'static str),
 }
 
@@ -76,7 +76,7 @@ impl OperationalListingDecodeError {
             Self::InvalidJson(field) => {
                 OperationalListingParseError::InvalidJson(field.to_string())
             }
-            #[cfg(feature = "serde_json")]
+            #[cfg(feature = "json")]
             Self::InvalidDiscount(field) => {
                 OperationalListingParseError::InvalidDiscount(field.to_string())
             }
@@ -90,7 +90,7 @@ impl OperationalListingDecodeError {
             | Self::InvalidNumber(field)
             | Self::InvalidUnit(field)
             | Self::InvalidCurrency(field) => EventParseError::InvalidTag(field),
-            #[cfg(feature = "serde_json")]
+            #[cfg(feature = "json")]
             Self::InvalidDiscount(field) => EventParseError::InvalidTag(field),
             Self::InvalidJson(_) => EventParseError::InvalidJson("content"),
         }
@@ -120,7 +120,7 @@ fn reject_private_listing_location_content(
     if !trimmed.starts_with('{') {
         return Ok(());
     }
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
             return Ok(());
@@ -802,12 +802,12 @@ fn parse_image_size(value: &str) -> Option<OperationalListingImageSize> {
 }
 
 fn parse_discount(payload: &str) -> Result<Discount, OperationalListingDecodeError> {
-    #[cfg(feature = "serde_json")]
+    #[cfg(feature = "json")]
     {
         serde_json::from_str(payload)
             .map_err(|_| OperationalListingDecodeError::InvalidDiscount(TAG_RADROOTS_DISCOUNT))
     }
-    #[cfg(not(feature = "serde_json"))]
+    #[cfg(not(feature = "json"))]
     {
         let _ = payload;
         Err(OperationalListingDecodeError::InvalidJson("discount"))

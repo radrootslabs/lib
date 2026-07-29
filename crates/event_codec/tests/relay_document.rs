@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_json")]
+#![cfg(feature = "json")]
 
 use radroots_event_codec::error::EventParseError;
 use radroots_event_codec::relay_document::decode::from_json;

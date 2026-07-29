@@ -12,10 +12,10 @@ use radroots_event::{post::document::Document, tag::name::TAG_D};
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::envelope::kind::KIND_DOCUMENT;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::wire::Nip01EventWireParts;
 
 const TAG_T: &str = "t";
@@ -61,12 +61,12 @@ pub fn document_build_tags(document: &Document) -> Result<Vec<Vec<String>>, Even
     Ok(tags)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts(document: &Document) -> Result<Nip01EventWireParts, EventEncodeError> {
     to_wire_parts_with_kind(document, KIND_DOCUMENT)
 }
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn to_wire_parts_with_kind(
     document: &Document,
     kind: u32,

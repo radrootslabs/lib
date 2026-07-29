@@ -1,12 +1,12 @@
 //! Deterministic event encoding boundary.
 
-#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+#[cfg(all(not(feature = "std"), feature = "json"))]
 use alloc::string::String;
 use core::fmt;
-#[cfg(all(feature = "std", feature = "serde_json"))]
+#[cfg(all(feature = "std", feature = "json"))]
 use std::string::String;
 
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 use radroots_event::envelope::EventEnvelope;
 
 /// A failure while encoding an event.
@@ -42,7 +42,7 @@ impl std::error::Error for EncodeError {}
 /// identifier, signature, or contract has been verified.
 ///
 /// ```no_run
-/// # #[cfg(feature = "serde_json")]
+/// # #[cfg(feature = "json")]
 /// # {
 /// # let raw_json = r#"{"id":"00","pubkey":"00","created_at":0,"kind":1,"tags":[],"content":"","sig":"00"}"#;
 /// let raw = radroots_event_codec::decode::event(raw_json)?;
@@ -51,7 +51,7 @@ impl std::error::Error for EncodeError {}
 /// # }
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-#[cfg(feature = "serde_json")]
+#[cfg(feature = "json")]
 pub fn event(event: &EventEnvelope) -> Result<String, EncodeError> {
     serde_json::to_string(&event.to_nip01_wire()).map_err(|_| EncodeError::Json)
 }
