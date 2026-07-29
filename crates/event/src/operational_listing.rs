@@ -13,8 +13,8 @@ use alloc::{string::String, vec::Vec};
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsOperationalListingParseError {
     InvalidKind(u32),
@@ -49,8 +49,8 @@ impl std::error::Error for RadrootsOperationalListingParseError {}
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -58,9 +58,9 @@ impl std::error::Error for RadrootsOperationalListingParseError {}
 #[derive(Clone, Debug)]
 pub enum RadrootsOperationalListingAvailability {
     Window {
-        #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
+        #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
         start: Option<u64>,
-        #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
+        #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
         end: Option<u64>,
     },
     Status {
@@ -72,8 +72,8 @@ pub enum RadrootsOperationalListingAvailability {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -89,8 +89,8 @@ pub enum RadrootsOperationalListingStatus {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
     feature = "serde",
     serde(rename_all = "snake_case", tag = "kind", content = "amount")
@@ -107,12 +107,12 @@ pub enum RadrootsOperationalListingDeliveryMethod {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListing {
     pub d_tag: RadrootsDTag,
-    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -125,9 +125,9 @@ pub struct RadrootsOperationalListing {
     pub bins: Vec<RadrootsOperationalListingBin>,
     pub resource_area: Option<RadrootsResourceAreaRef>,
     pub plot: Option<RadrootsPlotRef>,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<Discount>")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Array<Discount>")))]
     pub discounts: Option<Vec<Discount>>,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Decimal")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Decimal")))]
     pub inventory_available: Option<Decimal>,
     pub availability: Option<RadrootsOperationalListingAvailability>,
     pub delivery_method: Option<RadrootsOperationalListingDeliveryMethod>,
@@ -139,8 +139,8 @@ pub struct RadrootsOperationalListing {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingProduct {
     pub key: String,
@@ -164,28 +164,28 @@ pub struct RadrootsOperationalListingProductTagKeys;
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingBin {
     pub bin_id: RadrootsInventoryBinId,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Quantity")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Quantity")))]
     pub quantity: Quantity,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "QuantityPrice")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "QuantityPrice")))]
     pub price_per_canonical_unit: QuantityPrice,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Decimal")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Decimal")))]
     pub display_amount: Option<Decimal>,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Unit")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Unit")))]
     pub display_unit: Option<Unit>,
     pub display_label: Option<String>,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Money")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Money")))]
     pub display_price: Option<Money>,
-    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Unit")))]
+    #[cfg_attr(all(test, feature = "std"), dto(ts(type = "Unit")))]
     pub display_price_unit: Option<Unit>,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -203,8 +203,8 @@ pub struct RadrootsOperationalListingPublicLocation {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingImage {
     pub url: String,
@@ -215,7 +215,7 @@ pub struct RadrootsOperationalListingImage {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug)]
 pub struct RadrootsOperationalListingImageSize {
     pub w: u32,

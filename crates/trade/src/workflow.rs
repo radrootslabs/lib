@@ -171,6 +171,7 @@ pub struct RadrootsTradeMutationRecordV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradePrivateTermsEvidenceV1 {
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub candidate_id: RadrootsTradeCandidateId,
     pub state: RadrootsTradePrivateTermsStateV1,
 }
@@ -189,7 +190,9 @@ pub enum RadrootsTradeAttestationResultV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeAttestationRecordV1 {
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub event_id: RadrootsEventId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub claim_mutation_id: RadrootsTradeMutationId,
     pub result: RadrootsTradeAttestationResultV1,
 }
@@ -201,12 +204,15 @@ pub struct RadrootsTradeAttestationRecordV1 {
 pub struct RadrootsTradeProjectionV1 {
     pub reducer_contract_id: String,
     pub reducer_version: u16,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub trade_id: RadrootsTradeId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub root_mutation_id: Option<RadrootsTradeMutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub buyer_pubkey: Option<PublicKey>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub seller_pubkey: Option<PublicKey>,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub farm_id: Option<RadrootsDTag>,
     pub negotiation_state: RadrootsTradeNegotiationStateV1,
     pub agreement_state: RadrootsTradeAgreementStateV1,
@@ -216,14 +222,22 @@ pub struct RadrootsTradeProjectionV1 {
     pub attestation_state: RadrootsTradeAttestationStateV1,
     pub fulfillment_state: RadrootsTradeFulfillmentStateV1,
     pub payment_state: RadrootsTradePaymentStateV1,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub candidate_heads: Vec<RadrootsTradeMutationId>,
     pub agreement_claims: Vec<RadrootsTradeAgreementClaimV1>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub active_agreement_claim_ids: Vec<RadrootsTradeMutationId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub contested_claim_ids: Vec<RadrootsTradeMutationId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub cancelled_claim_ids: Vec<RadrootsTradeMutationId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub declined_candidate_ids: Vec<RadrootsTradeCandidateId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub missing_parent_ids: Vec<RadrootsTradeMutationId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub missing_proposal_ids: Vec<RadrootsTradeMutationId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
     pub unsupported_mutation_ids: Vec<RadrootsTradeMutationId>,
     pub issues: Vec<RadrootsTradeReducerIssueV1>,
     pub attestations: Vec<RadrootsTradeAttestationRecordV1>,
@@ -295,8 +309,11 @@ impl RadrootsTradeProjectionV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RadrootsTradeAgreementClaimV1 {
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub claim_mutation_id: RadrootsTradeMutationId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub proposal_mutation_id: RadrootsTradeMutationId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub candidate_id: RadrootsTradeCandidateId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub candidate_author_pubkey: PublicKey,
@@ -314,60 +331,81 @@ pub enum RadrootsTradeReducerIssueV1 {
     MultipleRootProposals,
     MissingMutationId,
     TradeIdentityMismatch {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         mutation_id: RadrootsTradeMutationId,
     },
     UnsupportedSchema {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         mutation_id: RadrootsTradeMutationId,
         schema_version: u16,
     },
     InvalidMutation {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         mutation_id: Option<RadrootsTradeMutationId>,
         reason: String,
     },
     MissingParent {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         mutation_id: RadrootsTradeMutationId,
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         parent_mutation_id: RadrootsTradeMutationId,
     },
     MissingProposal {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         proposal_mutation_id: RadrootsTradeMutationId,
     },
     CandidateIdMismatch {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         proposal_mutation_id: RadrootsTradeMutationId,
     },
     DecisionAuthorMismatch {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
     },
     DecisionParentMissing {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         proposal_mutation_id: RadrootsTradeMutationId,
     },
     MissingSellerReservation {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
     },
     ReservationCandidateMismatch {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
     },
     ReservationAuthorityMismatch {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
     },
     ReservationLineMismatch {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         decision_mutation_id: RadrootsTradeMutationId,
     },
     DecisionConflict {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         proposal_mutation_id: RadrootsTradeMutationId,
     },
     DoubleAcceptance {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         proposal_mutation_id: RadrootsTradeMutationId,
     },
     CancellationConflict {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         cancellation_mutation_id: RadrootsTradeMutationId,
     },
     InvalidCausalChain {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         mutation_id: RadrootsTradeMutationId,
     },
     PrivateTermsUnavailable {
+        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
         candidate_id: RadrootsTradeCandidateId,
     },
     ProjectionDigestUnavailable {

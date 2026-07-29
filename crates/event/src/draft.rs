@@ -532,45 +532,6 @@ impl From<RadrootsEventEnvelopeError> for RadrootsSignedEventError {
     }
 }
 
-#[cfg(feature = "signature")]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RadrootsSignatureVerificationError {
-    InvalidEventId,
-    InvalidPubkey,
-    InvalidSignature,
-    VerificationFailed,
-}
-
-#[cfg(feature = "signature")]
-impl fmt::Display for RadrootsSignatureVerificationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidEventId => write!(
-                f,
-                "signed event id cannot be decoded for signature verification"
-            ),
-            Self::InvalidPubkey => write!(
-                f,
-                "signed event pubkey cannot be decoded for signature verification"
-            ),
-            Self::InvalidSignature => write!(
-                f,
-                "signed event signature cannot be decoded for verification"
-            ),
-            Self::VerificationFailed => write!(f, "signed event signature verification failed"),
-        }
-    }
-}
-
-#[cfg(all(feature = "signature", feature = "std"))]
-impl std::error::Error for RadrootsSignatureVerificationError {}
-
-#[cfg(feature = "signature")]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsVerifiedSignedEvent {
-    signed_event: RadrootsSignedEvent,
-}
-
 impl RadrootsSignedEvent {
     pub fn new(parts: RadrootsSignedEventParts) -> Result<Self, RadrootsSignedEventError> {
         let id = RadrootsEventId::parse(parts.id)
@@ -703,27 +664,6 @@ impl RadrootsSignedEvent {
     pub fn signature_hex(&self) -> String {
         self.envelope.sig().to_hex()
     }
-
-    #[cfg(feature = "signature")]
-    pub fn verify_signature(
-        self,
-    ) -> Result<RadrootsVerifiedSignedEvent, RadrootsSignatureVerificationError> {
-        verify_bip340_signature(&self)?;
-        Ok(RadrootsVerifiedSignedEvent { signed_event: self })
-    }
-}
-
-#[cfg(feature = "signature")]
-impl RadrootsVerifiedSignedEvent {
-    #[inline]
-    pub fn signed_event(&self) -> &RadrootsSignedEvent {
-        &self.signed_event
-    }
-
-    #[inline]
-    pub fn into_signed_event(self) -> RadrootsSignedEvent {
-        self.signed_event
-    }
 }
 
 pub fn validate_signed_nostr_event_matches_draft(
@@ -784,25 +724,6 @@ pub fn validate_signed_nostr_event_matches_draft(
         });
     }
     Ok(())
-}
-
-#[cfg(feature = "signature")]
-fn verify_bip340_signature(
-    signed_event: &RadrootsSignedEvent,
-) -> Result<(), RadrootsSignatureVerificationError> {
-    use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
-
-    let event_id = *signed_event.id().as_bytes();
-    let pubkey = signed_event.pubkey().into_bytes();
-    let sig = *signed_event.sig().as_bytes();
-    let message = Message::from_digest(event_id);
-    let pubkey = XOnlyPublicKey::from_slice(&pubkey)
-        .map_err(|_| RadrootsSignatureVerificationError::InvalidPubkey)?;
-    let sig = Signature::from_slice(&sig)
-        .map_err(|_| RadrootsSignatureVerificationError::InvalidSignature)?;
-    Secp256k1::verification_only()
-        .verify_schnorr(&sig, &message, &pubkey)
-        .map_err(|_| RadrootsSignatureVerificationError::VerificationFailed)
 }
 
 pub fn compute_nip01_event_id(
@@ -1658,77 +1579,5 @@ mod tests {
         let error = nip01_event_id_preimage("not-hex", 1, KIND_POST, &[], "")
             .expect_err("invalid preimage pubkey");
         assert!(matches!(error, RadrootsDraftError::IdParse(_)));
-    }
-
-    #[cfg(feature = "signature")]
-    #[test]
-    fn verified_signed_event_accepts_valid_bip340_signature() {
-        use secp256k1::{Keypair, Message, Secp256k1, SecretKey};
-
-        let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(&[3u8; 32]).expect("secret key");
-        let keypair = Keypair::from_secret_key(&secp, &secret_key);
-        let (pubkey, _) = keypair.x_only_public_key();
-        let pubkey = pubkey.to_string();
-        let tags = vec![vec!["t".to_owned(), "soil".to_owned()]];
-        let content = "hello".to_owned();
-        let event_id = compute_canonical_nip01_event_id(
-            pubkey.as_str(),
-            1_700_000_000,
-            KIND_POST,
-            &tags,
-            content.as_str(),
-        )
-        .expect("event id")
-        .into_string();
-        let mut event_id_bytes = [0u8; 32];
-        hex::decode_to_slice(event_id.as_str(), &mut event_id_bytes).expect("event id bytes");
-        let message = Message::from_digest(event_id_bytes);
-        let sig = secp
-            .sign_schnorr_no_aux_rand(&message, &keypair)
-            .to_string();
-        let wire = unchecked_wire(
-            event_id,
-            pubkey,
-            1_700_000_000,
-            KIND_POST,
-            tags,
-            content,
-            sig,
-        );
-        let raw_json = raw_json_for_wire(&wire);
-        let signed =
-            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event");
-        let verified = signed.verify_signature().expect("verified event");
-
-        assert_eq!(verified.signed_event().kind(), KIND_POST);
-    }
-
-    #[cfg(feature = "signature")]
-    #[test]
-    fn verified_signed_event_rejects_invalid_bip340_signature() {
-        use secp256k1::{Keypair, Secp256k1, SecretKey};
-
-        let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(&[3u8; 32]).expect("secret key");
-        let keypair = Keypair::from_secret_key(&secp, &secret_key);
-        let (pubkey, _) = keypair.x_only_public_key();
-        let wire = verified_wire(
-            pubkey.to_string(),
-            1_700_000_000,
-            KIND_POST,
-            Vec::new(),
-            "hello".to_owned(),
-            hex_128('b'),
-        );
-        let raw_json = raw_json_for_wire(&wire);
-        let signed =
-            RadrootsSignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event");
-        let error = signed.verify_signature().expect_err("invalid signature");
-
-        assert_eq!(
-            error,
-            RadrootsSignatureVerificationError::VerificationFailed
-        );
     }
 }

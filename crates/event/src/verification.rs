@@ -79,11 +79,30 @@ impl IdVerifiedEvent {
         self.0
     }
 
-    /// Verifies the BIP-340 signature over the already verified event ID.
-    pub fn verify_signature(self) -> Result<SignatureVerifiedEvent, Error> {
-        verify_signature(&self.0)?;
+    /// Uses an explicit host capability to verify the signature over the
+    /// already verified event ID.
+    pub fn verify_signature<V>(self, verifier: &V) -> Result<SignatureVerifiedEvent, Error>
+    where
+        V: SignatureVerifier + ?Sized,
+    {
+        verifier.verify_signature(&self.0)?;
         Ok(SignatureVerifiedEvent(self.0))
     }
+}
+
+/// **Host SPI:** verifies an event signature.
+///
+/// The event crate owns the verification state transition, while concrete
+/// cryptographic implementations belong to codec or signing crates. Downstream
+/// implementations are supported and must normalize rejection to
+/// [`Error::SignatureInvalid`]. The trait is dyn-compatible and requires
+/// `Send + Sync`; verification is a synchronous, deterministic, side-effect-free
+/// operation with no cancellation or deadline boundary and must not durably
+/// commit state.
+pub trait SignatureVerifier: Send + Sync {
+    /// Returns success only when the envelope's signature is valid for its
+    /// already verified canonical event identifier.
+    fn verify_signature(&self, event: &RadrootsEventEnvelope) -> Result<(), Error>;
 }
 
 /// An event whose canonical identifier and BIP-340 signature are verified.
@@ -177,7 +196,6 @@ pub enum Error {
         actual: RadrootsEventId,
     },
     SignatureInvalid,
-    SignatureVerificationUnavailable,
     ContractValidation(RadrootsContractValidationError),
 }
 
@@ -188,7 +206,6 @@ impl Error {
             Self::MalformedEnvelope => "malformed_envelope",
             Self::IdMismatch { .. } => "id_mismatch",
             Self::SignatureInvalid => "signature_invalid",
-            Self::SignatureVerificationUnavailable => "signature_verification_unavailable",
             Self::ContractValidation(_) => "contract_validation",
         }
     }
@@ -205,9 +222,6 @@ impl fmt::Display for Error {
                 actual.to_hex()
             ),
             Self::SignatureInvalid => formatter.write_str("invalid NIP-01 event signature"),
-            Self::SignatureVerificationUnavailable => {
-                formatter.write_str("NIP-01 signature verification is unavailable")
-            }
             Self::ContractValidation(error) => {
                 write!(
                     formatter,
@@ -222,29 +236,26 @@ impl fmt::Display for Error {
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
-#[cfg(feature = "signature")]
-fn verify_signature(event: &RadrootsEventEnvelope) -> Result<(), Error> {
-    use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
-
-    let message = Message::from_digest(*event.id().as_bytes());
-    let public_key = XOnlyPublicKey::from_slice(&event.author().into_bytes())
-        .map_err(|_| Error::MalformedEnvelope)?;
-    let signature =
-        Signature::from_slice(event.sig().as_bytes()).map_err(|_| Error::SignatureInvalid)?;
-    Secp256k1::verification_only()
-        .verify_schnorr(&signature, &message, &public_key)
-        .map_err(|_| Error::SignatureInvalid)
-}
-
-#[cfg(not(feature = "signature"))]
-fn verify_signature(_event: &RadrootsEventEnvelope) -> Result<(), Error> {
-    Err(Error::SignatureVerificationUnavailable)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::envelope::RadrootsEventEnvelopeParts;
+
+    struct Accept;
+
+    impl SignatureVerifier for Accept {
+        fn verify_signature(&self, _event: &RadrootsEventEnvelope) -> Result<(), Error> {
+            Ok(())
+        }
+    }
+
+    struct Reject;
+
+    impl SignatureVerifier for Reject {
+        fn verify_signature(&self, _event: &RadrootsEventEnvelope) -> Result<(), Error> {
+            Err(Error::SignatureInvalid)
+        }
+    }
 
     fn valid_profile_event() -> RadrootsEventEnvelope {
         RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
@@ -272,27 +283,26 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "signature")]
     #[test]
     fn positive_vector_reaches_contract_validated_state() {
+        let verifier: &dyn SignatureVerifier = &Accept;
         let validated = RawEvent::new(valid_profile_event())
             .verify_id()
             .expect("verified id")
-            .verify_signature()
+            .verify_signature(verifier)
             .expect("verified signature")
             .validate_contract()
             .expect("validated contract");
         assert_eq!(validated.contract_id(), "radroots.profile.metadata.v1");
     }
 
-    #[cfg(not(feature = "signature"))]
     #[test]
-    fn signature_transition_fails_closed_when_capability_is_disabled() {
+    fn signature_transition_fails_closed_when_verifier_rejects() {
         let error = RawEvent::new(valid_profile_event())
             .verify_id()
             .expect("verified id")
-            .verify_signature()
-            .expect_err("signature capability must be unavailable");
-        assert_eq!(error, Error::SignatureVerificationUnavailable);
+            .verify_signature(&Reject)
+            .expect_err("signature must be rejected");
+        assert_eq!(error, Error::SignatureInvalid);
     }
 }

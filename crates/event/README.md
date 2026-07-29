@@ -22,6 +22,16 @@ are nested below that authority, including `food::availability`,
 `post::deletion`, `post::reply`, `tag::relay_hint`, and the farm and social
 subdomains.
 
+## Features
+
+The default feature set is `std` plus `serde`. The complete public feature
+vocabulary is `std`, `serde`, and `knowledge`; features are additive and
+`knowledge` enables the optional knowledge-event model. Binding generation and
+fixtures are private build/test concerns rather than public features.
+Cryptographic verification implementations belong to `radroots_event_codec`
+or signing crates and enter this crate only through the explicit
+`admission::SignatureVerifier` host SPI.
+
 The Profile module exposes the exclusive strict authored model. It requires a
 non-whitespace, control-free name; its media fields accept only image-typed,
 byte-verified Blossom descriptors; and its NIP-05 identifier type validates

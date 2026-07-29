@@ -64,7 +64,9 @@ impl FromStr for RadrootsTradeId {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeLocator {
     pub trade_id: RadrootsTradeId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub root_event_id: Option<RadrootsEventId>,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub listing_addr: Option<RadrootsClassifiedListingAddress>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub buyer_pubkey: Option<PublicKey>,
@@ -118,7 +120,9 @@ impl RadrootsTradeLocator {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeLocatorCandidate {
     pub trade_id: RadrootsTradeId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub root_event_id: RadrootsEventId,
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub listing_addr: RadrootsClassifiedListingAddress,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub buyer_pubkey: PublicKey,

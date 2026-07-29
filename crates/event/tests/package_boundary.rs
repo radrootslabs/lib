@@ -43,6 +43,19 @@ fn manifest_has_final_identity_and_required_radroots_dependencies() {
     assert!(
         MANIFEST.contains("radroots_protocol = { workspace = true, default-features = false }")
     );
+    assert_eq!(
+        table_keys(MANIFEST, "[features]"),
+        BTreeSet::from(["default", "knowledge", "serde", "std"]),
+        "radroots_event must expose only its approved user-visible feature vocabulary"
+    );
+    for implementation_feature in ["dto-bindgen", "fixture", "knowledge-nip54", "signature"] {
+        assert!(
+            !table_keys(MANIFEST, "[features]").contains(implementation_feature),
+            "implementation feature `{implementation_feature}` must remain private"
+        );
+    }
+    assert!(!table_keys(MANIFEST, "[dependencies]").contains("dto_bindgen"));
+    assert!(!table_keys(MANIFEST, "[dependencies]").contains("secp256k1"));
 }
 
 #[test]
@@ -130,6 +143,10 @@ fn verification_typestates_are_native_private_and_policy_gated() {
     assert!(verification.contains("pub struct SignatureVerifiedEvent(RadrootsEventEnvelope);"));
     assert!(admission.contains("policy.admit(&self)?;"));
     assert!(admission.contains("policy.make_visible(&self)?;"));
+    assert!(verification.contains("pub trait SignatureVerifier: Send + Sync"));
+    assert!(verification.contains("verifier.verify_signature(&self.0)?;"));
+    assert!(!verification.contains("secp256k1"));
+    assert!(!verification.contains("SignatureVerificationUnavailable"));
     assert!(!verification.contains("impl From<RawEvent> for IdVerifiedEvent"));
     assert!(!verification.contains("impl From<IdVerifiedEvent> for SignatureVerifiedEvent"));
     assert!(!admission.contains("impl From<ContractValidatedEvent> for AdmittedEvent"));

@@ -2,6 +2,7 @@
 
 pub use crate::verification::{
     ContractValidatedEvent, Error, IdVerifiedEvent, RawEvent, SignatureVerifiedEvent,
+    SignatureVerifier,
 };
 
 use crate::envelope::RadrootsEventEnvelope;
@@ -128,12 +129,18 @@ impl VisibleEvent {
     }
 }
 
-#[cfg(all(test, feature = "signature"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::envelope::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
 
     struct Allow;
+
+    impl SignatureVerifier for Allow {
+        fn verify_signature(&self, _event: &RadrootsEventEnvelope) -> Result<(), Error> {
+            Ok(())
+        }
+    }
 
     impl AdmissionPolicy for Allow {
         type Error = core::convert::Infallible;
@@ -177,7 +184,7 @@ mod tests {
         let visible = RawEvent::new(envelope)
             .verify_id()
             .expect("verified id")
-            .verify_signature()
+            .verify_signature(&Allow)
             .expect("verified signature")
             .validate_contract()
             .expect("validated contract")

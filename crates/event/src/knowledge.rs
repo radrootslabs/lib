@@ -527,8 +527,8 @@ pub fn validate_contribution_attestation(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsAddressableRef {
     pub kind: u32,
@@ -541,8 +541,8 @@ pub struct RadrootsAddressableRef {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsRightsAssertion {
     pub assertion: String,
@@ -555,8 +555,8 @@ pub struct RadrootsRightsAssertion {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsWikiArticle {
     pub d_tag: String,
@@ -573,8 +573,8 @@ pub struct RadrootsWikiArticle {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsWikiArticleVersionRef {
     pub event_id: String,
@@ -585,8 +585,8 @@ pub struct RadrootsWikiArticleVersionRef {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsWikiRedirect {
     pub d_tag: String,
@@ -597,8 +597,8 @@ pub struct RadrootsWikiRedirect {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsWikiMergeRequest {
     pub target_article: RadrootsAddressableRef,
@@ -612,8 +612,8 @@ pub struct RadrootsWikiMergeRequest {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeSource {
     pub schema: String,
@@ -636,8 +636,8 @@ pub struct RadrootsKnowledgeSource {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeClaim {
     pub schema: String,
@@ -655,8 +655,8 @@ pub struct RadrootsKnowledgeClaim {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeCitationSpan {
     pub source_ref: RadrootsEventRef,
@@ -672,8 +672,8 @@ pub struct RadrootsKnowledgeCitationSpan {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeNodeRef {
     pub node_type: String,
@@ -687,8 +687,8 @@ pub struct RadrootsKnowledgeNodeRef {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeRelation {
     pub schema: String,
@@ -705,8 +705,8 @@ pub struct RadrootsKnowledgeRelation {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeReview {
     pub schema: String,
@@ -723,8 +723,8 @@ pub struct RadrootsKnowledgeReview {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeReviewTarget {
     pub event_id: String,
@@ -739,8 +739,8 @@ pub struct RadrootsKnowledgeReviewTarget {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsKnowledgeReviewScope {
@@ -753,8 +753,8 @@ pub enum RadrootsKnowledgeReviewScope {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeReviewScore {
     pub dimension: String,
@@ -766,8 +766,8 @@ pub struct RadrootsKnowledgeReviewScore {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeFieldReport {
     pub schema: String,
@@ -786,8 +786,8 @@ pub struct RadrootsKnowledgeFieldReport {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeFieldContext {
     pub location_precision: RadrootsKnowledgeLocationPrecision,
@@ -801,8 +801,8 @@ pub struct RadrootsKnowledgeFieldContext {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(any(feature = "serde", test), serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsKnowledgeLocationPrecision {
@@ -818,8 +818,8 @@ pub enum RadrootsKnowledgeLocationPrecision {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeLocation {
     pub label: Option<String>,
@@ -832,8 +832,8 @@ pub struct RadrootsKnowledgeLocation {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeObservation {
     pub observation_type: String,
@@ -846,8 +846,8 @@ pub struct RadrootsKnowledgeObservation {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeObservationValue {
     pub key: String,
@@ -859,8 +859,8 @@ pub struct RadrootsKnowledgeObservationValue {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEvidenceBounty {
     pub schema: String,
@@ -878,8 +878,8 @@ pub struct RadrootsEvidenceBounty {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsKnowledgeChangeProposal {
     pub schema: String,
@@ -896,8 +896,8 @@ pub struct RadrootsKnowledgeChangeProposal {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsContributionAttestation {
     pub schema: String,

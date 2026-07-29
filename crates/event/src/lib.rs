@@ -42,7 +42,7 @@ pub mod admission;
 pub mod calendar;
 pub mod contract;
 pub mod draft;
-#[cfg(feature = "dto-bindgen")]
+#[cfg(all(test, feature = "std", feature = "knowledge"))]
 mod dto;
 pub mod envelope;
 pub mod farm;

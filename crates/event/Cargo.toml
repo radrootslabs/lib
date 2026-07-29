@@ -17,10 +17,7 @@ name = "radroots_event"
 
 [features]
 default = ["std", "serde"]
-dto-bindgen = ["std", "serde", "knowledge-nip54", "dep:dto_bindgen"]
 knowledge = []
-knowledge-nip54 = ["knowledge"]
-signature = ["dep:secp256k1"]
 std = [
   "radroots_blossom/std",
   "radroots_core/std",
@@ -36,7 +33,6 @@ serde = [
 ]
 
 [dependencies]
-dto_bindgen = { workspace = true, optional = true }
 radroots_blossom = { workspace = true, default-features = false }
 radroots_core = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
@@ -50,12 +46,12 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
-secp256k1 = { workspace = true, optional = true }
 sha2 = { workspace = true, default-features = false }
 unicode-general-category = { workspace = true }
 url_nostd = { workspace = true }
 
 [dev-dependencies]
+dto_bindgen = { workspace = true }
 radroots_core = { workspace = true, default-features = false, features = [
   "serde",
   "std",

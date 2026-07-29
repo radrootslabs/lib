@@ -14,12 +14,12 @@ pub mod relay_hint;
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventRef {
     pub id: String,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub author: radroots_identity::PublicKey,
     pub kind: u32,
     pub d_tag: Option<String>,
@@ -30,8 +30,8 @@ pub struct RadrootsEventRef {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventPtr {
     pub id: String,

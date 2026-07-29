@@ -22,7 +22,6 @@ dto-bindgen = [
   "serde_json",
   "dep:dto_bindgen",
   "dep:dto_bindgen_core",
-  "radroots_event/dto-bindgen",
 ]
 std = [
   "radroots_authority/std",

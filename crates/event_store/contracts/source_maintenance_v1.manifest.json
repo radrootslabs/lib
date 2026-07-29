@@ -257,8 +257,8 @@
     {
       "role": "event_public_surface",
       "path": "crates/event/src/lib.rs",
-      "byte_length": 1967,
-      "sha256": "b686e22f25e86b4cc3c5915d507b4d8681ba83026bfd350e970ee12281e94fb3",
+      "byte_length": 1993,
+      "sha256": "d7a869dead70892257c0a7a287ddc086c339242f9d8d22c384878315226fe050",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -278,22 +278,22 @@
     {
       "role": "event_envelope_authority",
       "path": "crates/event/src/envelope.rs",
-      "byte_length": 31224,
-      "sha256": "34c91001d301db1ac9207da41fb4ce4259bc7f758110d1debeb940670c2540ee",
+      "byte_length": 31248,
+      "sha256": "3105d9cc32779b8c75bfc272f83981cc0036884c78917168389850af7aecc4cd",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "event_verification_typestate_authority",
       "path": "crates/event/src/verification.rs",
-      "byte_length": 9469,
-      "sha256": "479610afcfe1f7c0c475fe2539eef9f6a0b329c6e5c6fd2dbab3d9da7d7cbcd5",
+      "byte_length": 9645,
+      "sha256": "8512710b2730b87c4630f140707d144f3f196685eaa26715f0ee7c99d0d3c6d2",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "event_admission_typestate_authority",
       "path": "crates/event/src/admission.rs",
-      "byte_length": 5809,
-      "sha256": "8caf75f69994e9710b4e8f82abface29e752dd581c012e5e20452c82d21c2d01",
+      "byte_length": 5975,
+      "sha256": "aaa5fc73146e521cdc0598c91bafa5103cfeef30dc4e66b6d71da3b76d9f8dfa",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -313,8 +313,8 @@
     {
       "role": "event_ids_authority",
       "path": "crates/event/src/id.rs",
-      "byte_length": 51746,
-      "sha256": "a4a669b3ff02545af0625ee19c645cc41fb0a5176c000e7aecf49e37585a4123",
+      "byte_length": 51758,
+      "sha256": "8b9a2da028e9621c660dde3c40a34713e7e0e8b3fe66b64aa18de6a6e666db45",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -341,8 +341,8 @@
     {
       "role": "event_draft_authority",
       "path": "crates/event/src/draft.rs",
-      "byte_length": 58672,
-      "sha256": "417842e7391e9a3187be20d8b936d83469148db1cbf0c61afcf88b87cf1a88be",
+      "byte_length": 53436,
+      "sha256": "1eeefbcb9467eb92a9640b3dbd36faa8d98afd20e26d8a3603646a5131be3196",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -362,15 +362,15 @@
     {
       "role": "event_profile_authority",
       "path": "crates/event/src/profile.rs",
-      "byte_length": 18927,
-      "sha256": "a4c0afeed75beea9ba44ec6e487582dbcd1116e7e092a6d5808dc4fbdea5ac73",
+      "byte_length": 18933,
+      "sha256": "8f75af27179d62e09da9c4d578e1bbf9e4cda71167888f8ae48ea3d8a9e8fa38",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
       "role": "event_post_authority",
       "path": "crates/event/src/post.rs",
-      "byte_length": 23129,
-      "sha256": "788fef2652dbb990ceca2bb5c80aa5fa1efc11d041f9bdf43998fbdff77745b6",
+      "byte_length": 23135,
+      "sha256": "8671cb3c4da0e2ea68f95ad99688dba209c6206296300394a7d6e771f7bfc3ed",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -411,8 +411,8 @@
     {
       "role": "event_social_authority",
       "path": "crates/event/src/social.rs",
-      "byte_length": 6263,
-      "sha256": "10c4d4f7b078355c97f0b701f60a280123f2d9c335aeabfc733db468d4a9d290",
+      "byte_length": 6284,
+      "sha256": "9db55b9eaa8b712430ecd7b4430e3ed50f3224a4a4c2537f9741e3026f4a1857",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

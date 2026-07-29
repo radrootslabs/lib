@@ -32,7 +32,7 @@ serde = [
 serde_json = ["serde", "dep:serde_json"]
 nostr = ["dep:nostr", "std"]
 knowledge = ["serde_json", "radroots_event/knowledge"]
-knowledge-nip54 = ["knowledge", "radroots_event/knowledge-nip54"]
+knowledge-nip54 = ["knowledge"]
 contract-manifest = ["knowledge", "dep:hex", "dep:sha2"]
 
 [dependencies]

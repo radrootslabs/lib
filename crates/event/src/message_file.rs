@@ -6,8 +6,8 @@ use crate::tag::RadrootsEventPtr;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -24,7 +24,7 @@ pub struct RadrootsMessageFile {
     pub decryption_nonce: String,
     pub encrypted_hash: String,
     pub original_hash: Option<String>,
-    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     pub size: Option<u64>,
     pub dimensions: Option<RadrootsMessageFileDimensions>,
     pub blurhash: Option<String>,
@@ -32,8 +32,8 @@ pub struct RadrootsMessageFile {
     pub fallbacks: Vec<String>,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)

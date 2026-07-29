@@ -130,9 +130,9 @@ impl RadrootsOrderEconomics {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderRequest")))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderRequest")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -141,9 +141,9 @@ impl RadrootsOrderEconomics {
 pub struct RadrootsOrderRequest {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub seller_pubkey: PublicKey,
     pub items: Vec<RadrootsOrderItem>,
     pub economics: RadrootsOrderEconomics,
@@ -159,10 +159,10 @@ impl RadrootsOrderRequest {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
-    feature = "dto-bindgen",
+    all(test, feature = "std"),
     dto(ts(name = "RadrootsOrderInventoryCommitment"))
 )]
 #[cfg_attr(
@@ -175,10 +175,10 @@ pub struct RadrootsOrderInventoryCommitment {
     pub bin_count: u32,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[cfg_attr(
-    feature = "dto-bindgen",
+    all(test, feature = "std"),
     dto(ts(name = "RadrootsOrderDecisionOutcome"))
 )]
 #[cfg_attr(
@@ -210,9 +210,9 @@ impl RadrootsOrderDecisionOutcome {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderDecision")))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderDecision")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -221,9 +221,9 @@ impl RadrootsOrderDecisionOutcome {
 pub struct RadrootsOrderDecision {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub seller_pubkey: PublicKey,
     pub decision: RadrootsOrderDecisionOutcome,
 }
@@ -236,9 +236,12 @@ impl RadrootsOrderDecision {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderCancellation")))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(
+    all(test, feature = "std"),
+    dto(ts(name = "RadrootsOrderCancellation"))
+)]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -247,9 +250,9 @@ impl RadrootsOrderDecision {
 pub struct RadrootsOrderCancellation {
     pub order_id: RadrootsOrderId,
     pub listing_addr: RadrootsClassifiedListingAddress,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub buyer_pubkey: PublicKey,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     pub seller_pubkey: PublicKey,
     pub reason: String,
 }
@@ -262,9 +265,9 @@ impl RadrootsOrderCancellation {
     }
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsCommercialDomain")))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsCommercialDomain")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
@@ -276,9 +279,9 @@ pub enum RadrootsCommercialDomain {
     Listing,
 }
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsOrderEventType")))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsOrderEventType")))]
 #[cfg_attr(
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)

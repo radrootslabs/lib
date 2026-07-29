@@ -42,8 +42,8 @@ const RADROOTS_POST_SIGNED_EVENT_FIXED_MAX_BYTES: usize = "{\"id\":\"".len()
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
 #[derive(Clone, Debug)]
 /// Compatibility projection for the legacy social post decoder.
 ///

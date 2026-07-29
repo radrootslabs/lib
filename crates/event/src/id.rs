@@ -59,8 +59,8 @@ impl std::error::Error for RadrootsIdParseError {}
 
 macro_rules! validated_string_id {
     ($name:ident, $validator:ident) => {
-        #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+        #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+        #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
         #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(String);
 
@@ -149,8 +149,8 @@ macro_rules! validated_string_id {
 
 macro_rules! validated_hex_id {
     ($name:ident, $byte_len:expr) => {
-        #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-        #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+        #[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+        #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name([u8; $byte_len]);
 

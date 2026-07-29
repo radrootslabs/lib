@@ -9,7 +9,7 @@ use alloc::{string::String, vec::Vec};
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[cfg_attr(
     any(feature = "serde", test),
     serde(rename_all = "snake_case", tag = "kind")
@@ -39,7 +39,7 @@ pub enum RadrootsSocialTarget {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default)]
 pub struct RadrootsSocialFarmAnchor {
     pub farm: RadrootsFarmRef,
@@ -50,7 +50,7 @@ pub struct RadrootsSocialFarmAnchor {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialLocation {
     pub name: Option<String>,
@@ -61,7 +61,7 @@ pub struct RadrootsSocialLocation {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaDimensions {
     pub width: u32,
@@ -72,7 +72,7 @@ pub struct RadrootsSocialMediaDimensions {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaThumbnail {
     pub url: String,
@@ -83,14 +83,14 @@ pub struct RadrootsSocialMediaThumbnail {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RadrootsSocialMediaMetadata {
     pub url: Option<String>,
     pub mime_type: Option<String>,
     pub sha256: Option<String>,
     pub original_sha256: Option<String>,
-    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(int = "json_string"))]
     pub size: Option<u64>,
     pub dimensions: Option<RadrootsSocialMediaDimensions>,
     pub blurhash: Option<String>,

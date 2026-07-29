@@ -7,7 +7,6 @@ pub radroots_event::admission::Error::IdMismatch::actual: radroots_event::id::Ra
 pub radroots_event::admission::Error::IdMismatch::expected: radroots_event::id::RadrootsEventId
 pub radroots_event::admission::Error::MalformedEnvelope
 pub radroots_event::admission::Error::SignatureInvalid
-pub radroots_event::admission::Error::SignatureVerificationUnavailable
 impl radroots_event::Error
 pub const fn radroots_event::Error::code(&self) -> &'static str
 impl core::error::Error for radroots_event::Error
@@ -34,7 +33,7 @@ pub struct radroots_event::admission::IdVerifiedEvent(_)
 impl radroots_event::admission::IdVerifiedEvent
 pub const fn radroots_event::admission::IdVerifiedEvent::event(&self) -> &radroots_event::envelope::RadrootsEventEnvelope
 pub fn radroots_event::admission::IdVerifiedEvent::into_event(self) -> radroots_event::envelope::RadrootsEventEnvelope
-pub fn radroots_event::admission::IdVerifiedEvent::verify_signature(self) -> core::result::Result<radroots_event::VerifiedEvent, radroots_event::Error>
+pub fn radroots_event::admission::IdVerifiedEvent::verify_signature<V>(self, &V) -> core::result::Result<radroots_event::VerifiedEvent, radroots_event::Error> where V: radroots_event::admission::SignatureVerifier + ?core::marker::Sized
 pub struct radroots_event::admission::RawEvent(_)
 impl radroots_event::admission::RawEvent
 pub const fn radroots_event::admission::RawEvent::event(&self) -> &radroots_event::envelope::RadrootsEventEnvelope
@@ -56,6 +55,8 @@ pub trait radroots_event::admission::AdmissionPolicy
 pub type radroots_event::admission::AdmissionPolicy::Error
 pub fn radroots_event::admission::AdmissionPolicy::admit(&self, &radroots_event::admission::ContractValidatedEvent) -> core::result::Result<(), Self::Error>
 pub fn radroots_event::admission::AdmissionPolicy::policy_id(&self) -> &'static str
+pub trait radroots_event::admission::SignatureVerifier: core::marker::Send + core::marker::Sync
+pub fn radroots_event::admission::SignatureVerifier::verify_signature(&self, &radroots_event::envelope::RadrootsEventEnvelope) -> core::result::Result<(), radroots_event::Error>
 pub trait radroots_event::admission::VisibilityPolicy
 pub type radroots_event::admission::VisibilityPolicy::Error
 pub fn radroots_event::admission::VisibilityPolicy::make_visible(&self, &radroots_event::admission::AdmittedEvent) -> core::result::Result<(), Self::Error>
@@ -492,14 +493,6 @@ pub fn radroots_event::draft::RadrootsDraftError::from(radroots_event::id::Radro
 impl core::error::Error for radroots_event::draft::RadrootsDraftError
 impl core::fmt::Display for radroots_event::draft::RadrootsDraftError
 pub fn radroots_event::draft::RadrootsDraftError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum radroots_event::draft::RadrootsSignatureVerificationError
-pub radroots_event::draft::RadrootsSignatureVerificationError::InvalidEventId
-pub radroots_event::draft::RadrootsSignatureVerificationError::InvalidPubkey
-pub radroots_event::draft::RadrootsSignatureVerificationError::InvalidSignature
-pub radroots_event::draft::RadrootsSignatureVerificationError::VerificationFailed
-impl core::error::Error for radroots_event::draft::RadrootsSignatureVerificationError
-impl core::fmt::Display for radroots_event::draft::RadrootsSignatureVerificationError
-pub fn radroots_event::draft::RadrootsSignatureVerificationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_event::draft::RadrootsSignedEventError
 pub radroots_event::draft::RadrootsSignedEventError::Envelope(radroots_event::envelope::RadrootsEventEnvelopeError)
 pub radroots_event::draft::RadrootsSignedEventError::RawJson(crate::wire::v1::RadrootsEventWireError)
@@ -548,7 +541,6 @@ pub fn radroots_event::draft::RadrootsSignedEvent::sig(&self) -> &radroots_event
 pub fn radroots_event::draft::RadrootsSignedEvent::sig_str(&self) -> &str
 pub fn radroots_event::draft::RadrootsSignedEvent::signature_hex(&self) -> alloc::string::String
 pub fn radroots_event::draft::RadrootsSignedEvent::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
-pub fn radroots_event::draft::RadrootsSignedEvent::verify_signature(self) -> core::result::Result<radroots_event::draft::RadrootsVerifiedSignedEvent, radroots_event::draft::RadrootsSignatureVerificationError>
 pub fn radroots_event::draft::RadrootsSignedEvent::wire(&self) -> &RadrootsNip01EventWire
 impl serde_core::ser::Serialize for radroots_event::draft::RadrootsSignedEvent
 pub fn radroots_event::draft::RadrootsSignedEvent::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
@@ -563,10 +555,6 @@ pub radroots_event::draft::RadrootsSignedEventParts::pubkey: alloc::string::Stri
 pub radroots_event::draft::RadrootsSignedEventParts::raw_json: alloc::string::String
 pub radroots_event::draft::RadrootsSignedEventParts::sig: alloc::string::String
 pub radroots_event::draft::RadrootsSignedEventParts::tags: alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
-pub struct radroots_event::draft::RadrootsVerifiedSignedEvent
-impl radroots_event::draft::RadrootsVerifiedSignedEvent
-pub fn radroots_event::draft::RadrootsVerifiedSignedEvent::into_signed_event(self) -> radroots_event::draft::RadrootsSignedEvent
-pub fn radroots_event::draft::RadrootsVerifiedSignedEvent::signed_event(&self) -> &radroots_event::draft::RadrootsSignedEvent
 pub fn radroots_event::draft::compute_nip01_event_id(&str, u64, u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event::id::RadrootsEventId, radroots_event::draft::RadrootsDraftError>
 pub fn radroots_event::draft::nip01_event_id_preimage(&str, u64, u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<alloc::string::String, radroots_event::draft::RadrootsDraftError>
 pub fn radroots_event::draft::validate_signed_nostr_event_matches_draft(&radroots_event::draft::RadrootsSignedEvent, &radroots_event::draft::RadrootsEventDraft) -> core::result::Result<(), radroots_event::draft::RadrootsDraftError>
@@ -803,8 +791,6 @@ pub fn radroots_event::envelope::RadrootsEventEnvelope::tag_slices(&self) -> &[r
 pub fn radroots_event::envelope::RadrootsEventEnvelope::tags(&self) -> &radroots_event::envelope::RadrootsEventTags
 pub fn radroots_event::envelope::RadrootsEventEnvelope::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
 pub fn radroots_event::envelope::RadrootsEventEnvelope::to_nip01_wire(&self) -> RadrootsNip01EventWire
-impl dto_bindgen_core::descriptor::Dto for radroots_event::envelope::RadrootsEventEnvelope
-pub fn radroots_event::envelope::RadrootsEventEnvelope::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::envelope::RadrootsEventEnvelopeLimits
 pub radroots_event::envelope::RadrootsEventEnvelopeLimits::max_content_bytes: usize
 pub radroots_event::envelope::RadrootsEventEnvelopeLimits::max_tag_count: usize
@@ -828,8 +814,6 @@ pub const fn radroots_event::envelope::RadrootsEventKind::class(self) -> radroot
 pub const fn radroots_event::envelope::RadrootsEventKind::new(u32) -> Self
 impl core::convert::From<u32> for radroots_event::envelope::RadrootsEventKind
 pub fn radroots_event::envelope::RadrootsEventKind::from(u32) -> Self
-impl dto_bindgen_core::descriptor::Dto for radroots_event::envelope::RadrootsEventKind
-pub fn radroots_event::envelope::RadrootsEventKind::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::envelope::RadrootsEventKind
 pub fn radroots_event::envelope::RadrootsEventKind::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::envelope::RadrootsEventKind
@@ -853,8 +837,6 @@ pub fn radroots_event::envelope::RadrootsEventTags::len(&self) -> usize
 pub fn radroots_event::envelope::RadrootsEventTags::new(alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<Self, radroots_event::envelope::RadrootsEventEnvelopeError>
 pub fn radroots_event::envelope::RadrootsEventTags::new_with_limits(alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, radroots_event::envelope::RadrootsEventEnvelopeLimits) -> core::result::Result<Self, radroots_event::envelope::RadrootsEventEnvelopeError>
 pub fn radroots_event::envelope::RadrootsEventTags::to_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::envelope::RadrootsEventTags
-pub fn radroots_event::envelope::RadrootsEventTags::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::envelope::RadrootsEventTags
 pub fn radroots_event::envelope::RadrootsEventTags::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::envelope::RadrootsEventTags
@@ -865,8 +847,6 @@ pub const fn radroots_event::envelope::RadrootsEventTimestamp::as_u64(self) -> u
 pub const fn radroots_event::envelope::RadrootsEventTimestamp::new(u64) -> Self
 impl core::convert::From<u64> for radroots_event::envelope::RadrootsEventTimestamp
 pub fn radroots_event::envelope::RadrootsEventTimestamp::from(u64) -> Self
-impl dto_bindgen_core::descriptor::Dto for radroots_event::envelope::RadrootsEventTimestamp
-pub fn radroots_event::envelope::RadrootsEventTimestamp::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::envelope::RadrootsEventTimestamp
 pub fn radroots_event::envelope::RadrootsEventTimestamp::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::envelope::RadrootsEventTimestamp
@@ -893,18 +873,12 @@ pub radroots_event::farm::change_set::RadrootsGcsLocation::point: radroots_event
 pub radroots_event::farm::change_set::RadrootsGcsLocation::polygon: radroots_event::farm::change_set::RadrootsGeoJsonPolygon
 pub radroots_event::farm::change_set::RadrootsGcsLocation::soil: core::option::Option<alloc::string::String>
 pub radroots_event::farm::change_set::RadrootsGcsLocation::tag_0: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::change_set::RadrootsGcsLocation
-pub fn radroots_event::farm::change_set::RadrootsGcsLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::change_set::RadrootsGeoJsonPoint
 pub radroots_event::farm::change_set::RadrootsGeoJsonPoint::coordinates: [f64; 2]
 pub radroots_event::farm::change_set::RadrootsGeoJsonPoint::type: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::change_set::RadrootsGeoJsonPoint
-pub fn radroots_event::farm::change_set::RadrootsGeoJsonPoint::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::change_set::RadrootsGeoJsonPolygon
 pub radroots_event::farm::change_set::RadrootsGeoJsonPolygon::coordinates: alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>
 pub radroots_event::farm::change_set::RadrootsGeoJsonPolygon::type: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::change_set::RadrootsGeoJsonPolygon
-pub fn radroots_event::farm::change_set::RadrootsGeoJsonPolygon::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::farm::coop
 pub struct radroots_event::farm::coop::RadrootsCoop
 pub radroots_event::farm::coop::RadrootsCoop::about: core::option::Option<alloc::string::String>
@@ -915,21 +889,15 @@ pub radroots_event::farm::coop::RadrootsCoop::name: alloc::string::String
 pub radroots_event::farm::coop::RadrootsCoop::picture: core::option::Option<alloc::string::String>
 pub radroots_event::farm::coop::RadrootsCoop::tags: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub radroots_event::farm::coop::RadrootsCoop::website: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::coop::RadrootsCoop
-pub fn radroots_event::farm::coop::RadrootsCoop::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::coop::RadrootsCoopLocation
 pub radroots_event::farm::coop::RadrootsCoopLocation::city: core::option::Option<alloc::string::String>
 pub radroots_event::farm::coop::RadrootsCoopLocation::country: core::option::Option<alloc::string::String>
 pub radroots_event::farm::coop::RadrootsCoopLocation::gcs: radroots_event::farm::change_set::RadrootsGcsLocation
 pub radroots_event::farm::coop::RadrootsCoopLocation::primary: core::option::Option<alloc::string::String>
 pub radroots_event::farm::coop::RadrootsCoopLocation::region: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::coop::RadrootsCoopLocation
-pub fn radroots_event::farm::coop::RadrootsCoopLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::coop::RadrootsCoopRef
 pub radroots_event::farm::coop::RadrootsCoopRef::d_tag: alloc::string::String
 pub radroots_event::farm::coop::RadrootsCoopRef::pubkey: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::coop::RadrootsCoopRef
-pub fn radroots_event::farm::coop::RadrootsCoopRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::farm::crdt
 pub enum radroots_event::farm::crdt::RadrootsCrdtBackend
 pub radroots_event::farm::crdt::RadrootsCrdtBackend::Automerge
@@ -1069,21 +1037,15 @@ pub radroots_event::farm::plot::RadrootsPlot::farm: radroots_event::farm::Radroo
 pub radroots_event::farm::plot::RadrootsPlot::location: core::option::Option<radroots_event::farm::plot::RadrootsPlotLocation>
 pub radroots_event::farm::plot::RadrootsPlot::name: alloc::string::String
 pub radroots_event::farm::plot::RadrootsPlot::tags: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::plot::RadrootsPlot
-pub fn radroots_event::farm::plot::RadrootsPlot::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::plot::RadrootsPlotLocation
 pub radroots_event::farm::plot::RadrootsPlotLocation::city: core::option::Option<alloc::string::String>
 pub radroots_event::farm::plot::RadrootsPlotLocation::country: core::option::Option<alloc::string::String>
 pub radroots_event::farm::plot::RadrootsPlotLocation::gcs: radroots_event::farm::change_set::RadrootsGcsLocation
 pub radroots_event::farm::plot::RadrootsPlotLocation::primary: core::option::Option<alloc::string::String>
 pub radroots_event::farm::plot::RadrootsPlotLocation::region: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::plot::RadrootsPlotLocation
-pub fn radroots_event::farm::plot::RadrootsPlotLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::plot::RadrootsPlotRef
 pub radroots_event::farm::plot::RadrootsPlotRef::d_tag: alloc::string::String
 pub radroots_event::farm::plot::RadrootsPlotRef::pubkey: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::plot::RadrootsPlotRef
-pub fn radroots_event::farm::plot::RadrootsPlotRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::farm::resource_area
 pub struct radroots_event::farm::resource_area::RadrootsResourceArea
 pub radroots_event::farm::resource_area::RadrootsResourceArea::about: core::option::Option<alloc::string::String>
@@ -1091,21 +1053,15 @@ pub radroots_event::farm::resource_area::RadrootsResourceArea::d_tag: alloc::str
 pub radroots_event::farm::resource_area::RadrootsResourceArea::location: radroots_event::farm::resource_area::RadrootsResourceAreaLocation
 pub radroots_event::farm::resource_area::RadrootsResourceArea::name: alloc::string::String
 pub radroots_event::farm::resource_area::RadrootsResourceArea::tags: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::resource_area::RadrootsResourceArea
-pub fn radroots_event::farm::resource_area::RadrootsResourceArea::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::resource_area::RadrootsResourceAreaLocation
 pub radroots_event::farm::resource_area::RadrootsResourceAreaLocation::city: core::option::Option<alloc::string::String>
 pub radroots_event::farm::resource_area::RadrootsResourceAreaLocation::country: core::option::Option<alloc::string::String>
 pub radroots_event::farm::resource_area::RadrootsResourceAreaLocation::gcs: radroots_event::farm::change_set::RadrootsGcsLocation
 pub radroots_event::farm::resource_area::RadrootsResourceAreaLocation::primary: core::option::Option<alloc::string::String>
 pub radroots_event::farm::resource_area::RadrootsResourceAreaLocation::region: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::resource_area::RadrootsResourceAreaLocation
-pub fn radroots_event::farm::resource_area::RadrootsResourceAreaLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::resource_area::RadrootsResourceAreaRef
 pub radroots_event::farm::resource_area::RadrootsResourceAreaRef::d_tag: alloc::string::String
 pub radroots_event::farm::resource_area::RadrootsResourceAreaRef::pubkey: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::resource_area::RadrootsResourceAreaRef
-pub fn radroots_event::farm::resource_area::RadrootsResourceAreaRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::farm::resource_cap
 pub struct radroots_event::farm::resource_cap::RadrootsResourceHarvestCap
 pub radroots_event::farm::resource_cap::RadrootsResourceHarvestCap::cap_quantity: radroots_core::quantity::Quantity
@@ -1118,13 +1074,9 @@ pub radroots_event::farm::resource_cap::RadrootsResourceHarvestCap::product: rad
 pub radroots_event::farm::resource_cap::RadrootsResourceHarvestCap::resource_area: radroots_event::farm::resource_area::RadrootsResourceAreaRef
 pub radroots_event::farm::resource_cap::RadrootsResourceHarvestCap::start: u64
 pub radroots_event::farm::resource_cap::RadrootsResourceHarvestCap::tags: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::resource_cap::RadrootsResourceHarvestCap
-pub fn radroots_event::farm::resource_cap::RadrootsResourceHarvestCap::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct
 pub radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct::category: core::option::Option<alloc::string::String>
 pub radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct::key: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct
-pub fn radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::farm::workspace
 pub enum radroots_event::farm::workspace::RadrootsFarmWorkspaceRelayMode
 pub radroots_event::farm::workspace::RadrootsFarmWorkspaceRelayMode::Read
@@ -1165,21 +1117,15 @@ pub radroots_event::farm::RadrootsFarm::name: alloc::string::String
 pub radroots_event::farm::RadrootsFarm::picture: core::option::Option<alloc::string::String>
 pub radroots_event::farm::RadrootsFarm::tags: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub radroots_event::farm::RadrootsFarm::website: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::RadrootsFarm
-pub fn radroots_event::farm::RadrootsFarm::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::RadrootsFarmPublicLocation
 pub radroots_event::farm::RadrootsFarmPublicLocation::city: core::option::Option<alloc::string::String>
 pub radroots_event::farm::RadrootsFarmPublicLocation::country: core::option::Option<alloc::string::String>
 pub radroots_event::farm::RadrootsFarmPublicLocation::geohash: alloc::string::String
 pub radroots_event::farm::RadrootsFarmPublicLocation::primary: alloc::string::String
 pub radroots_event::farm::RadrootsFarmPublicLocation::region: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::RadrootsFarmPublicLocation
-pub fn radroots_event::farm::RadrootsFarmPublicLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::farm::RadrootsFarmRef
 pub radroots_event::farm::RadrootsFarmRef::d_tag: alloc::string::String
 pub radroots_event::farm::RadrootsFarmRef::pubkey: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::farm::RadrootsFarmRef
-pub fn radroots_event::farm::RadrootsFarmRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::food
 pub mod radroots_event::food::availability
 #[non_exhaustive] pub enum radroots_event::food::availability::RadrootsFoodAvailabilityError
@@ -1449,8 +1395,6 @@ pub fn radroots_event::id::RadrootsAddressableCoordinate::fmt(&self, &mut core::
 impl core::str::traits::FromStr for radroots_event::id::RadrootsAddressableCoordinate
 pub type radroots_event::id::RadrootsAddressableCoordinate::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsAddressableCoordinate::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsAddressableCoordinate
-pub fn radroots_event::id::RadrootsAddressableCoordinate::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsAddressableCoordinate
 pub fn radroots_event::id::RadrootsAddressableCoordinate::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsAddressableCoordinate
@@ -1486,8 +1430,6 @@ pub fn radroots_event::id::RadrootsTradeCandidateId::fmt(&self, &mut core::fmt::
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeCandidateId
 pub type radroots_event::id::RadrootsTradeCandidateId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeCandidateId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeCandidateId
-pub fn radroots_event::id::RadrootsTradeCandidateId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeCandidateId
 pub fn radroots_event::id::RadrootsTradeCandidateId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeCandidateId
@@ -1512,8 +1454,6 @@ pub fn radroots_event::id::RadrootsClassifiedListingAddress::fmt(&self, &mut cor
 impl core::str::traits::FromStr for radroots_event::id::RadrootsClassifiedListingAddress
 pub type radroots_event::id::RadrootsClassifiedListingAddress::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsClassifiedListingAddress::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsClassifiedListingAddress
-pub fn radroots_event::id::RadrootsClassifiedListingAddress::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsClassifiedListingAddress
 pub fn radroots_event::id::RadrootsClassifiedListingAddress::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsClassifiedListingAddress
@@ -1538,8 +1478,6 @@ pub fn radroots_event::id::RadrootsDTag::fmt(&self, &mut core::fmt::Formatter<'_
 impl core::str::traits::FromStr for radroots_event::id::RadrootsDTag
 pub type radroots_event::id::RadrootsDTag::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsDTag::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsDTag
-pub fn radroots_event::id::RadrootsDTag::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsDTag
 pub fn radroots_event::id::RadrootsDTag::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsDTag
@@ -1574,8 +1512,6 @@ pub fn radroots_event::id::RadrootsEventId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventId
 pub type radroots_event::id::RadrootsEventId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventId
-pub fn radroots_event::id::RadrootsEventId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventId
 pub fn radroots_event::id::RadrootsEventId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventId
@@ -1605,8 +1541,6 @@ pub fn radroots_event::id::RadrootsEventPointer::fmt(&self, &mut core::fmt::Form
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventPointer
 pub type radroots_event::id::RadrootsEventPointer::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventPointer::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventPointer
-pub fn radroots_event::id::RadrootsEventPointer::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventPointer
 pub fn radroots_event::id::RadrootsEventPointer::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventPointer
@@ -1636,8 +1570,6 @@ pub fn radroots_event::id::RadrootsEventSignature::fmt(&self, &mut core::fmt::Fo
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventSignature
 pub type radroots_event::id::RadrootsEventSignature::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventSignature::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventSignature
-pub fn radroots_event::id::RadrootsEventSignature::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventSignature
 pub fn radroots_event::id::RadrootsEventSignature::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventSignature
@@ -1667,8 +1599,6 @@ pub fn radroots_event::id::RadrootsTradeMutationId::fmt(&self, &mut core::fmt::F
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeMutationId
 pub type radroots_event::id::RadrootsTradeMutationId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeMutationId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeMutationId
-pub fn radroots_event::id::RadrootsTradeMutationId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeMutationId
 pub fn radroots_event::id::RadrootsTradeMutationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeMutationId
@@ -1728,8 +1658,6 @@ pub fn radroots_event::id::RadrootsAddressableCoordinate::fmt(&self, &mut core::
 impl core::str::traits::FromStr for radroots_event::id::RadrootsAddressableCoordinate
 pub type radroots_event::id::RadrootsAddressableCoordinate::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsAddressableCoordinate::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsAddressableCoordinate
-pub fn radroots_event::id::RadrootsAddressableCoordinate::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsAddressableCoordinate
 pub fn radroots_event::id::RadrootsAddressableCoordinate::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsAddressableCoordinate
@@ -1760,8 +1688,6 @@ pub fn radroots_event::id::RadrootsClassifiedListingAddress::fmt(&self, &mut cor
 impl core::str::traits::FromStr for radroots_event::id::RadrootsClassifiedListingAddress
 pub type radroots_event::id::RadrootsClassifiedListingAddress::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsClassifiedListingAddress::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsClassifiedListingAddress
-pub fn radroots_event::id::RadrootsClassifiedListingAddress::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsClassifiedListingAddress
 pub fn radroots_event::id::RadrootsClassifiedListingAddress::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsClassifiedListingAddress
@@ -1786,8 +1712,6 @@ pub fn radroots_event::id::RadrootsDTag::fmt(&self, &mut core::fmt::Formatter<'_
 impl core::str::traits::FromStr for radroots_event::id::RadrootsDTag
 pub type radroots_event::id::RadrootsDTag::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsDTag::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsDTag
-pub fn radroots_event::id::RadrootsDTag::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsDTag
 pub fn radroots_event::id::RadrootsDTag::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsDTag
@@ -1812,8 +1736,6 @@ pub fn radroots_event::id::RadrootsEconomicsDigest::fmt(&self, &mut core::fmt::F
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEconomicsDigest
 pub type radroots_event::id::RadrootsEconomicsDigest::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEconomicsDigest::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEconomicsDigest
-pub fn radroots_event::id::RadrootsEconomicsDigest::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEconomicsDigest
 pub fn radroots_event::id::RadrootsEconomicsDigest::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEconomicsDigest
@@ -1848,8 +1770,6 @@ pub fn radroots_event::id::RadrootsEventId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventId
 pub type radroots_event::id::RadrootsEventId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventId
-pub fn radroots_event::id::RadrootsEventId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventId
 pub fn radroots_event::id::RadrootsEventId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventId
@@ -1879,8 +1799,6 @@ pub fn radroots_event::id::RadrootsEventPointer::fmt(&self, &mut core::fmt::Form
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventPointer
 pub type radroots_event::id::RadrootsEventPointer::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventPointer::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventPointer
-pub fn radroots_event::id::RadrootsEventPointer::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventPointer
 pub fn radroots_event::id::RadrootsEventPointer::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventPointer
@@ -1910,8 +1828,6 @@ pub fn radroots_event::id::RadrootsEventSignature::fmt(&self, &mut core::fmt::Fo
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventSignature
 pub type radroots_event::id::RadrootsEventSignature::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventSignature::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventSignature
-pub fn radroots_event::id::RadrootsEventSignature::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventSignature
 pub fn radroots_event::id::RadrootsEventSignature::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventSignature
@@ -1936,8 +1852,6 @@ pub fn radroots_event::id::RadrootsInventoryBinId::fmt(&self, &mut core::fmt::Fo
 impl core::str::traits::FromStr for radroots_event::id::RadrootsInventoryBinId
 pub type radroots_event::id::RadrootsInventoryBinId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsInventoryBinId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsInventoryBinId
-pub fn radroots_event::id::RadrootsInventoryBinId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsInventoryBinId
 pub fn radroots_event::id::RadrootsInventoryBinId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsInventoryBinId
@@ -1997,8 +1911,6 @@ pub fn radroots_event::id::RadrootsOrderId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsOrderId
 pub type radroots_event::id::RadrootsOrderId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsOrderId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsOrderId
-pub fn radroots_event::id::RadrootsOrderId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsOrderId
 pub fn radroots_event::id::RadrootsOrderId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsOrderId
@@ -2023,8 +1935,6 @@ pub fn radroots_event::id::RadrootsOrderQuoteId::fmt(&self, &mut core::fmt::Form
 impl core::str::traits::FromStr for radroots_event::id::RadrootsOrderQuoteId
 pub type radroots_event::id::RadrootsOrderQuoteId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsOrderQuoteId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsOrderQuoteId
-pub fn radroots_event::id::RadrootsOrderQuoteId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsOrderQuoteId
 pub fn radroots_event::id::RadrootsOrderQuoteId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsOrderQuoteId
@@ -2049,8 +1959,6 @@ pub fn radroots_event::id::RadrootsRelayUrl::fmt(&self, &mut core::fmt::Formatte
 impl core::str::traits::FromStr for radroots_event::id::RadrootsRelayUrl
 pub type radroots_event::id::RadrootsRelayUrl::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsRelayUrl::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsRelayUrl
-pub fn radroots_event::id::RadrootsRelayUrl::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsRelayUrl
 pub fn radroots_event::id::RadrootsRelayUrl::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsRelayUrl
@@ -2080,8 +1988,6 @@ pub fn radroots_event::id::RadrootsTradeCandidateId::fmt(&self, &mut core::fmt::
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeCandidateId
 pub type radroots_event::id::RadrootsTradeCandidateId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeCandidateId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeCandidateId
-pub fn radroots_event::id::RadrootsTradeCandidateId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeCandidateId
 pub fn radroots_event::id::RadrootsTradeCandidateId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeCandidateId
@@ -2111,8 +2017,6 @@ pub fn radroots_event::id::RadrootsTradeId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeId
 pub type radroots_event::id::RadrootsTradeId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeId
-pub fn radroots_event::id::RadrootsTradeId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeId
 pub fn radroots_event::id::RadrootsTradeId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeId
@@ -2142,8 +2046,6 @@ pub fn radroots_event::id::RadrootsTradeMutationId::fmt(&self, &mut core::fmt::F
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeMutationId
 pub type radroots_event::id::RadrootsTradeMutationId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeMutationId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeMutationId
-pub fn radroots_event::id::RadrootsTradeMutationId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeMutationId
 pub fn radroots_event::id::RadrootsTradeMutationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeMutationId
@@ -2173,8 +2075,6 @@ pub fn radroots_event::id::RadrootsTradeId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeId
 pub type radroots_event::id::RadrootsTradeId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeId
-pub fn radroots_event::id::RadrootsTradeId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeId
 pub fn radroots_event::id::RadrootsTradeId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeId
@@ -2189,14 +2089,10 @@ pub radroots_event::knowledge::RadrootsKnowledgeLocationPrecision::ExactPublic
 pub radroots_event::knowledge::RadrootsKnowledgeLocationPrecision::Locality
 pub radroots_event::knowledge::RadrootsKnowledgeLocationPrecision::None
 pub radroots_event::knowledge::RadrootsKnowledgeLocationPrecision::Region
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeLocationPrecision
-pub fn radroots_event::knowledge::RadrootsKnowledgeLocationPrecision::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::knowledge::RadrootsKnowledgeReviewScope
 pub radroots_event::knowledge::RadrootsKnowledgeReviewScope::AddressableCoordinateAtPublishedAt
 pub radroots_event::knowledge::RadrootsKnowledgeReviewScope::PolicyLatest
 pub radroots_event::knowledge::RadrootsKnowledgeReviewScope::SpecificVersion
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeReviewScope
-pub fn radroots_event::knowledge::RadrootsKnowledgeReviewScope::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::knowledge::RadrootsKnowledgeValidationError
 pub radroots_event::knowledge::RadrootsKnowledgeValidationError::EmptyField(&'static str)
 pub radroots_event::knowledge::RadrootsKnowledgeValidationError::InvalidField(&'static str)
@@ -2223,8 +2119,6 @@ pub radroots_event::knowledge::RadrootsAddressableRef::d_tag: alloc::string::Str
 pub radroots_event::knowledge::RadrootsAddressableRef::kind: u32
 pub radroots_event::knowledge::RadrootsAddressableRef::pubkey: alloc::string::String
 pub radroots_event::knowledge::RadrootsAddressableRef::relays: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsAddressableRef
-pub fn radroots_event::knowledge::RadrootsAddressableRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsContributionAttestation
 pub radroots_event::knowledge::RadrootsContributionAttestation::contribution_type: alloc::string::String
 pub radroots_event::knowledge::RadrootsContributionAttestation::contributor_pubkey: alloc::string::String
@@ -2233,8 +2127,6 @@ pub radroots_event::knowledge::RadrootsContributionAttestation::schema: alloc::s
 pub radroots_event::knowledge::RadrootsContributionAttestation::schema_version: u16
 pub radroots_event::knowledge::RadrootsContributionAttestation::subject_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsContributionAttestation::summary: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsContributionAttestation
-pub fn radroots_event::knowledge::RadrootsContributionAttestation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsEvidenceBounty
 pub radroots_event::knowledge::RadrootsEvidenceBounty::closes_at: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsEvidenceBounty::d_tag: alloc::string::String
@@ -2245,8 +2137,6 @@ pub radroots_event::knowledge::RadrootsEvidenceBounty::summary: core::option::Op
 pub radroots_event::knowledge::RadrootsEvidenceBounty::target_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsEvidenceBounty::title: alloc::string::String
 pub radroots_event::knowledge::RadrootsEvidenceBounty::topics: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsEvidenceBounty
-pub fn radroots_event::knowledge::RadrootsEvidenceBounty::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeChangeProposal
 pub radroots_event::knowledge::RadrootsKnowledgeChangeProposal::evidence_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeChangeProposal::proposal_type: alloc::string::String
@@ -2256,8 +2146,6 @@ pub radroots_event::knowledge::RadrootsKnowledgeChangeProposal::schema_version: 
 pub radroots_event::knowledge::RadrootsKnowledgeChangeProposal::summary: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeChangeProposal::supersedes: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeChangeProposal::target: radroots_event::tag::RadrootsEventRef
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeChangeProposal
-pub fn radroots_event::knowledge::RadrootsKnowledgeChangeProposal::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeCitationSpan
 pub radroots_event::knowledge::RadrootsKnowledgeCitationSpan::artifact_ref: core::option::Option<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeCitationSpan::chunk_id: core::option::Option<alloc::string::String>
@@ -2266,8 +2154,6 @@ pub radroots_event::knowledge::RadrootsKnowledgeCitationSpan::page_start: core::
 pub radroots_event::knowledge::RadrootsKnowledgeCitationSpan::quote_hash: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeCitationSpan::section_path: alloc::vec::Vec<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeCitationSpan::source_ref: radroots_event::tag::RadrootsEventRef
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeCitationSpan
-pub fn radroots_event::knowledge::RadrootsKnowledgeCitationSpan::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeClaim
 pub radroots_event::knowledge::RadrootsKnowledgeClaim::applies_to: alloc::vec::Vec<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeClaim::author_asserted_confidence: core::option::Option<alloc::string::String>
@@ -2278,16 +2164,12 @@ pub radroots_event::knowledge::RadrootsKnowledgeClaim::schema_version: u16
 pub radroots_event::knowledge::RadrootsKnowledgeClaim::supersedes: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeClaim::text: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeClaim::topics: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeClaim
-pub fn radroots_event::knowledge::RadrootsKnowledgeClaim::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeFieldContext
 pub radroots_event::knowledge::RadrootsKnowledgeFieldContext::context_tags: alloc::vec::Vec<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeFieldContext::location_precision: radroots_event::knowledge::RadrootsKnowledgeLocationPrecision
 pub radroots_event::knowledge::RadrootsKnowledgeFieldContext::private_location_ref: core::option::Option<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeFieldContext::public_location: core::option::Option<radroots_event::knowledge::RadrootsKnowledgeLocation>
 pub radroots_event::knowledge::RadrootsKnowledgeFieldContext::topics: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeFieldContext
-pub fn radroots_event::knowledge::RadrootsKnowledgeFieldContext::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeFieldReport
 pub radroots_event::knowledge::RadrootsKnowledgeFieldReport::artifact_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeFieldReport::context: radroots_event::knowledge::RadrootsKnowledgeFieldContext
@@ -2299,36 +2181,26 @@ pub radroots_event::knowledge::RadrootsKnowledgeFieldReport::schema: alloc::stri
 pub radroots_event::knowledge::RadrootsKnowledgeFieldReport::schema_version: u16
 pub radroots_event::knowledge::RadrootsKnowledgeFieldReport::summary: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeFieldReport::title: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeFieldReport
-pub fn radroots_event::knowledge::RadrootsKnowledgeFieldReport::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeLocation
 pub radroots_event::knowledge::RadrootsKnowledgeLocation::geohash: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeLocation::label: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeLocation::locality: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeLocation::region: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeLocation
-pub fn radroots_event::knowledge::RadrootsKnowledgeLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeNodeRef
 pub radroots_event::knowledge::RadrootsKnowledgeNodeRef::address_ref: core::option::Option<radroots_event::knowledge::RadrootsAddressableRef>
 pub radroots_event::knowledge::RadrootsKnowledgeNodeRef::event_ref: core::option::Option<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeNodeRef::external_id: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeNodeRef::label: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeNodeRef::node_type: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeNodeRef
-pub fn radroots_event::knowledge::RadrootsKnowledgeNodeRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeObservation
 pub radroots_event::knowledge::RadrootsKnowledgeObservation::observation_type: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeObservation::observed_at: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeObservation::text: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeObservation::values: alloc::vec::Vec<radroots_event::knowledge::RadrootsKnowledgeObservationValue>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeObservation
-pub fn radroots_event::knowledge::RadrootsKnowledgeObservation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeObservationValue
 pub radroots_event::knowledge::RadrootsKnowledgeObservationValue::key: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeObservationValue::unit: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeObservationValue::value: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeObservationValue
-pub fn radroots_event::knowledge::RadrootsKnowledgeObservationValue::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeRelation
 pub radroots_event::knowledge::RadrootsKnowledgeRelation::author_asserted_confidence: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeRelation::object: radroots_event::knowledge::RadrootsKnowledgeNodeRef
@@ -2338,8 +2210,6 @@ pub radroots_event::knowledge::RadrootsKnowledgeRelation::schema_version: u16
 pub radroots_event::knowledge::RadrootsKnowledgeRelation::subject: radroots_event::knowledge::RadrootsKnowledgeNodeRef
 pub radroots_event::knowledge::RadrootsKnowledgeRelation::supersedes: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeRelation::support_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeRelation
-pub fn radroots_event::knowledge::RadrootsKnowledgeRelation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeReview
 pub radroots_event::knowledge::RadrootsKnowledgeReview::evidence_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeReview::notes: core::option::Option<alloc::string::String>
@@ -2349,14 +2219,10 @@ pub radroots_event::knowledge::RadrootsKnowledgeReview::schema_version: u16
 pub radroots_event::knowledge::RadrootsKnowledgeReview::scores: alloc::vec::Vec<radroots_event::knowledge::RadrootsKnowledgeReviewScore>
 pub radroots_event::knowledge::RadrootsKnowledgeReview::target: radroots_event::knowledge::RadrootsKnowledgeReviewTarget
 pub radroots_event::knowledge::RadrootsKnowledgeReview::verdict: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeReview
-pub fn radroots_event::knowledge::RadrootsKnowledgeReview::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeReviewScore
 pub radroots_event::knowledge::RadrootsKnowledgeReviewScore::dimension: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeReviewScore::note: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeReviewScore::value: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeReviewScore
-pub fn radroots_event::knowledge::RadrootsKnowledgeReviewScore::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeReviewTarget
 pub radroots_event::knowledge::RadrootsKnowledgeReviewTarget::address: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeReviewTarget::author_pubkey: alloc::string::String
@@ -2364,8 +2230,6 @@ pub radroots_event::knowledge::RadrootsKnowledgeReviewTarget::event_id: alloc::s
 pub radroots_event::knowledge::RadrootsKnowledgeReviewTarget::kind: u32
 pub radroots_event::knowledge::RadrootsKnowledgeReviewTarget::relays: alloc::vec::Vec<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeReviewTarget::review_scope: radroots_event::knowledge::RadrootsKnowledgeReviewScope
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeReviewTarget
-pub fn radroots_event::knowledge::RadrootsKnowledgeReviewTarget::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsKnowledgeSource
 pub radroots_event::knowledge::RadrootsKnowledgeSource::artifact_refs: alloc::vec::Vec<radroots_event::tag::RadrootsEventRef>
 pub radroots_event::knowledge::RadrootsKnowledgeSource::author_asserted_rights: core::option::Option<radroots_event::knowledge::RadrootsRightsAssertion>
@@ -2381,15 +2245,11 @@ pub radroots_event::knowledge::RadrootsKnowledgeSource::source_type: alloc::stri
 pub radroots_event::knowledge::RadrootsKnowledgeSource::summary: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsKnowledgeSource::title: alloc::string::String
 pub radroots_event::knowledge::RadrootsKnowledgeSource::topics: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsKnowledgeSource
-pub fn radroots_event::knowledge::RadrootsKnowledgeSource::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsRightsAssertion
 pub radroots_event::knowledge::RadrootsRightsAssertion::assertion: alloc::string::String
 pub radroots_event::knowledge::RadrootsRightsAssertion::holder: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsRightsAssertion::license: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsRightsAssertion::url: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsRightsAssertion
-pub fn radroots_event::knowledge::RadrootsRightsAssertion::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsWikiArticle
 pub radroots_event::knowledge::RadrootsWikiArticle::content_djot: alloc::string::String
 pub radroots_event::knowledge::RadrootsWikiArticle::d_tag: alloc::string::String
@@ -2399,26 +2259,18 @@ pub radroots_event::knowledge::RadrootsWikiArticle::references: alloc::vec::Vec<
 pub radroots_event::knowledge::RadrootsWikiArticle::summary: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsWikiArticle::title: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsWikiArticle::topics: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsWikiArticle
-pub fn radroots_event::knowledge::RadrootsWikiArticle::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsWikiArticleVersionRef
 pub radroots_event::knowledge::RadrootsWikiArticleVersionRef::address_ref: radroots_event::knowledge::RadrootsAddressableRef
 pub radroots_event::knowledge::RadrootsWikiArticleVersionRef::event_id: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsWikiArticleVersionRef
-pub fn radroots_event::knowledge::RadrootsWikiArticleVersionRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsWikiMergeRequest
 pub radroots_event::knowledge::RadrootsWikiMergeRequest::base_version_event_id: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsWikiMergeRequest::destination_pubkey: alloc::string::String
 pub radroots_event::knowledge::RadrootsWikiMergeRequest::explanation: core::option::Option<alloc::string::String>
 pub radroots_event::knowledge::RadrootsWikiMergeRequest::source_version_event_id: alloc::string::String
 pub radroots_event::knowledge::RadrootsWikiMergeRequest::target_article: radroots_event::knowledge::RadrootsAddressableRef
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsWikiMergeRequest
-pub fn radroots_event::knowledge::RadrootsWikiMergeRequest::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::knowledge::RadrootsWikiRedirect
 pub radroots_event::knowledge::RadrootsWikiRedirect::d_tag: alloc::string::String
 pub radroots_event::knowledge::RadrootsWikiRedirect::target: radroots_event::knowledge::RadrootsAddressableRef
-impl dto_bindgen_core::descriptor::Dto for radroots_event::knowledge::RadrootsWikiRedirect
-pub fn radroots_event::knowledge::RadrootsWikiRedirect::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub const radroots_event::knowledge::RADROOTS_CONTRIBUTION_ATTESTATION_SCHEMA: &str
 pub const radroots_event::knowledge::RADROOTS_EVIDENCE_BOUNTY_SCHEMA: &str
 pub const radroots_event::knowledge::RADROOTS_KNOWLEDGE_CHANGE_PROPOSAL_SCHEMA: &str
@@ -2465,16 +2317,12 @@ pub radroots_event::listing::operational::RadrootsOperationalListingAvailability
 pub radroots_event::listing::operational::RadrootsOperationalListingAvailability::Window
 pub radroots_event::listing::operational::RadrootsOperationalListingAvailability::Window::end: core::option::Option<u64>
 pub radroots_event::listing::operational::RadrootsOperationalListingAvailability::Window::start: core::option::Option<u64>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingAvailability
-pub fn radroots_event::listing::operational::RadrootsOperationalListingAvailability::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod
 pub radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod::LocalDelivery
 pub radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod::Other
 pub radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod::Other::method: alloc::string::String
 pub radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod::Pickup
 pub radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod::Shipping
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod
-pub fn radroots_event::listing::operational::RadrootsOperationalListingDeliveryMethod::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::listing::operational::RadrootsOperationalListingParseError
 pub radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidCurrency
 pub radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidDiscount(alloc::string::String)
@@ -2487,15 +2335,11 @@ pub radroots_event::listing::operational::RadrootsOperationalListingParseError::
 impl core::error::Error for radroots_event::listing::operational::RadrootsOperationalListingParseError
 impl core::fmt::Display for radroots_event::listing::operational::RadrootsOperationalListingParseError
 pub fn radroots_event::listing::operational::RadrootsOperationalListingParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingParseError
-pub fn radroots_event::listing::operational::RadrootsOperationalListingParseError::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::listing::operational::RadrootsOperationalListingStatus
 pub radroots_event::listing::operational::RadrootsOperationalListingStatus::Active
 pub radroots_event::listing::operational::RadrootsOperationalListingStatus::Other
 pub radroots_event::listing::operational::RadrootsOperationalListingStatus::Other::value: alloc::string::String
 pub radroots_event::listing::operational::RadrootsOperationalListingStatus::Sold
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingStatus
-pub fn radroots_event::listing::operational::RadrootsOperationalListingStatus::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::listing::operational::RadrootsOperationalListing
 pub radroots_event::listing::operational::RadrootsOperationalListing::availability: core::option::Option<radroots_event::listing::operational::RadrootsOperationalListingAvailability>
 pub radroots_event::listing::operational::RadrootsOperationalListing::bins: alloc::vec::Vec<radroots_event::listing::operational::RadrootsOperationalListingBin>
@@ -2511,8 +2355,6 @@ pub radroots_event::listing::operational::RadrootsOperationalListing::primary_bi
 pub radroots_event::listing::operational::RadrootsOperationalListing::product: radroots_event::listing::operational::RadrootsOperationalListingProduct
 pub radroots_event::listing::operational::RadrootsOperationalListing::published_at: core::option::Option<u64>
 pub radroots_event::listing::operational::RadrootsOperationalListing::resource_area: core::option::Option<radroots_event::farm::resource_area::RadrootsResourceAreaRef>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListing
-pub fn radroots_event::listing::operational::RadrootsOperationalListing::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::listing::operational::RadrootsOperationalListingBin
 pub radroots_event::listing::operational::RadrootsOperationalListingBin::bin_id: radroots_event::id::RadrootsInventoryBinId
 pub radroots_event::listing::operational::RadrootsOperationalListingBin::display_amount: core::option::Option<radroots_core::decimal::Decimal>
@@ -2522,18 +2364,12 @@ pub radroots_event::listing::operational::RadrootsOperationalListingBin::display
 pub radroots_event::listing::operational::RadrootsOperationalListingBin::display_unit: core::option::Option<radroots_core::unit::Unit>
 pub radroots_event::listing::operational::RadrootsOperationalListingBin::price_per_canonical_unit: radroots_core::quantity_price::QuantityPrice
 pub radroots_event::listing::operational::RadrootsOperationalListingBin::quantity: radroots_core::quantity::Quantity
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingBin
-pub fn radroots_event::listing::operational::RadrootsOperationalListingBin::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::listing::operational::RadrootsOperationalListingImage
 pub radroots_event::listing::operational::RadrootsOperationalListingImage::size: core::option::Option<radroots_event::listing::operational::RadrootsOperationalListingImageSize>
 pub radroots_event::listing::operational::RadrootsOperationalListingImage::url: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingImage
-pub fn radroots_event::listing::operational::RadrootsOperationalListingImage::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::listing::operational::RadrootsOperationalListingImageSize
 pub radroots_event::listing::operational::RadrootsOperationalListingImageSize::h: u32
 pub radroots_event::listing::operational::RadrootsOperationalListingImageSize::w: u32
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingImageSize
-pub fn radroots_event::listing::operational::RadrootsOperationalListingImageSize::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::listing::operational::RadrootsOperationalListingProduct
 pub radroots_event::listing::operational::RadrootsOperationalListingProduct::category: alloc::string::String
 pub radroots_event::listing::operational::RadrootsOperationalListingProduct::key: alloc::string::String
@@ -2544,8 +2380,6 @@ pub radroots_event::listing::operational::RadrootsOperationalListingProduct::pro
 pub radroots_event::listing::operational::RadrootsOperationalListingProduct::summary: core::option::Option<alloc::string::String>
 pub radroots_event::listing::operational::RadrootsOperationalListingProduct::title: alloc::string::String
 pub radroots_event::listing::operational::RadrootsOperationalListingProduct::year: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingProduct
-pub fn radroots_event::listing::operational::RadrootsOperationalListingProduct::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::listing::operational::RadrootsOperationalListingProductTagKeys
 pub struct radroots_event::listing::operational::RadrootsOperationalListingPublicLocation
 pub radroots_event::listing::operational::RadrootsOperationalListingPublicLocation::city: core::option::Option<alloc::string::String>
@@ -2553,8 +2387,6 @@ pub radroots_event::listing::operational::RadrootsOperationalListingPublicLocati
 pub radroots_event::listing::operational::RadrootsOperationalListingPublicLocation::geohash: alloc::string::String
 pub radroots_event::listing::operational::RadrootsOperationalListingPublicLocation::primary: alloc::string::String
 pub radroots_event::listing::operational::RadrootsOperationalListingPublicLocation::region: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::listing::operational::RadrootsOperationalListingPublicLocation
-pub fn radroots_event::listing::operational::RadrootsOperationalListingPublicLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub const radroots_event::listing::operational::RADROOTS_OPERATIONAL_LISTING_PRODUCT_TAG_KEYS: [&str; 9]
 pub mod radroots_event::media
 pub mod radroots_event::media::file_metadata
@@ -2783,19 +2615,13 @@ pub radroots_event::post::document::RadrootsDocument::summary: core::option::Opt
 pub radroots_event::post::document::RadrootsDocument::tags: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub radroots_event::post::document::RadrootsDocument::title: alloc::string::String
 pub radroots_event::post::document::RadrootsDocument::version: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::post::document::RadrootsDocument
-pub fn radroots_event::post::document::RadrootsDocument::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::post::document::RadrootsDocumentSubject
 pub radroots_event::post::document::RadrootsDocumentSubject::address: core::option::Option<alloc::string::String>
 pub radroots_event::post::document::RadrootsDocumentSubject::pubkey: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::post::document::RadrootsDocumentSubject
-pub fn radroots_event::post::document::RadrootsDocumentSubject::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::post::reaction
 pub struct radroots_event::post::reaction::RadrootsReaction
 pub radroots_event::post::reaction::RadrootsReaction::content: alloc::string::String
 pub radroots_event::post::reaction::RadrootsReaction::target: radroots_event::social::RadrootsSocialTarget
-impl dto_bindgen_core::descriptor::Dto for radroots_event::post::reaction::RadrootsReaction
-pub fn radroots_event::post::reaction::RadrootsReaction::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::post::reply
 #[non_exhaustive] pub enum radroots_event::post::reply::RadrootsNip10ReplyError
 pub radroots_event::post::reply::RadrootsNip10ReplyError::AuthorInvalid(radroots_event::id::RadrootsIdParseError)
@@ -2917,8 +2743,6 @@ pub radroots_event::post::RadrootsPost::location: core::option::Option<radroots_
 pub radroots_event::post::RadrootsPost::media: core::option::Option<alloc::vec::Vec<radroots_event::social::RadrootsSocialMediaMetadata>>
 pub radroots_event::post::RadrootsPost::quote_refs: core::option::Option<alloc::vec::Vec<radroots_event::social::RadrootsSocialTarget>>
 pub radroots_event::post::RadrootsPost::topics: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::post::RadrootsPost
-pub fn radroots_event::post::RadrootsPost::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::post::RadrootsPostImageDimensions
 impl radroots_event::post::RadrootsPostImageDimensions
 pub const fn radroots_event::post::RadrootsPostImageDimensions::height(self) -> u32
@@ -2940,8 +2764,6 @@ pub struct radroots_event::profile::account::RadrootsAccountClaim
 pub radroots_event::profile::account::RadrootsAccountClaim::nip05: core::option::Option<alloc::string::String>
 pub radroots_event::profile::account::RadrootsAccountClaim::pubkey: alloc::string::String
 pub radroots_event::profile::account::RadrootsAccountClaim::username: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::profile::account::RadrootsAccountClaim
-pub fn radroots_event::profile::account::RadrootsAccountClaim::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub const radroots_event::profile::account::KIND_ACCOUNT_CLAIM: u32
 #[non_exhaustive] pub enum radroots_event::profile::RadrootsAuthoredProfileError
 pub radroots_event::profile::RadrootsAuthoredProfileError::InvalidName
@@ -2966,8 +2788,6 @@ pub radroots_event::profile::RadrootsProfileType::Coop
 pub radroots_event::profile::RadrootsProfileType::Farm
 pub radroots_event::profile::RadrootsProfileType::Individual
 pub radroots_event::profile::RadrootsProfileType::Radrootsd
-impl dto_bindgen_core::descriptor::Dto for radroots_event::profile::RadrootsProfileType
-pub fn radroots_event::profile::RadrootsProfileType::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::profile::RadrootsAuthoredProfile
 impl radroots_event::profile::RadrootsAuthoredProfile
 pub fn radroots_event::profile::RadrootsAuthoredProfile::about(&self) -> core::option::Option<&str>
@@ -3020,41 +2840,29 @@ pub mod radroots_event::social::app_data
 pub struct radroots_event::social::app_data::RadrootsAppData
 pub radroots_event::social::app_data::RadrootsAppData::content: alloc::string::String
 pub radroots_event::social::app_data::RadrootsAppData::d_tag: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::app_data::RadrootsAppData
-pub fn radroots_event::social::app_data::RadrootsAppData::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub const radroots_event::social::app_data::KIND_APP_DATA: u32
 pub mod radroots_event::social::follow
 pub struct radroots_event::social::follow::RadrootsFollow
 pub radroots_event::social::follow::RadrootsFollow::list: alloc::vec::Vec<radroots_event::social::follow::RadrootsFollowProfile>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::follow::RadrootsFollow
-pub fn radroots_event::social::follow::RadrootsFollow::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::follow::RadrootsFollowProfile
 pub radroots_event::social::follow::RadrootsFollowProfile::contact_name: core::option::Option<alloc::string::String>
 pub radroots_event::social::follow::RadrootsFollowProfile::public_key: alloc::string::String
 pub radroots_event::social::follow::RadrootsFollowProfile::published_at: u64
 pub radroots_event::social::follow::RadrootsFollowProfile::relay_url: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::follow::RadrootsFollowProfile
-pub fn radroots_event::social::follow::RadrootsFollowProfile::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::geochat
 pub struct radroots_event::social::geochat::RadrootsGeoChat
 pub radroots_event::social::geochat::RadrootsGeoChat::content: alloc::string::String
 pub radroots_event::social::geochat::RadrootsGeoChat::geohash: alloc::string::String
 pub radroots_event::social::geochat::RadrootsGeoChat::nickname: core::option::Option<alloc::string::String>
 pub radroots_event::social::geochat::RadrootsGeoChat::teleported: bool
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::geochat::RadrootsGeoChat
-pub fn radroots_event::social::geochat::RadrootsGeoChat::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::gift_wrap
 pub struct radroots_event::social::gift_wrap::RadrootsGiftWrap
 pub radroots_event::social::gift_wrap::RadrootsGiftWrap::content: alloc::string::String
 pub radroots_event::social::gift_wrap::RadrootsGiftWrap::expiration: core::option::Option<u32>
 pub radroots_event::social::gift_wrap::RadrootsGiftWrap::recipient: radroots_event::social::gift_wrap::RadrootsGiftWrapRecipient
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::gift_wrap::RadrootsGiftWrap
-pub fn radroots_event::social::gift_wrap::RadrootsGiftWrap::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::gift_wrap::RadrootsGiftWrapRecipient
 pub radroots_event::social::gift_wrap::RadrootsGiftWrapRecipient::public_key: alloc::string::String
 pub radroots_event::social::gift_wrap::RadrootsGiftWrapRecipient::relay_url: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::gift_wrap::RadrootsGiftWrapRecipient
-pub fn radroots_event::social::gift_wrap::RadrootsGiftWrapRecipient::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::group
 pub struct radroots_event::social::group::RadrootsGroupAdmins
 pub radroots_event::social::group::RadrootsGroupAdmins::admins: alloc::vec::Vec<radroots_event::social::group::RadrootsGroupUserRef>
@@ -3148,20 +2956,14 @@ pub radroots_event::social::job::JobFeedbackStatus::Partial
 pub radroots_event::social::job::JobFeedbackStatus::PaymentRequired
 pub radroots_event::social::job::JobFeedbackStatus::Processing
 pub radroots_event::social::job::JobFeedbackStatus::Success
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job::JobFeedbackStatus
-pub fn radroots_event::social::job::JobFeedbackStatus::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::social::job::JobInputType
 pub radroots_event::social::job::JobInputType::Event
 pub radroots_event::social::job::JobInputType::Job
 pub radroots_event::social::job::JobInputType::Text
 pub radroots_event::social::job::JobInputType::Url
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job::JobInputType
-pub fn radroots_event::social::job::JobInputType::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::job::JobPaymentRequest
 pub radroots_event::social::job::JobPaymentRequest::amount_sat: u32
 pub radroots_event::social::job::JobPaymentRequest::bolt11: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job::JobPaymentRequest
-pub fn radroots_event::social::job::JobPaymentRequest::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::job_feedback
 pub struct radroots_event::social::job_feedback::RadrootsJobFeedback
 pub radroots_event::social::job_feedback::RadrootsJobFeedback::content: core::option::Option<alloc::string::String>
@@ -3172,21 +2974,15 @@ pub radroots_event::social::job_feedback::RadrootsJobFeedback::kind: u16
 pub radroots_event::social::job_feedback::RadrootsJobFeedback::payment: core::option::Option<radroots_event::social::job::JobPaymentRequest>
 pub radroots_event::social::job_feedback::RadrootsJobFeedback::request_event: radroots_event::tag::RadrootsEventPtr
 pub radroots_event::social::job_feedback::RadrootsJobFeedback::status: radroots_event::social::job::JobFeedbackStatus
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job_feedback::RadrootsJobFeedback
-pub fn radroots_event::social::job_feedback::RadrootsJobFeedback::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::job_request
 pub struct radroots_event::social::job_request::RadrootsJobInput
 pub radroots_event::social::job_request::RadrootsJobInput::data: alloc::string::String
 pub radroots_event::social::job_request::RadrootsJobInput::input_type: radroots_event::social::job::JobInputType
 pub radroots_event::social::job_request::RadrootsJobInput::marker: core::option::Option<alloc::string::String>
 pub radroots_event::social::job_request::RadrootsJobInput::relay: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job_request::RadrootsJobInput
-pub fn radroots_event::social::job_request::RadrootsJobInput::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::job_request::RadrootsJobParam
 pub radroots_event::social::job_request::RadrootsJobParam::key: alloc::string::String
 pub radroots_event::social::job_request::RadrootsJobParam::value: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job_request::RadrootsJobParam
-pub fn radroots_event::social::job_request::RadrootsJobParam::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::job_request::RadrootsJobRequest
 pub radroots_event::social::job_request::RadrootsJobRequest::bid_sat: core::option::Option<u32>
 pub radroots_event::social::job_request::RadrootsJobRequest::encrypted: bool
@@ -3197,8 +2993,6 @@ pub radroots_event::social::job_request::RadrootsJobRequest::params: alloc::vec:
 pub radroots_event::social::job_request::RadrootsJobRequest::providers: alloc::vec::Vec<alloc::string::String>
 pub radroots_event::social::job_request::RadrootsJobRequest::relays: alloc::vec::Vec<alloc::string::String>
 pub radroots_event::social::job_request::RadrootsJobRequest::topics: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job_request::RadrootsJobRequest
-pub fn radroots_event::social::job_request::RadrootsJobRequest::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::job_result
 pub struct radroots_event::social::job_result::RadrootsJobResult
 pub radroots_event::social::job_result::RadrootsJobResult::content: core::option::Option<alloc::string::String>
@@ -3209,19 +3003,13 @@ pub radroots_event::social::job_result::RadrootsJobResult::kind: u16
 pub radroots_event::social::job_result::RadrootsJobResult::payment: core::option::Option<radroots_event::social::job::JobPaymentRequest>
 pub radroots_event::social::job_result::RadrootsJobResult::request_event: radroots_event::tag::RadrootsEventPtr
 pub radroots_event::social::job_result::RadrootsJobResult::request_json: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::job_result::RadrootsJobResult
-pub fn radroots_event::social::job_result::RadrootsJobResult::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::list
 pub struct radroots_event::social::list::RadrootsList
 pub radroots_event::social::list::RadrootsList::content: alloc::string::String
 pub radroots_event::social::list::RadrootsList::entries: alloc::vec::Vec<radroots_event::social::list::RadrootsListEntry>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::list::RadrootsList
-pub fn radroots_event::social::list::RadrootsList::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::list::RadrootsListEntry
 pub radroots_event::social::list::RadrootsListEntry::tag: alloc::string::String
 pub radroots_event::social::list::RadrootsListEntry::values: alloc::vec::Vec<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::list::RadrootsListEntry
-pub fn radroots_event::social::list::RadrootsListEntry::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::list_set
 pub struct radroots_event::social::list_set::RadrootsListSet
 pub radroots_event::social::list_set::RadrootsListSet::content: alloc::string::String
@@ -3230,21 +3018,15 @@ pub radroots_event::social::list_set::RadrootsListSet::description: core::option
 pub radroots_event::social::list_set::RadrootsListSet::entries: alloc::vec::Vec<radroots_event::social::list::RadrootsListEntry>
 pub radroots_event::social::list_set::RadrootsListSet::image: core::option::Option<alloc::string::String>
 pub radroots_event::social::list_set::RadrootsListSet::title: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::list_set::RadrootsListSet
-pub fn radroots_event::social::list_set::RadrootsListSet::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::message
 pub struct radroots_event::social::message::RadrootsMessage
 pub radroots_event::social::message::RadrootsMessage::content: alloc::string::String
 pub radroots_event::social::message::RadrootsMessage::recipients: alloc::vec::Vec<radroots_event::social::message::RadrootsMessageRecipient>
 pub radroots_event::social::message::RadrootsMessage::reply_to: core::option::Option<radroots_event::tag::RadrootsEventPtr>
 pub radroots_event::social::message::RadrootsMessage::subject: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::message::RadrootsMessage
-pub fn radroots_event::social::message::RadrootsMessage::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::message::RadrootsMessageRecipient
 pub radroots_event::social::message::RadrootsMessageRecipient::public_key: alloc::string::String
 pub radroots_event::social::message::RadrootsMessageRecipient::relay_url: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::message::RadrootsMessageRecipient
-pub fn radroots_event::social::message::RadrootsMessageRecipient::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::message_file
 pub struct radroots_event::social::message_file::RadrootsMessageFile
 pub radroots_event::social::message_file::RadrootsMessageFile::blurhash: core::option::Option<alloc::string::String>
@@ -3262,13 +3044,9 @@ pub radroots_event::social::message_file::RadrootsMessageFile::reply_to: core::o
 pub radroots_event::social::message_file::RadrootsMessageFile::size: core::option::Option<u64>
 pub radroots_event::social::message_file::RadrootsMessageFile::subject: core::option::Option<alloc::string::String>
 pub radroots_event::social::message_file::RadrootsMessageFile::thumb: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::message_file::RadrootsMessageFile
-pub fn radroots_event::social::message_file::RadrootsMessageFile::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::message_file::RadrootsMessageFileDimensions
 pub radroots_event::social::message_file::RadrootsMessageFileDimensions::h: u32
 pub radroots_event::social::message_file::RadrootsMessageFileDimensions::w: u32
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::message_file::RadrootsMessageFileDimensions
-pub fn radroots_event::social::message_file::RadrootsMessageFileDimensions::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::relay_auth
 pub struct radroots_event::social::relay_auth::RadrootsRelayAuth
 pub radroots_event::social::relay_auth::RadrootsRelayAuth::challenge: alloc::string::String
@@ -3283,13 +3061,9 @@ pub radroots_event::social::relay_document::RadrootsRelayDocument::pubkey: core:
 pub radroots_event::social::relay_document::RadrootsRelayDocument::software: core::option::Option<alloc::string::String>
 pub radroots_event::social::relay_document::RadrootsRelayDocument::supported_nips: core::option::Option<alloc::vec::Vec<u16>>
 pub radroots_event::social::relay_document::RadrootsRelayDocument::version: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::relay_document::RadrootsRelayDocument
-pub fn radroots_event::social::relay_document::RadrootsRelayDocument::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::social::seal
 pub struct radroots_event::social::seal::RadrootsSeal
 pub radroots_event::social::seal::RadrootsSeal::content: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::seal::RadrootsSeal
-pub fn radroots_event::social::seal::RadrootsSeal::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::social::RadrootsReportType
 pub radroots_event::social::RadrootsReportType::Illegal
 pub radroots_event::social::RadrootsReportType::Impersonation
@@ -3313,8 +3087,6 @@ pub radroots_event::social::RadrootsSocialTarget::External
 pub radroots_event::social::RadrootsSocialTarget::External::external_kind: alloc::string::String
 pub radroots_event::social::RadrootsSocialTarget::External::hint: core::option::Option<alloc::string::String>
 pub radroots_event::social::RadrootsSocialTarget::External::id: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::RadrootsSocialTarget
-pub fn radroots_event::social::RadrootsSocialTarget::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::RadrootsReportFileTarget
 pub radroots_event::social::RadrootsReportFileTarget::magnet: core::option::Option<alloc::string::String>
 pub radroots_event::social::RadrootsReportFileTarget::sha256: core::option::Option<alloc::string::String>
@@ -3326,18 +3098,12 @@ pub radroots_event::social::RadrootsReportTarget::reported_pubkey: alloc::string
 pub struct radroots_event::social::RadrootsSocialFarmAnchor
 pub radroots_event::social::RadrootsSocialFarmAnchor::farm: radroots_event::farm::RadrootsFarmRef
 pub radroots_event::social::RadrootsSocialFarmAnchor::relays: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::RadrootsSocialFarmAnchor
-pub fn radroots_event::social::RadrootsSocialFarmAnchor::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::RadrootsSocialLocation
 pub radroots_event::social::RadrootsSocialLocation::geohash: core::option::Option<alloc::string::String>
 pub radroots_event::social::RadrootsSocialLocation::name: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::RadrootsSocialLocation
-pub fn radroots_event::social::RadrootsSocialLocation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::RadrootsSocialMediaDimensions
 pub radroots_event::social::RadrootsSocialMediaDimensions::height: u32
 pub radroots_event::social::RadrootsSocialMediaDimensions::width: u32
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::RadrootsSocialMediaDimensions
-pub fn radroots_event::social::RadrootsSocialMediaDimensions::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::RadrootsSocialMediaMetadata
 pub radroots_event::social::RadrootsSocialMediaMetadata::alt: core::option::Option<alloc::string::String>
 pub radroots_event::social::RadrootsSocialMediaMetadata::blurhash: core::option::Option<alloc::string::String>
@@ -3355,13 +3121,9 @@ pub radroots_event::social::RadrootsSocialMediaMetadata::size: core::option::Opt
 pub radroots_event::social::RadrootsSocialMediaMetadata::summary: core::option::Option<alloc::string::String>
 pub radroots_event::social::RadrootsSocialMediaMetadata::thumbnails: core::option::Option<alloc::vec::Vec<radroots_event::social::RadrootsSocialMediaThumbnail>>
 pub radroots_event::social::RadrootsSocialMediaMetadata::url: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::RadrootsSocialMediaMetadata
-pub fn radroots_event::social::RadrootsSocialMediaMetadata::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::social::RadrootsSocialMediaThumbnail
 pub radroots_event::social::RadrootsSocialMediaThumbnail::dimensions: core::option::Option<radroots_event::social::RadrootsSocialMediaDimensions>
 pub radroots_event::social::RadrootsSocialMediaThumbnail::url: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::social::RadrootsSocialMediaThumbnail
-pub fn radroots_event::social::RadrootsSocialMediaThumbnail::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::tag
 pub mod radroots_event::tag::name
 pub const radroots_event::tag::name::TAG_A: &str
@@ -3445,22 +3207,16 @@ pub fn radroots_event::tag::relay_hint::RadrootsNostrRelayHint::from_str(&str) -
 pub struct radroots_event::tag::RadrootsEventPtr
 pub radroots_event::tag::RadrootsEventPtr::id: alloc::string::String
 pub radroots_event::tag::RadrootsEventPtr::relays: core::option::Option<alloc::string::String>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::tag::RadrootsEventPtr
-pub fn radroots_event::tag::RadrootsEventPtr::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::tag::RadrootsEventRef
 pub radroots_event::tag::RadrootsEventRef::author: radroots_identity::key::PublicKey
 pub radroots_event::tag::RadrootsEventRef::d_tag: core::option::Option<alloc::string::String>
 pub radroots_event::tag::RadrootsEventRef::id: alloc::string::String
 pub radroots_event::tag::RadrootsEventRef::kind: u32
 pub radroots_event::tag::RadrootsEventRef::relays: core::option::Option<alloc::vec::Vec<alloc::string::String>>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::tag::RadrootsEventRef
-pub fn radroots_event::tag::RadrootsEventRef::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::trade
 pub mod radroots_event::trade::order
 pub enum radroots_event::trade::order::RadrootsCommercialDomain
 pub radroots_event::trade::order::RadrootsCommercialDomain::Listing
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsCommercialDomain
-pub fn radroots_event::trade::order::RadrootsCommercialDomain::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order::RadrootsOrderDecisionOutcome
 pub radroots_event::trade::order::RadrootsOrderDecisionOutcome::Accepted
 pub radroots_event::trade::order::RadrootsOrderDecisionOutcome::Accepted::inventory_commitments: alloc::vec::Vec<radroots_event::trade::order::RadrootsOrderInventoryCommitment>
@@ -3468,24 +3224,16 @@ pub radroots_event::trade::order::RadrootsOrderDecisionOutcome::Declined
 pub radroots_event::trade::order::RadrootsOrderDecisionOutcome::Declined::reason: alloc::string::String
 impl radroots_event::trade::order::RadrootsOrderDecisionOutcome
 pub fn radroots_event::trade::order::RadrootsOrderDecisionOutcome::validate(&self) -> core::result::Result<(), radroots_event::trade::order::RadrootsOrderPayloadError>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderDecisionOutcome
-pub fn radroots_event::trade::order::RadrootsOrderDecisionOutcome::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order::RadrootsOrderEconomicActor
 pub radroots_event::trade::order::RadrootsOrderEconomicActor::Buyer
 pub radroots_event::trade::order::RadrootsOrderEconomicActor::Seller
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicActor
-pub fn radroots_event::trade::order::RadrootsOrderEconomicActor::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order::RadrootsOrderEconomicEffect
 pub radroots_event::trade::order::RadrootsOrderEconomicEffect::Decrease
 pub radroots_event::trade::order::RadrootsOrderEconomicEffect::Increase
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicEffect
-pub fn radroots_event::trade::order::RadrootsOrderEconomicEffect::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order::RadrootsOrderEconomicLineKind
 pub radroots_event::trade::order::RadrootsOrderEconomicLineKind::BasketAdjustment
 pub radroots_event::trade::order::RadrootsOrderEconomicLineKind::ListingDiscount
 pub radroots_event::trade::order::RadrootsOrderEconomicLineKind::RevisionAdjustment
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicLineKind
-pub fn radroots_event::trade::order::RadrootsOrderEconomicLineKind::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order::RadrootsOrderEnvelopeError
 pub radroots_event::trade::order::RadrootsOrderEnvelopeError::InvalidVersion
 pub radroots_event::trade::order::RadrootsOrderEnvelopeError::InvalidVersion::expected: u16
@@ -3505,8 +3253,6 @@ pub const fn radroots_event::trade::order::RadrootsOrderEventType::kind(self) ->
 pub const fn radroots_event::trade::order::RadrootsOrderEventType::name(self) -> &'static str
 pub const fn radroots_event::trade::order::RadrootsOrderEventType::requires_listing_snapshot(self) -> bool
 pub const fn radroots_event::trade::order::RadrootsOrderEventType::requires_order_chain(self) -> bool
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEventType
-pub fn radroots_event::trade::order::RadrootsOrderEventType::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order::RadrootsOrderPayloadError
 pub radroots_event::trade::order::RadrootsOrderPayloadError::EmptyField(&'static str)
 pub radroots_event::trade::order::RadrootsOrderPayloadError::InvalidEconomicCurrency
@@ -3547,8 +3293,6 @@ impl core::fmt::Display for radroots_event::trade::order::RadrootsOrderPayloadEr
 pub fn radroots_event::trade::order::RadrootsOrderPayloadError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_event::trade::order::RadrootsOrderPricingBasis
 pub radroots_event::trade::order::RadrootsOrderPricingBasis::ListingEvent
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderPricingBasis
-pub fn radroots_event::trade::order::RadrootsOrderPricingBasis::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderCancellation
 pub radroots_event::trade::order::RadrootsOrderCancellation::buyer_pubkey: radroots_identity::key::PublicKey
 pub radroots_event::trade::order::RadrootsOrderCancellation::listing_addr: radroots_event::id::RadrootsClassifiedListingAddress
@@ -3557,8 +3301,6 @@ pub radroots_event::trade::order::RadrootsOrderCancellation::reason: alloc::stri
 pub radroots_event::trade::order::RadrootsOrderCancellation::seller_pubkey: radroots_identity::key::PublicKey
 impl radroots_event::trade::order::RadrootsOrderCancellation
 pub fn radroots_event::trade::order::RadrootsOrderCancellation::validate(&self) -> core::result::Result<(), radroots_event::trade::order::RadrootsOrderPayloadError>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderCancellation
-pub fn radroots_event::trade::order::RadrootsOrderCancellation::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderDecision
 pub radroots_event::trade::order::RadrootsOrderDecision::buyer_pubkey: radroots_identity::key::PublicKey
 pub radroots_event::trade::order::RadrootsOrderDecision::decision: radroots_event::trade::order::RadrootsOrderDecisionOutcome
@@ -3567,8 +3309,6 @@ pub radroots_event::trade::order::RadrootsOrderDecision::order_id: radroots_even
 pub radroots_event::trade::order::RadrootsOrderDecision::seller_pubkey: radroots_identity::key::PublicKey
 impl radroots_event::trade::order::RadrootsOrderDecision
 pub fn radroots_event::trade::order::RadrootsOrderDecision::validate(&self) -> core::result::Result<(), radroots_event::trade::order::RadrootsOrderPayloadError>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderDecision
-pub fn radroots_event::trade::order::RadrootsOrderDecision::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderEconomicItem
 pub radroots_event::trade::order::RadrootsOrderEconomicItem::bin_count: u32
 pub radroots_event::trade::order::RadrootsOrderEconomicItem::bin_id: radroots_event::id::RadrootsInventoryBinId
@@ -3577,8 +3317,6 @@ pub radroots_event::trade::order::RadrootsOrderEconomicItem::quantity_amount: ra
 pub radroots_event::trade::order::RadrootsOrderEconomicItem::quantity_unit: radroots_core::unit::Unit
 pub radroots_event::trade::order::RadrootsOrderEconomicItem::unit_price_amount: radroots_core::decimal::Decimal
 pub radroots_event::trade::order::RadrootsOrderEconomicItem::unit_price_currency: radroots_core::currency::Currency
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicItem
-pub fn radroots_event::trade::order::RadrootsOrderEconomicItem::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderEconomicLine
 pub radroots_event::trade::order::RadrootsOrderEconomicLine::actor: radroots_event::trade::order::RadrootsOrderEconomicActor
 pub radroots_event::trade::order::RadrootsOrderEconomicLine::amount: radroots_core::money::Money
@@ -3586,15 +3324,11 @@ pub radroots_event::trade::order::RadrootsOrderEconomicLine::effect: radroots_ev
 pub radroots_event::trade::order::RadrootsOrderEconomicLine::id: alloc::string::String
 pub radroots_event::trade::order::RadrootsOrderEconomicLine::kind: radroots_event::trade::order::RadrootsOrderEconomicLineKind
 pub radroots_event::trade::order::RadrootsOrderEconomicLine::reason: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicLine
-pub fn radroots_event::trade::order::RadrootsOrderEconomicLine::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderEconomicTotals
 pub radroots_event::trade::order::RadrootsOrderEconomicTotals::adjustment_total: radroots_core::money::Money
 pub radroots_event::trade::order::RadrootsOrderEconomicTotals::discount_total: radroots_core::money::Money
 pub radroots_event::trade::order::RadrootsOrderEconomicTotals::subtotal: radroots_core::money::Money
 pub radroots_event::trade::order::RadrootsOrderEconomicTotals::total: radroots_core::money::Money
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicTotals
-pub fn radroots_event::trade::order::RadrootsOrderEconomicTotals::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderEconomics
 pub radroots_event::trade::order::RadrootsOrderEconomics::adjustment_total: radroots_core::money::Money
 pub radroots_event::trade::order::RadrootsOrderEconomics::adjustments: alloc::vec::Vec<radroots_event::trade::order::RadrootsOrderEconomicLine>
@@ -3612,8 +3346,6 @@ pub fn radroots_event::trade::order::RadrootsOrderEconomics::canonicalize(&mut s
 pub fn radroots_event::trade::order::RadrootsOrderEconomics::canonicalized(&self) -> Self
 pub fn radroots_event::trade::order::RadrootsOrderEconomics::derived_totals(&self) -> core::result::Result<radroots_event::trade::order::RadrootsOrderEconomicTotals, radroots_event::trade::order::RadrootsOrderPayloadError>
 pub fn radroots_event::trade::order::RadrootsOrderEconomics::validate(&self) -> core::result::Result<(), radroots_event::trade::order::RadrootsOrderPayloadError>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomics
-pub fn radroots_event::trade::order::RadrootsOrderEconomics::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderEnvelope<T>
 pub radroots_event::trade::order::RadrootsOrderEnvelope::domain: radroots_event::trade::order::RadrootsCommercialDomain
 pub radroots_event::trade::order::RadrootsOrderEnvelope::listing_addr: alloc::string::String
@@ -3627,13 +3359,9 @@ pub fn radroots_event::trade::order::RadrootsOrderEnvelope<T>::validate(&self) -
 pub struct radroots_event::trade::order::RadrootsOrderInventoryCommitment
 pub radroots_event::trade::order::RadrootsOrderInventoryCommitment::bin_count: u32
 pub radroots_event::trade::order::RadrootsOrderInventoryCommitment::bin_id: radroots_event::id::RadrootsInventoryBinId
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderInventoryCommitment
-pub fn radroots_event::trade::order::RadrootsOrderInventoryCommitment::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderItem
 pub radroots_event::trade::order::RadrootsOrderItem::bin_count: u32
 pub radroots_event::trade::order::RadrootsOrderItem::bin_id: radroots_event::id::RadrootsInventoryBinId
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderItem
-pub fn radroots_event::trade::order::RadrootsOrderItem::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order::RadrootsOrderRequest
 pub radroots_event::trade::order::RadrootsOrderRequest::buyer_pubkey: radroots_identity::key::PublicKey
 pub radroots_event::trade::order::RadrootsOrderRequest::economics: radroots_event::trade::order::RadrootsOrderEconomics
@@ -3643,31 +3371,21 @@ pub radroots_event::trade::order::RadrootsOrderRequest::order_id: radroots_event
 pub radroots_event::trade::order::RadrootsOrderRequest::seller_pubkey: radroots_identity::key::PublicKey
 impl radroots_event::trade::order::RadrootsOrderRequest
 pub fn radroots_event::trade::order::RadrootsOrderRequest::validate(&self) -> core::result::Result<(), radroots_event::trade::order::RadrootsOrderPayloadError>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderRequest
-pub fn radroots_event::trade::order::RadrootsOrderRequest::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub const radroots_event::trade::order::RADROOTS_COMMERCIAL_LISTING_DOMAIN: &str
 pub const radroots_event::trade::order::RADROOTS_ORDER_ENVELOPE_VERSION: u16
 pub mod radroots_event::trade::order_economics
 pub enum radroots_event::trade::order_economics::RadrootsOrderEconomicActor
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicActor::Buyer
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicActor::Seller
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicActor
-pub fn radroots_event::trade::order::RadrootsOrderEconomicActor::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order_economics::RadrootsOrderEconomicEffect
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicEffect::Decrease
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicEffect::Increase
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicEffect
-pub fn radroots_event::trade::order::RadrootsOrderEconomicEffect::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order_economics::RadrootsOrderEconomicLineKind
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLineKind::BasketAdjustment
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLineKind::ListingDiscount
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLineKind::RevisionAdjustment
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicLineKind
-pub fn radroots_event::trade::order::RadrootsOrderEconomicLineKind::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::order_economics::RadrootsOrderPricingBasis
 pub radroots_event::trade::order_economics::RadrootsOrderPricingBasis::ListingEvent
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderPricingBasis
-pub fn radroots_event::trade::order::RadrootsOrderPricingBasis::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order_economics::RadrootsOrderEconomicItem
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicItem::bin_count: u32
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicItem::bin_id: radroots_event::id::RadrootsInventoryBinId
@@ -3676,8 +3394,6 @@ pub radroots_event::trade::order_economics::RadrootsOrderEconomicItem::quantity_
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicItem::quantity_unit: radroots_core::unit::Unit
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicItem::unit_price_amount: radroots_core::decimal::Decimal
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicItem::unit_price_currency: radroots_core::currency::Currency
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicItem
-pub fn radroots_event::trade::order::RadrootsOrderEconomicItem::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order_economics::RadrootsOrderEconomicLine
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLine::actor: radroots_event::trade::order::RadrootsOrderEconomicActor
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLine::amount: radroots_core::money::Money
@@ -3685,15 +3401,11 @@ pub radroots_event::trade::order_economics::RadrootsOrderEconomicLine::effect: r
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLine::id: alloc::string::String
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLine::kind: radroots_event::trade::order::RadrootsOrderEconomicLineKind
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicLine::reason: alloc::string::String
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicLine
-pub fn radroots_event::trade::order::RadrootsOrderEconomicLine::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order_economics::RadrootsOrderEconomicTotals
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicTotals::adjustment_total: radroots_core::money::Money
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicTotals::discount_total: radroots_core::money::Money
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicTotals::subtotal: radroots_core::money::Money
 pub radroots_event::trade::order_economics::RadrootsOrderEconomicTotals::total: radroots_core::money::Money
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomicTotals
-pub fn radroots_event::trade::order::RadrootsOrderEconomicTotals::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order_economics::RadrootsOrderEconomics
 pub radroots_event::trade::order_economics::RadrootsOrderEconomics::adjustment_total: radroots_core::money::Money
 pub radroots_event::trade::order_economics::RadrootsOrderEconomics::adjustments: alloc::vec::Vec<radroots_event::trade::order::RadrootsOrderEconomicLine>
@@ -3711,13 +3423,9 @@ pub fn radroots_event::trade::order::RadrootsOrderEconomics::canonicalize(&mut s
 pub fn radroots_event::trade::order::RadrootsOrderEconomics::canonicalized(&self) -> Self
 pub fn radroots_event::trade::order::RadrootsOrderEconomics::derived_totals(&self) -> core::result::Result<radroots_event::trade::order::RadrootsOrderEconomicTotals, radroots_event::trade::order::RadrootsOrderPayloadError>
 pub fn radroots_event::trade::order::RadrootsOrderEconomics::validate(&self) -> core::result::Result<(), radroots_event::trade::order::RadrootsOrderPayloadError>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderEconomics
-pub fn radroots_event::trade::order::RadrootsOrderEconomics::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::trade::order_economics::RadrootsOrderItem
 pub radroots_event::trade::order_economics::RadrootsOrderItem::bin_count: u32
 pub radroots_event::trade::order_economics::RadrootsOrderItem::bin_id: radroots_event::id::RadrootsInventoryBinId
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::order::RadrootsOrderItem
-pub fn radroots_event::trade::order::RadrootsOrderItem::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub mod radroots_event::trade::validation
 pub enum radroots_event::trade::validation::RadrootsOperationalListingValidationError
 pub radroots_event::trade::validation::RadrootsOperationalListingValidationError::InvalidBin
@@ -3752,8 +3460,6 @@ pub radroots_event::trade::validation::RadrootsOperationalListingValidationError
 impl core::error::Error for radroots_event::trade::validation::RadrootsOperationalListingValidationError
 impl core::fmt::Display for radroots_event::trade::validation::RadrootsOperationalListingValidationError
 pub fn radroots_event::trade::validation::RadrootsOperationalListingValidationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl dto_bindgen_core::descriptor::Dto for radroots_event::trade::validation::RadrootsOperationalListingValidationError
-pub fn radroots_event::trade::validation::RadrootsOperationalListingValidationError::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub enum radroots_event::trade::RadrootsTradeDecisionV1
 pub radroots_event::trade::RadrootsTradeDecisionV1::Accepted
 pub radroots_event::trade::RadrootsTradeDecisionV1::Accepted::reservation_assertion: core::option::Option<radroots_event::trade::RadrootsSellerReservationAssertionV1>
@@ -3861,8 +3567,6 @@ pub fn radroots_event::id::RadrootsTradeCandidateId::fmt(&self, &mut core::fmt::
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeCandidateId
 pub type radroots_event::id::RadrootsTradeCandidateId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeCandidateId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeCandidateId
-pub fn radroots_event::id::RadrootsTradeCandidateId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeCandidateId
 pub fn radroots_event::id::RadrootsTradeCandidateId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeCandidateId
@@ -3892,8 +3596,6 @@ pub fn radroots_event::id::RadrootsTradeMutationId::fmt(&self, &mut core::fmt::F
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeMutationId
 pub type radroots_event::id::RadrootsTradeMutationId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeMutationId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeMutationId
-pub fn radroots_event::id::RadrootsTradeMutationId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeMutationId
 pub fn radroots_event::id::RadrootsTradeMutationId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeMutationId
@@ -4047,8 +3749,6 @@ pub fn radroots_event::id::RadrootsTradeId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsTradeId
 pub type radroots_event::id::RadrootsTradeId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsTradeId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsTradeId
-pub fn radroots_event::id::RadrootsTradeId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsTradeId
 pub fn radroots_event::id::RadrootsTradeId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsTradeId
@@ -4082,7 +3782,6 @@ pub radroots_event::Error::IdMismatch::actual: radroots_event::id::RadrootsEvent
 pub radroots_event::Error::IdMismatch::expected: radroots_event::id::RadrootsEventId
 pub radroots_event::Error::MalformedEnvelope
 pub radroots_event::Error::SignatureInvalid
-pub radroots_event::Error::SignatureVerificationUnavailable
 impl radroots_event::Error
 pub const fn radroots_event::Error::code(&self) -> &'static str
 impl core::error::Error for radroots_event::Error
@@ -4107,8 +3806,6 @@ pub fn radroots_event::envelope::RadrootsEventEnvelope::tag_slices(&self) -> &[r
 pub fn radroots_event::envelope::RadrootsEventEnvelope::tags(&self) -> &radroots_event::envelope::RadrootsEventTags
 pub fn radroots_event::envelope::RadrootsEventEnvelope::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
 pub fn radroots_event::envelope::RadrootsEventEnvelope::to_nip01_wire(&self) -> RadrootsNip01EventWire
-impl dto_bindgen_core::descriptor::Dto for radroots_event::envelope::RadrootsEventEnvelope
-pub fn radroots_event::envelope::RadrootsEventEnvelope::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 pub struct radroots_event::EventDraft
 impl radroots_event::draft::RadrootsEventDraft
 pub fn radroots_event::draft::RadrootsEventDraft::content(&self) -> &str
@@ -4153,8 +3850,6 @@ pub fn radroots_event::id::RadrootsEventId::fmt(&self, &mut core::fmt::Formatter
 impl core::str::traits::FromStr for radroots_event::id::RadrootsEventId
 pub type radroots_event::id::RadrootsEventId::Err = radroots_event::id::RadrootsIdParseError
 pub fn radroots_event::id::RadrootsEventId::from_str(&str) -> core::result::Result<Self, Self::Err>
-impl dto_bindgen_core::descriptor::Dto for radroots_event::id::RadrootsEventId
-pub fn radroots_event::id::RadrootsEventId::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::id::RadrootsEventId
 pub fn radroots_event::id::RadrootsEventId::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::id::RadrootsEventId
@@ -4166,8 +3861,6 @@ pub const fn radroots_event::envelope::RadrootsEventKind::class(self) -> radroot
 pub const fn radroots_event::envelope::RadrootsEventKind::new(u32) -> Self
 impl core::convert::From<u32> for radroots_event::envelope::RadrootsEventKind
 pub fn radroots_event::envelope::RadrootsEventKind::from(u32) -> Self
-impl dto_bindgen_core::descriptor::Dto for radroots_event::envelope::RadrootsEventKind
-pub fn radroots_event::envelope::RadrootsEventKind::describe(&mut dto_bindgen_core::descriptor::DescribeCtx) -> dto_bindgen_core::types::TypeRef
 impl serde_core::ser::Serialize for radroots_event::envelope::RadrootsEventKind
 pub fn radroots_event::envelope::RadrootsEventKind::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
 impl<'de> serde_core::de::Deserialize<'de> for radroots_event::envelope::RadrootsEventKind
@@ -4199,7 +3892,6 @@ pub fn radroots_event::draft::RadrootsSignedEvent::sig(&self) -> &radroots_event
 pub fn radroots_event::draft::RadrootsSignedEvent::sig_str(&self) -> &str
 pub fn radroots_event::draft::RadrootsSignedEvent::signature_hex(&self) -> alloc::string::String
 pub fn radroots_event::draft::RadrootsSignedEvent::tags_as_vec(&self) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
-pub fn radroots_event::draft::RadrootsSignedEvent::verify_signature(self) -> core::result::Result<radroots_event::draft::RadrootsVerifiedSignedEvent, radroots_event::draft::RadrootsSignatureVerificationError>
 pub fn radroots_event::draft::RadrootsSignedEvent::wire(&self) -> &RadrootsNip01EventWire
 impl serde_core::ser::Serialize for radroots_event::draft::RadrootsSignedEvent
 pub fn radroots_event::draft::RadrootsSignedEvent::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer

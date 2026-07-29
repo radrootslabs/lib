@@ -61,7 +61,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventTimestamp {
     }
 }
 
-#[cfg(feature = "dto-bindgen")]
+#[cfg(all(test, feature = "std"))]
 impl dto_bindgen::Dto for RadrootsEventTimestamp {
     fn describe(ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         <u64 as dto_bindgen::Dto>::describe(ctx)
@@ -120,7 +120,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventKind {
     }
 }
 
-#[cfg(feature = "dto-bindgen")]
+#[cfg(all(test, feature = "std"))]
 impl dto_bindgen::Dto for RadrootsEventKind {
     fn describe(ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         <u32 as dto_bindgen::Dto>::describe(ctx)
@@ -408,7 +408,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsEventTags {
     }
 }
 
-#[cfg(feature = "dto-bindgen")]
+#[cfg(all(test, feature = "std"))]
 impl dto_bindgen::Dto for RadrootsEventTags {
     fn describe(ctx: &mut dto_bindgen::__private::DescribeCtx) -> dto_bindgen::__private::TypeRef {
         <Vec<Vec<String>> as dto_bindgen::Dto>::describe(ctx)
@@ -430,15 +430,15 @@ pub struct RadrootsEventEnvelopeParts {
     any(feature = "serde", test),
     derive(serde::Serialize, serde::Deserialize)
 )]
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(export))]
-#[cfg_attr(feature = "dto-bindgen", dto(ts(name = "RadrootsEventEnvelopeDto")))]
+#[cfg_attr(all(test, feature = "std"), derive(dto_bindgen::Dto))]
+#[cfg_attr(all(test, feature = "std"), dto(export))]
+#[cfg_attr(all(test, feature = "std"), dto(ts(name = "RadrootsEventEnvelopeDto")))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsEventEnvelope {
     id: RadrootsEventId,
-    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
+    #[cfg_attr(all(test, feature = "std"), dto(as = "string"))]
     author: PublicKey,
-    #[cfg_attr(feature = "dto-bindgen", dto(int = "json_number"))]
+    #[cfg_attr(all(test, feature = "std"), dto(int = "json_number"))]
     created_at: RadrootsEventTimestamp,
     kind: RadrootsEventKind,
     tags: RadrootsEventTags,
