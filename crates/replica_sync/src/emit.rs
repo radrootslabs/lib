@@ -16,11 +16,13 @@ use crate::types::{
     RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaEventDraft, RadrootsReplicaFarmSelector,
     RadrootsReplicaSyncBundle, RadrootsReplicaSyncOptions, RadrootsReplicaSyncRequest,
 };
+use radroots_event::envelope::kind::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
+use radroots_event::farm::change_set::{
+    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+};
+use radroots_event::farm::location::{has_textual_locality, is_public_geohash5};
+use radroots_event::farm::plot::RadrootsPlot;
 use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
-use radroots_event::location::{has_textual_locality, is_public_geohash5};
-use radroots_event::plot::RadrootsPlot;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::farm::encode as farm_encode;
 use radroots_event_codec::farm::list_sets as farm_list_sets;
@@ -503,10 +505,10 @@ fn load_farm_location(
 fn load_plot_location(
     exec: &dyn SqlExecutor,
     plot: &Plot,
-) -> Result<Option<radroots_event::plot::RadrootsPlotLocation>, RadrootsReplicaEventsError> {
+) -> Result<Option<radroots_event::farm::plot::RadrootsPlotLocation>, RadrootsReplicaEventsError> {
     let location = load_gcs_location_for_plot(exec, &plot.id)?;
     Ok(
-        location.map(|gcs| radroots_event::plot::RadrootsPlotLocation {
+        location.map(|gcs| radroots_event::farm::plot::RadrootsPlotLocation {
             primary: plot.location_primary.clone(),
             city: plot.location_city.clone(),
             region: plot.location_region.clone(),
@@ -633,7 +635,7 @@ fn compare_relation_rows(a: &RelationRow, b: &RelationRow) -> core::cmp::Orderin
 }
 
 fn list_set_to_wire_parts(
-    list_set: &radroots_event::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::RadrootsListSet,
 ) -> Result<RadrootsNip01EventWireParts, RadrootsReplicaEventsError> {
     #[cfg(test)]
     if failpoints::take_list_set_to_wire_error() {
@@ -1964,7 +1966,7 @@ mod tests {
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&clean_exec, &clean_farm).is_err());
 
-        let invalid_list_set = radroots_event::list_set::RadrootsListSet {
+        let invalid_list_set = radroots_event::social::list_set::RadrootsListSet {
             d_tag: String::new(),
             content: String::new(),
             entries: Vec::new(),
@@ -2006,7 +2008,7 @@ mod tests {
         super::failpoints::set_list_set_to_wire_error();
         assert!(radroots_replica_list_set_events(&exec, &farm_row).is_err());
 
-        let invalid_list_set = radroots_event::list_set::RadrootsListSet {
+        let invalid_list_set = radroots_event::social::list_set::RadrootsListSet {
             d_tag: String::new(),
             content: String::new(),
             entries: Vec::new(),

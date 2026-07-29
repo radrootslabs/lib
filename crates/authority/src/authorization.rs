@@ -173,7 +173,7 @@ mod tests {
     use radroots_event::contract::{
         AuthorRole, RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, event_contract,
     };
-    use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
+    use radroots_event::envelope::kind::{KIND_CLASSIFIED_LISTING, KIND_POST, KIND_TRADE_PROPOSAL};
     use radroots_identity::PublicKey;
 
     const OTHER_VALID_PUBKEY: &str =

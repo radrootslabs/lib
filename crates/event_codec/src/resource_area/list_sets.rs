@@ -8,11 +8,11 @@ use alloc::{
     vec::Vec,
 };
 
+use radroots_event::envelope::kind::{KIND_FARM, KIND_PLOT};
 use radroots_event::farm::RadrootsFarmRef;
-use radroots_event::kinds::{KIND_FARM, KIND_PLOT};
-use radroots_event::list::RadrootsListEntry;
-use radroots_event::list_set::RadrootsListSet;
-use radroots_event::plot::RadrootsPlotRef;
+use radroots_event::farm::plot::RadrootsPlotRef;
+use radroots_event::social::list::RadrootsListEntry;
+use radroots_event::social::list_set::RadrootsListSet;
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;

@@ -12,7 +12,7 @@ use core::fmt;
 use std::collections::{BTreeMap, BTreeSet};
 
 use radroots_event::{
-    kinds::KIND_POST,
+    envelope::kind::KIND_POST,
     post::{
         RADROOTS_ASK_MARKER_TAG_VALUE, RADROOTS_POST_ALT_MAX_BYTES,
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_IMETA_MAX_COUNT,

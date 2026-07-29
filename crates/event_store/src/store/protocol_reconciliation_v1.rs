@@ -14,13 +14,13 @@ use crate::source_maintenance_v1::{
     raw_source_capacity_delta_v1, validate_source_capacity_authority_fast_v1,
 };
 use radroots_event::contract::registry_v7::RadrootsEventContract;
-use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
-use radroots_event::event_head::v1::{
+use radroots_event::envelope::event_head::v1::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
     RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     event_head_candidate_for_nip01_event_v1, select_event_head_v1,
 };
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
+use radroots_event::id::RadrootsEventId;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, SqliteConnection, Transaction};
 

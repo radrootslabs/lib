@@ -1,25 +1,25 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_event::{
+    envelope::kind::{KIND_FARM_FILE_METADATA, KIND_POST},
     farm::RadrootsFarmRef,
-    farm_crdt::{
+    farm::crdt::{
         RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtChange,
         RadrootsFarmCrdtDocumentKind, RadrootsFarmSemanticKind,
     },
-    farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
-    farm_workspace::{
+    farm::file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
+    farm::workspace::{
         RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION, RADROOTS_FARM_WORKSPACE_SCHEMA,
         RadrootsFarmWorkspaceManifest, RadrootsFarmWorkspaceMediaServer, RadrootsFarmWorkspaceRef,
         RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
     },
-    group::{
+    social::group::{
         KIND_GROUP_CREATE_INVITE, KIND_GROUP_METADATA, RadrootsGroupAdmins,
         RadrootsGroupCreateInvite, RadrootsGroupEditableMetadata, RadrootsGroupMetadata,
         RadrootsGroupPutUser, RadrootsGroupUserRef,
     },
-    http_auth::RadrootsHttpAuth,
-    kinds::{KIND_FARM_FILE_METADATA, KIND_POST},
-    relay_auth::RadrootsRelayAuth,
+    social::http_auth::RadrootsHttpAuth,
+    social::relay_auth::RadrootsRelayAuth,
 };
 use radroots_event_codec::{
     error::EventParseError,

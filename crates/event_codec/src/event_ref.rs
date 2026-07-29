@@ -6,8 +6,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    RadrootsEventRef,
-    ids::{RadrootsDTag, RadrootsEventId, RadrootsRelayUrl},
+    id::{RadrootsDTag, RadrootsEventId, RadrootsRelayUrl},
+    tag::RadrootsEventRef,
 };
 use radroots_identity::PublicKey;
 

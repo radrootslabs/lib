@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-use crate::operational_listing::RadrootsOperationalListingParseError;
+use crate::listing::operational::RadrootsOperationalListingParseError;
 
 #[cfg_attr(
     any(feature = "serde", test),

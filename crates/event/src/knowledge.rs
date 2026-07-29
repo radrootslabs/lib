@@ -5,12 +5,12 @@ use alloc::{string::String, vec::Vec};
 
 use core::fmt;
 
-use crate::RadrootsEventRef;
-use crate::ids::{
+use crate::envelope::kind::KIND_WIKI_ARTICLE;
+use crate::id::{
     RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsRelayUrl,
     parse_public_key,
 };
-use crate::kinds::KIND_WIKI_ARTICLE;
+use crate::tag::RadrootsEventRef;
 
 pub const RADROOTS_KNOWLEDGE_SCHEMA_VERSION: u16 = 1;
 pub const RADROOTS_WIKI_D_TAG_MAX_LEN: usize = 512;
@@ -372,7 +372,7 @@ pub fn validate_knowledge_claim(
         ));
     }
     for citation in &claim.citation_spans {
-        if citation.source_ref.kind != crate::kinds::KIND_KNOWLEDGE_SOURCE {
+        if citation.source_ref.kind != crate::envelope::kind::KIND_KNOWLEDGE_SOURCE {
             return Err(RadrootsKnowledgeValidationError::InvalidField(
                 "citation_spans",
             ));
@@ -986,7 +986,7 @@ mod tests {
 
     fn citation_span() -> RadrootsKnowledgeCitationSpan {
         RadrootsKnowledgeCitationSpan {
-            source_ref: event_ref_with_kind(crate::kinds::KIND_KNOWLEDGE_SOURCE),
+            source_ref: event_ref_with_kind(crate::envelope::kind::KIND_KNOWLEDGE_SOURCE),
             artifact_ref: Some(event_ref()),
             page_start: None,
             page_end: None,
@@ -1040,7 +1040,7 @@ mod tests {
             target: RadrootsKnowledgeReviewTarget {
                 event_id: hex_64('d'),
                 author_pubkey: hex_64('a'),
-                kind: crate::kinds::KIND_KNOWLEDGE_CLAIM,
+                kind: crate::envelope::kind::KIND_KNOWLEDGE_CLAIM,
                 address: None,
                 relays: Vec::new(),
                 review_scope: RadrootsKnowledgeReviewScope::SpecificVersion,

@@ -5,7 +5,7 @@ use std::{borrow::Cow, collections::BTreeSet, fs, path::Path};
 use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
-use radroots_event::food_availability::{
+use radroots_event::food::availability::{
     RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityDetailsParts,
     RadrootsFoodAvailabilityError, RadrootsFoodAvailabilityImage, RadrootsFoodAvailabilityStatus,
     RadrootsFoodContent, RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodImageDimensions,
@@ -15,8 +15,8 @@ use radroots_event::food_availability::{
 use radroots_event::media::RadrootsAuthoredImage;
 use radroots_event::wire::{RadrootsNip01EventWire, compute_canonical_nip01_event_id};
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
-    classified_listing::RadrootsClassifiedListingPartition,
+    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
+    listing::classified::RadrootsClassifiedListingPartition,
 };
 use radroots_event_codec::food_availability::admission::{
     RadrootsFoodAvailabilityAdmissionError, RadrootsFoodAvailabilityAdmissionOutcome,

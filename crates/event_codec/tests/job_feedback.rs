@@ -1,8 +1,10 @@
 mod common;
 
-use radroots_event::job::{JobFeedbackStatus, JobPaymentRequest};
-use radroots_event::job_feedback::RadrootsJobFeedback;
-use radroots_event::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
+use radroots_event::envelope::kind::{
+    KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
+};
+use radroots_event::social::job::{JobFeedbackStatus, JobPaymentRequest};
+use radroots_event::social::job_feedback::RadrootsJobFeedback;
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::job::error::JobParseError;
 use radroots_event_codec::job::feedback::decode::{job_feedback_from_tags, parsed_from_event};

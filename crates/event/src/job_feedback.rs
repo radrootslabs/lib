@@ -1,6 +1,6 @@
 use crate::{
-    RadrootsEventPtr,
-    job::{JobFeedbackStatus, JobPaymentRequest},
+    social::job::{JobFeedbackStatus, JobPaymentRequest},
+    tag::RadrootsEventPtr,
 };
 
 #[cfg(not(feature = "std"))]

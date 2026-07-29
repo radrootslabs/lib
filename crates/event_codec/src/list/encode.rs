@@ -2,9 +2,9 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    kinds::KIND_LIST_READ_WRITE_RELAYS,
-    list::{RadrootsList, RadrootsListEntry},
-    tags::TAG_R,
+    envelope::kind::KIND_LIST_READ_WRITE_RELAYS,
+    social::list::{RadrootsList, RadrootsListEntry},
+    tag::name::TAG_R,
 };
 
 use super::is_generic_list_codec_kind;

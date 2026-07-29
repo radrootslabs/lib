@@ -5,14 +5,22 @@ models, kinds, and tag conventions for the `radroots` core libraries.
 
 ## Overview
 
- * typed content modules for accounts, app data, comments, coops, documents,
-   farms, farm workspaces, farm CRDT changes, farm files, groups, auth events,
-   jobs, lists, messages, posts, profiles, reactions, trades, and related
-   domains;
+ * typed content grouped under the singular `admission`, `calendar`,
+   `contract`, `draft`, `envelope`, `farm`, `food`, `id`, `knowledge`,
+   `listing`, `media`, `post`, `profile`, `social`, `tag`, `trade`, and `wire`
+   modules;
  * shared event references, pointers, and kind and tag definitions used across
    event-processing code;
  * portable event model semantics for both `std` and `no_std` builds;
  * optional integration with `serde` for serialization.
+
+The crate root is intentionally limited to `Event`, `EventDraft`,
+`SignedEvent`, `VerifiedEvent`, `EventId`, `EventKind`, `EventTag`, and `Error`.
+Domain-specific values live under their owning module. Existing focused models
+are nested below that authority, including `food::availability`,
+`listing::classified`, `listing::operational`, `post::comment`,
+`post::deletion`, `post::reply`, `tag::relay_hint`, and the farm and social
+subdomains.
 
 The Profile module exposes the exclusive strict authored model. It requires a
 non-whitespace, control-free name; its media fields accept only image-typed,
@@ -30,7 +38,7 @@ image-typed byte-verified Blossom descriptor. That descriptor state is not an
 upload receipt; BUD-02 completion remains a runtime prerequisite before
 signing.
 
-The shared relay-hint module exposes `RadrootsNostrRelayHint` for NIP-10 Reply
+The shared `tag::relay_hint` module exposes `RadrootsNostrRelayHint` for NIP-10 Reply
 and NIP-22 Comment references. It is a byte-stable subset of WebSocket URLs:
 exact lowercase `ws://` or `wss://`, visible ASCII, canonical lowercase DNS or
 four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, canonical optional port
@@ -38,7 +46,7 @@ four-octet IPv4 or bracketed pure-hex RFC 5952 IPv6, canonical optional port
 escapes. It rejects IDNA and percent-encoded hosts, legacy IPv4, userinfo,
 fragments, controls, backslashes, and normalization-dependent spellings.
 
-The Reply module exposes opaque `RadrootsNip10ReplyReference` and
+The `post::reply` module exposes opaque `RadrootsNip10ReplyReference` and
 `RadrootsAuthoredNip10Reply` types for strict direct and nested kind-1
 authoring. References carry a validated event id, referenced author, and
 optional shared relay hint; construction emits either one marked root or
@@ -47,7 +55,7 @@ wire-size claim: Reply construction separately enforces the 4,096-byte
 tag-element ceiling. These values prove syntax and authored shape, not target
 existence, target kind, signature, author, or relay availability.
 
-The Comment module implements the strict Radroots
+The `post::comment` module implements the strict Radroots
 [NIP-22](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/22.md)
 kind-`1111` profile. `RadrootsAuthoredNip22Comment` and its opaque event-root,
 address-root, parent, position, and root-kind values admit only kind-`30402`,
@@ -78,7 +86,7 @@ admission. The three governed Comment operations are
 114-case corpus are owned by `radroots_event_codec` and
 `contracts/conformance`.
 
-The Deletion module implements the effect-free request layer of
+The `post::deletion` module implements the effect-free request layer of
 [NIP-09](https://github.com/nostr-protocol/nips/blob/bdfa7e62ef87fcfcb992b1a27aee49d36b0b4f91/09.md).
 `RadrootsAuthoredNip09DeletionRequest` requires at least one validated event-id
 or replaceable/addressable coordinate target. Event targets carry a
@@ -114,7 +122,7 @@ one-element tag still contributes its raw first name, and marker matching is
 case-sensitive. `classify_classified_listing_tags` and the borrowed-slice
 variant inspect neither kind, tag values, nor tag arity.
 
-The FoodAvailability module provides `RadrootsFoodAvailabilityDetails` and
+The `food::availability` module provides `RadrootsFoodAvailabilityDetails` and
 checked identifier, text, publication timestamp, price, currency, unit,
 quantity, status, image-dimension, and image values. Content contains at least
 one scalar outside Unicode whitespace and U+001C through U+001F, and is bounded

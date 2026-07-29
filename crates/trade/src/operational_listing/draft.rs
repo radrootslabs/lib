@@ -13,10 +13,10 @@ use std::vec::Vec;
 use radroots_authority::RadrootsActorContext;
 use radroots_event::{
     contract::AuthorRole,
-    ids::{RadrootsClassifiedListingAddress, RadrootsIdParseError, RadrootsInventoryBinId},
-    kinds::KIND_CLASSIFIED_LISTING,
-    operational_listing::RadrootsOperationalListing,
-    trade_validation::RadrootsOperationalListingValidationError,
+    envelope::kind::KIND_CLASSIFIED_LISTING,
+    id::{RadrootsClassifiedListingAddress, RadrootsIdParseError, RadrootsInventoryBinId},
+    listing::operational::RadrootsOperationalListing,
+    trade::validation::RadrootsOperationalListingValidationError,
 };
 use radroots_identity::{Error as PublicKeyError, PublicKey};
 
@@ -195,16 +195,16 @@ mod tests {
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::AuthorRole,
+        envelope::kind::KIND_CLASSIFIED_LISTING,
         farm::RadrootsFarmRef,
-        ids::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
-        kinds::KIND_CLASSIFIED_LISTING,
-        operational_listing::{
+        id::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
+        listing::operational::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
             RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
             RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
             RadrootsOperationalListingStatus,
         },
-        trade_validation::RadrootsOperationalListingValidationError,
+        trade::validation::RadrootsOperationalListingValidationError,
     };
     use radroots_identity::PublicKey;
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};

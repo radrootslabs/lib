@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};
-use radroots_event::kinds::KIND_PROFILE;
+use radroots_event::envelope::kind::KIND_PROFILE;
 use radroots_event_codec::job::traits::{JobEventBorrow, JobEventLike};
 
 #[derive(Clone, Debug)]

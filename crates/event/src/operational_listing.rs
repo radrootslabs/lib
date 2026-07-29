@@ -2,9 +2,9 @@ use radroots_core::pricing::Discount;
 use radroots_core::{Decimal, Money, Quantity, QuantityPrice, Unit};
 
 use crate::farm::RadrootsFarmRef;
-use crate::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use crate::plot::RadrootsPlotRef;
-use crate::resource_area::RadrootsResourceAreaRef;
+use crate::farm::plot::RadrootsPlotRef;
+use crate::farm::resource_area::RadrootsResourceAreaRef;
+use crate::id::{RadrootsDTag, RadrootsInventoryBinId};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn listing_model_covers_published_metadata() {
-        use crate::kinds::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
+        use crate::envelope::kind::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
 
         let listing = super::RadrootsOperationalListing {
             d_tag: "listing-draft".parse().unwrap(),

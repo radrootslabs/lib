@@ -14,7 +14,7 @@ use std::{
 };
 
 use radroots_event::{
-    ids::{
+    id::{
         RadrootsDTag, RadrootsEventId, RadrootsTradeCandidateId, RadrootsTradeId,
         RadrootsTradeMutationId,
     },
@@ -1080,7 +1080,7 @@ fn projection_digest(_projection: &RadrootsTradeProjectionV1) -> String {
 mod tests {
     use super::*;
     use radroots_event::{
-        ids::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId},
+        id::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId},
         trade::{
             RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
             RADROOTS_TRADE_REVISION_DECISION_CONTRACT_ID,

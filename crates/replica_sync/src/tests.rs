@@ -2,8 +2,8 @@ use crate::{
     RADROOTS_REPLICA_TRANSFER_VERSION, RadrootsReplicaFarmSelector, RadrootsReplicaSyncRequest,
     radroots_replica_sync_all,
 };
-use radroots_event::gcs::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_event::kinds::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
+use radroots_event::envelope::kind::{KIND_FARM, KIND_LIST_SET_GENERIC, KIND_PLOT};
+use radroots_event::farm::change_set::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 use radroots_replica_schema::ReplicaSchemaError;
 use radroots_replica_schema::farm::IFarmFields;
 use radroots_replica_schema::farm_gcs_location::IFarmGcsLocationFields;

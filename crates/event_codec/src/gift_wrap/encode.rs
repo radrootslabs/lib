@@ -6,8 +6,8 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
-use radroots_event::kinds::KIND_GIFT_WRAP;
+use radroots_event::envelope::kind::KIND_GIFT_WRAP;
+use radroots_event::social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
 
 use crate::error::EventEncodeError;
 use radroots_event::wire::RadrootsNip01EventWireParts;

@@ -1,4 +1,6 @@
-use radroots_event::{job_feedback::RadrootsJobFeedback, kinds::KIND_JOB_FEEDBACK};
+use radroots_event::{
+    envelope::kind::KIND_JOB_FEEDBACK, social::job_feedback::RadrootsJobFeedback,
+};
 
 use crate::job::encode::{JobEncodeError, canonicalize_tags};
 use crate::job::util::{feedback_status_tag, push_amount_tag_msat};

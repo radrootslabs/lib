@@ -1,7 +1,7 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_event::{
-    kinds::{KIND_POST, KIND_PROFILE},
+    envelope::kind::{KIND_POST, KIND_PROFILE},
     profile::{
         RADROOTS_PROFILE_TYPE_TAG_ANY, RADROOTS_PROFILE_TYPE_TAG_COOP,
         RADROOTS_PROFILE_TYPE_TAG_FARM, RADROOTS_PROFILE_TYPE_TAG_KEY,

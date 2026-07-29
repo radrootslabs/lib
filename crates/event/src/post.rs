@@ -1,3 +1,5 @@
+//! Authored posts and related public social-content event models.
+
 #[cfg(not(feature = "std"))]
 use alloc::{format, string::String, vec::Vec};
 use core::fmt;
@@ -10,7 +12,7 @@ use crate::social::{
     RadrootsSocialFarmAnchor, RadrootsSocialLocation, RadrootsSocialMediaMetadata,
     RadrootsSocialTarget,
 };
-use crate::tags::TAG_IMETA;
+use crate::tag::name::TAG_IMETA;
 
 pub const RADROOTS_POST_CONTENT_MAX_BYTES: usize = crate::wire::v1::DEFAULT_CONTENT_MAX_BYTES;
 pub const RADROOTS_POST_IMETA_MAX_COUNT: usize = 64;
@@ -680,3 +682,19 @@ mod tests {
         }
     }
 }
+#[path = "article.rs"]
+pub mod article;
+#[path = "comment.rs"]
+pub mod comment;
+#[path = "deletion.rs"]
+pub mod deletion;
+#[path = "document.rs"]
+pub mod document;
+#[path = "reaction.rs"]
+pub mod reaction;
+#[path = "reply.rs"]
+pub mod reply;
+#[path = "report.rs"]
+pub mod report;
+#[path = "repost.rs"]
+pub mod repost;

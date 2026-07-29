@@ -5,18 +5,18 @@ use alloc::{format, string::String, vec::Vec};
 use core::fmt;
 
 use radroots_event::{
-    comment::{
+    envelope::kind::KIND_COMMENT,
+    id::{
+        RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
+        RadrootsIdParseError,
+    },
+    post::comment::{
         RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES, RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
         RADROOTS_NIP22_COMMENT_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP22_COMMENT_TAG_MAX_COUNT,
         RADROOTS_NIP22_COMMENT_TAG_TOTAL_ELEMENT_MAX_COUNT,
         RADROOTS_NIP22_COMMENT_TAG_TOTAL_MAX_BYTES, RadrootsNip22CommentRootKind,
     },
-    ids::{
-        RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
-        RadrootsIdParseError,
-    },
-    kinds::KIND_COMMENT,
-    relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::RadrootsNostrRelayHint,
 };
 use radroots_identity::PublicKey;
 

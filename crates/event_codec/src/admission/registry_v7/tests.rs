@@ -17,7 +17,7 @@ fn frozen_typed_contract_ids_resolve_in_registry_v7() {
         "radroots.social.reply.v1",
         "radroots.social.comment.v1",
         "radroots.social.deletion_request.v1",
-        radroots_event::food_availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
+        radroots_event::food::availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
     ] {
         assert_eq!(
             event_contract_registry_v7(contract_id).map(|contract| contract.id),

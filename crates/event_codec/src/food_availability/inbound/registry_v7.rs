@@ -6,16 +6,16 @@ use alloc::{boxed::Box, string::String, string::ToString, vec::Vec};
 use core::fmt;
 use radroots_blossom::{BlobUrl, Sha256};
 use radroots_event::{
-    RadrootsEventTags,
-    classified_listing::RadrootsClassifiedListingPartition,
-    food_availability::{
+    envelope::RadrootsEventTags,
+    envelope::kind::KIND_CLASSIFIED_LISTING,
+    food::availability::{
         RADROOTS_FOOD_DECIMAL_MAX_DIGITS, RADROOTS_FOOD_IMAGE_MAX_COUNT,
         RadrootsFoodAvailabilityError, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
         RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodImageDimensions,
         RadrootsFoodPrice, RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText,
         RadrootsFoodUnit, food_media_blossom_digest, food_media_http_url_is_valid,
     },
-    kinds::KIND_CLASSIFIED_LISTING,
+    listing::classified::RadrootsClassifiedListingPartition,
     wire::DEFAULT_RAW_JSON_MAX_BYTES,
 };
 

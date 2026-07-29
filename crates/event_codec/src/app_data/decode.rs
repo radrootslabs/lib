@@ -5,8 +5,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    app_data::{KIND_APP_DATA, RadrootsAppData},
-    tags::TAG_D,
+    social::app_data::{KIND_APP_DATA, RadrootsAppData},
+    tag::name::TAG_D,
 };
 
 use crate::error::EventParseError;

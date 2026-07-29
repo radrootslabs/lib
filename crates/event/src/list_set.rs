@@ -1,4 +1,4 @@
-use crate::list::RadrootsListEntry;
+use crate::social::list::RadrootsListEntry;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

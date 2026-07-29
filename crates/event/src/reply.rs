@@ -3,12 +3,12 @@ use alloc::string::String;
 use core::fmt;
 
 use crate::{
-    ids::{RadrootsEventId, RadrootsIdParseError, parse_public_key},
+    id::{RadrootsEventId, RadrootsIdParseError, parse_public_key},
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
-    relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::RadrootsNostrRelayHint,
 };
 use radroots_identity::PublicKey;
 
@@ -181,7 +181,7 @@ impl RadrootsNip10ReplyReference {
 /// and has no Serde construction path.
 ///
 /// ```compile_fail
-/// let _: radroots_event::reply::RadrootsAuthoredNip10Reply =
+/// let _: radroots_event::post::reply::RadrootsAuthoredNip10Reply =
 ///     serde_json::from_str(r#"{"content":"reply"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]

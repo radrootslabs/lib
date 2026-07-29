@@ -8,8 +8,10 @@ use std::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
-    deletion::{
+    envelope::RadrootsEventEnvelope,
+    envelope::RadrootsEventEnvelopeLimits,
+    envelope::RadrootsEventEnvelopeParts,
+    post::deletion::{
         RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES, RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
         RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         RADROOTS_NIP09_DELETION_TAG_TOTAL_ELEMENT_MAX_COUNT,

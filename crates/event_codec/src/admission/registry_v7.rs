@@ -3,10 +3,10 @@ use radroots_event::{
         RadrootsContractMatchError, RadrootsContractValidationError, RadrootsEventContract,
         event_contract_registry_v7, validate_event_contract_registry_v7,
     },
-    food_availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
-    kinds::{
+    envelope::kind::{
         KIND_CLASSIFIED_LISTING, KIND_COMMENT, KIND_DELETION_REQUEST, KIND_POST, KIND_PROFILE,
     },
+    food::availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
 };
 
 use crate::{

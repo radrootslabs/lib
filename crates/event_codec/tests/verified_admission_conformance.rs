@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, fs, path::Path};
 
-use radroots_event::{RadrootsEventEnvelope, RadrootsNip01EventWire};
+use radroots_event::{envelope::RadrootsEventEnvelope, wire::RadrootsNip01EventWire};
 use radroots_event_codec::{
     admission::{RadrootsAdmittedEvent, RadrootsEventAdmissionError, admit_verified_event},
     verification::verify_nip01_event,

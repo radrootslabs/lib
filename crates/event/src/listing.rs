@@ -1,7 +1,6 @@
-//! Canonical listing-event domain model.
-//!
-//! Existing listing behavior moves here during module normalization.
+//! Canonical listing-event domain models.
 
-/// Internal marker for the target module while its models are consolidated.
-#[allow(dead_code)]
-pub(crate) struct ModuleScaffold;
+#[path = "classified_listing.rs"]
+pub mod classified;
+#[path = "operational_listing.rs"]
+pub mod operational;

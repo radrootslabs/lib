@@ -5,8 +5,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_MESSAGE_FILE,
-    message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions},
+    envelope::kind::KIND_MESSAGE_FILE,
+    social::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions},
 };
 
 use crate::error::EventParseError;

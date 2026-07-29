@@ -6,8 +6,8 @@ use alloc::{format, string::ToString};
 use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
-use radroots_event::kinds::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
-use radroots_event::operational_listing::RadrootsOperationalListing;
+use radroots_event::envelope::kind::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind};
+use radroots_event::listing::operational::RadrootsOperationalListing;
 
 use crate::error::EventEncodeError;
 use crate::operational_listing::tags::operational_listing_tags;
@@ -74,8 +74,8 @@ mod tests {
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         farm::RadrootsFarmRef,
-        ids::{RadrootsDTag, RadrootsInventoryBinId},
-        operational_listing::{RadrootsOperationalListingBin, RadrootsOperationalListingProduct},
+        id::{RadrootsDTag, RadrootsInventoryBinId},
+        listing::operational::{RadrootsOperationalListingBin, RadrootsOperationalListingProduct},
     };
 
     fn decimal(value: &str) -> Decimal {

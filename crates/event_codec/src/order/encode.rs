@@ -1,8 +1,8 @@
 #[cfg(feature = "serde_json")]
 use radroots_event::{
-    RadrootsEventPtr,
-    ids::RadrootsEventId,
-    order::{
+    id::RadrootsEventId,
+    tag::RadrootsEventPtr,
+    trade::order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
         RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
         RadrootsOrderRequest,
@@ -192,9 +192,11 @@ mod tests {
     };
     use crate::error::EventEncodeError;
     use radroots_event::{
-        RadrootsEventPtr,
-        ids::RadrootsEventId,
-        order::{RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError},
+        id::RadrootsEventId,
+        tag::RadrootsEventPtr,
+        trade::order::{
+            RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
+        },
     };
     use radroots_identity::PublicKey;
 

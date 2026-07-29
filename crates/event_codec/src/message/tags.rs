@@ -6,7 +6,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{RadrootsEventPtr, message::RadrootsMessageRecipient};
+use radroots_event::{social::message::RadrootsMessageRecipient, tag::RadrootsEventPtr};
 
 use crate::error::{EventEncodeError, EventParseError};
 
@@ -156,7 +156,7 @@ pub(crate) fn parse_subject_tag(tags: &[Vec<String>]) -> Result<Option<String>, 
 mod tests {
     use super::*;
     use crate::test_fixtures::RELAY_PRIMARY_WSS;
-    use radroots_event::{RadrootsEventPtr, message::RadrootsMessageRecipient};
+    use radroots_event::{social::message::RadrootsMessageRecipient, tag::RadrootsEventPtr};
 
     #[test]
     fn parse_recipients_rejects_missing_p_tags() {

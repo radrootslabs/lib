@@ -2,11 +2,11 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    farm_workspace::{
+    envelope::kind::KIND_FARM,
+    farm::workspace::{
         KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_TAG, RadrootsFarmWorkspaceManifest,
     },
-    kinds::KIND_FARM,
-    tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
+    tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
 
 use crate::d_tag::validate_d_tag_tag;

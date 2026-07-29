@@ -4,13 +4,13 @@ pub mod encode;
 #[cfg(test)]
 mod tests {
     use radroots_event::{
-        farm_crdt::RadrootsFarmCrdtDocumentKind,
-        farm_file::{
+        envelope::kind::KIND_POST,
+        farm::crdt::RadrootsFarmCrdtDocumentKind,
+        farm::file::{
             KIND_FARM_FILE_METADATA, RadrootsFarmFileDimensions, RadrootsFarmFileMetadata,
             RadrootsFarmFileSource,
         },
-        farm_workspace::RadrootsFarmWorkspaceRef,
-        kinds::KIND_POST,
+        farm::workspace::RadrootsFarmWorkspaceRef,
     };
 
     use crate::error::{EventEncodeError, EventParseError};

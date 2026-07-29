@@ -3,15 +3,16 @@ use alloc::{string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventPtr,
-    ids::{RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError},
-    kinds::is_order_event_kind,
-    order::{
+    envelope::RadrootsEventEnvelope,
+    envelope::kind::is_order_event_kind,
+    id::{RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError},
+    tag::RadrootsEventPtr,
+    tag::name::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
+    trade::order::{
         RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderEnvelope,
         RadrootsOrderEnvelopeError, RadrootsOrderEventType, RadrootsOrderPayloadError,
         RadrootsOrderRequest,
     },
-    tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
 };
 #[cfg(feature = "serde_json")]
 use radroots_identity::PublicKey;
@@ -352,20 +353,22 @@ mod tests {
     use crate::order::tags::TAG_LISTING_EVENT;
     use radroots_core::{Currency, Decimal, Money, Unit};
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr,
-        ids::{
+        envelope::RadrootsEventEnvelope,
+        envelope::RadrootsEventEnvelopeParts,
+        envelope::kind::{KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
+        id::{
             RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsInventoryBinId,
             RadrootsOrderId, RadrootsOrderQuoteId,
         },
-        kinds::{KIND_ORDER_CANCELLATION, KIND_ORDER_DECISION, KIND_ORDER_REQUEST},
-        order::{
+        tag::RadrootsEventPtr,
+        tag::name::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
+        trade::order::{
             RadrootsOrderCancellation, RadrootsOrderDecision, RadrootsOrderDecisionOutcome,
             RadrootsOrderEconomicItem, RadrootsOrderEconomicLine, RadrootsOrderEconomics,
             RadrootsOrderEnvelope, RadrootsOrderEnvelopeError, RadrootsOrderEventType,
             RadrootsOrderInventoryCommitment, RadrootsOrderItem, RadrootsOrderPayloadError,
             RadrootsOrderPricingBasis, RadrootsOrderRequest,
         },
-        tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
     use radroots_identity::PublicKey;
 

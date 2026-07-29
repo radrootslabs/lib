@@ -6,11 +6,11 @@ use alloc::{
 };
 
 use radroots_event::{
+    envelope::kind::{KIND_FARM, KIND_POST},
     farm::RadrootsFarmRef,
-    kinds::{KIND_FARM, KIND_POST},
     post::RadrootsPost,
     social::{RadrootsSocialFarmAnchor, RadrootsSocialMediaMetadata, RadrootsSocialTarget},
-    tags::{TAG_A, TAG_IMETA, TAG_Q, TAG_T},
+    tag::name::{TAG_A, TAG_IMETA, TAG_Q, TAG_T},
 };
 
 use crate::error::EventParseError;

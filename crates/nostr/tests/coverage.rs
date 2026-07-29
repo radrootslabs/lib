@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use nostr::nips::nip04;
 #[cfg(feature = "events")]
-use radroots_event::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
+use radroots_event::post::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
 use radroots_nostr::error::RadrootsNostrTagsResolveError;
 use radroots_nostr::events::jobs::{
     radroots_nostr_build_event_job_feedback, radroots_nostr_build_event_job_result,

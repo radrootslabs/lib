@@ -2,7 +2,7 @@ pub mod decode;
 pub mod encode;
 
 use crate::d_tag::is_d_tag_base64url;
-use radroots_event::kinds::{KIND_CALENDAR, is_nip51_list_set_kind};
+use radroots_event::envelope::kind::{KIND_CALENDAR, is_nip51_list_set_kind};
 
 pub(crate) const fn is_generic_list_set_codec_kind(kind: u32) -> bool {
     is_nip51_list_set_kind(kind) && kind != KIND_CALENDAR
@@ -30,9 +30,9 @@ mod tests {
     };
     use crate::error::{EventEncodeError, EventParseError};
     use radroots_event::{
-        kinds::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
-        list::RadrootsListEntry,
-        list_set::RadrootsListSet,
+        envelope::kind::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
+        social::list::RadrootsListEntry,
+        social::list_set::RadrootsListSet,
     };
 
     #[test]

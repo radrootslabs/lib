@@ -1,7 +1,7 @@
 #![cfg(all(feature = "knowledge", feature = "nostr"))]
 
 use radroots_event::contract::validate_event_contract_shape;
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
 };
 use radroots_event::knowledge::{
@@ -19,7 +19,7 @@ use radroots_event::knowledge::{
     RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
 use radroots_event::wire::RadrootsNip01EventWireParts;
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::knowledge::{
     contribution_attestation_from_event, contribution_attestation_to_wire_parts,
@@ -41,8 +41,8 @@ fn hex_64(character: char) -> String {
     core::iter::repeat_n(character, 64).collect()
 }
 
-fn event_ref(character: char, kind: u32) -> radroots_event::RadrootsEventRef {
-    radroots_event::RadrootsEventRef {
+fn event_ref(character: char, kind: u32) -> radroots_event::tag::RadrootsEventRef {
+    radroots_event::tag::RadrootsEventRef {
         id: hex_64(character),
         author: radroots_identity::PublicKey::from_hex(
             "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df",

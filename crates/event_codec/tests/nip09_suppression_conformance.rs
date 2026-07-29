@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
 use radroots_event_codec::{
     deletion::{
         admission::{

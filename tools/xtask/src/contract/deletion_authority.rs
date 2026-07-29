@@ -45,11 +45,11 @@ pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation;
             "crates/event_codec/src/deletion/authored.rs",
         ],
         rust_types: &[
-            "radroots_event::deletion::RadrootsAuthoredNip09DeletionRequest",
-            "radroots_event::deletion::RadrootsNip09DeletionAddressTarget",
-            "radroots_event::deletion::RadrootsNip09DeletionError",
-            "radroots_event::deletion::RadrootsNip09DeletionEventTarget",
-            "radroots_event::ids::RadrootsNip01Coordinate",
+            "radroots_event::post::deletion::RadrootsAuthoredNip09DeletionRequest",
+            "radroots_event::post::deletion::RadrootsNip09DeletionAddressTarget",
+            "radroots_event::post::deletion::RadrootsNip09DeletionError",
+            "radroots_event::post::deletion::RadrootsNip09DeletionEventTarget",
+            "radroots_event::id::RadrootsNip01Coordinate",
             "radroots_event::wire::RadrootsNip01EventWireParts",
         ],
         case_kinds: &[
@@ -97,7 +97,7 @@ pub(super) const DELETION_OPERATION_EXPECTATIONS: [DeletionOperationExpectation;
             "crates/event_codec/src/verification.rs",
         ],
         rust_types: &[
-            "radroots_event::RadrootsEventEnvelope",
+            "radroots_event::envelope::RadrootsEventEnvelope",
             "radroots_event_codec::deletion::admission::RadrootsAdmittedNip09DeletionRequestEvent",
             "radroots_event_codec::deletion::admission::RadrootsNip09DeletionAdmissionError",
             "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionProjection",

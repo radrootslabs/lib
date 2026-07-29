@@ -6,9 +6,9 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_RESOURCE_AREA,
-    resource_area::{RadrootsResourceArea, RadrootsResourceAreaRef},
-    tags::TAG_D,
+    envelope::kind::KIND_RESOURCE_AREA,
+    farm::resource_area::{RadrootsResourceArea, RadrootsResourceAreaRef},
+    tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag;

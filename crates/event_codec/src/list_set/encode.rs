@@ -5,7 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::list_set::RadrootsListSet;
+use radroots_event::social::list_set::RadrootsListSet;
 
 use crate::error::EventEncodeError;
 #[cfg(feature = "serde_json")]
@@ -75,7 +75,7 @@ pub fn to_wire_parts_with_kind(
 
 #[cfg(feature = "serde_json")]
 pub fn list_set_private_entries_json(
-    entries: &[radroots_event::list::RadrootsListEntry],
+    entries: &[radroots_event::social::list::RadrootsListEntry],
 ) -> Result<String, EventEncodeError> {
     let tags = list_entries_to_tags(entries)?;
     serde_json::to_string(&tags).map_err(|_| EventEncodeError::Json)

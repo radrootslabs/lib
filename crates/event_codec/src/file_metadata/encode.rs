@@ -5,9 +5,9 @@ use alloc::{
 };
 
 use radroots_event::{
-    file_metadata::RadrootsFileMetadata,
-    kinds::KIND_PUBLIC_FILE_METADATA,
-    tags::{
+    envelope::kind::KIND_PUBLIC_FILE_METADATA,
+    media::file_metadata::RadrootsFileMetadata,
+    tag::name::{
         TAG_ALT, TAG_BLURHASH, TAG_DIMENSIONS, TAG_FALLBACK, TAG_MAGNET, TAG_MIME,
         TAG_ORIGINAL_SHA256, TAG_SERVICE, TAG_SHA256, TAG_SIZE, TAG_SUMMARY, TAG_URL,
     },

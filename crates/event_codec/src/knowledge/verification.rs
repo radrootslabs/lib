@@ -3,8 +3,8 @@ use alloc::string::{String, ToString};
 
 use core::fmt;
 
-use radroots_event::RadrootsEventEnvelope;
 use radroots_event::contract::RadrootsContractValidationError;
+use radroots_event::envelope::RadrootsEventEnvelope;
 use radroots_event::knowledge::{
     RadrootsContributionAttestation, RadrootsEvidenceBounty, RadrootsKnowledgeChangeProposal,
     RadrootsKnowledgeClaim, RadrootsKnowledgeFieldReport, RadrootsKnowledgeRelation,

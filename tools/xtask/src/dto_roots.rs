@@ -124,9 +124,10 @@ fn generate_discovery_roots(
         let input = fs::read_to_string(&path).map_err(|error| {
             format!("failed to read DTO source `{source_file}` for {authority_label}: {error}")
         })?;
-        inventories.push(
-            scan_rust_source(source_file.clone(), &input).map_err(|error| error.to_string())?,
-        );
+        let mut inventory =
+            scan_rust_source(source_file.clone(), &input).map_err(|error| error.to_string())?;
+        inventory.source_file = canonical_dto_source_path(source_file).to_owned();
+        inventories.push(inventory);
     }
 
     let mut package_config = config.clone();
@@ -140,6 +141,47 @@ fn generate_discovery_roots(
         display_path: module.path,
         contents: module.contents,
     })
+}
+
+/// Returns the crate-visible source route used by generated root descriptors.
+///
+/// `radroots_event` intentionally keeps several implementation files at the
+/// crate source root while exposing them through singular domain facades with
+/// `#[path = "..."]`. `dto_bindgen_core` derives a descriptor's Rust module
+/// path from its source filename, so these routed files need the same logical
+/// path that rustc assigns through their public facade. The physical source
+/// path remains the authority used for reading and diagnostics.
+fn canonical_dto_source_path(source_file: &str) -> &str {
+    match source_file {
+        "crates/event/src/account.rs" => "crates/event/src/profile/account.rs",
+        "crates/event/src/app_data.rs" => "crates/event/src/social/app_data.rs",
+        "crates/event/src/comment.rs" => "crates/event/src/post/comment.rs",
+        "crates/event/src/coop.rs" => "crates/event/src/farm/coop.rs",
+        "crates/event/src/document.rs" => "crates/event/src/post/document.rs",
+        "crates/event/src/follow.rs" => "crates/event/src/social/follow.rs",
+        "crates/event/src/gcs.rs" => "crates/event/src/farm/change_set.rs",
+        "crates/event/src/geochat.rs" => "crates/event/src/social/geochat.rs",
+        "crates/event/src/gift_wrap.rs" => "crates/event/src/social/gift_wrap.rs",
+        "crates/event/src/job.rs" => "crates/event/src/social/job.rs",
+        "crates/event/src/job_feedback.rs" => "crates/event/src/social/job_feedback.rs",
+        "crates/event/src/job_request.rs" => "crates/event/src/social/job_request.rs",
+        "crates/event/src/job_result.rs" => "crates/event/src/social/job_result.rs",
+        "crates/event/src/list.rs" => "crates/event/src/social/list.rs",
+        "crates/event/src/list_set.rs" => "crates/event/src/social/list_set.rs",
+        "crates/event/src/message.rs" => "crates/event/src/social/message.rs",
+        "crates/event/src/message_file.rs" => "crates/event/src/social/message_file.rs",
+        "crates/event/src/operational_listing.rs" => "crates/event/src/listing/operational.rs",
+        "crates/event/src/order.rs" => "crates/event/src/trade/order.rs",
+        "crates/event/src/order_economics.rs" => "crates/event/src/trade/order_economics.rs",
+        "crates/event/src/plot.rs" => "crates/event/src/farm/plot.rs",
+        "crates/event/src/reaction.rs" => "crates/event/src/post/reaction.rs",
+        "crates/event/src/relay_document.rs" => "crates/event/src/social/relay_document.rs",
+        "crates/event/src/resource_area.rs" => "crates/event/src/farm/resource_area.rs",
+        "crates/event/src/resource_cap.rs" => "crates/event/src/farm/resource_cap.rs",
+        "crates/event/src/seal.rs" => "crates/event/src/social/seal.rs",
+        "crates/event/src/trade_validation.rs" => "crates/event/src/trade/validation.rs",
+        _ => source_file,
+    }
 }
 
 fn workspace_path(workspace_root: &Path, configured_path: &str) -> Result<PathBuf, String> {
@@ -689,6 +731,52 @@ root_module_file = "crates/demo/src/generated/dto_roots.rs"
             fs::read_to_string(root.join("crates/demo/src/generated/dto_roots.rs"))
                 .expect("read top-level roots")
                 .contains("DemoDto")
+        );
+    }
+
+    #[test]
+    fn event_routed_sources_generate_crate_visible_module_paths() {
+        for (physical, routed) in [
+            ("account.rs", "profile/account.rs"),
+            ("app_data.rs", "social/app_data.rs"),
+            ("comment.rs", "post/comment.rs"),
+            ("coop.rs", "farm/coop.rs"),
+            ("document.rs", "post/document.rs"),
+            ("follow.rs", "social/follow.rs"),
+            ("gcs.rs", "farm/change_set.rs"),
+            ("geochat.rs", "social/geochat.rs"),
+            ("gift_wrap.rs", "social/gift_wrap.rs"),
+            ("job.rs", "social/job.rs"),
+            ("job_feedback.rs", "social/job_feedback.rs"),
+            ("job_request.rs", "social/job_request.rs"),
+            ("job_result.rs", "social/job_result.rs"),
+            ("list.rs", "social/list.rs"),
+            ("list_set.rs", "social/list_set.rs"),
+            ("message.rs", "social/message.rs"),
+            ("message_file.rs", "social/message_file.rs"),
+            ("operational_listing.rs", "listing/operational.rs"),
+            ("order.rs", "trade/order.rs"),
+            ("order_economics.rs", "trade/order_economics.rs"),
+            ("plot.rs", "farm/plot.rs"),
+            ("reaction.rs", "post/reaction.rs"),
+            ("relay_document.rs", "social/relay_document.rs"),
+            ("resource_area.rs", "farm/resource_area.rs"),
+            ("resource_cap.rs", "farm/resource_cap.rs"),
+            ("seal.rs", "social/seal.rs"),
+            ("trade_validation.rs", "trade/validation.rs"),
+        ] {
+            let physical = format!("crates/event/src/{physical}");
+            let routed = format!("crates/event/src/{routed}");
+            assert_eq!(canonical_dto_source_path(&physical), routed);
+        }
+
+        assert_eq!(
+            canonical_dto_source_path("crates/event/src/farm.rs"),
+            "crates/event/src/farm.rs"
+        );
+        assert_eq!(
+            canonical_dto_source_path("crates/core/src/money.rs"),
+            "crates/core/src/money.rs"
         );
     }
 

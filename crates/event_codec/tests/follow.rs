@@ -4,8 +4,8 @@ mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    follow::{RadrootsFollow, RadrootsFollowProfile},
-    kinds::{KIND_FOLLOW, KIND_POST},
+    envelope::kind::{KIND_FOLLOW, KIND_POST},
+    social::follow::{RadrootsFollow, RadrootsFollowProfile},
 };
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};

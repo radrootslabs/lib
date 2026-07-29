@@ -2,14 +2,14 @@
 use alloc::string::{String, ToString};
 use core::{fmt, net::Ipv6Addr, str::FromStr};
 
-use crate::ids::RadrootsIdParseError;
+use crate::id::RadrootsIdParseError;
 
 /// One canonical, byte-stable Nostr relay hint.
 ///
 /// This intentionally accepts a conservative subset of WebSocket URLs. It
 /// does not inherit browser URL normalization, legacy IPv4 syntax, Unicode
 /// host processing, user information, or fragments. It is separate from the
-/// generic [`crate::ids::RadrootsRelayUrl`] type because protocol-tag
+/// generic [`crate::id::RadrootsRelayUrl`] type because protocol-tag
 /// validation must be portable across implementations.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RadrootsNostrRelayHint(String);
@@ -334,7 +334,7 @@ fn upper_hex_digit(byte: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::RadrootsRelayUrl;
+    use crate::id::RadrootsRelayUrl;
 
     #[test]
     fn canonical_relay_hints_accept_portable_hosts_paths_and_queries() {

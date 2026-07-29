@@ -2,7 +2,7 @@
 
 use radroots_core::{Decimal, Quantity, Unit};
 
-use crate::resource_area::RadrootsResourceAreaRef;
+use crate::farm::resource_area::RadrootsResourceAreaRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

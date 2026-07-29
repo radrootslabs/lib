@@ -1,4 +1,4 @@
-use crate::{farm::RadrootsFarmRef, gcs::RadrootsGcsLocation};
+use crate::{farm::RadrootsFarmRef, farm::change_set::RadrootsGcsLocation};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

@@ -1,4 +1,4 @@
-use radroots_event::{job_result::RadrootsJobResult, kinds::is_result_kind};
+use radroots_event::{envelope::kind::is_result_kind, social::job_result::RadrootsJobResult};
 
 use crate::job::encode::{JobEncodeError, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_amount_tag_msat};

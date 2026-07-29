@@ -7,7 +7,9 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{document::RadrootsDocument, kinds::KIND_DOCUMENT, tags::TAG_D};
+use radroots_event::{
+    envelope::kind::KIND_DOCUMENT, post::document::RadrootsDocument, tag::name::TAG_D,
+};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;
@@ -160,7 +162,7 @@ pub fn parsed_from_event(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
+    use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
 
     #[test]
     fn document_decode_accepts_subject_without_address() {

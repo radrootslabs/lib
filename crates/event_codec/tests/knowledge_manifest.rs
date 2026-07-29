@@ -2,11 +2,11 @@
 
 use std::collections::BTreeSet;
 
-use radroots_event::RADROOTS_EVENT_VERSION;
+use radroots_event::contract::VERSION;
 use radroots_event::contract::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsEventClass, all_event_contracts,
 };
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM,
     KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW,
 };
@@ -67,7 +67,7 @@ fn knowledge_manifest_covers_required_fields_for_every_contract() {
         manifest.registry_version,
         RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION
     );
-    assert_eq!(manifest.radroots_event_version, RADROOTS_EVENT_VERSION);
+    assert_eq!(manifest.radroots_event_version, VERSION);
     assert_eq!(
         manifest.radroots_event_codec_version,
         env!("CARGO_PKG_VERSION")

@@ -38,8 +38,8 @@ impl RadrootsEventSigner for RadrootsLocalEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::RadrootsEventEnvelope;
-    use radroots_event::kinds::KIND_GEOCHAT;
+    use radroots_event::envelope::RadrootsEventEnvelope;
+    use radroots_event::envelope::kind::KIND_GEOCHAT;
     use radroots_nostr::prelude::{
         RadrootsNostrEventVerification, RadrootsNostrSecretKey, radroots_nostr_verify_event,
     };

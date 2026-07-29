@@ -1,4 +1,4 @@
-use radroots_event::{job_request::RadrootsJobRequest, kinds::is_request_kind};
+use radroots_event::{envelope::kind::is_request_kind, social::job_request::RadrootsJobRequest};
 
 use crate::job::encode::{JobEncodeError, canonicalize_tags};
 use crate::job::util::{job_input_type_tag, push_bid_tag_sat};

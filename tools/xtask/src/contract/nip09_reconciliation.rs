@@ -91,7 +91,7 @@ const EVENT_STORE_STORE_ROOT_BASELINE_SHA256: &str =
 const EVENT_STORE_MIGRATION_IMPL_BASELINE_SHA256: &str =
     "69f3c730f8a4f3a4af0028c74f6903126def01ceb63eed8a173e696ce291dc09";
 const EVENT_CRATE_ROOT_BASELINE_SHA256: &str =
-    "89a65d522cfb025f100da4e22ee847239459a2dde1a3e48e9d94212fb78472bf";
+    "82e48537344777e00a72c4d93b20d66c7afd5cc5ffd25aa5ae3717b4bbd2f3ae";
 const EVENT_CODEC_CRATE_ROOT_BASELINE_SHA256: &str =
     "8c29ceccb06abc94279db3257d52e14ad721e2eb302e54fbf26f8856d0db0b53";
 const BLOSSOM_CRATE_ROOT_BASELINE_SHA256: &str =
@@ -147,8 +147,10 @@ const GOVERNED_SUPPORT_SOURCE_TREE_BASELINES: [GovernedSourceTreeBaselineSpec; 5
 ];
 const SUPPORT_ITEM_MACRO_SOURCE_ALLOWLIST: [&str; 2] = [
     "crates/event/src/contract/registry_v7.rs",
-    "crates/event/src/ids.rs",
+    "crates/event/src/id.rs",
 ];
+const SUCCESSOR_SOURCE_PATH_REPLACEMENTS: [(&str, &str); 1] =
+    [("crates/event/src/ids.rs", "crates/event/src/id.rs")];
 const EVENT_STORE_PROTOCOL_RECONCILIATION_SOURCE_RELATIVE: &str =
     "crates/event_store/src/store/protocol_reconciliation_v1.rs";
 const EVENT_STORE_PROTOCOL_STORAGE_SOURCE_RELATIVE: &str =
@@ -671,7 +673,7 @@ enum CallableSpec {
 const ENTRY_POINT_SPECS: &[EntryPointSpec] = &[
     EntryPointSpec {
         role: "event_head_candidate",
-        rust_path: "radroots_event::event_head::v1::event_head_candidate_for_nip01_event_v1",
+        rust_path: "radroots_event::envelope::event_head::v1::event_head_candidate_for_nip01_event_v1",
         source_path: "crates/event/src/event_head/v1.rs",
         callable: CallableSpec::Free {
             module_path: &[],
@@ -681,7 +683,7 @@ const ENTRY_POINT_SPECS: &[EntryPointSpec] = &[
     },
     EntryPointSpec {
         role: "event_head_selection",
-        rust_path: "radroots_event::event_head::v1::select_event_head_v1",
+        rust_path: "radroots_event::envelope::event_head::v1::select_event_head_v1",
         source_path: "crates/event/src/event_head/v1.rs",
         callable: CallableSpec::Free {
             module_path: &[],
@@ -1259,23 +1261,15 @@ const SOURCE_ROUTE_WITNESS_SPECS: &[SourceRouteWitnessSpec] = &[
         modules: &[
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
+                name: "admission",
+            },
+            ModuleRouteSpec {
+                visibility: RouteVisibility::Public,
                 name: "calendar",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "classified_listing",
-            },
-            ModuleRouteSpec {
-                visibility: RouteVisibility::Public,
-                name: "comment",
-            },
-            ModuleRouteSpec {
-                visibility: RouteVisibility::Public,
                 name: "contract",
-            },
-            ModuleRouteSpec {
-                visibility: RouteVisibility::Public,
-                name: "deletion",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
@@ -1287,19 +1281,23 @@ const SOURCE_ROUTE_WITNESS_SPECS: &[SourceRouteWitnessSpec] = &[
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "event_head",
+                name: "farm",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "food_availability",
+                name: "food",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "ids",
+                name: "id",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "kinds",
+                name: "knowledge",
+            },
+            ModuleRouteSpec {
+                visibility: RouteVisibility::Public,
+                name: "listing",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
@@ -1315,22 +1313,55 @@ const SOURCE_ROUTE_WITNESS_SPECS: &[SourceRouteWitnessSpec] = &[
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "relay_hint",
-            },
-            ModuleRouteSpec {
-                visibility: RouteVisibility::Public,
                 name: "social",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
-                name: "tags",
+                name: "tag",
+            },
+            ModuleRouteSpec {
+                visibility: RouteVisibility::Public,
+                name: "trade",
             },
             ModuleRouteSpec {
                 visibility: RouteVisibility::Public,
                 name: "wire",
             },
         ],
-        uses: &[],
+        uses: &[
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "draft::RadrootsEventDraft as EventDraft",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "draft::RadrootsSignedEvent as SignedEvent",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "envelope::RadrootsEventEnvelope as Event",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "envelope::RadrootsEventKind as EventKind",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "envelope::RadrootsEventTag as EventTag",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "id::EventId",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "verification::Error",
+            },
+            UseRouteSpec {
+                visibility: RouteVisibility::Public,
+                path: "verification::SignatureVerifiedEvent as VerifiedEvent",
+            },
+        ],
     },
     SourceRouteWitnessSpec {
         role: "event_contract_registry_v7_route",
@@ -4951,7 +4982,7 @@ fn describe_impl_resolution_witness(
 
     let mut protected_paths = FROZEN_SOURCE_SPECS
         .iter()
-        .map(|spec| spec.path)
+        .map(|spec| successor_source_path(spec.path))
         .chain(
             ROUTE_FACADE_BASELINE_SOURCES
                 .iter()
@@ -5037,7 +5068,7 @@ fn describe_impl_resolution_witness(
     };
     let mut protected_member_paths = FROZEN_SOURCE_SPECS
         .iter()
-        .map(|spec| spec.path)
+        .map(|spec| successor_source_path(spec.path))
         .chain([
             POST_CORE_EXTENSION_SOURCE_RELATIVE,
             POST_CORE_STORAGE_SOURCE_RELATIVE,
@@ -5168,6 +5199,13 @@ fn normalized_identifier(identifier: &syn::Ident) -> String {
     normalized_identifier_spelling(&identifier.to_string())
 }
 
+fn successor_source_path(relative: &'static str) -> &'static str {
+    SUCCESSOR_SOURCE_PATH_REPLACEMENTS
+        .iter()
+        .find_map(|(predecessor, successor)| (*predecessor == relative).then_some(*successor))
+        .unwrap_or(relative)
+}
+
 fn normalized_identifier_spelling(spelling: &str) -> String {
     spelling.strip_prefix("r#").unwrap_or(spelling).to_owned()
 }
@@ -5239,6 +5277,13 @@ fn validate_raw_crate_attributes(relative: &str, source: &str) -> Result<(), Str
             "#![cfg_attr(coverage_nightly,feature(coverage_attribute))]",
             "#![cfg_attr(all(not(feature=\"std\"),not(test)),no_std)]",
             "#![forbid(unsafe_code)]",
+            "#![deny(rustdoc::broken_intra_doc_links)]",
+            "#![doc=\" Canonical Radroots event-domain models.\"]",
+            "#![doc=\"\"]",
+            "#![doc=\" Public behavior is grouped under the approved singular domain modules.\"]",
+            "#![doc=\" The crate root intentionally exposes only [`Event`], [`EventDraft`],\"]",
+            "#![doc=\" [`SignedEvent`], [`VerifiedEvent`], [`EventId`], [`EventKind`], [`EventTag`],\"]",
+            "#![doc=\" and [`Error`].\"]",
         ],
         "crates/event_codec/src/lib.rs" => &[
             "#![cfg_attr(not(feature=\"std\"),no_std)]",
@@ -5519,9 +5564,13 @@ fn validate_public_crate_root_resolution_authority(
 ) -> Result<(), String> {
     let protected_bindings = protected_resolution_bindings(file);
     let expected_file_attributes: &[&str] = match relative {
-        "crates/event/src/lib.rs"
-        | "crates/event_codec/src/lib.rs"
-        | "crates/blossom/src/lib.rs" => &["#![forbid(unsafe_code)]"],
+        "crates/event/src/lib.rs" => &[
+            "#![forbid(unsafe_code)]",
+            "#![deny(rustdoc::broken_intra_doc_links)]",
+        ],
+        "crates/event_codec/src/lib.rs" | "crates/blossom/src/lib.rs" => {
+            &["#![forbid(unsafe_code)]"]
+        }
         _ => {
             return Err(format!(
                 "unsupported public crate-root audit target {relative}"
@@ -5557,23 +5606,7 @@ fn validate_public_crate_root_resolution_authority(
                 .iter()
                 .map(compact_tokens)
                 .collect::<Vec<_>>();
-            let expected_attributes: &[&str] = match item {
-                syn::Item::Struct(item)
-                    if relative == "crates/event/src/lib.rs"
-                        && matches!(
-                            item.ident.to_string().as_str(),
-                            "RadrootsEventRef" | "RadrootsEventPtr"
-                        ) =>
-                {
-                    &[
-                        "#[cfg_attr(feature=\"serde\",derive(serde::Serialize,serde::Deserialize))]",
-                        "#[cfg_attr(feature=\"dto-bindgen\",derive(dto_bindgen::Dto))]",
-                        "#[cfg_attr(feature=\"dto-bindgen\",dto(export))]",
-                        "#[derive(Clone,Debug,PartialEq,Eq)]",
-                    ]
-                }
-                _ => &[],
-            };
+            let expected_attributes: &[&str] = &[];
             if attributes != expected_attributes {
                 return Err(format!(
                     "{relative} top-level item `{}` has unsupported source-generating attributes: expected {expected_attributes:?}, found {attributes:?}",
@@ -5656,7 +5689,17 @@ fn validate_public_crate_root_resolution_authority(
                 let mut routes = Vec::new();
                 flatten_use_tree("", &item_use.tree, &mut routes);
                 for route in routes {
-                    if route.ends_with("::*") || route.contains(" as ") {
+                    let curated_event_alias = relative == "crates/event/src/lib.rs"
+                        && matches!(
+                            route.as_str(),
+                            "draft::RadrootsEventDraft as EventDraft"
+                                | "draft::RadrootsSignedEvent as SignedEvent"
+                                | "envelope::RadrootsEventEnvelope as Event"
+                                | "envelope::RadrootsEventKind as EventKind"
+                                | "envelope::RadrootsEventTag as EventTag"
+                                | "verification::SignatureVerifiedEvent as VerifiedEvent"
+                        );
+                    if route.ends_with("::*") || (route.contains(" as ") && !curated_event_alias) {
                         return Err(format!(
                             "{relative} use route `{route}` must not use glob or alias name resolution"
                         ));
@@ -5829,6 +5872,7 @@ fn expected_source_module_route_attributes(
     module: &str,
 ) -> &'static [&'static str] {
     match (relative, module) {
+        ("crates/event/src/lib.rs", "knowledge") => &["#[cfg(feature=\"knowledge\")]"],
         ("crates/event_codec/src/lib.rs", "admission") => &["#[cfg(feature=\"serde_json\")]"],
         ("crates/event_codec/src/profile/mod.rs", "inbound") => &["#[cfg(feature=\"serde_json\")]"],
         (EVENT_STORE_LIB_SOURCE_RELATIVE, _) => &["#[cfg(feature=\"sqlite\")]"],
@@ -9407,8 +9451,8 @@ fn validate_post_core_extension_source(relative: &str, bytes: &[u8]) -> Result<(
         "super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult",
         "crate::error::RadrootsEventStoreError",
         "crate::model::RadrootsEventIngest",
-        "radroots_event::ids::RadrootsTradeCandidateId",
-        "radroots_event::ids::RadrootsTradeMutationId",
+        "radroots_event::id::RadrootsTradeCandidateId",
+        "radroots_event::id::RadrootsTradeMutationId",
         "radroots_event::trade::RADROOTS_TRADE_MUTATION_CONTRACT_IDS",
         "radroots_event::trade::RadrootsSellerReservationAssertionV1",
         "radroots_event::trade::RadrootsTradeDecisionV1",
@@ -9556,8 +9600,8 @@ fn validate_post_core_storage_source(
         "crate::error::RadrootsEventStoreError",
         "crate::model::RadrootsTransportObservation",
         "radroots_event::envelope::RadrootsEventEnvelope",
-        "radroots_event::ids::RadrootsTradeCandidateId",
-        "radroots_event::ids::RadrootsTradeMutationId",
+        "radroots_event::id::RadrootsTradeCandidateId",
+        "radroots_event::id::RadrootsTradeMutationId",
         "radroots_event::trade::RadrootsSellerReservationAssertionV1",
         "radroots_event::trade::RadrootsTradeMutationEnvelopeV1",
         "radroots_event::trade::RadrootsTradeMutationKindV1",

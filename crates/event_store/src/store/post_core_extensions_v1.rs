@@ -2,7 +2,7 @@ use super::post_core_storage_v1::{PostCoreStorageV1, TradeProjectionWrite};
 use super::protocol_reconciliation_v1::ProtocolReconciliationV1IngestResult;
 use crate::error::RadrootsEventStoreError;
 use crate::model::RadrootsEventIngest;
-use radroots_event::ids::{RadrootsTradeCandidateId, RadrootsTradeMutationId};
+use radroots_event::id::{RadrootsTradeCandidateId, RadrootsTradeMutationId};
 use radroots_event::trade::{
     RADROOTS_TRADE_MUTATION_CONTRACT_IDS, RadrootsSellerReservationAssertionV1,
     RadrootsTradeDecisionV1, RadrootsTradeMutationBodyV1, RadrootsTradeMutationEnvelopeV1,

@@ -3,7 +3,7 @@ pub mod encode;
 
 #[cfg(test)]
 mod tests {
-    use radroots_event::{http_auth::RadrootsHttpAuth, kinds::KIND_POST};
+    use radroots_event::{envelope::kind::KIND_POST, social::http_auth::RadrootsHttpAuth};
 
     use crate::error::{EventEncodeError, EventParseError};
     use crate::http_auth::decode::{data_from_event, http_auth_from_event, parsed_from_event};

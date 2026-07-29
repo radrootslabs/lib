@@ -5,11 +5,11 @@ use alloc::{
 };
 
 use radroots_event::{
-    article::RadrootsArticle,
+    envelope::kind::{KIND_ARTICLE, KIND_FARM},
     farm::RadrootsFarmRef,
-    kinds::{KIND_ARTICLE, KIND_FARM},
+    post::article::RadrootsArticle,
     social::RadrootsSocialFarmAnchor,
-    tags::{TAG_A, TAG_D, TAG_IMAGE, TAG_PUBLISHED_AT, TAG_SUMMARY, TAG_T, TAG_TITLE},
+    tag::name::{TAG_A, TAG_D, TAG_IMAGE, TAG_PUBLISHED_AT, TAG_SUMMARY, TAG_T, TAG_TITLE},
 };
 
 use crate::d_tag::validate_d_tag_tag;

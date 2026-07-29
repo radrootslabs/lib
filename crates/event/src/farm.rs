@@ -1,3 +1,5 @@
+//! Farm, cooperative, plot, resource, and farm-document event models.
+
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
@@ -45,3 +47,21 @@ pub struct RadrootsFarmPublicLocation {
     pub country: Option<String>,
     pub geohash: String,
 }
+#[path = "gcs.rs"]
+pub mod change_set;
+#[path = "coop.rs"]
+pub mod coop;
+#[path = "farm_crdt.rs"]
+pub mod crdt;
+#[path = "farm_file.rs"]
+pub mod file;
+#[path = "location.rs"]
+pub mod location;
+#[path = "plot.rs"]
+pub mod plot;
+#[path = "resource_area.rs"]
+pub mod resource_area;
+#[path = "resource_cap.rs"]
+pub mod resource_cap;
+#[path = "farm_workspace.rs"]
+pub mod workspace;

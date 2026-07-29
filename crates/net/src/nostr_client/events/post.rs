@@ -1,7 +1,7 @@
 use crate::error::{NetError, Result};
 use radroots_event::{
+    post::reply::RadrootsAuthoredNip10Reply,
     post::{RadrootsAuthoredUpdate, RadrootsPost},
-    reply::RadrootsAuthoredNip10Reply,
 };
 use radroots_event_codec::parsed::RadrootsParsedData;
 use radroots_nostr::prelude::{

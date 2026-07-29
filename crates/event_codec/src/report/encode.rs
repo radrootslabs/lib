@@ -7,10 +7,10 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_REPORT,
-    report::RadrootsReport,
+    envelope::kind::KIND_REPORT,
+    post::report::RadrootsReport,
     social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
-    tags::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
+    tag::name::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
 };
 
 use crate::error::EventEncodeError;

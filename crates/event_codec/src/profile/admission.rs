@@ -1,9 +1,9 @@
 use core::fmt;
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     contract::{RadrootsEventContract, event_contract},
-    kinds::KIND_PROFILE,
+    envelope::RadrootsEventEnvelope,
+    envelope::kind::KIND_PROFILE,
 };
 
 use crate::profile::inbound::{

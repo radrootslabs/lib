@@ -6,8 +6,8 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::geochat::RadrootsGeoChat;
-use radroots_event::kinds::KIND_GEOCHAT;
+use radroots_event::envelope::kind::KIND_GEOCHAT;
+use radroots_event::social::geochat::RadrootsGeoChat;
 
 use crate::error::EventEncodeError;
 use radroots_event::wire::RadrootsNip01EventWireParts;

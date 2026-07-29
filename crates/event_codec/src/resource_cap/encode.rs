@@ -6,14 +6,15 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_RESOURCE_AREA, resource_cap::RadrootsResourceHarvestCap, tags::TAG_D,
+    envelope::kind::KIND_RESOURCE_AREA, farm::resource_cap::RadrootsResourceHarvestCap,
+    tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::kinds::KIND_RESOURCE_HARVEST_CAP;
+use radroots_event::envelope::kind::KIND_RESOURCE_HARVEST_CAP;
 #[cfg(feature = "serde_json")]
 use radroots_event::wire::RadrootsNip01EventWireParts;
 
@@ -107,8 +108,8 @@ mod tests {
     use super::*;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
     use radroots_core::{Decimal, Quantity, Unit};
-    use radroots_event::resource_area::RadrootsResourceAreaRef;
-    use radroots_event::resource_cap::RadrootsResourceHarvestProduct;
+    use radroots_event::farm::resource_area::RadrootsResourceAreaRef;
+    use radroots_event::farm::resource_cap::RadrootsResourceHarvestProduct;
 
     fn sample_cap_with_category(category: Option<&str>) -> RadrootsResourceHarvestCap {
         RadrootsResourceHarvestCap {

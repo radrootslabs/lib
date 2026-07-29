@@ -306,6 +306,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/blossom/src/url.rs",
     },
     SourceSpec {
+        role: "event_public_surface",
+        path: "crates/event/src/lib.rs",
+    },
+    SourceSpec {
         role: "event_contract_facade",
         path: "crates/event/src/contract.rs",
     },
@@ -335,7 +339,7 @@ const SOURCE_SPECS: &[SourceSpec] = &[
     },
     SourceSpec {
         role: "event_ids_authority",
-        path: "crates/event/src/ids.rs",
+        path: "crates/event/src/id.rs",
     },
     SourceSpec {
         role: "event_trade_authority",
@@ -454,6 +458,14 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "crates/event_codec/src/deletion/reconciliation_v1.rs",
     },
     SourceSpec {
+        role: "event_codec_error_authority",
+        path: "crates/event_codec/src/error.rs",
+    },
+    SourceSpec {
+        role: "event_codec_food_admission_authority",
+        path: "crates/event_codec/src/food_availability/admission.rs",
+    },
+    SourceSpec {
         role: "event_codec_food_inbound_facade",
         path: "crates/event_codec/src/food_availability/inbound.rs",
     },
@@ -500,6 +512,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
     SourceSpec {
         role: "addressable_transition_feed_model",
         path: "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+    },
+    SourceSpec {
+        role: "current_visibility_model",
+        path: "crates/event_store/src/model/current_visibility_v1.rs",
     },
     SourceSpec {
         role: "food_projection_model",
@@ -578,6 +594,10 @@ const SOURCE_SPECS: &[SourceSpec] = &[
         path: "tools/xtask/src/contract.rs",
     },
     SourceSpec {
+        role: "dto_root_generation_authority",
+        path: "tools/xtask/src/dto_roots.rs",
+    },
+    SourceSpec {
         role: "xtask_dispatch_and_release_preflight",
         path: "tools/xtask/src/main.rs",
     },
@@ -603,6 +623,7 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/core/src/quantity.rs",
     "crates/core/src/quantity_price.rs",
     "crates/core/src/unit.rs",
+    "crates/event/src/lib.rs",
     "crates/event/src/calendar.rs",
     "crates/event/src/classified_listing.rs",
     "crates/event/src/comment.rs",
@@ -630,6 +651,8 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_codec/src/comment/inbound/registry_v7.rs",
     "crates/event_codec/src/deletion/mod.rs",
     "crates/event_codec/src/deletion/reconciliation_v1.rs",
+    "crates/event_codec/src/error.rs",
+    "crates/event_codec/src/food_availability/admission.rs",
     "crates/event_codec/src/food_availability/inbound.rs",
     "crates/event_codec/src/food_availability/inbound/registry_v7.rs",
     "crates/event_codec/src/job/traits.rs",
@@ -648,6 +671,7 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_store/src/migrations.rs",
     "crates/event_store/src/model.rs",
     "crates/event_store/src/model/addressable_transition_feed_v1.rs",
+    "crates/event_store/src/model/current_visibility_v1.rs",
     "crates/event_store/src/model/food_availability_projection_v1.rs",
     "crates/event_store/src/model/ingest_reconciliation_v1.rs",
     "crates/event_store/src/model/reconciliation_v1.rs",
@@ -662,6 +686,9 @@ const PREDECESSOR_SUPERSEDED_SOURCE_PATHS: &[&str] = &[
     "crates/event_store/src/store/protocol_reconciliation_v1.rs",
     "crates/event_store/src/store/protocol_storage_v1.rs",
 ];
+
+const PREDECESSOR_SUPERSESSION_REPLACEMENTS: &[(&str, &str)] =
+    &[("crates/event/src/ids.rs", "crates/event/src/id.rs")];
 
 const PREDECESSOR_SUPERSEDED_ARTIFACT_PATHS: &[&str] =
     &[FOOD_PREDECESSOR_RESULT_VECTOR_EXECUTOR_RELATIVE];
@@ -1113,14 +1140,46 @@ fn validate_predecessor_production_source_coverage(workspace_root: &Path) -> Res
     if unique_source_paths.len() != source_paths.len() {
         return Err("SourceMaintenance SOURCE_SPECS paths must be unique".to_owned());
     }
+    let replaced_predecessors = PREDECESSOR_SUPERSESSION_REPLACEMENTS
+        .iter()
+        .map(|(predecessor, _)| *predecessor)
+        .collect::<BTreeSet<_>>();
+    let replacement_paths = PREDECESSOR_SUPERSESSION_REPLACEMENTS
+        .iter()
+        .map(|(_, replacement)| *replacement)
+        .collect::<BTreeSet<_>>();
+    if replaced_predecessors.len() != PREDECESSOR_SUPERSESSION_REPLACEMENTS.len()
+        || replacement_paths.len() != PREDECESSOR_SUPERSESSION_REPLACEMENTS.len()
+    {
+        return Err(
+            "SourceMaintenance predecessor supersession replacements must be one-to-one".to_owned(),
+        );
+    }
+    for (predecessor, replacement) in PREDECESSOR_SUPERSESSION_REPLACEMENTS {
+        if predecessor == replacement || !PREDECESSOR_SUPERSEDED_SOURCE_PATHS.contains(predecessor)
+        {
+            return Err(format!(
+                "SourceMaintenance replacement `{predecessor}` -> `{replacement}` must rename an explicitly superseded predecessor"
+            ));
+        }
+        if workspace_root.join(predecessor).exists() {
+            return Err(format!(
+                "SourceMaintenance renamed predecessor path `{predecessor}` must be absent"
+            ));
+        }
+    }
     for path in PREDECESSOR_SUPERSEDED_SOURCE_PATHS {
+        let current_path = PREDECESSOR_SUPERSESSION_REPLACEMENTS
+            .iter()
+            .find_map(|(predecessor, replacement)| (*predecessor == *path).then_some(*replacement))
+            .unwrap_or(path);
         let count = source_paths
             .iter()
-            .filter(|candidate| **candidate == *path)
+            .filter(|candidate| **candidate == current_path)
             .count();
         if count != 1 {
             return Err(format!(
-                "SourceMaintenance successor must current-byte-bind superseded predecessor path `{path}` exactly once; found {count}"
+                "SourceMaintenance successor must current-byte-bind superseded predecessor path `{path}` through `{current_path}` exactly once; found {count}"
             ));
         }
     }
@@ -3584,7 +3643,7 @@ struct DelegatedAuthoritySpec {
 const EXECUTABLE_AUTHORITY_AST_SHA256: &str =
     "da4ba88c3cabe0e5ed6df4ca0115645c8a65d43cdea7d2dbf5e78d99256e8e15";
 const BOUND_AUTHORITY_SOURCE_AST_SHA256: &str =
-    "bd1d92cdd1e399a844f5957ef2117d6860bc309b66af24b56ad251a464b2a6dd";
+    "b61fd74737d24230a64e4b4e215e2b270e03947ef60481c7e6f301bf3ca05fe5";
 
 #[derive(Clone, Debug, Serialize)]
 struct ExecutableAuthorityIdentity {

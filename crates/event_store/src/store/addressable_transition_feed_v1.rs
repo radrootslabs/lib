@@ -20,7 +20,7 @@ use crate::model::{
 use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::id::RadrootsEventId;
 use radroots_identity::PublicKey;
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 

@@ -18,13 +18,13 @@ use crate::{
     RadrootsEventStoreError, RadrootsEventStoreSourceCapacityResourceV1,
 };
 use radroots_event::contract::registry_v7::RadrootsEventContract;
-use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
-use radroots_event::event_head::v1::{
+use radroots_event::envelope::event_head::v1::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
     RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     event_head_candidate_for_nip01_event_v1, select_event_head_v1,
 };
-use radroots_event::ids::RadrootsNip01Coordinate;
+use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
+use radroots_event::id::RadrootsNip01Coordinate;
 use radroots_event_codec::admission::registry_v7::{
     RadrootsRegistryV7AdmissionDecision, admit_verified_event_registry_v7,
 };
@@ -3601,9 +3601,9 @@ mod tests {
     use nostr::{Keys, SECP256K1, secp256k1::Message};
     use radroots_event::wire::v1::RadrootsNip01EventWire;
     use radroots_event::{
-        deletion::RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         envelope::RadrootsEventEnvelopeParts,
-        kinds::{KIND_DELETION_REQUEST, KIND_LIST_SET_RELAY, KIND_POST},
+        envelope::kind::{KIND_DELETION_REQUEST, KIND_LIST_SET_RELAY, KIND_POST},
+        post::deletion::RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         wire::compute_canonical_nip01_event_id,
     };
     use radroots_event_codec::verification::v1::verify_nip01_event_v1;

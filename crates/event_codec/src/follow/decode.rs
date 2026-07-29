@@ -2,8 +2,8 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    follow::{RadrootsFollow, RadrootsFollowProfile},
-    kinds::KIND_FOLLOW,
+    envelope::kind::KIND_FOLLOW,
+    social::follow::{RadrootsFollow, RadrootsFollowProfile},
 };
 
 use crate::error::EventParseError;

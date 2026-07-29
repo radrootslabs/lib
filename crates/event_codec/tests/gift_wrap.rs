@@ -3,8 +3,8 @@ mod common;
 mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
-use radroots_event::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
-use radroots_event::kinds::{KIND_GIFT_WRAP, KIND_MESSAGE};
+use radroots_event::envelope::kind::{KIND_GIFT_WRAP, KIND_MESSAGE};
+use radroots_event::social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::gift_wrap::decode::{

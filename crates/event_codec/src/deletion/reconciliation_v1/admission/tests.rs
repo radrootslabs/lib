@@ -6,7 +6,7 @@ fn admitted_contract_resolves_registry_entry() {
     use nostr::secp256k1::Message;
     use nostr::{Keys, SECP256K1};
     use radroots_event::{
-        RadrootsEventEnvelopeParts, kinds::KIND_DELETION_REQUEST,
+        envelope::RadrootsEventEnvelopeParts, envelope::kind::KIND_DELETION_REQUEST,
         wire::compute_canonical_nip01_event_id,
     };
     use radroots_test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX;

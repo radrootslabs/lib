@@ -1,4 +1,6 @@
-use crate::RadrootsEventEnvelope;
+#![allow(dead_code, unused_imports)]
+
+use crate::envelope::RadrootsEventEnvelope;
 
 #[derive(dto_bindgen::Dto)]
 #[dto(export)]

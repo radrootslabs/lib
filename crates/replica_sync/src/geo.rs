@@ -3,7 +3,7 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_event::gcs::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
+use radroots_event::farm::change_set::{RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
 
 const EARTH_RADIUS_M: f64 = 6_378_137.0;
 

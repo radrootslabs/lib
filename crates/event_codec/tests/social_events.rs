@@ -1,18 +1,18 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_event::{
-    farm_crdt::RadrootsFarmCrdtDocumentKind,
-    farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata},
-    farm_workspace::RadrootsFarmWorkspaceRef,
-    file_metadata::RadrootsFileMetadata,
-    group::{RadrootsGroupEditableMetadata, RadrootsGroupMetadata},
-    kinds::{
+    envelope::kind::{
         KIND_ARTICLE, KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_FARM_CRDT_CHANGE,
         KIND_GROUP_METADATA, KIND_HTTP_AUTH, KIND_POST, KIND_PUBLIC_FILE_METADATA, KIND_RELAY_AUTH,
         KIND_REPORT, is_home_feed_candidate_kind, is_market_candidate_kind,
         is_private_farm_ops_kind, is_public_social_kind,
     },
+    farm::crdt::RadrootsFarmCrdtDocumentKind,
+    farm::file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata},
+    farm::workspace::RadrootsFarmWorkspaceRef,
+    media::file_metadata::RadrootsFileMetadata,
     social::RadrootsSocialMediaDimensions,
+    social::group::{RadrootsGroupEditableMetadata, RadrootsGroupMetadata},
 };
 use radroots_event_codec::{
     article::decode::article_from_event,

@@ -10,11 +10,11 @@ use alloc::string::{String, ToString};
 #[cfg(all(feature = "serde_json", feature = "std"))]
 use std::string::{String, ToString};
 
-use radroots_event::ids::RadrootsClassifiedListingAddress;
+use radroots_event::id::RadrootsClassifiedListingAddress;
 #[cfg(feature = "serde_json")]
 use radroots_event::{
     draft::{RadrootsDraftError, RadrootsEventDraft},
-    kinds::KIND_CLASSIFIED_LISTING,
+    envelope::kind::KIND_CLASSIFIED_LISTING,
 };
 #[cfg(feature = "serde_json")]
 use radroots_event_codec::operational_listing::encode::to_wire_parts_with_kind;
@@ -172,16 +172,16 @@ mod tests {
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::validate_event_contract_shape,
+        envelope::kind::KIND_CLASSIFIED_LISTING,
         farm::RadrootsFarmRef,
-        ids::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
-        kinds::KIND_CLASSIFIED_LISTING,
-        operational_listing::{
+        farm::resource_area::RadrootsResourceAreaRef,
+        id::{RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsInventoryBinId},
+        listing::operational::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
             RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
             RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
             RadrootsOperationalListingStatus,
         },
-        resource_area::RadrootsResourceAreaRef,
     };
     use radroots_event_codec::verification::verify_nip01_event;
     use radroots_identity::PublicKey;

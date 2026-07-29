@@ -16,8 +16,8 @@ use crate::model::{
 use crate::nip09::reconciliation_v1::{
     EventAdmission, ReconciliationProfile, generation_from_blob,
 };
-use radroots_event::food_availability::RadrootsFoodIdentifier;
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::food::availability::RadrootsFoodIdentifier;
+use radroots_event::id::RadrootsEventId;
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsFoodAvailabilityProjectionOutcome,
     project_verified_food_availability_event_registry_v7,

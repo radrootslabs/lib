@@ -13,9 +13,11 @@ mod tests {
         resource_area_stewards_list_set,
     };
     use radroots_event::farm::RadrootsFarmRef;
-    use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-    use radroots_event::plot::RadrootsPlotRef;
-    use radroots_event::resource_area::{
+    use radroots_event::farm::change_set::{
+        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+    };
+    use radroots_event::farm::plot::RadrootsPlotRef;
+    use radroots_event::farm::resource_area::{
         RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
     };
 

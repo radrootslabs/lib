@@ -6,8 +6,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    job::{JobFeedbackStatus, JobInputType},
-    job_request::{RadrootsJobInput, RadrootsJobParam},
+    social::job::{JobFeedbackStatus, JobInputType},
+    social::job_request::{RadrootsJobInput, RadrootsJobParam},
 };
 
 use crate::job::error::JobParseError;

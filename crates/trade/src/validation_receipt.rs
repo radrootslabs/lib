@@ -9,10 +9,10 @@ use alloc::{
 
 use base64::Engine as _;
 use radroots_event::{
-    RadrootsEventEnvelope,
-    ids::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts},
-    kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
-    tags::{TAG_A, TAG_D},
+    envelope::RadrootsEventEnvelope,
+    envelope::kind::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
+    id::{RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts},
+    tag::name::{TAG_A, TAG_D},
     wire::RadrootsNip01EventWireParts,
 };
 use radroots_identity::PublicKey;
@@ -1146,10 +1146,11 @@ mod tests {
         verify_validation_receipt_event, verify_validator_set_event,
     };
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
-        ids::RadrootsAddressableCoordinate,
-        kinds::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
-        tags::TAG_D,
+        envelope::RadrootsEventEnvelope,
+        envelope::RadrootsEventEnvelopeParts,
+        envelope::kind::{KIND_TRADE_VALIDATION_RECEIPT, KIND_VALIDATOR_SET},
+        id::RadrootsAddressableCoordinate,
+        tag::name::TAG_D,
     };
     use radroots_identity::PublicKey;
     use radroots_test_fixtures::{
@@ -1176,7 +1177,7 @@ mod tests {
         PublicKey::from_hex(FIXTURE_CAROL_PUBLIC_KEY_HEX).expect("validator pubkey")
     }
 
-    fn validator_set_addr() -> radroots_event::ids::RadrootsAddressableCoordinate {
+    fn validator_set_addr() -> radroots_event::id::RadrootsAddressableCoordinate {
         validator_set_address(&validator_set_author(), &validator_set_id())
             .expect("validator set address")
     }

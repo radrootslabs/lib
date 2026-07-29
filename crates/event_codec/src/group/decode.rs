@@ -5,7 +5,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    group::{
+    social::group::{
         KIND_GROUP_ADMINS, KIND_GROUP_CREATE_GROUP, KIND_GROUP_CREATE_INVITE,
         KIND_GROUP_DELETE_EVENT, KIND_GROUP_DELETE_GROUP, KIND_GROUP_EDIT_METADATA,
         KIND_GROUP_JOIN_REQUEST, KIND_GROUP_LEAVE_REQUEST, KIND_GROUP_MEMBERS, KIND_GROUP_METADATA,
@@ -16,7 +16,7 @@ use radroots_event::{
         RadrootsGroupMetadata, RadrootsGroupPutUser, RadrootsGroupRemoveUser, RadrootsGroupRole,
         RadrootsGroupRoles, RadrootsGroupUserRef,
     },
-    tags::{TAG_D, TAG_E, TAG_H, TAG_P},
+    tag::name::{TAG_D, TAG_E, TAG_H, TAG_P},
 };
 
 use crate::error::EventParseError;

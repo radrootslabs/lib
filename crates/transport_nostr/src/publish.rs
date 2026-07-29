@@ -1057,7 +1057,7 @@ mod tests {
     use super::{RadrootsNostrEvent, ensure_raw_event_matches_signed_event};
     use nostr::JsonUtil;
     use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-    use radroots_event::kinds::KIND_GEOCHAT;
+    use radroots_event::envelope::kind::KIND_GEOCHAT;
     use radroots_event::wire::RadrootsNip01EventWire;
     use radroots_nostr::prelude::{
         RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,

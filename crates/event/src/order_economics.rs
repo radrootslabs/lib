@@ -5,7 +5,7 @@ use alloc::{string::String, vec::Vec};
 
 use radroots_core::{Currency, Decimal, Money, Unit};
 
-use crate::ids::{RadrootsInventoryBinId, RadrootsOrderQuoteId};
+use crate::id::{RadrootsInventoryBinId, RadrootsOrderQuoteId};
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]

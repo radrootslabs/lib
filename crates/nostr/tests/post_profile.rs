@@ -3,7 +3,7 @@ mod test_fixtures;
 
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
-    RadrootsAuthoredImage,
+    media::RadrootsAuthoredImage,
     post::{
         RadrootsAuthoredAsk, RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostImage,
         RadrootsAuthoredUpdate, RadrootsPostImageDimensions,

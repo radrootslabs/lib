@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 
-use radroots_event::relay_document::RadrootsRelayDocument;
+use radroots_event::social::relay_document::RadrootsRelayDocument;
 
 use crate::error::EventEncodeError;
 

@@ -11,15 +11,15 @@ use crate::{
         RadrootsCalendarUri, RadrootsIanaTimeZoneId, canonical_calendar_geohash_is_valid,
         canonical_calendar_tag_text_is_valid, covered_utc_days,
     },
-    classified_listing::{
-        RadrootsClassifiedListingPartition, TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY,
-    },
     envelope::RadrootsEventEnvelope,
-    ids::{
+    envelope::kind::*,
+    id::{
         RadrootsAddressableCoordinate, RadrootsDTag, RadrootsEventId, RadrootsNip01Coordinate,
         parse_public_key, relay_url_is_valid,
     },
-    kinds::*,
+    listing::classified::{
+        RadrootsClassifiedListingPartition, TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY,
+    },
 };
 use radroots_blossom::BlobUrl;
 
@@ -4402,7 +4402,7 @@ fn validate_calendar_rsvp_contract(
         .find(|tag| tag.first().map(String::as_str) == Some("a"))
         .and_then(|tag| tag.get(1))
         .and_then(|coordinate| {
-            crate::ids::RadrootsAddressableCoordinateParts::parse(coordinate).ok()
+            crate::id::RadrootsAddressableCoordinateParts::parse(coordinate).ok()
         })
         .map(|parts| parts.pubkey);
     if let Some(author_hint) = tag_value(tags, "p") {
@@ -4737,7 +4737,7 @@ fn canonical_calendar_coordinate_is_valid(value: &str) -> bool {
     let Some((pubkey, d_tag)) = remainder.split_once(':') else {
         return false;
     };
-    let Ok(parts) = crate::ids::RadrootsAddressableCoordinateParts::parse(value) else {
+    let Ok(parts) = crate::id::RadrootsAddressableCoordinateParts::parse(value) else {
         return false;
     };
     kind == "31924" && pubkey == parts.pubkey.to_hex() && d_tag == parts.d_tag.as_str()
@@ -4750,7 +4750,7 @@ fn canonical_calendar_event_coordinate_is_valid(value: &str) -> bool {
     let Some((pubkey, d_tag)) = remainder.split_once(':') else {
         return false;
     };
-    let Ok(parts) = crate::ids::RadrootsAddressableCoordinateParts::parse(value) else {
+    let Ok(parts) = crate::id::RadrootsAddressableCoordinateParts::parse(value) else {
         return false;
     };
     matches!(

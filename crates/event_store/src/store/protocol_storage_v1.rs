@@ -4,7 +4,7 @@ use crate::model::reconciliation_v1::{
     StoredEventClass,
 };
 use radroots_event::envelope::RadrootsEventKind;
-use radroots_event::event_head::v1::RadrootsEventHeadCoordinate;
+use radroots_event::envelope::event_head::v1::RadrootsEventHeadCoordinate;
 use radroots_identity::PublicKey;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{Row, Sqlite, Transaction};

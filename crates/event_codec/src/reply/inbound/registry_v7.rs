@@ -7,13 +7,13 @@ use core::fmt;
 use std::collections::BTreeSet;
 
 use radroots_event::{
-    ids::{RadrootsEventId, RadrootsIdParseError},
-    kinds::KIND_POST,
+    envelope::kind::KIND_POST,
+    id::{RadrootsEventId, RadrootsIdParseError},
     post::{
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,
         RADROOTS_POST_TAG_ELEMENT_MAX_BYTES, RADROOTS_POST_TAG_TOTAL_MAX_BYTES,
     },
-    relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::RadrootsNostrRelayHint,
 };
 use radroots_identity::{Error as PublicKeyError, PublicKey};
 

@@ -63,14 +63,12 @@ use crate::schema::{
     destroy_event_store_schema_for_test,
     rollback_event_store_schema_offline_destructive_for_migration_test,
 };
-use radroots_event::event_head::v1::RadrootsEventHeadCoordinate;
+use radroots_event::envelope::event_head::v1::RadrootsEventHeadCoordinate;
 #[cfg(test)]
-use radroots_event::event_head::v1::{
+use radroots_event::envelope::event_head::v1::{
     RadrootsEventHeadCandidateResult, event_head_candidate_for_nip01_event_v1,
 };
-use radroots_event::ids::{
-    RadrootsDTag, RadrootsEventId, RadrootsTradeId, RadrootsTradeMutationId,
-};
+use radroots_event::id::{RadrootsDTag, RadrootsEventId, RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_event::trade::RadrootsTradeMutationKindV1;
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
@@ -1786,14 +1784,14 @@ mod tests {
         TagKind as RadrootsNostrTagKind, Timestamp as RadrootsNostrTimestamp,
     };
     use radroots_event::draft::RadrootsSignedEvent;
-    use radroots_event::food_availability::{
-        RadrootsFoodAvailabilityStatus, RadrootsFoodIdentifier,
-    };
-    use radroots_event::ids::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId};
-    use radroots_event::kinds::{
+    use radroots_event::envelope::kind::{
         KIND_CALENDAR_DATE_EVENT, KIND_CLASSIFIED_LISTING, KIND_DELETION_REQUEST, KIND_FARM,
         KIND_GEOCHAT, KIND_LIST_SET_RELAY, KIND_POST, KIND_PROFILE, KIND_RELAY_AUTH,
     };
+    use radroots_event::food::availability::{
+        RadrootsFoodAvailabilityStatus, RadrootsFoodIdentifier,
+    };
+    use radroots_event::id::{RadrootsClassifiedListingAddress, RadrootsInventoryBinId};
     use radroots_event::trade::{
         RADROOTS_TRADE_DECISION_CONTRACT_ID, RADROOTS_TRADE_PROPOSAL_CONTRACT_ID,
         RADROOTS_TRADE_SCHEMA_VERSION, RadrootsFulfillmentProfileV1,

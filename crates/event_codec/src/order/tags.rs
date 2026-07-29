@@ -2,9 +2,9 @@
 use alloc::{borrow::ToOwned, string::String, vec, vec::Vec};
 
 use radroots_event::{
-    RadrootsEventPtr,
-    ids::{RadrootsEventEnvelopePointer, RadrootsEventId},
-    tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
+    id::{RadrootsEventEnvelopePointer, RadrootsEventId},
+    tag::RadrootsEventPtr,
+    tag::name::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
 };
 
 use crate::{
@@ -253,9 +253,9 @@ mod tests {
         job::error::JobParseError,
     };
     use radroots_event::{
-        RadrootsEventPtr,
-        kinds::KIND_CLASSIFIED_LISTING,
-        tags::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
+        envelope::kind::KIND_CLASSIFIED_LISTING,
+        tag::RadrootsEventPtr,
+        tag::name::{TAG_D, TAG_E_PREV, TAG_E_ROOT},
     };
 
     fn event_id(character: char) -> String {

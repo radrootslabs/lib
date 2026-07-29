@@ -49,7 +49,7 @@ mod tests {
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey};
     use nostr::JsonUtil;
     use radroots_event::draft::RadrootsEventDraft;
-    use radroots_event::kinds::KIND_GEOCHAT;
+    use radroots_event::envelope::kind::KIND_GEOCHAT;
 
     fn fixture_keys(secret_key_hex: &str) -> RadrootsNostrKeys {
         let secret_key = RadrootsNostrSecretKey::from_hex(secret_key_hex).expect("secret key");

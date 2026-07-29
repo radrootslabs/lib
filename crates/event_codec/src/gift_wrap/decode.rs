@@ -5,8 +5,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
-    kinds::KIND_GIFT_WRAP,
+    envelope::kind::KIND_GIFT_WRAP,
+    social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient},
 };
 
 use crate::error::EventParseError;

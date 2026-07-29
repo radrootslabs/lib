@@ -6,7 +6,7 @@ use radroots_event::contract::{
     RadrootsContractValidationError, RadrootsEventClass, all_event_contracts,
     validate_event_contract_shape,
 };
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM,
     KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_WIKI_ARTICLE,
 };
@@ -14,7 +14,7 @@ use radroots_event::knowledge::{
     RADROOTS_KNOWLEDGE_CLAIM_SCHEMA, RADROOTS_KNOWLEDGE_FIELD_REPORT_SCHEMA, RadrootsWikiArticle,
 };
 use radroots_event::wire::RadrootsNip01EventWireParts;
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::knowledge::{
     contribution_attestation_to_wire_parts, evidence_bounty_to_wire_parts,

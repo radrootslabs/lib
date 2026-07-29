@@ -619,7 +619,7 @@ impl RadrootsFoodAvailabilityImage {
 /// and bind these details to a per-revision `created_at` before signing.
 ///
 /// ```compile_fail
-/// let _: radroots_event::food_availability::RadrootsFoodAvailabilityDetails =
+/// let _: radroots_event::food::availability::RadrootsFoodAvailabilityDetails =
 ///     serde_json::from_str(r#"{"content":"carrots"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]

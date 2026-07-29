@@ -3,7 +3,7 @@ use crate::operational_listing::model::{
 };
 use radroots_core::pricing::{Error as PricingError, QuantityPriceOps};
 use radroots_core::{Decimal, Quantity};
-use radroots_event::operational_listing::RadrootsOperationalListingBin;
+use radroots_event::listing::operational::RadrootsOperationalListingBin;
 
 pub trait BinPricingTryExt {
     fn try_subtotal_for_count(
@@ -67,8 +67,8 @@ mod tests {
     use super::BinPricingTryExt;
     use radroots_core::pricing::Error as PricingError;
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-    use radroots_event::ids::RadrootsInventoryBinId;
-    use radroots_event::operational_listing::RadrootsOperationalListingBin;
+    use radroots_event::id::RadrootsInventoryBinId;
+    use radroots_event::listing::operational::RadrootsOperationalListingBin;
 
     fn bin_id(raw: &str) -> RadrootsInventoryBinId {
         RadrootsInventoryBinId::parse(raw).expect("bin id")

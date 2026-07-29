@@ -34,8 +34,8 @@ pub use food_availability_projection_v1::{
 };
 
 use crate::RadrootsEventStoreError;
-use radroots_event::RadrootsEventKind;
-use radroots_event::ids::{
+use radroots_event::envelope::RadrootsEventKind;
+use radroots_event::id::{
     RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId, RadrootsTradeCandidateId,
     RadrootsTradeId, RadrootsTradeMutationId,
 };
@@ -603,12 +603,12 @@ pub struct RadrootsTradeProjectionCheckpoint {
 mod tests {
     use super::*;
     use crate::model::reconciliation_v1::{tag_semantic_name, tag_value_type_name};
-    use radroots_event::RadrootsEventKindClass;
     use radroots_event::contract::{RadrootsTagSemantic, RadrootsTagValueType};
-    use radroots_event::event_head::{
+    use radroots_event::envelope::RadrootsEventKindClass;
+    use radroots_event::envelope::event_head::{
         RadrootsCurrentEventHead, RadrootsEventHeadCoordinate, RadrootsEventHeadDecision,
     };
-    use radroots_event::ids::RadrootsEventId;
+    use radroots_event::id::RadrootsEventId;
     use radroots_identity::PublicKey;
 
     #[test]

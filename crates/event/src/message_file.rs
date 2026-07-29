@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use crate::RadrootsEventPtr;
-use crate::message::RadrootsMessageRecipient;
+use crate::social::message::RadrootsMessageRecipient;
+use crate::tag::RadrootsEventPtr;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

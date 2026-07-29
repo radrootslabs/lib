@@ -34,3 +34,4 @@ expand a package beyond its charter.
 | `radroots_identity` | [`radroots_identity.txt`](radroots_identity.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_blossom` | [`radroots_blossom.txt`](radroots_blossom.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_protocol` | [`radroots_protocol.txt`](radroots_protocol.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots_event` | [`radroots_event.txt`](radroots_event.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |

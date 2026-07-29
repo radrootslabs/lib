@@ -1,5 +1,5 @@
 use super::*;
-use radroots_event::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::RadrootsEventEnvelopeParts;
 
 #[test]
 fn id_verification_returns_the_exact_envelope() {

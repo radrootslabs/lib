@@ -1,4 +1,7 @@
-use crate::{RadrootsEventPtr, job::JobPaymentRequest, job_request::RadrootsJobInput};
+use crate::{
+    social::{job::JobPaymentRequest, job_request::RadrootsJobInput},
+    tag::RadrootsEventPtr,
+};
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

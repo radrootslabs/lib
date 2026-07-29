@@ -9,8 +9,8 @@ use crate::contract::registry_v7::{
     RadrootsContractMatchError, RadrootsEventClass, RadrootsEventContract, identify_event_contract,
 };
 use crate::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass, RadrootsEventTag};
-use crate::ids::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError};
-use crate::tags::TAG_D;
+use crate::id::{RadrootsDTag, RadrootsEventId, RadrootsIdParseError};
+use crate::tag::name::TAG_D;
 use radroots_identity::PublicKey;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -215,4 +215,5 @@ fn first_tag_value<'a>(tags: &'a [RadrootsEventTag], name: &str) -> Option<&'a s
 }
 
 #[cfg(test)]
+#[path = "v1/tests.rs"]
 mod tests;

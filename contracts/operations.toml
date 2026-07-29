@@ -464,7 +464,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::verification::RadrootsIdVerifiedEvent",
   "radroots_event_codec::verification::RadrootsNip01VerificationError",
   "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
@@ -514,9 +514,9 @@ transport = "none"
 [operations.event_select_head.implementation]
 rust_modules = ["crates/event/src/event_head.rs"]
 rust_types = [
-  "radroots_event::event_head::RadrootsCurrentEventHead",
-  "radroots_event::event_head::RadrootsEventHeadCandidate",
-  "radroots_event::event_head::RadrootsEventHeadDecision",
+  "radroots_event::envelope::event_head::RadrootsCurrentEventHead",
+  "radroots_event::envelope::event_head::RadrootsEventHeadCandidate",
+  "radroots_event::envelope::event_head::RadrootsEventHeadDecision",
 ]
 
 [operations.event_select_head.conformance]
@@ -540,10 +540,10 @@ rust_modules = [
 ]
 rust_types = [
   "radroots_blossom::ByteVerifiedDescriptor",
-  "radroots_event::food_availability::RadrootsFoodAvailabilityDetails",
-  "radroots_event::food_availability::RadrootsFoodAvailabilityDetailsParts",
-  "radroots_event::food_availability::RadrootsFoodAvailabilityError",
-  "radroots_event::food_availability::RadrootsFoodAvailabilityImage",
+  "radroots_event::food::availability::RadrootsFoodAvailabilityDetails",
+  "radroots_event::food::availability::RadrootsFoodAvailabilityDetailsParts",
+  "radroots_event::food::availability::RadrootsFoodAvailabilityError",
+  "radroots_event::food::availability::RadrootsFoodAvailabilityImage",
   "radroots_event::media::RadrootsAuthoredImage",
   "radroots_event::wire::RadrootsNip01EventWireParts",
   "radroots_event_codec::food_availability::authored::RadrootsFoodAvailabilityEncodeError",
@@ -574,8 +574,8 @@ rust_modules = [
   "crates/event_codec/src/food_availability/inbound.rs",
 ]
 rust_types = [
-  "radroots_event::classified_listing::RadrootsClassifiedListingPartition",
-  "radroots_event::food_availability::RadrootsFoodAvailabilityError",
+  "radroots_event::listing::classified::RadrootsClassifiedListingPartition",
+  "radroots_event::food::availability::RadrootsFoodAvailabilityError",
   "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityImageDiagnostic",
   "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionError",
   "radroots_event_codec::food_availability::inbound::RadrootsFoodAvailabilityProjectionOutcome",
@@ -609,7 +609,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::food_availability::admission::RadrootsAdmittedFoodAvailabilityEvent",
   "radroots_event_codec::food_availability::admission::RadrootsExcludedClassifiedListingCandidate",
   "radroots_event_codec::food_availability::admission::RadrootsFoodAvailabilityAdmissionError",
@@ -729,7 +729,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::profile::admission::RadrootsAdmittedProfileEvent",
   "radroots_event_codec::profile::admission::RadrootsProfileAdmissionError",
   "radroots_event_codec::profile::inbound::RadrootsInboundProfileMetadata",
@@ -773,7 +773,7 @@ rust_modules = [
   "crates/event_codec/src/operational_listing/encode.rs",
   "crates/event_codec/src/operational_listing/tags.rs",
 ]
-rust_types = ["radroots_event::operational_listing::RadrootsOperationalListing"]
+rust_types = ["radroots_event::listing::operational::RadrootsOperationalListing"]
 
 [operations.operational_listing_build_tags.conformance]
 vector = "contracts/conformance/vectors/operational_listing/build_tags.v1.json"
@@ -794,7 +794,7 @@ rust_modules = [
   "crates/event_codec/src/operational_listing/encode.rs",
   "crates/event_codec/src/wire.rs",
 ]
-rust_types = ["radroots_event::operational_listing::RadrootsOperationalListing"]
+rust_types = ["radroots_event::listing::operational::RadrootsOperationalListing"]
 
 [operations.operational_listing_build_draft.conformance]
 vector = "contracts/conformance/vectors/operational_listing/build_draft.v1.json"
@@ -813,9 +813,9 @@ transport = "native"
 [operations.operational_listing_parse_event.implementation]
 rust_modules = ["crates/event_codec/src/operational_listing/decode.rs"]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
-  "radroots_event::operational_listing::RadrootsOperationalListingParseError",
-  "radroots_event::operational_listing::RadrootsOperationalListing",
+  "radroots_event::envelope::RadrootsEventEnvelope",
+  "radroots_event::listing::operational::RadrootsOperationalListingParseError",
+  "radroots_event::listing::operational::RadrootsOperationalListing",
 ]
 
 [operations.operational_listing_parse_event.conformance]
@@ -929,10 +929,10 @@ rust_modules = [
   "crates/event_codec/src/reply/authored.rs",
 ]
 rust_types = [
-  "radroots_event::reply::RadrootsAuthoredNip10Reply",
-  "radroots_event::reply::RadrootsNip10ReplyError",
-  "radroots_event::relay_hint::RadrootsNostrRelayHint",
-  "radroots_event::reply::RadrootsNip10ReplyReference",
+  "radroots_event::post::reply::RadrootsAuthoredNip10Reply",
+  "radroots_event::post::reply::RadrootsNip10ReplyError",
+  "radroots_event::tag::relay_hint::RadrootsNostrRelayHint",
+  "radroots_event::post::reply::RadrootsNip10ReplyReference",
 ]
 
 [operations.social_reply_build_authored_draft.conformance]
@@ -959,7 +959,7 @@ rust_modules = [
   "crates/event_codec/src/reply/inbound.rs",
 ]
 rust_types = [
-  "radroots_event::relay_hint::RadrootsNostrRelayHint",
+  "radroots_event::tag::relay_hint::RadrootsNostrRelayHint",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10EventReference",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10Participant",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -994,7 +994,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::reply::admission::RadrootsAdmittedNip10ReplyEvent",
   "radroots_event_codec::reply::admission::RadrootsNip10ReplyAdmissionError",
   "radroots_event_codec::reply::inbound::RadrootsInboundNip10ReplyProjection",
@@ -1055,7 +1055,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::post::admission::RadrootsAdmittedRootPostEvent",
   "radroots_event_codec::post::admission::RadrootsPostAdmissionError",
   "radroots_event_codec::post::admission::RadrootsPostAdmissionOutcome",
@@ -1089,15 +1089,15 @@ rust_modules = [
   "crates/event_codec/src/comment/authored.rs",
 ]
 rust_types = [
-  "radroots_event::comment::RadrootsAuthoredNip22Comment",
-  "radroots_event::comment::RadrootsNip22AddressRootReference",
-  "radroots_event::comment::RadrootsNip22CommentError",
-  "radroots_event::comment::RadrootsNip22CommentParentReference",
-  "radroots_event::comment::RadrootsNip22CommentPosition",
-  "radroots_event::comment::RadrootsNip22CommentRoot",
-  "radroots_event::comment::RadrootsNip22CommentRootKind",
-  "radroots_event::comment::RadrootsNip22EventRootReference",
-  "radroots_event::relay_hint::RadrootsNostrRelayHint",
+  "radroots_event::post::comment::RadrootsAuthoredNip22Comment",
+  "radroots_event::post::comment::RadrootsNip22AddressRootReference",
+  "radroots_event::post::comment::RadrootsNip22CommentError",
+  "radroots_event::post::comment::RadrootsNip22CommentParentReference",
+  "radroots_event::post::comment::RadrootsNip22CommentPosition",
+  "radroots_event::post::comment::RadrootsNip22CommentRoot",
+  "radroots_event::post::comment::RadrootsNip22CommentRootKind",
+  "radroots_event::post::comment::RadrootsNip22EventRootReference",
+  "radroots_event::tag::relay_hint::RadrootsNostrRelayHint",
   "radroots_event::wire::RadrootsNip01EventWireParts",
 ]
 
@@ -1165,7 +1165,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::comment::admission::RadrootsAdmittedNip22CommentEvent",
   "radroots_event_codec::comment::admission::RadrootsNip22CommentAdmissionError",
   "radroots_event_codec::comment::inbound::RadrootsInboundNip22CommentProjection",
@@ -1197,11 +1197,11 @@ rust_modules = [
   "crates/event_codec/src/deletion/authored.rs",
 ]
 rust_types = [
-  "radroots_event::deletion::RadrootsAuthoredNip09DeletionRequest",
-  "radroots_event::deletion::RadrootsNip09DeletionAddressTarget",
-  "radroots_event::deletion::RadrootsNip09DeletionError",
-  "radroots_event::deletion::RadrootsNip09DeletionEventTarget",
-  "radroots_event::ids::RadrootsNip01Coordinate",
+  "radroots_event::post::deletion::RadrootsAuthoredNip09DeletionRequest",
+  "radroots_event::post::deletion::RadrootsNip09DeletionAddressTarget",
+  "radroots_event::post::deletion::RadrootsNip09DeletionError",
+  "radroots_event::post::deletion::RadrootsNip09DeletionEventTarget",
+  "radroots_event::id::RadrootsNip01Coordinate",
   "radroots_event::wire::RadrootsNip01EventWireParts",
 ]
 
@@ -1263,7 +1263,7 @@ rust_modules = [
   "crates/event_codec/src/verification.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::deletion::admission::RadrootsAdmittedNip09DeletionRequestEvent",
   "radroots_event_codec::deletion::admission::RadrootsNip09DeletionAdmissionError",
   "radroots_event_codec::deletion::inbound::RadrootsInboundNip09DeletionProjection",
@@ -1321,7 +1321,7 @@ transport = "native"
 
 [operations.social_reaction_build_tags.implementation]
 rust_modules = ["crates/event_codec/src/reaction/encode.rs"]
-rust_types = ["radroots_event::reaction::RadrootsReaction"]
+rust_types = ["radroots_event::post::reaction::RadrootsReaction"]
 
 [operations.social_reaction_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -1339,7 +1339,7 @@ transport = "native"
 
 [operations.social_article_build_tags.implementation]
 rust_modules = ["crates/event_codec/src/article/encode.rs"]
-rust_types = ["radroots_event::article::RadrootsArticle"]
+rust_types = ["radroots_event::post::article::RadrootsArticle"]
 
 [operations.social_article_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -1357,7 +1357,7 @@ transport = "native"
 
 [operations.social_file_metadata_build_tags.implementation]
 rust_modules = ["crates/event_codec/src/file_metadata/encode.rs"]
-rust_types = ["radroots_event::file_metadata::RadrootsFileMetadata"]
+rust_types = ["radroots_event::media::file_metadata::RadrootsFileMetadata"]
 
 [operations.social_file_metadata_build_tags.conformance]
 vector = "contracts/conformance/vectors/social/mvp.v1.json"
@@ -1762,7 +1762,7 @@ transport = "native"
 [operations.trade_parse_mutation_event.implementation]
 rust_modules = ["crates/event_codec/src/trade/mod.rs"]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event::trade::RadrootsTradeMutationEnvelopeV1",
 ]
 
@@ -1782,12 +1782,12 @@ transport = "native"
 
 [operations.trade_parse_classified_listing_address.implementation]
 rust_modules = [
-  "crates/event/src/ids.rs",
+  "crates/event/src/id.rs",
   "crates/trade/src/operational_listing/mod.rs",
 ]
 rust_types = [
-  "radroots_event::ids::RadrootsClassifiedListingAddress",
-  "radroots_event::ids::RadrootsIdParseError",
+  "radroots_event::id::RadrootsClassifiedListingAddress",
+  "radroots_event::id::RadrootsIdParseError",
   "radroots_trade::operational_listing::RadrootsClassifiedListingAddressParts",
 ]
 
@@ -1837,7 +1837,7 @@ rust_modules = [
 ]
 rust_types = [
   "radroots_event_codec::verification::RadrootsSignatureVerifiedEvent",
-  "radroots_event::trade_validation::RadrootsOperationalListingValidationError",
+  "radroots_event::trade::validation::RadrootsOperationalListingValidationError",
   "radroots_trade::operational_listing::validation::RadrootsOperationalListingTradeProjection",
 ]
 
@@ -1886,7 +1886,7 @@ rust_modules = [
   "crates/event_codec/src/knowledge/decode.rs",
 ]
 rust_types = [
-  "radroots_event::RadrootsEventEnvelope",
+  "radroots_event::envelope::RadrootsEventEnvelope",
   "radroots_event_codec::verification::RadrootsDecodedEvent",
 ]
 

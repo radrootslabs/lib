@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::kinds::KIND_APP_DATA as KIND_APP_DATA_EVENT;
+use crate::envelope::kind::KIND_APP_DATA as KIND_APP_DATA_EVENT;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;

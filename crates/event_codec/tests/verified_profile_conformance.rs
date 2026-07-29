@@ -2,12 +2,15 @@
 
 use std::{borrow::Cow, fs, path::Path};
 
-use radroots_event::event_head::{
+use radroots_event::envelope::event_head::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidate, RadrootsEventHeadCandidateResult,
     RadrootsEventHeadDecision, event_head_candidate_for_event, select_event_head,
 };
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsNip01EventWire};
-use radroots_event::{RadrootsEventWireError, ids::RadrootsIdParseError};
+use radroots_event::{
+    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
+    wire::RadrootsNip01EventWire,
+};
+use radroots_event::{id::RadrootsIdParseError, wire::RadrootsEventWireError};
 use radroots_event_codec::profile::admission::{
     RadrootsAdmittedProfileEvent, RadrootsProfileAdmissionError, verify_and_admit_profile_event,
 };

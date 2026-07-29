@@ -6,8 +6,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_POST,
-    reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference},
+    envelope::kind::KIND_POST,
+    post::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference},
     wire::RadrootsNip01EventWireParts,
 };
 

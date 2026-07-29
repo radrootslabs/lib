@@ -7,7 +7,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_RESOURCE_HARVEST_CAP, resource_cap::RadrootsResourceHarvestCap, tags::TAG_D,
+    envelope::kind::KIND_RESOURCE_HARVEST_CAP, farm::resource_cap::RadrootsResourceHarvestCap,
+    tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;

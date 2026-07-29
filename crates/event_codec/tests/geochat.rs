@@ -2,8 +2,8 @@ mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    geochat::RadrootsGeoChat,
-    kinds::{KIND_GEOCHAT, KIND_POST},
+    envelope::kind::{KIND_GEOCHAT, KIND_POST},
+    social::geochat::RadrootsGeoChat,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::geochat::decode::{

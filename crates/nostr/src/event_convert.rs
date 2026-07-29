@@ -2,7 +2,8 @@
 
 use crate::types::RadrootsNostrEvent as RadrootsNostrRawEvent;
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts, RadrootsEventPtr,
+    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeError,
+    envelope::RadrootsEventEnvelopeParts, tag::RadrootsEventPtr,
 };
 
 pub fn radroots_event_from_nostr(

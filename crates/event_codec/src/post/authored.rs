@@ -6,7 +6,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_POST,
+    envelope::kind::KIND_POST,
     post::{
         RADROOTS_ASK_MARKER_TAG_KEY, RADROOTS_ASK_MARKER_TAG_VALUE, RadrootsAuthoredAsk,
         RadrootsAuthoredPhotoUpdate, RadrootsAuthoredPostImage, RadrootsAuthoredUpdate,

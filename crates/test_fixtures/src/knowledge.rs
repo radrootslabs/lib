@@ -1,5 +1,4 @@
-use radroots_event::RadrootsEventRef;
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_EVIDENCE_BOUNTY, KIND_FILE_METADATA,
     KIND_KNOWLEDGE_CHANGE_PROPOSAL, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT,
     KIND_KNOWLEDGE_RELATION, KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE,
@@ -19,6 +18,7 @@ use radroots_event::knowledge::{
     RadrootsKnowledgeReviewTarget, RadrootsKnowledgeSource, RadrootsWikiArticle,
     RadrootsWikiArticleVersionRef, RadrootsWikiMergeRequest, RadrootsWikiRedirect,
 };
+use radroots_event::tag::RadrootsEventRef;
 use radroots_identity::PublicKey;
 
 use crate::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};

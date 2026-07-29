@@ -3,41 +3,45 @@ mod test_fixtures;
 
 use radroots_core::pricing::{Discount, DiscountScope, DiscountThreshold, DiscountValue};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-use radroots_event::RadrootsEventPtr;
-use radroots_event::app_data::RadrootsAppData;
-use radroots_event::coop::RadrootsCoop;
-use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
-use radroots_event::follow::{RadrootsFollow, RadrootsFollowProfile};
-use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_event::geochat::RadrootsGeoChat;
-use radroots_event::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
-use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use radroots_event::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
-use radroots_event::job_feedback::RadrootsJobFeedback;
-use radroots_event::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
-use radroots_event::job_result::RadrootsJobResult;
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_ARTICLE, KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
 };
-use radroots_event::list::{RadrootsList, RadrootsListEntry};
-use radroots_event::list_set::RadrootsListSet;
-use radroots_event::message::{RadrootsMessage, RadrootsMessageRecipient};
-use radroots_event::message_file::RadrootsMessageFile;
-use radroots_event::operational_listing::{
+use radroots_event::farm::change_set::{
+    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+};
+use radroots_event::farm::coop::RadrootsCoop;
+use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotRef};
+use radroots_event::farm::resource_area::{
+    RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
+};
+use radroots_event::farm::resource_cap::{
+    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
+};
+use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
+use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::listing::operational::{
     RadrootsOperationalListing, RadrootsOperationalListingAvailability,
     RadrootsOperationalListingBin, RadrootsOperationalListingImage,
     RadrootsOperationalListingImageSize, RadrootsOperationalListingProduct,
     RadrootsOperationalListingPublicLocation, RadrootsOperationalListingStatus,
 };
-use radroots_event::plot::{RadrootsPlot, RadrootsPlotRef};
-use radroots_event::reaction::RadrootsReaction;
-use radroots_event::resource_area::{
-    RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
-};
-use radroots_event::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
-use radroots_event::seal::RadrootsSeal;
+use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
+use radroots_event::post::reaction::RadrootsReaction;
 use radroots_event::social::RadrootsSocialTarget;
+use radroots_event::social::app_data::RadrootsAppData;
+use radroots_event::social::follow::{RadrootsFollow, RadrootsFollowProfile};
+use radroots_event::social::geochat::RadrootsGeoChat;
+use radroots_event::social::gift_wrap::{RadrootsGiftWrap, RadrootsGiftWrapRecipient};
+use radroots_event::social::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
+use radroots_event::social::job_feedback::RadrootsJobFeedback;
+use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
+use radroots_event::social::job_result::RadrootsJobResult;
+use radroots_event::social::list::{RadrootsList, RadrootsListEntry};
+use radroots_event::social::list_set::RadrootsListSet;
+use radroots_event::social::message::{RadrootsMessage, RadrootsMessageRecipient};
+use radroots_event::social::message_file::RadrootsMessageFile;
+use radroots_event::social::seal::RadrootsSeal;
+use radroots_event::tag::RadrootsEventPtr;
 use radroots_event_codec::error::EventEncodeError;
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::operational_listing::encode::operational_listing_build_tags;

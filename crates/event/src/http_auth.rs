@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::kinds::KIND_HTTP_AUTH as KIND_HTTP_AUTH_EVENT;
+use crate::envelope::kind::KIND_HTTP_AUTH as KIND_HTTP_AUTH_EVENT;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;

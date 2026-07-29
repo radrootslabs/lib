@@ -2,8 +2,8 @@ use super::RadrootsTransportObservation;
 use crate::RadrootsEventStoreError;
 use radroots_event::contract::registry_v7::{RadrootsTagSemantic, RadrootsTagValueType};
 use radroots_event::draft::RadrootsSignedEvent;
+use radroots_event::envelope::event_head::v1::RadrootsEventHeadDecision;
 use radroots_event::envelope::{RadrootsEventEnvelope, RadrootsEventKindClass};
-use radroots_event::event_head::v1::RadrootsEventHeadDecision;
 use radroots_event_codec::verification::v1::RadrootsSignatureVerifiedEvent;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

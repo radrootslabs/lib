@@ -2,7 +2,7 @@
 
 use core::str::FromStr;
 
-use radroots_event::ids::{
+use radroots_event::id::{
     RadrootsClassifiedListingAddress, RadrootsEventId, RadrootsIdParseError, RadrootsOrderId,
 };
 use radroots_identity::PublicKey;
@@ -141,7 +141,7 @@ impl RadrootsTradeLocatorCandidate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::kinds::KIND_CLASSIFIED_LISTING;
+    use radroots_event::envelope::kind::KIND_CLASSIFIED_LISTING;
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
 
     const BUYER: &str = FIXTURE_BOB_PUBLIC_KEY_HEX;

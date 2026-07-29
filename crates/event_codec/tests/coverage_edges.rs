@@ -1,6 +1,6 @@
 #![cfg(feature = "serde_json")]
 
-use radroots_event::kinds::KIND_POST;
+use radroots_event::envelope::kind::KIND_POST;
 use radroots_event_codec::error::EventParseError;
 
 fn assert_invalid_kind<T>(result: Result<T, EventParseError>, expected: &'static str, got: u32) {

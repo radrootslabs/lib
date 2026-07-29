@@ -1,5 +1,5 @@
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
-use radroots_event::food_availability::{
+use radroots_event::food::availability::{
     RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityDetailsParts,
     RadrootsFoodAvailabilityImage, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
     RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodImageDimensions, RadrootsFoodPrice,
@@ -33,7 +33,7 @@ fn typed_food_builder_signs_the_exact_strict_profile() {
     assert_eq!(
         event.kind,
         RadrootsNostrKind::Custom(
-            u16::try_from(radroots_event::kinds::KIND_CLASSIFIED_LISTING)
+            u16::try_from(radroots_event::envelope::kind::KIND_CLASSIFIED_LISTING)
                 .expect("classified listing kind")
         )
     );
@@ -109,7 +109,7 @@ fn typed_food_builder_preserves_a_byte_verified_blossom_image_tuple() {
 fn generic_builder_reserves_focused_and_ambiguous_listing_profiles() {
     let keys = fixture_keys();
     let kind = RadrootsNostrKind::Custom(
-        u16::try_from(radroots_event::kinds::KIND_CLASSIFIED_LISTING)
+        u16::try_from(radroots_event::envelope::kind::KIND_CLASSIFIED_LISTING)
             .expect("classified listing kind"),
     );
 
@@ -137,7 +137,7 @@ fn generic_builder_reserves_focused_and_ambiguous_listing_profiles() {
 fn generic_builder_retains_marker_free_and_operational_nip99_compatibility() {
     let keys = fixture_keys();
     let kind = RadrootsNostrKind::Custom(
-        u16::try_from(radroots_event::kinds::KIND_CLASSIFIED_LISTING)
+        u16::try_from(radroots_event::envelope::kind::KIND_CLASSIFIED_LISTING)
             .expect("classified listing kind"),
     );
 

@@ -2,7 +2,7 @@
 
 use crate::RadrootsOutboxError;
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
+use radroots_event::id::{RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_transport::{
     RadrootsTransportKind, RadrootsTransportMeshScopeId, RadrootsTransportOutcomeKind,
     RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy,

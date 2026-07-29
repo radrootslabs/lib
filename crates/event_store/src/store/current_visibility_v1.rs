@@ -7,7 +7,7 @@ use crate::model::{
     RadrootsNip09SuppressionReason, StoredEventClass,
 };
 use crate::nip09::reconciliation_v1::generation_from_blob;
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::id::RadrootsEventId;
 use sqlx::{Row, Sqlite, Transaction};
 
 impl RadrootsEventStore {

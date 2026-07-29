@@ -4,8 +4,9 @@ use alloc::boxed::Box;
 use core::fmt;
 
 use radroots_event::{
-    RadrootsEventEnvelope, classified_listing::RadrootsClassifiedListingPartition,
-    contract::RadrootsEventContract, food_availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
+    contract::RadrootsEventContract, envelope::RadrootsEventEnvelope,
+    food::availability::RADROOTS_FOOD_AVAILABILITY_CONTRACT_ID,
+    listing::classified::RadrootsClassifiedListingPartition,
 };
 
 use crate::{

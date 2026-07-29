@@ -5,10 +5,10 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::{KIND_GENERIC_REPOST, KIND_POST, KIND_REPOST},
-    repost::{RadrootsGenericRepost, RadrootsRepost},
+    envelope::kind::{KIND_GENERIC_REPOST, KIND_POST, KIND_REPOST},
+    post::repost::{RadrootsGenericRepost, RadrootsRepost},
     social::RadrootsSocialTarget,
-    tags::{TAG_A, TAG_E, TAG_K, TAG_P},
+    tag::name::{TAG_A, TAG_E, TAG_K, TAG_P},
 };
 
 use crate::error::EventParseError;

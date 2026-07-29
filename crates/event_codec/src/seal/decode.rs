@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{kinds::KIND_SEAL, seal::RadrootsSeal};
+use radroots_event::{envelope::kind::KIND_SEAL, social::seal::RadrootsSeal};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};

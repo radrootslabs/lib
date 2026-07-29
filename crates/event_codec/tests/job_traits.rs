@@ -1,12 +1,14 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_event::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
-use radroots_event::job_feedback::RadrootsJobFeedback;
-use radroots_event::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
-use radroots_event::job_result::RadrootsJobResult;
-use radroots_event::kinds::{KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+use radroots_event::envelope::kind::{
+    KIND_JOB_FEEDBACK, KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN,
+};
+use radroots_event::social::job::{JobFeedbackStatus, JobInputType, JobPaymentRequest};
+use radroots_event::social::job_feedback::RadrootsJobFeedback;
+use radroots_event::social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest};
+use radroots_event::social::job_result::RadrootsJobResult;
+use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
 use radroots_event_codec::job::feedback::encode::to_wire_parts as to_feedback_wire_parts;
 use radroots_event_codec::job::request::encode::to_wire_parts as to_request_wire_parts;
 use radroots_event_codec::job::result::encode::to_wire_parts as to_result_wire_parts;
@@ -77,7 +79,7 @@ fn borrowed_event_adapter_builds_request_metadata() {
 fn sample_result() -> RadrootsJobResult {
     RadrootsJobResult {
         kind: u16::try_from(KIND_JOB_RESULT_MIN + 1).expect("result kind must fit NIP-01"),
-        request_event: radroots_event::RadrootsEventPtr {
+        request_event: radroots_event::tag::RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },
@@ -103,7 +105,7 @@ fn sample_feedback() -> RadrootsJobFeedback {
         kind: u16::try_from(KIND_JOB_FEEDBACK).expect("feedback kind must fit NIP-01"),
         status: JobFeedbackStatus::Processing,
         extra_info: Some("processing".to_string()),
-        request_event: radroots_event::RadrootsEventPtr {
+        request_event: radroots_event::tag::RadrootsEventPtr {
             id: "req".to_string(),
             relays: Some(RELAY_PRIMARY_WSS.to_string()),
         },

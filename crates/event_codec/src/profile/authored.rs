@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use radroots_event::{
-    kinds::KIND_PROFILE,
+    envelope::kind::KIND_PROFILE,
     profile::{RADROOTS_PROFILE_METADATA_MAX_CONTENT_BYTES, RadrootsAuthoredProfile},
     wire::RadrootsNip01EventWireParts,
 };

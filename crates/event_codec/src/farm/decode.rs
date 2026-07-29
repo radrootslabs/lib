@@ -7,10 +7,10 @@ use alloc::{
 };
 
 use radroots_event::{
+    envelope::kind::KIND_FARM,
     farm::RadrootsFarm,
-    kinds::KIND_FARM,
-    location::{has_textual_locality, is_public_geohash5},
-    tags::TAG_D,
+    farm::location::{has_textual_locality, is_public_geohash5},
+    tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;

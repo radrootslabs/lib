@@ -14,11 +14,13 @@ mod tests {
         member_of_coops_list_set,
     };
     use crate::error::EventEncodeError;
-    use radroots_event::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
-    use radroots_event::farm::RadrootsFarmRef;
-    use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
     #[cfg(feature = "serde_json")]
-    use radroots_event::kinds::KIND_COOP;
+    use radroots_event::envelope::kind::KIND_COOP;
+    use radroots_event::farm::RadrootsFarmRef;
+    use radroots_event::farm::change_set::{
+        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+    };
+    use radroots_event::farm::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
 
     #[test]
     fn coop_tags_include_required_fields() {

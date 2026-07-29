@@ -15,7 +15,7 @@ use std::{collections::BTreeMap, string::String, vec::Vec};
 use crate::envelope::{
     RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventEnvelopeParts,
 };
-use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
+use crate::id::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use core::fmt;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};

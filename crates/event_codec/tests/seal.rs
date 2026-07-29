@@ -1,5 +1,5 @@
-use radroots_event::kinds::{KIND_MESSAGE, KIND_SEAL};
-use radroots_event::seal::RadrootsSeal;
+use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_SEAL};
+use radroots_event::social::seal::RadrootsSeal;
 
 mod common;
 

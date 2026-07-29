@@ -8,9 +8,9 @@ use alloc::{
 };
 
 use radroots_event::{
-    coop::{RadrootsCoop, RadrootsCoopRef},
-    kinds::KIND_COOP,
-    tags::TAG_D,
+    envelope::kind::KIND_COOP,
+    farm::coop::{RadrootsCoop, RadrootsCoopRef},
+    tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag;

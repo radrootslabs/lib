@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::kinds::{
+use crate::envelope::kind::{
     KIND_GROUP_ADMINS as KIND_GROUP_ADMINS_EVENT,
     KIND_GROUP_CREATE_GROUP as KIND_GROUP_CREATE_GROUP_EVENT,
     KIND_GROUP_CREATE_INVITE as KIND_GROUP_CREATE_INVITE_EVENT,

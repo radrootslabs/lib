@@ -6,7 +6,6 @@ use alloc::{
 };
 
 use radroots_event::{
-    classified_listing::RadrootsClassifiedListingPartition,
     contract::{
         AuthorRole, RadrootsContentSchema, RadrootsEventAuthoringPolicy, RadrootsEventClass,
         RadrootsEventContract, RadrootsEventDiscriminator, RadrootsEventPrivacy,
@@ -14,6 +13,7 @@ use radroots_event::{
         RadrootsTagCardinality, RadrootsTagContract, RadrootsTagSemantic, RadrootsTagValueType,
         all_event_contracts_registry_v7, all_kind_contracts_registry_v7,
     },
+    listing::classified::RadrootsClassifiedListingPartition,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

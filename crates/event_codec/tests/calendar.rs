@@ -1,6 +1,5 @@
 use radroots_blossom::{BlobDescriptor, BlobUrl, MediaType, Sha256};
 use radroots_event::{
-    RadrootsAuthoredImage, RadrootsEventTags,
     calendar::{
         RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS, RADROOTS_CALENDAR_SECONDS_PER_DAY,
         RadrootsAuthoredCalendar, RadrootsAuthoredCalendarDateEvent,
@@ -9,11 +8,13 @@ use radroots_event::{
         RadrootsCalendarEventReference, RadrootsCalendarEventRsvpStatus,
         RadrootsCalendarParticipant, RadrootsCalendarUid, RadrootsIanaTimeZoneId, covered_utc_days,
     },
-    kinds::{
+    envelope::RadrootsEventTags,
+    envelope::kind::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP,
         KIND_CALENDAR_TIME_EVENT, KIND_POST,
     },
-    tags::{
+    media::RadrootsAuthoredImage,
+    tag::name::{
         TAG_A, TAG_D, TAG_D_DAY, TAG_END, TAG_END_TZID, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_P,
         TAG_R, TAG_START, TAG_START_TZID, TAG_SUMMARY, TAG_T, TAG_TITLE,
     },

@@ -1,10 +1,10 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_event::{
-    kinds::{KIND_ARTICLE, KIND_GENERIC_REPOST, KIND_POST, KIND_REACTION, KIND_REPOST},
-    repost::{RadrootsGenericRepost, RadrootsRepost},
+    envelope::kind::{KIND_ARTICLE, KIND_GENERIC_REPOST, KIND_POST, KIND_REACTION, KIND_REPOST},
+    post::repost::{RadrootsGenericRepost, RadrootsRepost},
     social::RadrootsSocialTarget,
-    tags::{TAG_A, TAG_E, TAG_K, TAG_P},
+    tag::name::{TAG_A, TAG_E, TAG_K, TAG_P},
 };
 use radroots_event_codec::{
     error::{EventEncodeError, EventParseError},

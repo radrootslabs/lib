@@ -3,7 +3,7 @@ use super::{
     RadrootsNip09SuppressionEvidenceV1,
 };
 use crate::RadrootsEventStoreError;
-use radroots_event::ids::RadrootsEventId;
+use radroots_event::id::RadrootsEventId;
 use radroots_identity::PublicKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -330,7 +330,7 @@ impl RadrootsAddressableTransitionCauseV1 {
 
 /// The exact addressable head identity retained by the event store.
 ///
-/// This is intentionally not a [`radroots_event::ids::RadrootsNip01Coordinate`]:
+/// This is intentionally not a [`radroots_event::id::RadrootsNip01Coordinate`]:
 /// an individually valid maximum-size `d` tag can make the combined NIP-01
 /// coordinate too large for a wire tag element while still remaining valid raw
 /// head identity.

@@ -1,6 +1,6 @@
 use radroots_event::contract::RadrootsContractValidationError;
 use radroots_event::draft::{RadrootsDraftError, RadrootsEventDraft};
-use radroots_event::kinds::{KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE};
+use radroots_event::envelope::kind::{KIND_GEOCHAT, KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE};
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::wire::{canonicalize_tags, empty_content};
 

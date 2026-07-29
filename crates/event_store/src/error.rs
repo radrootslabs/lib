@@ -1,5 +1,5 @@
 use radroots_event::draft::RadrootsSignedEventError;
-use radroots_event::ids::RadrootsIdParseError;
+use radroots_event::id::RadrootsIdParseError;
 use radroots_event::wire::RadrootsEventWireError;
 use radroots_event_codec::verification::RadrootsNip01VerificationError;
 use radroots_transport::RadrootsTransportError;

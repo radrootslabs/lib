@@ -5,13 +5,13 @@ use alloc::{
 };
 
 use radroots_event::{
-    farm_crdt::RadrootsFarmCrdtDocumentKind,
-    farm_file::{
+    farm::crdt::RadrootsFarmCrdtDocumentKind,
+    farm::file::{
         KIND_FARM_FILE_METADATA, RadrootsFarmFileDimensions, RadrootsFarmFileMetadata,
         RadrootsFarmFileSource,
     },
-    farm_workspace::KIND_FARM_WORKSPACE_MANIFEST,
-    tags::{TAG_A, TAG_D, TAG_H, TAG_MIME, TAG_ORIGINAL_SHA256, TAG_SHA256, TAG_URL},
+    farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
+    tag::name::{TAG_A, TAG_D, TAG_H, TAG_MIME, TAG_ORIGINAL_SHA256, TAG_SHA256, TAG_URL},
 };
 
 use crate::d_tag::validate_d_tag_tag;
@@ -71,7 +71,7 @@ pub fn farm_file_metadata_from_event(
 
     let metadata = RadrootsFarmFileMetadata {
         d_tag,
-        workspace: radroots_event::farm_workspace::RadrootsFarmWorkspaceRef {
+        workspace: radroots_event::farm::workspace::RadrootsFarmWorkspaceRef {
             pubkey: workspace.pubkey,
             d_tag: workspace.d_tag,
         },

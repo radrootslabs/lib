@@ -1,16 +1,16 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_event::{
+    envelope::kind::{KIND_FARM, KIND_FARM_FILE_METADATA},
     farm::RadrootsFarmRef,
-    farm_crdt::KIND_FARM_CRDT_CHANGE,
-    farm_workspace::{
+    farm::crdt::KIND_FARM_CRDT_CHANGE,
+    farm::workspace::{
         KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION,
         RADROOTS_FARM_WORKSPACE_SCHEMA, RadrootsFarmWorkspaceManifest,
         RadrootsFarmWorkspaceMediaServer, RadrootsFarmWorkspaceRelay,
         RadrootsFarmWorkspaceRelayMode,
     },
-    kinds::{KIND_FARM, KIND_FARM_FILE_METADATA},
-    tags::{TAG_A, TAG_H, TAG_P},
+    tag::name::{TAG_A, TAG_H, TAG_P},
 };
 use radroots_event_codec::{
     error::{EventEncodeError, EventParseError},

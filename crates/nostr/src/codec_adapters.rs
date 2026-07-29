@@ -4,8 +4,8 @@ use alloc::{string::String, vec::Vec};
 use crate::types::RadrootsNostrEvent;
 
 use radroots_event::{
-    job_feedback::RadrootsJobFeedback, job_request::RadrootsJobRequest,
-    job_result::RadrootsJobResult,
+    social::job_feedback::RadrootsJobFeedback, social::job_request::RadrootsJobRequest,
+    social::job_result::RadrootsJobResult,
 };
 use radroots_event_codec::job::{
     error::JobParseError, feedback::decode as fb_decode, request::decode as req_decode,

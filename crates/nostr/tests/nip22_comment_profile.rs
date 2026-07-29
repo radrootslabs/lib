@@ -1,10 +1,10 @@
 use radroots_event::{
-    comment::{
+    envelope::kind::{
+        KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
+    },
+    post::comment::{
         RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference,
         RadrootsNip22CommentParentReference, RadrootsNip22EventRootReference,
-    },
-    kinds::{
-        KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
     },
 };
 use radroots_event_codec::comment::{

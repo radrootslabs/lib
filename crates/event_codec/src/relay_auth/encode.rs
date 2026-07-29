@@ -2,8 +2,8 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    relay_auth::{KIND_RELAY_AUTH, RadrootsRelayAuth},
-    tags::{TAG_CHALLENGE, TAG_RELAY},
+    social::relay_auth::{KIND_RELAY_AUTH, RadrootsRelayAuth},
+    tag::name::{TAG_CHALLENGE, TAG_RELAY},
 };
 
 use crate::error::EventEncodeError;

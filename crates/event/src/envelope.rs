@@ -1,12 +1,17 @@
 #![forbid(unsafe_code)]
 
+#[path = "event_head.rs"]
+pub mod event_head;
+#[path = "kinds.rs"]
+pub mod kind;
+
 #[cfg(all(not(feature = "std"), not(test)))]
 use alloc::{string::String, vec::Vec};
 
 #[cfg(any(feature = "std", test))]
 use std::{string::String, vec::Vec};
 
-use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
+use crate::id::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use crate::wire::v1::{
     DEFAULT_CONTENT_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES, DEFAULT_TAG_MAX_COUNT,
     DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES, RadrootsNip01EventWire,

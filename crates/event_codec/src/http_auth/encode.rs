@@ -2,8 +2,8 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    http_auth::{KIND_HTTP_AUTH, RadrootsHttpAuth},
-    tags::{TAG_METHOD, TAG_PAYLOAD, TAG_URL_AUTH},
+    social::http_auth::{KIND_HTTP_AUTH, RadrootsHttpAuth},
+    tag::name::{TAG_METHOD, TAG_PAYLOAD, TAG_URL_AUTH},
 };
 
 use crate::error::EventEncodeError;

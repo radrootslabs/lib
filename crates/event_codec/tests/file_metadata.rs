@@ -4,13 +4,13 @@ mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    farm_crdt::RadrootsFarmCrdtDocumentKind,
-    farm_file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
-    farm_workspace::RadrootsFarmWorkspaceRef,
-    file_metadata::RadrootsFileMetadata,
-    kinds::{KIND_POST, KIND_PUBLIC_FILE_METADATA},
+    envelope::kind::{KIND_POST, KIND_PUBLIC_FILE_METADATA},
+    farm::crdt::RadrootsFarmCrdtDocumentKind,
+    farm::file::{RadrootsFarmFileDimensions, RadrootsFarmFileMetadata, RadrootsFarmFileSource},
+    farm::workspace::RadrootsFarmWorkspaceRef,
+    media::file_metadata::RadrootsFileMetadata,
     social::{RadrootsSocialMediaDimensions, RadrootsSocialMediaThumbnail},
-    tags::{
+    tag::name::{
         TAG_ALT, TAG_DIMENSIONS, TAG_FALLBACK, TAG_MAGNET, TAG_MIME, TAG_ORIGINAL_SHA256,
         TAG_SERVICE, TAG_SHA256, TAG_SIZE, TAG_SUMMARY, TAG_THUMB, TAG_URL,
     },

@@ -1,3 +1,5 @@
+//! Social graph, messaging, access, and job event models.
+
 use crate::farm::RadrootsFarmRef;
 
 #[cfg(not(feature = "std"))]
@@ -188,3 +190,37 @@ mod tests {
         assert_eq!(RadrootsReportType::Spam, RadrootsReportType::Spam);
     }
 }
+#[path = "app_data.rs"]
+pub mod app_data;
+#[path = "follow.rs"]
+pub mod follow;
+#[path = "geochat.rs"]
+pub mod geochat;
+#[path = "gift_wrap.rs"]
+pub mod gift_wrap;
+#[path = "group.rs"]
+pub mod group;
+#[path = "http_auth.rs"]
+pub mod http_auth;
+#[path = "job.rs"]
+pub mod job;
+#[path = "job_feedback.rs"]
+pub mod job_feedback;
+#[path = "job_request.rs"]
+pub mod job_request;
+#[path = "job_result.rs"]
+pub mod job_result;
+#[path = "list.rs"]
+pub mod list;
+#[path = "list_set.rs"]
+pub mod list_set;
+#[path = "message.rs"]
+pub mod message;
+#[path = "message_file.rs"]
+pub mod message_file;
+#[path = "relay_auth.rs"]
+pub mod relay_auth;
+#[path = "relay_document.rs"]
+pub mod relay_document;
+#[path = "seal.rs"]
+pub mod seal;

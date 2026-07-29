@@ -6,8 +6,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::RadrootsEventRef;
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CONTRIBUTION_ATTESTATION, KIND_EVIDENCE_BOUNTY, KIND_KNOWLEDGE_CHANGE_PROPOSAL,
     KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_FIELD_REPORT, KIND_KNOWLEDGE_RELATION,
     KIND_KNOWLEDGE_REVIEW, KIND_KNOWLEDGE_SOURCE, KIND_WIKI_ARTICLE, KIND_WIKI_MERGE_REQUEST,
@@ -28,7 +27,10 @@ use radroots_event::knowledge::{
     validate_knowledge_source, validate_wiki_article, validate_wiki_merge_request,
     validate_wiki_redirect,
 };
-use radroots_event::tags::{TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T};
+use radroots_event::tag::RadrootsEventRef;
+use radroots_event::tag::name::{
+    TAG_A, TAG_CONTRACT, TAG_D, TAG_E, TAG_G, TAG_P, TAG_SUMMARY, TAG_T,
+};
 use serde::Serialize;
 
 use crate::error::EventEncodeError;

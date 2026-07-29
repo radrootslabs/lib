@@ -1,11 +1,11 @@
 #![cfg(feature = "serde_json")]
 
 use radroots_event::{
-    farm_crdt::{
+    farm::crdt::{
         RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RadrootsCrdtBackend, RadrootsFarmCrdtChange,
         RadrootsFarmCrdtDocumentKind, RadrootsFarmSemanticKind,
     },
-    farm_workspace::RadrootsFarmWorkspaceRef,
+    farm::workspace::RadrootsFarmWorkspaceRef,
 };
 use radroots_event_codec::farm_crdt::encode::to_wire_parts;
 

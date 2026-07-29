@@ -877,7 +877,8 @@ fn validate_food_availability_projection_manifest_with_superseded_artifacts_unde
     if manifest.migration.up.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[7].sha256
         || manifest.migration.down.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[8].sha256
         || manifest.result_vector.sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[4].sha256
-        || manifest.result_vector.executor_sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[6].sha256
+        || (!superseded_artifacts.contains(RESULT_VECTOR_EXECUTOR_RELATIVE)
+            && manifest.result_vector.executor_sha256 != IMMUTABLE_PREDECESSOR_ARTIFACTS[6].sha256)
     {
         return Err(format!(
             "{MANIFEST_RELATIVE} does not describe the immutable FoodAvailability predecessor identity"

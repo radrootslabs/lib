@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{kinds::KIND_MESSAGE, message::RadrootsMessage};
+use radroots_event::{envelope::kind::KIND_MESSAGE, social::message::RadrootsMessage};
 
 use crate::error::EventParseError;
 use crate::message::tags::{parse_recipients, parse_reply_tag, parse_subject_tag};

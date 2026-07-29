@@ -8,8 +8,10 @@ use std::{
 };
 
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeLimits, RadrootsEventEnvelopeParts,
-    comment::{
+    envelope::RadrootsEventEnvelope,
+    envelope::RadrootsEventEnvelopeLimits,
+    envelope::RadrootsEventEnvelopeParts,
+    post::comment::{
         RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
         RadrootsNip22CommentParentReference, RadrootsNip22EventRootReference,
     },

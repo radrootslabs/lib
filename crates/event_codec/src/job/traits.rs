@@ -5,8 +5,8 @@ use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};
 #[cfg(not(feature = "std"))]
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use radroots_event::{
-    job_feedback::RadrootsJobFeedback, job_request::RadrootsJobRequest,
-    job_result::RadrootsJobResult,
+    social::job_feedback::RadrootsJobFeedback, social::job_request::RadrootsJobRequest,
+    social::job_result::RadrootsJobResult,
 };
 
 use crate::job::{
@@ -176,7 +176,7 @@ impl<'a, E: JobEventBorrow<'a>> JobEventLike for BorrowedEventAdapter<'a, E> {
     }
 }
 
-impl<'a> JobEventBorrow<'a> for radroots_event::RadrootsEventEnvelope {
+impl<'a> JobEventBorrow<'a> for radroots_event::envelope::RadrootsEventEnvelope {
     #[inline]
     fn raw_id(&'a self) -> String {
         self.id_hex()

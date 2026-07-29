@@ -5,8 +5,8 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_REACTION, reaction::RadrootsReaction, social::RadrootsSocialTarget,
-    tags::TAG_E_ROOT,
+    envelope::kind::KIND_REACTION, post::reaction::RadrootsReaction, social::RadrootsSocialTarget,
+    tag::name::TAG_E_ROOT,
 };
 
 use crate::error::EventParseError;

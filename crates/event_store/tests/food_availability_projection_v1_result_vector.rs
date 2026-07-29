@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use radroots_blossom::Sha256;
-use radroots_event::food_availability::RadrootsFoodIdentifier;
+use radroots_event::food::availability::RadrootsFoodIdentifier;
 use radroots_event_store::{
     RADROOTS_ADDRESSABLE_TRANSITION_FEED_VERSION_V1,
     RADROOTS_FOOD_AVAILABILITY_PROJECTION_VERSION_V1,

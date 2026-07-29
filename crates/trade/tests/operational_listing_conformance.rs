@@ -2,7 +2,7 @@
 
 use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
-use radroots_event::{RadrootsNip01EventWire, ids::RadrootsIdParseError};
+use radroots_event::{id::RadrootsIdParseError, wire::RadrootsNip01EventWire};
 use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
 use radroots_nostr::prelude::radroots_event_from_nostr;
 use radroots_trade::operational_listing::{

@@ -6,13 +6,13 @@ use alloc::{
 };
 
 use radroots_event::{
-    comment::{
+    envelope::kind::KIND_COMMENT,
+    post::comment::{
         RadrootsAuthoredNip22Comment, RadrootsNip22AddressRootReference,
         RadrootsNip22CommentParentReference, RadrootsNip22CommentPosition,
         RadrootsNip22CommentRoot, RadrootsNip22EventRootReference,
     },
-    kinds::KIND_COMMENT,
-    relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::RadrootsNostrRelayHint,
     wire::RadrootsNip01EventWireParts,
 };
 use radroots_identity::PublicKey;
@@ -119,12 +119,14 @@ fn optional_relay_tag(
 mod tests {
     use super::*;
     use radroots_event::{
-        comment::{
+        envelope::kind::{
+            KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING,
+        },
+        post::comment::{
             RADROOTS_NIP22_COMMENT_CONTENT_MAX_BYTES, RADROOTS_NIP22_COMMENT_EVENT_WIRE_MAX_BYTES,
             RadrootsNip22AddressRootReference, RadrootsNip22CommentError,
             RadrootsNip22CommentParentReference, RadrootsNip22EventRootReference,
         },
-        kinds::{KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING},
     };
 
     fn h(character: char) -> String {

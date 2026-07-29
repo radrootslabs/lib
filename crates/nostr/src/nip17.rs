@@ -10,9 +10,9 @@ use nostr::{
 };
 use thiserror::Error;
 
-use radroots_event::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
-use radroots_event::message::RadrootsMessage;
-use radroots_event::message_file::RadrootsMessageFile;
+use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_MESSAGE_FILE};
+use radroots_event::social::message::RadrootsMessage;
+use radroots_event::social::message_file::RadrootsMessageFile;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message::decode as message_decode;
@@ -93,7 +93,7 @@ fn rumor_from_parts(
 }
 
 fn parse_recipients(
-    recipients: &[radroots_event::message::RadrootsMessageRecipient],
+    recipients: &[radroots_event::social::message::RadrootsMessageRecipient],
 ) -> Result<Vec<PublicKey>, RadrootsNip17Error> {
     let mut out = Vec::with_capacity(recipients.len());
     for recipient in recipients {
@@ -210,8 +210,10 @@ mod tests {
     use super::*;
     use crate::test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB};
     use nostr::{Keys, SecretKey};
-    use radroots_event::message::{RadrootsMessage, RadrootsMessageRecipient};
-    use radroots_event::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+    use radroots_event::social::message::{RadrootsMessage, RadrootsMessageRecipient};
+    use radroots_event::social::message_file::{
+        RadrootsMessageFile, RadrootsMessageFileDimensions,
+    };
 
     fn sender_keys() -> Keys {
         Keys::new(SecretKey::from_hex(FIXTURE_ALICE.secret_key_hex).unwrap())

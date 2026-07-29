@@ -2,7 +2,6 @@ use std::{borrow::Cow, fs, path::Path};
 
 use radroots_blossom::{BlobDescriptor, ByteVerifiedDescriptor, Error};
 use radroots_event::{
-    RadrootsAuthoredImage,
     calendar::{
         RADROOTS_CALENDAR_MAX_COVERED_UTC_DAYS, RadrootsAuthoredCalendar,
         RadrootsAuthoredCalendarDateEvent, RadrootsAuthoredCalendarEventRsvp,
@@ -15,6 +14,7 @@ use radroots_event::{
         RadrootsParsedNip52CalendarCommon, RadrootsParsedNip52CalendarEventRsvp,
     },
     contract::validate_event_contract_parts,
+    media::RadrootsAuthoredImage,
 };
 use radroots_event_codec::{
     calendar::{
@@ -534,11 +534,11 @@ fn assert_event_reference(
     );
     assert_eq!(actual.relay(), relay, "{}", vector_id(vector));
 
-    let parts = radroots_event::ids::RadrootsAddressableCoordinateParts::parse(coordinate)
+    let parts = radroots_event::id::RadrootsAddressableCoordinateParts::parse(coordinate)
         .expect("expected event reference coordinate");
     let canonical_coordinate = format!("{}:{}:{}", parts.kind, parts.pubkey, parts.d_tag);
     let canonical_relay =
-        relay.is_none_or(|relay| radroots_event::ids::RadrootsRelayUrl::parse(relay).is_ok());
+        relay.is_none_or(|relay| radroots_event::id::RadrootsRelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
         coordinate == canonical_coordinate && canonical_relay,
@@ -571,7 +571,7 @@ fn assert_revision_reference(
     );
     assert_eq!(actual.relay(), relay, "{}", vector_id(vector));
     let canonical_relay =
-        relay.is_none_or(|relay| radroots_event::ids::RadrootsRelayUrl::parse(relay).is_ok());
+        relay.is_none_or(|relay| radroots_event::id::RadrootsRelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
         event_id == actual.event_id().to_hex() && canonical_relay,
@@ -601,7 +601,7 @@ fn assert_author_reference(
     );
     assert_eq!(actual.relay(), relay, "{}", vector_id(vector));
     let canonical_relay =
-        relay.is_none_or(|relay| radroots_event::ids::RadrootsRelayUrl::parse(relay).is_ok());
+        relay.is_none_or(|relay| radroots_event::id::RadrootsRelayUrl::parse(relay).is_ok());
     assert_eq!(
         actual.is_canonical(),
         pubkey == actual.pubkey().to_hex() && canonical_relay,

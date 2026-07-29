@@ -1,7 +1,7 @@
 use futures::future::BoxFuture;
 use nostr::{EventBuilder, JsonUtil};
 use radroots_event::draft::{RadrootsEventDraft, RadrootsSignedEvent};
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_DELETION_REQUEST, KIND_FOLLOW, KIND_GEOCHAT, KIND_POST, KIND_PROFILE,
 };
 use radroots_event::wire::v1::DEFAULT_RAW_JSON_MAX_BYTES;

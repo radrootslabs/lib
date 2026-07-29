@@ -4,9 +4,9 @@ mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    kinds::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
-    list::RadrootsListEntry,
-    list_set::RadrootsListSet,
+    envelope::kind::{KIND_CALENDAR, KIND_LIST_SET_FOLLOW, KIND_POST, is_nip51_list_set_kind},
+    social::list::RadrootsListEntry,
+    social::list_set::RadrootsListSet,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::list_set::decode::{

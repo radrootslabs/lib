@@ -1,7 +1,9 @@
 pub mod decode;
 pub mod encode;
 
-use radroots_event::kinds::{KIND_CALENDAR, is_nip51_list_set_kind, is_nip51_standard_list_kind};
+use radroots_event::envelope::kind::{
+    KIND_CALENDAR, is_nip51_list_set_kind, is_nip51_standard_list_kind,
+};
 
 pub(crate) fn is_generic_list_codec_kind(kind: u32) -> bool {
     is_nip51_standard_list_kind(kind) || (is_nip51_list_set_kind(kind) && kind != KIND_CALENDAR)
@@ -11,8 +13,8 @@ pub(crate) fn is_generic_list_codec_kind(kind: u32) -> bool {
 mod tests {
     use super::{decode::list_from_tags, encode::list_build_tags, is_generic_list_codec_kind};
     use radroots_event::{
-        kinds::{KIND_CALENDAR, KIND_LIST_MUTE, KIND_LIST_SET_FOLLOW, KIND_POST},
-        list::{RadrootsList, RadrootsListEntry},
+        envelope::kind::{KIND_CALENDAR, KIND_LIST_MUTE, KIND_LIST_SET_FOLLOW, KIND_POST},
+        social::list::{RadrootsList, RadrootsListEntry},
     };
 
     #[test]

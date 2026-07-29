@@ -7,10 +7,10 @@ use alloc::{
 
 #[cfg(feature = "serde_json")]
 use radroots_event::{
-    RadrootsEventEnvelope,
-    ids::RadrootsTradeMutationId,
-    kinds::is_trade_mutation_event_kind,
-    tags::{TAG_D, TAG_E},
+    envelope::RadrootsEventEnvelope,
+    envelope::kind::is_trade_mutation_event_kind,
+    id::RadrootsTradeMutationId,
+    tag::name::{TAG_D, TAG_E},
     trade::{
         RadrootsTradeMutationEnvelopeV1, RadrootsTradeProtocolError,
         canonical_trade_mutation_content, trade_mutation_from_canonical_content,
@@ -213,8 +213,9 @@ fn map_trade_protocol_error_to_encode_error(error: RadrootsTradeProtocolError) -
 mod tests {
     use super::*;
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
-        ids::{
+        envelope::RadrootsEventEnvelope,
+        envelope::RadrootsEventEnvelopeParts,
+        id::{
             RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId,
             RadrootsInventoryBinId, RadrootsTradeId,
         },
@@ -330,7 +331,10 @@ mod tests {
     #[test]
     fn trade_mutation_event_build_roundtrips_canonical_content_and_tags() {
         let parts = trade_mutation_event_build(proposal()).unwrap();
-        assert_eq!(parts.kind, radroots_event::kinds::KIND_TRADE_PROPOSAL);
+        assert_eq!(
+            parts.kind,
+            radroots_event::envelope::kind::KIND_TRADE_PROPOSAL
+        );
         assert_eq!(
             parts.tags[0],
             vec![
@@ -472,7 +476,7 @@ mod tests {
             id: hex_64('e'),
             author: pubkey('a').to_hex(),
             created_at: 1_799_000_000,
-            kind: radroots_event::kinds::KIND_TRADE_DECISION,
+            kind: radroots_event::envelope::kind::KIND_TRADE_DECISION,
             tags: built.tags,
             content: built.content,
             sig: core::iter::repeat_n('f', 128).collect(),

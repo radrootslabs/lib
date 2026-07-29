@@ -12,26 +12,26 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use radroots_core::Decimal;
-#[cfg(test)]
-use radroots_event::RadrootsEventEnvelopeParts;
 use radroots_event::contract::RadrootsEventClass;
-use radroots_event::event_head::{
+#[cfg(test)]
+use radroots_event::envelope::RadrootsEventEnvelopeParts;
+use radroots_event::envelope::event_head::{
     RadrootsCurrentEventHead, RadrootsEventHeadCandidateResult, RadrootsEventHeadCoordinate,
     RadrootsEventHeadDecision as ProtocolEventHeadDecision, event_head_candidate_for_class,
     event_head_candidate_for_event, select_event_head,
 };
-use radroots_event::ids::RadrootsEventId;
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_CALENDAR, KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_PLOT, KIND_PROFILE,
     is_nip51_list_set_kind,
 };
-use radroots_event::operational_listing::{
+use radroots_event::id::RadrootsEventId;
+use radroots_event::listing::operational::{
     RadrootsOperationalListing, RadrootsOperationalListingAvailability,
     RadrootsOperationalListingBin, RadrootsOperationalListingStatus,
 };
 use radroots_event::{
-    RadrootsEventEnvelope,
-    classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
+    envelope::RadrootsEventEnvelope,
+    listing::classified::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
 };
 use radroots_event_codec::farm::decode as farm_decode;
 use radroots_event_codec::food_availability::inbound::{
@@ -591,7 +591,7 @@ fn ingest_list_set_event(
     exec: &dyn SqlExecutor,
     event: &RadrootsEventEnvelope,
 ) -> Result<RadrootsReplicaIngestOutcome, RadrootsReplicaEventsError> {
-    if event.kind_u32() != radroots_event::kinds::KIND_LIST_SET_GENERIC {
+    if event.kind_u32() != radroots_event::envelope::kind::KIND_LIST_SET_GENERIC {
         return Ok(RadrootsReplicaIngestOutcome::Skipped);
     }
     let list_set = list_set_decode::list_set_from_tags(
@@ -1241,7 +1241,7 @@ fn upsert_plot_tags(
 fn upsert_plot_location(
     exec: &dyn SqlExecutor,
     plot_id: &str,
-    location: Option<radroots_event::plot::RadrootsPlotLocation>,
+    location: Option<radroots_event::farm::plot::RadrootsPlotLocation>,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<(), RadrootsReplicaEventsError> {
     clear_plot_locations(exec, plot_id)?;
@@ -1318,7 +1318,7 @@ fn clear_plot_locations(
 
 fn create_gcs_location(
     exec: &dyn SqlExecutor,
-    gcs: radroots_event::gcs::RadrootsGcsLocation,
+    gcs: radroots_event::farm::change_set::RadrootsGcsLocation,
     factory: &dyn RadrootsReplicaIdFactory,
 ) -> Result<String, RadrootsReplicaEventsError> {
     let d_tag = factory.new_d_tag();
@@ -1370,7 +1370,7 @@ fn map_gcs_polygon_serialize_error(_err: serde_json::Error) -> RadrootsReplicaEv
 
 #[cfg(test)]
 fn serialize_gcs_point(
-    point: &radroots_event::gcs::RadrootsGeoJsonPoint,
+    point: &radroots_event::farm::change_set::RadrootsGeoJsonPoint,
 ) -> Result<String, serde_json::Error> {
     #[cfg(test)]
     if failpoints::take_gcs_point_serialize_error() {
@@ -1380,13 +1380,13 @@ fn serialize_gcs_point(
 }
 
 #[cfg(not(test))]
-fn serialize_gcs_point(point: &radroots_event::gcs::RadrootsGeoJsonPoint) -> String {
+fn serialize_gcs_point(point: &radroots_event::farm::change_set::RadrootsGeoJsonPoint) -> String {
     serde_json::to_string(point).expect("gcs.point serializes")
 }
 
 #[cfg(test)]
 fn serialize_gcs_polygon(
-    polygon: &radroots_event::gcs::RadrootsGeoJsonPolygon,
+    polygon: &radroots_event::farm::change_set::RadrootsGeoJsonPolygon,
 ) -> Result<String, serde_json::Error> {
     #[cfg(test)]
     if failpoints::take_gcs_polygon_serialize_error() {
@@ -1396,7 +1396,9 @@ fn serialize_gcs_polygon(
 }
 
 #[cfg(not(test))]
-fn serialize_gcs_polygon(polygon: &radroots_event::gcs::RadrootsGeoJsonPolygon) -> String {
+fn serialize_gcs_polygon(
+    polygon: &radroots_event::farm::change_set::RadrootsGeoJsonPolygon,
+) -> String {
     serde_json::to_string(polygon).expect("gcs.polygon serializes")
 }
 
@@ -1409,7 +1411,7 @@ fn upsert_farm_members(
     exec: &dyn SqlExecutor,
     farm_id: &str,
     role: ListSetRole,
-    list_set: &radroots_event::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::RadrootsListSet,
 ) -> Result<(), RadrootsReplicaEventsError> {
     let role_value = match role {
         ListSetRole::Members => ROLE_MEMBER,
@@ -1463,7 +1465,7 @@ fn upsert_farm_members(
 fn upsert_member_claims(
     exec: &dyn SqlExecutor,
     member_pubkey: &str,
-    list_set: &radroots_event::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::RadrootsListSet,
 ) -> Result<(), RadrootsReplicaEventsError> {
     let existing_query = farm_member_claim::find_many(
         exec,
@@ -1548,7 +1550,7 @@ fn unpack_farm_location_strings(
 }
 
 fn unpack_plot_location_strings(
-    location: Option<&radroots_event::plot::RadrootsPlotLocation>,
+    location: Option<&radroots_event::farm::plot::RadrootsPlotLocation>,
 ) -> (
     Option<String>,
     Option<String>,
@@ -1567,7 +1569,7 @@ fn unpack_plot_location_strings(
 }
 
 fn ensure_list_set_entries_tag(
-    list_set: &radroots_event::list_set::RadrootsListSet,
+    list_set: &radroots_event::social::list_set::RadrootsListSet,
     expected: &str,
     label: &str,
 ) -> Result<(), RadrootsReplicaEventsError> {
@@ -1624,16 +1626,18 @@ mod tests {
 
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Money, Quantity, QuantityPrice, Unit};
+    use radroots_event::envelope::kind::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
+    use radroots_event::farm::change_set::{
+        RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+    };
+    use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotLocation};
     use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-    use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-    use radroots_event::kinds::{KIND_LIST_SET_FOLLOW, KIND_LIST_SET_GENERIC};
-    use radroots_event::list::RadrootsListEntry;
-    use radroots_event::list_set::RadrootsListSet;
-    use radroots_event::operational_listing::RadrootsOperationalListingProduct;
-    use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation};
+    use radroots_event::listing::operational::RadrootsOperationalListingProduct;
     use radroots_event::profile::{
         RADROOTS_PROFILE_TYPE_TAG_KEY, RadrootsProfileType, radroots_profile_type_tag_value,
     };
+    use radroots_event::social::list::RadrootsListEntry;
+    use radroots_event::social::list_set::RadrootsListSet;
     use radroots_event_codec::farm::encode as farm_encode;
     use radroots_event_codec::farm::list_sets as farm_list_sets;
     use radroots_event_codec::list_set::encode as list_set_encode;

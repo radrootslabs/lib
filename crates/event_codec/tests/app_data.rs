@@ -2,8 +2,8 @@ mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    app_data::{KIND_APP_DATA, RadrootsAppData},
-    kinds::KIND_POST,
+    envelope::kind::KIND_POST,
+    social::app_data::{KIND_APP_DATA, RadrootsAppData},
 };
 use radroots_event_codec::app_data::decode::{
     app_data_from_tags, data_from_event, parsed_from_event,

@@ -2,11 +2,13 @@
 use alloc::{format, string::String, vec::Vec};
 
 #[cfg(feature = "serde_json")]
-use radroots_event::farm_crdt::KIND_FARM_CRDT_CHANGE;
+use radroots_event::farm::crdt::KIND_FARM_CRDT_CHANGE;
 use radroots_event::{
-    farm_crdt::{RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
-    farm_workspace::KIND_FARM_WORKSPACE_MANIFEST,
-    tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
+    farm::crdt::{
+        RADROOTS_FARM_CRDT_CHANGE_SCHEMA, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange,
+    },
+    farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
+    tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
 
 use crate::d_tag::validate_d_tag;

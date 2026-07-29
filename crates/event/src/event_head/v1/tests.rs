@@ -1,10 +1,10 @@
 use super::*;
-use crate::RadrootsEventEnvelopeParts;
 use crate::contract::RadrootsContractMatchError;
-use crate::ids::parse_public_key;
-use crate::kinds::{
+use crate::envelope::RadrootsEventEnvelopeParts;
+use crate::envelope::kind::{
     KIND_FOLLOW, KIND_LIST_SET_GENERIC, KIND_POST, KIND_PROFILE, KIND_TRADE_PROPOSAL,
 };
+use crate::id::parse_public_key;
 
 fn hex_64(character: char) -> String {
     crate::test_valid_hex_64(character)

@@ -2,11 +2,11 @@ mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    kinds::{
+    envelope::kind::{
         KIND_CALENDAR, KIND_LIST_MUTE, KIND_LIST_READ_WRITE_RELAYS, KIND_LIST_SET_FOLLOW, KIND_POST,
     },
-    list::{RadrootsList, RadrootsListEntry},
-    tags::TAG_R,
+    social::list::{RadrootsList, RadrootsListEntry},
+    tag::name::TAG_R,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::list::decode::{

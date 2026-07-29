@@ -11,18 +11,18 @@ use alloc::{
 use radroots_core::Money;
 #[cfg(any(feature = "serde_json", test))]
 use radroots_core::pricing::Discount;
+use radroots_event::envelope::kind::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
 use radroots_event::farm::RadrootsFarmRef;
-use radroots_event::kinds::{KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA};
-use radroots_event::location::{has_textual_locality, is_public_geohash5};
-use radroots_event::operational_listing::{
+use radroots_event::farm::location::{has_textual_locality, is_public_geohash5};
+use radroots_event::farm::plot::RadrootsPlotRef;
+use radroots_event::farm::resource_area::RadrootsResourceAreaRef;
+use radroots_event::listing::operational::{
     RadrootsOperationalListing, RadrootsOperationalListingAvailability,
     RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
     RadrootsOperationalListingImage, RadrootsOperationalListingPublicLocation,
     RadrootsOperationalListingStatus,
 };
-use radroots_event::plot::RadrootsPlotRef;
-use radroots_event::resource_area::RadrootsResourceAreaRef;
-use radroots_event::tags::{TAG_D, TAG_PUBLISHED_AT};
+use radroots_event::tag::name::{TAG_D, TAG_PUBLISHED_AT};
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
@@ -462,8 +462,8 @@ mod tests {
     };
     use radroots_core::pricing::{DiscountScope, DiscountThreshold, DiscountValue};
     use radroots_core::{Currency, Decimal, Quantity, QuantityPrice, Unit};
-    use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
-    use radroots_event::operational_listing::{
+    use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+    use radroots_event::listing::operational::{
         RadrootsOperationalListingImageSize, RadrootsOperationalListingProduct,
         RadrootsOperationalListingStatus,
     };

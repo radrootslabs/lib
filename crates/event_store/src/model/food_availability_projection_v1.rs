@@ -4,12 +4,12 @@ use super::{
 use crate::RadrootsEventStoreError;
 use radroots_blossom::Sha256;
 use radroots_event::{
-    food_availability::{
+    food::availability::{
         RADROOTS_FOOD_IMAGE_MAX_COUNT, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
         RadrootsFoodIdentifier, RadrootsFoodImageDimensions, RadrootsFoodPrice,
         RadrootsFoodPublishedAt, RadrootsFoodQuantity, RadrootsFoodText, food_media_blossom_digest,
     },
-    ids::RadrootsEventId,
+    id::RadrootsEventId,
 };
 use radroots_event_codec::food_availability::inbound::{
     RadrootsFoodAvailabilityImageDiagnostic, RadrootsInboundFoodAvailabilityImage,

@@ -2,7 +2,7 @@
 use alloc::{string::String, vec::Vec};
 
 use crate::error::EventParseError;
-use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -92,7 +92,7 @@ impl<T> RadrootsParsedEvent<T> {
 #[cfg(test)]
 mod tests {
     use super::{RadrootsParsedData, RadrootsParsedEvent};
-    use radroots_event::{RadrootsEventEnvelope, RadrootsEventEnvelopeParts};
+    use radroots_event::{envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts};
 
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const AUTHOR: &str = crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;

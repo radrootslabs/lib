@@ -7,10 +7,10 @@ use alloc::{
 };
 
 use radroots_event::{
+    envelope::kind::{KIND_FARM, KIND_PLOT},
     farm::RadrootsFarmRef,
-    kinds::{KIND_FARM, KIND_PLOT},
-    plot::RadrootsPlot,
-    tags::TAG_D,
+    farm::plot::RadrootsPlot,
+    tag::name::TAG_D,
 };
 
 use crate::d_tag::validate_d_tag_tag;

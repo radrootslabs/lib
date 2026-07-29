@@ -1,7 +1,7 @@
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
-use radroots_event::{list::RadrootsListEntry, list_set::RadrootsListSet};
+use radroots_event::{social::list::RadrootsListEntry, social::list_set::RadrootsListSet};
 
 use crate::error::EventParseError;
 #[cfg(feature = "serde_json")]

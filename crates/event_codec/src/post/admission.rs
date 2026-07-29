@@ -1,6 +1,6 @@
 use core::fmt;
 
-use radroots_event::{RadrootsEventEnvelope, contract::RadrootsEventContract};
+use radroots_event::{contract::RadrootsEventContract, envelope::RadrootsEventEnvelope};
 
 use crate::{
     post::inbound::{

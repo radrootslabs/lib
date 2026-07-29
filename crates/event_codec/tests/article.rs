@@ -4,11 +4,11 @@ mod common;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
 use radroots_event::{
-    article::RadrootsArticle,
+    envelope::kind::{KIND_ARTICLE, KIND_POST},
     farm::RadrootsFarmRef,
-    kinds::{KIND_ARTICLE, KIND_POST},
+    post::article::RadrootsArticle,
     social::{RadrootsSocialFarmAnchor, RadrootsSocialLocation},
-    tags::{TAG_A, TAG_D, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_PUBLISHED_AT, TAG_T, TAG_TITLE},
+    tag::name::{TAG_A, TAG_D, TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_PUBLISHED_AT, TAG_T, TAG_TITLE},
 };
 use radroots_event_codec::{
     article::{

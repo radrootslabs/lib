@@ -3,7 +3,7 @@ use alloc::string::String;
 #[cfg(feature = "std")]
 use std::string::String;
 
-use crate::{RadrootsEventTag, RadrootsEventTags};
+use crate::envelope::{RadrootsEventTag, RadrootsEventTags};
 
 pub const TAG_RADROOTS_PRICE_UNIT: &str = "radroots:price_unit";
 pub const TAG_RADROOTS_QUANTITY: &str = "radroots:quantity";

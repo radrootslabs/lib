@@ -1,4 +1,4 @@
-use crate::kinds::KIND_ACCOUNT_CLAIM as KIND_ACCOUNT_CLAIM_EVENT;
+use crate::envelope::kind::KIND_ACCOUNT_CLAIM as KIND_ACCOUNT_CLAIM_EVENT;
 
 #[cfg(not(feature = "std"))]
 use alloc::string::String;

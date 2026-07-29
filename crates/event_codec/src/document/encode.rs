@@ -7,13 +7,13 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{document::RadrootsDocument, tags::TAG_D};
+use radroots_event::{post::document::RadrootsDocument, tag::name::TAG_D};
 
 use crate::d_tag::validate_d_tag;
 use crate::error::EventEncodeError;
 
 #[cfg(feature = "serde_json")]
-use radroots_event::kinds::KIND_DOCUMENT;
+use radroots_event::envelope::kind::KIND_DOCUMENT;
 
 #[cfg(feature = "serde_json")]
 use radroots_event::wire::RadrootsNip01EventWireParts;
@@ -91,7 +91,7 @@ pub fn to_wire_parts_with_kind(
 mod tests {
     use super::*;
     use crate::test_fixtures::FIXTURE_ALICE_PUBLIC_KEY_HEX;
-    use radroots_event::document::RadrootsDocumentSubject;
+    use radroots_event::post::document::RadrootsDocumentSubject;
 
     fn sample_document_address() -> String {
         format!("30340:{FIXTURE_ALICE_PUBLIC_KEY_HEX}:AAAAAAAAAAAAAAAAAAAAAA")

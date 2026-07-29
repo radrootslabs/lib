@@ -4,10 +4,10 @@ mod common;
 
 use common::{AUTHOR as ENVELOPE_AUTHOR, EVENT_ID as ENVELOPE_ID, EVENT_SIG};
 use radroots_event::{
-    kinds::{KIND_ARTICLE, KIND_POST, KIND_REPORT},
-    report::RadrootsReport,
+    envelope::kind::{KIND_ARTICLE, KIND_POST, KIND_REPORT},
+    post::report::RadrootsReport,
     social::{RadrootsReportFileTarget, RadrootsReportType, RadrootsSocialTarget},
-    tags::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
+    tag::name::{TAG_A, TAG_E, TAG_MAGNET, TAG_P, TAG_SERVER, TAG_SHA256},
 };
 use radroots_event_codec::{
     error::{EventEncodeError, EventParseError},

@@ -12,7 +12,7 @@ use crate::{
         RadrootsContractValidationError, RadrootsEventContract, validate_event_contract_registry_v7,
     },
     envelope::RadrootsEventEnvelope,
-    ids::RadrootsEventId,
+    id::RadrootsEventId,
     wire::compute_canonical_nip01_event_id,
 };
 

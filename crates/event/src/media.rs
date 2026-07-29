@@ -1,5 +1,8 @@
 use core::fmt;
 
+#[path = "file_metadata.rs"]
+pub mod file_metadata;
+
 use radroots_blossom::ByteVerifiedDescriptor;
 
 /// Errors raised while constructing strict authored image media.

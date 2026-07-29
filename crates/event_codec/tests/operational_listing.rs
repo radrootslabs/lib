@@ -3,21 +3,24 @@
 use radroots_core::pricing::{Discount, DiscountScope, DiscountThreshold, DiscountValue};
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
+    envelope::RadrootsEventEnvelope,
+    envelope::RadrootsEventEnvelopeParts,
+    envelope::kind::{
+        KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_PLOT, KIND_POST, KIND_RESOURCE_AREA,
+    },
     farm::RadrootsFarmRef,
-    ids::{RadrootsDTag, RadrootsInventoryBinId},
-    kinds::{KIND_CLASSIFIED_LISTING, KIND_FARM, KIND_PLOT, KIND_POST, KIND_RESOURCE_AREA},
-    operational_listing::RadrootsOperationalListingParseError,
-    operational_listing::{
+    farm::plot::RadrootsPlotRef,
+    farm::resource_area::RadrootsResourceAreaRef,
+    id::{RadrootsDTag, RadrootsInventoryBinId},
+    listing::operational::RadrootsOperationalListingParseError,
+    listing::operational::{
         RadrootsOperationalListing, RadrootsOperationalListingAvailability,
         RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
         RadrootsOperationalListingImage, RadrootsOperationalListingImageSize,
         RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
         RadrootsOperationalListingStatus,
     },
-    plot::RadrootsPlotRef,
-    resource_area::RadrootsResourceAreaRef,
-    tags::{TAG_D, TAG_PUBLISHED_AT},
+    tag::name::{TAG_D, TAG_PUBLISHED_AT},
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::operational_listing::decode::{

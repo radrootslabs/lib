@@ -2,7 +2,7 @@
 use alloc::{string::ToString, vec, vec::Vec};
 
 use radroots_event::{
-    deletion::RadrootsAuthoredNip09DeletionRequest, kinds::KIND_DELETION_REQUEST,
+    envelope::kind::KIND_DELETION_REQUEST, post::deletion::RadrootsAuthoredNip09DeletionRequest,
     wire::RadrootsNip01EventWireParts,
 };
 
@@ -49,7 +49,7 @@ pub fn authored_nip09_deletion_request_to_wire_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::deletion::{
+    use radroots_event::post::deletion::{
         RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES, RadrootsNip09DeletionAddressTarget,
         RadrootsNip09DeletionEventTarget,
     };
@@ -97,7 +97,7 @@ mod tests {
     fn core_wire_estimator_matches_emitted_json_at_the_strict_boundary() {
         let target = RadrootsNip09DeletionEventTarget::parse(h('a'), 1).expect("event target");
         let mut lower = 0usize;
-        let mut upper = radroots_event::deletion::RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES;
+        let mut upper = radroots_event::post::deletion::RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES;
         while lower < upper {
             let candidate = lower + (upper - lower).div_ceil(2);
             if RadrootsAuthoredNip09DeletionRequest::new(

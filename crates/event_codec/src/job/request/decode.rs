@@ -1,6 +1,6 @@
 use radroots_event::{
-    job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
-    kinds::is_request_kind,
+    envelope::kind::is_request_kind,
+    social::job_request::{RadrootsJobInput, RadrootsJobParam, RadrootsJobRequest},
 };
 
 #[cfg(not(feature = "std"))]

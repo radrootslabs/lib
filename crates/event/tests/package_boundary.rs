@@ -16,7 +16,7 @@ use radroots_identity::PublicKey;
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
-const IDENTIFIERS: &str = include_str!("../src/ids.rs");
+const IDENTIFIERS: &str = include_str!("../src/id.rs");
 const CONTRACT_REGISTRY: &str = include_str!("../src/contract/registry_v7.rs");
 const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
 const TRADE: &str = include_str!("../src/trade.rs");
@@ -48,7 +48,7 @@ fn manifest_has_final_identity_and_required_radroots_dependencies() {
 #[test]
 fn crate_root_declares_every_approved_module() {
     let declared = root_declarations("pub mod ");
-    for module in [
+    let approved = [
         "admission",
         "calendar",
         "contract",
@@ -66,12 +66,44 @@ fn crate_root_declares_every_approved_module() {
         "tag",
         "trade",
         "wire",
+    ];
+    assert_eq!(
+        declared,
+        approved.into_iter().collect(),
+        "the crate root must expose exactly the approved singular module vocabulary"
+    );
+}
+
+#[test]
+fn crate_root_exposes_the_curated_native_event_vocabulary() {
+    type CuratedRootTypes = (
+        radroots_event::Event,
+        radroots_event::EventDraft,
+        radroots_event::SignedEvent,
+        radroots_event::VerifiedEvent,
+        radroots_event::EventId,
+        radroots_event::EventKind,
+        radroots_event::EventTag,
+        radroots_event::Error,
+    );
+    let _: Option<CuratedRootTypes> = None;
+    for root_export in [
+        "Event",
+        "EventDraft",
+        "SignedEvent",
+        "VerifiedEvent",
+        "EventId",
+        "EventKind",
+        "EventTag",
+        "Error",
     ] {
         assert!(
-            declared.contains(module),
-            "missing approved module {module}"
+            ROOT.contains(root_export),
+            "missing root export {root_export}"
         );
     }
+    assert!(!ROOT.contains("pub use *"));
+    assert!(!ROOT.contains("pub use crate::*"));
 }
 
 #[test]
@@ -147,7 +179,7 @@ fn event_references_use_the_identity_owned_public_key() {
     let author =
         PublicKey::from_hex("585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df")
             .expect("valid public key");
-    let reference = radroots_event::RadrootsEventRef {
+    let reference = radroots_event::tag::RadrootsEventRef {
         id: "a".repeat(64),
         author,
         kind: 1,
@@ -176,7 +208,7 @@ fn trade_protocol_identifiers_have_one_definition_and_deliberate_facades() {
     assert_eq!(core::mem::size_of::<CandidateId>(), 32);
     assert_eq!(core::mem::size_of::<MutationId>(), 32);
     assert!(TradeId::parse("order-1").is_err());
-    assert!(radroots_event::ids::RadrootsOrderId::parse("order-1").is_ok());
+    assert!(radroots_event::id::RadrootsOrderId::parse("order-1").is_ok());
 
     for definition in [
         "validated_hex_id!(RadrootsTradeId, 16);",

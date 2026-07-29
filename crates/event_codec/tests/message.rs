@@ -2,9 +2,9 @@
 mod test_fixtures;
 
 use radroots_event::{
-    RadrootsEventPtr,
-    kinds::{KIND_MESSAGE, KIND_POST},
-    message::{RadrootsMessage, RadrootsMessageRecipient},
+    envelope::kind::{KIND_MESSAGE, KIND_POST},
+    social::message::{RadrootsMessage, RadrootsMessageRecipient},
+    tag::RadrootsEventPtr,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message::decode::{

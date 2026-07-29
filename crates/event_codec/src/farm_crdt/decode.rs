@@ -2,9 +2,9 @@
 use alloc::{string::String, vec::Vec};
 
 use radroots_event::{
-    farm_crdt::{KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
-    farm_workspace::KIND_FARM_WORKSPACE_MANIFEST,
-    tags::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
+    farm::crdt::{KIND_FARM_CRDT_CHANGE, RADROOTS_FARM_CRDT_TAG, RadrootsFarmCrdtChange},
+    farm::workspace::KIND_FARM_WORKSPACE_MANIFEST,
+    tag::name::{TAG_A, TAG_D, TAG_H, TAG_P, TAG_T},
 };
 
 use crate::d_tag::validate_d_tag_tag;

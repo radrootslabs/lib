@@ -1,6 +1,6 @@
 #![cfg(feature = "serde_json")]
 
-use radroots_event::relay_document::RadrootsRelayDocument;
+use radroots_event::social::relay_document::RadrootsRelayDocument;
 
 use crate::error::EventParseError;
 

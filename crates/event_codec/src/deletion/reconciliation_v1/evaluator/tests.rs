@@ -2,7 +2,8 @@ use super::*;
 
 use nostr::{Keys, SECP256K1, secp256k1::Message};
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeParts, wire::compute_canonical_nip01_event_id,
+    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
+    wire::compute_canonical_nip01_event_id,
 };
 
 use crate::{

@@ -4,7 +4,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{geochat::RadrootsGeoChat, kinds::KIND_GEOCHAT};
+use radroots_event::{envelope::kind::KIND_GEOCHAT, social::geochat::RadrootsGeoChat};
 
 use crate::error::EventParseError;
 use crate::parsed::{RadrootsParsedData, RadrootsParsedEvent};

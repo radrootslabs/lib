@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeParts, RadrootsEventPtr, RadrootsEventRef,
+    envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts, tag::RadrootsEventPtr,
+    tag::RadrootsEventRef,
 };
 use radroots_identity::PublicKey;
 

@@ -11,7 +11,7 @@ use std::{string::String, vec::Vec};
 use core::fmt;
 
 use crate::{
-    ids::{
+    id::{
         RadrootsEventId, RadrootsIdParseError, RadrootsNip01Coordinate,
         RadrootsNip01CoordinateParseError,
     },
@@ -235,7 +235,7 @@ impl RadrootsNip09DeletionAddressTarget {
 /// This type is opaque and has no Serde construction path.
 ///
 /// ```compile_fail
-/// let _: radroots_event::deletion::RadrootsAuthoredNip09DeletionRequest =
+/// let _: radroots_event::post::deletion::RadrootsAuthoredNip09DeletionRequest =
 ///     serde_json::from_str(
 ///         r#"{"content":"","event_targets":[],"address_targets":[]}"#
 ///     ).unwrap();
@@ -492,7 +492,7 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::RADROOTS_NIP01_COORDINATE_MAX_BYTES;
+    use crate::id::RADROOTS_NIP01_COORDINATE_MAX_BYTES;
 
     fn event_target(character: char, kind: u32) -> RadrootsNip09DeletionEventTarget {
         RadrootsNip09DeletionEventTarget::parse(character.to_string().repeat(64), kind)

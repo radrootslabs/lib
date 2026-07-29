@@ -14,12 +14,12 @@ use crate::model::{
     RadrootsOutboxSignedTradeMutationInput, RadrootsOutboxStatusSummary,
     RadrootsOutboxTradeMutationInput,
 };
-use radroots_event::RadrootsEventKindClass;
 use radroots_event::draft::{
     RadrootsEventDraft, RadrootsSignedEvent, validate_signed_nostr_event_matches_draft,
 };
-use radroots_event::ids::{RadrootsTradeId, RadrootsTradeMutationId};
-use radroots_event::kinds::TRADE_MUTATION_EVENT_KINDS;
+use radroots_event::envelope::RadrootsEventKindClass;
+use radroots_event::envelope::kind::TRADE_MUTATION_EVENT_KINDS;
+use radroots_event::id::{RadrootsTradeId, RadrootsTradeMutationId};
 use radroots_event::trade::trade_mutation_from_canonical_content;
 use radroots_event::wire::RadrootsNip01EventWire;
 use radroots_event_store::{
@@ -3394,12 +3394,12 @@ fn u32_from_i64(field: &'static str, value: i64) -> Result<u32, RadrootsOutboxEr
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
-    use radroots_event::ids::{
+    use radroots_event::envelope::kind::{
+        KIND_CLASSIFIED_LISTING, KIND_FOLLOW, KIND_GEOCHAT, KIND_HTTP_AUTH, KIND_RELAY_AUTH,
+    };
+    use radroots_event::id::{
         RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsInventoryBinId,
         RadrootsTradeId,
-    };
-    use radroots_event::kinds::{
-        KIND_CLASSIFIED_LISTING, KIND_FOLLOW, KIND_GEOCHAT, KIND_HTTP_AUTH, KIND_RELAY_AUTH,
     };
     use radroots_event::trade::{
         RADROOTS_TRADE_PROPOSAL_CONTRACT_ID, RADROOTS_TRADE_SCHEMA_VERSION,

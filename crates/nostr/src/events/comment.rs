@@ -5,7 +5,9 @@ use crate::{
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::{comment::RadrootsAuthoredNip22Comment, wire::RadrootsNip01EventWireParts};
+use radroots_event::{
+    post::comment::RadrootsAuthoredNip22Comment, wire::RadrootsNip01EventWireParts,
+};
 use radroots_event_codec::comment::authored::authored_nip22_comment_to_wire_parts;
 
 /// A sealed builder for a validated strict NIP-22 Comment.
@@ -62,8 +64,8 @@ mod tests {
     use super::*;
     use crate::test_fixtures::FIXTURE_BOB_PUBLIC_KEY_HEX;
     use radroots_event::{
-        comment::{RadrootsAuthoredNip22Comment, RadrootsNip22EventRootReference},
-        kinds::{KIND_CLASSIFIED_LISTING, KIND_COMMENT},
+        envelope::kind::{KIND_CLASSIFIED_LISTING, KIND_COMMENT},
+        post::comment::{RadrootsAuthoredNip22Comment, RadrootsNip22EventRootReference},
     };
 
     #[test]

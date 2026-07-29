@@ -35,7 +35,7 @@ pub trait RadrootsEventSigner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::kinds::KIND_GEOCHAT;
+    use radroots_event::envelope::kind::KIND_GEOCHAT;
 
     fn hex_64(character: char) -> String {
         std::iter::repeat_n(character, 64).collect()

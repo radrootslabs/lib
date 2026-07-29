@@ -1,5 +1,5 @@
 use super::*;
-use crate::RadrootsEventEnvelopeParts;
+use crate::envelope::RadrootsEventEnvelopeParts;
 use std::collections::BTreeSet;
 
 static AMBIGUOUS_TEST_CONTRACTS: &[RadrootsEventContract] = &[
@@ -1035,7 +1035,7 @@ fn nip22_comment_contract_is_typed_and_admission_only() {
 
 #[test]
 fn nip09_deletion_request_contract_is_typed_and_admission_only() {
-    use crate::deletion::{
+    use crate::post::deletion::{
         RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES, RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
         RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
         RADROOTS_NIP09_DELETION_TAG_TOTAL_ELEMENT_MAX_COUNT,

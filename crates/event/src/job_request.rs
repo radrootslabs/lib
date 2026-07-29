@@ -1,4 +1,4 @@
-use crate::job::JobInputType;
+use crate::social::job::JobInputType;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

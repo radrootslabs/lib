@@ -1,5 +1,12 @@
 #![forbid(unsafe_code)]
 
+#[path = "order.rs"]
+pub mod order;
+#[path = "order_economics.rs"]
+pub mod order_economics;
+#[path = "trade_validation.rs"]
+pub mod validation;
+
 #[cfg(all(not(feature = "std"), feature = "serde"))]
 use alloc::{collections::BTreeMap, format, string::ToString};
 #[cfg(not(feature = "std"))]
@@ -11,17 +18,17 @@ use std::{string::String, vec::Vec};
 
 use core::fmt;
 
-use crate::ids::{
+use crate::envelope::kind::{
+    KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION, KIND_TRADE_PROPOSAL,
+    KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
+};
+use crate::id::{
     RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
     RadrootsInventoryBinId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
 };
-pub use crate::ids::{
+pub use crate::id::{
     RadrootsTradeCandidateId as CandidateId, RadrootsTradeId as TradeId,
     RadrootsTradeMutationId as MutationId,
-};
-use crate::kinds::{
-    KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION, KIND_TRADE_PROPOSAL,
-    KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
 };
 use radroots_identity::PublicKey;
 #[cfg(feature = "serde")]
@@ -1080,7 +1087,7 @@ impl<'de> Visitor<'de> for NoDuplicateJsonValueVisitor {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
-    use crate::ids::parse_public_key;
+    use crate::id::parse_public_key;
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()

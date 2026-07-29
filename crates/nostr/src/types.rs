@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::error::RadrootsNostrError;
-use radroots_event::classified_listing::{
+use radroots_event::listing::classified::{
     RadrootsClassifiedListingPartition, classify_classified_listing_marker_names,
 };
 
@@ -242,10 +242,10 @@ impl RadrootsNostrGenericEventBuilder {
         let is_profile = kind == RadrootsNostrKind::Metadata.as_u16();
         let is_reserved_post = kind == RadrootsNostrKind::TextNote.as_u16();
         let is_reserved_deletion_request =
-            kind == radroots_event::kinds::KIND_DELETION_REQUEST as u16;
-        let is_reserved_comment = kind == radroots_event::kinds::KIND_COMMENT as u16;
+            kind == radroots_event::envelope::kind::KIND_DELETION_REQUEST as u16;
+        let is_reserved_comment = kind == radroots_event::envelope::kind::KIND_COMMENT as u16;
         let classified_listing_partition =
-            (kind == radroots_event::kinds::KIND_CLASSIFIED_LISTING as u16).then(|| {
+            (kind == radroots_event::envelope::kind::KIND_CLASSIFIED_LISTING as u16).then(|| {
                 classify_classified_listing_marker_names(
                     event
                         .tags
@@ -324,17 +324,19 @@ mod tests {
             ),
             (
                 RadrootsNostrGenericEventBuilder::new(
-                    RadrootsNostrKind::Custom(radroots_event::kinds::KIND_DELETION_REQUEST as u16),
+                    RadrootsNostrKind::Custom(
+                        radroots_event::envelope::kind::KIND_DELETION_REQUEST as u16,
+                    ),
                     "Deletion request",
                 ),
-                radroots_event::kinds::KIND_DELETION_REQUEST as u16,
+                radroots_event::envelope::kind::KIND_DELETION_REQUEST as u16,
             ),
             (
                 RadrootsNostrGenericEventBuilder::new(
-                    RadrootsNostrKind::Custom(radroots_event::kinds::KIND_COMMENT as u16),
+                    RadrootsNostrKind::Custom(radroots_event::envelope::kind::KIND_COMMENT as u16),
                     "Comment",
                 ),
-                radroots_event::kinds::KIND_COMMENT as u16,
+                radroots_event::envelope::kind::KIND_COMMENT as u16,
             ),
         ] {
             assert!(matches!(

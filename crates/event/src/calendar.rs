@@ -7,7 +7,7 @@ use alloc::{
 };
 use core::{fmt, ops::RangeInclusive, str::FromStr};
 
-use crate::ids::{
+use crate::id::{
     RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsDTag,
     RadrootsEventId, RadrootsRelayUrl, parse_public_key,
 };
@@ -298,7 +298,8 @@ impl RadrootsCalendarEventReference {
             .map_err(|_| RadrootsCalendarEventError::InvalidEventReference)?;
         if !matches!(
             parts.kind,
-            crate::kinds::KIND_CALENDAR_DATE_EVENT | crate::kinds::KIND_CALENDAR_TIME_EVENT
+            crate::envelope::kind::KIND_CALENDAR_DATE_EVENT
+                | crate::envelope::kind::KIND_CALENDAR_TIME_EVENT
         ) {
             return Err(RadrootsCalendarEventError::InvalidEventReference);
         }
@@ -833,9 +834,9 @@ impl RadrootsCalendarRequest {
     ) -> Result<Self, RadrootsCalendarEventError> {
         let calendar = RadrootsAddressableCoordinate::parse(calendar.as_ref())
             .map_err(|_| RadrootsCalendarEventError::InvalidUrl("calendar request"))?;
-        let parts = crate::ids::RadrootsAddressableCoordinateParts::parse(calendar.as_str())
+        let parts = crate::id::RadrootsAddressableCoordinateParts::parse(calendar.as_str())
             .map_err(|_| RadrootsCalendarEventError::InvalidUrl("calendar request"))?;
-        if parts.kind != crate::kinds::KIND_CALENDAR {
+        if parts.kind != crate::envelope::kind::KIND_CALENDAR {
             return Err(RadrootsCalendarEventError::InvalidUrl("calendar request"));
         }
         let relay = relay
@@ -862,7 +863,7 @@ impl RadrootsCalendarRequest {
 
     pub fn is_canonical(&self) -> bool {
         let Ok(parts) =
-            crate::ids::RadrootsAddressableCoordinateParts::parse(self.calendar.as_str())
+            crate::id::RadrootsAddressableCoordinateParts::parse(self.calendar.as_str())
         else {
             return false;
         };

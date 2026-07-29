@@ -10,7 +10,7 @@ use crate::model::reconciliation_v1::{
     RadrootsEventAdmissionStatus, RadrootsEventIngest, StoredEventClass, tag_semantic_name,
     tag_value_type_name,
 };
-use radroots_event::kinds::KIND_LIST_SET_FOLLOW;
+use radroots_event::envelope::kind::KIND_LIST_SET_FOLLOW;
 use radroots_event::wire::v1::RadrootsNip01EventWire;
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};

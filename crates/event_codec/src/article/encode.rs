@@ -5,9 +5,9 @@ use alloc::{
 };
 
 use radroots_event::{
-    article::RadrootsArticle,
-    kinds::KIND_ARTICLE,
-    tags::{TAG_D, TAG_IMAGE, TAG_PUBLISHED_AT, TAG_SUMMARY, TAG_T, TAG_TITLE},
+    envelope::kind::KIND_ARTICLE,
+    post::article::RadrootsArticle,
+    tag::name::{TAG_D, TAG_IMAGE, TAG_PUBLISHED_AT, TAG_SUMMARY, TAG_T, TAG_TITLE},
 };
 
 use crate::d_tag::validate_d_tag;

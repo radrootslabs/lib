@@ -6,7 +6,9 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{kinds::KIND_RESOURCE_AREA, resource_area::RadrootsResourceArea, tags::TAG_D};
+use radroots_event::{
+    envelope::kind::KIND_RESOURCE_AREA, farm::resource_area::RadrootsResourceArea, tag::name::TAG_D,
+};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;

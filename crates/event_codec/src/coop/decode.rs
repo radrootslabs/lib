@@ -7,7 +7,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::{coop::RadrootsCoop, kinds::KIND_COOP, tags::TAG_D};
+use radroots_event::{envelope::kind::KIND_COOP, farm::coop::RadrootsCoop, tag::name::TAG_D};
 
 use crate::d_tag::validate_d_tag_tag;
 use crate::error::EventParseError;

@@ -19,10 +19,10 @@ use radroots_event::{
         RadrootsParsedNip52CalendarParts, RadrootsParsedNip52CalendarTimeEvent,
         calendar_geohash_is_valid, calendar_relay_url_is_valid, calendar_tag_text_is_valid,
     },
-    kinds::{
+    envelope::kind::{
         KIND_CALENDAR, KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_EVENT_RSVP, KIND_CALENDAR_TIME_EVENT,
     },
-    tags::{
+    tag::name::{
         TAG_A, TAG_D, TAG_D_DAY, TAG_DESCRIPTION, TAG_E, TAG_END, TAG_END_TZID, TAG_FREE_BUSY,
         TAG_G, TAG_IMAGE, TAG_LOCATION, TAG_P, TAG_R, TAG_START, TAG_START_TZID, TAG_STATUS,
         TAG_SUMMARY, TAG_T, TAG_TITLE,

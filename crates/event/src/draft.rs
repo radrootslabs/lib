@@ -10,14 +10,14 @@ use crate::contract::registry_v7::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError,
     RadrootsEventContract, event_contract, validate_event_contract_parts,
 };
-use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
+use crate::envelope::{
+    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventKind, RadrootsEventTags,
+    RadrootsEventTimestamp,
+};
+use crate::id::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use crate::wire::v1::{
     RadrootsCanonicalEventIdError, RadrootsEventWireError, RadrootsNip01EventWire,
     canonical_nip01_event_id_preimage, compute_canonical_nip01_event_id,
-};
-use crate::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeError, RadrootsEventKind, RadrootsEventTags,
-    RadrootsEventTimestamp,
 };
 use core::fmt;
 use radroots_identity::PublicKey;
@@ -858,7 +858,7 @@ fn nip01_event_id_preimage_for_valid_pubkey(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kinds::{
+    use crate::envelope::kind::{
         KIND_COMMENT, KIND_DELETION_REQUEST, KIND_FARM_CRDT_CHANGE, KIND_GEOCHAT,
         KIND_KNOWLEDGE_CLAIM, KIND_KNOWLEDGE_SOURCE, KIND_POST, KIND_PROFILE,
     };

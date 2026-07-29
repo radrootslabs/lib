@@ -1,6 +1,6 @@
 use radroots_blossom::{BlobDescriptor, BlobUrl, ByteVerifiedDescriptor, MediaType, Sha256};
 use radroots_event::{
-    RadrootsAuthoredImage,
+    media::RadrootsAuthoredImage,
     post::{
         RADROOTS_ASK_MARKER_TAG_VALUE, RADROOTS_POST_ALT_MAX_BYTES,
         RADROOTS_POST_CONTENT_MAX_BYTES, RADROOTS_POST_EVENT_WIRE_MAX_BYTES,

@@ -6,14 +6,14 @@ use alloc::{
 use core::fmt;
 
 use crate::{
-    ids::{
+    envelope::kind::{
+        KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
+    },
+    id::{
         RadrootsAddressableCoordinate, RadrootsAddressableCoordinateParts, RadrootsEventId,
         RadrootsIdParseError, parse_public_key,
     },
-    kinds::{
-        KIND_CALENDAR_DATE_EVENT, KIND_CALENDAR_TIME_EVENT, KIND_CLASSIFIED_LISTING, KIND_COMMENT,
-    },
-    relay_hint::RadrootsNostrRelayHint,
+    tag::relay_hint::RadrootsNostrRelayHint,
     wire::{
         DEFAULT_CONTENT_MAX_BYTES, DEFAULT_RAW_JSON_MAX_BYTES, DEFAULT_TAG_ELEMENT_MAX_BYTES,
         DEFAULT_TAG_MAX_COUNT, DEFAULT_TAG_TOTAL_ELEMENT_MAX_COUNT, DEFAULT_TAG_TOTAL_MAX_BYTES,
@@ -466,7 +466,7 @@ pub enum RadrootsNip22CommentPosition {
 /// This type is opaque and has no Serde construction path.
 ///
 /// ```compile_fail
-/// let _: radroots_event::comment::RadrootsAuthoredNip22Comment =
+/// let _: radroots_event::post::comment::RadrootsAuthoredNip22Comment =
 ///     serde_json::from_str(r#"{"content":"comment"}"#).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -4,11 +4,11 @@ use alloc::boxed::Box;
 use core::fmt;
 
 use radroots_event::{
-    RadrootsEventEnvelope,
     contract::{
         RadrootsContractMatchError, RadrootsContractValidationError, RadrootsEventContract,
     },
-    kinds::{
+    envelope::RadrootsEventEnvelope,
+    envelope::kind::{
         KIND_CLASSIFIED_LISTING, KIND_COMMENT, KIND_DELETION_REQUEST, KIND_POST, KIND_PROFILE,
     },
 };
@@ -323,7 +323,8 @@ mod tests {
         use nostr::secp256k1::Message;
         use nostr::{Keys, SECP256K1};
         use radroots_event::{
-            RadrootsEventEnvelopeParts, kinds::KIND_FOLLOW, wire::compute_canonical_nip01_event_id,
+            envelope::RadrootsEventEnvelopeParts, envelope::kind::KIND_FOLLOW,
+            wire::compute_canonical_nip01_event_id,
         };
 
         #[test]

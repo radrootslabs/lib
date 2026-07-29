@@ -51,8 +51,8 @@ impl std::error::Error for EventParseError {
     }
 }
 
-impl From<radroots_event::RadrootsEventEnvelopeError> for EventParseError {
-    fn from(_: radroots_event::RadrootsEventEnvelopeError) -> Self {
+impl From<radroots_event::envelope::RadrootsEventEnvelopeError> for EventParseError {
+    fn from(_: radroots_event::envelope::RadrootsEventEnvelopeError) -> Self {
         Self::InvalidEnvelope
     }
 }
@@ -97,7 +97,7 @@ impl std::error::Error for EventEncodeError {}
 #[cfg(test)]
 mod tests {
     use super::EventParseError;
-    use radroots_event::RadrootsEventEnvelopeError;
+    use radroots_event::envelope::RadrootsEventEnvelopeError;
 
     #[test]
     #[cfg_attr(coverage_nightly, coverage(off))]

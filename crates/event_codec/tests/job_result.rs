@@ -2,10 +2,10 @@ mod common;
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_event::job::{JobInputType, JobPaymentRequest};
-use radroots_event::job_request::RadrootsJobInput;
-use radroots_event::job_result::RadrootsJobResult;
-use radroots_event::kinds::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
+use radroots_event::envelope::kind::{KIND_JOB_REQUEST_MIN, KIND_JOB_RESULT_MIN};
+use radroots_event::social::job::{JobInputType, JobPaymentRequest};
+use radroots_event::social::job_request::RadrootsJobInput;
+use radroots_event::social::job_result::RadrootsJobResult;
 use radroots_event_codec::job::encode::JobEncodeError;
 use radroots_event_codec::job::error::JobParseError;
 use radroots_event_codec::job::result::decode::{job_result_from_tags, parsed_from_event};

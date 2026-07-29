@@ -7,19 +7,23 @@ mod common;
 
 use common::{EVENT_ID, EVENT_SIG};
 use radroots_core::{Decimal, Quantity, Unit};
-use radroots_event::coop::RadrootsCoop;
-use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
-use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
 };
-use radroots_event::plot::RadrootsPlot;
-use radroots_event::resource_area::{
+use radroots_event::farm::change_set::{
+    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
+};
+use radroots_event::farm::coop::RadrootsCoop;
+use radroots_event::farm::plot::RadrootsPlot;
+use radroots_event::farm::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
 };
-use radroots_event::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
-use radroots_event::tags::TAG_D;
+use radroots_event::farm::resource_cap::{
+    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
+};
+use radroots_event::farm::{RadrootsFarm, RadrootsFarmRef};
+use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
+use radroots_event::tag::name::TAG_D;
 use radroots_event_codec::coop::decode::{
     coop_from_event, data_from_event as coop_metadata_from_event,
     parsed_from_event as coop_index_from_event,

@@ -505,8 +505,9 @@ mod tests {
         let client = RadrootsNostrClient::new_signerless();
         let raw_kind_one = RadrootsNostrKind::Custom(RadrootsNostrKind::TextNote.as_u16());
         let deletion_request =
-            RadrootsNostrKind::Custom(radroots_event::kinds::KIND_DELETION_REQUEST as u16);
-        let comment = RadrootsNostrKind::Custom(radroots_event::kinds::KIND_COMMENT as u16);
+            RadrootsNostrKind::Custom(radroots_event::envelope::kind::KIND_DELETION_REQUEST as u16);
+        let comment =
+            RadrootsNostrKind::Custom(radroots_event::envelope::kind::KIND_COMMENT as u16);
         let classified_listing = RadrootsNostrKind::Custom(30_402);
         let builders = vec![
             RadrootsNostrGenericEventBuilder::new(RadrootsNostrKind::Metadata, "{}"),
@@ -593,14 +594,15 @@ mod tests {
             RadrootsNostrSecretKey::from_slice(&[5_u8; 32]).expect("test secret key"),
         );
         let client = RadrootsNostrClient::new(keys);
-        let reference = radroots_event::reply::RadrootsNip10ReplyReference::parse(
+        let reference = radroots_event::post::reply::RadrootsNip10ReplyReference::parse(
             "a".repeat(64),
             FIXTURE_BOB_PUBLIC_KEY_HEX,
             None,
         )
         .expect("reference");
-        let reply = radroots_event::reply::RadrootsAuthoredNip10Reply::direct("Reply", reference)
-            .expect("reply");
+        let reply =
+            radroots_event::post::reply::RadrootsAuthoredNip10Reply::direct("Reply", reference)
+                .expect("reply");
         let builder =
             crate::events::reply::radroots_nostr_build_nip10_reply_event(&reply).expect("builder");
 

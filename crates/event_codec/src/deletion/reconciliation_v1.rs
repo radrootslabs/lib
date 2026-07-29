@@ -148,8 +148,8 @@ pub mod evaluator {
     use alloc::format;
 
     use radroots_event::{
-        ids::{RadrootsEventId, RadrootsNip01Coordinate},
-        kinds::KIND_DELETION_REQUEST,
+        envelope::kind::KIND_DELETION_REQUEST,
+        id::{RadrootsEventId, RadrootsNip01Coordinate},
     };
 
     use crate::verification::v1::RadrootsSignatureVerifiedEvent;
@@ -439,18 +439,18 @@ pub mod inbound {
     };
 
     use radroots_event::{
-        deletion::{
+        envelope::kind::KIND_DELETION_REQUEST,
+        id::{
+            RadrootsEventId, RadrootsIdParseError, RadrootsNip01Coordinate,
+            RadrootsNip01CoordinateParseError,
+        },
+        post::deletion::{
             RADROOTS_NIP09_DELETION_CONTENT_MAX_BYTES,
             RADROOTS_NIP09_DELETION_EVENT_WIRE_MAX_BYTES,
             RADROOTS_NIP09_DELETION_TAG_ELEMENT_MAX_BYTES, RADROOTS_NIP09_DELETION_TAG_MAX_COUNT,
             RADROOTS_NIP09_DELETION_TAG_TOTAL_ELEMENT_MAX_COUNT,
             RADROOTS_NIP09_DELETION_TAG_TOTAL_MAX_BYTES, RADROOTS_NIP09_DELETION_TARGET_KIND_MAX,
         },
-        ids::{
-            RadrootsEventId, RadrootsIdParseError, RadrootsNip01Coordinate,
-            RadrootsNip01CoordinateParseError,
-        },
-        kinds::KIND_DELETION_REQUEST,
     };
 
     use crate::verification::v1::RadrootsSignatureVerifiedEvent;

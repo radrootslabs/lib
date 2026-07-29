@@ -7,7 +7,7 @@ use alloc::{
 };
 
 use radroots_event::{
-    kinds::KIND_REACTION, reaction::RadrootsReaction, social::RadrootsSocialTarget,
+    envelope::kind::KIND_REACTION, post::reaction::RadrootsReaction, social::RadrootsSocialTarget,
 };
 
 use crate::error::EventEncodeError;

@@ -6,7 +6,7 @@ pub mod encode;
 #[cfg(test)]
 mod tests {
     use crate::document::encode::document_build_tags;
-    use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
+    use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
 
     #[test]
     fn document_tags_include_required_fields() {

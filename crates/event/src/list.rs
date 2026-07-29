@@ -28,7 +28,7 @@ pub struct RadrootsListEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kinds::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind};
+    use crate::envelope::kind::{KIND_LIST_READ_WRITE_RELAYS, is_nip51_standard_list_kind};
 
     #[test]
     fn generic_list_model_covers_nip65_relay_entries() {

@@ -5,7 +5,7 @@ use crate::{
         RadrootsNostrTimestamp,
     },
 };
-use radroots_event::food_availability::RadrootsFoodAvailabilityDetails;
+use radroots_event::food::availability::RadrootsFoodAvailabilityDetails;
 use radroots_event_codec::food_availability::authored::authored_food_availability_to_wire_parts;
 
 /// A sealed builder for a validated focused FoodAvailability event.

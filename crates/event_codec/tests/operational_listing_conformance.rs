@@ -3,8 +3,8 @@
 use std::{borrow::Cow, collections::BTreeSet, fs, path::Path};
 
 use radroots_event::{
-    RadrootsEventEnvelope, RadrootsEventEnvelopeParts, contract::validate_event_contract_shape,
-    operational_listing::RadrootsOperationalListing,
+    contract::validate_event_contract_shape, envelope::RadrootsEventEnvelope,
+    envelope::RadrootsEventEnvelopeParts, listing::operational::RadrootsOperationalListing,
 };
 use radroots_event_codec::{
     error::EventEncodeError,

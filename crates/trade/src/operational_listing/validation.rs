@@ -8,16 +8,16 @@ use alloc::{
 
 use radroots_core::{Decimal, Money, Quantity, Unit};
 use radroots_event::{
-    classified_listing::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
-    ids::RadrootsClassifiedListingAddress,
-    kinds::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind},
-    location::{has_textual_locality, is_public_geohash5},
-    operational_listing::{
+    envelope::kind::{KIND_CLASSIFIED_LISTING, is_classified_listing_kind},
+    farm::location::{has_textual_locality, is_public_geohash5},
+    id::RadrootsClassifiedListingAddress,
+    listing::classified::{RadrootsClassifiedListingPartition, classify_classified_listing_tags},
+    listing::operational::{
         RadrootsOperationalListing, RadrootsOperationalListingAvailability,
         RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
         RadrootsOperationalListingPublicLocation,
     },
-    trade_validation::RadrootsOperationalListingValidationError as OperationalListingValidationError,
+    trade::validation::RadrootsOperationalListingValidationError as OperationalListingValidationError,
 };
 use radroots_identity::PublicKey;
 
@@ -51,7 +51,7 @@ pub struct RadrootsOperationalListingTradeProjection {
 /// A plain envelope cannot cross this boundary:
 ///
 /// ```compile_fail
-/// use radroots_event::RadrootsEventEnvelope;
+/// use radroots_event::envelope::RadrootsEventEnvelope;
 /// use radroots_trade::operational_listing::validation::validate_operational_listing_event;
 ///
 /// fn validate_unverified(event: &RadrootsEventEnvelope) {
@@ -237,11 +237,12 @@ mod tests {
     use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts,
+        envelope::RadrootsEventEnvelope,
+        envelope::RadrootsEventEnvelopeParts,
+        envelope::kind::KIND_CLASSIFIED_LISTING,
         farm::RadrootsFarmRef,
-        ids::{RadrootsDTag, RadrootsInventoryBinId},
-        kinds::KIND_CLASSIFIED_LISTING,
-        operational_listing::{
+        id::{RadrootsDTag, RadrootsInventoryBinId},
+        listing::operational::{
             RadrootsOperationalListing, RadrootsOperationalListingAvailability,
             RadrootsOperationalListingBin, RadrootsOperationalListingDeliveryMethod,
             RadrootsOperationalListingProduct, RadrootsOperationalListingPublicLocation,
@@ -314,7 +315,7 @@ mod tests {
             inventory_available: Some(Decimal::from(5u32)),
             availability: Some(RadrootsOperationalListingAvailability::Status {
                 status:
-                    radroots_event::operational_listing::RadrootsOperationalListingStatus::Active,
+                    radroots_event::listing::operational::RadrootsOperationalListingStatus::Active,
             }),
             delivery_method: Some(RadrootsOperationalListingDeliveryMethod::Pickup),
             location: Some(RadrootsOperationalListingPublicLocation {
@@ -380,9 +381,9 @@ mod tests {
                 RadrootsOperationalListingAvailability::Status { status } => tags.push(vec![
                     "status".into(),
                     match status {
-                        radroots_event::operational_listing::RadrootsOperationalListingStatus::Active => "active".into(),
-                        radroots_event::operational_listing::RadrootsOperationalListingStatus::Sold => "sold".into(),
-                        radroots_event::operational_listing::RadrootsOperationalListingStatus::Other { value } => {
+                        radroots_event::listing::operational::RadrootsOperationalListingStatus::Active => "active".into(),
+                        radroots_event::listing::operational::RadrootsOperationalListingStatus::Sold => "sold".into(),
+                        radroots_event::listing::operational::RadrootsOperationalListingStatus::Other { value } => {
                             value.clone()
                         }
                     },
@@ -777,7 +778,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:primary_bin".into()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("radroots:primary_bin".into()),
             },
         );
     }
@@ -794,7 +795,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:primary_bin".into()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("radroots:primary_bin".into()),
             },
         );
     }
@@ -806,7 +807,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:bin".into()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("radroots:bin".into()),
             },
         );
     }
@@ -822,7 +823,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:price".into()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("radroots:price".into()),
             },
         );
     }
@@ -838,7 +839,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("radroots:price".into()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("radroots:price".into()),
             },
         );
     }
@@ -887,7 +888,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("g".to_string()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("g".to_string()),
             },
         );
     }
@@ -899,7 +900,7 @@ mod tests {
         assert_validation_err(
             listing,
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("g".to_string()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("g".to_string()),
             },
         );
     }
@@ -927,7 +928,7 @@ mod tests {
                 listing_addr: "addr".into(),
             },
             OperationalListingValidationError::ParseError {
-                error: radroots_event::operational_listing::RadrootsOperationalListingParseError::InvalidTag("d".into()),
+                error: radroots_event::listing::operational::RadrootsOperationalListingParseError::InvalidTag("d".into()),
             },
             OperationalListingValidationError::InvalidSeller,
             OperationalListingValidationError::MissingFarmProfile,

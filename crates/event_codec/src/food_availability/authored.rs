@@ -3,11 +3,12 @@ use alloc::{string::String, string::ToString, vec, vec::Vec};
 
 use core::fmt;
 use radroots_event::{
-    RadrootsEventEnvelopeError, RadrootsEventTags,
-    classified_listing::{TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY},
-    food_availability::{RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityError},
-    kinds::KIND_CLASSIFIED_LISTING,
-    tags::{
+    envelope::RadrootsEventEnvelopeError,
+    envelope::RadrootsEventTags,
+    envelope::kind::KIND_CLASSIFIED_LISTING,
+    food::availability::{RadrootsFoodAvailabilityDetails, RadrootsFoodAvailabilityError},
+    listing::classified::{TAG_RADROOTS_PRICE_UNIT, TAG_RADROOTS_QUANTITY},
+    tag::name::{
         TAG_D, TAG_IMAGE, TAG_LOCATION, TAG_PRICE, TAG_PUBLISHED_AT, TAG_STATUS, TAG_SUMMARY,
         TAG_TITLE,
     },
@@ -211,7 +212,7 @@ fn canonical_json_string_bytes(value: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use radroots_event::food_availability::{
+    use radroots_event::food::availability::{
         RadrootsFoodAvailabilityDetailsParts, RadrootsFoodAvailabilityStatus, RadrootsFoodContent,
         RadrootsFoodCurrency, RadrootsFoodIdentifier, RadrootsFoodPrice, RadrootsFoodPublishedAt,
         RadrootsFoodQuantity, RadrootsFoodText, RadrootsFoodUnit,

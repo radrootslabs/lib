@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::RadrootsEventPtr;
+use crate::tag::RadrootsEventPtr;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

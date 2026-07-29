@@ -5,8 +5,8 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::app_data::{KIND_APP_DATA, RadrootsAppData};
-use radroots_event::tags::TAG_D;
+use radroots_event::social::app_data::{KIND_APP_DATA, RadrootsAppData};
+use radroots_event::tag::name::TAG_D;
 
 use crate::error::EventEncodeError;
 use radroots_event::wire::RadrootsNip01EventWireParts;

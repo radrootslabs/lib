@@ -1,7 +1,7 @@
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_event::job::{JobFeedbackStatus, JobInputType};
+use radroots_event::social::job::{JobFeedbackStatus, JobInputType};
 use radroots_event_codec::job::error::JobParseError;
 use radroots_event_codec::job::util::{
     feedback_status_from_tag, feedback_status_tag, job_input_type_from_tag, job_input_type_tag,

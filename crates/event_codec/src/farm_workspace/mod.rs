@@ -6,15 +6,15 @@ pub mod decode;
 #[cfg(all(test, feature = "serde_json"))]
 mod tests {
     use radroots_event::{
+        envelope::kind::{KIND_FARM, KIND_FARM_FILE_METADATA, KIND_POST},
         farm::RadrootsFarmRef,
-        farm_crdt::KIND_FARM_CRDT_CHANGE,
-        farm_workspace::{
+        farm::crdt::KIND_FARM_CRDT_CHANGE,
+        farm::workspace::{
             KIND_FARM_WORKSPACE_MANIFEST, RADROOTS_FARM_WORKSPACE_PROTOCOL_VERSION,
             RADROOTS_FARM_WORKSPACE_SCHEMA, RADROOTS_FARM_WORKSPACE_TAG,
             RadrootsFarmWorkspaceManifest, RadrootsFarmWorkspaceMediaServer,
             RadrootsFarmWorkspaceRelay, RadrootsFarmWorkspaceRelayMode,
         },
-        kinds::{KIND_FARM, KIND_FARM_FILE_METADATA, KIND_POST},
     };
 
     use crate::error::{EventEncodeError, EventParseError};

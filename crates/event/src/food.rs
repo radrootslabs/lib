@@ -1,7 +1,4 @@
-//! Canonical food-event domain model.
-//!
-//! Existing food-availability behavior moves here during module normalization.
+//! Canonical food-event domain models.
 
-/// Internal marker for the target module while its models are consolidated.
-#[allow(dead_code)]
-pub(crate) struct ModuleScaffold;
+#[path = "food_availability.rs"]
+pub mod availability;

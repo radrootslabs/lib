@@ -1,3 +1,5 @@
+//! Profile and account event models.
+
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 use core::{fmt, str::FromStr};
@@ -550,3 +552,5 @@ mod tests {
         .unwrap()
     }
 }
+#[path = "account.rs"]
+pub mod account;

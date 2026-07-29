@@ -4,23 +4,27 @@
 mod test_fixtures;
 
 use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-use radroots_event::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
-use radroots_event::document::{RadrootsDocument, RadrootsDocumentSubject};
-use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-use radroots_event::gcs::{RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon};
-use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
-use radroots_event::kinds::{
+use radroots_event::envelope::kind::{
     KIND_COOP, KIND_DOCUMENT, KIND_FARM, KIND_PLOT, KIND_RESOURCE_AREA, KIND_RESOURCE_HARVEST_CAP,
 };
-use radroots_event::list_set::RadrootsListSet;
-use radroots_event::operational_listing::{
-    RadrootsOperationalListing, RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
+use radroots_event::farm::change_set::{
+    RadrootsGcsLocation, RadrootsGeoJsonPoint, RadrootsGeoJsonPolygon,
 };
-use radroots_event::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
-use radroots_event::resource_area::{
+use radroots_event::farm::coop::{RadrootsCoop, RadrootsCoopLocation, RadrootsCoopRef};
+use radroots_event::farm::plot::{RadrootsPlot, RadrootsPlotLocation, RadrootsPlotRef};
+use radroots_event::farm::resource_area::{
     RadrootsResourceArea, RadrootsResourceAreaLocation, RadrootsResourceAreaRef,
 };
-use radroots_event::resource_cap::{RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct};
+use radroots_event::farm::resource_cap::{
+    RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
+};
+use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+use radroots_event::listing::operational::{
+    RadrootsOperationalListing, RadrootsOperationalListingBin, RadrootsOperationalListingProduct,
+};
+use radroots_event::post::document::{RadrootsDocument, RadrootsDocumentSubject};
+use radroots_event::social::list_set::RadrootsListSet;
 use radroots_event_codec::coop::encode::{
     coop_build_tags, coop_ref_tags, to_wire_parts as coop_to_wire_parts,
     to_wire_parts_with_kind as coop_to_wire_parts_with_kind,

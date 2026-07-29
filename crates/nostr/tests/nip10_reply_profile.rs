@@ -1,4 +1,4 @@
-use radroots_event::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
+use radroots_event::post::reply::{RadrootsAuthoredNip10Reply, RadrootsNip10ReplyReference};
 use radroots_event_codec::{
     post::admission::{RadrootsPostAdmissionOutcome, verify_and_admit_post_event},
     reply::{

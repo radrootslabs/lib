@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
+use crate::envelope::kind::KIND_FARM_WORKSPACE_MANIFEST as KIND_FARM_WORKSPACE_MANIFEST_EVENT;
 use crate::farm::RadrootsFarmRef;
-use crate::kinds::KIND_FARM_WORKSPACE_MANIFEST as KIND_FARM_WORKSPACE_MANIFEST_EVENT;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
@@ -75,7 +75,7 @@ pub struct RadrootsFarmWorkspaceMediaServer {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
-    use crate::kinds::{
+    use crate::envelope::kind::{
         KIND_APP_DATA, KIND_FARM_CRDT_CHANGE, KIND_FARM_FILE_METADATA,
         KIND_FARM_WORKSPACE_MANIFEST as KIND_FARM_WORKSPACE_MANIFEST_KIND, KIND_HTTP_AUTH,
         KIND_RELAY_AUTH,

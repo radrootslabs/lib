@@ -2,7 +2,7 @@ mod common;
 #[path = "../src/test_fixtures.rs"]
 mod test_fixtures;
 
-use radroots_event::kinds::KIND_POST;
+use radroots_event::envelope::kind::KIND_POST;
 use radroots_event_codec::error::EventParseError;
 use radroots_event_codec::event_ref::{
     build_event_ref_tag, find_event_ref_tag, parse_event_ref_tag, parse_nip10_ref_tags,

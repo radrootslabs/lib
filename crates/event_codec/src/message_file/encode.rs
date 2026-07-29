@@ -7,8 +7,8 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::kinds::KIND_MESSAGE_FILE;
-use radroots_event::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+use radroots_event::envelope::kind::KIND_MESSAGE_FILE;
+use radroots_event::social::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
 
 use crate::error::EventEncodeError;
 use crate::message::tags::{build_recipient_tags, build_reply_tag, build_subject_tag};

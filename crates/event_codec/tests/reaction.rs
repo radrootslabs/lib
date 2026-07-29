@@ -2,10 +2,10 @@ mod common;
 
 use common::{AUTHOR as ENVELOPE_AUTHOR, EVENT_ID as ENVELOPE_ID, EVENT_SIG};
 use radroots_event::{
-    kinds::{KIND_ARTICLE, KIND_COMMENT, KIND_POST, KIND_REACTION},
-    reaction::RadrootsReaction,
+    envelope::kind::{KIND_ARTICLE, KIND_COMMENT, KIND_POST, KIND_REACTION},
+    post::reaction::RadrootsReaction,
     social::RadrootsSocialTarget,
-    tags::TAG_E_ROOT,
+    tag::name::TAG_E_ROOT,
 };
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::reaction::decode::{

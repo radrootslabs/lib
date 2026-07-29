@@ -8,8 +8,8 @@ mod tests {
     use crate::error::EventEncodeError;
     use crate::resource_cap::encode::resource_harvest_cap_build_tags;
     use radroots_core::{Decimal, Quantity, Unit};
-    use radroots_event::resource_area::RadrootsResourceAreaRef;
-    use radroots_event::resource_cap::{
+    use radroots_event::farm::resource_area::RadrootsResourceAreaRef;
+    use radroots_event::farm::resource_cap::{
         RadrootsResourceHarvestCap, RadrootsResourceHarvestProduct,
     };
 

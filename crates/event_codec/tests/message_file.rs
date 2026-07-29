@@ -3,10 +3,10 @@ mod common;
 mod test_fixtures;
 
 use common::{AUTHOR, EVENT_ID, EVENT_SIG};
-use radroots_event::RadrootsEventPtr;
-use radroots_event::kinds::{KIND_MESSAGE, KIND_MESSAGE_FILE};
-use radroots_event::message::RadrootsMessageRecipient;
-use radroots_event::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+use radroots_event::envelope::kind::{KIND_MESSAGE, KIND_MESSAGE_FILE};
+use radroots_event::social::message::RadrootsMessageRecipient;
+use radroots_event::social::message_file::{RadrootsMessageFile, RadrootsMessageFileDimensions};
+use radroots_event::tag::RadrootsEventPtr;
 
 use radroots_event_codec::error::{EventEncodeError, EventParseError};
 use radroots_event_codec::message_file::decode::{

@@ -1773,7 +1773,8 @@ mod tests {
     };
     use base64::Engine;
     use radroots_event::{
-        RadrootsEventEnvelope, RadrootsEventEnvelopeParts, kinds::KIND_TRADE_VALIDATION_RECEIPT,
+        envelope::RadrootsEventEnvelope, envelope::RadrootsEventEnvelopeParts,
+        envelope::kind::KIND_TRADE_VALIDATION_RECEIPT,
     };
     use radroots_trade::validation_receipt::{
         RadrootsValidationReceiptExpectedBinding, RadrootsValidationReceiptProof,

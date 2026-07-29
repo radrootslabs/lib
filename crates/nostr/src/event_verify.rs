@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use radroots_event::RadrootsEventEnvelope;
+use radroots_event::envelope::RadrootsEventEnvelope;
 use radroots_event_codec::verification::{
     RadrootsNip01VerificationError, verify_event_id, verify_nip01_event,
 };
@@ -59,7 +59,8 @@ mod tests {
     use crate::test_fixtures::FIXTURE_ALICE;
     use crate::types::{RadrootsNostrKeys, RadrootsNostrSecretKey, RadrootsNostrTimestamp};
     use radroots_event::{
-        RadrootsEventEnvelopeParts, kinds::KIND_POST, wire::compute_canonical_nip01_event_id,
+        envelope::RadrootsEventEnvelopeParts, envelope::kind::KIND_POST,
+        wire::compute_canonical_nip01_event_id,
     };
 
     fn fixture_keys() -> RadrootsNostrKeys {

@@ -4,10 +4,10 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::follow::{RadrootsFollow, RadrootsFollowProfile};
+use radroots_event::social::follow::{RadrootsFollow, RadrootsFollowProfile};
 
 use crate::error::EventEncodeError;
-use radroots_event::kinds::KIND_FOLLOW;
+use radroots_event::envelope::kind::KIND_FOLLOW;
 use radroots_event::wire::RadrootsNip01EventWireParts;
 
 const DEFAULT_KIND: u32 = KIND_FOLLOW;

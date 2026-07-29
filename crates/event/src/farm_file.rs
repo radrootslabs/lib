@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
-use crate::farm_crdt::RadrootsFarmCrdtDocumentKind;
-use crate::farm_workspace::RadrootsFarmWorkspaceRef;
-use crate::kinds::KIND_FARM_FILE_METADATA as KIND_FARM_FILE_METADATA_EVENT;
+use crate::envelope::kind::KIND_FARM_FILE_METADATA as KIND_FARM_FILE_METADATA_EVENT;
+use crate::farm::crdt::RadrootsFarmCrdtDocumentKind;
+use crate::farm::workspace::RadrootsFarmWorkspaceRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};

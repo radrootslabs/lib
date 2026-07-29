@@ -1,9 +1,9 @@
 use radroots_event::{
-    deletion::{
+    envelope::kind::KIND_DELETION_REQUEST,
+    post::deletion::{
         RadrootsAuthoredNip09DeletionRequest, RadrootsNip09DeletionAddressTarget,
         RadrootsNip09DeletionEventTarget,
     },
-    kinds::KIND_DELETION_REQUEST,
 };
 use radroots_event_codec::deletion::admission::verify_and_admit_nip09_deletion_request_event;
 use radroots_nostr::prelude::{

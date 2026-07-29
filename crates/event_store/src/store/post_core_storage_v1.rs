@@ -5,7 +5,7 @@ use crate::error::RadrootsEventStoreError;
 use crate::model::RadrootsEventIngest;
 use crate::model::RadrootsTransportObservation;
 use radroots_event::envelope::RadrootsEventEnvelope;
-use radroots_event::ids::{RadrootsTradeCandidateId, RadrootsTradeMutationId};
+use radroots_event::id::{RadrootsTradeCandidateId, RadrootsTradeMutationId};
 use radroots_event::trade::{
     RadrootsSellerReservationAssertionV1, RadrootsTradeMutationEnvelopeV1,
     RadrootsTradeMutationKindV1,

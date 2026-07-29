@@ -5,7 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use radroots_event::RADROOTS_EVENT_VERSION;
+use radroots_event::contract::VERSION;
 use radroots_event::contract::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContentSchema, RadrootsContractFamily,
     RadrootsEventClass, RadrootsEventContract, RadrootsEventDiscriminator, RadrootsEventPrivacy,
@@ -135,7 +135,7 @@ pub fn knowledge_contract_manifest() -> RadrootsKnowledgeContractManifest {
     RadrootsKnowledgeContractManifest {
         schema_version: RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION,
         registry_version: RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION,
-        radroots_event_version: RADROOTS_EVENT_VERSION.to_string(),
+        radroots_event_version: VERSION.to_string(),
         radroots_event_codec_version: env!("CARGO_PKG_VERSION").to_string(),
         contract_count: contracts.len(),
         contracts,
@@ -270,9 +270,9 @@ fn discriminator_manifest(
 }
 
 fn classified_listing_partition_label(
-    value: radroots_event::classified_listing::RadrootsClassifiedListingPartition,
+    value: radroots_event::listing::classified::RadrootsClassifiedListingPartition,
 ) -> &'static str {
-    use radroots_event::classified_listing::RadrootsClassifiedListingPartition;
+    use radroots_event::listing::classified::RadrootsClassifiedListingPartition;
 
     match value {
         RadrootsClassifiedListingPartition::FocusedFoodAvailability => "focused_food_availability",
@@ -464,8 +464,8 @@ fn reducer_label(value: RadrootsReducer) -> &'static str {
 mod tests {
     use super::{discriminator_manifest, reducer_label, standard_label};
     use radroots_event::{
-        classified_listing::RadrootsClassifiedListingPartition,
         contract::{RadrootsEventDiscriminator, RadrootsNostrStandard, RadrootsReducer},
+        listing::classified::RadrootsClassifiedListingPartition,
     };
 
     #[test]

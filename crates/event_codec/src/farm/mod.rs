@@ -15,15 +15,15 @@ mod tests {
         farm_plots_list_set_from_plots, member_of_farms_list_set,
     };
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
-    use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
-    use radroots_event::ids::{RadrootsDTag, RadrootsInventoryBinId};
     #[cfg(feature = "serde_json")]
-    use radroots_event::kinds::KIND_FARM;
-    use radroots_event::operational_listing::{
+    use radroots_event::envelope::kind::KIND_FARM;
+    use radroots_event::farm::plot::RadrootsPlot;
+    use radroots_event::farm::{RadrootsFarm, RadrootsFarmPublicLocation, RadrootsFarmRef};
+    use radroots_event::id::{RadrootsDTag, RadrootsInventoryBinId};
+    use radroots_event::listing::operational::{
         RadrootsOperationalListing, RadrootsOperationalListingBin,
         RadrootsOperationalListingProduct,
     };
-    use radroots_event::plot::RadrootsPlot;
 
     #[cfg(feature = "serde_json")]
     const EVENT_ID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

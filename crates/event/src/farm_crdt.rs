@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use crate::farm_workspace::RadrootsFarmWorkspaceRef;
-use crate::kinds::KIND_FARM_CRDT_CHANGE as KIND_FARM_CRDT_CHANGE_EVENT;
+use crate::envelope::kind::KIND_FARM_CRDT_CHANGE as KIND_FARM_CRDT_CHANGE_EVENT;
+use crate::farm::workspace::RadrootsFarmWorkspaceRef;
 
 #[cfg(not(feature = "std"))]
 use alloc::{
