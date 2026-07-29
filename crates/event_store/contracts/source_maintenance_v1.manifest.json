@@ -299,8 +299,8 @@
     {
       "role": "event_trade_authority",
       "path": "crates/event/src/trade.rs",
-      "byte_length": 68373,
-      "sha256": "f72ea517bb2a634420ee7528e0fbd38e524c8a4c09e7be47ffc237d839d9b2ec",
+      "byte_length": 68514,
+      "sha256": "88c21633f60b84adf30ad7fe21d6d0b6844cc7186826600a83a467cc028e55dd",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

@@ -21,7 +21,7 @@ use radroots_event::knowledge::{
 };
 use radroots_identity::PublicKey;
 
-use crate::RELAY_PRIMARY_WSS;
+use crate::{FIXTURE_ALICE_PUBLIC_KEY_HEX, RELAY_PRIMARY_WSS};
 
 pub const RADROOTS_KNOWLEDGE_FIXTURE_NAMESPACE: &str = "radroots-knowledge-fixture-v1";
 
@@ -144,10 +144,8 @@ pub fn hex_64(character: char) -> String {
 pub fn event_ref(character: char, kind: u32) -> RadrootsEventRef {
     RadrootsEventRef {
         id: hex_64(character),
-        author: PublicKey::from_hex(
-            "585591529da0bab31b3b1f986611cf5f435dca84f978c89ee8a40cca7103df",
-        )
-        .expect("fixture public key is valid"),
+        author: PublicKey::from_hex(FIXTURE_ALICE_PUBLIC_KEY_HEX)
+            .expect("fixture public key is valid"),
         kind,
         d_tag: None,
         relays: Some(vec![RELAY_PRIMARY_WSS.to_string()]),

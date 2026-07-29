@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
-use radroots_event::id::{DTag, EventId, EventSignature, Nip01Coordinate};
+use radroots_event::id::{
+    CandidateId, DTag, EventId, EventSignature, MutationId, Nip01Coordinate, TradeId,
+};
 #[cfg(feature = "knowledge")]
 #[allow(unused_imports)]
 use radroots_event::knowledge as _;
@@ -16,6 +18,7 @@ const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
 const IDENTIFIERS: &str = include_str!("../src/ids.rs");
 const RELAY_HINT: &str = include_str!("../src/relay_hint.rs");
+const TRADE: &str = include_str!("../src/trade.rs");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -106,6 +109,47 @@ fn event_references_use_the_identity_owned_public_key() {
 
     assert_eq!(reference.author, author);
     assert!(!IDENTIFIERS.contains("pub(crate) use radroots_identity::PublicKey"));
+}
+
+#[test]
+fn trade_protocol_identifiers_have_one_definition_and_deliberate_facades() {
+    let trade_id = TradeId::parse("11".repeat(16)).expect("trade id");
+    let candidate_id = CandidateId::parse("22".repeat(32)).expect("candidate id");
+    let mutation_id = MutationId::parse("33".repeat(32)).expect("mutation id");
+
+    let trade_surface_id: radroots_event::trade::TradeId = trade_id;
+    let trade_surface_candidate: radroots_event::trade::CandidateId = candidate_id;
+    let trade_surface_mutation: radroots_event::trade::MutationId = mutation_id;
+
+    assert_eq!(trade_surface_id, trade_id);
+    assert_eq!(trade_surface_candidate, candidate_id);
+    assert_eq!(trade_surface_mutation, mutation_id);
+    assert_eq!(core::mem::size_of::<TradeId>(), 16);
+    assert_eq!(core::mem::size_of::<CandidateId>(), 32);
+    assert_eq!(core::mem::size_of::<MutationId>(), 32);
+    assert!(TradeId::parse("order-1").is_err());
+    assert!(radroots_event::ids::RadrootsOrderId::parse("order-1").is_ok());
+
+    for definition in [
+        "validated_hex_id!(RadrootsTradeId, 16);",
+        "validated_hex_id!(RadrootsTradeCandidateId, 32);",
+        "validated_hex_id!(RadrootsTradeMutationId, 32);",
+    ] {
+        assert_eq!(IDENTIFIERS.matches(definition).count(), 1, "{definition}");
+    }
+    for duplicate in [
+        "pub struct TradeId",
+        "pub struct CandidateId",
+        "pub struct MutationId",
+        "pub struct RadrootsTradeId",
+        "pub struct RadrootsTradeCandidateId",
+        "pub struct RadrootsTradeMutationId",
+    ] {
+        assert!(
+            !TRADE.contains(duplicate),
+            "duplicate definition: {duplicate}"
+        );
+    }
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

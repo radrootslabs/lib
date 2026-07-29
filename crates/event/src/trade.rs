@@ -15,6 +15,10 @@ use crate::ids::{
     RadrootsClassifiedListingAddress, RadrootsDTag, RadrootsEventId, RadrootsIdParseError,
     RadrootsInventoryBinId, RadrootsTradeCandidateId, RadrootsTradeId, RadrootsTradeMutationId,
 };
+pub use crate::ids::{
+    RadrootsTradeCandidateId as CandidateId, RadrootsTradeId as TradeId,
+    RadrootsTradeMutationId as MutationId,
+};
 use crate::kinds::{
     KIND_TRADE_CANCELLATION, KIND_TRADE_DECISION, KIND_TRADE_PROPOSAL,
     KIND_TRADE_REVISION_DECISION, KIND_TRADE_REVISION_PROPOSAL,
