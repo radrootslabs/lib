@@ -5,6 +5,7 @@
 extern crate alloc;
 
 pub mod canonical;
+mod codec;
 pub mod d_tag;
 pub mod decode;
 pub mod encode;
@@ -26,6 +27,11 @@ pub mod tag_builders;
 pub mod verification;
 pub mod verify;
 pub mod wire;
+
+pub use codec::Codec;
+pub use decode::DecodeError;
+pub use encode::EncodeError;
+pub use verify::VerificationError;
 
 #[cfg(feature = "serde_json")]
 pub mod admission;
