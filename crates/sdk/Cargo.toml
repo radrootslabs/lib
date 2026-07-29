@@ -30,16 +30,15 @@ serde_json = [
   "dep:serde_json",
   "serde",
   "nostr",
-  "radroots_event_codec/serde_json",
+  "radroots_event_codec/json",
   "radroots_trade/serde_json",
 ]
-nostr = ["radroots_event_codec/nostr"]
+nostr = []
 knowledge = [
   "serde",
   "serde_json",
   "radroots_event/knowledge",
-  "radroots_event_codec/contract-manifest",
-  "radroots_event_codec/knowledge-nip54",
+  "radroots_event_codec/manifests",
 ]
 identity-models = [
   "radroots_identity/std",

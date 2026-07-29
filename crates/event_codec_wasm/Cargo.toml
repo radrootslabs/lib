@@ -25,10 +25,7 @@ radroots_event = { workspace = true, default-features = false, features = [
 ] }
 radroots_event_codec = { workspace = true, default-features = false, features = [
   "std",
-  "serde_json",
-  "nostr",
-  "knowledge-nip54",
-  "contract-manifest",
+  "manifests",
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }
