@@ -264,8 +264,8 @@
     {
       "role": "event_contract_registry_v7_authority",
       "path": "crates/event/src/contract/registry_v7.rs",
-      "byte_length": 156426,
-      "sha256": "b24fd9cf75279dcd24971fba7d55df1a58f0fc773b68984528bd42e59b838086",
+      "byte_length": 157246,
+      "sha256": "87a97f782427d4036d49a3dddaf2f5f46ddf585cd2f537c01628ba817a2f94e4",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -334,8 +334,8 @@
     {
       "role": "event_draft_authority",
       "path": "crates/event/src/draft.rs",
-      "byte_length": 58707,
-      "sha256": "c21e1b2e9cf6bfb4e007a32772ba59452deef0c9ba5f652992159e85fe7ccb24",
+      "byte_length": 58654,
+      "sha256": "d0c8550caabd359e53d854cdbc5c299108003a95e43d8133637c4301646ea7a6",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

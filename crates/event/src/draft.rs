@@ -8,8 +8,7 @@ use std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::contract::registry_v7::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, RadrootsContractValidationError,
-    RadrootsEventAuthoringPolicy, RadrootsEventContract, event_contract,
-    validate_event_contract_parts,
+    RadrootsEventContract, event_contract, validate_event_contract_parts,
 };
 use crate::ids::{RadrootsEventId, RadrootsEventSignature, RadrootsIdParseError, parse_public_key};
 use crate::wire::v1::{
@@ -387,7 +386,7 @@ impl RadrootsEventDraft {
 fn ensure_generic_draft_authorable(
     contract: &RadrootsEventContract,
 ) -> Result<(), RadrootsDraftError> {
-    if contract.authoring_policy != RadrootsEventAuthoringPolicy::GenericDraft {
+    if !contract.authoring_policy().permits_generic_draft() {
         return Err(RadrootsDraftError::ContractNotDraftAuthorable {
             contract_id: contract.id.to_owned(),
         });

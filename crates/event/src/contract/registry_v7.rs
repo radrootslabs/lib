@@ -271,6 +271,26 @@ pub enum RadrootsEventAuthoringPolicy {
     ReadOnly,
 }
 
+impl RadrootsEventAuthoringPolicy {
+    /// Returns whether untyped contract parts may construct a frozen draft.
+    #[must_use]
+    pub const fn permits_generic_draft(self) -> bool {
+        matches!(self, Self::GenericDraft)
+    }
+
+    /// Returns whether a sealed typed authoring API may construct an event.
+    #[must_use]
+    pub const fn permits_typed_authoring(self) -> bool {
+        !matches!(self, Self::ReadOnly)
+    }
+
+    /// Returns whether the contract is exclusively an inbound/read boundary.
+    #[must_use]
+    pub const fn is_read_only(self) -> bool {
+        matches!(self, Self::ReadOnly)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsContractMatchError {
     UnsupportedKind(u32),
@@ -394,7 +414,7 @@ pub struct RadrootsEventContract {
     pub privacy: RadrootsEventPrivacy,
     required_author_role: AuthorRole,
     pub content_schema: RadrootsContentSchema,
-    pub authoring_policy: RadrootsEventAuthoringPolicy,
+    authoring_policy: RadrootsEventAuthoringPolicy,
     pub discriminator: RadrootsEventDiscriminator,
     pub tags: &'static [RadrootsTagContract],
     pub reducers: &'static [RadrootsReducer],
@@ -408,6 +428,12 @@ impl RadrootsEventContract {
     #[must_use]
     pub const fn required_author_role(&self) -> AuthorRole {
         self.required_author_role
+    }
+
+    /// Returns the single registry-owned policy governing authoring routes.
+    #[must_use]
+    pub const fn authoring_policy(&self) -> RadrootsEventAuthoringPolicy {
+        self.authoring_policy
     }
 }
 

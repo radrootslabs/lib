@@ -138,6 +138,24 @@ fn author_role_catalog_is_event_owned_complete_and_schema_stable() {
     );
 }
 
+#[test]
+fn authoring_policy_matrix_is_centralized_and_complete() {
+    let generic = RadrootsEventAuthoringPolicy::GenericDraft;
+    assert!(generic.permits_generic_draft());
+    assert!(generic.permits_typed_authoring());
+    assert!(!generic.is_read_only());
+
+    let typed = RadrootsEventAuthoringPolicy::TypedOnly;
+    assert!(!typed.permits_generic_draft());
+    assert!(typed.permits_typed_authoring());
+    assert!(!typed.is_read_only());
+
+    let read_only = RadrootsEventAuthoringPolicy::ReadOnly;
+    assert!(!read_only.permits_generic_draft());
+    assert!(!read_only.permits_typed_authoring());
+    assert!(read_only.is_read_only());
+}
+
 fn unsigned_event(kind: u32, tags: Vec<Vec<&str>>, content: &str) -> RadrootsEventEnvelope {
     RadrootsEventEnvelope::new(RadrootsEventEnvelopeParts {
         id: "0".repeat(64),
@@ -579,7 +597,7 @@ fn classified_listing_kind_profiles_are_partitioned_and_explicit() {
     assert_eq!(food.required_author_role(), AuthorRole::Seller);
     assert_eq!(food.content_schema, RadrootsContentSchema::Markdown);
     assert_eq!(
-        food.authoring_policy,
+        food.authoring_policy(),
         RadrootsEventAuthoringPolicy::TypedOnly
     );
     assert_eq!(
@@ -923,7 +941,7 @@ fn post_subtype_contracts_require_verified_admission() {
         .expect("unsigned kind-1 identification remains generic");
     assert_eq!(generic.id, "radroots.social.post.v1");
     assert_eq!(
-        generic.authoring_policy,
+        generic.authoring_policy(),
         RadrootsEventAuthoringPolicy::ReadOnly
     );
 
@@ -939,7 +957,7 @@ fn post_subtype_contracts_require_verified_admission() {
             Some(RadrootsContractFamily::Social)
         );
         assert_eq!(
-            contract.authoring_policy,
+            contract.authoring_policy(),
             RadrootsEventAuthoringPolicy::TypedOnly
         );
         assert_eq!(
@@ -951,13 +969,13 @@ fn post_subtype_contracts_require_verified_admission() {
     assert_eq!(
         event_contract("radroots.profile.metadata.v1")
             .expect("strict authored profile contract")
-            .authoring_policy,
+            .authoring_policy(),
         RadrootsEventAuthoringPolicy::TypedOnly
     );
     assert_eq!(
         event_contract("radroots.social.geochat.v1")
             .expect("generic-draft control contract")
-            .authoring_policy,
+            .authoring_policy(),
         RadrootsEventAuthoringPolicy::GenericDraft
     );
 }
@@ -987,7 +1005,7 @@ fn nip22_comment_contract_is_typed_and_admission_only() {
     assert_eq!(contract.required_author_role(), AuthorRole::Any);
     assert_eq!(contract.content_schema, RadrootsContentSchema::PlainText);
     assert_eq!(
-        contract.authoring_policy,
+        contract.authoring_policy(),
         RadrootsEventAuthoringPolicy::TypedOnly
     );
     assert_eq!(
@@ -1048,7 +1066,7 @@ fn nip09_deletion_request_contract_is_typed_and_admission_only() {
     assert_eq!(contract.required_author_role(), AuthorRole::Any);
     assert_eq!(contract.content_schema, RadrootsContentSchema::PlainText);
     assert_eq!(
-        contract.authoring_policy,
+        contract.authoring_policy(),
         RadrootsEventAuthoringPolicy::TypedOnly
     );
     assert_eq!(

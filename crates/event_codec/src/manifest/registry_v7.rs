@@ -381,7 +381,7 @@ fn event_inventory_entry(
         privacy: privacy_inventory(contract.privacy),
         author_role: author_role_inventory(contract.required_author_role()),
         content_schema: content_schema_inventory(contract.content_schema),
-        authoring_policy: authoring_policy_inventory(contract.authoring_policy),
+        authoring_policy: authoring_policy_inventory(contract.authoring_policy()),
         discriminator: discriminator_inventory(&contract.discriminator),
         tags: contract.tags.iter().map(tag_inventory).collect(),
         reducers: contract

@@ -92,9 +92,9 @@ where
     S: RadrootsEventSigner + ?Sized,
     V: FnOnce(&RadrootsEventDraft) -> Result<(), RadrootsDraftError>,
 {
+    validate_draft(draft).map_err(RadrootsAuthorityError::DraftValidation)?;
     authorize_actor_for_draft(actor, draft)?;
     authorize_signer_for_draft(signer, draft)?;
-    validate_draft(draft).map_err(RadrootsAuthorityError::DraftValidation)?;
     let signed_event = signer.sign_frozen_draft(draft)?;
     validate_signed_event_matches_draft(&signed_event, draft)?;
     Ok(signed_event)
@@ -320,6 +320,7 @@ mod tests {
 
     struct CountingSigner {
         pubkey: PublicKey,
+        identity_invocations: Cell<usize>,
         sign_invocations: Cell<usize>,
     }
 
@@ -327,6 +328,7 @@ mod tests {
         fn new(pubkey: &str) -> Self {
             Self {
                 pubkey: PublicKey::from_hex(pubkey).expect("pubkey"),
+                identity_invocations: Cell::new(0),
                 sign_invocations: Cell::new(0),
             }
         }
@@ -334,6 +336,8 @@ mod tests {
 
     impl RadrootsEventSigner for CountingSigner {
         fn pubkey(&self) -> &PublicKey {
+            self.identity_invocations
+                .set(self.identity_invocations.get().saturating_add(1));
             &self.pubkey
         }
 
@@ -448,13 +452,47 @@ mod tests {
     }
 
     #[test]
-    fn stale_registry_draft_validation_failures_do_not_invoke_custom_signer() {
+    fn rejected_authoring_policies_do_not_consult_or_invoke_signer() {
         let pubkey = hex_64('a');
         let draft = operational_listing_event_draft(pubkey.as_str());
         let actor = seller_actor(pubkey.as_str());
         let signer = CountingSigner::new(pubkey.as_str());
 
         assert_eq!(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION, 7);
+        for contract_id in [
+            "radroots.profile.metadata.v1",
+            "radroots.social.post.v1",
+            "radroots.social.comment.v1",
+        ] {
+            let rejected_contract = event_contract(contract_id).expect("rejected contract");
+            assert!(!rejected_contract.authoring_policy().permits_generic_draft());
+            let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
+                Err(RadrootsDraftError::ContractNotDraftAuthorable {
+                    contract_id: contract_id.to_owned(),
+                })
+            })
+            .expect_err("rejected authoring policy must fail");
+
+            assert_eq!(
+                error,
+                RadrootsAuthorityError::DraftValidation(
+                    RadrootsDraftError::ContractNotDraftAuthorable {
+                        contract_id: contract_id.to_owned(),
+                    }
+                )
+            );
+        }
+        assert_eq!(signer.identity_invocations.get(), 0);
+        assert_eq!(signer.sign_invocations.get(), 0);
+    }
+
+    #[test]
+    fn stale_registry_drafts_do_not_consult_or_invoke_signer() {
+        let pubkey = hex_64('a');
+        let draft = operational_listing_event_draft(pubkey.as_str());
+        let actor = seller_actor(pubkey.as_str());
+        let signer = CountingSigner::new(pubkey.as_str());
+
         for actual in 1..RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION {
             let error = sign_authorized_draft_with_validator(&actor, &signer, &draft, |_| {
                 Err(RadrootsDraftError::ContractRegistryVersionMismatch {
@@ -474,6 +512,7 @@ mod tests {
                 )
             );
         }
+        assert_eq!(signer.identity_invocations.get(), 0);
         assert_eq!(signer.sign_invocations.get(), 0);
     }
 
