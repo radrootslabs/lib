@@ -221,7 +221,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
-        "23b72dde8ceda927843794768c9507b9cd81c2e2935d54cca12d84608946dbf0",
+        "211f0eedc43bab3fa8f5356effbd9e64b929285b3c4c0b72701aec8e8f7d4b8d",
     ),
     (
         BLOSSOM_CARGO_MANIFEST_RELATIVE,
@@ -229,7 +229,7 @@ const GOVERNED_DEPENDENCY_TABLE_SHA256: [(&str, &str); 7] = [
     ),
     (
         EVENT_STORE_CARGO_MANIFEST_RELATIVE,
-        "8ecd900f34ea701429e326911dff0ed49364b4b5aee654ee9f68b0c1e1bf7cbf",
+        "dc92a80725866be32cc773e0762ab26c72c07bc14aa6a6940460f8f175aa7237",
     ),
     (
         TRANSPORT_CARGO_MANIFEST_RELATIVE,
@@ -536,7 +536,7 @@ const RUNTIME_DEPENDENCY_ROOTS: [RuntimeDependencyRootSpec; 10] = [
     },
     RuntimeDependencyRootSpec {
         owner: "radroots_event_codec",
-        name: "nostr",
+        name: "secp256k1",
         expected_version: None,
     },
     RuntimeDependencyRootSpec {
@@ -611,8 +611,8 @@ const CARGO_PACKAGE_FEATURE_SPECS: &[CargoPackageFeatureSpec] = &[
         cargo_package_name: "radroots_event_codec",
         manifest_path: EVENT_CODEC_CARGO_MANIFEST_RELATIVE,
         default_features_enabled: false,
-        selected_features: &["nostr", "serde", "serde_json", "std"],
-        relevant_feature_definitions: &["nostr", "serde", "serde_json", "std"],
+        selected_features: &["serde", "serde_json", "std"],
+        relevant_feature_definitions: &["serde", "serde_json", "std"],
     },
     CargoPackageFeatureSpec {
         package: "radroots_event",
@@ -14851,7 +14851,6 @@ fn validate_required_feature_enables(
         ("radroots_event_store", "default") => &["runtime-tokio", "sqlite"],
         ("radroots_event_store", "runtime-tokio") => &["sqlx/runtime-tokio"],
         ("radroots_event_store", "sqlite") => &["dep:getrandom", "dep:sqlx", "sqlx/sqlite-bundled"],
-        ("radroots_event_codec", "nostr") => &["dep:nostr", "std"],
         ("radroots_event_codec", "serde") => {
             &["dep:serde", "radroots_core/serde", "radroots_event/serde"]
         }
@@ -15004,11 +15003,7 @@ fn validate_event_store_dependency_profile(
             name: "radroots_event_codec".to_owned(),
             default_features: false,
             optional: false,
-            features: vec![
-                "nostr".to_owned(),
-                "serde_json".to_owned(),
-                "std".to_owned(),
-            ],
+            features: vec!["serde_json".to_owned(), "std".to_owned()],
         },
         CargoDependencyFeatureDescriptor {
             name: "sqlx".to_owned(),
@@ -21530,6 +21525,12 @@ async fn nip09_reconciliation_v1_result_vector() {
     fn manifest_shape_rejects_generated_frozen_sources() {
         let workspace = synthetic_workspace();
         let mut manifest = immutable_manifest();
+        manifest.cargo_feature_profile =
+            describe_cargo_feature_profile(workspace.path()).expect("current feature profile");
+        let cargo_lock =
+            read_regular_file(workspace.path(), CARGO_LOCK_RELATIVE).expect("current Cargo.lock");
+        (manifest.runtime_dependency_policy, manifest.runtime_dependencies) =
+            runtime_dependencies_from_lock(&cargo_lock).expect("current runtime dependency profile");
         manifest.entry_points = expected_entry_points();
         manifest.frozen_sources[0].path = GENERATED_DESCRIPTOR_RELATIVE.to_owned();
         let error = validate_manifest_shape(workspace.path(), &manifest)

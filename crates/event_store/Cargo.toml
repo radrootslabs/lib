@@ -25,7 +25,6 @@ radroots_event = { workspace = true, default-features = false, features = [
   "serde",
 ] }
 radroots_event_codec = { workspace = true, default-features = false, features = [
-  "nostr",
   "serde_json",
   "std",
 ] }

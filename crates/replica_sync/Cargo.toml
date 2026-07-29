@@ -22,7 +22,7 @@ std = [
   "radroots_event_codec/std",
   "radroots_sql_core/std",
 ]
-legacy-ingest = ["std", "radroots_event_codec/nostr", "dep:base64", "dep:uuid"]
+legacy-ingest = ["std", "dep:base64", "dep:uuid"]
 
 [[test]]
 name = "ingest_roundtrip"

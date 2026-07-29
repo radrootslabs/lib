@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(feature = "nostr")]
 #[test]
 fn admitted_contract_resolves_registry_entry() {
     use nostr::secp256k1::Message;

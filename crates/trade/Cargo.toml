@@ -28,7 +28,6 @@ std = [
   "radroots_core/std",
   "radroots_event/std",
   "radroots_event_codec/std",
-  "radroots_event_codec/nostr",
   "radroots_identity/std",
 ]
 event_store = [

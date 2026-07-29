@@ -1,4 +1,4 @@
-#![cfg(all(feature = "serde_json", feature = "nostr"))]
+#![cfg(feature = "serde_json")]
 
 use std::{borrow::Cow, fs, path::Path};
 

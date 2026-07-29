@@ -32,7 +32,6 @@ serde = [
   "radroots_protocol/serde",
 ]
 serde_json = ["serde", "dep:serde_json"]
-nostr = ["dep:nostr", "std"]
 knowledge = ["serde_json", "radroots_event/knowledge"]
 knowledge-nip54 = ["knowledge"]
 contract-manifest = ["knowledge", "dep:hex", "dep:sha2"]
@@ -49,13 +48,14 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ], optional = true }
-nostr = { workspace = true, optional = true }
+secp256k1 = { workspace = true }
 hex = { version = "0.4", default-features = false, features = [
   "alloc",
 ], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
+nostr = { workspace = true }
 radroots_blossom = { workspace = true, default-features = false, features = [
   "serde",
   "std",

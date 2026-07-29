@@ -5,6 +5,7 @@ use radroots_event_codec::{canonical as _, decode as _, encode as _, verify as _
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const VERIFICATION: &str = include_str!("../src/verification/v1.rs");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -41,6 +42,23 @@ fn crate_root_declares_every_approved_module() {
             "missing approved module {module}"
         );
     }
+}
+
+#[test]
+fn codec_runtime_is_protocol_neutral_and_host_free() {
+    let features = table_keys(MANIFEST, "[features]");
+    let dependencies = table_keys(MANIFEST, "[dependencies]");
+
+    assert!(!features.contains("nostr"));
+    assert!(dependencies.contains("secp256k1"));
+    for forbidden in ["nostr", "nostr-sdk", "reqwest", "sqlx", "tokio"] {
+        assert!(
+            !dependencies.contains(forbidden),
+            "codec runtime must not depend on {forbidden}"
+        );
+    }
+    assert!(!VERIFICATION.contains("nostr::"));
+    assert!(!VERIFICATION.contains("feature = \"nostr\""));
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {

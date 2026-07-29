@@ -488,8 +488,8 @@
     {
       "role": "event_codec_verification_v1_authority",
       "path": "crates/event_codec/src/verification/v1.rs",
-      "byte_length": 8489,
-      "sha256": "ca52f783e8b23fa53e91b13bdefff3a9da0adafa2847556ca1a4ffe74538f421",
+      "byte_length": 6584,
+      "sha256": "72f64615bd6b6dc3b051579e3069b2213f3781dcc28e12f0b533c7d81b81b9b1",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -502,8 +502,8 @@
     {
       "role": "event_codec_admission_facade",
       "path": "crates/event_codec/src/admission.rs",
-      "byte_length": 20622,
-      "sha256": "72a1bc6abcb32398e33567071af1469cf32ce8498e4a1c7b0ba71e1e066fb14c",
+      "byte_length": 20592,
+      "sha256": "49cc28d06e99880d5df75e899ca72c97f4fa27e8cb4f96457527b6cff783e0ae",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -572,8 +572,8 @@
     {
       "role": "event_codec_deletion_reconciliation_v1_authority",
       "path": "crates/event_codec/src/deletion/reconciliation_v1.rs",
-      "byte_length": 38052,
-      "sha256": "06faad60285584a5910ad6b078b0141d461d62511e3ddceb8b021c8457f6a57c",
+      "byte_length": 38028,
+      "sha256": "c6901f559e83700610595720c47a4d062078ae8411e1fc2fb952dd215b19dd90",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -642,8 +642,8 @@
     {
       "role": "event_store_dependency_authority",
       "path": "crates/event_store/Cargo.toml",
-      "byte_length": 1567,
-      "sha256": "46e03d3c758e1116638021a0499dfa588b4266498e0d50cfa758f9bef9bcfeb3",
+      "byte_length": 1556,
+      "sha256": "9ec34fe9b0e7362a068a5473dea01ee6c4fe629311a9bd6e8be770ebcddb4200",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {
@@ -824,8 +824,8 @@
     {
       "role": "transitive_predecessor_membership_governance",
       "path": "tools/xtask/src/contract/nip09_reconciliation.rs",
-      "byte_length": 841956,
-      "sha256": "60fec3e9a75c3a9e7152b560dfe120640898f243eedaa79fd10ce4363c6942f7",
+      "byte_length": 842232,
+      "sha256": "09508250a5b22c239204937dea7567efb6aa34f1ecc84edb70bb5dcbcf8a3463",
       "hash_algorithm": "sha256_bytes_v1"
     },
     {

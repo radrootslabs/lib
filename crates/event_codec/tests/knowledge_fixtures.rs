@@ -1,4 +1,4 @@
-#![cfg(all(feature = "knowledge", feature = "nostr"))]
+#![cfg(feature = "knowledge")]
 
 use std::collections::BTreeSet;
 

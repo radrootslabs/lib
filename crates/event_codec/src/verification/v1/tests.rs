@@ -10,7 +10,6 @@ fn id_verification_returns_the_exact_envelope() {
     assert_eq!(verified.into_event(), event);
 }
 
-#[cfg(feature = "nostr")]
 #[test]
 fn signature_verification_returns_the_exact_envelope() {
     let event = signed_max_kind_event();
@@ -18,17 +17,6 @@ fn signature_verification_returns_the_exact_envelope() {
 
     assert_eq!(verified.event(), &event);
     assert_eq!(verified.into_event(), event);
-}
-
-#[cfg(not(feature = "nostr"))]
-#[test]
-fn signature_verification_reports_unavailable_without_nostr() {
-    let event = verify_event_id(signed_max_kind_event()).expect("canonical event id");
-
-    assert_eq!(
-        verify_event_signature(event),
-        Err(RadrootsNip01VerificationError::SignatureVerificationUnavailable)
-    );
 }
 
 #[test]
@@ -52,10 +40,6 @@ fn verification_error_codes_are_stable() {
         (
             RadrootsNip01VerificationError::SignatureInvalid,
             "signature_invalid",
-        ),
-        (
-            RadrootsNip01VerificationError::SignatureVerificationUnavailable,
-            "signature_verification_unavailable",
         ),
     ];
 

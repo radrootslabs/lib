@@ -4,8 +4,6 @@
 use alloc::string::String;
 
 use core::fmt;
-#[cfg(feature = "nostr")]
-use core::str::FromStr;
 
 use radroots_event::contract::registry_v7::{
     ContractValidationError, EventContract,
@@ -13,6 +11,7 @@ use radroots_event::contract::registry_v7::{
 };
 use radroots_event::envelope::EventEnvelope;
 use radroots_event::wire::v1::compute_canonical_nip01_event_id_v1;
+use secp256k1::{Message, Secp256k1, XOnlyPublicKey, schnorr::Signature};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsIdVerifiedEvent {
@@ -84,7 +83,6 @@ pub enum RadrootsNip01VerificationError {
     KindOutOfRange { kind: u32 },
     IdMismatch { expected: String, actual: String },
     SignatureInvalid,
-    SignatureVerificationUnavailable,
 }
 
 impl RadrootsNip01VerificationError {
@@ -94,7 +92,6 @@ impl RadrootsNip01VerificationError {
             Self::KindOutOfRange { .. } => "kind_out_of_range",
             Self::IdMismatch { .. } => "id_mismatch",
             Self::SignatureInvalid => "signature_invalid",
-            Self::SignatureVerificationUnavailable => "signature_verification_unavailable",
         }
     }
 }
@@ -113,9 +110,6 @@ impl fmt::Display for RadrootsNip01VerificationError {
                 )
             }
             Self::SignatureInvalid => formatter.write_str("invalid NIP-01 event signature"),
-            Self::SignatureVerificationUnavailable => {
-                formatter.write_str("NIP-01 signature verification requires the nostr feature")
-            }
         }
     }
 }
@@ -155,7 +149,6 @@ pub fn verify_event_id_v1(
     Ok(RadrootsIdVerifiedEvent { event })
 }
 
-#[cfg(feature = "nostr")]
 pub fn verify_event_signature(
     event: RadrootsIdVerifiedEvent,
 ) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
@@ -163,31 +156,18 @@ pub fn verify_event_signature(
 }
 
 /// Verifies the Schnorr signature with reconciliation-v1 semantics.
-#[cfg(feature = "nostr")]
 pub fn verify_event_signature_v1(
     event: RadrootsIdVerifiedEvent,
 ) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
-    let raw_event = raw_event_from_radroots(&event.event)?;
-    if raw_event.verify_signature() {
-        Ok(RadrootsSignatureVerifiedEvent { event: event.event })
-    } else {
-        Err(RadrootsNip01VerificationError::SignatureInvalid)
-    }
-}
-
-#[cfg(not(feature = "nostr"))]
-pub fn verify_event_signature(
-    event: RadrootsIdVerifiedEvent,
-) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
-    verify_event_signature_v1(event)
-}
-
-/// Reports unavailable signature verification with reconciliation-v1 semantics.
-#[cfg(not(feature = "nostr"))]
-pub fn verify_event_signature_v1(
-    _event: RadrootsIdVerifiedEvent,
-) -> Result<RadrootsSignatureVerifiedEvent, RadrootsNip01VerificationError> {
-    Err(RadrootsNip01VerificationError::SignatureVerificationUnavailable)
+    let public_key = XOnlyPublicKey::from_slice(event.event.author().as_bytes())
+        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
+    let signature = Signature::from_slice(event.event.sig().as_bytes())
+        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
+    let message = Message::from_digest(*event.event.id().as_bytes());
+    Secp256k1::verification_only()
+        .verify_schnorr(&signature, &message, &public_key)
+        .map_err(|_| RadrootsNip01VerificationError::SignatureInvalid)?;
+    Ok(RadrootsSignatureVerifiedEvent { event: event.event })
 }
 
 /// Verifies the canonical NIP-01 identifier and Schnorr signature in order.
@@ -220,43 +200,6 @@ pub fn validate_event_contract_registry_v7(
         verified_event: event,
         contract,
     })
-}
-
-#[cfg(feature = "nostr")]
-fn raw_event_from_radroots(
-    event: &EventEnvelope,
-) -> Result<nostr::Event, RadrootsNip01VerificationError> {
-    let event_id = event.id_hex();
-    let id = nostr::EventId::from_hex(event_id.as_str())
-        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let public_key = nostr::secp256k1::XOnlyPublicKey::from_str(&event.author().to_hex())
-        .map(nostr::PublicKey::from)
-        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    let kind = u16::try_from(event.kind_u32()).map_err(|_| {
-        RadrootsNip01VerificationError::KindOutOfRange {
-            kind: event.kind_u32(),
-        }
-    })?;
-    let tags_vec = event.tags_as_vec();
-    let mut tags = Vec::with_capacity(tags_vec.len());
-    for tag in tags_vec {
-        tags.push(
-            nostr::Tag::parse(tag)
-                .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?,
-        );
-    }
-    let signature = event.signature_hex();
-    let sig = nostr::secp256k1::schnorr::Signature::from_str(signature.as_str())
-        .map_err(|_| RadrootsNip01VerificationError::MalformedEnvelope)?;
-    Ok(nostr::Event::new(
-        id,
-        public_key,
-        nostr::Timestamp::from_secs(event.created_at_u64()),
-        nostr::Kind::Custom(kind),
-        tags,
-        event.content().to_string(),
-        sig,
-    ))
 }
 
 #[cfg(test)]

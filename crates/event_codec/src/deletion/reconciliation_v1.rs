@@ -413,7 +413,7 @@ pub mod evaluator {
         }
     }
 
-    #[cfg(all(test, feature = "nostr"))]
+    #[cfg(test)]
     mod tests;
 }
 

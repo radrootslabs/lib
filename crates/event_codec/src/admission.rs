@@ -302,7 +302,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "nostr")]
     mod signed {
         use super::*;
         use crate::{

@@ -168,11 +168,14 @@ pub mod prelude {
     pub use crate::draft_signing::radroots_nostr_sign_frozen_draft;
 
     #[cfg(feature = "events")]
-    pub use crate::event_convert::{radroots_event_from_nostr, radroots_event_ptr_from_nostr};
+    pub use crate::event_convert::{
+        nostr_event_from_radroots, radroots_event_from_nostr, radroots_event_ptr_from_nostr,
+    };
 
     #[cfg(feature = "events")]
     pub use crate::event_verify::{
-        RadrootsNostrEventVerification, radroots_nostr_verify_event, radroots_nostr_verify_event_id,
+        NostrSignatureVerifier, RadrootsNostrEventVerification, radroots_nostr_verify_event,
+        radroots_nostr_verify_event_id,
     };
 
     #[cfg(feature = "codec")]

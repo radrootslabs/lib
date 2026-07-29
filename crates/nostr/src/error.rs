@@ -5,6 +5,9 @@ pub enum RadrootsNostrError {
     #[error("Nostr event kind {kind} exceeds {max}")]
     KindOutOfRange { kind: u32, max: u16 },
 
+    #[error("Radroots event field {field} cannot be represented by Nostr")]
+    EventConversion { field: &'static str },
+
     #[cfg(feature = "client")]
     #[error("Client error: {0}")]
     ClientError(#[from] nostr_sdk::client::Error),

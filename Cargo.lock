@@ -4557,6 +4557,7 @@ dependencies = [
  "radroots_identity",
  "radroots_protocol",
  "radroots_test_fixtures",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2",

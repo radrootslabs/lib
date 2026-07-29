@@ -1,9 +1,28 @@
 #![forbid(unsafe_code)]
 
-use radroots_event::envelope::EventEnvelope;
-use radroots_event_codec::verification::{
-    RadrootsNip01VerificationError, verify_event_id, verify_nip01_event,
+use radroots_event::{
+    admission::{Error as VerificationError, RawEvent, SignatureVerifier},
+    envelope::EventEnvelope,
 };
+use radroots_event_codec::verify;
+
+/// Deterministic BIP-340 verification supplied by the Nostr adapter.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NostrSignatureVerifier;
+
+impl SignatureVerifier for NostrSignatureVerifier {
+    fn verify_signature(&self, event: &EventEnvelope) -> Result<(), VerificationError> {
+        validate_nostr_kind(event)?;
+        let public_key = nostr::secp256k1::XOnlyPublicKey::from_slice(event.author().as_bytes())
+            .map_err(|_| VerificationError::MalformedEnvelope)?;
+        let signature = nostr::secp256k1::schnorr::Signature::from_slice(event.sig().as_bytes())
+            .map_err(|_| VerificationError::MalformedEnvelope)?;
+        let message = nostr::secp256k1::Message::from_digest(*event.id().as_bytes());
+        nostr::SECP256K1
+            .verify_schnorr(&signature, &message, &public_key)
+            .map_err(|_| VerificationError::SignatureInvalid)
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RadrootsNostrEventVerification {
@@ -15,32 +34,34 @@ pub enum RadrootsNostrEventVerification {
 }
 
 pub fn radroots_nostr_verify_event(event: &EventEnvelope) -> RadrootsNostrEventVerification {
-    match verify_nip01_event(event.clone()) {
+    let result = validate_nostr_kind(event)
+        .and_then(|()| verify::id(RawEvent::new(event.clone())))
+        .and_then(|event| verify::signature(event, &NostrSignatureVerifier));
+    match result {
         Ok(_) => RadrootsNostrEventVerification::Verified,
         Err(error) => verification_error_status(&error),
     }
 }
 
 pub fn radroots_nostr_verify_event_id(event: &EventEnvelope) -> RadrootsNostrEventVerification {
-    match verify_event_id(event.clone()) {
+    let result = validate_nostr_kind(event).and_then(|()| verify::id(RawEvent::new(event.clone())));
+    match result {
         Ok(_) => RadrootsNostrEventVerification::IdVerified,
         Err(error) => verification_error_status(&error),
     }
 }
 
-fn verification_error_status(
-    error: &RadrootsNip01VerificationError,
-) -> RadrootsNostrEventVerification {
+fn validate_nostr_kind(event: &EventEnvelope) -> Result<(), VerificationError> {
+    u16::try_from(event.kind_u32())
+        .map(|_| ())
+        .map_err(|_| VerificationError::MalformedEnvelope)
+}
+
+fn verification_error_status(error: &VerificationError) -> RadrootsNostrEventVerification {
     match error {
-        RadrootsNip01VerificationError::IdMismatch { .. } => {
-            RadrootsNostrEventVerification::IdMismatch
-        }
-        RadrootsNip01VerificationError::SignatureInvalid => {
-            RadrootsNostrEventVerification::SignatureInvalid
-        }
-        RadrootsNip01VerificationError::MalformedEnvelope
-        | RadrootsNip01VerificationError::KindOutOfRange { .. }
-        | RadrootsNip01VerificationError::SignatureVerificationUnavailable => {
+        VerificationError::IdMismatch { .. } => RadrootsNostrEventVerification::IdMismatch,
+        VerificationError::SignatureInvalid => RadrootsNostrEventVerification::SignatureInvalid,
+        VerificationError::MalformedEnvelope | VerificationError::ContractValidation(_) => {
             RadrootsNostrEventVerification::MalformedEnvelope
         }
         _ => RadrootsNostrEventVerification::MalformedEnvelope,

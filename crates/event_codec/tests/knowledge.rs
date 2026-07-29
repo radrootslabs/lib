@@ -1,4 +1,4 @@
-#![cfg(all(feature = "knowledge", feature = "nostr"))]
+#![cfg(feature = "knowledge")]
 
 use radroots_event::contract::validate_event_contract_shape;
 use radroots_event::envelope::kind::{
