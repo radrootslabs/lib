@@ -424,7 +424,7 @@ mod tests {
 
         let parent = RadrootsTradeMutationId::parse(hex_64('9')).unwrap();
         let mut parent_envelope = proposal();
-        parent_envelope.parent_mutation_ids.push(parent.clone());
+        parent_envelope.parent_mutation_ids.push(parent);
         let parent_tags = trade_mutation_tags(&parent_envelope).unwrap();
         validate_trade_mutation_tags(&parent_envelope, &parent_tags).unwrap();
 

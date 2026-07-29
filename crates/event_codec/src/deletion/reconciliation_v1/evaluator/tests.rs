@@ -99,7 +99,7 @@ fn nip09_evaluator_exact_event_reference_is_time_independent() {
         vec![event_reference(target.event().id_hex().as_str())],
         "exact",
     );
-    let request_id = request.event().id().clone();
+    let request_id = *request.event().id();
 
     let decision = evaluate_nip09_suppression(&target, &[request]);
 
@@ -134,7 +134,7 @@ fn nip09_evaluator_address_cutoff_is_inclusive_and_later_replacement_is_visible(
         vec![address_reference(coordinate.as_str())],
         "address",
     );
-    let request_id = request.event().id().clone();
+    let request_id = *request.event().id();
 
     let suppressed = evaluate_nip09_suppression(&at_cutoff, core::slice::from_ref(&request));
     assert_decision(
@@ -312,8 +312,8 @@ fn nip09_evaluator_reduction_is_order_and_repeat_invariant() {
         vec![address_reference(coordinate.as_str())],
         "address older",
     );
-    let lower_exact_id = core::cmp::min(exact_a.event().id(), exact_b.event().id()).clone();
-    let lower_address_id = core::cmp::min(address_a.event().id(), address_b.event().id()).clone();
+    let lower_exact_id = *core::cmp::min(exact_a.event().id(), exact_b.event().id());
+    let lower_address_id = *core::cmp::min(address_a.event().id(), address_b.event().id());
 
     let forward = vec![
         exact_a.clone(),

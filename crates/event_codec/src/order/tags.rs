@@ -65,7 +65,7 @@ fn parse_event_ptr_tag(
         None => None,
     };
     if let Some(relay) = relay.as_ref() {
-        RadrootsEventEnvelopePointer::new(event_id.clone(), [relay.as_str()])
+        RadrootsEventEnvelopePointer::new(event_id, [relay.as_str()])
             .map_err(|_| EventParseError::InvalidTag(name))?;
     }
     Ok(Some(RadrootsEventPtr {

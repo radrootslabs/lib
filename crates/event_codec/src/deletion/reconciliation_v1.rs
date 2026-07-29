@@ -328,7 +328,7 @@ pub mod evaluator {
                 )
             {
                 event_reference = Some(RadrootsNip09EventReferenceEvidence {
-                    request_id: request_event.id().clone(),
+                    request_id: *request_event.id(),
                 });
             }
             if let Some(coordinate) = address_match {
@@ -343,7 +343,7 @@ pub mod evaluator {
                     address_reference = Some(RadrootsNip09AddressReferenceEvidence {
                         coordinate: coordinate.clone(),
                         inclusive_cutoff,
-                        request_id: request_event.id().clone(),
+                        request_id: *request_event.id(),
                     });
                 }
             }
@@ -822,16 +822,13 @@ pub mod inbound {
                             error,
                         }
                     })?;
-                    if !event_targets.contains_key(&event_id) {
-                        event_targets.insert(
-                            event_id.clone(),
-                            RadrootsInboundNip09DeletionEventTarget {
-                                tag_index,
-                                event_id,
-                                raw_tag: tag.clone(),
-                            },
-                        );
-                    }
+                    event_targets.entry(event_id).or_insert_with(|| {
+                        RadrootsInboundNip09DeletionEventTarget {
+                            tag_index,
+                            event_id,
+                            raw_tag: tag.clone(),
+                        }
+                    });
                 }
                 Some("a") => {
                     let Some(value) = tag.get(1) else {
