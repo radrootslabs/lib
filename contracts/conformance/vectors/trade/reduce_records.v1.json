@@ -16,7 +16,7 @@
         "evidence_state": "complete",
         "conflict_state": "none",
         "attestation_state": "none",
-        "projection_digest": "input_order_independent_sha256_over_canonical_projection"
+        "projection_digest": "35a5f555344febe675f4e5e6b15865356400b2b8f7791fc631590e0f1e1fd441"
       }
     },
     {
@@ -61,6 +61,44 @@
         "evidence_state": "missing",
         "agreement_claim_visibility": "retained_when_local_claim_is_known",
         "global_invalidity": false
+      }
+    },
+    {
+      "id": "trade_reduce_unsupported_version_isolated_005",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "unsupported_version_proposal_without_supported_records"
+      },
+      "expected": {
+        "evidence_state": "unsupported_version",
+        "negotiation_state": "none",
+        "agreement_state": "none",
+        "unsupported_record_domain_authority": false
+      }
+    },
+    {
+      "id": "trade_reduce_private_evidence_precedence_006",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "agreed_private_terms_candidate_with_conflicting_duplicate_evidence",
+        "evidence_order": "arbitrary"
+      },
+      "expected": {
+        "private_terms_state": "commitment_mismatch",
+        "projection_digest": "input_order_independent"
+      }
+    },
+    {
+      "id": "trade_reduce_attestation_deduplication_007",
+      "kind": "trade.reduce_records",
+      "input": {
+        "shape": "agreed_claim_with_duplicate_valid_and_distinct_invalid_attestations",
+        "attestation_order": "arbitrary"
+      },
+      "expected": {
+        "attestation_state": "conflicting",
+        "duplicate_records": "removed",
+        "projection_digest": "input_order_independent"
       }
     }
   ]

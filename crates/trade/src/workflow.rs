@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+#[cfg(all(not(feature = "std"), feature = "serde_json"))]
+use alloc::format;
 #[cfg(not(feature = "std"))]
 use alloc::{
     collections::{BTreeMap, BTreeSet},
@@ -281,7 +283,7 @@ pub enum RadrootsTradeAttestationResultV1 {
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RadrootsTradeAttestationRecordV1 {
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     event_id: EventId,
@@ -417,8 +419,18 @@ impl RadrootsTradeProjectionV1 {
             .sort_by_key(|left| left.claim_mutation_id);
         self.issues.sort();
         self.issues.dedup();
-        self.attestations.sort_by_key(|left| left.event_id);
-        self.projection_digest = projection_digest(self);
+        self.attestations.sort();
+        self.attestations.dedup();
+        match projection_digest(self) {
+            Ok(digest) => self.projection_digest = digest,
+            Err(reason) => {
+                self.projection_digest.clear();
+                self.issues
+                    .push(RadrootsTradeReducerIssueV1::ProjectionDigestUnavailable { reason });
+                self.issues.sort();
+                self.issues.dedup();
+            }
+        }
     }
 
     pub fn reducer_contract_id(&self) -> &str {
@@ -710,7 +722,6 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
                     mutation_id,
                     schema_version: record.mutation.schema_version,
                 });
-            mutations.entry(mutation_id).or_insert(record.mutation);
             continue;
         }
         if let Err(error) = record.mutation.validate() {
@@ -822,6 +833,10 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::MultipleRootProposals);
+        set_conflict(
+            &mut projection.conflict_state,
+            RadrootsTradeConflictStateV1::ConcurrentCandidates,
+        );
     } else {
         projection.root_mutation_id = root_proposals.first().cloned();
         let root = projection
@@ -1225,10 +1240,14 @@ fn reduce_private_terms_state(
     candidates_by_proposal: &BTreeMap<MutationId, CandidateRecord>,
     private_terms: &[RadrootsTradePrivateTermsEvidenceV1],
 ) -> RadrootsTradePrivateTermsStateV1 {
-    let private_terms_by_candidate = private_terms
-        .iter()
-        .map(|record| (record.candidate_id, record.state))
-        .collect::<BTreeMap<_, _>>();
+    let mut private_terms_by_candidate =
+        BTreeMap::<CandidateId, RadrootsTradePrivateTermsStateV1>::new();
+    for record in private_terms {
+        private_terms_by_candidate
+            .entry(record.candidate_id)
+            .and_modify(|state| *state = (*state).max(record.state))
+            .or_insert(record.state);
+    }
     let mut required_states = Vec::new();
     for claim in &projection.agreement_claims {
         let candidate_record = candidates_by_proposal
@@ -1340,22 +1359,22 @@ fn set_conflict(
 }
 
 #[cfg(feature = "serde_json")]
-fn projection_digest(projection: &RadrootsTradeProjectionV1) -> String {
+fn projection_digest(projection: &RadrootsTradeProjectionV1) -> Result<String, String> {
     let mut digest_input = projection.clone();
     digest_input.projection_digest.clear();
     let value = serde_json::to_value(&digest_input)
-        .expect("trade projection contains only serializable contract values");
+        .map_err(|error| format!("projection serialization failed: {error}"))?;
     let canonical = radroots_event::trade::canonical_jcs_value(&value)
-        .expect("serialized trade projection must be canonicalizable");
+        .map_err(|error| format!("projection canonicalization failed: {error}"))?;
     let mut hasher = Sha256::new();
     hasher.update(RADROOTS_TRADE_PROJECTION_DIGEST_DOMAIN);
     hasher.update(canonical.as_bytes());
-    hex::encode(hasher.finalize())
+    Ok(hex::encode(hasher.finalize()))
 }
 
 #[cfg(not(feature = "serde_json"))]
-fn projection_digest(_projection: &RadrootsTradeProjectionV1) -> String {
-    String::new()
+fn projection_digest(_projection: &RadrootsTradeProjectionV1) -> Result<String, String> {
+    Err("projection digest requires the serde_json feature".to_string())
 }
 
 #[cfg(test)]
@@ -1374,6 +1393,9 @@ mod tests {
         },
     };
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX};
+
+    const REDUCER_VECTORS: &str =
+        include_str!("../../../contracts/conformance/vectors/trade/reduce_records.v1.json");
 
     fn hex_64(character: char) -> String {
         core::iter::repeat_n(character, 64).collect()
@@ -1736,8 +1758,153 @@ mod tests {
         let second = reduce(vec![decision, proposal]);
 
         assert_eq!(first.agreement_state, RadrootsTradeAgreementStateV1::Agreed);
+        assert_eq!(
+            first.projection_digest,
+            "35a5f555344febe675f4e5e6b15865356400b2b8f7791fc631590e0f1e1fd441"
+        );
         assert_eq!(first.projection_digest, second.projection_digest);
         assert_eq!(first.active_agreement_claim_ids.len(), 1);
+    }
+
+    #[test]
+    fn reducer_projection_is_identical_for_every_three_record_permutation() {
+        let proposal = proposal();
+        let decision = accepted_decision(&proposal, '1');
+        let cancellation = cancellation(&proposal, root_id(&decision), root_id(&decision));
+        let permutations = [
+            vec![proposal.clone(), decision.clone(), cancellation.clone()],
+            vec![proposal.clone(), cancellation.clone(), decision.clone()],
+            vec![decision.clone(), proposal.clone(), cancellation.clone()],
+            vec![decision.clone(), cancellation.clone(), proposal.clone()],
+            vec![cancellation.clone(), proposal.clone(), decision.clone()],
+            vec![cancellation, decision, proposal],
+        ];
+        let expected = reduce(permutations[0].clone());
+
+        for permutation in permutations.into_iter().skip(1) {
+            assert_eq!(reduce(permutation), expected);
+        }
+    }
+
+    #[test]
+    fn reducer_excludes_unsupported_versions_from_domain_semantics() {
+        let mut unsupported = proposal();
+        unsupported.schema_version += 1;
+        let unsupported_id = root_id(&unsupported);
+
+        let projection = reduce(vec![unsupported]);
+
+        assert_eq!(
+            projection.evidence_state,
+            RadrootsTradeEvidenceStateV1::UnsupportedVersion
+        );
+        assert_eq!(
+            projection.negotiation_state,
+            RadrootsTradeNegotiationStateV1::None
+        );
+        assert_eq!(
+            projection.agreement_state,
+            RadrootsTradeAgreementStateV1::None
+        );
+        assert_eq!(projection.root_mutation_id, None);
+        assert_eq!(projection.unsupported_mutation_ids, vec![unsupported_id]);
+    }
+
+    #[test]
+    fn reducer_private_evidence_precedence_is_permutation_independent() {
+        let mut root = proposal();
+        if let TradeMutationBodyV1::Proposal { candidate } = &mut root.body {
+            candidate.private_terms = Some(TradePrivateTermsRefV1 {
+                artifact_id: "artifact-1".to_string(),
+                schema_id: "radroots.private.fulfillment.v1".to_string(),
+                ciphertext_commitment: hex_64('f'),
+                required_acknowledgement: true,
+            });
+        }
+        let root = recanonicalize(root);
+        let candidate_id = match &root.body {
+            TradeMutationBodyV1::Proposal { candidate } => candidate.candidate_id.unwrap(),
+            _ => unreachable!(),
+        };
+        let decision = accepted_decision(&root, '1');
+        let evidence = |state| RadrootsTradePrivateTermsEvidenceV1::new(candidate_id, state);
+        let reduce_with = |private_terms| {
+            RadrootsTradeReductionInputV1::new(trade_id())
+                .with_mutations(vec![record(root.clone()), record(decision.clone())])
+                .with_private_terms(private_terms)
+        };
+
+        let first = reduce_trade_records(reduce_with(vec![
+            evidence(RadrootsTradePrivateTermsStateV1::AvailableVerified),
+            evidence(RadrootsTradePrivateTermsStateV1::CommitmentMismatch),
+        ]));
+        let second = reduce_trade_records(reduce_with(vec![
+            evidence(RadrootsTradePrivateTermsStateV1::CommitmentMismatch),
+            evidence(RadrootsTradePrivateTermsStateV1::AvailableVerified),
+        ]));
+
+        assert_eq!(
+            first.private_terms_state,
+            RadrootsTradePrivateTermsStateV1::CommitmentMismatch
+        );
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn reducer_attestation_order_and_duplicates_do_not_change_digest() {
+        let root = proposal();
+        let decision = accepted_decision(&root, '1');
+        let valid = RadrootsTradeAttestationRecordV1::new(
+            event_id('8'),
+            root_id(&decision),
+            RadrootsTradeAttestationResultV1::Valid,
+        );
+        let invalid = RadrootsTradeAttestationRecordV1::new(
+            event_id('9'),
+            root_id(&decision),
+            RadrootsTradeAttestationResultV1::Invalid,
+        );
+        let reduce_with = |attestations| {
+            reduce_trade_records(
+                RadrootsTradeReductionInputV1::new(trade_id())
+                    .with_mutations(vec![record(root.clone()), record(decision.clone())])
+                    .with_attestations(attestations),
+            )
+        };
+
+        let first = reduce_with(vec![valid.clone(), invalid.clone(), valid.clone()]);
+        let second = reduce_with(vec![invalid, valid]);
+
+        assert_eq!(
+            first.attestation_state,
+            RadrootsTradeAttestationStateV1::Conflicting
+        );
+        assert_eq!(first.attestations.len(), 2);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn reducer_conformance_inventory_covers_deterministic_edge_cases() {
+        let document: serde_json::Value =
+            serde_json::from_str(REDUCER_VECTORS).expect("reducer vectors parse");
+        let ids = document["vectors"]
+            .as_array()
+            .expect("reducer vector array")
+            .iter()
+            .map(|vector| vector["id"].as_str().expect("reducer vector id"))
+            .collect::<BTreeSet<_>>();
+
+        for required in [
+            "trade_reduce_agreed_projection_digest_001",
+            "trade_reduce_contested_claims_002",
+            "trade_reduce_attestation_only_003",
+            "trade_reduce_missing_parent_004",
+            "trade_reduce_unsupported_version_isolated_005",
+            "trade_reduce_private_evidence_precedence_006",
+            "trade_reduce_attestation_deduplication_007",
+        ] {
+            assert!(ids.contains(required), "missing reducer vector {required}");
+        }
     }
 
     #[test]
@@ -1966,6 +2133,10 @@ mod tests {
             projection
                 .issues
                 .contains(&RadrootsTradeReducerIssueV1::MultipleRootProposals)
+        );
+        assert_eq!(
+            projection.conflict_state,
+            RadrootsTradeConflictStateV1::ConcurrentCandidates
         );
 
         let foreign_trade = TradeId::parse(hex_32('2')).expect("foreign trade");
