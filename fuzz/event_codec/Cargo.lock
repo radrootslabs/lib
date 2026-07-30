@@ -482,7 +482,7 @@ dependencies = [
 
 [[package]]
 name = "radroots_event_codec_fuzz"
-version = "0.0.0"
+version = "0.1.0-alpha"
 dependencies = [
  "libfuzzer-sys",
  "radroots_event_codec",

@@ -9,6 +9,8 @@ const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const VERIFICATION: &str = include_str!("../src/verification/v1.rs");
 const EXAMPLE: &str = include_str!("../examples/verify_profile.rs");
+const FUZZ_LOCK: &str = include_str!("../../../fuzz/event_codec/Cargo.lock");
+const FUZZ_MANIFEST: &str = include_str!("../../../fuzz/event_codec/Cargo.toml");
 const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_event_codec.txt");
 
 #[test]
@@ -28,6 +30,17 @@ fn manifest_has_final_identity_and_required_radroots_dependencies() {
     assert!(
         MANIFEST.contains("radroots_protocol = { workspace = true, default-features = false }")
     );
+}
+
+#[test]
+fn standalone_fuzz_package_uses_the_repository_version_contract() {
+    let package =
+        "name = \"radroots_event_codec_fuzz\"\npublish = false\nversion = \"0.1.0-alpha\"";
+    let locked_package = "name = \"radroots_event_codec_fuzz\"\nversion = \"0.1.0-alpha\"";
+
+    assert!(FUZZ_MANIFEST.contains(package));
+    assert!(FUZZ_LOCK.contains(locked_package));
+    assert!(!FUZZ_MANIFEST.contains("version = \"0.0.0\""));
 }
 
 #[test]
