@@ -73,7 +73,17 @@ fn retired_order_runtime_roots_are_not_active() {
 fn active_sources_do_not_import_retired_trade_modules() {
     for path in active_source_files() {
         let source = read_source(&path);
-        for forbidden in ["radroots_trade::order", "radroots_trade::projection"] {
+        for forbidden in [
+            "radroots_trade::order",
+            "radroots_trade::projection",
+            "radroots_trade::model::RadrootsTradeProjectionV1",
+            "radroots_trade::reducer::RadrootsTradeReducerIssueV1",
+            "radroots_trade::reducer::RadrootsTradeReductionInputV1",
+            "radroots_trade::workflow::RadrootsTrade",
+            "radroots_trade::RadrootsTradeProjectionV1",
+            "radroots_trade::RadrootsTradeReducerIssueV1",
+            "radroots_trade::RadrootsTradeReductionInputV1",
+        ] {
             assert!(
                 !source.contains(forbidden),
                 "{} must not import retired trade module `{forbidden}`",

@@ -41,13 +41,14 @@ use radroots_trade::evidence::{
 use radroots_trade::model::{
     RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1, RadrootsTradeConflictStateV1,
     RadrootsTradeFulfillmentStateV1, RadrootsTradeNegotiationStateV1, RadrootsTradePaymentStateV1,
-    RadrootsTradePrivateTermsStateV1, RadrootsTradeProjectionV1,
+    RadrootsTradePrivateTermsStateV1,
 };
 #[cfg(feature = "runtime")]
 use radroots_trade::reducer::{
-    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
-    RadrootsTradeReductionInputV1, reduce_trade_records,
+    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION, reduce_trade_records,
 };
+#[cfg(feature = "runtime")]
+use radroots_trade::{Projection, ReductionInput};
 #[cfg(feature = "runtime")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "runtime")]
@@ -530,7 +531,7 @@ pub struct TradeCommandReceipt {
     pub outbox_operation_id: i64,
     pub outbox_event_id: i64,
     pub delivery_state: SdkMutationState,
-    pub projection_state: Option<RadrootsTradeProjectionV1>,
+    pub projection_state: Option<Projection>,
     pub idempotency_digest_prefix: String,
     pub recovery_actions: Vec<RadrootsSdkRecoveryAction>,
     pub warnings: Vec<String>,
@@ -973,7 +974,7 @@ pub struct Page<T> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct TradeStatusView {
     pub trade_id: TradeId,
-    pub projection: RadrootsTradeProjectionV1,
+    pub projection: Projection,
     pub source_event_count: usize,
     pub private_terms: Vec<TradePrivateTermsAvailabilityView>,
 }
@@ -1595,7 +1596,7 @@ async fn trade_status_view(
 async fn trade_projection_for_trade(
     sdk: &RadrootsClient,
     trade_id: &TradeId,
-) -> Result<RadrootsTradeProjectionV1, RadrootsSdkError> {
+) -> Result<Projection, RadrootsSdkError> {
     let stored = sdk
         ._event_store
         .trade_mutations_for_trade(trade_id, TRADE_MUTATION_QUERY_LIMIT)
@@ -1612,7 +1613,7 @@ async fn trade_projection_for_trade(
         .map(stored_trade_mutation_record)
         .collect::<Result<Vec<_>, _>>()?;
     let private_terms = private_terms_evidence_for_mutations(sdk, trade_id, &mutations).await?;
-    let input = RadrootsTradeReductionInputV1::new(*trade_id)
+    let input = ReductionInput::new(*trade_id)
         .with_mutations(mutations)
         .with_private_terms(private_terms)
         .with_observed_at_unix_s(Some(sdk.now()?.unix_seconds()));
