@@ -4959,6 +4959,8 @@ dependencies = [
  "radroots_event",
  "radroots_identity",
  "radroots_protocol",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -41,17 +41,17 @@ mod tests {
 
     impl Signer for LocalSigner {
         fn status(&self) -> BoxFuture<'_, Result<SignerStatus, Error>> {
-            Box::pin(async { Ok(SignerStatus) })
+            Box::pin(async { Ok(SignerStatus::unavailable()) })
         }
 
         fn sign(&self, _request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
-            Box::pin(async { Ok(SignReceipt) })
+            Box::pin(async { Err(Error) })
         }
     }
 
     impl Signer for RemoteSigner {
         fn status(&self) -> BoxFuture<'_, Result<SignerStatus, Error>> {
-            Box::pin(async { Ok(SignerStatus) })
+            Box::pin(async { Ok(SignerStatus::unavailable()) })
         }
 
         fn sign(&self, _request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
@@ -61,7 +61,6 @@ mod tests {
 
     fn assert_dyn_signer(signer: &dyn Signer) {
         drop(signer.status());
-        drop(signer.sign(SignRequest));
     }
 
     #[test]
