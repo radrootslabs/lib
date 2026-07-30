@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fs, path::Path};
 
 #[allow(unused_imports)]
 use radroots_transport::{
@@ -9,6 +9,9 @@ use radroots_transport::{
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const EXAMPLE: &str = include_str!("../examples/host_transport.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_transport.txt");
+const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const SOURCE: &str = include_str!("../src/source.rs");
 const SINK: &str = include_str!("../src/sink.rs");
@@ -48,6 +51,7 @@ fn manifest_has_final_identity_features_and_required_radroots_dependencies() {
 
 #[test]
 fn crate_root_declares_the_approved_public_module_skeleton() {
+    assert!(ROOT.contains("#![doc = include_str!(\"../README.md\")]"));
     assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
     assert_eq!(
         root_declarations("pub mod "),
@@ -62,6 +66,75 @@ fn crate_root_declares_the_approved_public_module_skeleton() {
             "target",
         ])
     );
+}
+
+#[test]
+fn package_documentation_and_reviewed_api_baseline_are_complete() {
+    for required in [
+        "## Typical flow",
+        "## Host SPI contract",
+        "## Targets and extensible identity",
+        "## Bounds, deadlines, cancellation, and commit points",
+        "## Outcomes, partial success, and retry",
+        "## Serialization and provenance",
+        "## Security and side effects",
+        "## Features",
+        "## Intended consumers",
+        "radroots_crates_release_v1.md#9-radroots_transport",
+        "examples/host_transport.rs",
+    ] {
+        assert!(README.contains(required), "README is missing {required}");
+    }
+    for required in [
+        "impl EventSource for HostTransport",
+        "impl EventSink for HostTransport",
+        "fn fetch(&self, _request: FetchRequest) -> BoxFuture",
+        "_request: DeliveryRequest",
+        "let source: &dyn EventSource",
+        "let sink: &dyn EventSink",
+        "drop(future)",
+    ] {
+        assert!(EXAMPLE.contains(required), "example is missing {required}");
+    }
+    for required in [
+        "pub mod radroots_transport::capability",
+        "pub mod radroots_transport::endpoint",
+        "pub mod radroots_transport::error",
+        "pub mod radroots_transport::outcome",
+        "pub mod radroots_transport::policy",
+        "pub mod radroots_transport::sink",
+        "pub mod radroots_transport::source",
+        "pub mod radroots_transport::target",
+        "pub trait radroots_transport::EventSource",
+        "pub trait radroots_transport::EventSink",
+    ] {
+        assert!(
+            PUBLIC_API.contains(required),
+            "public API baseline is missing {required}"
+        );
+    }
+}
+
+#[test]
+fn every_public_module_has_crate_level_documentation() {
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    for module in [
+        "capability",
+        "endpoint",
+        "error",
+        "outcome",
+        "policy",
+        "sink",
+        "source",
+        "target",
+    ] {
+        let path = source_root.join(format!("{module}.rs"));
+        let source = fs::read_to_string(&path).expect("read module source");
+        assert!(
+            source.starts_with("//! "),
+            "public module {module} must start with module documentation"
+        );
+    }
 }
 
 #[test]

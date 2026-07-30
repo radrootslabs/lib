@@ -1,3 +1,5 @@
+//! Normalized transport contract errors.
+
 use core::fmt;
 
 /// Transport contract failure.

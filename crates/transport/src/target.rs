@@ -1,3 +1,5 @@
+//! Extensible transport identities and canonical operation targets.
+
 use crate::{
     RadrootsTransportError, RadrootsTransportKind,
     endpoint::{ENDPOINT_URI_MAX_BYTES, TARGET_LABEL_MAX_BYTES, TARGET_SCOPE_MAX_BYTES},
