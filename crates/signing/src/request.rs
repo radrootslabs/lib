@@ -1,7 +1,7 @@
 //! Validated signing requests.
 
 use core::fmt;
-use radroots_event::EventDraft;
+use radroots_event::{EventDraft, contract::event_contract};
 use radroots_protocol::runtime::v1::OperationId;
 
 #[cfg(not(feature = "std"))]
@@ -9,7 +9,7 @@ use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 
-use crate::{Actor, status::SignProgress};
+use crate::{Actor, Error, status::SignProgress};
 
 /// How a signer must interpret cancellation around remote publication.
 #[non_exhaustive]
@@ -97,21 +97,22 @@ pub struct SignRequest {
 }
 
 impl SignRequest {
-    /// Creates a request without installing a progress observer.
-    #[must_use]
+    /// Validates the current draft, then the actor role, then the expected
+    /// public key, and creates a request without a progress observer.
     pub fn new(
         operation_id: OperationId,
         actor: Actor,
         draft: EventDraft,
         policy: SignPolicy,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        authorize_actor_for_draft(&actor, &draft).map_err(|_| Error)?;
+        Ok(Self {
             operation_id,
             actor,
             draft,
             policy,
             progress_observer: None,
-        }
+        })
     }
 
     /// Installs a runtime-local progress observer.
@@ -153,6 +154,32 @@ impl SignRequest {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AuthorizationFailure {
+    InvalidDraft,
+    ActorRoleUnsatisfied,
+    ActorPublicKeyMismatch,
+}
+
+fn authorize_actor_for_draft(
+    actor: &Actor,
+    draft: &EventDraft,
+) -> Result<(), AuthorizationFailure> {
+    // This order is part of the authorization contract: no actor decision is
+    // made for an invalid/stale draft, and role rejection precedes key drift.
+    draft
+        .validate_for_signing()
+        .map_err(|_| AuthorizationFailure::InvalidDraft)?;
+    let contract = event_contract(draft.contract_id()).ok_or(AuthorizationFailure::InvalidDraft)?;
+    if !actor.satisfies(contract.required_author_role()) {
+        return Err(AuthorizationFailure::ActorRoleUnsatisfied);
+    }
+    if actor.public_key() != *draft.expected_pubkey() {
+        return Err(AuthorizationFailure::ActorPublicKeyMismatch);
+    }
+    Ok(())
+}
+
 impl fmt::Debug for SignRequest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -178,14 +205,17 @@ mod tests {
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
     use radroots_event::contract::AuthorRole;
+    use radroots_event::envelope::kind::KIND_TRADE_PROPOSAL;
     use radroots_identity::PublicKey;
 
     #[cfg(not(feature = "std"))]
-    use alloc::{string::String, sync::Arc, vec::Vec};
+    use alloc::{string::String, sync::Arc, vec, vec::Vec};
     #[cfg(feature = "std")]
-    use std::{string::String, sync::Arc, vec::Vec};
+    use std::{string::String, sync::Arc, vec, vec::Vec};
 
     const PUBLIC_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const OTHER_PUBLIC_KEY: &str =
+        "e0266e3cfb0d2886f91c73f5f868f3b98273713e5fcd97c081663f5518a4b3af";
 
     struct CountingObserver(AtomicUsize);
 
@@ -219,6 +249,7 @@ mod tests {
             SignPolicy::new(1_700_000_100, CancellationPolicy::PreservePublishedRequest)
                 .expect("policy"),
         )
+        .expect("authorized request")
     }
 
     #[test]
@@ -244,6 +275,54 @@ mod tests {
         let debug = alloc_or_std_format(&request);
         assert!(!debug.contains("private-draft-content"));
         assert!(debug.contains("redacted frozen event draft"));
+    }
+
+    #[test]
+    fn authorization_rejects_role_before_public_key_drift() {
+        let draft = EventDraft::new(
+            "radroots.trade.proposal.v1",
+            KIND_TRADE_PROPOSAL,
+            1_700_000_000,
+            vec![
+                vec![
+                    "contract".to_owned(),
+                    "radroots.trade.proposal.v1".to_owned(),
+                ],
+                vec![
+                    "d".to_owned(),
+                    "11111111111111111111111111111111".to_owned(),
+                ],
+                vec!["p".to_owned(), PUBLIC_KEY.to_owned()],
+            ],
+            r#"{"contract_id":"radroots.trade.proposal.v1"}"#,
+            PUBLIC_KEY,
+        )
+        .expect("draft");
+        let wrong_key = PublicKey::from_hex(OTHER_PUBLIC_KEY).expect("public key");
+        let actor = Actor::new(
+            wrong_key,
+            ActorSource::ExplicitPublicKey,
+            [AuthorRole::Seller],
+        )
+        .expect("actor");
+
+        assert_eq!(
+            authorize_actor_for_draft(&actor, &draft),
+            Err(AuthorizationFailure::ActorRoleUnsatisfied)
+        );
+    }
+
+    #[test]
+    fn authorization_rejects_actor_public_key_drift() {
+        let draft = request().draft().clone();
+        let wrong_key = PublicKey::from_hex(OTHER_PUBLIC_KEY).expect("public key");
+        let actor = Actor::new(wrong_key, ActorSource::ExplicitPublicKey, [AuthorRole::Any])
+            .expect("actor");
+
+        assert_eq!(
+            authorize_actor_for_draft(&actor, &draft),
+            Err(AuthorizationFailure::ActorPublicKeyMismatch)
+        );
     }
 
     fn alloc_or_std_format(value: &SignRequest) -> String {
