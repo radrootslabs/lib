@@ -4,7 +4,7 @@ use core::fmt;
 use radroots_event::{SignedEvent, draft::validate_signed_nostr_event_matches_draft};
 use radroots_protocol::runtime::v1::OperationId;
 
-use crate::{Error, SignRequest};
+use crate::{Error, SignRequest, error::Kind};
 
 /// Successful signer output with portable operation provenance.
 #[non_exhaustive]
@@ -36,8 +36,19 @@ impl SignReceipt {
         signed_event: SignedEvent,
         completed_at_unix: u64,
     ) -> Result<Self, Error> {
-        validate_signed_nostr_event_matches_draft(&signed_event, request.draft())
-            .map_err(|_| Error)?;
+        validate_signed_nostr_event_matches_draft(&signed_event, request.draft()).map_err(
+            |source| {
+                #[cfg(feature = "std")]
+                {
+                    Error::with_source(Kind::SignerOutputInvalid, source)
+                }
+                #[cfg(not(feature = "std"))]
+                {
+                    let _ = source;
+                    Error::new(Kind::SignerOutputInvalid)
+                }
+            },
+        )?;
         Ok(Self {
             operation_id: request.operation_id(),
             signed_event,
@@ -207,10 +218,9 @@ mod tests {
         ];
 
         for event in cases {
-            assert_eq!(
-                SignReceipt::from_signed_event(&request, event, 42),
-                Err(Error)
-            );
+            let error =
+                SignReceipt::from_signed_event(&request, event, 42).expect_err("drift must fail");
+            assert_eq!(error.kind(), Kind::SignerOutputInvalid);
         }
     }
 }

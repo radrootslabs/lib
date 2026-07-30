@@ -156,6 +156,7 @@ error_catalog! {
     SignerRejected => ("signer_rejected", Signer, false, [SelectAuthorizedActor]),
     SignerTimeout => ("signer_timeout", Signer, true, [RetryAfterTransportFailure]),
     SignerCancelled => ("signer_cancelled", Signer, false, [ConfigureSigner]),
+    SignerOutputInvalid => ("signer_output_invalid", Signer, false, [ConfigureSigner]),
     RelayAuthRequired => ("relay_auth_required", Network, true, [CompleteSignerAuthentication]),
     RelayAuthRejected => ("relay_auth_rejected", Network, false, [CompleteSignerAuthentication]),
     RelayPaymentRequired => ("relay_payment_required", Network, false, [ConfigureTransportTargets]),
@@ -762,7 +763,7 @@ mod tests {
 
     #[test]
     fn generated_catalog_is_complete_unique_and_self_consistent() {
-        assert_eq!(CATALOG.len(), 56);
+        assert_eq!(CATALOG.len(), 57);
         assert_eq!(KnownCode::ALL.len(), CATALOG.len());
         let mut codes = BTreeSet::new();
         for (index, descriptor) in CATALOG.iter().enumerate() {

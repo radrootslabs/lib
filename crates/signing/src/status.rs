@@ -7,7 +7,7 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
-use crate::capability::SignerCapability;
+use crate::{Error, capability::SignerCapability, error::Kind};
 
 const MAX_AUTH_URI_BYTES: usize = 2_048;
 
@@ -28,19 +28,19 @@ impl AuthChallenge {
         uri: impl Into<String>,
         required_at_unix: u64,
         expires_at_unix: Option<u64>,
-    ) -> Result<Self, AuthChallengeError> {
+    ) -> Result<Self, Error> {
         let uri = uri.into();
         if uri.len() > MAX_AUTH_URI_BYTES
             || uri.trim() != uri
             || !uri.starts_with("https://")
             || uri.chars().any(char::is_control)
         {
-            return Err(AuthChallengeError::InvalidUri);
+            return Err(Error::new(Kind::InvalidArgument));
         }
         if let Some(expires_at_unix) = expires_at_unix
             && expires_at_unix < required_at_unix
         {
-            return Err(AuthChallengeError::ExpiresBeforeRequired);
+            return Err(Error::new(Kind::InvalidArgument));
         }
         Ok(Self {
             uri,
@@ -99,26 +99,6 @@ impl<'de> serde::Deserialize<'de> for AuthChallenge {
     }
 }
 
-/// Invalid authentication challenge input.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AuthChallengeError {
-    /// The URI was not bounded canonical HTTPS text.
-    InvalidUri,
-    /// The challenge expiry preceded the required timestamp.
-    ExpiresBeforeRequired,
-}
-
-impl fmt::Display for AuthChallengeError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::InvalidUri => "authentication challenge URI is invalid",
-            Self::ExpiresBeforeRequired => "authentication challenge expires before it is required",
-        })
-    }
-}
-
-impl core::error::Error for AuthChallengeError {}
-
 /// Stable signing progress stages.
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -146,9 +126,9 @@ pub struct SignProgress {
 
 impl SignProgress {
     /// Creates a progress update without an authentication challenge.
-    pub const fn stage(stage: SignProgressStage) -> Result<Self, SignProgressError> {
+    pub const fn stage(stage: SignProgressStage) -> Result<Self, Error> {
         if matches!(stage, SignProgressStage::AwaitingAuthentication) {
-            return Err(SignProgressError::MissingAuthenticationChallenge);
+            return Err(Error::new(Kind::InvalidArgument));
         }
         Ok(Self {
             stage,
@@ -196,36 +176,14 @@ impl<'de> serde::Deserialize<'de> for SignProgress {
             (SignProgressStage::AwaitingAuthentication, Some(challenge)) => {
                 Ok(Self::authentication(challenge))
             }
-            (SignProgressStage::AwaitingAuthentication, None) => Err(serde::de::Error::custom(
-                SignProgressError::MissingAuthenticationChallenge,
-            )),
-            (_, Some(_)) => Err(serde::de::Error::custom(
-                SignProgressError::UnexpectedAuthenticationChallenge,
-            )),
+            (SignProgressStage::AwaitingAuthentication, None) => {
+                Err(serde::de::Error::custom(Error::new(Kind::InvalidArgument)))
+            }
+            (_, Some(_)) => Err(serde::de::Error::custom(Error::new(Kind::InvalidArgument))),
             (stage, None) => Self::stage(stage).map_err(serde::de::Error::custom),
         }
     }
 }
-
-/// Invalid progress construction.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SignProgressError {
-    MissingAuthenticationChallenge,
-    UnexpectedAuthenticationChallenge,
-}
-
-impl fmt::Display for SignProgressError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::MissingAuthenticationChallenge => "authentication progress requires a challenge",
-            Self::UnexpectedAuthenticationChallenge => {
-                "only authentication progress may carry a challenge"
-            }
-        })
-    }
-}
-
-impl core::error::Error for SignProgressError {}
 
 /// Current signer availability.
 #[non_exhaustive]
@@ -306,20 +264,26 @@ mod tests {
         assert_eq!(challenge.expires_at_unix(), Some(20));
         assert!(!format!("{challenge:?}").contains("sensitive"));
         assert_eq!(
-            AuthChallenge::new("http://auth.example", 10, None),
-            Err(AuthChallengeError::InvalidUri)
+            AuthChallenge::new("http://auth.example", 10, None)
+                .expect_err("HTTP challenge must fail")
+                .kind(),
+            Kind::InvalidArgument
         );
         assert_eq!(
-            AuthChallenge::new("https://auth.example", 20, Some(10)),
-            Err(AuthChallengeError::ExpiresBeforeRequired)
+            AuthChallenge::new("https://auth.example", 20, Some(10))
+                .expect_err("invalid expiry must fail")
+                .kind(),
+            Kind::InvalidArgument
         );
     }
 
     #[test]
     fn progress_requires_challenges_only_at_the_authentication_stage() {
         assert_eq!(
-            SignProgress::stage(SignProgressStage::AwaitingAuthentication),
-            Err(SignProgressError::MissingAuthenticationChallenge)
+            SignProgress::stage(SignProgressStage::AwaitingAuthentication)
+                .expect_err("missing challenge must fail")
+                .kind(),
+            Kind::InvalidArgument
         );
         let challenge =
             AuthChallenge::new("https://auth.example/approve", 10, None).expect("challenge");

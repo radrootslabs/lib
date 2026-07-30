@@ -4,9 +4,10 @@
 //! It describes host selection and provenance but does not select accounts,
 //! acquire keys, or prove that a host granted a role.
 
-use core::fmt;
 use radroots_event::contract::AuthorRole;
 use radroots_identity::{AccountId, PublicKey};
+
+use crate::{Error, error::Kind};
 
 #[cfg(not(feature = "std"))]
 use alloc::collections::BTreeSet;
@@ -102,29 +103,6 @@ impl ActorResolutionRequest {
     }
 }
 
-/// Validation failures while constructing actor provenance.
-#[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ActorError {
-    /// Text did not contain a canonical public key.
-    InvalidPublicKey,
-    /// Account provenance did not identify the same public key as the actor.
-    AccountPublicKeyMismatch,
-}
-
-impl fmt::Display for ActorError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::InvalidPublicKey => "actor public key is invalid",
-            Self::AccountPublicKeyMismatch => {
-                "actor account identifier does not match the actor public key"
-            }
-        })
-    }
-}
-
-impl core::error::Error for ActorError {}
-
 /// An actor-role claim and its public provenance.
 ///
 /// Construction validates that account-backed provenance and the public key
@@ -139,14 +117,14 @@ pub struct Actor {
 
 impl Actor {
     /// Creates actor provenance from canonical public values.
-    pub fn new<I>(public_key: PublicKey, source: ActorSource, roles: I) -> Result<Self, ActorError>
+    pub fn new<I>(public_key: PublicKey, source: ActorSource, roles: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = AuthorRole>,
     {
         if let Some(account_id) = source.account_id()
             && account_id.as_bytes() != public_key.as_bytes()
         {
-            return Err(ActorError::AccountPublicKeyMismatch);
+            return Err(Error::new(Kind::InvalidArgument));
         }
         Ok(Self {
             public_key,
@@ -160,12 +138,12 @@ impl Actor {
         public_key: &str,
         source: ActorSource,
         roles: I,
-    ) -> Result<Self, ActorError>
+    ) -> Result<Self, Error>
     where
         I: IntoIterator<Item = AuthorRole>,
     {
         let public_key =
-            PublicKey::from_hex(public_key).map_err(|_| ActorError::InvalidPublicKey)?;
+            PublicKey::from_hex(public_key).map_err(|_| Error::new(Kind::InvalidArgument))?;
         Self::new(public_key, source, roles)
     }
 
@@ -245,22 +223,21 @@ mod tests {
             assert_eq!(actor.account_id(), Some(account_id(ALICE)));
         }
 
-        assert_eq!(
-            Actor::new(
-                public_key(ALICE),
-                ActorSource::LocalAccount(account_id(BOB)),
-                [AuthorRole::Farmer],
-            ),
-            Err(ActorError::AccountPublicKeyMismatch)
-        );
+        let error = Actor::new(
+            public_key(ALICE),
+            ActorSource::LocalAccount(account_id(BOB)),
+            [AuthorRole::Farmer],
+        )
+        .expect_err("mismatched account must fail");
+        assert_eq!(error.kind(), Kind::InvalidArgument);
     }
 
     #[test]
     fn invalid_public_key_text_is_rejected() {
-        assert_eq!(
-            Actor::from_public_key_hex("not-a-public-key", ActorSource::ExplicitPublicKey, []),
-            Err(ActorError::InvalidPublicKey)
-        );
+        let error =
+            Actor::from_public_key_hex("not-a-public-key", ActorSource::ExplicitPublicKey, [])
+                .expect_err("invalid public key must fail");
+        assert_eq!(error.kind(), Kind::InvalidArgument);
     }
 
     #[test]

@@ -40,6 +40,7 @@ mod tests {
     use crate::{
         Actor,
         actor::ActorSource,
+        error::Kind,
         request::{CancellationPolicy, SignPolicy},
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
@@ -67,7 +68,7 @@ mod tests {
         }
 
         fn sign(&self, _request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
-            Box::pin(async { Err(Error) })
+            Box::pin(async { Err(Error::new(Kind::InternalError)) })
         }
     }
 
@@ -77,7 +78,7 @@ mod tests {
         }
 
         fn sign(&self, _request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
-            Box::pin(async { Err(Error) })
+            Box::pin(async { Err(Error::new(Kind::InternalError)) })
         }
     }
 
@@ -88,7 +89,7 @@ mod tests {
 
         fn sign(&self, _request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>> {
             self.0.fetch_add(1, Ordering::Relaxed);
-            Box::pin(async { Err(Error) })
+            Box::pin(async { Err(Error::new(Kind::InternalError)) })
         }
     }
 
@@ -169,7 +170,10 @@ mod tests {
             ),
         ];
         for request in requests {
-            assert!(request.is_err());
+            assert_eq!(
+                request.as_ref().expect_err("request must fail").kind(),
+                Kind::AuthorizationDenied
+            );
             if let Ok(request) = request {
                 drop(signer.sign(request));
             }

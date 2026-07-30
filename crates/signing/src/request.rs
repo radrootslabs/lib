@@ -9,7 +9,7 @@ use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use std::sync::Arc;
 
-use crate::{Actor, Error, status::SignProgress};
+use crate::{Actor, Error, error::Kind, status::SignProgress};
 
 /// How a signer must interpret cancellation around remote publication.
 #[non_exhaustive]
@@ -36,12 +36,9 @@ pub struct SignPolicy {
 
 impl SignPolicy {
     /// Creates a bounded policy. Unix timestamp zero is never a valid deadline.
-    pub const fn new(
-        deadline_unix: u64,
-        cancellation: CancellationPolicy,
-    ) -> Result<Self, SignPolicyError> {
+    pub const fn new(deadline_unix: u64, cancellation: CancellationPolicy) -> Result<Self, Error> {
         if deadline_unix == 0 {
-            return Err(SignPolicyError::InvalidDeadline);
+            return Err(Error::new(Kind::InvalidArgument));
         }
         Ok(Self {
             deadline_unix,
@@ -61,21 +58,6 @@ impl SignPolicy {
         self.cancellation
     }
 }
-
-/// Invalid signing policy input.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SignPolicyError {
-    /// The deadline was the Unix epoch sentinel rather than a real bound.
-    InvalidDeadline,
-}
-
-impl fmt::Display for SignPolicyError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("signing deadline must be greater than zero")
-    }
-}
-
-impl core::error::Error for SignPolicyError {}
 
 /// Runtime-local observer for signing progress.
 ///
@@ -105,7 +87,7 @@ impl SignRequest {
         draft: EventDraft,
         policy: SignPolicy,
     ) -> Result<Self, Error> {
-        authorize_actor_for_draft(&actor, &draft).map_err(|_| Error)?;
+        authorize_actor_for_draft(&actor, &draft).map_err(authorization_error)?;
         Ok(Self {
             operation_id,
             actor,
@@ -178,6 +160,14 @@ fn authorize_actor_for_draft(
         return Err(AuthorizationFailure::ActorPublicKeyMismatch);
     }
     Ok(())
+}
+
+fn authorization_error(failure: AuthorizationFailure) -> Error {
+    match failure {
+        AuthorizationFailure::InvalidDraft => Error::new(Kind::InvalidArgument),
+        AuthorizationFailure::ActorRoleUnsatisfied
+        | AuthorizationFailure::ActorPublicKeyMismatch => Error::new(Kind::AuthorizationDenied),
+    }
 }
 
 impl fmt::Debug for SignRequest {
@@ -254,10 +244,9 @@ mod tests {
 
     #[test]
     fn policy_requires_a_real_deadline() {
-        assert_eq!(
-            SignPolicy::new(0, CancellationPolicy::LocalCooperative),
-            Err(SignPolicyError::InvalidDeadline)
-        );
+        let error = SignPolicy::new(0, CancellationPolicy::LocalCooperative)
+            .expect_err("zero deadline must fail");
+        assert_eq!(error.kind(), Kind::InvalidArgument);
     }
 
     #[test]
