@@ -23,12 +23,12 @@ use radroots_event_codec::knowledge::{
     wiki_article_to_wire_parts, wiki_merge_request_from_event, wiki_merge_request_to_wire_parts,
     wiki_redirect_to_wire_parts,
 };
+#[cfg(feature = "manifests")]
+use radroots_event_codec::manifest::{contract_manifest_json, knowledge_contract_manifest};
 use radroots_event_codec::verification::{
     RadrootsDecodeError, RadrootsDecodedEvent, RadrootsNip01VerificationError,
     verify_and_decode_radroots_event,
 };
-#[cfg(feature = "manifests")]
-use radroots_event_codec::{contract_manifest_json, knowledge_contract_manifest};
 use radroots_test_fixtures::RELAY_PRIMARY_WSS;
 use radroots_test_fixtures::knowledge::{
     RADROOTS_KNOWLEDGE_ADVERSARIAL_FIXTURES, RADROOTS_KNOWLEDGE_VALID_CONTRACT_IDS,

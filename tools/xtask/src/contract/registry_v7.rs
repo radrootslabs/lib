@@ -2,7 +2,7 @@ use super::artifact_bundle::{
     GeneratedArtifact, read_regular_file, validate_canonical_json_artifact,
     validate_sha256_artifact, with_artifact_bundle_transaction,
 };
-use radroots_event_codec::{
+use radroots_event_codec::manifest::registry_v7::{
     RADROOTS_EVENT_CONTRACT_REGISTRY_V7_EVENT_COUNT,
     RADROOTS_EVENT_CONTRACT_REGISTRY_V7_INVENTORY_SCHEMA_VERSION,
     RADROOTS_EVENT_CONTRACT_REGISTRY_V7_KIND_COUNT, RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION,

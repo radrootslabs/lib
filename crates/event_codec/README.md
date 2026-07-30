@@ -28,9 +28,11 @@ The Release V1 canonical root consists of `Codec`, `DecodeError`,
 canonical modules so each import states whether it encodes, decodes, verifies,
 or admits data. The pre-release tree still exposes temporary compatibility
 paths while first-party consumers finish migration; they are not the
-canonical interface and may be removed before Release V1. The complete current
-surface, including those temporary paths, is recorded in the
-[public API baseline](../../docs/api/radroots_event_codec.txt).
+canonical interface and may be removed before Release V1. The canonical
+surface is recorded in the
+[public API baseline](../../docs/api/radroots_event_codec.txt). The hidden
+routes and their mandatory Step 313 removal are recorded in
+[`COMPATIBILITY.md`](COMPATIBILITY.md).
 
 ## Verification pipeline
 

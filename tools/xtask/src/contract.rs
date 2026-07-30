@@ -4571,7 +4571,7 @@ fn validate_knowledge_contract_manifest_artifacts_under_lock(
             KNOWLEDGE_MANIFEST_SHA256_RELATIVE,
         ));
     }
-    if parsed != radroots_event_codec::knowledge_contract_manifest() {
+    if parsed != radroots_event_codec::manifest::knowledge_contract_manifest() {
         return Err(stale_knowledge_manifest_error(KNOWLEDGE_MANIFEST_RELATIVE));
     }
 
@@ -4579,13 +4579,13 @@ fn validate_knowledge_contract_manifest_artifacts_under_lock(
 }
 
 fn expected_knowledge_contract_manifest_json() -> Result<String, String> {
-    let expected_json = radroots_event_codec::contract_manifest_json()
+    let expected_json = radroots_event_codec::manifest::contract_manifest_json()
         .map_err(|error| format!("serialize knowledge contract manifest: {error}"))?;
     Ok(expected_json)
 }
 
 fn expected_knowledge_contract_manifest_sha256() -> Result<String, String> {
-    radroots_event_codec::contract_manifest_sha256()
+    radroots_event_codec::manifest::contract_manifest_sha256()
         .map_err(|error| format!("hash knowledge contract manifest: {error}"))
 }
 
@@ -4593,19 +4593,19 @@ fn validate_knowledge_contract_manifest_shape(
     manifest: &radroots_event_codec::manifest::RadrootsKnowledgeContractManifest,
 ) -> Result<(), String> {
     if manifest.schema_version
-        != radroots_event_codec::RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION
+        != radroots_event_codec::manifest::RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION
     {
         return Err(format!(
             "{KNOWLEDGE_MANIFEST_RELATIVE} schema_version must be {}",
-            radroots_event_codec::RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION
+            radroots_event_codec::manifest::RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION
         ));
     }
     if manifest.registry_version
-        != radroots_event_codec::RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION
+        != radroots_event_codec::manifest::registry_v7::RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION
     {
         return Err(format!(
             "{KNOWLEDGE_MANIFEST_RELATIVE} registry_version must be {}",
-            radroots_event_codec::RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION
+            radroots_event_codec::manifest::registry_v7::RADROOTS_EVENT_CONTRACT_REGISTRY_V7_VERSION
         ));
     }
     if manifest.contract_count != manifest.contracts.len() {

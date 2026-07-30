@@ -5,6 +5,7 @@ use radroots_event_codec::{canonical as _, decode as _, encode as _, verify as _
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const README: &str = include_str!("../README.md");
+const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 const VERIFICATION: &str = include_str!("../src/verification/v1.rs");
 const EXAMPLE: &str = include_str!("../examples/verify_profile.rs");
@@ -63,6 +64,8 @@ fn canonical_root_exports_are_explicit_and_host_types_do_not_leak() {
 
     assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
     assert!(!ROOT.contains("pub trait "));
+    assert!(ROOT.contains("TEMPORARY COMPATIBILITY QUARANTINE (publish = false)"));
+    assert!(ROOT.contains("must be removed at the final compatibility checkpoint, Step 313"));
     for forbidden in [
         "nostr::",
         "nostr_sdk::",
@@ -74,6 +77,49 @@ fn canonical_root_exports_are_explicit_and_host_types_do_not_leak() {
         assert!(
             !ROOT.contains(forbidden),
             "crate root must not expose host path {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn compatibility_surface_is_private_documentation_hidden_and_has_a_removal_gate() {
+    assert!(MANIFEST.contains("publish = false"));
+    for module in [
+        "comment",
+        "deletion",
+        "error",
+        "job",
+        "knowledge",
+        "profile",
+        "verification",
+        "wire",
+    ] {
+        assert!(
+            ROOT.contains(&format!("#[doc(hidden)]\npub mod {module};")),
+            "compatibility module {module} is not documentation-hidden"
+        );
+    }
+    for required in [
+        "The only canonical Release V1 modules",
+        "Steps 288-294",
+        "Step 313 is the exact final-removal checkpoint",
+        "repeat the all-first-party search",
+    ] {
+        assert!(
+            COMPATIBILITY.contains(required),
+            "compatibility record is missing {required}"
+        );
+    }
+
+    for retired_root_export in [
+        "pub use tag_builders::RadrootsEventTagBuilder;",
+        "pub use verification::{",
+        "pub use manifest::registry_v7::{",
+        "pub use manifest::{",
+    ] {
+        assert!(
+            !ROOT.contains(retired_root_export),
+            "retired prefixed root export remains: {retired_root_export}"
         );
     }
 }
