@@ -132,7 +132,7 @@ impl RadrootsTradeLocatorCandidate {
     pub fn locator(&self) -> RadrootsTradeLocator {
         RadrootsTradeLocator {
             trade_id: self.trade_id.clone(),
-            root_event_id: Some(self.root_event_id.clone()),
+            root_event_id: Some(self.root_event_id),
             listing_addr: Some(self.listing_addr.clone()),
             buyer_pubkey: Some(self.buyer_pubkey),
             seller_pubkey: Some(self.seller_pubkey),

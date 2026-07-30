@@ -291,11 +291,10 @@ impl RadrootsTradeProjectionV1 {
         self.unsupported_mutation_ids.sort();
         self.unsupported_mutation_ids.dedup();
         self.agreement_claims
-            .sort_by(|left, right| left.claim_mutation_id.cmp(&right.claim_mutation_id));
+            .sort_by_key(|left| left.claim_mutation_id);
         self.issues.sort();
         self.issues.dedup();
-        self.attestations
-            .sort_by(|left, right| left.event_id.cmp(&right.event_id));
+        self.attestations.sort_by_key(|left| left.event_id);
         self.projection_digest = projection_digest(self);
     }
 }
@@ -433,11 +432,11 @@ struct CancellationRecord {
 }
 
 pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTradeProjectionV1 {
-    let mut projection = RadrootsTradeProjectionV1::empty(input.trade_id.clone());
+    let mut projection = RadrootsTradeProjectionV1::empty(input.trade_id);
     let mut mutations = BTreeMap::<MutationId, TradeMutationEnvelopeV1>::new();
 
     for record in input.mutations {
-        let mutation_id = match record.mutation.mutation_id.clone() {
+        let mutation_id = match record.mutation.mutation_id {
             Some(mutation_id) => mutation_id,
             None => {
                 projection
@@ -447,13 +446,11 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
             }
         };
         if record.mutation.schema_version != RADROOTS_TRADE_SCHEMA_VERSION {
-            projection
-                .unsupported_mutation_ids
-                .push(mutation_id.clone());
+            projection.unsupported_mutation_ids.push(mutation_id);
             projection
                 .issues
                 .push(RadrootsTradeReducerIssueV1::UnsupportedSchema {
-                    mutation_id: mutation_id.clone(),
+                    mutation_id,
                     schema_version: record.mutation.schema_version,
                 });
             mutations.entry(mutation_id).or_insert(record.mutation);
@@ -463,7 +460,7 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
             projection
                 .issues
                 .push(RadrootsTradeReducerIssueV1::InvalidMutation {
-                    mutation_id: Some(mutation_id.clone()),
+                    mutation_id: Some(mutation_id),
                     reason: error.to_string(),
                 });
             continue;
@@ -471,9 +468,7 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
         if record.mutation.trade_id != input.trade_id {
             projection
                 .issues
-                .push(RadrootsTradeReducerIssueV1::TradeIdentityMismatch {
-                    mutation_id: mutation_id.clone(),
-                });
+                .push(RadrootsTradeReducerIssueV1::TradeIdentityMismatch { mutation_id });
             continue;
         }
         mutations.entry(mutation_id).or_insert(record.mutation);
@@ -488,17 +483,17 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
 
     for (mutation_id, mutation) in &mutations {
         if matches!(mutation.body, TradeMutationBodyV1::Proposal { .. }) {
-            root_proposals.push(mutation_id.clone());
+            root_proposals.push(*mutation_id);
         }
         for parent in &mutation.parent_mutation_ids {
-            referenced_parents.insert(parent.clone());
+            referenced_parents.insert(*parent);
             if !mutations.contains_key(parent) {
-                projection.missing_parent_ids.push(parent.clone());
+                projection.missing_parent_ids.push(*parent);
                 projection
                     .issues
                     .push(RadrootsTradeReducerIssueV1::MissingParent {
-                        mutation_id: mutation_id.clone(),
-                        parent_mutation_id: parent.clone(),
+                        mutation_id: *mutation_id,
+                        parent_mutation_id: *parent,
                     });
             }
         }
@@ -506,9 +501,9 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
             TradeMutationBodyV1::Proposal { candidate }
             | TradeMutationBodyV1::RevisionProposal { candidate } => {
                 candidates_by_proposal.insert(
-                    mutation_id.clone(),
+                    *mutation_id,
                     CandidateRecord {
-                        proposal_mutation_id: mutation_id.clone(),
+                        proposal_mutation_id: *mutation_id,
                         author_pubkey: mutation.author_pubkey,
                         candidate: candidate.clone(),
                     },
@@ -521,10 +516,10 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
                 target_claim_mutation_id,
                 reason: _,
             } => cancellations.push(CancellationRecord {
-                mutation_id: mutation_id.clone(),
+                mutation_id: *mutation_id,
                 parent_mutation_ids: mutation.parent_mutation_ids.clone(),
-                target_candidate_id: target_candidate_id.clone(),
-                target_claim_mutation_id: target_claim_mutation_id.clone(),
+                target_candidate_id: *target_candidate_id,
+                target_claim_mutation_id: *target_claim_mutation_id,
             }),
         }
     }
@@ -542,9 +537,9 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
                 decision,
             } => {
                 decisions_by_proposal
-                    .entry(proposal_mutation_id.clone())
+                    .entry(*proposal_mutation_id)
                     .or_default()
-                    .push(mutation_id.clone());
+                    .push(*mutation_id);
                 apply_decision(
                     DecisionApplication {
                         mutation_id,
@@ -597,7 +592,7 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
                 projection
                     .issues
                     .push(RadrootsTradeReducerIssueV1::DoubleAcceptance {
-                        proposal_mutation_id: proposal_mutation_id.clone(),
+                        proposal_mutation_id: *proposal_mutation_id,
                     });
                 set_conflict(
                     &mut projection.conflict_state,
@@ -608,7 +603,7 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
                 projection
                     .issues
                     .push(RadrootsTradeReducerIssueV1::DecisionConflict {
-                        proposal_mutation_id: proposal_mutation_id.clone(),
+                        proposal_mutation_id: *proposal_mutation_id,
                     });
                 set_conflict(
                     &mut projection.conflict_state,
@@ -653,7 +648,7 @@ pub fn reduce_trade_records(input: RadrootsTradeReductionInputV1) -> RadrootsTra
             projection
                 .issues
                 .push(RadrootsTradeReducerIssueV1::PrivateTermsUnavailable {
-                    candidate_id: claim.candidate_id.clone(),
+                    candidate_id: claim.candidate_id,
                 });
         }
     }
@@ -678,14 +673,12 @@ fn apply_decision(
         decision,
     } = application;
     let Some(candidate_record) = candidates_by_proposal.get(proposal_mutation_id) else {
-        projection
-            .missing_proposal_ids
-            .push(proposal_mutation_id.clone());
+        projection.missing_proposal_ids.push(*proposal_mutation_id);
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::MissingProposal {
-                decision_mutation_id: mutation_id.clone(),
-                proposal_mutation_id: proposal_mutation_id.clone(),
+                decision_mutation_id: *mutation_id,
+                proposal_mutation_id: *proposal_mutation_id,
             });
         return;
     };
@@ -693,8 +686,8 @@ fn apply_decision(
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::CandidateIdMismatch {
-                decision_mutation_id: mutation_id.clone(),
-                proposal_mutation_id: proposal_mutation_id.clone(),
+                decision_mutation_id: *mutation_id,
+                proposal_mutation_id: *proposal_mutation_id,
             });
         set_conflict(
             &mut projection.conflict_state,
@@ -706,7 +699,7 @@ fn apply_decision(
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::DecisionAuthorMismatch {
-                decision_mutation_id: mutation_id.clone(),
+                decision_mutation_id: *mutation_id,
             });
         return;
     }
@@ -714,8 +707,8 @@ fn apply_decision(
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::DecisionParentMissing {
-                decision_mutation_id: mutation_id.clone(),
-                proposal_mutation_id: proposal_mutation_id.clone(),
+                decision_mutation_id: *mutation_id,
+                proposal_mutation_id: *proposal_mutation_id,
             });
         set_conflict(
             &mut projection.conflict_state,
@@ -730,7 +723,7 @@ fn apply_decision(
                 projection
                     .issues
                     .push(RadrootsTradeReducerIssueV1::MissingSellerReservation {
-                        decision_mutation_id: mutation_id.clone(),
+                        decision_mutation_id: *mutation_id,
                     });
                 return;
             };
@@ -742,11 +735,11 @@ fn apply_decision(
                 projection,
             ) {
                 claims.insert(
-                    mutation_id.clone(),
+                    *mutation_id,
                     RadrootsTradeAgreementClaimV1 {
-                        claim_mutation_id: mutation_id.clone(),
-                        proposal_mutation_id: candidate_record.proposal_mutation_id.clone(),
-                        candidate_id: candidate_id.clone(),
+                        claim_mutation_id: *mutation_id,
+                        proposal_mutation_id: candidate_record.proposal_mutation_id,
+                        candidate_id: *candidate_id,
                         candidate_author_pubkey: candidate_record.author_pubkey,
                         accepted_by_pubkey: mutation.author_pubkey,
                         reservation_commitment: reservation.assertion_commitment.clone(),
@@ -781,7 +774,7 @@ fn validate_reservation(
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::ReservationCandidateMismatch {
-                decision_mutation_id: decision_mutation_id.clone(),
+                decision_mutation_id: *decision_mutation_id,
             });
         valid = false;
     }
@@ -789,7 +782,7 @@ fn validate_reservation(
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::ReservationAuthorityMismatch {
-                decision_mutation_id: decision_mutation_id.clone(),
+                decision_mutation_id: *decision_mutation_id,
             });
         set_conflict(
             &mut projection.conflict_state,
@@ -801,7 +794,7 @@ fn validate_reservation(
         projection
             .issues
             .push(RadrootsTradeReducerIssueV1::ReservationLineMismatch {
-                decision_mutation_id: decision_mutation_id.clone(),
+                decision_mutation_id: *decision_mutation_id,
             });
         return false;
     }
@@ -815,7 +808,7 @@ fn validate_reservation(
             projection
                 .issues
                 .push(RadrootsTradeReducerIssueV1::ReservationLineMismatch {
-                    decision_mutation_id: decision_mutation_id.clone(),
+                    decision_mutation_id: *decision_mutation_id,
                 });
             valid = false;
             break;
@@ -864,15 +857,15 @@ fn apply_agreement_state(
             && claims.contains_key(target_claim_id)
         {
             if cancellation.parent_mutation_ids.contains(target_claim_id) {
-                projection.cancelled_claim_ids.push(target_claim_id.clone());
-                if projection.active_agreement_claim_ids == [target_claim_id.clone()] {
+                projection.cancelled_claim_ids.push(*target_claim_id);
+                if projection.active_agreement_claim_ids == [*target_claim_id] {
                     projection.agreement_state = RadrootsTradeAgreementStateV1::Cancelled;
                 }
             } else {
                 projection
                     .issues
                     .push(RadrootsTradeReducerIssueV1::CancellationConflict {
-                        cancellation_mutation_id: cancellation.mutation_id.clone(),
+                        cancellation_mutation_id: cancellation.mutation_id,
                     });
                 projection.agreement_state = RadrootsTradeAgreementStateV1::Contested;
                 set_conflict(
@@ -939,11 +932,11 @@ fn ancestors_of(
     let mut ancestors = BTreeSet::new();
     if let Some(mutation) = mutations.get(mutation_id) {
         for parent in &mutation.parent_mutation_ids {
-            ancestors.insert(parent.clone());
+            ancestors.insert(*parent);
             ancestors.extend(ancestors_of(parent, mutations, memo));
         }
     }
-    memo.insert(mutation_id.clone(), ancestors.clone());
+    memo.insert(*mutation_id, ancestors.clone());
     ancestors
 }
 
@@ -977,7 +970,7 @@ fn reduce_private_terms_state(
 ) -> RadrootsTradePrivateTermsStateV1 {
     let private_terms_by_candidate = private_terms
         .iter()
-        .map(|record| (record.candidate_id.clone(), record.state))
+        .map(|record| (record.candidate_id, record.state))
         .collect::<BTreeMap<_, _>>();
     let mut required_states = Vec::new();
     for claim in &projection.agreement_claims {
@@ -1061,7 +1054,7 @@ fn declined_candidate_ids(
                 candidate_id,
                 decision: TradeDecisionV1::Declined { .. },
                 ..
-            } => Some(candidate_id.clone()),
+            } => Some(*candidate_id),
             _ => None,
         })
         .collect()
@@ -1251,7 +1244,7 @@ mod tests {
             reservation_id: dtag(&format!("reservation-{marker}")),
             inventory_authority_id: candidate.seller_pubkey,
             inventory_epoch: 42,
-            candidate_id: candidate.candidate_id.clone().unwrap(),
+            candidate_id: candidate.candidate_id.unwrap(),
             commitments: candidate
                 .lines
                 .iter()
@@ -1272,7 +1265,7 @@ mod tests {
         proposal: &TradeMutationEnvelopeV1,
         marker: char,
     ) -> TradeMutationEnvelopeV1 {
-        let proposal_id = proposal.mutation_id.clone().unwrap();
+        let proposal_id = proposal.mutation_id.unwrap();
         let candidate = match &proposal.body {
             TradeMutationBodyV1::Proposal { candidate }
             | TradeMutationBodyV1::RevisionProposal { candidate } => candidate.clone(),
@@ -1287,13 +1280,13 @@ mod tests {
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
             farm_id: dtag("farm-1"),
-            parent_mutation_ids: vec![proposal_id.clone()],
+            parent_mutation_ids: vec![proposal_id],
             author_pubkey: pubkey('b'),
             counterparty_pubkey: pubkey('a'),
             authored_at_unix_s: u64::from(marker),
             body: TradeMutationBodyV1::Decision {
                 proposal_mutation_id: proposal_id,
-                candidate_id: candidate.candidate_id.clone().unwrap(),
+                candidate_id: candidate.candidate_id.unwrap(),
                 decision: TradeDecisionV1::Accepted {
                     reservation_assertion: Some(reservation(&candidate, marker)),
                 },
@@ -1304,7 +1297,7 @@ mod tests {
     }
 
     fn declined_decision(proposal: &TradeMutationEnvelopeV1) -> TradeMutationEnvelopeV1 {
-        let proposal_id = proposal.mutation_id.clone().unwrap();
+        let proposal_id = proposal.mutation_id.unwrap();
         let candidate = match &proposal.body {
             TradeMutationBodyV1::Proposal { candidate }
             | TradeMutationBodyV1::RevisionProposal { candidate } => candidate.clone(),
@@ -1319,13 +1312,13 @@ mod tests {
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
             farm_id: dtag("farm-1"),
-            parent_mutation_ids: vec![proposal_id.clone()],
+            parent_mutation_ids: vec![proposal_id],
             author_pubkey: pubkey('b'),
             counterparty_pubkey: pubkey('a'),
             authored_at_unix_s: 102,
             body: TradeMutationBodyV1::Decision {
                 proposal_mutation_id: proposal_id,
-                candidate_id: candidate.candidate_id.clone().unwrap(),
+                candidate_id: candidate.candidate_id.unwrap(),
                 decision: TradeDecisionV1::Declined {
                     reason: "unavailable".to_string(),
                 },
@@ -1366,7 +1359,7 @@ mod tests {
         root: &TradeMutationEnvelopeV1,
         proposal: &TradeMutationEnvelopeV1,
     ) -> TradeMutationEnvelopeV1 {
-        let proposal_id = proposal.mutation_id.clone().unwrap();
+        let proposal_id = proposal.mutation_id.unwrap();
         let candidate = match &proposal.body {
             TradeMutationBodyV1::RevisionProposal { candidate } => candidate.clone(),
             _ => unreachable!(),
@@ -1380,13 +1373,13 @@ mod tests {
             buyer_pubkey: pubkey('a'),
             seller_pubkey: pubkey('b'),
             farm_id: dtag("farm-1"),
-            parent_mutation_ids: vec![proposal_id.clone()],
+            parent_mutation_ids: vec![proposal_id],
             author_pubkey: pubkey('b'),
             counterparty_pubkey: pubkey('a'),
             authored_at_unix_s: 201,
             body: TradeMutationBodyV1::RevisionDecision {
                 proposal_mutation_id: proposal_id,
-                candidate_id: candidate.candidate_id.clone().unwrap(),
+                candidate_id: candidate.candidate_id.unwrap(),
                 decision: TradeDecisionV1::Accepted {
                     reservation_assertion: Some(reservation(&candidate, '9')),
                 },
@@ -1425,7 +1418,7 @@ mod tests {
     }
 
     fn root_id(envelope: &TradeMutationEnvelopeV1) -> MutationId {
-        envelope.mutation_id.clone().unwrap()
+        envelope.mutation_id.unwrap()
     }
 
     fn record(mutation: TradeMutationEnvelopeV1) -> RadrootsTradeMutationRecordV1 {
@@ -1451,7 +1444,7 @@ mod tests {
     fn candidate_cancellation(root: &TradeMutationEnvelopeV1) -> TradeMutationEnvelopeV1 {
         let candidate_id = match &root.body {
             TradeMutationBodyV1::Proposal { candidate } => {
-                candidate.candidate_id.clone().expect("candidate id")
+                candidate.candidate_id.expect("candidate id")
             }
             _ => unreachable!(),
         };
@@ -1543,7 +1536,7 @@ mod tests {
         let proposal = proposal();
         let mut decision = accepted_decision(&proposal, '1');
         let missing_parent = MutationId::parse(hex_64('e')).unwrap();
-        decision.parent_mutation_ids = vec![missing_parent.clone()];
+        decision.parent_mutation_ids = vec![missing_parent];
         let decision = canonical_trade_mutation_content(TradeMutationEnvelopeV1 {
             mutation_id: None,
             ..decision
@@ -1891,7 +1884,7 @@ mod tests {
         let root = recanonicalize(root);
         let candidate_id = match &root.body {
             TradeMutationBodyV1::Proposal { candidate } => {
-                candidate.candidate_id.clone().expect("candidate id")
+                candidate.candidate_id.expect("candidate id")
             }
             _ => unreachable!(),
         };
@@ -1913,7 +1906,7 @@ mod tests {
             let mut input = RadrootsTradeReductionInputV1::new(trade_id());
             input.mutations = vec![record(root.clone()), record(decision.clone())];
             input.private_terms = vec![RadrootsTradePrivateTermsEvidenceV1 {
-                candidate_id: candidate_id.clone(),
+                candidate_id,
                 state,
             }];
             assert_eq!(reduce_trade_records(input).private_terms_state, expected);
@@ -2014,7 +2007,7 @@ mod tests {
         revision_decline.root_mutation_id = Some(root_id(&root));
         revision_decline.body = TradeMutationBodyV1::RevisionDecision {
             proposal_mutation_id,
-            candidate_id: candidate_id.clone(),
+            candidate_id,
             decision,
         };
         let revision_decline = recanonicalize(revision_decline);
@@ -2054,7 +2047,7 @@ mod tests {
             TradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
             _ => unreachable!(),
         };
-        let candidate_id = candidate.candidate_id.clone().expect("candidate id");
+        let candidate_id = candidate.candidate_id.expect("candidate id");
         let decision_mutation_id = root_id(&accepted_decision(&root, '9'));
 
         for field in 0..5 {
@@ -2093,23 +2086,17 @@ mod tests {
             TradeMutationBodyV1::Proposal { candidate } => candidate.clone(),
             _ => unreachable!(),
         };
-        let candidate_id = candidate.candidate_id.clone().expect("candidate id");
+        let candidate_id = candidate.candidate_id.expect("candidate id");
         let claim = |claim_mutation_id: MutationId| RadrootsTradeAgreementClaimV1 {
             claim_mutation_id,
             proposal_mutation_id: root_id(&root),
-            candidate_id: candidate_id.clone(),
+            candidate_id,
             candidate_author_pubkey: root.buyer_pubkey,
             accepted_by_pubkey: root.seller_pubkey,
             reservation_commitment: hex_64('a'),
         };
-        let claims = BTreeMap::from([
-            (first_id.clone(), claim(first_id.clone())),
-            (second_id.clone(), claim(second_id.clone())),
-        ]);
-        let mutations = BTreeMap::from([
-            (first_id.clone(), first_decision),
-            (second_id.clone(), second_decision),
-        ]);
+        let claims = BTreeMap::from([(first_id, claim(first_id)), (second_id, claim(second_id))]);
+        let mutations = BTreeMap::from([(first_id, first_decision), (second_id, second_decision)]);
         let missing_claim = MutationId::parse(hex_64('e')).expect("missing claim");
         let cancellations = vec![
             CancellationRecord {
@@ -2126,9 +2113,9 @@ mod tests {
             },
             CancellationRecord {
                 mutation_id: MutationId::parse(hex_64('5')).expect("cancellation"),
-                parent_mutation_ids: vec![first_id.clone()],
+                parent_mutation_ids: vec![first_id],
                 target_candidate_id: None,
-                target_claim_mutation_id: Some(first_id.clone()),
+                target_claim_mutation_id: Some(first_id),
             },
         ];
         let mut projection = RadrootsTradeProjectionV1::empty(trade_id());

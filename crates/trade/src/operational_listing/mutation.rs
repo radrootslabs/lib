@@ -169,9 +169,11 @@ pub fn build_operational_listing_mutation_draft(
 
 #[cfg(test)]
 mod tests {
+    use nostr::{EventBuilder, JsonUtil, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         contract::validate_event_contract_shape,
+        draft::EventDraft,
         envelope::kind::KIND_CLASSIFIED_LISTING,
         farm::FarmRef,
         farm::resource_area::ResourceAreaRef,
@@ -181,12 +183,10 @@ mod tests {
             OperationalListingDeliveryMethod, OperationalListingProduct,
             OperationalListingPublicLocation, OperationalListingStatus,
         },
+        wire::Nip01EventWire,
     };
     use radroots_event_codec::verification::verify_nip01_event;
     use radroots_identity::PublicKey;
-    use radroots_nostr::prelude::{
-        RadrootsNostrKeys, RadrootsNostrSecretKey, radroots_nostr_sign_frozen_draft,
-    };
     use radroots_test_fixtures::{FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX};
 
     use crate::operational_listing::draft::RadrootsOperationalListingCanonicalEdit;
@@ -206,6 +206,31 @@ mod tests {
 
     fn bin_id(raw: &str) -> InventoryBinId {
         InventoryBinId::parse(raw).expect("bin id")
+    }
+
+    fn sign_draft(draft: &EventDraft) -> radroots_event::envelope::EventEnvelope {
+        let keys = Keys::parse(FIXTURE_ALICE_SECRET_KEY_HEX).expect("fixture signing key");
+        assert_eq!(keys.public_key().to_hex(), draft.expected_pubkey().to_hex());
+        let tags = draft
+            .tags_as_vec()
+            .into_iter()
+            .map(|tag| Tag::parse(tag).expect("draft tag"))
+            .collect::<Vec<_>>();
+        let event = EventBuilder::new(
+            Kind::Custom(u16::try_from(draft.kind_u32()).expect("NIP-01 kind")),
+            draft.content(),
+        )
+        .tags(tags)
+        .allow_self_tagging()
+        .custom_created_at(Timestamp::from_secs(draft.created_at_u64()))
+        .sign_with_keys(&keys)
+        .expect("signed listing event");
+        assert_eq!(event.id.to_hex(), draft.expected_event_id_hex());
+        let raw_json = event.as_json();
+        Nip01EventWire::parse_json(raw_json.as_str())
+            .expect("canonical event wire")
+            .into_envelope()
+            .expect("event envelope")
     }
 
     fn listing() -> OperationalListing {
@@ -472,14 +497,10 @@ mod tests {
         let draft =
             build_operational_listing_mutation_draft(&publish, 1_700_000_000).expect("draft");
 
-        let keys = RadrootsNostrKeys::new(
-            RadrootsNostrSecretKey::from_hex(FIXTURE_ALICE_SECRET_KEY_HEX)
-                .expect("fixture secret key"),
-        );
-        let signed = radroots_nostr_sign_frozen_draft(&keys, &draft).expect("signed listing event");
-        validate_event_contract_shape(signed.envelope(), OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID)
+        let signed = sign_draft(&draft);
+        validate_event_contract_shape(&signed, OPERATIONAL_LISTING_PUBLISHED_CONTRACT_ID)
             .expect("operational listing contract");
-        let verified = verify_nip01_event(signed.envelope().clone()).expect("verified listing");
+        let verified = verify_nip01_event(signed).expect("verified listing");
         let validated = validate_operational_listing_event(&verified).expect("validated listing");
 
         assert_eq!(validated.seller_pubkey, SELLER);

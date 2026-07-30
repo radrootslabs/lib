@@ -233,7 +233,7 @@ mod tests {
         OperationalListingValidationError, validate_operational_listing_event,
         validate_operational_listing_model,
     };
-    use nostr::{EventBuilder, Keys, Kind, Tag, Timestamp};
+    use nostr::{EventBuilder, JsonUtil, Keys, Kind, Tag, Timestamp};
     use radroots_core::{Currency, Decimal, Money, Quantity, QuantityPrice, Unit};
     use radroots_event::{
         envelope::EventEnvelope,
@@ -246,10 +246,10 @@ mod tests {
             OperationalListingDeliveryMethod, OperationalListingProduct,
             OperationalListingPublicLocation,
         },
+        wire::Nip01EventWire,
     };
     use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
     use radroots_identity::PublicKey;
-    use radroots_nostr::prelude::radroots_event_from_nostr;
     use radroots_test_fixtures::{
         FIXTURE_ALICE_PUBLIC_KEY_HEX, FIXTURE_ALICE_SECRET_KEY_HEX, FIXTURE_BOB_PUBLIC_KEY_HEX,
         FIXTURE_BOB_SECRET_KEY_HEX,
@@ -457,7 +457,11 @@ mod tests {
         .custom_created_at(Timestamp::from_secs(1))
         .sign_with_keys(&keys)
         .expect("signed test event");
-        let envelope = radroots_event_from_nostr(&event).expect("event adapter");
+        let raw_json = event.as_json();
+        let envelope = Nip01EventWire::parse_json(raw_json.as_str())
+            .expect("canonical event wire")
+            .into_envelope()
+            .expect("event envelope");
         verify_nip01_event(envelope).expect("verified test event")
     }
 

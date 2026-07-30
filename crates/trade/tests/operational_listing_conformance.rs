@@ -4,7 +4,6 @@ use nostr::secp256k1::Message;
 use nostr::{Event as NostrEvent, JsonUtil, Keys, SECP256K1};
 use radroots_event::{id::ParseError, wire::Nip01EventWire};
 use radroots_event_codec::verification::{RadrootsSignatureVerifiedEvent, verify_nip01_event};
-use radroots_nostr::prelude::radroots_event_from_nostr;
 use radroots_trade::operational_listing::{
     parse_classified_listing_address, validation::validate_operational_listing_event,
 };
@@ -264,9 +263,6 @@ fn verified_event(vector: &Vector, keys: &Keys) -> RadrootsSignatureVerifiedEven
     let envelope = wire
         .into_envelope()
         .unwrap_or_else(|error| panic!("{} failed envelope conversion: {error}", vector.id));
-    let adapted = radroots_event_from_nostr(&event)
-        .unwrap_or_else(|error| panic!("{} failed Nostr adapter conversion: {error}", vector.id));
-    assert_eq!(envelope, adapted, "{} conversion drift", vector.id);
     verify_nip01_event(envelope)
         .unwrap_or_else(|error| panic!("{} failed typed verification: {error}", vector.id))
 }

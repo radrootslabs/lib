@@ -6,7 +6,7 @@ edition.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Trade domain model for Radroots"
+description = "Deterministic trade validation, reduction, evidence, and workflow planning for Radroots"
 repository.workspace = true
 homepage.workspace = true
 documentation = "https://docs.rs/radroots_trade"
@@ -82,11 +82,6 @@ thiserror = { workspace = true }
 [dev-dependencies]
 nostr = { workspace = true }
 radroots_test_fixtures = { workspace = true }
-radroots_nostr = { workspace = true, default-features = false, features = [
-  "std",
-  "events",
-] }
-radroots_transport = { workspace = true, default-features = false }
 sqlx = { workspace = true, default-features = false, features = [
   "runtime-tokio",
   "sqlite-bundled",

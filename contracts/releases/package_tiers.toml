@@ -53,26 +53,3 @@ packages = ["radroots_sdk"]
 id = "facade"
 rank = 6
 packages = ["radroots"]
-
-# These exact development-only edges predate the final trade boundary and are
-# removed by the manifest-alignment checkpoint. Normal, build, target, or
-# feature-broadened forms remain forbidden.
-[[temporary_exception]]
-owner = "radroots_trade"
-dependency = "radroots_nostr"
-kind = "dev"
-target = "all"
-features = ["events", "std"]
-uses_default_features = false
-removal_step = 88
-rationale = "Existing trade conformance tests consume Nostr vectors until the Step 088 package boundary alignment."
-
-[[temporary_exception]]
-owner = "radroots_trade"
-dependency = "radroots_transport"
-kind = "dev"
-target = "all"
-features = []
-uses_default_features = false
-removal_step = 88
-rationale = "Existing trade workflow tests use transport test types until the Step 088 package boundary alignment."

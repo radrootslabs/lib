@@ -5,7 +5,7 @@
 use core::fmt;
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::ToString, vec::Vec};
+use alloc::{format, vec::Vec};
 
 #[cfg(feature = "std")]
 use std::vec::Vec;
