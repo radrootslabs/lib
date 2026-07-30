@@ -594,6 +594,7 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
     for required in [
         "let mut fingerprints = BTreeSet::new();",
         "RadrootsTransportError::DuplicateTargetFingerprint",
+        "targets.len() > TARGET_SET_MAX_ITEMS",
     ] {
         assert!(
             transport_source.contains(required),
@@ -602,8 +603,8 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
     }
     let target_struct = source_between(
         transport_source.as_str(),
-        "pub struct RadrootsTransportTarget {",
-        "impl RadrootsTransportTarget {",
+        "pub struct Target {",
+        "impl Target {",
     );
     for forbidden in [
         "pub kind:",
@@ -618,8 +619,8 @@ fn transport_target_identity_sources_reject_silent_dedupe() {
         );
     }
     for required in [
-        "impl<'de> serde::Deserialize<'de> for RadrootsTransportTarget",
-        "impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetSet",
+        "impl<'de> serde::Deserialize<'de> for Target",
+        "impl<'de> serde::Deserialize<'de> for TargetSet",
     ] {
         assert!(
             transport_source.contains(required),

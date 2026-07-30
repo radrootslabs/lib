@@ -15,6 +15,7 @@ pub enum RadrootsTransportError {
     EmptyTargetLabel,
     InvalidTargetLabel,
     EmptyTargetSet,
+    TargetSetTooLarge,
     DuplicateTargetFingerprint,
     InvalidTargetFingerprint,
     InvalidSatisfactionPolicy,
@@ -55,6 +56,7 @@ impl fmt::Display for RadrootsTransportError {
             Self::EmptyTargetLabel => f.write_str("transport target label is empty"),
             Self::InvalidTargetLabel => f.write_str("transport target label is invalid"),
             Self::EmptyTargetSet => f.write_str("transport target set is empty"),
+            Self::TargetSetTooLarge => f.write_str("transport target set exceeds its item limit"),
             Self::DuplicateTargetFingerprint => {
                 f.write_str("transport target set contains duplicate fingerprints")
             }

@@ -1,19 +1,25 @@
 use crate::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID, RadrootsTransportError,
     RadrootsTransportKind,
+    endpoint::{ENDPOINT_URI_MAX_BYTES, TARGET_LABEL_MAX_BYTES, TARGET_SCOPE_MAX_BYTES},
 };
 use alloc::collections::BTreeSet;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::net::Ipv6Addr;
+use core::str::FromStr;
 use sha2::{Digest, Sha256};
+
+/// Maximum number of targets in one operation.
+pub const TARGET_SET_MAX_ITEMS: usize = 64;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsTransportTargetUri(String);
+/// Canonical transport endpoint URI.
+pub struct EndpointUri(String);
 
-impl RadrootsTransportTargetUri {
+impl EndpointUri {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
         let canonical = canonicalize_uri(raw.as_ref())?;
         Ok(Self(canonical))
@@ -29,14 +35,36 @@ impl RadrootsTransportTargetUri {
     }
 }
 
-impl core::fmt::Display for RadrootsTransportTargetUri {
+impl core::fmt::Display for EndpointUri {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
+impl AsRef<str> for EndpointUri {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for EndpointUri {
+    type Err = RadrootsTransportError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for EndpointUri {
+    type Error = RadrootsTransportError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetUri {
+impl<'de> serde::Deserialize<'de> for EndpointUri {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -54,15 +82,17 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetUri {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsTransportMeshScopeId(String);
+/// Optional transport-neutral target scope.
+pub struct TargetScope(String);
 
-impl RadrootsTransportMeshScopeId {
+impl TargetScope {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
         let value = raw.as_ref();
         if value.is_empty() {
             return Err(RadrootsTransportError::EmptyTargetScope);
         }
-        if value != value.trim()
+        if value.len() > TARGET_SCOPE_MAX_BYTES
+            || value != value.trim()
             || value
                 .chars()
                 .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.')))
@@ -81,14 +111,36 @@ impl RadrootsTransportMeshScopeId {
     }
 }
 
-impl core::fmt::Display for RadrootsTransportMeshScopeId {
+impl core::fmt::Display for TargetScope {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
+impl AsRef<str> for TargetScope {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for TargetScope {
+    type Err = RadrootsTransportError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for TargetScope {
+    type Error = RadrootsTransportError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsTransportMeshScopeId {
+impl<'de> serde::Deserialize<'de> for TargetScope {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -100,15 +152,17 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportMeshScopeId {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsTransportTargetLabel(String);
+/// Optional human-readable target label excluded from target identity.
+pub struct TargetLabel(String);
 
-impl RadrootsTransportTargetLabel {
+impl TargetLabel {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsTransportError> {
-        let trimmed = raw.as_ref().trim();
+        let raw = raw.as_ref();
+        let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Err(RadrootsTransportError::EmptyTargetLabel);
         }
-        if trimmed.chars().any(char::is_control) {
+        if raw.len() > TARGET_LABEL_MAX_BYTES || trimmed.chars().any(char::is_control) {
             return Err(RadrootsTransportError::InvalidTargetLabel);
         }
         Ok(Self(trimmed.to_string()))
@@ -119,14 +173,36 @@ impl RadrootsTransportTargetLabel {
     }
 }
 
-impl core::fmt::Display for RadrootsTransportTargetLabel {
+impl core::fmt::Display for TargetLabel {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
+impl AsRef<str> for TargetLabel {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for TargetLabel {
+    type Err = RadrootsTransportError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for TargetLabel {
+    type Error = RadrootsTransportError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetLabel {
+impl<'de> serde::Deserialize<'de> for TargetLabel {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -144,13 +220,14 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetLabel {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RadrootsTransportTargetFingerprint(String);
+/// Deterministic SHA-256 fingerprint of canonical target identity fields.
+pub struct TargetFingerprint(String);
 
-impl RadrootsTransportTargetFingerprint {
+impl TargetFingerprint {
     pub fn from_target(
         kind: &RadrootsTransportKind,
-        uri: &RadrootsTransportTargetUri,
-        scope: Option<&RadrootsTransportMeshScopeId>,
+        uri: &EndpointUri,
+        scope: Option<&TargetScope>,
     ) -> Self {
         let mut hasher = Sha256::new();
         hasher.update(kind.canonical_label().as_bytes());
@@ -187,14 +264,36 @@ fn hex_encode(bytes: &[u8]) -> String {
     out
 }
 
-impl core::fmt::Display for RadrootsTransportTargetFingerprint {
+impl core::fmt::Display for TargetFingerprint {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
+impl AsRef<str> for TargetFingerprint {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl FromStr for TargetFingerprint {
+    type Err = RadrootsTransportError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<&str> for TargetFingerprint {
+    type Error = RadrootsTransportError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetFingerprint {
+impl<'de> serde::Deserialize<'de> for TargetFingerprint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -212,15 +311,16 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetFingerprint {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTransportTarget {
+/// Validated transport-neutral target.
+pub struct Target {
     kind: RadrootsTransportKind,
-    uri: RadrootsTransportTargetUri,
-    scope: Option<RadrootsTransportMeshScopeId>,
-    label: Option<RadrootsTransportTargetLabel>,
-    fingerprint: RadrootsTransportTargetFingerprint,
+    uri: EndpointUri,
+    scope: Option<TargetScope>,
+    label: Option<TargetLabel>,
+    fingerprint: TargetFingerprint,
 }
 
-impl RadrootsTransportTarget {
+impl Target {
     pub fn new(
         kind: RadrootsTransportKind,
         uri: impl AsRef<str>,
@@ -234,8 +334,8 @@ impl RadrootsTransportTarget {
 
     pub fn nostr_relay_with_metadata(
         uri: impl AsRef<str>,
-        scope: Option<RadrootsTransportMeshScopeId>,
-        label: Option<RadrootsTransportTargetLabel>,
+        scope: Option<TargetScope>,
+        label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         Self::new_with_metadata(RadrootsTransportKind::Nostr, uri, scope, label)
     }
@@ -246,8 +346,8 @@ impl RadrootsTransportTarget {
 
     pub fn reticulum_with_metadata(
         uri: impl AsRef<str>,
-        scope: Option<RadrootsTransportMeshScopeId>,
-        label: Option<RadrootsTransportTargetLabel>,
+        scope: Option<TargetScope>,
+        label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         Self::new_with_metadata(RadrootsTransportKind::Reticulum, uri, scope, label)
     }
@@ -258,8 +358,8 @@ impl RadrootsTransportTarget {
 
     pub fn local_with_metadata(
         uri: impl AsRef<str>,
-        scope: Option<RadrootsTransportMeshScopeId>,
-        label: Option<RadrootsTransportTargetLabel>,
+        scope: Option<TargetScope>,
+        label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         Self::new_with_metadata(RadrootsTransportKind::Local, uri, scope, label)
     }
@@ -267,20 +367,19 @@ impl RadrootsTransportTarget {
     pub fn new_with_metadata(
         kind: RadrootsTransportKind,
         uri: impl AsRef<str>,
-        scope: Option<RadrootsTransportMeshScopeId>,
-        label: Option<RadrootsTransportTargetLabel>,
+        scope: Option<TargetScope>,
+        label: Option<TargetLabel>,
     ) -> Result<Self, RadrootsTransportError> {
         let raw_uri = uri.as_ref();
         let uri = match kind {
-            RadrootsTransportKind::Nostr => RadrootsTransportTargetUri::parse_nostr_relay(raw_uri)?,
-            _ => RadrootsTransportTargetUri::parse(raw_uri)?,
+            RadrootsTransportKind::Nostr => EndpointUri::parse_nostr_relay(raw_uri)?,
+            _ => EndpointUri::parse(raw_uri)?,
         };
         if kind == RadrootsTransportKind::Reticulum && raw_uri != RADROOTS_RETICULUM_ENDPOINT_URI {
             return Err(RadrootsTransportError::InvalidTargetUri);
         }
         let scope = scope.or_else(|| default_scope_for_kind(&kind));
-        let fingerprint =
-            RadrootsTransportTargetFingerprint::from_target(&kind, &uri, scope.as_ref());
+        let fingerprint = TargetFingerprint::from_target(&kind, &uri, scope.as_ref());
         Ok(Self {
             kind,
             uri,
@@ -294,19 +393,19 @@ impl RadrootsTransportTarget {
         &self.kind
     }
 
-    pub fn uri(&self) -> &RadrootsTransportTargetUri {
+    pub fn uri(&self) -> &EndpointUri {
         &self.uri
     }
 
-    pub fn scope(&self) -> Option<&RadrootsTransportMeshScopeId> {
+    pub fn scope(&self) -> Option<&TargetScope> {
         self.scope.as_ref()
     }
 
-    pub fn label(&self) -> Option<&RadrootsTransportTargetLabel> {
+    pub fn label(&self) -> Option<&TargetLabel> {
         self.label.as_ref()
     }
 
-    pub fn fingerprint(&self) -> &RadrootsTransportTargetFingerprint {
+    pub fn fingerprint(&self) -> &TargetFingerprint {
         &self.fingerprint
     }
 }
@@ -314,7 +413,7 @@ impl RadrootsTransportTarget {
 #[cfg(feature = "serde")]
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RadrootsTransportTargetWire {
+struct TargetWire {
     kind: RadrootsTransportKind,
     uri: String,
     scope: Option<String>,
@@ -323,21 +422,21 @@ struct RadrootsTransportTargetWire {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsTransportTarget {
+impl<'de> serde::Deserialize<'de> for Target {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let wire = RadrootsTransportTargetWire::deserialize(deserializer)?;
+        let wire = TargetWire::deserialize(deserializer)?;
         let scope = wire
             .scope
-            .map(RadrootsTransportMeshScopeId::parse)
+            .map(TargetScope::parse)
             .transpose()
             .map_err(serde::de::Error::custom)?;
         let label = wire
             .label
             .map(|label| {
-                let parsed = RadrootsTransportTargetLabel::parse(label.as_str())?;
+                let parsed = TargetLabel::parse(label.as_str())?;
                 if parsed.as_str() != label {
                     return Err(RadrootsTransportError::InvalidTargetLabel);
                 }
@@ -345,7 +444,7 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTarget {
             })
             .transpose()
             .map_err(serde::de::Error::custom)?;
-        let fingerprint = RadrootsTransportTargetFingerprint::parse(wire.fingerprint.as_str())
+        let fingerprint = TargetFingerprint::parse(wire.fingerprint.as_str())
             .map_err(serde::de::Error::custom)?;
         if fingerprint.as_str() != wire.fingerprint {
             return Err(serde::de::Error::custom(
@@ -368,20 +467,24 @@ impl<'de> serde::Deserialize<'de> for RadrootsTransportTarget {
     }
 }
 
-fn default_scope_for_kind(kind: &RadrootsTransportKind) -> Option<RadrootsTransportMeshScopeId> {
-    (*kind == RadrootsTransportKind::Reticulum).then(RadrootsTransportMeshScopeId::local_reticulum)
+fn default_scope_for_kind(kind: &RadrootsTransportKind) -> Option<TargetScope> {
+    (*kind == RadrootsTransportKind::Reticulum).then(TargetScope::local_reticulum)
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RadrootsTransportTargetSet {
-    targets: Vec<RadrootsTransportTarget>,
+/// Bounded non-empty set of targets with unique fingerprints.
+pub struct TargetSet {
+    targets: Vec<Target>,
 }
 
-impl RadrootsTransportTargetSet {
-    pub fn new(targets: Vec<RadrootsTransportTarget>) -> Result<Self, RadrootsTransportError> {
+impl TargetSet {
+    pub fn new(targets: Vec<Target>) -> Result<Self, RadrootsTransportError> {
         if targets.is_empty() {
             return Err(RadrootsTransportError::EmptyTargetSet);
+        }
+        if targets.len() > TARGET_SET_MAX_ITEMS {
+            return Err(RadrootsTransportError::TargetSetTooLarge);
         }
         let mut fingerprints = BTreeSet::new();
         for target in &targets {
@@ -392,7 +495,7 @@ impl RadrootsTransportTargetSet {
         Ok(Self { targets })
     }
 
-    pub fn targets(&self) -> &[RadrootsTransportTarget] {
+    pub fn targets(&self) -> &[Target] {
         &self.targets
     }
 
@@ -408,17 +511,17 @@ impl RadrootsTransportTargetSet {
 #[cfg(feature = "serde")]
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RadrootsTransportTargetSetWire {
-    targets: Vec<RadrootsTransportTarget>,
+struct TargetSetWire {
+    targets: Vec<Target>,
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for RadrootsTransportTargetSet {
+impl<'de> serde::Deserialize<'de> for TargetSet {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let wire = RadrootsTransportTargetSetWire::deserialize(deserializer)?;
+        let wire = TargetSetWire::deserialize(deserializer)?;
         Self::new(wire.targets).map_err(serde::de::Error::custom)
     }
 }
@@ -429,6 +532,9 @@ fn canonicalize_uri(raw: &str) -> Result<String, RadrootsTransportError> {
         return Err(RadrootsTransportError::EmptyTargetUri);
     }
     if raw != trimmed {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    if trimmed.len() > ENDPOINT_URI_MAX_BYTES {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
     if trimmed
@@ -473,6 +579,9 @@ fn canonicalize_nostr_relay_uri(raw: &str) -> Result<String, RadrootsTransportEr
         return Err(RadrootsTransportError::EmptyTargetUri);
     }
     if raw != trimmed {
+        return Err(RadrootsTransportError::InvalidTargetUri);
+    }
+    if trimmed.len() > ENDPOINT_URI_MAX_BYTES {
         return Err(RadrootsTransportError::InvalidTargetUri);
     }
     if trimmed
@@ -736,3 +845,27 @@ fn upper_hex_digit(byte: u8) -> bool {
 fn is_local_ws_relay_host(host: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "[::1]")
 }
+
+/// Compatibility endpoint URI name retained until the workspace cutover.
+#[doc(hidden)]
+pub type RadrootsTransportTargetUri = EndpointUri;
+
+/// Compatibility target scope name retained until the workspace cutover.
+#[doc(hidden)]
+pub type RadrootsTransportMeshScopeId = TargetScope;
+
+/// Compatibility target label name retained until the workspace cutover.
+#[doc(hidden)]
+pub type RadrootsTransportTargetLabel = TargetLabel;
+
+/// Compatibility target fingerprint name retained until the workspace cutover.
+#[doc(hidden)]
+pub type RadrootsTransportTargetFingerprint = TargetFingerprint;
+
+/// Compatibility target name retained until the workspace cutover.
+#[doc(hidden)]
+pub type RadrootsTransportTarget = Target;
+
+/// Compatibility target-set name retained until the workspace cutover.
+#[doc(hidden)]
+pub type RadrootsTransportTargetSet = TargetSet;

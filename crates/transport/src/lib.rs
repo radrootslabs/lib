@@ -52,6 +52,7 @@ pub use status::{
 pub use target::{
     RadrootsTransportMeshScopeId, RadrootsTransportTarget, RadrootsTransportTargetFingerprint,
     RadrootsTransportTargetLabel, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
+    TARGET_SET_MAX_ITEMS, Target, TargetSet,
 };
 pub use transport::{
     RadrootsTransport, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest,

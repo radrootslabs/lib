@@ -644,6 +644,10 @@ fn transport_errors_have_stable_display_strings() {
             "transport target set is empty",
         ),
         (
+            RadrootsTransportError::TargetSetTooLarge,
+            "transport target set exceeds its item limit",
+        ),
+        (
             RadrootsTransportError::DuplicateTargetFingerprint,
             "transport target set contains duplicate fingerprints",
         ),

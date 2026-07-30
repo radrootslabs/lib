@@ -787,6 +787,7 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         RadrootsTransportError::EmptyTargetUri
         | RadrootsTransportError::InvalidTargetUri
         | RadrootsTransportError::EmptyTargetSet
+        | RadrootsTransportError::TargetSetTooLarge
         | RadrootsTransportError::DuplicateTargetFingerprint
         | RadrootsTransportError::InvalidTargetFingerprint
         | RadrootsTransportError::UnexpectedDeliveryTargetReceipt
