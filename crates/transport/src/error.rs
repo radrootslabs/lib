@@ -1,5 +1,8 @@
 use core::fmt;
 
+/// Transport contract failure.
+pub type Error = RadrootsTransportError;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RadrootsTransportError {
     UnsupportedOperation,

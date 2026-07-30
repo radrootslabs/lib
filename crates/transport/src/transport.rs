@@ -12,6 +12,8 @@ use core::pin::Pin;
 pub type RadrootsTransportFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, RadrootsTransportError>> + Send + 'a>>;
 
+/// Compatibility contract retained until the planned workspace consumer cutover.
+#[doc(hidden)]
 pub trait RadrootsTransport: Send + Sync {
     fn transport_kind(&self) -> RadrootsTransportKind;
 

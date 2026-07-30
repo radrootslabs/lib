@@ -8,6 +8,9 @@ use radroots_transport::{
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
+const SOURCE: &str = include_str!("../src/source.rs");
+const SINK: &str = include_str!("../src/sink.rs");
+const LEGACY_TRANSPORT: &str = include_str!("../src/transport.rs");
 
 #[test]
 fn manifest_has_final_identity_features_and_required_radroots_dependencies() {
@@ -56,6 +59,36 @@ fn crate_root_declares_the_approved_public_module_skeleton() {
             "target",
         ])
     );
+}
+
+#[test]
+fn source_and_sink_are_independent_dyn_compatible_host_spis() {
+    for required in [
+        "pub trait EventSource: Send + Sync",
+        "fn status(&self)",
+        "fn fetch(",
+        "Dropping a returned future requests cancellation.",
+        "explicit request deadline",
+    ] {
+        assert!(
+            SOURCE.contains(required),
+            "source SPI is missing {required}"
+        );
+    }
+    assert!(!SOURCE.contains("fn deliver("));
+
+    for required in [
+        "pub trait EventSink: Send + Sync",
+        "fn status(&self)",
+        "fn deliver(",
+        "Dropping a returned future requests cancellation.",
+        "explicit request deadline",
+    ] {
+        assert!(SINK.contains(required), "sink SPI is missing {required}");
+    }
+    assert!(!SINK.contains("fn fetch("));
+
+    assert!(LEGACY_TRANSPORT.contains("#[doc(hidden)]\npub trait RadrootsTransport: Send + Sync"));
 }
 
 fn table_keys<'a>(source: &'a str, heading: &str) -> BTreeSet<&'a str> {

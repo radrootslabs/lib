@@ -26,7 +26,7 @@ pub use delivery::{
     RadrootsTransportDeliveryRequest, RadrootsTransportSatisfactionClass,
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetReceipt,
 };
-pub use error::RadrootsTransportError;
+pub use error::{Error, RadrootsTransportError};
 pub use id::{RadrootsTransportKind, TRANSPORT_ID_MAX_BYTES, TransportId};
 pub use kind::{
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
@@ -43,6 +43,8 @@ pub use reticulum::{
     ReticulumGatewaySemanticsV1, ReticulumPayloadPolicyV1, ReticulumPrivacySemanticsV1,
     ReticulumRoutingMetadataV1,
 };
+pub use sink::{DeliveryReceipt, DeliveryRequest, EventSink, SinkStatus};
+pub use source::{BoxFuture, EventSource, FetchPage, FetchRequest, SourceStatus};
 pub use status::{
     RadrootsTransportCapabilities, RadrootsTransportDeliveryTargetStatus, RadrootsTransportOutcome,
     RadrootsTransportOutcomeKind, RadrootsTransportStatus,
