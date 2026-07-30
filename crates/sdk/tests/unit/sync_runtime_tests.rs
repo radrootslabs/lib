@@ -51,10 +51,8 @@ use radroots_signing::{
     Actor, Error as SigningError, SignReceipt, SignRequest, Signer, SignerStatus,
     actor::ActorSource, error::Kind as SigningErrorKind, signer::BoxFuture as SigningFuture,
 };
-use radroots_transport::{
-    RadrootsTransportDeliveryTargetStatus, RadrootsTransportMeshScopeId, RadrootsTransportTarget,
-    RadrootsTransportTargetLabel,
-};
+use radroots_transport::target::{TargetLabel, TargetScope};
+use radroots_transport::{RadrootsTransportDeliveryTargetStatus, Target, TransportId};
 #[cfg(feature = "radrootsd-execution")]
 use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
 use radroots_transport_nostr::{
@@ -233,7 +231,7 @@ async fn claimed_uningested_radrootsd_event_with_satisfaction(
         .expect("sdk");
     let draft = radrootsd_frozen_draft(d_tag);
     let radrootsd_target =
-        RadrootsTransportTarget::nostr_relay("wss://relay.example.com").expect("Nostr target");
+        Target::new(TransportId::NOSTR, "wss://relay.example.com").expect("Nostr target");
     let enqueue = sdk
         ._outbox
         .enqueue_operation(
@@ -313,12 +311,12 @@ fn assert_no_transport_publish_request(listener: &TcpListener) {
 fn delivery_target_record(
     delivery_target_id: i64,
     delivery_plan_id: i64,
-    target: &RadrootsTransportTarget,
+    target: &Target,
 ) -> RadrootsOutboxDeliveryTargetRecord {
     RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id,
         delivery_plan_id,
-        transport_kind: target.kind().clone(),
+        transport_kind: *target.kind(),
         endpoint_uri: target.uri().clone(),
         target_scope: target.scope().cloned(),
         target_label: target.label().cloned(),
@@ -869,12 +867,12 @@ async fn radrootsd_push_empty_queue_and_private_helpers_are_deterministic() {
         .expect("any-target radrootsd policy"),
         TransportPublishDeliveryPolicy::Any
     );
-    let first_required = RadrootsTransportTarget::nostr_relay("wss://required-a.example.com")
+    let first_required = Target::new(TransportId::NOSTR, "wss://required-a.example.com")
         .expect("first required target");
-    let second_required = RadrootsTransportTarget::nostr_relay("wss://required-b.example.com")
+    let second_required = Target::new(TransportId::NOSTR, "wss://required-b.example.com")
         .expect("second required target");
-    let optional = RadrootsTransportTarget::nostr_relay("wss://optional.example.com")
-        .expect("optional target");
+    let optional =
+        Target::new(TransportId::NOSTR, "wss://optional.example.com").expect("optional target");
     let policy = RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
         vec![
@@ -1011,11 +1009,11 @@ async fn radrootsd_delivery_policy_rejects_non_accepted_satisfaction_before_daem
 #[cfg(feature = "radrootsd-execution")]
 #[test]
 fn radrootsd_outbox_target_conversion_rejects_reticulum_targets_before_behavior_loss() {
-    let target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
+    let target = Target::reticulum().expect("Reticulum target");
     let record = RadrootsOutboxDeliveryTargetRecord {
         delivery_target_id: 1,
         delivery_plan_id: 1,
-        transport_kind: target.kind().clone(),
+        transport_kind: *target.kind(),
         endpoint_uri: target.uri().clone(),
         target_scope: target.scope().cloned(),
         target_label: target.label().cloned(),
@@ -1043,10 +1041,11 @@ fn radrootsd_outbox_target_conversion_rejects_reticulum_targets_before_behavior_
 #[cfg(feature = "radrootsd-execution")]
 #[test]
 fn radrootsd_outbox_target_conversion_preserves_nostr_scope_and_label() {
-    let target = RadrootsTransportTarget::nostr_relay_with_metadata(
+    let target = Target::new_with_metadata(
+        TransportId::NOSTR,
         "wss://relay.example.com",
-        Some(RadrootsTransportMeshScopeId::parse("farm.local").expect("scope")),
-        Some(RadrootsTransportTargetLabel::parse("Farm relay").expect("label")),
+        Some(TargetScope::parse("farm.local").expect("scope")),
+        Some(TargetLabel::parse("Farm relay").expect("label")),
     )
     .expect("scoped Nostr target");
     let record = delivery_target_record(1, 1, &target);
@@ -1191,8 +1190,8 @@ async fn radrootsd_local_validation_errors_release_claim_before_daemon_publish()
         .expect("stored before");
     assert!(!stored_before.event_store_ingested);
     assert_eq!(stored_before.event_store_ingested_at_ms, None);
-    let reticulum_target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    claimed.delivery_targets[0].transport_kind = reticulum_target.kind().clone();
+    let reticulum_target = Target::reticulum().expect("Reticulum target");
+    claimed.delivery_targets[0].transport_kind = *reticulum_target.kind();
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri().clone();
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint().clone();
     let sync = sdk.sync();
@@ -1259,7 +1258,7 @@ async fn radrootsd_local_validation_failure_keeps_sibling_plan_ready_and_claimab
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![
-                        RadrootsTransportTarget::nostr_relay("wss://active.example.com")
+                        Target::new(TransportId::NOSTR, "wss://active.example.com")
                             .expect("active target"),
                     ],
                 ),
@@ -1283,7 +1282,7 @@ async fn radrootsd_local_validation_failure_keeps_sibling_plan_ready_and_claimab
                     1,
                     RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![
-                        RadrootsTransportTarget::nostr_relay("wss://sibling.example.com")
+                        Target::new(TransportId::NOSTR, "wss://sibling.example.com")
                             .expect("sibling target"),
                     ],
                 ),
@@ -1321,8 +1320,8 @@ async fn radrootsd_local_validation_failure_keeps_sibling_plan_ready_and_claimab
         .expect("stored before");
     let ingested_before = stored_before.event_store_ingested;
     let ingested_at_before = stored_before.event_store_ingested_at_ms;
-    let reticulum_target = RadrootsTransportTarget::reticulum().expect("Reticulum target");
-    claimed.delivery_targets[0].transport_kind = reticulum_target.kind().clone();
+    let reticulum_target = Target::reticulum().expect("Reticulum target");
+    claimed.delivery_targets[0].transport_kind = *reticulum_target.kind();
     claimed.delivery_targets[0].endpoint_uri = reticulum_target.uri().clone();
     claimed.delivery_targets[0].endpoint_fingerprint = reticulum_target.fingerprint().clone();
     let sync = sdk.sync();
@@ -1526,16 +1525,18 @@ async fn radrootsd_completion_matches_duplicate_endpoint_targets_by_scope() {
     let signed_event = RadrootsdFixtureSigner::new()
         .sign_frozen_draft(&draft)
         .expect("signed event");
-    let farm_a = RadrootsTransportTarget::nostr_relay_with_metadata(
+    let farm_a = Target::new_with_metadata(
+        TransportId::NOSTR,
         "wss://relay.example.com",
-        Some(RadrootsTransportMeshScopeId::parse("farm.a").expect("farm a scope")),
-        Some(RadrootsTransportTargetLabel::parse("Farm A").expect("farm a label")),
+        Some(TargetScope::parse("farm.a").expect("farm a scope")),
+        Some(TargetLabel::parse("Farm A").expect("farm a label")),
     )
     .expect("farm a target");
-    let farm_b = RadrootsTransportTarget::nostr_relay_with_metadata(
+    let farm_b = Target::new_with_metadata(
+        TransportId::NOSTR,
         "wss://relay.example.com",
-        Some(RadrootsTransportMeshScopeId::parse("farm.b").expect("farm b scope")),
-        Some(RadrootsTransportTargetLabel::parse("Farm B").expect("farm b label")),
+        Some(TargetScope::parse("farm.b").expect("farm b scope")),
+        Some(TargetLabel::parse("Farm B").expect("farm b label")),
     )
     .expect("farm b target");
     let enqueue = sdk
@@ -1736,10 +1737,11 @@ impl OutboxPublishReceiptFixture for RadrootsOutboxPublishReceipt {
             .push(RadrootsOutboxPublishTargetReceipt {
                 delivery_target_id: 10,
                 endpoint_uri: "wss://relay.example.com".to_owned(),
-                endpoint_fingerprint: RadrootsTransportTarget::nostr_relay_with_metadata(
+                endpoint_fingerprint: Target::new_with_metadata(
+                    TransportId::NOSTR,
                     "wss://relay.example.com",
-                    Some(RadrootsTransportMeshScopeId::parse("farm.local").expect("scope")),
-                    Some(RadrootsTransportTargetLabel::parse("Farm relay").expect("label")),
+                    Some(TargetScope::parse("farm.local").expect("scope")),
+                    Some(TargetLabel::parse("Farm relay").expect("label")),
                 )
                 .expect("target")
                 .fingerprint()

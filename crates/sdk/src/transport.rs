@@ -1,18 +1,22 @@
 use crate::RadrootsSdkError;
+use radroots_transport::target::{TargetFingerprint, TargetScope, TargetSet as TransportTargetSet};
 use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportImplementationState, RadrootsTransportMeshScopeId,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetFingerprint, RadrootsTransportTargetSet,
+    RadrootsTransportImplementationState, RadrootsTransportSatisfactionPolicy,
+    RadrootsTransportStatus, Target,
 };
 use radroots_transport_nostr::{RadrootsRelayUrlPolicy, RelayUrl};
+use radroots_transport_reticulum::{
+    RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,
+    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE,
+};
 use serde::ser::{SerializeStruct, Serializer};
 use std::collections::BTreeSet;
 
 pub use radroots_transport::{
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus, RadrootsTransportKind,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
     RadrootsTransportOutcome, RadrootsTransportSatisfactionClass, RadrootsTransportTargetReceipt,
+    TransportId,
 };
 
 pub const SDK_TRANSPORT_TARGET_MAX_COUNT: usize = 20;
@@ -43,10 +47,10 @@ pub enum SatisfactionPolicy {
         threshold: u16,
     },
     RequiredAcceptedTargets {
-        target_fingerprints: Vec<RadrootsTransportTargetFingerprint>,
+        target_fingerprints: Vec<TargetFingerprint>,
     },
     RequiredDeliveredTargets {
-        target_fingerprints: Vec<RadrootsTransportTargetFingerprint>,
+        target_fingerprints: Vec<TargetFingerprint>,
     },
 }
 
@@ -127,14 +131,14 @@ fn validate_satisfaction_threshold(threshold: u16) -> Result<(), RadrootsSdkErro
 
 fn required_target_fingerprints<I, S>(
     targets: I,
-) -> Result<Vec<RadrootsTransportTargetFingerprint>, RadrootsSdkError>
+) -> Result<Vec<TargetFingerprint>, RadrootsSdkError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
     let fingerprints = targets
         .into_iter()
-        .map(|target| RadrootsTransportTargetFingerprint::parse(target.as_ref()))
+        .map(|target| TargetFingerprint::parse(target.as_ref()))
         .collect::<Result<Vec<_>, _>>()?;
     RadrootsTransportSatisfactionPolicy::required_targets(
         RadrootsTransportSatisfactionClass::Accepted,
@@ -233,29 +237,29 @@ impl serde::Serialize for TargetPolicy {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(transparent)]
-pub struct MeshScopeId(RadrootsTransportMeshScopeId);
+pub struct MeshScopeId(TargetScope);
 
 impl MeshScopeId {
     pub fn parse(raw: impl AsRef<str>) -> Result<Self, RadrootsSdkError> {
-        Ok(Self(RadrootsTransportMeshScopeId::parse(raw)?))
+        Ok(Self(TargetScope::parse(raw)?))
     }
 
     pub fn local_reticulum() -> Self {
-        Self(RadrootsTransportMeshScopeId::local_reticulum())
+        Self(TargetScope::parse(RADROOTS_RETICULUM_SCOPE_ID).expect("Reticulum scope"))
     }
 
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 
-    pub(crate) fn transport_scope(&self) -> RadrootsTransportMeshScopeId {
+    pub(crate) fn transport_scope(&self) -> TargetScope {
         self.0.clone()
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TargetSet {
-    targets: Vec<RadrootsTransportTarget>,
+    targets: Vec<Target>,
     canonical_targets: Vec<String>,
 }
 
@@ -271,18 +275,16 @@ impl TargetSet {
         let mut targets = Vec::new();
         for relay in relays {
             let normalized = normalized_nostr_relay_url(relay.as_ref(), policy)?;
-            targets.push(RadrootsTransportTarget::nostr_relay(normalized)?);
+            targets.push(Target::new(TransportId::NOSTR, normalized)?);
         }
         Self::from_transport_targets(targets)
     }
 
-    pub fn transport_targets(
-        targets: Vec<RadrootsTransportTarget>,
-    ) -> Result<Self, RadrootsSdkError> {
+    pub fn transport_targets(targets: Vec<Target>) -> Result<Self, RadrootsSdkError> {
         Self::from_transport_targets(targets)
     }
 
-    pub fn targets(&self) -> &[RadrootsTransportTarget] {
+    pub fn targets(&self) -> &[Target] {
         self.targets.as_slice()
     }
 
@@ -290,19 +292,19 @@ impl TargetSet {
         self.canonical_targets.as_slice()
     }
 
-    pub fn transport_target_set(&self) -> Result<RadrootsTransportTargetSet, RadrootsSdkError> {
-        Ok(RadrootsTransportTargetSet::new(self.targets.clone())?)
+    pub fn transport_target_set(&self) -> Result<TransportTargetSet, RadrootsSdkError> {
+        Ok(TransportTargetSet::new(self.targets.clone())?)
     }
 
     pub fn nostr_relay_urls(&self) -> Vec<String> {
         self.targets
             .iter()
-            .filter(|target| target.kind() == &RadrootsTransportKind::Nostr)
+            .filter(|target| target.kind() == &TransportId::NOSTR)
             .map(|target| target.uri().as_str().to_owned())
             .collect()
     }
 
-    pub fn into_targets(self) -> Vec<RadrootsTransportTarget> {
+    pub fn into_targets(self) -> Vec<Target> {
         self.targets
     }
 
@@ -314,9 +316,7 @@ impl TargetSet {
         self.targets.is_empty()
     }
 
-    fn from_transport_targets(
-        targets: Vec<RadrootsTransportTarget>,
-    ) -> Result<Self, RadrootsSdkError> {
+    fn from_transport_targets(targets: Vec<Target>) -> Result<Self, RadrootsSdkError> {
         if targets.is_empty() {
             return Err(RadrootsSdkError::empty_transport_targets(
                 "sdk transport target set",
@@ -329,7 +329,7 @@ impl TargetSet {
             ));
         }
         for target in &targets {
-            if target.kind() == &RadrootsTransportKind::Reticulum
+            if target.kind() == &TransportId::RETICULUM
                 && target.uri().as_str() != RADROOTS_RETICULUM_ENDPOINT_URI
             {
                 return Err(RadrootsSdkError::InvalidRequest {
@@ -339,7 +339,7 @@ impl TargetSet {
                 });
             }
         }
-        RadrootsTransportTargetSet::new(targets.clone())?;
+        TransportTargetSet::new(targets.clone())?;
         let canonical_targets = targets
             .iter()
             .map(|target| target.fingerprint().to_string())
@@ -440,10 +440,11 @@ impl ReticulumProfile {
     }
 
     pub fn target_set(&self) -> Result<TargetSet, RadrootsSdkError> {
-        if self.endpoint_uri.as_str() != radroots_transport::RADROOTS_RETICULUM_ENDPOINT_URI {
+        if self.endpoint_uri.as_str() != RADROOTS_RETICULUM_ENDPOINT_URI {
             return Err(radroots_transport::RadrootsTransportError::InvalidTargetUri.into());
         }
-        TargetSet::transport_targets(vec![RadrootsTransportTarget::reticulum_with_metadata(
+        TargetSet::transport_targets(vec![Target::new_with_metadata(
+            TransportId::RETICULUM,
             self.endpoint_uri.as_str(),
             Some(self.scope.transport_scope()),
             None,
@@ -639,9 +640,7 @@ impl TransportProfile {
         }
     }
 
-    pub(crate) fn configured_transport_targets(
-        &self,
-    ) -> Result<Vec<RadrootsTransportTarget>, RadrootsSdkError> {
+    pub(crate) fn configured_transport_targets(&self) -> Result<Vec<Target>, RadrootsSdkError> {
         Ok(self
             .target_set()?
             .map(TargetSet::into_targets)
@@ -652,7 +651,7 @@ impl TransportProfile {
         match self {
             Self::LocalOnly => vec![
                 RadrootsTransportStatus::new(
-                    RadrootsTransportKind::Local,
+                    TransportId::LOCAL,
                     true,
                     RadrootsTransportImplementationState::Real,
                     false,
@@ -688,7 +687,7 @@ impl TransportProfile {
 
 fn nostr_transport_status(profile_id: &str) -> RadrootsTransportStatus {
     RadrootsTransportStatus::new(
-        RadrootsTransportKind::Nostr,
+        TransportId::NOSTR,
         true,
         RadrootsTransportImplementationState::Real,
         true,
@@ -699,7 +698,7 @@ fn nostr_transport_status(profile_id: &str) -> RadrootsTransportStatus {
 
 fn reticulum_transport_status(profile_id: &str, endpoint_uri: &str) -> RadrootsTransportStatus {
     RadrootsTransportStatus::new(
-        RadrootsTransportKind::Reticulum,
+        TransportId::RETICULUM,
         true,
         RadrootsTransportImplementationState::Real,
         false,
@@ -724,7 +723,7 @@ impl From<RadrootsTransportDeliveryReceipt> for TransportReceipt {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct TransportReceipt {
     request_id: String,
-    target_set: RadrootsTransportTargetSet,
+    target_set: TransportTargetSet,
     target_receipts: Vec<RadrootsTransportTargetReceipt>,
 }
 
@@ -733,7 +732,7 @@ impl TransportReceipt {
         self.request_id.as_str()
     }
 
-    pub fn target_set(&self) -> &RadrootsTransportTargetSet {
+    pub fn target_set(&self) -> &TransportTargetSet {
         &self.target_set
     }
 

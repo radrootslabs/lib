@@ -34,13 +34,12 @@ use radroots_protocol::radrootsd::transport_publish::v5::{
 #[cfg(feature = "runtime")]
 use radroots_trade::reducer::{RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION};
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
-use radroots_transport::RadrootsTransportTargetFingerprint;
+use radroots_transport::target::TargetFingerprint;
 #[cfg(feature = "runtime")]
 use radroots_transport::{
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportCapabilityAvailability,
-    RadrootsTransportCapabilityMaturity, RadrootsTransportImplementationState,
-    RadrootsTransportKind, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
-    RadrootsTransportTarget,
+    RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
+    RadrootsTransportImplementationState, RadrootsTransportOutcomeKind, RadrootsTransportStatus,
+    Target, TransportId,
 };
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport::{RadrootsTransportSatisfactionClass, RadrootsTransportSatisfactionPolicy};
@@ -51,6 +50,7 @@ use radroots_transport_nostr::{
     RadrootsOutboxPublishPolicy, RadrootsOutboxPublishReceipt, RadrootsOutboxPublishTargetReceipt,
     RadrootsRelayOutcomeKind, publish_claimed_outbox_event_with_transport,
 };
+use radroots_transport_reticulum::RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE;
 #[cfg(feature = "runtime")]
 use sha2::{Digest, Sha256};
 
@@ -214,7 +214,7 @@ pub struct SyncTransportTargetSummary {
 
 #[cfg(feature = "runtime")]
 impl SyncTransportTargetSummary {
-    fn from_transport_target(target: &RadrootsTransportTarget) -> Self {
+    fn from_transport_target(target: &Target) -> Self {
         Self {
             transport_kind: target.kind().canonical_label(),
             endpoint_uri: target.uri().as_str().to_owned(),
@@ -279,6 +279,7 @@ fn transport_implementation_label(state: RadrootsTransportImplementationState) -
 #[cfg(feature = "runtime")]
 fn transport_maturity_label(maturity: RadrootsTransportCapabilityMaturity) -> &'static str {
     match maturity {
+        RadrootsTransportCapabilityMaturity::Experimental => "experimental",
         RadrootsTransportCapabilityMaturity::Preview => "preview",
         RadrootsTransportCapabilityMaturity::Stable => "stable",
     }
@@ -816,7 +817,7 @@ impl<'sdk> SyncClient<'sdk> {
         request: PushOutboxRequest,
     ) -> Result<PushOutboxReceipt, RadrootsSdkError>
     where
-        T: radroots_transport::RadrootsTransport + ?Sized,
+        T: radroots_transport::EventSink + ?Sized,
     {
         request.validate()?;
         let recovery_now_ms = sdk_now_ms(self.sdk)?;
@@ -1313,7 +1314,7 @@ async fn radrootsd_delivery_policy(
 fn radrootsd_delivery_policy_from_remaining(
     ready_target_count: usize,
     required_remaining: usize,
-    required_remaining_targets: Option<&[RadrootsTransportTargetFingerprint]>,
+    required_remaining_targets: Option<&[TargetFingerprint]>,
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
 ) -> Result<TransportPublishDeliveryPolicy, RadrootsSdkError> {
     reject_non_accepted_radrootsd_satisfaction(satisfaction_policy)?;
@@ -1373,7 +1374,7 @@ fn radrootsd_delivery_policy_from_remaining(
 fn radrootsd_required_remaining_targets(
     satisfaction_policy: &RadrootsTransportSatisfactionPolicy,
     active_targets: &[&RadrootsOutboxDeliveryTargetRecord],
-) -> Result<Option<Vec<RadrootsTransportTargetFingerprint>>, RadrootsSdkError> {
+) -> Result<Option<Vec<TargetFingerprint>>, RadrootsSdkError> {
     let RadrootsTransportSatisfactionPolicy::RequiredTargets { class, targets } =
         satisfaction_policy
     else {
@@ -1535,7 +1536,7 @@ fn radrootsd_transport_publish_target_policy(
 fn transport_publish_target_from_outbox_target(
     target: &RadrootsOutboxDeliveryTargetRecord,
 ) -> Result<TransportPublishTarget, RadrootsSdkError> {
-    if target.transport_kind != RadrootsTransportKind::Nostr {
+    if target.transport_kind != TransportId::NOSTR {
         return Err(RadrootsSdkError::InvalidRequest {
             message: format!(
                 "radrootsd execution explicit targets are Nostr-only and cannot publish {} target {}",
@@ -1930,7 +1931,7 @@ fn push_receipt_event_id(value: &str, field: &str) -> Result<EventId, RadrootsSd
 #[cfg(feature = "runtime")]
 fn push_target_receipt(target: RadrootsOutboxPublishTargetReceipt) -> PushOutboxTargetReceipt {
     PushOutboxTargetReceipt {
-        transport_kind: RadrootsTransportKind::Nostr.canonical_label(),
+        transport_kind: TransportId::NOSTR.canonical_label(),
         endpoint_uri: target.endpoint_uri,
         target_scope: target.target_scope,
         target_label: target.target_label,

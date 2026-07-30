@@ -23,9 +23,8 @@ use radroots_signing::{
     Actor, SignRequest, Signer,
     request::{CancellationPolicy, SignPolicy},
 };
-use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportKind, RadrootsTransportTarget,
-};
+use radroots_transport::{Target, TransportId};
+use radroots_transport_reticulum::RADROOTS_RETICULUM_ENDPOINT_URI;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 
@@ -221,7 +220,7 @@ async fn enqueue_signed_workflow_event(
             })?;
     ensure_runtime_operation_can_commit(&mut tx, request, &idempotency_key).await?;
     let local_import_observation = RadrootsTransportObservation::new(
-        RadrootsTransportKind::Local,
+        TransportId::LOCAL,
         SDK_LOCAL_EVENT_ENDPOINT_URI,
         RadrootsTransportObservationType::LocalImport,
         observed_at_ms,
@@ -300,7 +299,7 @@ async fn enqueue_signed_trade_workflow_event(
             })?;
     ensure_runtime_operation_can_commit(&mut tx, request, &idempotency_key).await?;
     let local_import_observation = RadrootsTransportObservation::new(
-        RadrootsTransportKind::Local,
+        TransportId::LOCAL,
         SDK_LOCAL_EVENT_ENDPOINT_URI,
         RadrootsTransportObservationType::LocalImport,
         observed_at_ms,
@@ -411,13 +410,12 @@ fn resolved_delivery_plan(
             )
         }
         TargetPolicy::MeshScope(scope) => {
-            let target_set = TargetSet::transport_targets(vec![
-                RadrootsTransportTarget::reticulum_with_metadata(
-                    RADROOTS_RETICULUM_ENDPOINT_URI,
-                    Some(scope.transport_scope()),
-                    None,
-                )?,
-            ])?;
+            let target_set = TargetSet::transport_targets(vec![Target::new_with_metadata(
+                TransportId::RETICULUM,
+                RADROOTS_RETICULUM_ENDPOINT_URI,
+                Some(scope.transport_scope()),
+                None,
+            )?])?;
             delivery_plan_from_targets(
                 "mesh_scope",
                 target_set.into_targets(),
@@ -430,7 +428,7 @@ fn resolved_delivery_plan(
 
 fn delivery_plan_from_targets(
     transport_profile_id: impl Into<String>,
-    targets: Vec<RadrootsTransportTarget>,
+    targets: Vec<Target>,
     satisfaction_policy: &SatisfactionPolicy,
     reticulum_behavior: RadrootsOutboxReticulumBehavior,
 ) -> Result<SdkResolvedDeliveryPlan, RadrootsSdkError> {
@@ -446,11 +444,11 @@ fn delivery_plan_from_targets(
 
 fn reticulum_behavior_for_targets(
     transport_profile: &TransportProfile,
-    targets: &[RadrootsTransportTarget],
+    targets: &[Target],
 ) -> RadrootsOutboxReticulumBehavior {
     if targets
         .iter()
-        .any(|target| target.kind() == &RadrootsTransportKind::Reticulum)
+        .any(|target| target.kind() == &TransportId::RETICULUM)
     {
         outbox_reticulum_behavior(transport_profile)
     } else {

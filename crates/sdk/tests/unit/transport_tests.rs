@@ -4,10 +4,8 @@ use super::{
     TransportProfile,
 };
 use crate::{RadrootsSdkError, SDK_TRANSPORT_TARGET_MAX_COUNT};
-use radroots_transport::{
-    RADROOTS_RETICULUM_ENDPOINT_URI, RadrootsTransportError, RadrootsTransportKind,
-    RadrootsTransportTarget,
-};
+use radroots_transport::{RadrootsTransportError, Target, TransportId};
+use radroots_transport_reticulum::RADROOTS_RETICULUM_ENDPOINT_URI;
 
 use crate::serializer_failure::assert_struct_serialize_error_paths;
 
@@ -208,10 +206,10 @@ fn target_sets_reject_duplicate_transport_fingerprints() {
             if message == "transport target set contains duplicate fingerprints"
     ));
 
-    let first = RadrootsTransportTarget::nostr_relay("wss://relay-a.example.com/path")
-        .expect("first target");
-    let second = RadrootsTransportTarget::nostr_relay("WSS://RELAY-A.EXAMPLE.COM/path")
-        .expect("second target");
+    let first =
+        Target::new(TransportId::NOSTR, "wss://relay-a.example.com/path").expect("first target");
+    let second =
+        Target::new(TransportId::NOSTR, "WSS://RELAY-A.EXAMPLE.COM/path").expect("second target");
     let duplicate_targets =
         TargetSet::transport_targets(vec![first, second]).expect_err("duplicate targets");
 
@@ -306,7 +304,7 @@ fn explicit_target_sets_reject_noncanonical_reticulum_endpoints() {
         "reticulum:custom".to_owned(),
     ] {
         assert_eq!(
-            RadrootsTransportTarget::new(RadrootsTransportKind::Reticulum, invalid.as_str())
+            Target::new(TransportId::RETICULUM, invalid.as_str())
                 .expect_err("invalid Reticulum target"),
             RadrootsTransportError::InvalidTargetUri
         );

@@ -31,15 +31,14 @@ use radroots_sdk::{
     StorageStatusRequest, SyncStatusRequest, SyncStatusSource, TargetPolicy, TransportProfile,
 };
 use radroots_signing::{Actor, actor::ActorSource};
-use radroots_transport::{
-    RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE, RadrootsTransportMeshScopeId,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetLabel,
-};
+use radroots_transport::target::{TargetLabel, TargetScope};
+use radroots_transport::{RadrootsTransportSatisfactionPolicy, Target, TransportId};
 use radroots_transport_nostr::{
     RadrootsMockRelayPublishAdapter, RadrootsNostrTransport, RadrootsRelayOutcome,
     RadrootsRelayPublishAdapter, RadrootsRelayPublishRelayReceipt, RadrootsRelayPublishRequest,
     RadrootsRelayTransportError,
 };
+use radroots_transport_reticulum::RADROOTS_RETICULUM_UNAVAILABLE_MESSAGE;
 #[cfg(feature = "radrootsd-execution")]
 use std::io::{Read, Write};
 #[cfg(feature = "radrootsd-execution")]
@@ -602,11 +601,12 @@ fn scoped_duplicate_relay_delivery_plan(
     )
 }
 
-fn scoped_nostr_target(relay: &str, scope: &str, label: &str) -> RadrootsTransportTarget {
-    RadrootsTransportTarget::nostr_relay_with_metadata(
+fn scoped_nostr_target(relay: &str, scope: &str, label: &str) -> Target {
+    Target::new_with_metadata(
+        TransportId::NOSTR,
         relay,
-        Some(RadrootsTransportMeshScopeId::parse(scope).expect("target scope")),
-        Some(RadrootsTransportTargetLabel::parse(label).expect("target label")),
+        Some(TargetScope::parse(scope).expect("target scope")),
+        Some(TargetLabel::parse(label).expect("target label")),
     )
     .expect("scoped Nostr target")
 }
@@ -1746,7 +1746,7 @@ async fn product_push_outbox_uses_radrootsd_execution_transport_with_daemon_reso
     assert_eq!(pre_push_targets.len(), 1);
     assert_eq!(
         pre_push_targets[0].transport_kind,
-        radroots_sdk::RadrootsTransportKind::Nostr
+        radroots_sdk::TransportId::NOSTR
     );
     assert_eq!(
         pre_push_targets[0].status,
@@ -2753,7 +2753,7 @@ async fn push_outbox_with_transport_scopes_duplicate_endpoint_sibling_plans() {
                     1,
                     radroots_transport::RadrootsTransportSatisfactionPolicy::all_accepted(),
                     vec![
-                        radroots_transport::RadrootsTransportTarget::nostr_relay(RELAY_A)
+                        radroots_transport::Target::new(TransportId::NOSTR, RELAY_A)
                             .expect("second target"),
                     ],
                 ),

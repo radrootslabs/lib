@@ -113,6 +113,34 @@ fn active_sources_do_not_import_retired_listing_contracts() {
 }
 
 #[test]
+fn active_sources_use_canonical_transport_type_names() {
+    for path in active_source_files() {
+        let source = read_source(&path);
+        for retired in [
+            "RadrootsTransportKind",
+            "RadrootsTransportMeshScopeId",
+            "RadrootsTransportTarget",
+            "RadrootsTransportTargetFingerprint",
+            "RadrootsTransportTargetLabel",
+            "RadrootsTransportTargetSet",
+        ] {
+            let restores_identifier = source.match_indices(retired).any(|(index, _)| {
+                let before = source[..index].chars().next_back();
+                let after = source[index + retired.len()..].chars().next();
+                before.is_none_or(|character| !(character.is_alphanumeric() || character == '_'))
+                    && after
+                        .is_none_or(|character| !(character.is_alphanumeric() || character == '_'))
+            });
+            assert!(
+                !restores_identifier,
+                "{} must use the canonical transport type instead of `{retired}`",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn active_sources_do_not_describe_compatibility_paths() {
     for path in active_source_files() {
         let source = read_source(&path).to_lowercase();

@@ -10,7 +10,7 @@ use radroots_protocol::radrootsd::transport_publish::v5::{
     TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
     TargetSource as TransportPublishTargetSource,
 };
-use radroots_transport::RADROOTS_RETICULUM_ENDPOINT_URI;
+use radroots_transport_reticulum::RADROOTS_RETICULUM_ENDPOINT_URI;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread::JoinHandle;

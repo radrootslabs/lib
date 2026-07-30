@@ -193,9 +193,9 @@ pub use crate::trade_runtime::{
 #[cfg(feature = "runtime")]
 pub use crate::transport::{
     MeshScopeId, MultiTargetProfile, NostrProfile, NostrRelayUrlPolicy, PublishMode,
-    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus, RadrootsTransportKind,
+    RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryTargetStatus,
     RadrootsTransportOutcome, RadrootsTransportSatisfactionClass, RadrootsTransportTargetReceipt,
     RadrootsdExecutionAuth, RadrootsdExecutionProfile, ReticulumAgentEndpoint, ReticulumBehavior,
     ReticulumProfile, SDK_TRANSPORT_TARGET_MAX_COUNT, SatisfactionPolicy, TargetPolicy, TargetSet,
-    TransportProfile, TransportReceipt,
+    TransportId, TransportProfile, TransportReceipt,
 };
