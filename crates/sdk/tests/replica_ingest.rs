@@ -60,7 +60,7 @@ fn open_replica() -> (TempDir, ReplicaSql<SqlxSqliteExecutor>) {
 fn ingest_farm(replica: &ReplicaSql<SqlxSqliteExecutor>) -> EventEnvelope {
     let farm_value = sample_farm();
     let author = seller_pubkey();
-    let parts = radroots_event_codec::farm::encode::to_wire_parts(&farm_value).expect("farm draft");
+    let parts = radroots_event_codec::encode::farm::to_wire_parts(&farm_value).expect("farm draft");
     let event = sdk_event(
         1,
         &author,

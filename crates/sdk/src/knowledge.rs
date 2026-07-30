@@ -37,14 +37,13 @@ pub use radroots_event::{
     tag::EventRef,
 };
 pub use radroots_event_codec::{
-    RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION,
-    error::RadrootsEncodeError,
+    encode::RadrootsEncodeError,
     manifest::{
-        RadrootsKnowledgeContractManifest, RadrootsKnowledgeContractManifestEntry,
-        RadrootsKnowledgeManifestCodecSupport, RadrootsKnowledgeManifestDiscriminator,
-        RadrootsKnowledgeManifestTagContract,
+        RADROOTS_KNOWLEDGE_CONTRACT_MANIFEST_SCHEMA_VERSION, RadrootsKnowledgeContractManifest,
+        RadrootsKnowledgeContractManifestEntry, RadrootsKnowledgeManifestCodecSupport,
+        RadrootsKnowledgeManifestDiscriminator, RadrootsKnowledgeManifestTagContract,
     },
-    verification::{
+    verify::{
         RadrootsContractValidatedEvent, RadrootsDecodeError, RadrootsDecodedEvent,
         RadrootsIdVerifiedEvent, RadrootsNip01VerificationError, RadrootsSignatureVerifiedEvent,
     },
@@ -55,15 +54,17 @@ use radroots_event::knowledge::{
     validate_knowledge_source, validate_wiki_merge_request, validate_wiki_redirect,
 };
 use radroots_event_codec::{
-    contract_manifest_json as codec_contract_manifest_json,
-    contract_manifest_sha256 as codec_contract_manifest_sha256,
-    knowledge::{
+    encode::knowledge::{
         knowledge_claim_to_wire_parts, knowledge_field_report_to_wire_parts,
         knowledge_relation_to_wire_parts, knowledge_review_to_wire_parts,
         knowledge_source_to_wire_parts, wiki_article_to_wire_parts,
         wiki_merge_request_to_wire_parts, wiki_redirect_to_wire_parts,
     },
-    knowledge_contract_manifest, verify_and_decode_radroots_event as codec_verify_and_decode,
+    manifest::{
+        contract_manifest_json as codec_contract_manifest_json,
+        contract_manifest_sha256 as codec_contract_manifest_sha256, knowledge_contract_manifest,
+    },
+    verify::verify_and_decode_radroots_event as codec_verify_and_decode,
 };
 
 pub const WIKI_ARTICLE_CONTRACT_ID: &str = "radroots.wiki.article.v1";

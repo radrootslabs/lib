@@ -623,7 +623,7 @@ fn signed_event_from_nip46_response(
                         reason: format!("remote signed event is invalid: {error}"),
                     }
                 })?;
-            radroots_event_codec::verification::verify_nip01_event(signed_event.envelope().clone())
+            radroots_event_codec::verify::verify_nip01_event(signed_event.envelope().clone())
                 .map(|_| signed_event)
                 .map_err(|error| RadrootsSdkError::SignerProtocol {
                     mode: RadrootsSdkSignerMode::MycNip46.as_str().to_owned(),

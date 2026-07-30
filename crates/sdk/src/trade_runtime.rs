@@ -29,7 +29,7 @@ use radroots_event::{
     },
 };
 #[cfg(feature = "runtime")]
-use radroots_event_codec::trade::trade_mutation_event_build;
+use radroots_event_codec::encode::trade::trade_mutation_event_build;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RadrootsStoredTradeMutation, RadrootsTradeProjectionCheckpoint};
 #[cfg(feature = "runtime")]
