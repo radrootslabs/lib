@@ -1,15 +1,10 @@
 //! Outbound event delivery SPI and request models.
 
 use crate::{
-    Error, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest,
-    RadrootsTransportStatus, source::BoxFuture,
+    Error, RadrootsTransportDeliveryReceipt, RadrootsTransportDeliveryRequest, source::BoxFuture,
 };
 
-/// Current sink status.
-///
-/// This compatibility alias is replaced by the dedicated sink status model in
-/// the ordered capability/status checkpoint.
-pub type SinkStatus = RadrootsTransportStatus;
+pub use crate::status::SinkStatus;
 
 /// Bounded delivery request.
 ///

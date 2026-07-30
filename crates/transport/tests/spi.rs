@@ -1,10 +1,10 @@
 use futures::executor::block_on;
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, EventSource, FetchPage, FetchRequest,
-    RadrootsTransportCapabilities, RadrootsTransportImplementationState, RadrootsTransportKind,
     RadrootsTransportOutcome, RadrootsTransportOutcomeKind, RadrootsTransportPayload,
-    RadrootsTransportSatisfactionPolicy, RadrootsTransportStatus, RadrootsTransportTarget,
-    RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, SinkStatus, SourceStatus,
+    RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
+    RadrootsTransportTargetSet, SinkStatus, SourceStatus, TransportId,
+    capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
 };
 
 struct SourceOnly;
@@ -82,26 +82,26 @@ impl EventSink for Bidirectional {
     }
 }
 
-fn source_status() -> RadrootsTransportStatus {
-    RadrootsTransportStatus::new(
-        RadrootsTransportKind::Local,
+fn source_status() -> SourceStatus {
+    SourceStatus::new(
+        TransportId::LOCAL,
         true,
-        RadrootsTransportImplementationState::Real,
-        false,
+        Maturity::Stable,
+        Availability::Available,
+        SourceCapabilities::FETCH,
         "source ready",
     )
-    .with_capabilities(RadrootsTransportCapabilities::fetch_only())
 }
 
-fn sink_status() -> RadrootsTransportStatus {
-    RadrootsTransportStatus::new(
-        RadrootsTransportKind::Local,
+fn sink_status() -> SinkStatus {
+    SinkStatus::new(
+        TransportId::LOCAL,
         true,
-        RadrootsTransportImplementationState::Real,
-        true,
+        Maturity::Stable,
+        Availability::Available,
+        SinkCapabilities::DELIVER,
         "sink ready",
     )
-    .with_capabilities(RadrootsTransportCapabilities::deliver_only())
 }
 
 fn target_set() -> RadrootsTransportTargetSet {
@@ -122,15 +122,13 @@ fn source_only_and_sink_only_implementations_are_independently_dispatchable() {
     assert_sink_dyn_compatible(&sink);
 
     let source_status = block_on(EventSource::status(&source)).expect("source status");
-    assert!(source_status.capabilities.fetch);
-    assert!(!source_status.capabilities.deliver);
+    assert!(source_status.capabilities().can_fetch());
     let page =
         block_on(source.fetch(FetchRequest::new("fetch-1", target_set()))).expect("fetch page");
     assert_eq!(page.request_id, "fetch-1");
 
     let sink_status = block_on(EventSink::status(&sink)).expect("sink status");
-    assert!(sink_status.capabilities.deliver);
-    assert!(!sink_status.capabilities.fetch);
+    assert!(sink_status.capabilities().can_deliver());
     let receipt = block_on(
         sink.deliver(
             DeliveryRequest::new(
@@ -158,13 +156,13 @@ fn a_bidirectional_adapter_exposes_both_dyn_contracts() {
     assert!(
         block_on(EventSource::status(&adapter))
             .expect("source status")
-            .capabilities
-            .fetch
+            .capabilities()
+            .can_fetch()
     );
     assert!(
         block_on(EventSink::status(&adapter))
             .expect("sink status")
-            .capabilities
-            .deliver
+            .capabilities()
+            .can_deliver()
     );
 }

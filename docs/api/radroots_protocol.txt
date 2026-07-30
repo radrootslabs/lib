@@ -19,6 +19,7 @@ impl core::error::Error for radroots_protocol::capability::v1::Error
 impl core::fmt::Display for radroots_protocol::capability::v1::Error
 pub fn radroots_protocol::capability::v1::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_protocol::capability::v1::Maturity
+pub radroots_protocol::capability::v1::Maturity::Experimental
 pub radroots_protocol::capability::v1::Maturity::Preview
 pub radroots_protocol::capability::v1::Maturity::Stable
 pub struct radroots_protocol::capability::v1::MeshScopeId

@@ -1,19 +1,13 @@
 //! Inbound event source SPI and page models.
 
-use crate::{
-    Error, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest, RadrootsTransportStatus,
-};
+use crate::{Error, RadrootsTransportFetchReceipt, RadrootsTransportFetchRequest};
 use alloc::boxed::Box;
 use core::{future::Future, pin::Pin};
 
+pub use crate::status::SourceStatus;
+
 /// Heap-backed future returned by transport SPIs.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-/// Current source status.
-///
-/// This compatibility alias is replaced by the dedicated source status model
-/// in the ordered capability/status checkpoint.
-pub type SourceStatus = RadrootsTransportStatus;
 
 /// Bounded source request.
 ///

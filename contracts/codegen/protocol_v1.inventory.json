@@ -7,7 +7,7 @@
     {
       "module": "capability::v1",
       "path": "crates/protocol/src/capability/v1.rs",
-      "sha256": "416f3ae2a5f97c46b56b0c24095f6f6813d2851b7856c84cfbdc251bdd30a846",
+      "sha256": "ec6ee0f70283ca6ac9ef2954ae557181810b685e0b09eb7af27ce58e63e3627a",
       "types": [
         {
           "rust_path": "radroots_protocol::capability::v1::Availability",

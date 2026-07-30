@@ -112,6 +112,8 @@ impl<'de> serde::Deserialize<'de> for TransportKind {
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Maturity {
+    /// Supported only as an experimental contract.
+    Experimental,
     /// Supported as a preview contract.
     Preview,
     /// Supported as a stable contract.
