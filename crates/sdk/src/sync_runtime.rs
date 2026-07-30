@@ -32,9 +32,7 @@ use radroots_protocol::radrootsd::transport_publish::v5::{
     TargetOutcome as TransportPublishTargetOutcome, TargetPolicy as TransportPublishTargetPolicy,
 };
 #[cfg(feature = "runtime")]
-use radroots_trade::workflow::{
-    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
-};
+use radroots_trade::reducer::{RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION};
 #[cfg(all(feature = "runtime", feature = "radrootsd-execution"))]
 use radroots_transport::RadrootsTransportTargetFingerprint;
 #[cfg(feature = "runtime")]

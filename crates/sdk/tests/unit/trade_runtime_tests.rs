@@ -20,10 +20,8 @@ use radroots_event::{
 };
 use radroots_identity::PublicKey;
 use radroots_nostr::prelude::RadrootsNostrKeys;
-use radroots_trade::workflow::{
-    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
-    RadrootsTradePrivateTermsStateV1,
-};
+use radroots_trade::model::RadrootsTradePrivateTermsStateV1;
+use radroots_trade::reducer::{RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION};
 
 fn pubkey(value: &str) -> PublicKey {
     PublicKey::from_hex(value).expect("pubkey")

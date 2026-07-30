@@ -33,13 +33,20 @@ use radroots_event_codec::encode::trade::trade_mutation_event_build;
 #[cfg(feature = "runtime")]
 use radroots_event_store::{RadrootsStoredTradeMutation, RadrootsTradeProjectionCheckpoint};
 #[cfg(feature = "runtime")]
-use radroots_trade::workflow::{
-    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
+use radroots_trade::evidence::{
+    RadrootsTradeEvidenceStateV1, RadrootsTradeMutationRecordV1,
+    RadrootsTradePrivateTermsEvidenceV1,
+};
+#[cfg(feature = "runtime")]
+use radroots_trade::model::{
     RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1, RadrootsTradeConflictStateV1,
-    RadrootsTradeEvidenceStateV1, RadrootsTradeFulfillmentStateV1, RadrootsTradeMutationRecordV1,
-    RadrootsTradeNegotiationStateV1, RadrootsTradePaymentStateV1,
-    RadrootsTradePrivateTermsEvidenceV1, RadrootsTradePrivateTermsStateV1,
-    RadrootsTradeProjectionV1, RadrootsTradeReductionInputV1, reduce_trade_records,
+    RadrootsTradeFulfillmentStateV1, RadrootsTradeNegotiationStateV1, RadrootsTradePaymentStateV1,
+    RadrootsTradePrivateTermsStateV1, RadrootsTradeProjectionV1,
+};
+#[cfg(feature = "runtime")]
+use radroots_trade::reducer::{
+    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
+    RadrootsTradeReductionInputV1, reduce_trade_records,
 };
 #[cfg(feature = "runtime")]
 use serde::{Deserialize, Serialize};
@@ -219,16 +226,16 @@ impl<'client> TradeQueryService<'client> {
             trade_id: view.trade_id,
             reducer_contract_id: RADROOTS_TRADE_REDUCER_CONTRACT_ID.to_owned(),
             reducer_version: RADROOTS_TRADE_REDUCER_VERSION,
-            projection_digest: view.projection.projection_digest.clone(),
-            root_mutation_id: view.projection.root_mutation_id,
-            negotiation_state: enum_label(&view.projection.negotiation_state)?,
-            agreement_state: enum_label(&view.projection.agreement_state)?,
-            evidence_state: enum_label(&view.projection.evidence_state)?,
-            conflict_state: enum_label(&view.projection.conflict_state)?,
-            private_terms_state: enum_label(&view.projection.private_terms_state)?,
-            attestation_state: enum_label(&view.projection.attestation_state)?,
-            fulfillment_state: enum_label(&view.projection.fulfillment_state)?,
-            payment_state: enum_label(&view.projection.payment_state)?,
+            projection_digest: view.projection.projection_digest().to_owned(),
+            root_mutation_id: view.projection.root_mutation_id().copied(),
+            negotiation_state: enum_label(&view.projection.negotiation_state())?,
+            agreement_state: enum_label(&view.projection.agreement_state())?,
+            evidence_state: enum_label(&view.projection.evidence_state())?,
+            conflict_state: enum_label(&view.projection.conflict_state())?,
+            private_terms_state: enum_label(&view.projection.private_terms_state())?,
+            attestation_state: enum_label(&view.projection.attestation_state())?,
+            fulfillment_state: enum_label(&view.projection.fulfillment_state())?,
+            payment_state: enum_label(&view.projection.payment_state())?,
             projection_json: serde_json::to_string(&view.projection)
                 .map_err(trade_query_store_error)?,
             last_mutation_id: last.mutation_id,
@@ -243,8 +250,8 @@ impl<'client> TradeQueryService<'client> {
             api_version: 1,
             trade_id: view.trade_id,
             evidence_count: view.private_terms.len(),
-            projection_digest: view.projection.projection_digest,
-            projection_state: view.projection.private_terms_state,
+            projection_digest: view.projection.projection_digest().to_owned(),
+            projection_state: view.projection.private_terms_state(),
         })
     }
 
@@ -1456,7 +1463,7 @@ async fn ensure_private_terms_ref_available(
             private_ref.ciphertext_commitment.as_str(),
         )
         .await?;
-    match evidence.state {
+    match evidence.state() {
         RadrootsTradePrivateTermsStateV1::AvailableVerified => Ok(()),
         RadrootsTradePrivateTermsStateV1::CommitmentMismatch => Err(trade_command_error(
             RadrootsSdkTradeErrorKind::PrivateArtifactCommitmentMismatch,
@@ -1600,14 +1607,15 @@ async fn trade_projection_for_trade(
             "trade is not present in the local event store",
         ));
     }
-    let mut input = RadrootsTradeReductionInputV1::new(*trade_id);
-    input.mutations = stored
+    let mutations = stored
         .iter()
         .map(stored_trade_mutation_record)
         .collect::<Result<Vec<_>, _>>()?;
-    input.private_terms =
-        private_terms_evidence_for_mutations(sdk, trade_id, &input.mutations).await?;
-    input.observed_at_unix_s = Some(sdk.now()?.unix_seconds());
+    let private_terms = private_terms_evidence_for_mutations(sdk, trade_id, &mutations).await?;
+    let input = RadrootsTradeReductionInputV1::new(*trade_id)
+        .with_mutations(mutations)
+        .with_private_terms(private_terms)
+        .with_observed_at_unix_s(Some(sdk.now()?.unix_seconds()));
     Ok(reduce_trade_records(input))
 }
 
@@ -1627,11 +1635,11 @@ async fn private_terms_views_for_trade(
     let evidence = private_terms_evidence_for_mutations(sdk, trade_id, &records).await?;
     let mut evidence_by_candidate = evidence
         .into_iter()
-        .map(|item| (item.candidate_id, item.state))
+        .map(|item| (*item.candidate_id(), item.state()))
         .collect::<BTreeMap<_, _>>();
     let mut views = BTreeMap::<CandidateId, TradePrivateTermsAvailabilityView>::new();
     for record in records {
-        if let Some((candidate_id, private_ref)) = candidate_private_ref(&record.mutation) {
+        if let Some((candidate_id, private_ref)) = candidate_private_ref(record.mutation()) {
             let state = evidence_by_candidate
                 .remove(&candidate_id)
                 .unwrap_or(RadrootsTradePrivateTermsStateV1::Missing);
@@ -1660,7 +1668,7 @@ async fn private_terms_evidence_for_mutations(
     let mut seen = BTreeSet::new();
     let trade_id_hex = trade_id.to_hex();
     for record in mutations {
-        if let Some((candidate_id, private_ref)) = candidate_private_ref(&record.mutation) {
+        if let Some((candidate_id, private_ref)) = candidate_private_ref(record.mutation()) {
             if !seen.insert(candidate_id) {
                 continue;
             }
@@ -1700,10 +1708,10 @@ fn candidate_private_ref(
 fn stored_trade_mutation_record(
     stored: &RadrootsStoredTradeMutation,
 ) -> Result<RadrootsTradeMutationRecordV1, RadrootsSdkError> {
-    Ok(RadrootsTradeMutationRecordV1 {
-        transport_event_id: Some(stored.first_transport_event_id),
-        mutation: stored_trade_envelope(stored)?,
-    })
+    Ok(RadrootsTradeMutationRecordV1::new(
+        Some(stored.first_transport_event_id),
+        stored_trade_envelope(stored)?,
+    ))
 }
 
 #[cfg(feature = "runtime")]
@@ -1742,19 +1750,19 @@ async fn list_trade_views(
         let view = trade_status_view(sdk, &row.trade_id).await?;
         items.push(TradeSummaryView {
             trade_id: view.trade_id,
-            root_mutation_id: view.projection.root_mutation_id,
-            buyer_pubkey: view.projection.buyer_pubkey.map(|value| value.to_string()),
-            seller_pubkey: view.projection.seller_pubkey.map(|value| value.to_string()),
-            farm_id: view.projection.farm_id.map(|value| value.to_string()),
-            negotiation_state: view.projection.negotiation_state,
-            agreement_state: view.projection.agreement_state,
-            evidence_state: view.projection.evidence_state,
-            conflict_state: view.projection.conflict_state,
-            private_terms_state: view.projection.private_terms_state,
-            attestation_state: view.projection.attestation_state,
-            fulfillment_state: view.projection.fulfillment_state,
-            payment_state: view.projection.payment_state,
-            projection_digest: view.projection.projection_digest,
+            root_mutation_id: view.projection.root_mutation_id().copied(),
+            buyer_pubkey: view.projection.buyer_pubkey().map(ToString::to_string),
+            seller_pubkey: view.projection.seller_pubkey().map(ToString::to_string),
+            farm_id: view.projection.farm_id().map(ToString::to_string),
+            negotiation_state: view.projection.negotiation_state(),
+            agreement_state: view.projection.agreement_state(),
+            evidence_state: view.projection.evidence_state(),
+            conflict_state: view.projection.conflict_state(),
+            private_terms_state: view.projection.private_terms_state(),
+            attestation_state: view.projection.attestation_state(),
+            fulfillment_state: view.projection.fulfillment_state(),
+            payment_state: view.projection.payment_state(),
+            projection_digest: view.projection.projection_digest().to_owned(),
             source_event_count: view.source_event_count,
             updated_event_seq: row.updated_event_seq,
         });

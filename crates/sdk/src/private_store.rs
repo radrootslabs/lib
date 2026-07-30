@@ -6,9 +6,8 @@ use radroots_event::id::{AddressableCoordinate, AddressableCoordinateParts};
 use radroots_event::trade::RADROOTS_TRADE_MAX_PRIVATE_ARTIFACT_BYTES;
 use radroots_protected_store::{RadrootsProtectedFileKeySource, RadrootsProtectedStoreEnvelope};
 use radroots_secret_vault::{RadrootsSecretKeyWrapping, RadrootsSecretVaultAccessError};
-use radroots_trade::workflow::{
-    RadrootsTradePrivateTermsEvidenceV1, RadrootsTradePrivateTermsStateV1,
-};
+use radroots_trade::evidence::RadrootsTradePrivateTermsEvidenceV1;
+use radroots_trade::model::RadrootsTradePrivateTermsStateV1;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -594,14 +593,14 @@ impl SdkPrivateStore {
                 }
             }
         };
-        Ok(RadrootsTradePrivateTermsEvidenceV1 {
-            candidate_id: candidate_id.parse().map_err(|error| {
-                RadrootsSdkError::InvalidRequest {
+        Ok(RadrootsTradePrivateTermsEvidenceV1::new(
+            candidate_id
+                .parse()
+                .map_err(|error| RadrootsSdkError::InvalidRequest {
                     message: format!("private terms candidate id is invalid: {error}"),
-                }
-            })?,
+                })?,
             state,
-        })
+        ))
     }
 
     async fn configure_connection(&self, file_backed: bool) -> Result<(), RadrootsSdkError> {
