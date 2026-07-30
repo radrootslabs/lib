@@ -37,3 +37,4 @@ expand a package beyond its charter.
 | `radroots_event` | [`radroots_event.txt`](radroots_event.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_event_codec` | [`radroots_event_codec.txt`](radroots_event_codec.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
 | `radroots_trade` | [`radroots_trade.txt`](radroots_trade.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |
+| `radroots_signing` | [`radroots_signing.txt`](radroots_signing.txt) | [release V1 specification](../specs/radroots_crates_release_v1.md) |

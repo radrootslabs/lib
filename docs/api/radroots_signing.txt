@@ -1,0 +1,220 @@
+pub mod radroots_signing
+pub mod radroots_signing::actor
+#[non_exhaustive] pub enum radroots_signing::actor::ActorSelector
+pub radroots_signing::actor::ActorSelector::Account(radroots_identity::account::AccountId)
+pub radroots_signing::actor::ActorSelector::DraftExpectedPublicKey
+pub radroots_signing::actor::ActorSelector::PublicKey(radroots_identity::key::PublicKey)
+pub radroots_signing::actor::ActorSelector::SelectedAccount
+#[non_exhaustive] pub enum radroots_signing::actor::ActorSource
+pub radroots_signing::actor::ActorSource::ExplicitPublicKey
+pub radroots_signing::actor::ActorSource::LocalAccount(radroots_identity::account::AccountId)
+pub radroots_signing::actor::ActorSource::RemoteSigner(radroots_identity::account::AccountId)
+pub radroots_signing::actor::ActorSource::Service(radroots_identity::account::AccountId)
+impl radroots_signing::actor::ActorSource
+pub const fn radroots_signing::actor::ActorSource::account_id(self) -> core::option::Option<radroots_identity::account::AccountId>
+pub struct radroots_signing::actor::Actor
+impl radroots_signing::actor::Actor
+pub const fn radroots_signing::actor::Actor::account_id(&self) -> core::option::Option<radroots_identity::account::AccountId>
+pub fn radroots_signing::actor::Actor::from_public_key_hex<I>(&str, radroots_signing::actor::ActorSource, I) -> core::result::Result<Self, radroots_signing::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_event::contract::registry_v7::AuthorRole>
+pub fn radroots_signing::actor::Actor::new<I>(radroots_identity::key::PublicKey, radroots_signing::actor::ActorSource, I) -> core::result::Result<Self, radroots_signing::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_event::contract::registry_v7::AuthorRole>
+pub const fn radroots_signing::actor::Actor::public_key(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_signing::actor::Actor::roles(&self) -> &alloc::collections::btree::set::BTreeSet<radroots_event::contract::registry_v7::AuthorRole>
+pub fn radroots_signing::actor::Actor::satisfies(&self, radroots_event::contract::registry_v7::AuthorRole) -> bool
+pub const fn radroots_signing::actor::Actor::source(&self) -> radroots_signing::actor::ActorSource
+pub struct radroots_signing::actor::ActorResolutionRequest
+impl radroots_signing::actor::ActorResolutionRequest
+pub const fn radroots_signing::actor::ActorResolutionRequest::expected_public_key(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_signing::actor::ActorResolutionRequest::new(radroots_signing::actor::ActorSelector, radroots_event::contract::registry_v7::AuthorRole, radroots_identity::key::PublicKey) -> Self
+pub const fn radroots_signing::actor::ActorResolutionRequest::required_role(&self) -> radroots_event::contract::registry_v7::AuthorRole
+pub const fn radroots_signing::actor::ActorResolutionRequest::selector(&self) -> radroots_signing::actor::ActorSelector
+pub mod radroots_signing::capability
+#[non_exhaustive] pub enum radroots_signing::capability::CancellationSupport
+pub radroots_signing::capability::CancellationSupport::BeforeAndAfterPublication
+pub radroots_signing::capability::CancellationSupport::BeforePublication
+#[non_exhaustive] pub enum radroots_signing::capability::SignerKind
+pub radroots_signing::capability::SignerKind::HostMediated
+pub radroots_signing::capability::SignerKind::Local
+pub radroots_signing::capability::SignerKind::Remote
+#[non_exhaustive] pub struct radroots_signing::capability::SignerCapability
+impl radroots_signing::capability::SignerCapability
+pub const fn radroots_signing::capability::SignerCapability::cancellation(self) -> radroots_signing::capability::CancellationSupport
+pub const fn radroots_signing::capability::SignerCapability::kind(self) -> radroots_signing::capability::SignerKind
+pub const fn radroots_signing::capability::SignerCapability::may_require_authentication(self) -> bool
+pub const fn radroots_signing::capability::SignerCapability::new(radroots_signing::capability::SignerKind, radroots_signing::capability::CancellationSupport, bool, bool) -> Self
+pub const fn radroots_signing::capability::SignerCapability::reports_progress(self) -> bool
+pub mod radroots_signing::error
+#[non_exhaustive] pub enum radroots_signing::error::Kind
+pub radroots_signing::error::Kind::AuthorizationDenied
+pub radroots_signing::error::Kind::DeadlineExceeded
+pub radroots_signing::error::Kind::InternalError
+pub radroots_signing::error::Kind::InvalidArgument
+pub radroots_signing::error::Kind::SignerCancelled
+pub radroots_signing::error::Kind::SignerCapabilityMissing
+pub radroots_signing::error::Kind::SignerOutputInvalid
+pub radroots_signing::error::Kind::SignerRejected
+pub radroots_signing::error::Kind::SignerTimeout
+pub radroots_signing::error::Kind::SignerUnavailable
+impl radroots_signing::error::Kind
+pub const radroots_signing::error::Kind::ALL: &'static [Self]
+pub const fn radroots_signing::error::Kind::descriptor(self) -> radroots_signing::error::Descriptor
+pub struct radroots_signing::error::Descriptor
+impl radroots_signing::error::Descriptor
+pub const fn radroots_signing::error::Descriptor::class(self) -> radroots_protocol::error::v1::Class
+pub const fn radroots_signing::error::Descriptor::code(self) -> &'static str
+pub const fn radroots_signing::error::Descriptor::kind(self) -> radroots_signing::error::Kind
+pub const fn radroots_signing::error::Descriptor::known_code(self) -> radroots_protocol::error::v1::KnownCode
+pub const fn radroots_signing::error::Descriptor::message(self) -> &'static str
+pub const fn radroots_signing::error::Descriptor::recovery_actions(self) -> &'static [radroots_protocol::error::v1::RecoveryAction]
+pub const fn radroots_signing::error::Descriptor::retryable(self) -> bool
+pub struct radroots_signing::error::Error
+impl radroots_signing::error::Error
+pub const fn radroots_signing::error::Error::class(&self) -> radroots_protocol::error::v1::Class
+pub const fn radroots_signing::error::Error::code(&self) -> &'static str
+pub const fn radroots_signing::error::Error::descriptor(&self) -> radroots_signing::error::Descriptor
+pub const fn radroots_signing::error::Error::kind(&self) -> radroots_signing::error::Kind
+pub const fn radroots_signing::error::Error::new(radroots_signing::error::Kind) -> Self
+pub const fn radroots_signing::error::Error::recovery_actions(&self) -> &'static [radroots_protocol::error::v1::RecoveryAction]
+pub const fn radroots_signing::error::Error::retryable(&self) -> bool
+pub fn radroots_signing::error::Error::to_report(&self, core::option::Option<radroots_protocol::runtime::v1::OperationId>) -> radroots_protocol::error::v1::ErrorReport
+pub fn radroots_signing::error::Error::with_source<E>(radroots_signing::error::Kind, E) -> Self where E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+impl core::convert::From<&radroots_signing::error::Error> for radroots_protocol::error::v1::ErrorReport
+pub fn radroots_protocol::error::v1::ErrorReport::from(&radroots_signing::error::Error) -> Self
+impl core::error::Error for radroots_signing::error::Error
+pub fn radroots_signing::error::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_signing::error::Error
+pub fn radroots_signing::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_signing::error::Error
+pub fn radroots_signing::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_signing::error::CATALOG: &[radroots_signing::error::Descriptor]
+pub mod radroots_signing::receipt
+#[non_exhaustive] pub struct radroots_signing::receipt::SignReceipt
+impl radroots_signing::receipt::SignReceipt
+pub const fn radroots_signing::receipt::SignReceipt::completed_at_unix(&self) -> u64
+pub fn radroots_signing::receipt::SignReceipt::from_signed_event(&radroots_signing::request::SignRequest, radroots_event::draft::SignedEvent, u64) -> core::result::Result<Self, radroots_signing::error::Error>
+pub const fn radroots_signing::receipt::SignReceipt::operation_id(&self) -> radroots_protocol::runtime::v1::OperationId
+pub const fn radroots_signing::receipt::SignReceipt::signed_event(&self) -> &radroots_event::draft::SignedEvent
+impl core::fmt::Debug for radroots_signing::receipt::SignReceipt
+pub fn radroots_signing::receipt::SignReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_signing::request
+#[non_exhaustive] pub enum radroots_signing::request::CancellationPolicy
+pub radroots_signing::request::CancellationPolicy::LocalCooperative
+pub radroots_signing::request::CancellationPolicy::PreservePublishedRequest
+#[non_exhaustive] pub struct radroots_signing::request::SignPolicy
+impl radroots_signing::request::SignPolicy
+pub const fn radroots_signing::request::SignPolicy::cancellation(self) -> radroots_signing::request::CancellationPolicy
+pub const fn radroots_signing::request::SignPolicy::deadline_unix(self) -> u64
+pub const fn radroots_signing::request::SignPolicy::new(u64, radroots_signing::request::CancellationPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
+pub struct radroots_signing::request::SignRequest
+impl radroots_signing::request::SignRequest
+pub const fn radroots_signing::request::SignRequest::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_signing::request::SignRequest::draft(&self) -> &radroots_event::draft::EventDraft
+pub fn radroots_signing::request::SignRequest::new(radroots_protocol::runtime::v1::OperationId, radroots_signing::actor::Actor, radroots_event::draft::EventDraft, radroots_signing::request::SignPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
+pub const fn radroots_signing::request::SignRequest::operation_id(&self) -> radroots_protocol::runtime::v1::OperationId
+pub const fn radroots_signing::request::SignRequest::policy(&self) -> radroots_signing::request::SignPolicy
+pub fn radroots_signing::request::SignRequest::report_progress(&self, &radroots_signing::status::SignProgress)
+pub fn radroots_signing::request::SignRequest::with_progress_observer(self, alloc::sync::Arc<dyn radroots_signing::request::ProgressObserver>) -> Self
+impl core::fmt::Debug for radroots_signing::request::SignRequest
+pub fn radroots_signing::request::SignRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait radroots_signing::request::ProgressObserver: core::marker::Send + core::marker::Sync
+pub fn radroots_signing::request::ProgressObserver::on_progress(&self, &radroots_signing::status::SignProgress)
+pub mod radroots_signing::signer
+pub trait radroots_signing::signer::Signer: core::marker::Send + core::marker::Sync
+pub fn radroots_signing::signer::Signer::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
+pub fn radroots_signing::signer::Signer::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>
+pub type radroots_signing::signer::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
+pub mod radroots_signing::status
+#[non_exhaustive] pub enum radroots_signing::status::SignProgressStage
+pub radroots_signing::status::SignProgressStage::AwaitingAuthentication
+pub radroots_signing::status::SignProgressStage::AwaitingSignature
+pub radroots_signing::status::SignProgressStage::Complete
+pub radroots_signing::status::SignProgressStage::Queued
+pub radroots_signing::status::SignProgressStage::RequestPublished
+pub radroots_signing::status::SignProgressStage::Validating
+pub radroots_signing::status::SignProgressStage::VerifyingOutput
+#[non_exhaustive] pub enum radroots_signing::status::SignerAvailability
+pub radroots_signing::status::SignerAvailability::AwaitingAuthentication
+pub radroots_signing::status::SignerAvailability::Busy
+pub radroots_signing::status::SignerAvailability::Ready
+pub radroots_signing::status::SignerAvailability::Unavailable
+#[non_exhaustive] pub struct radroots_signing::status::AuthChallenge
+impl radroots_signing::status::AuthChallenge
+pub const fn radroots_signing::status::AuthChallenge::expires_at_unix(&self) -> core::option::Option<u64>
+pub fn radroots_signing::status::AuthChallenge::new(impl core::convert::Into<alloc::string::String>, u64, core::option::Option<u64>) -> core::result::Result<Self, radroots_signing::error::Error>
+pub const fn radroots_signing::status::AuthChallenge::required_at_unix(&self) -> u64
+pub fn radroots_signing::status::AuthChallenge::uri(&self) -> &str
+impl core::fmt::Debug for radroots_signing::status::AuthChallenge
+pub fn radroots_signing::status::AuthChallenge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_signing::status::AuthChallenge
+pub fn radroots_signing::status::AuthChallenge::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+#[non_exhaustive] pub struct radroots_signing::status::SignProgress
+impl radroots_signing::status::SignProgress
+pub const fn radroots_signing::status::SignProgress::authentication(radroots_signing::status::AuthChallenge) -> Self
+pub const fn radroots_signing::status::SignProgress::challenge(&self) -> core::option::Option<&radroots_signing::status::AuthChallenge>
+pub const fn radroots_signing::status::SignProgress::stage(radroots_signing::status::SignProgressStage) -> core::result::Result<Self, radroots_signing::error::Error>
+pub const fn radroots_signing::status::SignProgress::stage_value(&self) -> radroots_signing::status::SignProgressStage
+impl<'de> serde_core::de::Deserialize<'de> for radroots_signing::status::SignProgress
+pub fn radroots_signing::status::SignProgress::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
+#[non_exhaustive] pub struct radroots_signing::status::SignerStatus
+impl radroots_signing::status::SignerStatus
+pub const fn radroots_signing::status::SignerStatus::availability(&self) -> radroots_signing::status::SignerAvailability
+pub fn radroots_signing::status::SignerStatus::capabilities(&self) -> &[radroots_signing::capability::SignerCapability]
+pub fn radroots_signing::status::SignerStatus::new(radroots_signing::status::SignerAvailability, alloc::vec::Vec<radroots_signing::capability::SignerCapability>, core::option::Option<radroots_signing::status::SignProgress>) -> Self
+pub const fn radroots_signing::status::SignerStatus::progress(&self) -> core::option::Option<&radroots_signing::status::SignProgress>
+pub const fn radroots_signing::status::SignerStatus::unavailable() -> Self
+pub struct radroots_signing::Actor
+impl radroots_signing::actor::Actor
+pub const fn radroots_signing::actor::Actor::account_id(&self) -> core::option::Option<radroots_identity::account::AccountId>
+pub fn radroots_signing::actor::Actor::from_public_key_hex<I>(&str, radroots_signing::actor::ActorSource, I) -> core::result::Result<Self, radroots_signing::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_event::contract::registry_v7::AuthorRole>
+pub fn radroots_signing::actor::Actor::new<I>(radroots_identity::key::PublicKey, radroots_signing::actor::ActorSource, I) -> core::result::Result<Self, radroots_signing::error::Error> where I: core::iter::traits::collect::IntoIterator<Item = radroots_event::contract::registry_v7::AuthorRole>
+pub const fn radroots_signing::actor::Actor::public_key(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_signing::actor::Actor::roles(&self) -> &alloc::collections::btree::set::BTreeSet<radroots_event::contract::registry_v7::AuthorRole>
+pub fn radroots_signing::actor::Actor::satisfies(&self, radroots_event::contract::registry_v7::AuthorRole) -> bool
+pub const fn radroots_signing::actor::Actor::source(&self) -> radroots_signing::actor::ActorSource
+pub struct radroots_signing::Error
+impl radroots_signing::error::Error
+pub const fn radroots_signing::error::Error::class(&self) -> radroots_protocol::error::v1::Class
+pub const fn radroots_signing::error::Error::code(&self) -> &'static str
+pub const fn radroots_signing::error::Error::descriptor(&self) -> radroots_signing::error::Descriptor
+pub const fn radroots_signing::error::Error::kind(&self) -> radroots_signing::error::Kind
+pub const fn radroots_signing::error::Error::new(radroots_signing::error::Kind) -> Self
+pub const fn radroots_signing::error::Error::recovery_actions(&self) -> &'static [radroots_protocol::error::v1::RecoveryAction]
+pub const fn radroots_signing::error::Error::retryable(&self) -> bool
+pub fn radroots_signing::error::Error::to_report(&self, core::option::Option<radroots_protocol::runtime::v1::OperationId>) -> radroots_protocol::error::v1::ErrorReport
+pub fn radroots_signing::error::Error::with_source<E>(radroots_signing::error::Kind, E) -> Self where E: core::error::Error + core::marker::Send + core::marker::Sync + 'static
+impl core::convert::From<&radroots_signing::error::Error> for radroots_protocol::error::v1::ErrorReport
+pub fn radroots_protocol::error::v1::ErrorReport::from(&radroots_signing::error::Error) -> Self
+impl core::error::Error for radroots_signing::error::Error
+pub fn radroots_signing::error::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for radroots_signing::error::Error
+pub fn radroots_signing::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_signing::error::Error
+pub fn radroots_signing::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct radroots_signing::SignReceipt
+impl radroots_signing::receipt::SignReceipt
+pub const fn radroots_signing::receipt::SignReceipt::completed_at_unix(&self) -> u64
+pub fn radroots_signing::receipt::SignReceipt::from_signed_event(&radroots_signing::request::SignRequest, radroots_event::draft::SignedEvent, u64) -> core::result::Result<Self, radroots_signing::error::Error>
+pub const fn radroots_signing::receipt::SignReceipt::operation_id(&self) -> radroots_protocol::runtime::v1::OperationId
+pub const fn radroots_signing::receipt::SignReceipt::signed_event(&self) -> &radroots_event::draft::SignedEvent
+impl core::fmt::Debug for radroots_signing::receipt::SignReceipt
+pub fn radroots_signing::receipt::SignReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_signing::SignRequest
+impl radroots_signing::request::SignRequest
+pub const fn radroots_signing::request::SignRequest::actor(&self) -> &radroots_signing::actor::Actor
+pub const fn radroots_signing::request::SignRequest::draft(&self) -> &radroots_event::draft::EventDraft
+pub fn radroots_signing::request::SignRequest::new(radroots_protocol::runtime::v1::OperationId, radroots_signing::actor::Actor, radroots_event::draft::EventDraft, radroots_signing::request::SignPolicy) -> core::result::Result<Self, radroots_signing::error::Error>
+pub const fn radroots_signing::request::SignRequest::operation_id(&self) -> radroots_protocol::runtime::v1::OperationId
+pub const fn radroots_signing::request::SignRequest::policy(&self) -> radroots_signing::request::SignPolicy
+pub fn radroots_signing::request::SignRequest::report_progress(&self, &radroots_signing::status::SignProgress)
+pub fn radroots_signing::request::SignRequest::with_progress_observer(self, alloc::sync::Arc<dyn radroots_signing::request::ProgressObserver>) -> Self
+impl core::fmt::Debug for radroots_signing::request::SignRequest
+pub fn radroots_signing::request::SignRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct radroots_signing::SignerStatus
+impl radroots_signing::status::SignerStatus
+pub const fn radroots_signing::status::SignerStatus::availability(&self) -> radroots_signing::status::SignerAvailability
+pub fn radroots_signing::status::SignerStatus::capabilities(&self) -> &[radroots_signing::capability::SignerCapability]
+pub fn radroots_signing::status::SignerStatus::new(radroots_signing::status::SignerAvailability, alloc::vec::Vec<radroots_signing::capability::SignerCapability>, core::option::Option<radroots_signing::status::SignProgress>) -> Self
+pub const fn radroots_signing::status::SignerStatus::progress(&self) -> core::option::Option<&radroots_signing::status::SignProgress>
+pub const fn radroots_signing::status::SignerStatus::unavailable() -> Self
+pub trait radroots_signing::Signer: core::marker::Send + core::marker::Sync
+pub fn radroots_signing::Signer::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
+pub fn radroots_signing::Signer::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>

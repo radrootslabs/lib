@@ -7,6 +7,9 @@ use radroots_signing::{
 };
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const EXAMPLE: &str = include_str!("../examples/host_signer.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_signing.txt");
+const README: &str = include_str!("../README.md");
 const ROOT: &str = include_str!("../src/lib.rs");
 
 #[test]
@@ -120,6 +123,68 @@ fn crate_root_declares_the_approved_module_skeleton() {
         ])
     );
     assert!(!ROOT.contains("prelude"));
+}
+
+#[test]
+fn package_documentation_and_reviewed_api_baseline_are_complete() {
+    for required in [
+        "## Typical flow",
+        "## Host SPI contract",
+        "## Deadlines, cancellation, and commit points",
+        "## Serialization contract",
+        "## Security and side effects",
+        "## Features",
+        "## Intended consumers",
+        "radroots_crates_release_v1.md#8-radroots_signing",
+        "examples/host_signer.rs",
+    ] {
+        assert!(README.contains(required), "README is missing {required}");
+    }
+    for required in [
+        "impl Signer for HostSigner",
+        "fn status(&self) -> BoxFuture",
+        "fn sign(&self, _request: SignRequest) -> BoxFuture",
+        "let signer: &dyn Signer",
+        "drop(future)",
+    ] {
+        assert!(EXAMPLE.contains(required), "example is missing {required}");
+    }
+    for required in [
+        "pub mod radroots_signing::actor",
+        "pub mod radroots_signing::capability",
+        "pub mod radroots_signing::error",
+        "pub mod radroots_signing::receipt",
+        "pub mod radroots_signing::request",
+        "pub mod radroots_signing::signer",
+        "pub mod radroots_signing::status",
+        "pub trait radroots_signing::Signer",
+    ] {
+        assert!(
+            PUBLIC_API.contains(required),
+            "public API baseline is missing {required}"
+        );
+    }
+}
+
+#[test]
+fn every_public_module_has_crate_level_documentation() {
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    for module in [
+        "actor",
+        "capability",
+        "error",
+        "request",
+        "receipt",
+        "signer",
+        "status",
+    ] {
+        let path = source_root.join(format!("{module}.rs"));
+        let source = fs::read_to_string(&path).expect("read module source");
+        assert!(
+            source.starts_with("//! "),
+            "public module {module} must start with module documentation"
+        );
+    }
 }
 
 #[test]
