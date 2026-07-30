@@ -8,7 +8,8 @@ const DRAFT: &str = include_str!("../src/operational_listing/draft.rs");
 const IDENTITY: &str = include_str!("../src/identity.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
-const TRADE_CONTRACT: &str = include_str!("../src/workflow.rs");
+const REDUCER_IMPLEMENTATION: &str = include_str!("../src/reducer_impl.rs");
+const WORKFLOW: &str = include_str!("../src/workflow.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
 
 #[test]
@@ -145,8 +146,38 @@ fn trade_model_reducer_and_evidence_have_final_public_owners() {
         "pub claim_mutation_id:",
     ] {
         assert!(
-            !TRADE_CONTRACT.contains(declaration),
+            !REDUCER_IMPLEMENTATION.contains(declaration),
             "native trade contract field must remain private: {declaration}"
+        );
+    }
+}
+
+#[test]
+fn workflow_plan_is_root_exported_and_side_effect_free() {
+    let _: Option<radroots_trade::WorkflowPlan> = None;
+    let _: Option<radroots_trade::Error> = None;
+
+    for forbidden in [
+        "std::fs",
+        "std::net",
+        "sqlx",
+        "tokio",
+        "reqwest",
+        "event_store",
+        "outbox",
+        ".sign(",
+        ".deliver(",
+        ".execute(",
+    ] {
+        assert!(
+            !WORKFLOW.contains(forbidden),
+            "workflow plan acquired host side-effect authority: {forbidden}"
+        );
+    }
+    for action in ["Sign", "Persist", "Deliver", "VerifyPrivateTerms"] {
+        assert!(
+            WORKFLOW.contains(action),
+            "missing workflow action {action}"
         );
     }
 }
