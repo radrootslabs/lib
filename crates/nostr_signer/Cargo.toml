@@ -9,7 +9,6 @@ license.workspace = true
 description = "Signer state model for Radroots"
 repository.workspace = true
 homepage.workspace = true
-documentation = "https://docs.rs/radroots_nostr_signer"
 readme = "README"
 
 [features]

@@ -9,6 +9,7 @@ license.workspace = true
 description = "Authority model for Radroots"
 repository.workspace = true
 homepage.workspace = true
+readme = "README.md"
 
 [features]
 default = ["std"]
