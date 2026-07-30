@@ -1,4 +1,8 @@
 //! Validated, side-effect-free trade workflow plans.
+//!
+//! Plans describe required private-term verification, signing, persistence,
+//! and delivery actions. Hosts retain exclusive authority to execute them and
+//! to define cancellation, deadlines, and durable commit behavior.
 
 #[cfg(not(feature = "std"))]
 use alloc::{format, string::String, vec, vec::Vec};

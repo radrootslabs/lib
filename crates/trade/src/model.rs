@@ -1,4 +1,7 @@
-//! Native trade-domain models and validated value types.
+//! Native trade-domain projections and validated business identifiers.
+//!
+//! Protocol trade identity remains owned by [`radroots_event::trade`]. This
+//! module owns projection state plus the semantically distinct [`OrderId`].
 
 pub use crate::trade_contract_v1::{
     RadrootsTradeAgreementClaimV1, RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1,

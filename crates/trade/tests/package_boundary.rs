@@ -18,6 +18,9 @@ const CANONICAL_WORKFLOW_VECTORS: &str =
 const PACKAGED_WORKFLOW_VECTORS: &str = include_str!("fixtures/prepare_workflow.v1.json");
 const WORKFLOW: &str = include_str!("../src/workflow.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
+const README: &str = include_str!("../README.md");
+const EXAMPLE: &str = include_str!("../examples/reduce_trade.rs");
+const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_trade.txt");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -249,6 +252,56 @@ fn workflow_plan_is_root_exported_and_side_effect_free() {
         assert!(
             WORKFLOW.contains(action),
             "missing workflow action {action}"
+        );
+    }
+}
+
+#[test]
+fn package_documentation_and_reviewed_api_baseline_are_complete() {
+    for section in [
+        "## Canonical surface",
+        "## Deterministic reduction",
+        "## Workflow planning",
+        "## Features",
+        "## Serialization and versioning",
+        "## Security and trust boundaries",
+        "## Side effects, cancellation, and commit points",
+        "## Intended consumers",
+        "## Package charter",
+    ] {
+        assert!(README.contains(section), "README is missing {section}");
+    }
+    assert!(ROOT.contains("#![doc = include_str!(\"../README.md\")]"));
+    assert!(
+        EXAMPLE.contains("use radroots_trade::{ReductionInput, reducer::reduce_trade_records};")
+    );
+
+    assert!(PUBLIC_API.starts_with("pub mod radroots_trade\n"));
+    for item in [
+        "pub mod radroots_trade::evidence",
+        "pub mod radroots_trade::model",
+        "pub mod radroots_trade::reducer",
+        "pub mod radroots_trade::validation",
+        "pub mod radroots_trade::workflow",
+        "pub struct radroots_trade::Projection",
+        "pub enum radroots_trade::ReducerIssue",
+        "pub struct radroots_trade::ReductionInput",
+        "pub struct radroots_trade::WorkflowPlan",
+    ] {
+        assert!(PUBLIC_API.contains(item), "API baseline is missing {item}");
+    }
+    for forbidden in [
+        "radroots_authority::",
+        "radroots_event_store::",
+        "radroots_outbox::",
+        "radroots_transport::",
+        "reqwest::",
+        "sqlx::",
+        "tokio::",
+    ] {
+        assert!(
+            !PUBLIC_API.contains(forbidden),
+            "API baseline exposes forbidden host path {forbidden}"
         );
     }
 }
