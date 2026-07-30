@@ -86,6 +86,21 @@ fn trade_canonicalization_accepts_validated_identity_without_authority_or_signin
     assert!(DRAFT.contains("performs no signing or authorization"));
 }
 
+#[test]
+fn trade_feature_graph_has_no_persistence_or_sql_boundary() {
+    let features = table_keys(MANIFEST, "[features]");
+    let dependencies = table_keys(MANIFEST, "[dependencies]");
+    let dev_dependencies = table_keys(MANIFEST, "[dev-dependencies]");
+
+    assert!(!features.contains("event_store"));
+    assert!(!dependencies.contains("radroots_event_store"));
+    assert!(!dependencies.contains("sqlx"));
+    assert!(!dev_dependencies.contains("sqlx"));
+    assert!(!dev_dependencies.contains("tokio"));
+    assert!(!MANIFEST.contains("sqlite-bundled"));
+    assert!(!MANIFEST.contains("runtime-tokio"));
+}
+
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
     let Some((_, table)) = manifest.split_once(heading) else {
         return BTreeSet::new();

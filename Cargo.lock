@@ -5114,15 +5114,12 @@ dependencies = [
  "radroots_core",
  "radroots_event",
  "radroots_event_codec",
- "radroots_event_store",
  "radroots_identity",
  "radroots_test_fixtures",
  "serde",
  "serde_json",
  "sha2",
- "sqlx",
  "thiserror 1.0.69",
- "tokio",
 ]
 
 [[package]]
