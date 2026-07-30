@@ -18,6 +18,18 @@ pub enum RadrootsTransportError {
     TargetSetTooLarge,
     DuplicateTargetFingerprint,
     InvalidTargetFingerprint,
+    EmptyFetchRequestId,
+    InvalidFetchRequestId,
+    InvalidFetchLimit,
+    InvalidFetchDeadline,
+    EmptyFetchCursor,
+    InvalidFetchCursor,
+    InvalidObservedAt,
+    UnexpectedFetchProvenance,
+    UnexpectedFetchTargetOutcome,
+    DuplicateFetchTargetOutcome,
+    FetchPageLimitExceeded,
+    FetchPageRequestMismatch,
     InvalidSatisfactionPolicy,
     EmptyRequiredTargetSet,
     DuplicateRequiredTargetFingerprint,
@@ -62,6 +74,28 @@ impl fmt::Display for RadrootsTransportError {
             }
             Self::InvalidTargetFingerprint => {
                 f.write_str("transport target fingerprint is invalid")
+            }
+            Self::EmptyFetchRequestId => f.write_str("transport fetch request id is empty"),
+            Self::InvalidFetchRequestId => f.write_str("transport fetch request id is invalid"),
+            Self::InvalidFetchLimit => f.write_str("transport fetch limit is invalid"),
+            Self::InvalidFetchDeadline => f.write_str("transport fetch deadline is invalid"),
+            Self::EmptyFetchCursor => f.write_str("transport fetch cursor is empty"),
+            Self::InvalidFetchCursor => f.write_str("transport fetch cursor is invalid"),
+            Self::InvalidObservedAt => f.write_str("transport event observation time is invalid"),
+            Self::UnexpectedFetchProvenance => {
+                f.write_str("transport fetch page contains unexpected event provenance")
+            }
+            Self::UnexpectedFetchTargetOutcome => {
+                f.write_str("transport fetch page contains an unexpected target outcome")
+            }
+            Self::DuplicateFetchTargetOutcome => {
+                f.write_str("transport fetch page contains a duplicate target outcome")
+            }
+            Self::FetchPageLimitExceeded => {
+                f.write_str("transport fetch page exceeds its requested event limit")
+            }
+            Self::FetchPageRequestMismatch => {
+                f.write_str("transport fetch page does not match its request")
             }
             Self::InvalidSatisfactionPolicy => {
                 f.write_str("transport satisfaction policy is invalid")

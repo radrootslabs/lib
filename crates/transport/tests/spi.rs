@@ -5,6 +5,7 @@ use radroots_transport::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTarget, RadrootsTransportTargetReceipt,
     RadrootsTransportTargetSet, SinkStatus, SourceStatus, TransportId,
     capability::{Availability, Maturity, SinkCapabilities, SourceCapabilities},
+    source::{FetchBounds, NextPage},
 };
 
 struct SourceOnly;
@@ -18,7 +19,9 @@ impl EventSource for SourceOnly {
         &self,
         request: FetchRequest,
     ) -> BoxFuture<'_, Result<FetchPage, radroots_transport::Error>> {
-        Box::pin(async move { Ok(FetchPage::new(request.request_id, Vec::new(), 0)) })
+        Box::pin(async move {
+            FetchPage::for_request(&request, Vec::new(), Vec::new(), NextPage::Complete)
+        })
     }
 }
 
@@ -123,9 +126,14 @@ fn source_only_and_sink_only_implementations_are_independently_dispatchable() {
 
     let source_status = block_on(EventSource::status(&source)).expect("source status");
     assert!(source_status.capabilities().can_fetch());
-    let page =
-        block_on(source.fetch(FetchRequest::new("fetch-1", target_set()))).expect("fetch page");
-    assert_eq!(page.request_id, "fetch-1");
+    let request = FetchRequest::new(
+        "fetch-1",
+        target_set(),
+        FetchBounds::new(10, 1_700_000_000_000).expect("fetch bounds"),
+    )
+    .expect("fetch request");
+    let page = block_on(source.fetch(request)).expect("fetch page");
+    assert_eq!(page.request_id().as_str(), "fetch-1");
 
     let sink_status = block_on(EventSink::status(&sink)).expect("sink status");
     assert!(sink_status.capabilities().can_deliver());

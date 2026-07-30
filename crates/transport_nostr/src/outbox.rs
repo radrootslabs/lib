@@ -790,6 +790,18 @@ fn transport_error_to_relay_error(error: RadrootsTransportError) -> RadrootsRela
         | RadrootsTransportError::TargetSetTooLarge
         | RadrootsTransportError::DuplicateTargetFingerprint
         | RadrootsTransportError::InvalidTargetFingerprint
+        | RadrootsTransportError::EmptyFetchRequestId
+        | RadrootsTransportError::InvalidFetchRequestId
+        | RadrootsTransportError::InvalidFetchLimit
+        | RadrootsTransportError::InvalidFetchDeadline
+        | RadrootsTransportError::EmptyFetchCursor
+        | RadrootsTransportError::InvalidFetchCursor
+        | RadrootsTransportError::InvalidObservedAt
+        | RadrootsTransportError::UnexpectedFetchProvenance
+        | RadrootsTransportError::UnexpectedFetchTargetOutcome
+        | RadrootsTransportError::DuplicateFetchTargetOutcome
+        | RadrootsTransportError::FetchPageLimitExceeded
+        | RadrootsTransportError::FetchPageRequestMismatch
         | RadrootsTransportError::UnexpectedDeliveryTargetReceipt
         | RadrootsTransportError::DuplicateDeliveryTargetReceipt
         | RadrootsTransportError::MissingDeliveryTargetReceipt

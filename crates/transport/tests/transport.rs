@@ -2086,6 +2086,18 @@ fn target_contract_covers_parser_and_authority_boundaries() {
 fn every_transport_error_has_a_stable_display_message() {
     let remaining = [
         RadrootsTransportError::RequiredTargetNotRequested,
+        RadrootsTransportError::EmptyFetchRequestId,
+        RadrootsTransportError::InvalidFetchRequestId,
+        RadrootsTransportError::InvalidFetchLimit,
+        RadrootsTransportError::InvalidFetchDeadline,
+        RadrootsTransportError::EmptyFetchCursor,
+        RadrootsTransportError::InvalidFetchCursor,
+        RadrootsTransportError::InvalidObservedAt,
+        RadrootsTransportError::UnexpectedFetchProvenance,
+        RadrootsTransportError::UnexpectedFetchTargetOutcome,
+        RadrootsTransportError::DuplicateFetchTargetOutcome,
+        RadrootsTransportError::FetchPageLimitExceeded,
+        RadrootsTransportError::FetchPageRequestMismatch,
         RadrootsTransportError::EmptyDeliveryRequestId,
         RadrootsTransportError::InvalidDeliveryRequestId,
         RadrootsTransportError::InvalidDeliveryTimestamp,
