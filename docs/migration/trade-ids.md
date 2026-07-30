@@ -12,10 +12,11 @@ Import these types from `radroots_event::trade`. The deliberate
 canonical event-bound identifiers. Both paths resolve to the same definitions;
 neither path introduces a wrapper or conversion.
 
-`OrderId` is a separate human or business-workflow identifier. It is not an
-alias for `TradeId`, and protocol code must not infer or construct a `TradeId`
-from an `OrderId`. Persisted and wire boundaries encode protocol IDs as
-lowercase hexadecimal only through their explicit `to_hex` and parsing APIs.
+`radroots_trade::model::OrderId` is the separate human or business-workflow
+identifier. It is not an alias for `TradeId`, and no conversion exists between
+them. Protocol code must not infer or construct a `TradeId` from an `OrderId`.
+Persisted and wire boundaries encode protocol IDs as lowercase hexadecimal
+only through their explicit `to_hex` and parsing APIs.
 
 The algorithm package's former `TradeId(OrderId)` wrapper is removed at its
 ordered package-refactor checkpoint. New event-domain code must use the

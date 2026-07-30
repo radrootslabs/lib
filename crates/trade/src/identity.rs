@@ -1,67 +1,21 @@
 #![forbid(unsafe_code)]
 
-use core::str::FromStr;
-
-use radroots_event::id::{ClassifiedListingAddress, EventId, OrderId, ParseError};
+use radroots_event::{
+    id::{ClassifiedListingAddress, EventId},
+    trade::TradeId,
+};
 use radroots_identity::PublicKey;
 
-#[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
-#[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(transparent))]
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct TradeId(OrderId);
-
-impl TradeId {
-    pub fn parse(value: impl AsRef<str>) -> Result<Self, ParseError> {
-        OrderId::parse(value).map(Self)
-    }
-
-    pub fn as_order_id(&self) -> &OrderId {
-        &self.0
-    }
-
-    pub fn into_order_id(self) -> OrderId {
-        self.0
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl From<OrderId> for TradeId {
-    fn from(order_id: OrderId) -> Self {
-        Self(order_id)
-    }
-}
-
-impl From<TradeId> for OrderId {
-    fn from(trade_id: TradeId) -> Self {
-        trade_id.into_order_id()
-    }
-}
-
-impl AsRef<str> for TradeId {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl FromStr for TradeId {
-    type Err = ParseError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::parse(value)
-    }
-}
+use crate::model::OrderId;
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
 #[cfg_attr(feature = "dto-bindgen", dto(export))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeLocator {
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub trade_id: TradeId,
+    pub order_id: Option<OrderId>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub root_event_id: Option<EventId>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
@@ -73,9 +27,10 @@ pub struct RadrootsTradeLocator {
 }
 
 impl RadrootsTradeLocator {
-    pub fn new(trade_id: impl Into<TradeId>) -> Self {
+    pub fn new(trade_id: TradeId) -> Self {
         Self {
-            trade_id: trade_id.into(),
+            trade_id,
+            order_id: None,
             root_event_id: None,
             listing_addr: None,
             buyer_pubkey: None,
@@ -83,12 +38,9 @@ impl RadrootsTradeLocator {
         }
     }
 
-    pub fn from_order_id(order_id: OrderId) -> Self {
-        Self::new(order_id)
-    }
-
-    pub fn order_id(&self) -> &OrderId {
-        self.trade_id.as_order_id()
+    pub fn with_order_id(mut self, order_id: OrderId) -> Self {
+        self.order_id = Some(order_id);
+        self
     }
 
     pub fn with_root_event_id(mut self, root_event_id: EventId) -> Self {
@@ -117,7 +69,9 @@ impl RadrootsTradeLocator {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeLocatorCandidate {
+    #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub trade_id: TradeId,
+    pub order_id: OrderId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
     pub root_event_id: EventId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
@@ -131,7 +85,8 @@ pub struct RadrootsTradeLocatorCandidate {
 impl RadrootsTradeLocatorCandidate {
     pub fn locator(&self) -> RadrootsTradeLocator {
         RadrootsTradeLocator {
-            trade_id: self.trade_id.clone(),
+            trade_id: self.trade_id,
+            order_id: Some(self.order_id.clone()),
             root_event_id: Some(self.root_event_id),
             listing_addr: Some(self.listing_addr.clone()),
             buyer_pubkey: Some(self.buyer_pubkey),
@@ -157,6 +112,10 @@ mod tests {
         OrderId::parse("order-1").expect("order id")
     }
 
+    fn trade_id() -> TradeId {
+        TradeId::parse("11".repeat(16)).expect("trade id")
+    }
+
     fn public_key(raw: &str) -> PublicKey {
         PublicKey::from_hex(raw).expect("public key")
     }
@@ -169,28 +128,18 @@ mod tests {
     }
 
     #[test]
-    fn trade_id_and_locator_accessors_cover_public_surface() {
+    fn protocol_trade_and_business_order_ids_remain_distinct() {
         let order_id = order_id();
-        let trade_id = TradeId::parse(order_id.as_str()).expect("trade id");
-
-        assert_eq!(trade_id.as_order_id(), &order_id);
-        assert_eq!(trade_id.as_str(), "order-1");
-        assert_eq!(trade_id.as_ref(), "order-1");
-        assert_eq!(TradeId::from_str("order-1").unwrap(), trade_id);
-        assert!(TradeId::parse(" ").is_err());
-        assert_eq!(
-            OrderId::from(trade_id.clone()),
-            trade_id.clone().into_order_id()
-        );
-
-        let locator = RadrootsTradeLocator::from_order_id(order_id.clone())
+        let trade_id = trade_id();
+        let locator = RadrootsTradeLocator::new(trade_id)
+            .with_order_id(order_id.clone())
             .with_root_event_id(event_id(1))
             .with_listing_addr(listing_addr())
             .with_buyer_pubkey(public_key(BUYER))
             .with_seller_pubkey(public_key(SELLER));
 
-        assert_eq!(locator.order_id(), &order_id);
-        assert_eq!(locator.trade_id.as_order_id(), &order_id);
+        assert_eq!(locator.trade_id, trade_id);
+        assert_eq!(locator.order_id.as_ref(), Some(&order_id));
         assert_eq!(locator.root_event_id, Some(event_id(1)));
         assert_eq!(locator.listing_addr, Some(listing_addr()));
         assert_eq!(locator.buyer_pubkey, Some(public_key(BUYER)));
@@ -200,7 +149,8 @@ mod tests {
     #[test]
     fn locator_candidate_converts_to_specific_locator() {
         let candidate = RadrootsTradeLocatorCandidate {
-            trade_id: order_id().into(),
+            trade_id: trade_id(),
+            order_id: order_id(),
             root_event_id: event_id(1),
             listing_addr: listing_addr(),
             buyer_pubkey: public_key(BUYER),
@@ -210,6 +160,7 @@ mod tests {
         let locator = candidate.locator();
 
         assert_eq!(locator.trade_id, candidate.trade_id);
+        assert_eq!(locator.order_id, Some(candidate.order_id));
         assert_eq!(locator.root_event_id, Some(candidate.root_event_id));
         assert_eq!(locator.listing_addr, Some(candidate.listing_addr));
         assert_eq!(locator.buyer_pubkey, Some(candidate.buyer_pubkey));

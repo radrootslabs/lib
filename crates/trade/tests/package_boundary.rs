@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, workflow as _};
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
+const IDENTITY: &str = include_str!("../src/identity.rs");
+const MODEL: &str = include_str!("../src/model.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
 
@@ -49,6 +51,25 @@ fn expired_upward_development_dependencies_are_absent() {
             "expired tier exception remains: {dependency}"
         );
     }
+}
+
+#[test]
+fn protocol_trade_id_is_singular_and_business_order_id_is_distinct() {
+    let trade_id = radroots_event::trade::TradeId::parse("11".repeat(16))
+        .expect("canonical protocol trade id");
+    let order_id = radroots_trade::model::OrderId::parse("order-1").expect("business order id");
+    let locator = radroots_trade::identity::RadrootsTradeLocator::new(trade_id)
+        .with_order_id(order_id.clone());
+
+    assert_eq!(locator.trade_id, trade_id);
+    assert_eq!(locator.order_id, Some(order_id));
+    assert!(!IDENTITY.contains("pub struct TradeId"));
+    assert!(!IDENTITY.contains("pub type TradeId"));
+    assert!(!IDENTITY.contains("From<OrderId> for TradeId"));
+    assert!(!IDENTITY.contains("From<TradeId> for OrderId"));
+    assert!(IDENTITY.contains("trade::TradeId"));
+    assert!(MODEL.contains("pub struct OrderId(String);"));
+    assert!(MODEL.contains("No conversion exists between them."));
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
