@@ -296,9 +296,10 @@ impl TransportRoute {
 
     pub fn includes_transport(self, kind: TransportKind) -> bool {
         match kind {
-            TransportKind::Local => self.local,
-            TransportKind::Nostr => self.nostr,
-            TransportKind::Reticulum => self.reticulum,
+            TransportKind::LOCAL => self.local,
+            TransportKind::NOSTR => self.nostr,
+            TransportKind::RETICULUM => self.reticulum,
+            _ => false,
         }
     }
 }
@@ -956,10 +957,10 @@ pub fn validate_catalog(descriptors: &[OperationDescriptor]) -> Result<(), Error
         if !descriptor.transport_capability.deliver
             || !descriptor
                 .transport_capability
-                .includes_transport(TransportKind::Nostr)
+                .includes_transport(TransportKind::NOSTR)
             || !descriptor
                 .transport_capability
-                .includes_transport(TransportKind::Reticulum)
+                .includes_transport(TransportKind::RETICULUM)
         {
             return Err(Error::CatalogInvalid {
                 message: format!(

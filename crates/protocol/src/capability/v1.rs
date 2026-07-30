@@ -5,39 +5,105 @@ use core::fmt;
 
 use crate::schema::{Metadata, ModuleVersion, Registry};
 
-/// Stable wire identity for a supported transport family.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+/// Maximum encoded length of a capability transport identity.
+pub const MAX_TRANSPORT_KIND_BYTES: usize = 64;
+
+/// Stable wire identity for a transport family.
+///
+/// The representation is intentionally open so adding a transport does not
+/// require adding an enum variant to this versioned wire contract.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum TransportKind {
-    /// Process-local transport.
-    Local,
-    /// Nostr relay transport.
-    Nostr,
-    /// Reticulum mesh transport.
-    Reticulum,
+pub struct TransportKind {
+    bytes: [u8; MAX_TRANSPORT_KIND_BYTES],
+    len: u8,
 }
 
 impl TransportKind {
-    /// Returns the stable serialized identity.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Local => "local",
-            Self::Nostr => "nostr",
-            Self::Reticulum => "reticulum",
+    /// Process-local transport.
+    pub const LOCAL: Self = Self::from_static(b"local");
+    /// Nostr relay transport.
+    pub const NOSTR: Self = Self::from_static(b"nostr");
+    /// Reticulum mesh transport.
+    pub const RETICULUM: Self = Self::from_static(b"reticulum");
+    /// Daemon-mediated transport.
+    pub const RADROOTSD: Self = Self::from_static(b"radrootsd");
+
+    const fn from_static(value: &[u8]) -> Self {
+        let mut bytes = [0; MAX_TRANSPORT_KIND_BYTES];
+        let mut index = 0;
+        while index < value.len() {
+            bytes[index] = value[index];
+            index += 1;
+        }
+        Self {
+            bytes,
+            len: value.len() as u8,
         }
     }
 
-    /// Parses an exact stable transport identity.
+    /// Parses an exact canonical transport identity.
+    ///
+    /// Identities contain 1-64 lowercase ASCII bytes. They begin and end with
+    /// an ASCII letter or digit and may use single `-` separators internally.
     pub fn parse(value: &str) -> Result<Self, Error> {
-        match value {
-            "local" => Ok(Self::Local),
-            "nostr" => Ok(Self::Nostr),
-            "reticulum" => Ok(Self::Reticulum),
-            _ => Err(Error::UnknownTransportKind {
-                value: value.to_string(),
-            }),
+        if value.is_empty() {
+            return Err(Error::EmptyTransportKind);
         }
+        let raw = value.as_bytes();
+        let valid_edge = |byte: u8| byte.is_ascii_lowercase() || byte.is_ascii_digit();
+        let valid = raw.len() <= MAX_TRANSPORT_KIND_BYTES
+            && valid_edge(raw[0])
+            && valid_edge(raw[raw.len() - 1])
+            && raw.iter().enumerate().all(|(index, byte)| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || (*byte == b'-' && index > 0 && raw[index - 1] != b'-')
+            });
+        if !valid {
+            return Err(Error::InvalidTransportKind {
+                value: value.to_string(),
+            });
+        }
+
+        let mut bytes = [0; MAX_TRANSPORT_KIND_BYTES];
+        bytes[..raw.len()].copy_from_slice(raw);
+        Ok(Self {
+            bytes,
+            len: raw.len() as u8,
+        })
+    }
+
+    /// Returns the validated wire identity.
+    pub fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.bytes[..usize::from(self.len)])
+            .expect("TransportKind stores validated ASCII")
+    }
+}
+
+impl fmt::Display for TransportKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for TransportKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for TransportKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::parse(value.as_str()).map_err(serde::de::Error::custom)
     }
 }
 
@@ -162,7 +228,7 @@ pub struct TransportDescriptor {
 /// Exact Release V1 transport capability catalog.
 pub const CATALOG: &[TransportDescriptor] = &[
     TransportDescriptor {
-        kind: TransportKind::Local,
+        kind: TransportKind::LOCAL,
         maturity: Maturity::Stable,
         availability: Availability::Available,
         can_deliver: true,
@@ -173,7 +239,7 @@ pub const CATALOG: &[TransportDescriptor] = &[
         required_for_v1: true,
     },
     TransportDescriptor {
-        kind: TransportKind::Nostr,
+        kind: TransportKind::NOSTR,
         maturity: Maturity::Stable,
         availability: Availability::Available,
         can_deliver: true,
@@ -184,7 +250,7 @@ pub const CATALOG: &[TransportDescriptor] = &[
         required_for_v1: true,
     },
     TransportDescriptor {
-        kind: TransportKind::Reticulum,
+        kind: TransportKind::RETICULUM,
         maturity: Maturity::Preview,
         availability: Availability::Unavailable,
         can_deliver: true,
@@ -217,30 +283,23 @@ pub const SCHEMAS: &[Metadata] = &[
 
 /// Validates catalog uniqueness and required V1 membership.
 pub fn validate_catalog(descriptors: &[TransportDescriptor]) -> Result<(), Error> {
-    let mut seen = [false; 3];
-    for descriptor in descriptors {
-        let index = match descriptor.kind {
-            TransportKind::Local => 0,
-            TransportKind::Nostr => 1,
-            TransportKind::Reticulum => 2,
-        };
-        if seen[index] {
+    for (index, descriptor) in descriptors.iter().enumerate() {
+        if descriptors[..index]
+            .iter()
+            .any(|candidate| candidate.kind == descriptor.kind)
+        {
             return Err(Error::DuplicateTransportKind {
                 kind: descriptor.kind,
             });
         }
-        seen[index] = true;
     }
 
-    for (index, kind) in [
-        TransportKind::Local,
-        TransportKind::Nostr,
-        TransportKind::Reticulum,
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        if !seen[index] {
+    for kind in [
+        TransportKind::LOCAL,
+        TransportKind::NOSTR,
+        TransportKind::RETICULUM,
+    ] {
+        if !descriptors.iter().any(|descriptor| descriptor.kind == kind) {
             return Err(Error::MissingRequiredTransport { kind });
         }
     }
@@ -261,8 +320,10 @@ pub fn schema_registry() -> Result<Registry, crate::schema::Error> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Error {
-    /// The transport identity is unknown.
-    UnknownTransportKind {
+    /// The transport identity is empty.
+    EmptyTransportKind,
+    /// The transport identity is not canonical or exceeds its bound.
+    InvalidTransportKind {
         /// Rejected transport identity.
         value: String,
     },
@@ -285,8 +346,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnknownTransportKind { value } => {
-                write!(formatter, "unknown transport kind {value}")
+            Self::EmptyTransportKind => formatter.write_str("transport kind is empty"),
+            Self::InvalidTransportKind { value } => {
+                write!(formatter, "invalid transport kind {value}")
             }
             Self::InvalidMeshScopeId => formatter.write_str("invalid mesh scope id"),
             Self::InvalidReticulumDestination => {
@@ -323,21 +385,31 @@ mod tests {
     }
 
     #[test]
-    fn parsers_preserve_v1_acceptance_and_diagnostics() {
+    fn transport_kind_accepts_built_ins_and_forward_compatible_values() {
         for (value, expected) in [
-            ("local", TransportKind::Local),
-            ("nostr", TransportKind::Nostr),
-            ("reticulum", TransportKind::Reticulum),
+            ("local", TransportKind::LOCAL),
+            ("nostr", TransportKind::NOSTR),
+            ("reticulum", TransportKind::RETICULUM),
+            ("radrootsd", TransportKind::RADROOTSD),
         ] {
             assert_eq!(TransportKind::parse(value), Ok(expected));
             assert_eq!(expected.as_str(), value);
         }
         assert_eq!(
-            TransportKind::parse("mesh")
-                .expect_err("unknown")
-                .to_string(),
-            "unknown transport kind mesh"
+            TransportKind::parse("fieldbus-v2").unwrap().as_str(),
+            "fieldbus-v2"
         );
+        for invalid in ["", "NOSTR", " fieldbus", "fieldbus_2", "fieldbus--2"] {
+            assert!(
+                TransportKind::parse(invalid).is_err(),
+                "accepted {invalid:?}"
+            );
+        }
+        assert!(TransportKind::parse(&"a".repeat(MAX_TRANSPORT_KIND_BYTES + 1)).is_err());
+    }
+
+    #[test]
+    fn other_capability_parsers_preserve_v1_diagnostics() {
         assert_eq!(
             MeshScopeId::parse("local/scope")
                 .expect_err("invalid scope")
@@ -357,13 +429,13 @@ mod tests {
         assert_eq!(
             validate_catalog(&[CATALOG[0], CATALOG[0]]),
             Err(Error::DuplicateTransportKind {
-                kind: TransportKind::Local,
+                kind: TransportKind::LOCAL,
             })
         );
         assert_eq!(
             validate_catalog(&[CATALOG[1], CATALOG[2]]),
             Err(Error::MissingRequiredTransport {
-                kind: TransportKind::Local,
+                kind: TransportKind::LOCAL,
             })
         );
     }

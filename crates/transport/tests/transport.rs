@@ -13,12 +13,12 @@ use radroots_transport::{
     RadrootsTransportTargetReceipt, RadrootsTransportTargetSet, RadrootsTransportTargetUri,
     ReticulumCapabilityReportV1, ReticulumDestinationV1, ReticulumDuplicateFragmentBehaviorV1,
     ReticulumFragmentIntegrityV1, ReticulumFragmentationModeV1, ReticulumGatewaySemanticsV1,
-    ReticulumPrivacySemanticsV1,
+    ReticulumPrivacySemanticsV1, TRANSPORT_ID_MAX_BYTES, TransportId,
 };
 use serde_json::Value;
 use std::borrow::ToOwned;
 use std::boxed::Box;
-use std::string::{String, ToString};
+use std::string::ToString;
 use std::vec;
 use std::vec::Vec;
 
@@ -168,39 +168,32 @@ fn reticulum_capability_report_v1_is_explicitly_unavailable_without_fragmentatio
 }
 
 #[test]
-fn transport_kind_parser_round_trips_first_wave_canonical_labels() {
-    assert_eq!(
-        RadrootsTransportKind::parse(" NOSTR ").expect("nostr kind"),
-        RadrootsTransportKind::Nostr
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse("reticulum").expect("reticulum kind"),
-        RadrootsTransportKind::Reticulum
-    );
-    assert_eq!(
-        RadrootsTransportKind::parse("local").expect("local kind"),
-        RadrootsTransportKind::Local
-    );
+fn transport_id_round_trips_built_ins_and_custom_values() {
+    for (raw, expected) in [
+        ("local", TransportId::LOCAL),
+        ("nostr", TransportId::NOSTR),
+        ("reticulum", TransportId::RETICULUM),
+        ("radrootsd", TransportId::RADROOTSD),
+    ] {
+        let parsed = TransportId::parse(raw).expect("built-in transport id");
+        assert_eq!(parsed, expected);
+        assert_eq!(parsed.as_str(), raw);
+        assert_eq!(parsed.to_string(), raw);
+    }
+
+    let custom = TransportId::parse("fieldbus-v2").expect("custom transport id");
+    assert_eq!(custom.as_str(), "fieldbus-v2");
+    let custom_target =
+        RadrootsTransportTarget::new(custom, "fieldbus:node-7").expect("custom target");
+    assert_eq!(custom_target.kind(), &custom);
     assert_eq!(
         RadrootsTransportKind::Local.canonical_label(),
         "local".to_owned()
     );
-    for retired in [
-        "mesh".to_owned(),
-        ["pro", "xy"].concat(),
-        ["hy", "brid"].concat(),
-        ["reticulum", "_preview"].concat(),
-        "fieldbus".to_owned(),
-    ] {
-        assert_eq!(
-            RadrootsTransportKind::parse(retired).expect_err("retired or unknown kind"),
-            RadrootsTransportError::InvalidTransportKind
-        );
-    }
 }
 
 #[test]
-fn canonical_transport_kind_parser_rejects_noncanonical_public_values() {
+fn transport_id_parser_enforces_canonical_syntax_and_bound() {
     assert_eq!(
         RadrootsTransportKind::parse_canonical("nostr").expect("nostr kind"),
         RadrootsTransportKind::Nostr
@@ -214,22 +207,22 @@ fn canonical_transport_kind_parser_rejects_noncanonical_public_values() {
         RadrootsTransportError::InvalidTransportKind
     );
     assert_eq!(
-        RadrootsTransportKind::parse_canonical(removed_radrootsd_execution_transport_kind())
-            .expect_err("removed radrootsd execution kind"),
+        RadrootsTransportKind::parse_canonical("radrootsd_proxy")
+            .expect_err("underscore separator"),
         RadrootsTransportError::InvalidTransportKind
     );
     assert_eq!(
-        RadrootsTransportKind::parse_canonical("fieldbus").expect_err("custom kind"),
-        RadrootsTransportError::InvalidTransportKind
+        RadrootsTransportKind::parse_canonical("fieldbus").expect("custom kind"),
+        TransportId::parse("fieldbus").expect("same custom kind")
     );
     assert_eq!(
         RadrootsTransportKind::parse_canonical("").expect_err("empty kind"),
         RadrootsTransportError::EmptyTransportKind
     );
-}
-
-fn removed_radrootsd_execution_transport_kind() -> String {
-    ["radrootsd", "_", "pro", "xy"].concat()
+    assert_eq!(
+        TransportId::parse("a".repeat(TRANSPORT_ID_MAX_BYTES + 1)).expect_err("overlong kind"),
+        RadrootsTransportError::InvalidTransportKind
+    );
 }
 
 #[test]
@@ -679,7 +672,15 @@ fn transport_errors_have_stable_display_strings() {
 
 #[test]
 fn transport_kind_and_target_parsers_cover_negative_edges() {
-    for invalid in ["bad kind", "bad:kind", "bad/kind", "bad\nkind", "fieldbus"] {
+    for invalid in [
+        "bad kind",
+        "bad:kind",
+        "bad/kind",
+        "bad\nkind",
+        "-fieldbus",
+        "fieldbus-",
+        "fieldbus--v2",
+    ] {
         assert_eq!(
             RadrootsTransportKind::parse(invalid).expect_err("invalid kind"),
             RadrootsTransportError::InvalidTransportKind
@@ -1882,6 +1883,19 @@ fn status_contract_covers_builders_and_availability_defaults() {
 fn transport_kind_deserializer_rejects_non_string_values() {
     assert!(serde_json::from_str::<RadrootsTransportKind>("1").is_err());
     assert!(serde_json::from_str::<RadrootsTransportKind>("\"NOSTR\"").is_err());
+}
+
+#[test]
+#[cfg(feature = "serde")]
+fn transport_id_serde_uses_the_protocol_wire_contract() {
+    let id = TransportId::parse("future-mesh-v3").expect("future transport id");
+    let encoded = serde_json::to_string(&id).expect("serialize transport id");
+    assert_eq!(encoded, "\"future-mesh-v3\"");
+    assert_eq!(serde_json::from_str::<TransportId>(&encoded).unwrap(), id);
+
+    let protocol: radroots_protocol::capability::v1::TransportKind = id.into();
+    assert_eq!(protocol.as_str(), id.as_str());
+    assert_eq!(TransportId::from(protocol), id);
 }
 
 #[test]

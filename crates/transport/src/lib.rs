@@ -8,6 +8,7 @@ pub mod capability;
 mod delivery;
 pub mod endpoint;
 pub mod error;
+mod id;
 mod kind;
 mod message;
 pub mod outcome;
@@ -26,9 +27,10 @@ pub use delivery::{
     RadrootsTransportSatisfactionPolicy, RadrootsTransportTargetReceipt,
 };
 pub use error::RadrootsTransportError;
+pub use id::{RadrootsTransportKind, TRANSPORT_ID_MAX_BYTES, TransportId};
 pub use kind::{
     RadrootsTransportCapabilityAvailability, RadrootsTransportCapabilityMaturity,
-    RadrootsTransportImplementationState, RadrootsTransportKind,
+    RadrootsTransportImplementationState,
 };
 pub use message::{
     RADROOTS_RETICULUM_ENDPOINT_URI, RADROOTS_RETICULUM_SCOPE_ID,

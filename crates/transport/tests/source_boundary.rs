@@ -759,30 +759,31 @@ fn required_target_semantics_stay_fingerprint_exact() {
 }
 
 #[test]
-fn transport_hardening_sources_reject_removed_execution_kind_and_keep_reticulum_contracts() {
+fn transport_identity_is_extensible_and_reticulum_contracts_remain_explicit() {
     let crates_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("transport crate parent");
-    let transport_kind = read_source(crates_root.join("transport/src/kind.rs").as_path());
-    for required in ["Nostr,", "Reticulum,", "Local,"] {
-        assert!(
-            transport_kind.contains(required),
-            "transport kind source must retain first-wave transport witness `{required}`"
-        );
-    }
-    let removed_kind_variant = ["Pro", "xy,"].concat();
-    let removed_parse_arm = [r#""#, "pro", "xy", r#"" => Ok(Self::"#, "Pro", "xy)"].concat();
-    let removed_label_arm = [r#"Self::"#, "Pro", "xy => \"", "pro", "xy\".to_string()"].concat();
-    for forbidden in [
-        &removed_kind_variant,
-        &removed_parse_arm,
-        &removed_label_arm,
+    let transport_id = read_source(crates_root.join("transport/src/id.rs").as_path());
+    for required in [
+        "pub struct TransportId(",
+        "pub const LOCAL:",
+        "pub const NOSTR:",
+        "pub const RETICULUM:",
+        "pub const RADROOTSD:",
+        "ProtocolTransportKind::parse",
     ] {
         assert!(
-            !transport_kind.contains(forbidden.as_str()),
-            "transport kind source must not retain removed radrootsd execution transport witness `{forbidden}`"
+            transport_id.contains(required),
+            "transport identity source must retain extensible identity witness `{required}`"
         );
     }
+    assert!(!transport_id.contains("pub enum TransportId"));
+
+    let protocol_identity =
+        read_source(crates_root.join("protocol/src/capability/v1.rs").as_path());
+    assert!(protocol_identity.contains("pub struct TransportKind"));
+    assert!(!protocol_identity.contains("pub enum TransportKind"));
+    assert!(protocol_identity.contains("MAX_TRANSPORT_KIND_BYTES"));
 
     let transport_message_source =
         read_source(crates_root.join("transport/src/message.rs").as_path());

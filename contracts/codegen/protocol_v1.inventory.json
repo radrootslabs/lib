@@ -7,7 +7,7 @@
     {
       "module": "capability::v1",
       "path": "crates/protocol/src/capability/v1.rs",
-      "sha256": "8a50dc841ced8e5f4fea18cd248f2a170b8e4e51175511a82ac5c6213c768ba3",
+      "sha256": "416f3ae2a5f97c46b56b0c24095f6f6813d2851b7856c84cfbdc251bdd30a846",
       "types": [
         {
           "rust_path": "radroots_protocol::capability::v1::Availability",
@@ -35,7 +35,7 @@
         },
         {
           "rust_path": "radroots_protocol::capability::v1::TransportKind",
-          "kind": "enum"
+          "kind": "struct"
         }
       ]
     },
@@ -203,7 +203,7 @@
     {
       "module": "runtime::v1",
       "path": "crates/protocol/src/runtime/v1.rs",
-      "sha256": "94157d512a1ea152685529f9a3e5cb23da95db6e2271b09f1c9f835c14703743",
+      "sha256": "3ef493bd3d2e18f52f2efa0c508fe1bcdaced26d7f53674f130ccf38dd1b1e36",
       "types": [
         {
           "rust_path": "radroots_protocol::runtime::v1::ApprovalRequirement",

@@ -8,25 +8,19 @@ pub radroots_protocol::capability::v1::Availability::Unavailable
 #[non_exhaustive] pub enum radroots_protocol::capability::v1::Error
 pub radroots_protocol::capability::v1::Error::DuplicateTransportKind
 pub radroots_protocol::capability::v1::Error::DuplicateTransportKind::kind: radroots_protocol::capability::v1::TransportKind
+pub radroots_protocol::capability::v1::Error::EmptyTransportKind
 pub radroots_protocol::capability::v1::Error::InvalidMeshScopeId
 pub radroots_protocol::capability::v1::Error::InvalidReticulumDestination
+pub radroots_protocol::capability::v1::Error::InvalidTransportKind
+pub radroots_protocol::capability::v1::Error::InvalidTransportKind::value: alloc::string::String
 pub radroots_protocol::capability::v1::Error::MissingRequiredTransport
 pub radroots_protocol::capability::v1::Error::MissingRequiredTransport::kind: radroots_protocol::capability::v1::TransportKind
-pub radroots_protocol::capability::v1::Error::UnknownTransportKind
-pub radroots_protocol::capability::v1::Error::UnknownTransportKind::value: alloc::string::String
 impl core::error::Error for radroots_protocol::capability::v1::Error
 impl core::fmt::Display for radroots_protocol::capability::v1::Error
 pub fn radroots_protocol::capability::v1::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_protocol::capability::v1::Maturity
 pub radroots_protocol::capability::v1::Maturity::Preview
 pub radroots_protocol::capability::v1::Maturity::Stable
-pub enum radroots_protocol::capability::v1::TransportKind
-pub radroots_protocol::capability::v1::TransportKind::Local
-pub radroots_protocol::capability::v1::TransportKind::Nostr
-pub radroots_protocol::capability::v1::TransportKind::Reticulum
-impl radroots_protocol::capability::v1::TransportKind
-pub const fn radroots_protocol::capability::v1::TransportKind::as_str(self) -> &'static str
-pub fn radroots_protocol::capability::v1::TransportKind::parse(&str) -> core::result::Result<Self, radroots_protocol::capability::v1::Error>
 pub struct radroots_protocol::capability::v1::MeshScopeId
 impl radroots_protocol::capability::v1::MeshScopeId
 pub fn radroots_protocol::capability::v1::MeshScopeId::as_str(&self) -> &str
@@ -48,7 +42,22 @@ pub radroots_protocol::capability::v1::TransportDescriptor::can_observe_receipts
 pub radroots_protocol::capability::v1::TransportDescriptor::kind: radroots_protocol::capability::v1::TransportKind
 pub radroots_protocol::capability::v1::TransportDescriptor::maturity: radroots_protocol::capability::v1::Maturity
 pub radroots_protocol::capability::v1::TransportDescriptor::required_for_v1: bool
+pub struct radroots_protocol::capability::v1::TransportKind
+impl radroots_protocol::capability::v1::TransportKind
+pub const radroots_protocol::capability::v1::TransportKind::LOCAL: Self
+pub const radroots_protocol::capability::v1::TransportKind::NOSTR: Self
+pub const radroots_protocol::capability::v1::TransportKind::RADROOTSD: Self
+pub const radroots_protocol::capability::v1::TransportKind::RETICULUM: Self
+pub fn radroots_protocol::capability::v1::TransportKind::as_str(&self) -> &str
+pub fn radroots_protocol::capability::v1::TransportKind::parse(&str) -> core::result::Result<Self, radroots_protocol::capability::v1::Error>
+impl core::fmt::Display for radroots_protocol::capability::v1::TransportKind
+pub fn radroots_protocol::capability::v1::TransportKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_protocol::capability::v1::TransportKind
+pub fn radroots_protocol::capability::v1::TransportKind::serialize<S>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for radroots_protocol::capability::v1::TransportKind
+pub fn radroots_protocol::capability::v1::TransportKind::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_protocol::capability::v1::CATALOG: &[radroots_protocol::capability::v1::TransportDescriptor]
+pub const radroots_protocol::capability::v1::MAX_TRANSPORT_KIND_BYTES: usize
 pub const radroots_protocol::capability::v1::SCHEMAS: &[radroots_protocol::schema::Metadata]
 pub fn radroots_protocol::capability::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::capability::v1::validate_catalog(&[radroots_protocol::capability::v1::TransportDescriptor]) -> core::result::Result<(), radroots_protocol::capability::v1::Error>
@@ -139,6 +148,7 @@ pub radroots_protocol::error::v1::KnownCode::RevisionRequired
 pub radroots_protocol::error::v1::KnownCode::SchemaTooNew
 pub radroots_protocol::error::v1::KnownCode::SignerCancelled
 pub radroots_protocol::error::v1::KnownCode::SignerCapabilityMissing
+pub radroots_protocol::error::v1::KnownCode::SignerOutputInvalid
 pub radroots_protocol::error::v1::KnownCode::SignerRejected
 pub radroots_protocol::error::v1::KnownCode::SignerTimeout
 pub radroots_protocol::error::v1::KnownCode::SignerUnavailable

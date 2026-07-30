@@ -2897,6 +2897,12 @@ fn delivery_target_from_row(
             target_scope.clone(),
             target_label.clone(),
         ),
+        _ => RadrootsTransportTarget::new_with_metadata(
+            transport_kind,
+            endpoint_uri_raw.as_str(),
+            target_scope.clone(),
+            target_label.clone(),
+        ),
     }
     .map_err(|_| invalid_identity("canonical_fields"))?;
     if target.uri().as_str() != endpoint_uri_raw

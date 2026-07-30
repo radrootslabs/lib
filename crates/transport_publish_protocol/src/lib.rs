@@ -1222,6 +1222,7 @@ fn transport_target_from_parts(
         RadrootsTransportKind::Local => {
             RadrootsTransportTarget::local_with_metadata(endpoint_uri, scope, label)
         }
+        _ => RadrootsTransportTarget::new_with_metadata(transport_kind, endpoint_uri, scope, label),
     }
 }
 

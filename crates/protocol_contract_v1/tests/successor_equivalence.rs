@@ -30,15 +30,15 @@ fn capability_value_json_is_byte_identical() {
     for (predecessor, successor) in [
         (
             predecessor::TransportKindV1::Local,
-            capability::TransportKind::Local,
+            capability::TransportKind::LOCAL,
         ),
         (
             predecessor::TransportKindV1::Nostr,
-            capability::TransportKind::Nostr,
+            capability::TransportKind::NOSTR,
         ),
         (
             predecessor::TransportKindV1::Reticulum,
-            capability::TransportKind::Reticulum,
+            capability::TransportKind::RETICULUM,
         ),
     ] {
         assert_eq!(
