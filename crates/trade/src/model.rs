@@ -1,5 +1,11 @@
 //! Native trade-domain models and validated value types.
 
+pub use crate::trade_contract_v1::{
+    RadrootsTradeAgreementClaimV1, RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1,
+    RadrootsTradeConflictStateV1, RadrootsTradeFulfillmentStateV1, RadrootsTradeNegotiationStateV1,
+    RadrootsTradePaymentStateV1, RadrootsTradePrivateTermsStateV1, RadrootsTradeProjectionV1,
+};
+
 #[cfg(not(feature = "std"))]
 use alloc::string::{String, ToString};
 #[cfg(feature = "std")]

@@ -134,12 +134,12 @@ pub enum RadrootsTradePaymentStateV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeReductionInputV1 {
-    pub trade_id: TradeId,
-    pub mutations: Vec<RadrootsTradeMutationRecordV1>,
-    pub private_terms: Vec<RadrootsTradePrivateTermsEvidenceV1>,
-    pub attestations: Vec<RadrootsTradeAttestationRecordV1>,
-    pub evidence_state: RadrootsTradeEvidenceStateV1,
-    pub observed_at_unix_s: Option<u64>,
+    trade_id: TradeId,
+    mutations: Vec<RadrootsTradeMutationRecordV1>,
+    private_terms: Vec<RadrootsTradePrivateTermsEvidenceV1>,
+    attestations: Vec<RadrootsTradeAttestationRecordV1>,
+    evidence_state: RadrootsTradeEvidenceStateV1,
+    observed_at_unix_s: Option<u64>,
 }
 
 impl RadrootsTradeReductionInputV1 {
@@ -153,13 +153,93 @@ impl RadrootsTradeReductionInputV1 {
             observed_at_unix_s: None,
         }
     }
+
+    #[must_use]
+    pub fn with_mutations(mut self, mutations: Vec<RadrootsTradeMutationRecordV1>) -> Self {
+        self.mutations = mutations;
+        self
+    }
+
+    #[must_use]
+    pub fn with_private_terms(
+        mut self,
+        private_terms: Vec<RadrootsTradePrivateTermsEvidenceV1>,
+    ) -> Self {
+        self.private_terms = private_terms;
+        self
+    }
+
+    #[must_use]
+    pub fn with_attestations(
+        mut self,
+        attestations: Vec<RadrootsTradeAttestationRecordV1>,
+    ) -> Self {
+        self.attestations = attestations;
+        self
+    }
+
+    #[must_use]
+    pub fn with_evidence_state(mut self, evidence_state: RadrootsTradeEvidenceStateV1) -> Self {
+        self.evidence_state = evidence_state;
+        self
+    }
+
+    #[must_use]
+    pub fn with_observed_at_unix_s(mut self, observed_at_unix_s: Option<u64>) -> Self {
+        self.observed_at_unix_s = observed_at_unix_s;
+        self
+    }
+
+    pub const fn trade_id(&self) -> &TradeId {
+        &self.trade_id
+    }
+
+    pub fn mutations(&self) -> &[RadrootsTradeMutationRecordV1] {
+        &self.mutations
+    }
+
+    pub fn private_terms(&self) -> &[RadrootsTradePrivateTermsEvidenceV1] {
+        &self.private_terms
+    }
+
+    pub fn attestations(&self) -> &[RadrootsTradeAttestationRecordV1] {
+        &self.attestations
+    }
+
+    pub const fn evidence_state(&self) -> RadrootsTradeEvidenceStateV1 {
+        self.evidence_state
+    }
+
+    pub const fn observed_at_unix_s(&self) -> Option<u64> {
+        self.observed_at_unix_s
+    }
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeMutationRecordV1 {
-    pub transport_event_id: Option<EventId>,
-    pub mutation: TradeMutationEnvelopeV1,
+    transport_event_id: Option<EventId>,
+    mutation: TradeMutationEnvelopeV1,
+}
+
+impl RadrootsTradeMutationRecordV1 {
+    pub const fn new(
+        transport_event_id: Option<EventId>,
+        mutation: TradeMutationEnvelopeV1,
+    ) -> Self {
+        Self {
+            transport_event_id,
+            mutation,
+        }
+    }
+
+    pub const fn transport_event_id(&self) -> Option<&EventId> {
+        self.transport_event_id.as_ref()
+    }
+
+    pub const fn mutation(&self) -> &TradeMutationEnvelopeV1 {
+        &self.mutation
+    }
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -168,8 +248,25 @@ pub struct RadrootsTradeMutationRecordV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradePrivateTermsEvidenceV1 {
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub candidate_id: CandidateId,
-    pub state: RadrootsTradePrivateTermsStateV1,
+    candidate_id: CandidateId,
+    state: RadrootsTradePrivateTermsStateV1,
+}
+
+impl RadrootsTradePrivateTermsEvidenceV1 {
+    pub const fn new(candidate_id: CandidateId, state: RadrootsTradePrivateTermsStateV1) -> Self {
+        Self {
+            candidate_id,
+            state,
+        }
+    }
+
+    pub const fn candidate_id(&self) -> &CandidateId {
+        &self.candidate_id
+    }
+
+    pub const fn state(&self) -> RadrootsTradePrivateTermsStateV1 {
+        self.state
+    }
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -187,10 +284,36 @@ pub enum RadrootsTradeAttestationResultV1 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeAttestationRecordV1 {
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub event_id: EventId,
+    event_id: EventId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub claim_mutation_id: MutationId,
-    pub result: RadrootsTradeAttestationResultV1,
+    claim_mutation_id: MutationId,
+    result: RadrootsTradeAttestationResultV1,
+}
+
+impl RadrootsTradeAttestationRecordV1 {
+    pub const fn new(
+        event_id: EventId,
+        claim_mutation_id: MutationId,
+        result: RadrootsTradeAttestationResultV1,
+    ) -> Self {
+        Self {
+            event_id,
+            claim_mutation_id,
+            result,
+        }
+    }
+
+    pub const fn event_id(&self) -> &EventId {
+        &self.event_id
+    }
+
+    pub const fn claim_mutation_id(&self) -> &MutationId {
+        &self.claim_mutation_id
+    }
+
+    pub const fn result(&self) -> RadrootsTradeAttestationResultV1 {
+        self.result
+    }
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -198,46 +321,46 @@ pub struct RadrootsTradeAttestationRecordV1 {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RadrootsTradeProjectionV1 {
-    pub reducer_contract_id: String,
-    pub reducer_version: u16,
+    reducer_contract_id: String,
+    reducer_version: u16,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub trade_id: TradeId,
+    trade_id: TradeId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub root_mutation_id: Option<MutationId>,
+    root_mutation_id: Option<MutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub buyer_pubkey: Option<PublicKey>,
+    buyer_pubkey: Option<PublicKey>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub seller_pubkey: Option<PublicKey>,
+    seller_pubkey: Option<PublicKey>,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub farm_id: Option<DTag>,
-    pub negotiation_state: RadrootsTradeNegotiationStateV1,
-    pub agreement_state: RadrootsTradeAgreementStateV1,
-    pub evidence_state: RadrootsTradeEvidenceStateV1,
-    pub conflict_state: RadrootsTradeConflictStateV1,
-    pub private_terms_state: RadrootsTradePrivateTermsStateV1,
-    pub attestation_state: RadrootsTradeAttestationStateV1,
-    pub fulfillment_state: RadrootsTradeFulfillmentStateV1,
-    pub payment_state: RadrootsTradePaymentStateV1,
+    farm_id: Option<DTag>,
+    negotiation_state: RadrootsTradeNegotiationStateV1,
+    agreement_state: RadrootsTradeAgreementStateV1,
+    evidence_state: RadrootsTradeEvidenceStateV1,
+    conflict_state: RadrootsTradeConflictStateV1,
+    private_terms_state: RadrootsTradePrivateTermsStateV1,
+    attestation_state: RadrootsTradeAttestationStateV1,
+    fulfillment_state: RadrootsTradeFulfillmentStateV1,
+    payment_state: RadrootsTradePaymentStateV1,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub candidate_heads: Vec<MutationId>,
-    pub agreement_claims: Vec<RadrootsTradeAgreementClaimV1>,
+    candidate_heads: Vec<MutationId>,
+    agreement_claims: Vec<RadrootsTradeAgreementClaimV1>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub active_agreement_claim_ids: Vec<MutationId>,
+    active_agreement_claim_ids: Vec<MutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub contested_claim_ids: Vec<MutationId>,
+    contested_claim_ids: Vec<MutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub cancelled_claim_ids: Vec<MutationId>,
+    cancelled_claim_ids: Vec<MutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub declined_candidate_ids: Vec<CandidateId>,
+    declined_candidate_ids: Vec<CandidateId>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub missing_parent_ids: Vec<MutationId>,
+    missing_parent_ids: Vec<MutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub missing_proposal_ids: Vec<MutationId>,
+    missing_proposal_ids: Vec<MutationId>,
     #[cfg_attr(feature = "dto-bindgen", dto(ts(type = "Array<string>")))]
-    pub unsupported_mutation_ids: Vec<MutationId>,
-    pub issues: Vec<RadrootsTradeReducerIssueV1>,
-    pub attestations: Vec<RadrootsTradeAttestationRecordV1>,
-    pub projection_digest: String,
+    unsupported_mutation_ids: Vec<MutationId>,
+    issues: Vec<RadrootsTradeReducerIssueV1>,
+    attestations: Vec<RadrootsTradeAttestationRecordV1>,
+    projection_digest: String,
 }
 
 impl RadrootsTradeProjectionV1 {
@@ -297,6 +420,114 @@ impl RadrootsTradeProjectionV1 {
         self.attestations.sort_by_key(|left| left.event_id);
         self.projection_digest = projection_digest(self);
     }
+
+    pub fn reducer_contract_id(&self) -> &str {
+        &self.reducer_contract_id
+    }
+
+    pub const fn reducer_version(&self) -> u16 {
+        self.reducer_version
+    }
+
+    pub const fn trade_id(&self) -> &TradeId {
+        &self.trade_id
+    }
+
+    pub const fn root_mutation_id(&self) -> Option<&MutationId> {
+        self.root_mutation_id.as_ref()
+    }
+
+    pub const fn buyer_pubkey(&self) -> Option<&PublicKey> {
+        self.buyer_pubkey.as_ref()
+    }
+
+    pub const fn seller_pubkey(&self) -> Option<&PublicKey> {
+        self.seller_pubkey.as_ref()
+    }
+
+    pub const fn farm_id(&self) -> Option<&DTag> {
+        self.farm_id.as_ref()
+    }
+
+    pub const fn negotiation_state(&self) -> RadrootsTradeNegotiationStateV1 {
+        self.negotiation_state
+    }
+
+    pub const fn agreement_state(&self) -> RadrootsTradeAgreementStateV1 {
+        self.agreement_state
+    }
+
+    pub const fn evidence_state(&self) -> RadrootsTradeEvidenceStateV1 {
+        self.evidence_state
+    }
+
+    pub const fn conflict_state(&self) -> RadrootsTradeConflictStateV1 {
+        self.conflict_state
+    }
+
+    pub const fn private_terms_state(&self) -> RadrootsTradePrivateTermsStateV1 {
+        self.private_terms_state
+    }
+
+    pub const fn attestation_state(&self) -> RadrootsTradeAttestationStateV1 {
+        self.attestation_state
+    }
+
+    pub const fn fulfillment_state(&self) -> RadrootsTradeFulfillmentStateV1 {
+        self.fulfillment_state
+    }
+
+    pub const fn payment_state(&self) -> RadrootsTradePaymentStateV1 {
+        self.payment_state
+    }
+
+    pub fn candidate_heads(&self) -> &[MutationId] {
+        &self.candidate_heads
+    }
+
+    pub fn agreement_claims(&self) -> &[RadrootsTradeAgreementClaimV1] {
+        &self.agreement_claims
+    }
+
+    pub fn active_agreement_claim_ids(&self) -> &[MutationId] {
+        &self.active_agreement_claim_ids
+    }
+
+    pub fn contested_claim_ids(&self) -> &[MutationId] {
+        &self.contested_claim_ids
+    }
+
+    pub fn cancelled_claim_ids(&self) -> &[MutationId] {
+        &self.cancelled_claim_ids
+    }
+
+    pub fn declined_candidate_ids(&self) -> &[CandidateId] {
+        &self.declined_candidate_ids
+    }
+
+    pub fn missing_parent_ids(&self) -> &[MutationId] {
+        &self.missing_parent_ids
+    }
+
+    pub fn missing_proposal_ids(&self) -> &[MutationId] {
+        &self.missing_proposal_ids
+    }
+
+    pub fn unsupported_mutation_ids(&self) -> &[MutationId] {
+        &self.unsupported_mutation_ids
+    }
+
+    pub fn issues(&self) -> &[RadrootsTradeReducerIssueV1] {
+        &self.issues
+    }
+
+    pub fn attestations(&self) -> &[RadrootsTradeAttestationRecordV1] {
+        &self.attestations
+    }
+
+    pub fn projection_digest(&self) -> &str {
+        &self.projection_digest
+    }
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]
@@ -305,16 +536,42 @@ impl RadrootsTradeProjectionV1 {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RadrootsTradeAgreementClaimV1 {
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub claim_mutation_id: MutationId,
+    claim_mutation_id: MutationId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub proposal_mutation_id: MutationId,
+    proposal_mutation_id: MutationId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub candidate_id: CandidateId,
+    candidate_id: CandidateId,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub candidate_author_pubkey: PublicKey,
+    candidate_author_pubkey: PublicKey,
     #[cfg_attr(feature = "dto-bindgen", dto(as = "string"))]
-    pub accepted_by_pubkey: PublicKey,
-    pub reservation_commitment: String,
+    accepted_by_pubkey: PublicKey,
+    reservation_commitment: String,
+}
+
+impl RadrootsTradeAgreementClaimV1 {
+    pub const fn claim_mutation_id(&self) -> &MutationId {
+        &self.claim_mutation_id
+    }
+
+    pub const fn proposal_mutation_id(&self) -> &MutationId {
+        &self.proposal_mutation_id
+    }
+
+    pub const fn candidate_id(&self) -> &CandidateId {
+        &self.candidate_id
+    }
+
+    pub const fn candidate_author_pubkey(&self) -> &PublicKey {
+        &self.candidate_author_pubkey
+    }
+
+    pub const fn accepted_by_pubkey(&self) -> &PublicKey {
+        &self.accepted_by_pubkey
+    }
+
+    pub fn reservation_commitment(&self) -> &str {
+        &self.reservation_commitment
+    }
 }
 
 #[cfg_attr(feature = "dto-bindgen", derive(dto_bindgen::Dto))]

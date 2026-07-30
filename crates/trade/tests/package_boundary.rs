@@ -8,6 +8,7 @@ const DRAFT: &str = include_str!("../src/operational_listing/draft.rs");
 const IDENTITY: &str = include_str!("../src/identity.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const ROOT: &str = include_str!("../src/lib.rs");
+const TRADE_CONTRACT: &str = include_str!("../src/workflow.rs");
 const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_tiers.toml");
 
 #[test]
@@ -31,7 +32,7 @@ fn crate_root_declares_every_approved_module() {
     let declared = root_declarations("pub mod ");
     for module in ["evidence", "model", "reducer", "validation", "workflow"] {
         assert!(
-            declared.contains(module),
+            declared.contains(module) || ROOT.contains(&format!("pub mod {module} {{")),
             "missing approved module {module}"
         );
     }
@@ -99,6 +100,55 @@ fn trade_feature_graph_has_no_persistence_or_sql_boundary() {
     assert!(!dev_dependencies.contains("tokio"));
     assert!(!MANIFEST.contains("sqlite-bundled"));
     assert!(!MANIFEST.contains("runtime-tokio"));
+}
+
+#[test]
+fn trade_model_reducer_and_evidence_have_final_public_owners() {
+    use radroots_trade::{Projection, ReducerIssue, ReductionInput};
+    use radroots_trade::{evidence::RadrootsTradeEvidenceStateV1, reducer::reduce_trade_records};
+
+    let trade_id = radroots_event::trade::TradeId::parse("22".repeat(16))
+        .expect("canonical protocol trade id");
+    let input = ReductionInput::new(trade_id)
+        .with_evidence_state(RadrootsTradeEvidenceStateV1::Complete)
+        .with_mutations(Vec::new())
+        .with_private_terms(Vec::new())
+        .with_attestations(Vec::new())
+        .with_observed_at_unix_s(Some(42));
+
+    assert_eq!(input.trade_id(), &trade_id);
+    assert_eq!(
+        input.evidence_state(),
+        RadrootsTradeEvidenceStateV1::Complete
+    );
+    assert_eq!(input.observed_at_unix_s(), Some(42));
+    assert!(input.mutations().is_empty());
+
+    let projection: Projection = reduce_trade_records(input.clone());
+    let _: &[ReducerIssue] = projection.issues();
+    assert_eq!(projection.trade_id(), &trade_id);
+    assert_eq!(
+        projection.evidence_state(),
+        RadrootsTradeEvidenceStateV1::Missing
+    );
+
+    let serialized = serde_json::to_value(input).expect("serialize reduction input");
+    assert_eq!(serialized["trade_id"], trade_id.to_string());
+    assert_eq!(serialized["observed_at_unix_s"], 42);
+    assert_eq!(serialized["mutations"], serde_json::json!([]));
+
+    for declaration in [
+        "pub trade_id:",
+        "pub mutations:",
+        "pub projection_digest:",
+        "pub candidate_id:",
+        "pub claim_mutation_id:",
+    ] {
+        assert!(
+            !TRADE_CONTRACT.contains(declaration),
+            "native trade contract field must remain private: {declaration}"
+        );
+    }
 }
 
 fn table_keys<'a>(manifest: &'a str, heading: &str) -> BTreeSet<&'a str> {
