@@ -22,15 +22,17 @@ New code should enter through these modules:
 | `workflow` | Validated plans describing host actions without executing them. |
 
 The curated root exports are `Projection`, `ReductionInput`, `ReducerIssue`,
-`WorkflowPlan`, and `Error`. The canonical protocol `TradeId` remains owned by
-`radroots_event`; `model::OrderId` is a distinct human or business-workflow
-identifier and has no conversion to or from `TradeId`.
+`WorkflowPlan`, `ValidationError`, and `Error`. The canonical protocol
+`TradeId` remains owned by `radroots_event`; `model::OrderId` is a distinct
+human or business-workflow identifier and has no conversion to or from
+`TradeId`.
 
 The pre-release tree still contains operational-listing, binding-generation,
 and versioned-contract migration paths needed by integrated consumers. They
-are not new package identities or authority to add host behavior, and they
-may be removed before publication. The reviewed Rust surface is recorded in
-the [public API baseline](../../docs/api/radroots_trade.txt).
+are not new package identities or authority to add host behavior. Their exact
+consumers and final-removal checkpoint are recorded in
+[`COMPATIBILITY.md`](COMPATIBILITY.md). The reviewed Rust surface is recorded
+in the [public API baseline](../../docs/api/radroots_trade.txt).
 
 ## Deterministic reduction
 

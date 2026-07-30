@@ -662,8 +662,22 @@ mod tests {
     }
 
     #[test]
-    fn migration_exception_is_exact_about_features() {
+    fn temporary_exception_is_exact_about_features() {
         let policy = policy();
+        assert!(
+            policy.temporary_exception.is_empty(),
+            "expired dependency exceptions must not remain in production policy"
+        );
+        let exceptions = [super::TemporaryException {
+            owner: "radroots_trade".to_owned(),
+            dependency: "radroots_nostr".to_owned(),
+            kind: "dev".to_owned(),
+            target: "all".to_owned(),
+            features: vec!["events".to_owned(), "std".to_owned()],
+            uses_default_features: false,
+            removal_step: 88,
+            rationale: "synthetic exact-match fixture".to_owned(),
+        }];
         let owner = super::CargoPackage {
             id: "owner".to_owned(),
             name: "radroots_trade".to_owned(),
@@ -686,7 +700,7 @@ mod tests {
             uses_default_features: false,
         };
         assert!(exception_matches(
-            &policy.temporary_exception,
+            &exceptions,
             &owner,
             &dependency,
             &kind,
@@ -698,7 +712,7 @@ mod tests {
             ..exact
         };
         assert!(!exception_matches(
-            &policy.temporary_exception,
+            &exceptions,
             &owner,
             &dependency,
             &kind,

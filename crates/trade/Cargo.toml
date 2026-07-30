@@ -17,6 +17,7 @@ name = "radroots_trade"
 
 [features]
 default = ["std", "serde", "serde_json"]
+# TEMPORARY COMPATIBILITY QUARANTINE (publish = false): see COMPATIBILITY.md.
 dto-bindgen = [
   "std",
   "serde_json",
@@ -48,6 +49,7 @@ serde_json = [
 [dependencies]
 radroots_core = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
+# Required only by the quarantined operational-listing surface.
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
 base64 = { workspace = true, optional = true }

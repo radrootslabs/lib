@@ -3,14 +3,15 @@ use dto_bindgen_core::{
     StructDef, TargetFieldNames, TargetOverride, TypeDef, TypeRef, WireFieldNames,
 };
 
+use crate::evidence::RadrootsTradeEvidenceStateV1;
+use crate::model::{
+    RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1, RadrootsTradeConflictStateV1,
+    RadrootsTradeFulfillmentStateV1, RadrootsTradeNegotiationStateV1, RadrootsTradePaymentStateV1,
+    RadrootsTradePrivateTermsStateV1, RadrootsTradeProjectionV1,
+};
 use crate::operational_listing::{
     model::{RadrootsOperationalListingSubtotal, RadrootsOperationalListingTotal},
     validation::RadrootsOperationalListingTradeProjection,
-};
-use crate::workflow::{
-    RadrootsTradeAgreementStateV1, RadrootsTradeAttestationStateV1, RadrootsTradeConflictStateV1,
-    RadrootsTradeEvidenceStateV1, RadrootsTradeFulfillmentStateV1, RadrootsTradeNegotiationStateV1,
-    RadrootsTradePaymentStateV1, RadrootsTradePrivateTermsStateV1, RadrootsTradeProjectionV1,
 };
 
 pub fn dto_roots() -> [RootDescriptor; 12] {

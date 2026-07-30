@@ -256,18 +256,6 @@ fn private_terms_plan(body: &TradeMutationBodyV1) -> Result<Option<PrivateTermsP
     }))
 }
 
-// Temporary migration reexports for the existing versioned reducer contract.
-pub use crate::trade_contract_v1::{
-    RADROOTS_TRADE_REDUCER_CONTRACT_ID, RADROOTS_TRADE_REDUCER_VERSION,
-    RadrootsTradeAgreementClaimV1, RadrootsTradeAgreementStateV1, RadrootsTradeAttestationRecordV1,
-    RadrootsTradeAttestationResultV1, RadrootsTradeAttestationStateV1,
-    RadrootsTradeConflictStateV1, RadrootsTradeEvidenceStateV1, RadrootsTradeFulfillmentStateV1,
-    RadrootsTradeMutationRecordV1, RadrootsTradeNegotiationStateV1, RadrootsTradePaymentStateV1,
-    RadrootsTradePrivateTermsEvidenceV1, RadrootsTradePrivateTermsStateV1,
-    RadrootsTradeProjectionV1, RadrootsTradeReducerIssueV1, RadrootsTradeReductionInputV1,
-    reduce_trade_records,
-};
-
 #[cfg(test)]
 mod tests {
     use super::*;

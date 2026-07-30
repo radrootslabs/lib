@@ -5,7 +5,6 @@ use radroots_trade::{evidence as _, model as _, reducer as _, validation as _, w
 
 const MANIFEST: &str = include_str!("../Cargo.toml");
 const DRAFT: &str = include_str!("../src/operational_listing/draft.rs");
-const IDENTITY: &str = include_str!("../src/identity.rs");
 const MODEL: &str = include_str!("../src/model.rs");
 const OPERATIONS: &str = include_str!("../../../contracts/operations.toml");
 const ROOT: &str = include_str!("../src/lib.rs");
@@ -21,6 +20,7 @@ const PACKAGE_TIERS: &str = include_str!("../../../contracts/releases/package_ti
 const README: &str = include_str!("../README.md");
 const EXAMPLE: &str = include_str!("../examples/reduce_trade.rs");
 const PUBLIC_API: &str = include_str!("../../../docs/api/radroots_trade.txt");
+const COMPATIBILITY: &str = include_str!("../COMPATIBILITY.md");
 
 #[test]
 fn manifest_has_final_identity_and_required_radroots_dependencies() {
@@ -71,18 +71,14 @@ fn protocol_trade_id_is_singular_and_business_order_id_is_distinct() {
     let trade_id = radroots_event::trade::TradeId::parse("11".repeat(16))
         .expect("canonical protocol trade id");
     let order_id = radroots_trade::model::OrderId::parse("order-1").expect("business order id");
-    let locator = radroots_trade::identity::RadrootsTradeLocator::new(trade_id)
-        .with_order_id(order_id.clone());
 
-    assert_eq!(locator.trade_id, trade_id);
-    assert_eq!(locator.order_id, Some(order_id));
-    assert!(!IDENTITY.contains("pub struct TradeId"));
-    assert!(!IDENTITY.contains("pub type TradeId"));
-    assert!(!IDENTITY.contains("From<OrderId> for TradeId"));
-    assert!(!IDENTITY.contains("From<TradeId> for OrderId"));
-    assert!(IDENTITY.contains("trade::TradeId"));
+    assert_eq!(trade_id.to_string(), "11".repeat(16));
+    assert_eq!(order_id.as_str(), "order-1");
+    assert!(!ROOT.contains("pub mod identity;"));
     assert!(MODEL.contains("pub struct OrderId(String);"));
     assert!(MODEL.contains("No conversion exists between them."));
+    assert!(!MODEL.contains("From<OrderId> for TradeId"));
+    assert!(!MODEL.contains("From<TradeId> for OrderId"));
 }
 
 #[test]
@@ -131,7 +127,9 @@ fn trade_feature_graph_has_no_persistence_or_sql_boundary() {
 
 #[test]
 fn portable_root_exports_and_native_traits_are_compile_checked() {
-    use radroots_trade::{Error, Projection, ReducerIssue, ReductionInput, WorkflowPlan};
+    use radroots_trade::{
+        Error, Projection, ReducerIssue, ReductionInput, ValidationError, WorkflowPlan,
+    };
 
     fn assert_portable<T: Clone + core::fmt::Debug + Eq + Send + Sync>() {}
     fn assert_native_error<T: core::error::Error + Send + Sync>() {}
@@ -141,6 +139,7 @@ fn portable_root_exports_and_native_traits_are_compile_checked() {
     assert_portable::<ReductionInput>();
     assert_portable::<WorkflowPlan>();
     assert_native_error::<Error>();
+    assert_native_error::<ValidationError>();
 
     assert!(ROOT.contains("#![cfg_attr(not(feature = \"std\"), no_std)]"));
     assert!(!ROOT.contains("pub trait "));
@@ -148,6 +147,7 @@ fn portable_root_exports_and_native_traits_are_compile_checked() {
         "pub use model::RadrootsTradeProjectionV1 as Projection;",
         "RadrootsTradeReducerIssueV1 as ReducerIssue",
         "RadrootsTradeReductionInputV1 as ReductionInput",
+        "pub use validation::ValidationError;",
         "pub use workflow::{Error, WorkflowPlan};",
     ] {
         assert!(
@@ -257,6 +257,38 @@ fn workflow_plan_is_root_exported_and_side_effect_free() {
 }
 
 #[test]
+fn superseded_trade_surfaces_are_removed_or_explicitly_quarantined() {
+    assert!(!ROOT.contains("pub mod identity;"));
+    assert!(!ROOT.contains("pub mod prelude;"));
+    assert!(!WORKFLOW.contains("Temporary migration reexports"));
+    assert!(!WORKFLOW.contains("pub use crate::trade_contract_v1"));
+
+    for declaration in [
+        "#[doc(hidden)]\npub mod dto;",
+        "#[doc(hidden)]\npub mod operational_listing;",
+        "#[doc(hidden)]\npub mod validation_receipt;",
+    ] {
+        assert!(
+            ROOT.contains(declaration),
+            "temporary surface is not documentation-hidden: {declaration}"
+        );
+    }
+    for required in [
+        "Step 238",
+        "Steps 261-262",
+        "Step 313 is the exact final-removal checkpoint",
+        "radroots_event_codec",
+        "serde_json",
+        "dto-bindgen",
+    ] {
+        assert!(
+            COMPATIBILITY.contains(required),
+            "compatibility contract is missing {required}"
+        );
+    }
+}
+
+#[test]
 fn package_documentation_and_reviewed_api_baseline_are_complete() {
     for section in [
         "## Canonical surface",
@@ -286,6 +318,7 @@ fn package_documentation_and_reviewed_api_baseline_are_complete() {
         "pub struct radroots_trade::Projection",
         "pub enum radroots_trade::ReducerIssue",
         "pub struct radroots_trade::ReductionInput",
+        "pub struct radroots_trade::ValidationError",
         "pub struct radroots_trade::WorkflowPlan",
     ] {
         assert!(PUBLIC_API.contains(item), "API baseline is missing {item}");
